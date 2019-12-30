@@ -29,6 +29,7 @@ BloodAudioProcessor::BloodAudioProcessor()
     std::make_unique<AudioParameterFloat>("drive","Drive",NormalisableRange<float>(0.0f,100.0f,1.0f), 100.0f),
     std::make_unique<AudioParameterFloat>("mix","Mix",NormalisableRange<float>(0.0f,1.0f,0.01f), 1.0f),
     std::make_unique<AudioParameterFloat>("outputGain","OutputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
+    std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1.0f, 3.0f), 1.0f),
 })
 #endif
 {
@@ -111,7 +112,7 @@ void BloodAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     previousGainInput = (Decibels::decibelsToGain(*inputGainValue));
     auto outputGainValue = treeState.getRawParameterValue("outputGain");
     previousGainOutput = (Decibels::decibelsToGain(*outputGainValue));
-    //visualiser.clear();
+    visualiser.clear();
 }
 
 void BloodAudioProcessor::releaseResources()
@@ -165,6 +166,9 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     // the samples and the outer loop is handling the channels.
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
+//    float menuChoiceValue = 1.0f;
+    auto menuChoiceValue = treeState.getRawParameterValue("mode");
+    float menuChoice = *menuChoiceValue;
     
     auto driveValue = treeState.getRawParameterValue("drive");
     float drive = *driveValue;
@@ -191,7 +195,7 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     {
         
         
-        int menuChoice = 1;
+        
         float thresh = 1.f;
         auto* channelData = buffer.getWritePointer (channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
@@ -199,9 +203,10 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
             auto input = channelData[sample];
             auto cleanOut = channelData[sample];
             input *= (1+drive/20);
-            if (menuChoice == 1)
+            if (menuChoice == 1.0f)
                 //Hard Clipping
             {
+                
                 if (input > thresh)
                 {
                     input = thresh;
@@ -215,7 +220,7 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
                     input = input;
                 }
             }
-            if (menuChoice == 2)
+            if (menuChoice == 2.0f)
                 //Soft Clipping Exp
             {
                 if (input > thresh)
@@ -227,9 +232,10 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
                     input = -1.0f + expf(input);
                 }
             }
-            if (menuChoice == 3)
+            if (menuChoice == 3.0f)
                 //Half-Wave Rectifier
             {
+                
                 if (input > thresh)
                 {
                     input = input;
@@ -254,7 +260,7 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
 //            channelData++;
         }
         // ..do something to the data...
-        //audioProcessorEditor->visualiser.pushBuffer(buffer);
+//        visualiser.pushBuffer(buffer);
     }
 
     
@@ -267,6 +273,7 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     
     // ff output meter
     outputMeterSource.measureBlock (buffer);
+    visualiser.pushBuffer(buffer);
 }
 
 

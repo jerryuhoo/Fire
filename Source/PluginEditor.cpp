@@ -113,8 +113,29 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     
     
     //visualiser
-    addAndMakeVisible(visualiser);
+    //addAndMakeVisible(visualiser);
+    addAndMakeVisible(p.visualiser);
     
+    //distortion mode select
+    
+    distortionMode.addItem("mode 1", 1);
+    distortionMode.addItem("mode 2", 2);
+    distortionMode.addItem("mode 3", 3);
+    distortionMode.setJustificationType(Justification::centred);
+    distortionMode.setColour(ComboBox::textColourId, Colours::red);
+    distortionMode.setColour(ComboBox::arrowColourId, Colours::red);
+    distortionMode.setColour(ComboBox::buttonColourId, Colours::red);
+    distortionMode.setColour(ComboBox::outlineColourId, Colours::red);
+    distortionMode.setColour(ComboBox::focusedOutlineColourId, Colours::red);
+    distortionMode.setColour(ComboBox::backgroundColourId, Colour (50, 0, 0));
+    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, Colours::red);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, Colours::darkred);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, Colours::white);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, Colours::red);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, Colour (50, 0, 0));
+
+    modeSelection = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
+    addAndMakeVisible(distortionMode);
 }
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
@@ -129,7 +150,7 @@ void BloodAudioProcessorEditor::paint (Graphics& g)
     g.fillAll (Colours::black);
     g.setColour (Colours::red);
     g.setFont (15.0f);
-    g.drawFittedText ("Wings - Blood - ver 0.2", getLocalBounds(), Justification::bottomRight, 1);
+    g.drawFittedText ("Wings - Blood - ver 0.203", getLocalBounds(), Justification::bottomRight, 1);
 }
 
 void BloodAudioProcessorEditor::resized()
@@ -140,9 +161,17 @@ void BloodAudioProcessorEditor::resized()
     driveKnob.setBounds((getWidth()/5)*2-50, getHeight()-130, 100, 100);
     mixKnob.setBounds((getWidth()/5)*3-50, getHeight()-130, 100, 100);
     gainKnob.setBounds((getWidth()/5)*4-50, getHeight()-130, 100, 100);
-    visualiser.setBounds((getWidth()/5)*2-50, 50, 250, (getHeight() / 2));
+    
+    // visualiser
+    processor.visualiser.setBounds((getWidth()/5)*2-50, 50, 250, (getHeight() / 6));
     
     // ff meter
     inputMeter->setBounds((getWidth()/5)*1-50, 50, 100, (getHeight() / 2));
     outputMeter->setBounds((getWidth()/5)*4-50, 50, 100, (getHeight() / 2));
+    
+    // distortion menu
+//    Rectangle<int> area = getLocalBounds().reduced(40);
+    distortionMode.setBounds((getWidth()/5)*2-50, 250, 250, 50);
 }
+
+

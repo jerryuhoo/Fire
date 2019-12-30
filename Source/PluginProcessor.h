@@ -14,6 +14,22 @@
 //==============================================================================
 /**
 */
+
+// temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
+// probably use fifo
+class Visualiser : public AudioVisualiserComponent
+{
+public:
+    Visualiser() : AudioVisualiserComponent (2)
+    {
+        setBufferSize(128);
+        setSamplesPerBlock(16);
+        setColours(Colour (50, 0, 0), Colours::red);
+    }
+};
+
+
+
 class BloodAudioProcessor  : public AudioProcessor
 {
 
@@ -69,6 +85,10 @@ public:
         return outputMeterSource;
     }
     
+    // temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
+    // probably use fifo
+    Visualiser visualiser;
+    
 private:
     //==============================================================================
     
@@ -81,3 +101,6 @@ private:
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BloodAudioProcessor)
 };
+
+
+

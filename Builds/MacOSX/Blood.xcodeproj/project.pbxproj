@@ -85,6 +85,10 @@
 			isa = PBXBuildFile;
 			fileRef = FD98AEE7569D98ACC1E293DA;
 		};
+		5C375D7F5AE830D1BA3B47C9 = {
+			isa = PBXBuildFile;
+			fileRef = 34E8460A4E79422849A81391;
+		};
 		A940FA232BAB9E510C00D2B3 = {
 			isa = PBXBuildFile;
 			fileRef = C46BFF376042183DDBC6E826;
@@ -214,6 +218,13 @@
 			path = "Info-AU.plist";
 			sourceTree = "SOURCE_ROOT";
 		};
+		267B5559F913A1E1070D7C26 = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "ff_meters";
+			path = "../../../../../../Applications/JUCE/modules/ff_meters";
+			sourceTree = "SOURCE_ROOT";
+		};
 		268AB4DE69AA2A014726917C = {
 			isa = PBXFileReference;
 			lastKnownFileType = file;
@@ -235,6 +246,13 @@
 			path = System/Library/Frameworks/DiscRecording.framework;
 			sourceTree = SDKROOT;
 		};
+		34E8460A4E79422849A81391 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			name = "include_ff_meters_LevelMeter.cpp";
+			path = "../../JuceLibraryCode/include_ff_meters_LevelMeter.cpp";
+			sourceTree = "SOURCE_ROOT";
+		};
 		358CEE774D7C9D7037C1CDBE = {
 			isa = PBXFileReference;
 			lastKnownFileType = file.r;
@@ -247,6 +265,34 @@
 			lastKnownFileType = sourcecode.cpp.objcpp;
 			name = "include_juce_gui_basics.mm";
 			path = "../../JuceLibraryCode/include_juce_gui_basics.mm";
+			sourceTree = "SOURCE_ROOT";
+		};
+		47951BB2EC4F53A420F3BF54 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			name = "include_juce_audio_processors.mm";
+			path = "../../JuceLibraryCode/include_juce_audio_processors.mm";
+			sourceTree = "SOURCE_ROOT";
+		};
+		5E7569BAC9C68AC99F82CD1C = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			name = "include_juce_audio_plugin_client_AU_1.mm";
+			path = "../../JuceLibraryCode/include_juce_audio_plugin_client_AU_1.mm";
+			sourceTree = "SOURCE_ROOT";
+		};
+		6055DFB70B2456A73E10020B = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			name = "include_juce_opengl.mm";
+			path = "../../JuceLibraryCode/include_juce_opengl.mm";
+			sourceTree = "SOURCE_ROOT";
+		};
+		7D303CF44BC2D813794384ED = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			name = "include_juce_data_structures.mm";
+			path = "../../JuceLibraryCode/include_juce_data_structures.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
 		85717F97D2DB0F36823CFEA2 = {
@@ -291,13 +337,6 @@
 			path = System/Library/Frameworks/CoreMIDI.framework;
 			sourceTree = SDKROOT;
 		};
-		47951BB2EC4F53A420F3BF54 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.objcpp;
-			name = "include_juce_audio_processors.mm";
-			path = "../../JuceLibraryCode/include_juce_audio_processors.mm";
-			sourceTree = "SOURCE_ROOT";
-		};
 		4D9A082E99BFFBACFF45B8D5 = {
 			isa = PBXFileReference;
 			lastKnownFileType = file;
@@ -317,20 +356,6 @@
 			lastKnownFileType = sourcecode.cpp.cpp;
 			name = PluginProcessor.cpp;
 			path = ../../Source/PluginProcessor.cpp;
-			sourceTree = "SOURCE_ROOT";
-		};
-		5E7569BAC9C68AC99F82CD1C = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.objcpp;
-			name = "include_juce_audio_plugin_client_AU_1.mm";
-			path = "../../JuceLibraryCode/include_juce_audio_plugin_client_AU_1.mm";
-			sourceTree = "SOURCE_ROOT";
-		};
-		6055DFB70B2456A73E10020B = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.objcpp;
-			name = "include_juce_opengl.mm";
-			path = "../../JuceLibraryCode/include_juce_opengl.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
 		6858999F30BA88913E22074A = {
@@ -367,13 +392,6 @@
 			name = AudioUnit.framework;
 			path = System/Library/Frameworks/AudioUnit.framework;
 			sourceTree = SDKROOT;
-		};
-		7D303CF44BC2D813794384ED = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.objcpp;
-			name = "include_juce_data_structures.mm";
-			path = "../../JuceLibraryCode/include_juce_data_structures.mm";
-			sourceTree = "SOURCE_ROOT";
 		};
 		7D5DD25290CC66DE9DFAC713 = {
 			isa = PBXFileReference;
@@ -621,6 +639,7 @@
 		5181AA9B5E9DE63D4A293B9D = {
 			isa = PBXGroup;
 			children = (
+				267B5559F913A1E1070D7C26,
 				4D9A082E99BFFBACFF45B8D5,
 				FCD1C6CC1AF3A94658196845,
 				FE4EBACFBEB055F73D509465,
@@ -643,6 +662,7 @@
 			isa = PBXGroup;
 			children = (
 				0D4F820C92FD8475622E8D89,
+				34E8460A4E79422849A81391,
 				C46BFF376042183DDBC6E826,
 				29C1DFE7D80A54D38B6BC11C,
 				0056F1D41F73455305739F89,
@@ -771,6 +791,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -781,7 +802,7 @@
 				LIBRARY_STYLE = Bundle;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				OTHER_LDFLAGS = "-bundle -lBlood";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				USE_HEADERMAP = NO;
 				WRAPPER_EXTENSION = vst3;
@@ -823,6 +844,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -834,7 +856,7 @@
 				LLVM_LTO = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				OTHER_LDFLAGS = "-bundle -lBlood";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				USE_HEADERMAP = NO;
 				WRAPPER_EXTENSION = vst3;
@@ -875,6 +897,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -886,7 +909,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				OTHER_LDFLAGS = "-bundle -lBlood";
 				OTHER_REZFLAGS = "-d ppc_$ppc -d i386_$i386 -d ppc64_$ppc64 -d x86_64_$x86_64 -I /System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers -I \"$(DEVELOPER_DIR)/Extras/CoreAudio/AudioUnits/AUPublic/AUBase\" -I \"$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/AudioUnit.framework/Headers\"";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				USE_HEADERMAP = NO;
 				WRAPPER_EXTENSION = component;
@@ -928,6 +951,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -940,7 +964,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				OTHER_LDFLAGS = "-bundle -lBlood";
 				OTHER_REZFLAGS = "-d ppc_$ppc -d i386_$i386 -d ppc64_$ppc64 -d x86_64_$x86_64 -I /System/Library/Frameworks/CoreServices.framework/Frameworks/CarbonCore.framework/Versions/A/Headers -I \"$(DEVELOPER_DIR)/Extras/CoreAudio/AudioUnits/AUPublic/AUBase\" -I \"$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/AudioUnit.framework/Headers\"";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				USE_HEADERMAP = NO;
 				WRAPPER_EXTENSION = component;
@@ -978,6 +1002,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -986,7 +1011,7 @@
 				INFOPLIST_PREPROCESS = NO;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				OTHER_LDFLAGS = "-lBlood";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				USE_HEADERMAP = NO;
 			};
@@ -1024,6 +1049,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -1033,7 +1059,7 @@
 				LLVM_LTO = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				OTHER_LDFLAGS = "-lBlood";
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				USE_HEADERMAP = NO;
 			};
@@ -1071,13 +1097,14 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
 				);
 				INSTALL_PATH = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				SKIP_INSTALL = YES;
 				USE_HEADERMAP = NO;
@@ -1117,6 +1144,7 @@
 				HEADER_SEARCH_PATHS = (
 					"/Applications/JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
+					"../../../../../../Applications/JUCE/modules",
 					"/Applications/JUCE/modules",
 					"/Applications/JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -1124,7 +1152,7 @@
 				INSTALL_PATH = "@executable_path/../Frameworks";
 				LLVM_LTO = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
-				PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.Blood;
+				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Blood;
 				PRODUCT_NAME = "Blood";
 				SKIP_INSTALL = YES;
 				USE_HEADERMAP = NO;
@@ -1480,6 +1508,7 @@
 			files = (
 				D61DC5FD027C1F9EF07446DE,
 				2CABE1F985956F7BC7E9507D,
+				5C375D7F5AE830D1BA3B47C9,
 				A940FA232BAB9E510C00D2B3,
 				51241789434445984E77FF8A,
 				B4FE89E9C4D4A9EFED502713,

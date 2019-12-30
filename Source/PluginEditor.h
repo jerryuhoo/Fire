@@ -11,7 +11,7 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
-#include "PluginProcessor.h"
+
 
 
 class OtherLookAndFeel : public LookAndFeel_V4
@@ -48,7 +48,16 @@ class OtherLookAndFeel : public LookAndFeel_V4
     
 };
 
-
+class Visualiser : public AudioVisualiserComponent
+{
+public:
+    Visualiser() : AudioVisualiserComponent (2)
+    {
+        setBufferSize(512);
+        setSamplesPerBlock(256);
+        setColours(Colours::white, Colours::red);
+    }
+};
 
 //==============================================================================
 /**
@@ -56,6 +65,7 @@ class OtherLookAndFeel : public LookAndFeel_V4
 class BloodAudioProcessorEditor  : public AudioProcessorEditor //edited 12/28
 {
 public:
+    
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
     BloodAudioProcessorEditor (BloodAudioProcessor&);
     ~BloodAudioProcessorEditor();
@@ -65,27 +75,34 @@ public:
     void resized() override;
     //edited 12/28
     // void sliderValueChanged (Slider *slider) override; //edited 12/28
-    
+    Visualiser visualiser;
     
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     BloodAudioProcessor& processor;
     
+    // ff meter
+    std::unique_ptr<FFAU::LevelMeter> inputMeter;
+    std::unique_ptr<FFAU::LevelMeter> outputMeter;
+    std::unique_ptr<FFAU::LevelMeterLookAndFeel> lnf;
+    
     //create knobs and their labels
     Slider driveKnob;
-    Slider rangeKnob;
+    Slider inputKnob;
     Slider mixKnob;
     Slider gainKnob;
     Label driveLabel;
-    Label rangeLabel;
+    Label inputLabel;
     Label mixLabel;
     Label gainLabel;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> rangeAttachment;
+    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
 
+    
+    
     OtherLookAndFeel otherLookAndFeel; // create own knob style
     
     

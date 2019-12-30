@@ -11,7 +11,6 @@
 #pragma once
 
 #include "../JuceLibraryCode/JuceHeader.h"
-
 //==============================================================================
 /**
 */
@@ -58,14 +57,26 @@ public:
 
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
-
     
+    // ff meter
+    // ff meter
+    FFAU::LevelMeterSource& getInputMeterSource()
+    {
+        return inputMeterSource;
+    }
+    FFAU::LevelMeterSource& getOutputMeterSource()
+    {
+        return outputMeterSource;
+    }
     
 private:
     //==============================================================================
     
-
-    float previousGain;
+    //ff meter
+    FFAU::LevelMeterSource inputMeterSource;
+    FFAU::LevelMeterSource outputMeterSource;
+    float previousGainInput;
+    float previousGainOutput;
     
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BloodAudioProcessor)

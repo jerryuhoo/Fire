@@ -50,6 +50,7 @@
 #define JUCE_PROJUCER_VERSION 0x50405
 
 //==============================================================================
+#define JUCE_MODULE_AVAILABLE_ff_meters                     1
 #define JUCE_MODULE_AVAILABLE_juce_audio_basics             1
 #define JUCE_MODULE_AVAILABLE_juce_audio_devices            1
 #define JUCE_MODULE_AVAILABLE_juce_audio_formats            1
@@ -66,6 +67,13 @@
 #define JUCE_MODULE_AVAILABLE_juce_opengl                   1
 
 #define JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED 1
+
+//==============================================================================
+// ff_meters flags:
+
+#ifndef    FF_AUDIO_ALLOW_ALLOCATIONS_IN_MEASURE_BLOCK
+ //#define FF_AUDIO_ALLOW_ALLOCATIONS_IN_MEASURE_BLOCK 1
+#endif
 
 //==============================================================================
 // juce_audio_devices flags:
@@ -397,7 +405,7 @@
  #define JucePlugin_AUManufacturerCode     JucePlugin_ManufacturerCode
 #endif
 #ifndef  JucePlugin_CFBundleIdentifier
- #define JucePlugin_CFBundleIdentifier     com.yourcompany.Blood
+ #define JucePlugin_CFBundleIdentifier     com.Wings.Blood
 #endif
 #ifndef  JucePlugin_RTASCategory
  #define JucePlugin_RTASCategory           0
@@ -415,7 +423,7 @@
  #define JucePlugin_RTASDisableMultiMono   0
 #endif
 #ifndef  JucePlugin_AAXIdentifier
- #define JucePlugin_AAXIdentifier          com.yourcompany.Blood
+ #define JucePlugin_AAXIdentifier          com.Wings.Blood
 #endif
 #ifndef  JucePlugin_AAXManufacturerCode
  #define JucePlugin_AAXManufacturerCode    JucePlugin_ManufacturerCode

@@ -25,10 +25,10 @@ BloodAudioProcessor::BloodAudioProcessor()
 
 ,treeState(*this,nullptr,"PARAMETERS",
 {
+    std::make_unique<AudioParameterFloat>("inputGain","InputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
     std::make_unique<AudioParameterFloat>("drive","Drive",NormalisableRange<float>(0.0f,100.0f,1.0f), 100.0f),
-    std::make_unique<AudioParameterFloat>("range","Range",NormalisableRange<float>(0.0f,100.0f,1.0f), 100.0f),
     std::make_unique<AudioParameterFloat>("mix","Mix",NormalisableRange<float>(0.0f,1.0f,0.01f), 1.0f),
-    std::make_unique<AudioParameterFloat>("gain","Gain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
+    std::make_unique<AudioParameterFloat>("outputGain","OutputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
 })
 #endif
 {
@@ -107,8 +107,11 @@ void BloodAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-    auto sliderGainValue = treeState.getRawParameterValue("gain");
-    previousGain = (Decibels::decibelsToGain(*sliderGainValue));
+    auto inputGainValue = treeState.getRawParameterValue("inputGain");
+    previousGainInput = (Decibels::decibelsToGain(*inputGainValue));
+    auto outputGainValue = treeState.getRawParameterValue("outputGain");
+    previousGainOutput = (Decibels::decibelsToGain(*outputGainValue));
+    //visualiser.clear();
 }
 
 void BloodAudioProcessor::releaseResources()
@@ -165,15 +168,29 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     
     auto driveValue = treeState.getRawParameterValue("drive");
     float drive = *driveValue;
-//    auto rangeValue = treeState.getRawParameterValue("range");
-//    float range = *rangeValue;
+    auto inputGainValue = treeState.getRawParameterValue("inputGain");
+    float currentGainInput = Decibels::decibelsToGain(*inputGainValue);
     auto mixValue = treeState.getRawParameterValue("mix");
     float mix = *mixValue;
-    auto gainValue = treeState.getRawParameterValue("gain");
-    float currentGain = Decibels::decibelsToGain(*gainValue);
+    auto outputGainValue = treeState.getRawParameterValue("outputGain");
+    float currentGainOutput = Decibels::decibelsToGain(*outputGainValue);
+    
+    // input volume
+    if (currentGainInput == previousGainInput) {
+        buffer.applyGain(currentGainInput);
+    } else {
+        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
+        previousGainInput = currentGainInput;
+    }
+    
+    
+    // ff input meter
+    inputMeterSource.measureBlock (buffer);
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
+        
+        
         int menuChoice = 1;
         float thresh = 1.f;
         auto* channelData = buffer.getWritePointer (channel);
@@ -237,16 +254,19 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
 //            channelData++;
         }
         // ..do something to the data...
+        //audioProcessorEditor->visualiser.pushBuffer(buffer);
     }
 
     
-    if (currentGain == previousGain) {
-        buffer.applyGain(currentGain);
+    if (currentGainOutput == previousGainOutput) {
+        buffer.applyGain(currentGainOutput);
     } else {
-        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGain, currentGain);
-        previousGain = currentGain;
+        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainOutput, currentGainOutput);
+        previousGainOutput = currentGainOutput;
     }
     
+    // ff output meter
+    outputMeterSource.measureBlock (buffer);
 }
 
 
@@ -294,3 +314,5 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new BloodAudioProcessor();
 }
+
+

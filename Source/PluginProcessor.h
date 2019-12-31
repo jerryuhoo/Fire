@@ -71,6 +71,13 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    float hardClipping (float input, float thresh);
+    float expSoftClipping (float input, float thresh);
+    float squareWaveClipping (float input, float thresh);
+    float cubicSoftClipping (float input, float thresh);
+    float tanhSoftClipping (float input, float thresh);
+    float arctanSoftClipping (float input, float thresh);
+    
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     

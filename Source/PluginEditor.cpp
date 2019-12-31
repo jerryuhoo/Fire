@@ -21,22 +21,22 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     // ff meter
     lnf = std::make_unique<FFAU::LevelMeterLookAndFeel>();
     // adjust the colours to how you like them, e.g.
-    lnf->setColour (FFAU::LevelMeter::lmTextColour,             juce::Colours::red);
-    lnf->setColour (FFAU::LevelMeter::lmTextClipColour,         juce::Colours::red);
-    lnf->setColour (FFAU::LevelMeter::lmTextDeactiveColour,     juce::Colours::black);
-    lnf->setColour (FFAU::LevelMeter::lmTicksColour,            juce::Colours::red);
-    lnf->setColour (FFAU::LevelMeter::lmOutlineColour,          juce::Colours::red);
-    lnf->setColour (FFAU::LevelMeter::lmBackgroundColour,       juce::Colour (0xff050a29));
-    lnf->setColour (FFAU::LevelMeter::lmBackgroundClipColour,   juce::Colours::red);
-    lnf->setColour (FFAU::LevelMeter::lmMeterForegroundColour,  juce::Colours::green);
-    lnf->setColour (FFAU::LevelMeter::lmMeterOutlineColour,     juce::Colours::red);
-    lnf->setColour (FFAU::LevelMeter::lmMeterBackgroundColour,  juce::Colours::black);
-    lnf->setColour (FFAU::LevelMeter::lmMeterMaxNormalColour,   juce::Colours::white);
+    lnf->setColour (FFAU::LevelMeter::lmTextColour,             backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmTextClipColour,         backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmTextDeactiveColour,     backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmTicksColour,            backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmOutlineColour,          backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmBackgroundColour,       backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmBackgroundClipColour,   mainColour);
+    lnf->setColour (FFAU::LevelMeter::lmMeterForegroundColour,  backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmMeterOutlineColour,     backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmMeterBackgroundColour,  backgroundColour);
+    lnf->setColour (FFAU::LevelMeter::lmMeterMaxNormalColour,   juce::Colours::yellow);
     lnf->setColour (FFAU::LevelMeter::lmMeterMaxWarnColour,     juce::Colours::orange);
     lnf->setColour (FFAU::LevelMeter::lmMeterMaxOverColour,     juce::Colours::darkred);
-    lnf->setColour (FFAU::LevelMeter::lmMeterGradientLowColour, juce::Colour (50, 0, 0));
+    lnf->setColour (FFAU::LevelMeter::lmMeterGradientLowColour, secondColour);
     lnf->setColour (FFAU::LevelMeter::lmMeterGradientMidColour, juce::Colours::darkred);
-    lnf->setColour (FFAU::LevelMeter::lmMeterGradientMaxColour, juce::Colours::red);
+    lnf->setColour (FFAU::LevelMeter::lmMeterGradientMaxColour, mainColour);
     lnf->setColour (FFAU::LevelMeter::lmMeterReductionColour,   juce::Colours::orange);
     inputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
     inputMeter->setLookAndFeel(lnf.get());
@@ -62,7 +62,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     
     addAndMakeVisible (inputLabel);
     inputLabel.setText ("input volume", dontSendNotification);
-    inputLabel.setColour(Label::textColourId, Colours::red);
+    inputLabel.setColour(Label::textColourId, mainColour);
     inputLabel.attachToComponent (&inputKnob, false);
     
     
@@ -75,7 +75,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     
     addAndMakeVisible (driveLabel);
     driveLabel.setText ("drive", dontSendNotification);
-    driveLabel.setColour(Label::textColourId, Colours::red);
+    driveLabel.setColour(Label::textColourId, mainColour);
     driveLabel.attachToComponent (&driveKnob, false);
     
     
@@ -90,7 +90,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     
     addAndMakeVisible (mixLabel);
     mixLabel.setText ("mix", dontSendNotification);
-    mixLabel.setColour(Label::textColourId, Colours::red);
+    mixLabel.setColour(Label::textColourId, mainColour);
     mixLabel.attachToComponent (&mixKnob, false);
     
     //volume knob
@@ -103,7 +103,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     
     addAndMakeVisible (gainLabel);
     gainLabel.setText ("output volume", dontSendNotification);
-    gainLabel.setColour(Label::textColourId, Colours::red);
+    gainLabel.setColour(Label::textColourId, mainColour);
     gainLabel.attachToComponent (&gainKnob, false);
     
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
@@ -118,21 +118,24 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     
     //distortion mode select
     
-    distortionMode.addItem("mode 1", 1);
-    distortionMode.addItem("mode 2", 2);
-    distortionMode.addItem("mode 3", 3);
+    distortionMode.addItem("Arctan Soft Clipping", 1);
+    distortionMode.addItem("Exp Soft Clipping", 2);
+    distortionMode.addItem("Tanh Soft Clipping", 3);
+    distortionMode.addItem("Cubic Soft Clipping", 4);
+    distortionMode.addItem("Hard Clipping", 5);
+    distortionMode.addItem("Square Wave Clipping", 6);
     distortionMode.setJustificationType(Justification::centred);
-    distortionMode.setColour(ComboBox::textColourId, Colours::red);
-    distortionMode.setColour(ComboBox::arrowColourId, Colours::red);
-    distortionMode.setColour(ComboBox::buttonColourId, Colours::red);
-    distortionMode.setColour(ComboBox::outlineColourId, Colours::red);
-    distortionMode.setColour(ComboBox::focusedOutlineColourId, Colours::red);
-    distortionMode.setColour(ComboBox::backgroundColourId, Colour (50, 0, 0));
-    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, Colours::red);
+    distortionMode.setColour(ComboBox::textColourId, mainColour);
+    distortionMode.setColour(ComboBox::arrowColourId, mainColour);
+    distortionMode.setColour(ComboBox::buttonColourId, mainColour);
+    distortionMode.setColour(ComboBox::outlineColourId, mainColour);
+    distortionMode.setColour(ComboBox::focusedOutlineColourId, mainColour);
+    distortionMode.setColour(ComboBox::backgroundColourId, secondColour);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, mainColour);
     distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, Colours::darkred);
     distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, Colours::white);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, Colours::red);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, Colour (50, 0, 0));
+    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, mainColour);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, secondColour);
 
     modeSelection = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     addAndMakeVisible(distortionMode);
@@ -142,36 +145,149 @@ BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
 {
 }
 
+float f(float x)
+{
+    return 0.5;
+}
+
 //==============================================================================
 void BloodAudioProcessorEditor::paint (Graphics& g)
 {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     //g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
-    g.fillAll (Colours::black);
-    g.setColour (Colours::red);
+    g.fillAll (backgroundColour);
+    g.setColour (mainColour);
     g.setFont (15.0f);
-    g.drawFittedText ("Wings - Blood - ver 0.203", getLocalBounds(), Justification::bottomRight, 1);
+    g.drawFittedText ("Wings - Blood - ver 0.255 -------", getLocalBounds(), Justification::bottomRight, 1);
+    g.setFont (50.0f);
+    Rectangle<int> area (getWidth()/2, (getHeight() / 3)+100, getWidth()/2-50+2, (getHeight() / 3+2));
+    g.drawText ("BLOOD", area, Justification::centredTop);
+    // wave visualiser boundary
+    g.drawRect(50-1, 50-1, getWidth()/2-50+2, (getHeight() / 3)+2);
+    // mode visualiser boundary
+    // g.drawRect(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
+    
+    
+    // paint distortion function
+    
+    auto frame = getLocalBounds();        // adjust here, if you want to paint in a special location
+    frame.setBounds(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
+    const int numPix = frame.getWidth();  // you might experiment here, if you want less steps to speed up
+
+    float value  = -2.0f;                          // minimum (leftmost)  value for your graph
+    const float valInc = (2.0f - value) / numPix;  // maximum (rightmost) value for your graph
+    float pos = frame.getX();
+    const float posInc = frame.getWidth() / numPix;
+
+    Path p;
+    
+    float functionValue;
+    float mixValue;
+    float mode = *processor.treeState.getRawParameterValue("mode");
+    float mix = *processor.treeState.getRawParameterValue("mix");
+    
+    bool firstPoint = true;
+    
+    float yPos;
+    for (int i=1; i < numPix; ++i)
+    {
+        value += valInc;
+        pos += posInc;
+        
+        if (mode == 1.0f) {
+            functionValue = processor.arctanSoftClipping(value, 1.0f);
+        }
+        else if (mode == 2.0f) {
+            functionValue = processor.expSoftClipping(value, 1.0f);
+        }
+        else if (mode == 3.0f) {
+            functionValue = processor.tanhSoftClipping(value, 1.0f);
+        }
+        else if (mode == 4.0f) {
+            functionValue = processor.cubicSoftClipping(value, 1.0f);
+        }
+        else if (mode == 5.0f) {
+            functionValue = processor.hardClipping(value, 1.0f);
+        }
+        else if (mode == 6.0f) {
+            functionValue = processor.squareWaveClipping(value, 1.0f);
+        }
+        else {
+            functionValue = 1.0f;
+        }
+        mixValue = ((1 - mix) * value) + (mix * functionValue);
+        yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+        if (yPos < frame.getY())
+        {
+            continue;
+        }
+        if (yPos > frame.getBottom())
+        {
+            continue;
+        }
+        if (firstPoint == true)
+        {
+            mixValue = ((1 - mix) * value) + (mix * functionValue);
+            yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+            p.startNewSubPath (pos, yPos);
+            firstPoint = false;
+        }
+        p.lineTo (pos, yPos);  // replace f(x) with your function
+    }
+    g.setColour (mainColour);
+    g.drawRect (frame, 1);
+    g.setColour (secondColour);
+    g.fillRect(getWidth()/2+1, 50, getWidth()/2-50, (getHeight() / 3));
+    g.setColour (mainColour);
+    g.strokePath (p, PathStrokeType (3.0));
+    repaint();
 }
 
 void BloodAudioProcessorEditor::resized()
 {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
-    inputKnob.setBounds((getWidth()/5)*1-50, getHeight()-130, 100, 100);
-    driveKnob.setBounds((getWidth()/5)*2-50, getHeight()-130, 100, 100);
-    mixKnob.setBounds((getWidth()/5)*3-50, getHeight()-130, 100, 100);
-    gainKnob.setBounds((getWidth()/5)*4-50, getHeight()-130, 100, 100);
+    inputKnob.setBounds((getWidth()/5)*1-50, getHeight()-150, 100, 100);
+    driveKnob.setBounds((getWidth()/5)*2-50, getHeight()-150, 100, 100);
+    mixKnob.setBounds((getWidth()/5)*3-50, getHeight()-150, 100, 100);
+    gainKnob.setBounds((getWidth()/5)*4-50, getHeight()-150, 100, 100);
     
     // visualiser
-    processor.visualiser.setBounds((getWidth()/5)*2-50, 50, 250, (getHeight() / 6));
+    processor.visualiser.setBounds(50, 50, getWidth()/2-50, (getHeight() / 3));
     
     // ff meter
-    inputMeter->setBounds((getWidth()/5)*1-50, 50, 100, (getHeight() / 2));
-    outputMeter->setBounds((getWidth()/5)*4-50, 50, 100, (getHeight() / 2));
+    inputMeter->setBounds(0, 0, 30, getHeight());
+    outputMeter->setBounds(getWidth()-30, 0, 30, getHeight());
     
     // distortion menu
-//    Rectangle<int> area = getLocalBounds().reduced(40);
-    distortionMode.setBounds((getWidth()/5)*2-50, 250, 250, 50);
+    distortionMode.setBounds(50, (getHeight() / 3)+100, getWidth()/2-50, 50);
 }
 
 
+//float getFunctionValue(BloodAudioProcessor& processor, float value)
+//{
+//    float functionValue;
+//
+//    if (*processor.treeState.getRawParameterValue("mode") == 1.0f) {
+//        functionValue = processor.hardClipping(value, 1.0f);
+//    }
+//    else if (*processor.treeState.getRawParameterValue("mode") == 2.0f) {
+//        functionValue = processor.expSoftClipping(value, 1.0f);
+//    }
+//    else if (*processor.treeState.getRawParameterValue("mode") == 3.0f) {
+//        functionValue = processor.halfWaveClipping(value, 1.0f);
+//    }
+//    else if (*processor.treeState.getRawParameterValue("mode") == 4.0f) {
+//        functionValue = processor.cubicSoftClipping(value, 1.0f);
+//    }
+//    else if (*processor.treeState.getRawParameterValue("mode") == 5.0f) {
+//        functionValue = processor.tanhSoftClipping(value, 1.0f);
+//    }
+//    else if (*processor.treeState.getRawParameterValue("mode") == 6.0f) {
+//        functionValue = processor.arctanSoftClipping(value, 1.0f);
+//    }
+//    else {
+//        functionValue = 1.0f;
+//    }
+//    return functionValue;
+//}

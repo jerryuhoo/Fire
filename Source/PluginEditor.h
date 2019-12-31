@@ -12,16 +12,19 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
-
-
 class OtherLookAndFeel : public LookAndFeel_V4
 {
     public:
+    
+    Colour mainColour = Colours::red;
+    Colour backgroundColour = Colours::black;
+    Colour secondColour = Colour(50,0,0);
+    
     OtherLookAndFeel()
     {
-        setColour(Slider::textBoxTextColourId, Colours::red);
-        setColour(Slider::textBoxBackgroundColourId, Colours::black);
-        setColour(Slider::textBoxOutlineColourId, Colours::red);
+        setColour(Slider::textBoxTextColourId, mainColour);
+        setColour(Slider::textBoxBackgroundColourId, backgroundColour);
+        setColour(Slider::textBoxOutlineColourId, mainColour);
     }
     
     void drawRotarySlider (Graphics &g, int x, int y, int width, int height, float sliderPos, float rotaryStartAngle, float rotaryEndAngle, Slider &slider) override
@@ -35,19 +38,20 @@ class OtherLookAndFeel : public LookAndFeel_V4
         float angle = rotaryStartAngle+(sliderPos*(rotaryEndAngle-rotaryStartAngle));
         std::cout<<rotaryStartAngle<<" "<<rotaryEndAngle<<std::endl;
         Rectangle<float> dialArea (rx,ry,diameter,diameter);
-        g.setColour(Colour (50, 0, 0));
+        g.setColour(secondColour);
         //g.drawRect(dialArea);
         g.fillEllipse(dialArea);
         
-        g.setColour(Colours::red);
+        g.setColour(mainColour);
         Path dialTick;
         dialTick.addRectangle(0, -radius, 5.0f, radius*0.3);
         g.fillPath(dialTick, AffineTransform::rotation(angle).translated(centerX, centerY));
-        g.setColour(Colours::red);
+        g.setColour(mainColour);
         g.drawEllipse(rx, ry, diameter, diameter, 2.0f);
     }
     
 };
+
 
 //class Visualiser : public AudioVisualiserComponent
 //{
@@ -73,10 +77,11 @@ public:
 
     //==============================================================================
     void paint (Graphics&) override;
-    void resized() override;
-    
-    // combobox
-
+    void resized () override;
+    // color setting
+    Colour mainColour = Colours::red;
+    Colour backgroundColour = Colours::black;
+    Colour secondColour = Colour(50,0,0);
     
     
 //    Visualiser visualiser;
@@ -112,7 +117,11 @@ private:
     OtherLookAndFeel otherLookAndFeel;
     
     
+    //return function value by different modes
+    //float getFunctionValue(BloodAudioProcessor& processor, float value);
+    //int modeChoice;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BloodAudioProcessorEditor)
 };
+
 
 

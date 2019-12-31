@@ -26,10 +26,10 @@ BloodAudioProcessor::BloodAudioProcessor()
 ,treeState(*this,nullptr,"PARAMETERS",
 {
     std::make_unique<AudioParameterFloat>("inputGain","InputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
-    std::make_unique<AudioParameterFloat>("drive","Drive",NormalisableRange<float>(0.0f,100.0f,1.0f), 100.0f),
+    std::make_unique<AudioParameterFloat>("drive","Drive",NormalisableRange<float>(0.0f,1.0f,0.01f), 1.0f),
     std::make_unique<AudioParameterFloat>("mix","Mix",NormalisableRange<float>(0.0f,1.0f,0.01f), 1.0f),
     std::make_unique<AudioParameterFloat>("outputGain","OutputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
-    std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1.0f, 3.0f), 1.0f),
+    std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1.0f, 6.0f), 1.0f),
 })
 #endif
 {
@@ -193,57 +193,43 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-        
-        
-        
+
         float thresh = 1.f;
         auto* channelData = buffer.getWritePointer (channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
             
             auto input = channelData[sample];
             auto cleanOut = channelData[sample];
-            input *= (1+drive/20);
+            input *= 1.0f + 15.0f * drive;
             if (menuChoice == 1.0f)
-                //Hard Clipping
+            //arctan Soft Clipping
             {
-                
-                if (input > thresh)
-                {
-                    input = thresh;
-                }
-                else if (input < -thresh)
-                {
-                    input = -thresh;
-                }
-                else
-                {
-                    input = input;
-                }
+                input = arctanSoftClipping(input, thresh);
             }
             if (menuChoice == 2.0f)
-                //Soft Clipping Exp
+            //Exp Soft Clipping
             {
-                if (input > thresh)
-                {
-                    input = 1.0f - expf(-input);
-                }
-                else
-                {
-                    input = -1.0f + expf(input);
-                }
+                input = expSoftClipping(input, thresh);
             }
             if (menuChoice == 3.0f)
-                //Half-Wave Rectifier
+            //tanh Soft Clipping
             {
+                input = tanhSoftClipping(input, thresh);
+            }
+            if (menuChoice == 4.0f)
+            //Cubic Soft Clipping
+            {
+                input = cubicSoftClipping(input, thresh);
                 
-                if (input > thresh)
-                {
-                    input = input;
-                }
-                else
-                {
-                    input = 0;
-                }
+            }
+            if (menuChoice == 5.0f)
+            {
+                input = hardClipping(input, thresh);
+            }
+            if (menuChoice == 6.0f)
+            //Hard Clipping
+            {
+                input = squareWaveClipping(input, thresh);
             }
             channelData[sample] = ((1 - mix) * cleanOut) + (mix * input);
         
@@ -321,5 +307,93 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new BloodAudioProcessor();
 }
+
+float BloodAudioProcessor::arctanSoftClipping (float input, float thresh)
+{
+    input = atan(input)/2;
+    return input;
+}
+
+float BloodAudioProcessor::expSoftClipping (float input, float thresh)
+{
+    if (input > 0)
+    {
+        input = 1.0f - expf(-input);
+    }
+    else
+    {
+        input = -1.0f + expf(input);
+    }
+    input = 2.0f/3.0f*input;
+    return input;
+}
+
+float BloodAudioProcessor::tanhSoftClipping (float input, float thresh)
+{
+    input = tanh(input);
+    input = 2.0f/3.0f*input;
+    return input;
+}
+
+float BloodAudioProcessor::cubicSoftClipping (float input, float thresh)
+{
+    if (input > thresh)
+    {
+        input = thresh*2/3;
+    }
+    else if (input < -thresh)
+    {
+        input = -thresh*2/3;
+    }
+    else
+    {
+        input = input-(pow(input,3)/3);
+    }
+    return input;
+}
+
+
+
+float BloodAudioProcessor::hardClipping (float input, float thresh)
+{
+    if (input > thresh)
+    {
+        input = thresh;
+    }
+    else if (input < -thresh)
+    {
+        input = -thresh;
+    }
+    else
+    {
+        input = input;
+    }
+    input = 2.0f/3.0f*input;
+    return input;
+}
+
+
+
+float BloodAudioProcessor::squareWaveClipping (float input, float thresh)
+{
+    if (input > thresh)
+    {
+        input = thresh;
+    }
+    else if (input < -thresh)
+    {
+        input = -thresh;
+    }
+    else
+    {
+        input = 0;
+    }
+    input = 2.0f/3.0f*input;
+    return input;
+}
+
+
+
+
 
 

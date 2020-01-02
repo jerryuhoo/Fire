@@ -16,7 +16,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
 : AudioProcessorEditor (&p), processor (p)
 {
     
-    
+    setResizable (true, true);
     
     // ff meter
     lnf = std::make_unique<FFAU::LevelMeterLookAndFeel>();
@@ -35,8 +35,8 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     lnf->setColour (FFAU::LevelMeter::lmMeterMaxWarnColour,     juce::Colours::orange);
     lnf->setColour (FFAU::LevelMeter::lmMeterMaxOverColour,     juce::Colours::darkred);
     lnf->setColour (FFAU::LevelMeter::lmMeterGradientLowColour, secondColour);
-    lnf->setColour (FFAU::LevelMeter::lmMeterGradientMidColour, juce::Colours::darkred);
-    lnf->setColour (FFAU::LevelMeter::lmMeterGradientMaxColour, mainColour);
+    lnf->setColour (FFAU::LevelMeter::lmMeterGradientMidColour, mainColour);
+    lnf->setColour (FFAU::LevelMeter::lmMeterGradientMaxColour, juce::Colours::deeppink);
     lnf->setColour (FFAU::LevelMeter::lmMeterReductionColour,   juce::Colours::orange);
     inputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
     inputMeter->setLookAndFeel(lnf.get());
@@ -56,57 +56,57 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
     //input knob
     addAndMakeVisible(inputKnob);
     inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    inputKnob.setRange(-48, 6, 0.1);
+    // inputKnob.setRange(-36, 36, 0.1);
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     inputKnob.setLookAndFeel(&otherLookAndFeel);
     
     addAndMakeVisible (inputLabel);
-    inputLabel.setText ("input volume", dontSendNotification);
+    inputLabel.setText ("Drive", dontSendNotification);
     inputLabel.setColour(Label::textColourId, mainColour);
     inputLabel.attachToComponent (&inputKnob, false);
     
     
-    //drive knob
-    addAndMakeVisible(driveKnob);
-    driveKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    driveKnob.setRange(0, 100, 1);
-    driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    driveKnob.setLookAndFeel(&otherLookAndFeel);
-    
-    addAndMakeVisible (driveLabel);
-    driveLabel.setText ("drive", dontSendNotification);
-    driveLabel.setColour(Label::textColourId, mainColour);
-    driveLabel.attachToComponent (&driveKnob, false);
+    //drive knob (deleted)
+//    addAndMakeVisible(driveKnob);
+//    driveKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+//    // driveKnob.setRange(1, 16, 0.01);
+//    driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+//    driveKnob.setLookAndFeel(&otherLookAndFeel);
+//
+//    addAndMakeVisible (driveLabel);
+//    driveLabel.setText ("drive", dontSendNotification);
+//    driveLabel.setColour(Label::textColourId, mainColour);
+//    driveLabel.attachToComponent (&driveKnob, false);
     
     
     
     //mix knob
     addAndMakeVisible(mixKnob);
     mixKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    mixKnob.setRange(0, 1, 0.01);
-    mixKnob.setValue(100);
+    // mixKnob.setRange(0, 1, 0.01);
+    // mixKnob.setValue(100);
     mixKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     mixKnob.setLookAndFeel(&otherLookAndFeel);
     
     addAndMakeVisible (mixLabel);
-    mixLabel.setText ("mix", dontSendNotification);
+    mixLabel.setText ("Mix", dontSendNotification);
     mixLabel.setColour(Label::textColourId, mainColour);
     mixLabel.attachToComponent (&mixKnob, false);
     
     //volume knob
     addAndMakeVisible(gainKnob);
     gainKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    gainKnob.setRange(-48, 6, 0.1);
-    gainKnob.setValue(0);
+    // gainKnob.setRange(-48, 6, 0.1);
+    // gainKnob.setValue(0);
     gainKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     gainKnob.setLookAndFeel(&otherLookAndFeel);
     
     addAndMakeVisible (gainLabel);
-    gainLabel.setText ("output volume", dontSendNotification);
+    gainLabel.setText ("Output volume", dontSendNotification);
     gainLabel.setColour(Label::textColourId, mainColour);
     gainLabel.attachToComponent (&gainKnob, false);
     
-    driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
+    // driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob); // (deleted drive)
     inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix", mixKnob);
     gainAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", gainKnob);
@@ -139,6 +139,8 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor (BloodAudioProcessor& p)
 
     modeSelection = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     addAndMakeVisible(distortionMode);
+    
+    setResizeLimits (700, 525, 4000, 3000);
 }
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
@@ -158,7 +160,7 @@ void BloodAudioProcessorEditor::paint (Graphics& g)
     g.fillAll (backgroundColour);
     g.setColour (mainColour);
     g.setFont (15.0f);
-    g.drawFittedText ("Wings - Blood - ver 0.255 -------", getLocalBounds(), Justification::bottomRight, 1);
+    g.drawFittedText ("Wings - Blood - ver 0.26 -----", getLocalBounds(), Justification::bottomRight, 1);
     g.setFont (50.0f);
     Rectangle<int> area (getWidth()/2, (getHeight() / 3)+100, getWidth()/2-50+2, (getHeight() / 3+2));
     g.drawText ("BLOOD", area, Justification::centredTop);
@@ -170,29 +172,42 @@ void BloodAudioProcessorEditor::paint (Graphics& g)
     
     // paint distortion function
     
+    float functionValue;
+    float mixValue;
+    float mode = *processor.treeState.getRawParameterValue("mode");
+    float inputGain = *processor.treeState.getRawParameterValue("inputGain");
+    float mix = *processor.treeState.getRawParameterValue("mix");
+    // float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
+    
+    
     auto frame = getLocalBounds();        // adjust here, if you want to paint in a special location
     frame.setBounds(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
     const int numPix = frame.getWidth();  // you might experiment here, if you want less steps to speed up
-
-    float value  = -2.0f;                          // minimum (leftmost)  value for your graph
-    const float valInc = (2.0f - value) / numPix;  // maximum (rightmost) value for your graph
-    float pos = frame.getX();
+    
+    // float maxValue = 2.0f * drive * mix + 2.0f * (1 - mix);                  // maximum (rightmost) value for your graph
+    
+    float driveScale = 1;
+    if (inputGain >= 0) {
+        driveScale = pow(2, inputGain/6.0f);
+    }
+    float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
+    float value  = -maxValue;               // minimum (leftmost)  value for your graph
+    float valInc = (maxValue - value) / numPix;
+    float xPos = frame.getX();
     const float posInc = frame.getWidth() / numPix;
 
     Path p;
     
-    float functionValue;
-    float mixValue;
-    float mode = *processor.treeState.getRawParameterValue("mode");
-    float mix = *processor.treeState.getRawParameterValue("mix");
+    
     
     bool firstPoint = true;
     
     float yPos;
-    for (int i=1; i < numPix; ++i)
+    for (int i = 1; i < numPix; ++i)
     {
+   
         value += valInc;
-        pos += posInc;
+        xPos += posInc;
         
         if (mode == 1.0f) {
             functionValue = processor.arctanSoftClipping(value, 1.0f);
@@ -215,8 +230,9 @@ void BloodAudioProcessorEditor::paint (Graphics& g)
         else {
             functionValue = 1.0f;
         }
-        mixValue = ((1 - mix) * value) + (mix * functionValue);
+        mixValue = (((1 - mix) * value) + (mix * functionValue)) * (2.0f/3.0f); // 2/3 to make the graph looks better
         yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+        
         if (yPos < frame.getY())
         {
             continue;
@@ -227,12 +243,12 @@ void BloodAudioProcessorEditor::paint (Graphics& g)
         }
         if (firstPoint == true)
         {
-            mixValue = ((1 - mix) * value) + (mix * functionValue);
-            yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
-            p.startNewSubPath (pos, yPos);
+            //mixValue = ((1 - mix) * value) + (mix * functionValue);
+            //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+            p.startNewSubPath (xPos, yPos);
             firstPoint = false;
         }
-        p.lineTo (pos, yPos);  // replace f(x) with your function
+        p.lineTo (xPos, yPos);  // replace f(x) with your function
     }
     g.setColour (mainColour);
     g.drawRect (frame, 1);
@@ -247,17 +263,17 @@ void BloodAudioProcessorEditor::resized()
 {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
-    inputKnob.setBounds((getWidth()/5)*1-50, getHeight()-150, 100, 100);
-    driveKnob.setBounds((getWidth()/5)*2-50, getHeight()-150, 100, 100);
-    mixKnob.setBounds((getWidth()/5)*3-50, getHeight()-150, 100, 100);
-    gainKnob.setBounds((getWidth()/5)*4-50, getHeight()-150, 100, 100);
+    inputKnob.setBounds((getWidth()/4)*1-50, getHeight()-150, 100, 100);
+    // driveKnob.setBounds((getWidth()/5)*2-50, getHeight()-150, 100, 100); // (deleted drive)
+    mixKnob.setBounds((getWidth()/4)*2-50, getHeight()-150, 100, 100);
+    gainKnob.setBounds((getWidth()/4)*3-50, getHeight()-150, 100, 100);
     
     // visualiser
     processor.visualiser.setBounds(50, 50, getWidth()/2-50, (getHeight() / 3));
     
     // ff meter
-    inputMeter->setBounds(0, 0, 30, getHeight());
-    outputMeter->setBounds(getWidth()-30, 0, 30, getHeight());
+    inputMeter->setBounds(0, 0, 40, getHeight()+50);
+    outputMeter->setBounds(getWidth()-40, 0, 40, getHeight()+50);
     
     // distortion menu
     distortionMode.setBounds(50, (getHeight() / 3)+100, getWidth()/2-50, 50);

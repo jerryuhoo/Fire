@@ -25,8 +25,8 @@ BloodAudioProcessor::BloodAudioProcessor()
 
 ,treeState(*this,nullptr,"PARAMETERS",
 {
-    std::make_unique<AudioParameterFloat>("inputGain","InputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
-    std::make_unique<AudioParameterFloat>("drive","Drive",NormalisableRange<float>(0.0f,1.0f,0.01f), 1.0f),
+    std::make_unique<AudioParameterFloat>("inputGain","InputGain",NormalisableRange<float>(-36.0f,36.0f,0.1f), 0.0f),
+    // std::make_unique<AudioParameterFloat>("drive","Drive",NormalisableRange<float>(1.0f,16.0f,0.01f), 1.0f), // (deleted drive)
     std::make_unique<AudioParameterFloat>("mix","Mix",NormalisableRange<float>(0.0f,1.0f,0.01f), 1.0f),
     std::make_unique<AudioParameterFloat>("outputGain","OutputGain",NormalisableRange<float>(-48.0f,6.0f,0.1f), 0.0f),
     std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1.0f, 6.0f), 1.0f),
@@ -110,8 +110,12 @@ void BloodAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     // initialisation that you need..
     auto inputGainValue = treeState.getRawParameterValue("inputGain");
     previousGainInput = (Decibels::decibelsToGain(*inputGainValue));
+    
     auto outputGainValue = treeState.getRawParameterValue("outputGain");
     previousGainOutput = (Decibels::decibelsToGain(*outputGainValue));
+    
+    
+    
     visualiser.clear();
 }
 
@@ -170,27 +174,30 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     auto menuChoiceValue = treeState.getRawParameterValue("mode");
     float menuChoice = *menuChoiceValue;
     
-    auto driveValue = treeState.getRawParameterValue("drive");
-    float drive = *driveValue;
     auto inputGainValue = treeState.getRawParameterValue("inputGain");
     float currentGainInput = Decibels::decibelsToGain(*inputGainValue);
+    
+    // (deleted drive)
+//    auto driveValue = treeState.getRawParameterValue("drive");
+//    float drive = *driveValue;
+    
     auto mixValue = treeState.getRawParameterValue("mix");
     float mix = *mixValue;
+    
     auto outputGainValue = treeState.getRawParameterValue("outputGain");
     float currentGainOutput = Decibels::decibelsToGain(*outputGainValue);
     
-    // input volume
+    // ff input meter
+    inputMeterSource.measureBlock (buffer);
+    
+    // input volume fix
     if (currentGainInput == previousGainInput) {
         buffer.applyGain(currentGainInput);
     } else {
         buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
         previousGainInput = currentGainInput;
     }
-    
-    
-    // ff input meter
-    inputMeterSource.measureBlock (buffer);
-    
+
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
 
@@ -200,7 +207,8 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
             
             auto input = channelData[sample];
             auto cleanOut = channelData[sample];
-            input *= 1.0f + 15.0f * drive;
+            // input *= 1.0f + 15.0f * drive;
+            // input *= drive;  // (deleted drive)
             if (menuChoice == 1.0f)
             //arctan Soft Clipping
             {
@@ -250,6 +258,8 @@ void BloodAudioProcessor::processBlock (AudioBuffer<float>& buffer, MidiBuffer& 
     }
 
     
+    
+    // output volume fix
     if (currentGainOutput == previousGainOutput) {
         buffer.applyGain(currentGainOutput);
     } else {
@@ -324,14 +334,14 @@ float BloodAudioProcessor::expSoftClipping (float input, float thresh)
     {
         input = -1.0f + expf(input);
     }
-    input = 2.0f/3.0f*input;
+    //input = 2.0f/3.0f*input;
     return input;
 }
 
 float BloodAudioProcessor::tanhSoftClipping (float input, float thresh)
 {
     input = tanh(input);
-    input = 2.0f/3.0f*input;
+    //input = 2.0f/3.0f*input;
     return input;
 }
 
@@ -339,17 +349,17 @@ float BloodAudioProcessor::cubicSoftClipping (float input, float thresh)
 {
     if (input > thresh)
     {
-        input = thresh*2/3;
+        input = thresh * 2.0f / 3.0f;
     }
     else if (input < -thresh)
     {
-        input = -thresh*2/3;
+        input = -thresh * 2.0f /3.0f;
     }
     else
     {
-        input = input-(pow(input,3)/3);
+        input = input-(pow(input,3) / 3);
     }
-    return input;
+    return input *3.0f / 2.0f;
 }
 
 
@@ -368,7 +378,7 @@ float BloodAudioProcessor::hardClipping (float input, float thresh)
     {
         input = input;
     }
-    input = 2.0f/3.0f*input;
+    //input = 2.0f/3.0f*input;
     return input;
 }
 
@@ -376,6 +386,7 @@ float BloodAudioProcessor::hardClipping (float input, float thresh)
 
 float BloodAudioProcessor::squareWaveClipping (float input, float thresh)
 {
+    input = round(input*10)/10;
     if (input > thresh)
     {
         input = thresh;
@@ -386,9 +397,10 @@ float BloodAudioProcessor::squareWaveClipping (float input, float thresh)
     }
     else
     {
-        input = 0;
+        input = input;
     }
-    input = 2.0f/3.0f*input;
+    
+    //input = 2.0f/3.0f*input;
     return input;
 }
 

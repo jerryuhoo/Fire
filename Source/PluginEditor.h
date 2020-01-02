@@ -97,15 +97,15 @@ private:
     std::unique_ptr<FFAU::LevelMeterLookAndFeel> lnf;
     
     // create knobs and their labels
-    Slider driveKnob;
+    // Slider driveKnob; // (deleted drive)
     Slider inputKnob;
     Slider mixKnob;
     Slider gainKnob;
-    Label driveLabel;
+    // Label driveLabel;
     Label inputLabel;
     Label mixLabel;
     Label gainLabel;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
+    // std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> gainAttachment;

@@ -1,6 +1,18 @@
 # Blood
- distortion plugin
-
+ This is a distortion plugin.
+ This plugin has 6 different distortion modes:
+ - Arctan Soft Clipping
+ - Exp Soft Clipping
+ - Tanh Soft Clipping
+ - Cubic Soft Clipping
+ - Hard Clipping
+ - Square Wave Clipping
+ And three knobs:
+ - Drive knob
+ - Mix knob
+ - Output knob
+ 
+Hope you like it!
 
 # Release Notes:
 

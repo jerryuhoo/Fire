@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<JUCERPROJECT id="NykRD7" name="Blood" projectType="audioplug" jucerVersion="5.4.5"
+<JUCERPROJECT id="NykRD7" name="Blood" projectType="audioplug" jucerVersion="5.4.7"
               pluginManufacturer="Wings" aaxIdentifier="com.Wings.Blood" bundleIdentifier="com.Wings.Blood">
   <MAINGROUP id="X9e8F0" name="Blood">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
@@ -11,6 +11,8 @@
       <FILE id="MNKrsG" name="PluginEditor.cpp" compile="1" resource="0"
             file="Source/PluginEditor.cpp"/>
       <FILE id="O1QEz8" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+      <FILE id="w4rHsb" name="Distortion.cpp" compile="1" resource="0" file="Source/Distortion.cpp"/>
+      <FILE id="SfkGT4" name="Distortion.h" compile="0" resource="0" file="Source/Distortion.h"/>
     </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>
@@ -34,12 +36,12 @@
         <MODULEPATH id="juce_gui_basics" path="../../../../Applications/JUCE/modules"/>
         <MODULEPATH id="juce_gui_extra" path="../../../../Applications/JUCE/modules"/>
         <MODULEPATH id="juce_opengl" path="../../../../Applications/JUCE/modules"/>
-        <MODULEPATH id="ff_meters" path="../../../../Applications/JUCE/modules"/>
+        <MODULEPATH id="ff_meters" path="../juceUserModules/ff_meters"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>
   <MODULES>
-    <MODULE id="ff_meters" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="ff_meters" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>

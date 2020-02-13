@@ -9,7 +9,8 @@
  - Cubic Soft Clipping
  - Hard Clipping
  - Square Wave Clipping
- And three knobs:
+ And four knobs:
+ - Input knob
  - Drive knob
  - Mix knob
  - Output knob

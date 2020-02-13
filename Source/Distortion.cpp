@@ -2,17 +2,18 @@
 //  Distortion.cpp
 //  Blood
 //
-//  Created by 俞轶风 on 2/11/20.
+//  Created by 羽翼深蓝Wings on 2/11/20.
 //
 
 #include "Distortion.h"
 
 Distortion::Distortion()
 {
+    controls.thresh = 1.f;
     controls.mode = 0;
     controls.drive = 1.f;
+    controls.output = 1.f;
     controls.mix = 0.f;
-    controls.thresh = 1.f;
 }
 
 Distortion::~Distortion() {}
@@ -43,7 +44,7 @@ float Distortion::distortionProcess(float sample)
         input = squareWaveClipping(input);
         break;
     }
-
+    input = input * controls.output;
     return (1.f - controls.mix) * cleanOut + controls.mix * input;
 }
 

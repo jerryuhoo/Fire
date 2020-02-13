@@ -28,3 +28,8 @@ Hope you like it!
 2. Fix some display problems. Now you can see the change of graph when you modify drive knob and mix knob.
 3. Make the windows resizable.
 
+2020-2-12 (version 0.275)
+1. add input knob, change the location of mix and output knob. Now the output knob is before the mix knob so that it doesn't affect mix knob when mix = 0.
+2. fit JUCE v5.7.4
+3. seperate distortion module into Distortion.cpp and Distortion.h
+4. Change "mode" into interger

@@ -95,16 +95,18 @@ private:
     // create knobs and their labels
     Slider driveKnob; // (deleted drive)
     Slider inputKnob;
+    Slider outputKnob;
     Slider mixKnob;
-    Slider gainKnob;
+    
     Label driveLabel; // (deleted drive)
     Label inputLabel;
+    Label outputLabel;
     Label mixLabel;
-    Label gainLabel;
+    
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
+    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> outputAttachment;
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> gainAttachment;
 
     // mode menu
     ComboBox distortionMode;

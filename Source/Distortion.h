@@ -2,7 +2,7 @@
 //  Distortion.h
 //  Blood
 //
-//  Created by 俞轶风 on 2/11/20.
+//  Created by 羽翼深蓝Wings on 2/11/20.
 //
 
 #ifndef Distortion_h
@@ -20,6 +20,8 @@ public:
         float drive;
         // Threshold, [0., 1], the amplitude at which to start fold-back distortion
         float thresh;
+        // output
+        float output;
         // Mix, [0., 1.] ratio between a dry and wet signal
         float mix;
     } controls;

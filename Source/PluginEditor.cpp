@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.271"
+#define VERSION "0.275"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -74,6 +74,17 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     driveLabel.setColour(Label::textColourId, mainColour);
     driveLabel.attachToComponent(&driveKnob, false);
 
+    //output knob
+    addAndMakeVisible(outputKnob);
+    outputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    outputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    outputKnob.setLookAndFeel(&otherLookAndFeel);
+
+    addAndMakeVisible(outputLabel);
+    outputLabel.setText("Output", dontSendNotification);
+    outputLabel.setColour(Label::textColourId, mainColour);
+    outputLabel.attachToComponent(&outputKnob, false);
+
     //mix knob
     addAndMakeVisible(mixKnob);
     mixKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
@@ -84,22 +95,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     mixLabel.setText("Mix", dontSendNotification);
     mixLabel.setColour(Label::textColourId, mainColour);
     mixLabel.attachToComponent(&mixKnob, false);
-
-    //volume knob
-    addAndMakeVisible(gainKnob);
-    gainKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    gainKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    gainKnob.setLookAndFeel(&otherLookAndFeel);
-
-    addAndMakeVisible(gainLabel);
-    gainLabel.setText("Output", dontSendNotification);
-    gainLabel.setColour(Label::textColourId, mainColour);
-    gainLabel.attachToComponent(&gainKnob, false);
-
+    
+    //Attachment
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob); // (deleted drive)
     inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
+    outputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
     mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix", mixKnob);
-    gainAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", gainKnob);
 
     //visualiser
     //addAndMakeVisible(visualiser);
@@ -163,14 +164,14 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
 
     float functionValue;
     float mixValue;
-    float mode = *processor.treeState.getRawParameterValue("mode");
+    int mode = *processor.treeState.getRawParameterValue("mode");
     float inputGain = *processor.treeState.getRawParameterValue("inputGain");
-    float mix = *processor.treeState.getRawParameterValue("mix");
     float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
-
+    float mix = *processor.treeState.getRawParameterValue("mix");
+    
     distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.mix = mix;
     distortionProcessor.controls.drive = drive;
+    distortionProcessor.controls.mix = mix;
 
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
     frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2));
@@ -235,8 +236,8 @@ void BloodAudioProcessorEditor::resized()
     // subcomponents in your editor..
     inputKnob.setBounds((getWidth() / 5) * 1 - 50, getHeight() - 150, 100, 100);
     driveKnob.setBounds((getWidth() / 5) * 2 - 50, getHeight() - 150, 100, 100); // (deleted drive)
-    mixKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight() - 150, 100, 100);
-    gainKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight() - 150, 100, 100);
+    outputKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight() - 150, 100, 100);
+    mixKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight() - 150, 100, 100);
 
     // visualiser
     processor.visualiser.setBounds(50, 50, getWidth() / 2 - 50, (getHeight() / 3));

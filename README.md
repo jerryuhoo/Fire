@@ -33,3 +33,6 @@ Hope you like it!
 2. fit JUCE v5.7.4
 3. seperate distortion module into Distortion.cpp and Distortion.h
 4. Change "mode" into interger
+
+2020-2-14 (version 0.28)
+1. Finally, I use smoothedValue to eliminate zipper noise when twist knobs quickly.

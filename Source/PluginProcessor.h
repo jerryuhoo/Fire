@@ -94,10 +94,20 @@ private:
     //ff meter
     FFAU::LevelMeterSource inputMeterSource;
     FFAU::LevelMeterSource outputMeterSource;
+    
     float previousGainInput;
     float previousGainOutput;
+    float previousDrive;
+    
     std::atomic<float> *inputGainValue = nullptr;
     std::atomic<float> *outputGainValue = nullptr;
+    std::atomic<float> *previousDriveValue = nullptr;
+    
+    // fix the artifacts (also called zipper noise)
+    SmoothedValue<float> driveSmoother;
+    SmoothedValue<float> outputSmoother;
+    
     Distortion distortionProcessor;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloodAudioProcessor)
 };

@@ -21,8 +21,11 @@ Distortion::~Distortion() {}
 float Distortion::distortionProcess(float sample)
 {
     cleanOut = sample;
+    
     input = cleanOut * controls.drive;
 
+    // controls.drive = driverSmoother.getNextValue();
+    
     switch (controls.mode)
     {
     case 1:

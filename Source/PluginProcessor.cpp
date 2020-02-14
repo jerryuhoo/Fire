@@ -105,14 +105,26 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
+    
+    // fix the artifacts (also called zipper noise)
     inputGainValue = treeState.getRawParameterValue("inputGain");
     // previousGainInput = (Decibels::decibelsToGain(*inputGainValue));
     previousGainInput = (float)*inputGainValue;
     previousGainInput = Decibels::decibelsToGain(previousGainInput);
+    
     outputGainValue = treeState.getRawParameterValue("outputGain");
     previousGainOutput = (float)*outputGainValue;
     previousGainOutput = Decibels::decibelsToGain(previousGainOutput);
-
+    
+    previousDriveValue = treeState.getRawParameterValue("drive");
+    previousDrive = *previousDriveValue;
+    
+    driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
+    driveSmoother.setCurrentAndTargetValue(previousDrive);
+    
+    outputSmoother.reset(sampleRate, 0.05);
+    outputSmoother.setCurrentAndTargetValue(previousGainOutput);
+    
     visualiser.clear();
 }
 
@@ -186,8 +198,8 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     float mix = *mixValue;
     
     distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.drive = drive;
-    distortionProcessor.controls.output = currentGainOutput;
+    // distortionProcessor.controls.drive = drive;
+    // distortionProcessor.controls.output = currentGainOutput;
     distortionProcessor.controls.mix = mix;
     // ff input meter
     inputMeterSource.measureBlock(buffer);
@@ -202,14 +214,18 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
         previousGainInput = currentGainInput;
     }
-
+    
+    // set zipper noise smoother target
+    driveSmoother.setTargetValue(drive);
+    outputSmoother.setTargetValue(currentGainOutput);
+    
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-
-        // float thresh = 1.f;
         auto *channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
+            distortionProcessor.controls.drive = driveSmoother.getNextValue();
+            distortionProcessor.controls.output = outputSmoother.getNextValue();
             channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
         }
         //        visualiser.pushBuffer(buffer);

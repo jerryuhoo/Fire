@@ -7,6 +7,8 @@
 
 #ifndef Distortion_h
 #define Distortion_h
+
+#include "../JuceLibraryCode/JuceHeader.h"
 #include <cmath>
 
 class Distortion
@@ -41,6 +43,8 @@ private:
     float cubicSoftClipping(float input);
     float hardClipping(float input);
     float squareWaveClipping(float input);
+    
+    // SmoothedValue<float> driverSmoother;
 };
 
 #endif /* Distortion_h */

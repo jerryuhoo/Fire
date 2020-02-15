@@ -8,7 +8,7 @@
  - Tanh Soft Clipping
  - Cubic Soft Clipping
  - Hard Clipping
- - Square Wave Clipping
+ - Sin Wave Clipping
  And four knobs:
  - Input knob
  - Drive knob

@@ -44,7 +44,7 @@ float Distortion::distortionProcess(float sample)
         input = hardClipping(input);
         break;
     case 6:
-        input = squareWaveClipping(input);
+        input = sinWaveClipping(input);
         break;
     }
     input = input * controls.output;
@@ -113,22 +113,16 @@ float Distortion::hardClipping(float input)
     return input;
 }
 
-float Distortion::squareWaveClipping(float input)
+float Distortion::sinWaveClipping(float input)
 {
-    input = round(input * 10) / 10;
-    if (input > controls.thresh)
-    {
-        input = controls.thresh;
-    }
-    else if (input < -controls.thresh)
-    {
-        input = -controls.thresh;
-    }
-    else
-    {
-        input = input;
-    }
+    input = std::sin(input);
+    
+    return input;
+}
 
-    //input = 2.0f/3.0f*input;
+float Distortion::bitCrusher(float input)
+{
+    input = std::sin(input);
+    
     return input;
 }

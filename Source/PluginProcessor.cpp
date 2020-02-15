@@ -25,7 +25,7 @@ BloodAudioProcessor::BloodAudioProcessor()
                 {
                     std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 6, 1), 1),
                     std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f),
-                    std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 16.0f, 0.01f), 1.0f), // (deleted drive)
+                    std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f), // (deleted drive)
                     std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f),
                     std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f),
                     
@@ -231,16 +231,6 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         //        visualiser.pushBuffer(buffer);
     }
 
-    // output volume fix
-//    if (currentGainOutput == previousGainOutput)
-//    {
-//        buffer.applyGain(currentGainOutput);
-//    }
-//    else
-//    {
-//        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainOutput, currentGainOutput);
-//        previousGainOutput = currentGainOutput;
-//    }
 
     // ff output meter
     outputMeterSource.measureBlock(buffer);

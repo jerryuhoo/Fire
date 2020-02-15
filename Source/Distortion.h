@@ -42,8 +42,8 @@ private:
     float tanhSoftClipping(float input);
     float cubicSoftClipping(float input);
     float hardClipping(float input);
-    float squareWaveClipping(float input);
-    
+    float sinWaveClipping(float input);
+    float bitCrusher(float input);
     // SmoothedValue<float> driverSmoother;
 };
 

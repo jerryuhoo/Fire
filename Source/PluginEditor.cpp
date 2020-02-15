@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.28"
+#define VERSION "0.281"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -113,7 +113,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.addItem("Tanh Soft Clipping", 3);
     distortionMode.addItem("Cubic Soft Clipping", 4);
     distortionMode.addItem("Hard Clipping", 5);
-    distortionMode.addItem("Square Wave Clipping", 6);
+    distortionMode.addItem("Sin Wave Clipping", 6);
     distortionMode.setJustificationType(Justification::centred);
     distortionMode.setColour(ComboBox::textColourId, mainColour);
     distortionMode.setColour(ComboBox::arrowColourId, mainColour);

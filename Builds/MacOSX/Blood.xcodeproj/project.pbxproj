@@ -89,6 +89,10 @@
 			isa = PBXBuildFile;
 			fileRef = CBC1856AF2FFA48477FB0779;
 		};
+		F03B8086F0C4162205C8EBC5 = {
+			isa = PBXBuildFile;
+			fileRef = FD6940F8BF463800348876CE;
+		};
 		5C375D7F5AE830D1BA3B47C9 = {
 			isa = PBXBuildFile;
 			fileRef = 34E8460A4E79422849A81391;
@@ -194,6 +198,13 @@
 			path = ../../JuceLibraryCode/AppConfig.h;
 			sourceTree = "SOURCE_ROOT";
 		};
+		1A144B697BD6B79BB3AFE8D9 = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "juce_gui_extra";
+			path = "/Applications/JUCE/modules/juce_gui_extra";
+			sourceTree = "<absolute>";
+		};
 		1FDBE0D8750D848FF53A32E8 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -215,6 +226,13 @@
 			path = "Info-AU.plist";
 			sourceTree = "SOURCE_ROOT";
 		};
+		268AB4DE69AA2A014726917C = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "juce_audio_utils";
+			path = "/Applications/JUCE/modules/juce_audio_utils";
+			sourceTree = "<absolute>";
+		};
 		29C1DFE7D80A54D38B6BC11C = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -234,6 +252,20 @@
 			lastKnownFileType = sourcecode.cpp.cpp;
 			name = "include_ff_meters_LevelMeter.cpp";
 			path = "../../JuceLibraryCode/include_ff_meters_LevelMeter.cpp";
+			sourceTree = "SOURCE_ROOT";
+		};
+		37389CB7B93E7AC2F030033B = {
+			isa = PBXFileReference;
+			lastKnownFileType = image.png;
+			name = blood.png;
+			path = ../../../../../Desktop/blood.png;
+			sourceTree = "SOURCE_ROOT";
+		};
+		40E5BC4D0F214273FAFF677D = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			name = "include_juce_gui_basics.mm";
+			path = "../../JuceLibraryCode/include_juce_gui_basics.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
 		85717F97D2DB0F36823CFEA2 = {
@@ -257,20 +289,6 @@
 			path = Blood.app;
 			sourceTree = "BUILT_PRODUCTS_DIR";
 		};
-		1A144B697BD6B79BB3AFE8D9 = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "juce_gui_extra";
-			path = "/Applications/JUCE/modules/juce_gui_extra";
-			sourceTree = "<absolute>";
-		};
-		268AB4DE69AA2A014726917C = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "juce_audio_utils";
-			path = "/Applications/JUCE/modules/juce_audio_utils";
-			sourceTree = "<absolute>";
-		};
 		358CEE774D7C9D7037C1CDBE = {
 			isa = PBXFileReference;
 			lastKnownFileType = file.r;
@@ -284,13 +302,6 @@
 			name = CoreAudio.framework;
 			path = System/Library/Frameworks/CoreAudio.framework;
 			sourceTree = SDKROOT;
-		};
-		40E5BC4D0F214273FAFF677D = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.objcpp;
-			name = "include_juce_gui_basics.mm";
-			path = "../../JuceLibraryCode/include_juce_gui_basics.mm";
-			sourceTree = "SOURCE_ROOT";
 		};
 		4111ED926CAF4776091673D3 = {
 			isa = PBXFileReference;
@@ -481,6 +492,13 @@
 			path = "/Applications/JUCE/modules/juce_audio_plugin_client";
 			sourceTree = "<absolute>";
 		};
+		B463ABE9D163DEC02210D733 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			name = BinaryData.h;
+			path = ../../JuceLibraryCode/BinaryData.h;
+			sourceTree = "SOURCE_ROOT";
+		};
 		B678DE0EA102D56CC7250049 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -614,6 +632,13 @@
 			path = "/Applications/JUCE/modules/juce_audio_devices";
 			sourceTree = "<absolute>";
 		};
+		FD6940F8BF463800348876CE = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			name = BinaryData.cpp;
+			path = ../../JuceLibraryCode/BinaryData.cpp;
+			sourceTree = "SOURCE_ROOT";
+		};
 		FD98AEE7569D98ACC1E293DA = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.cpp;
@@ -641,10 +666,19 @@
 			name = Source;
 			sourceTree = "<group>";
 		};
+		744089E6ED50BD160D37D5E3 = {
+			isa = PBXGroup;
+			children = (
+				37389CB7B93E7AC2F030033B,
+			);
+			name = Resource;
+			sourceTree = "<group>";
+		};
 		2FFC634ADA4C49812D0E7F31 = {
 			isa = PBXGroup;
 			children = (
 				3939E26A928C35AAB6A88B28,
+				744089E6ED50BD160D37D5E3,
 			);
 			name = Blood;
 			sourceTree = "<group>";
@@ -675,6 +709,8 @@
 			isa = PBXGroup;
 			children = (
 				0D4F820C92FD8475622E8D89,
+				FD6940F8BF463800348876CE,
+				B463ABE9D163DEC02210D733,
 				34E8460A4E79422849A81391,
 				C46BFF376042183DDBC6E826,
 				29C1DFE7D80A54D38B6BC11C,
@@ -1526,6 +1562,7 @@
 				D61DC5FD027C1F9EF07446DE,
 				2CABE1F985956F7BC7E9507D,
 				4E9EDA850EF59C3F28CA20DB,
+				F03B8086F0C4162205C8EBC5,
 				5C375D7F5AE830D1BA3B47C9,
 				A940FA232BAB9E510C00D2B3,
 				51241789434445984E77FF8A,

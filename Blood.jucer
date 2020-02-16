@@ -14,6 +14,9 @@
       <FILE id="w4rHsb" name="Distortion.cpp" compile="1" resource="0" file="Source/Distortion.cpp"/>
       <FILE id="SfkGT4" name="Distortion.h" compile="0" resource="0" file="Source/Distortion.h"/>
     </GROUP>
+    <GROUP id="{4D5C8DFF-C673-563C-6FBC-4675C99EB0D9}" name="Resource">
+      <FILE id="bQ0Cbm" name="blood.png" compile="0" resource="1" file="../../../Desktop/blood.png"/>
+    </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>
     <XCODE_MAC targetFolder="Builds/MacOSX">

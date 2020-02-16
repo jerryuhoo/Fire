@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.281"
+#define VERSION "0.283"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -114,6 +114,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.addItem("Cubic Soft Clipping", 4);
     distortionMode.addItem("Hard Clipping", 5);
     distortionMode.addItem("Sin Wave Clipping", 6);
+    distortionMode.addItem("Bit Crusher", 7);
     distortionMode.setJustificationType(Justification::centred);
     distortionMode.setColour(ComboBox::textColourId, mainColour);
     distortionMode.setColour(ComboBox::arrowColourId, mainColour);
@@ -150,11 +151,22 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     g.fillAll(backgroundColour);
     g.setColour(mainColour);
     g.setFont(15.0f);
-    String version = (String) "Wings - Blood - Version " + (String)VERSION;
+    String version = (String) "Wings - Blood(close beta test) - Version " + (String)VERSION;
     g.drawFittedText(version, getLocalBounds(), Justification::centredBottom, 1);
-    g.setFont(50.0f);
-    Rectangle<int> area(getWidth() / 2, (getHeight() / 3) + 100, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2));
-    g.drawText("BLOOD", area, Justification::centredTop);
+    
+    // set title "Blood"
+    // g.setFont(50.0f);
+    // g.setFont (Font ("华文宋体", 50.0f, Font::bold));
+    // Rectangle<int> area(getWidth() / 2, (getHeight() / 3) + 100, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2));
+    // g.drawText("blood", area, Justification::centredTop);
+    
+    // set title picture "Blood"
+    Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
+    int x = getWidth() / 2 + 20;
+    int y = getHeight() / 2;
+    g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
+    
+    
     // wave visualiser boundary
     g.drawRect(50 - 1, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 2);
     // mode visualiser boundary

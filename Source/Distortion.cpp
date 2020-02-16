@@ -46,6 +46,9 @@ float Distortion::distortionProcess(float sample)
     case 6:
         input = sinWaveClipping(input);
         break;
+    case 7:
+        input = bitCrusher(input);
+        break;
     }
     input = input * controls.output;
     return (1.f - controls.mix) * cleanOut + controls.mix * input;
@@ -122,7 +125,7 @@ float Distortion::sinWaveClipping(float input)
 
 float Distortion::bitCrusher(float input)
 {
-    input = std::sin(input);
-    
+    input /= controls.drive;
+    input = std::ceil((64.f/controls.drive)*input)*(1.f/(64.f/controls.drive));
     return input;
 }

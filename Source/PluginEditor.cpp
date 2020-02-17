@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.284"
+#define VERSION "0.285"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -56,45 +56,49 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(inputKnob);
     inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    inputKnob.setLookAndFeel(&otherLookAndFeel);
+    inputKnob.setLookAndFeel(&otherLookAndFeelRed);
 
     addAndMakeVisible(inputLabel);
     inputLabel.setText("Input", dontSendNotification);
     inputLabel.setColour(Label::textColourId, mainColour);
     inputLabel.attachToComponent(&inputKnob, false);
+    inputLabel.setJustificationType (Justification::centred);
 
     //drive knob (deleted)
     addAndMakeVisible(driveKnob);
     driveKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    driveKnob.setLookAndFeel(&otherLookAndFeel);
+    driveKnob.setLookAndFeel(&otherLookAndFeelRed);
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", dontSendNotification);
     driveLabel.setColour(Label::textColourId, mainColour);
     driveLabel.attachToComponent(&driveKnob, false);
-
+    driveLabel.setJustificationType (Justification::centred);
+    
     //output knob
     addAndMakeVisible(outputKnob);
     outputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     outputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    outputKnob.setLookAndFeel(&otherLookAndFeel);
+    outputKnob.setLookAndFeel(&otherLookAndFeelRed);
 
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", dontSendNotification);
     outputLabel.setColour(Label::textColourId, mainColour);
     outputLabel.attachToComponent(&outputKnob, false);
+    outputLabel.setJustificationType (Justification::centred);
 
     //mix knob
     addAndMakeVisible(mixKnob);
     mixKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     mixKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    mixKnob.setLookAndFeel(&otherLookAndFeel);
+    mixKnob.setLookAndFeel(&otherLookAndFeelRed);
 
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", dontSendNotification);
     mixLabel.setColour(Label::textColourId, mainColour);
     mixLabel.attachToComponent(&mixKnob, false);
+    mixLabel.setJustificationType (Justification::centred);
     
     //Attachment
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob); // (deleted drive)

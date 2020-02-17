@@ -51,6 +51,24 @@ public:
     }
 };
 
+class OtherLookAndFeelRed : public LookAndFeel_V4
+{
+public:
+    Colour mainColour = Colours::red;
+    Colour backgroundColour = Colours::black;
+    Colour secondColour = Colour(50, 0, 0);
+
+    OtherLookAndFeelRed()
+    {
+        setColour(Slider::textBoxTextColourId, mainColour);
+        setColour(Slider::textBoxBackgroundColourId, backgroundColour);
+        setColour(Slider::textBoxOutlineColourId, mainColour);
+        setColour(Slider::thumbColourId, Colours::red);
+        setColour(Slider::rotarySliderFillColourId, Colour(200, 0, 0));
+        setColour(Slider::rotarySliderOutlineColourId, Colours::darkred);
+    }
+};
+
 //class Visualiser : public AudioVisualiserComponent
 //{
 //public:
@@ -113,6 +131,7 @@ private:
     std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeSelection;
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
+    OtherLookAndFeelRed otherLookAndFeelRed;
 
     Distortion distortionProcessor;
 

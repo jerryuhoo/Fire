@@ -77,7 +77,7 @@ public:
     void resized() override;
     // color setting
     Colour mainColour = Colours::red;
-    Colour backgroundColour = Colours::black;
+    Colour backgroundColour = Colour::fromFloatRGBA (0.0f, 0.0f, 0.0f, 0.0f); //Colours::black;
     Colour secondColour = Colour(50, 0, 0);
 
     //    Visualiser visualiser;

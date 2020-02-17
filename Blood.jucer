@@ -15,7 +15,9 @@
       <FILE id="SfkGT4" name="Distortion.h" compile="0" resource="0" file="Source/Distortion.h"/>
     </GROUP>
     <GROUP id="{4D5C8DFF-C673-563C-6FBC-4675C99EB0D9}" name="Resource">
-      <FILE id="bQ0Cbm" name="blood.png" compile="0" resource="1" file="../../../Desktop/blood.png"/>
+      <FILE id="BQXJYE" name="blood_background.png" compile="0" resource="1"
+            file="../../../Desktop/resource/blood_background.png"/>
+      <FILE id="meIkjM" name="blood.png" compile="0" resource="1" file="../../../Desktop/resource/blood.png"/>
     </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>

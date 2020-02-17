@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.283"
+#define VERSION "0.284"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -34,20 +34,20 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     lnf->setColour(FFAU::LevelMeter::lmMeterMaxNormalColour, juce::Colours::yellow);
     lnf->setColour(FFAU::LevelMeter::lmMeterMaxWarnColour, juce::Colours::orange);
     lnf->setColour(FFAU::LevelMeter::lmMeterMaxOverColour, juce::Colours::darkred);
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientLowColour, secondColour);
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMidColour, mainColour);
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMaxColour, juce::Colours::deeppink);
+    lnf->setColour(FFAU::LevelMeter::lmMeterGradientLowColour, Colour(180, 0, 0));
+    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMidColour, Colour(180, 0, 0));
+    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMaxColour, Colour(180, 0, 0));
     lnf->setColour(FFAU::LevelMeter::lmMeterReductionColour, juce::Colours::orange);
     inputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
     inputMeter->setLookAndFeel(lnf.get());
     inputMeter->setMeterSource(&processor.getInputMeterSource());
-    addAndMakeVisible(*inputMeter);
+    // addAndMakeVisible(*inputMeter); //暂时停用
 
     outputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
     outputMeter->setLookAndFeel(lnf.get());
     outputMeter->setMeterSource(&processor.getOutputMeterSource());
-    addAndMakeVisible(*outputMeter);
-
+    // addAndMakeVisible(*outputMeter); //暂时停用
+    
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     setSize(800, 600);
@@ -131,7 +131,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     modeSelection = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     addAndMakeVisible(distortionMode);
 
-    setResizeLimits(700, 525, 4000, 3000);
+    setResizeLimits(700, 525, 1500, 1125);
 }
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
@@ -148,8 +148,13 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
 {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     //g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
-    g.fillAll(backgroundColour);
+    //g.fillAll(backgroundColour);
     g.setColour(mainColour);
+    
+    // set background
+    Image background = ImageCache::getFromMemory(BinaryData::blood_background_png, (size_t) BinaryData::blood_background_pngSize);
+    g.drawImage(background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
+    
     g.setFont(15.0f);
     String version = (String) "Wings - Blood(close beta test) - Version " + (String)VERSION;
     g.drawFittedText(version, getLocalBounds(), Justification::centredBottom, 1);
@@ -162,9 +167,10 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     
     // set title picture "Blood"
     Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
-    int x = getWidth() / 2 + 20;
+    int x = getWidth() / 4 * 3 - title.getWidth() / 4;
     int y = getHeight() / 2;
     g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
+    
     
     
     // wave visualiser boundary
@@ -246,6 +252,10 @@ void BloodAudioProcessorEditor::resized()
 {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
+    
+    
+    
+    // knobs
     inputKnob.setBounds((getWidth() / 5) * 1 - 50, getHeight() - 150, 100, 100);
     driveKnob.setBounds((getWidth() / 5) * 2 - 50, getHeight() - 150, 100, 100); // (deleted drive)
     outputKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight() - 150, 100, 100);
@@ -255,8 +265,8 @@ void BloodAudioProcessorEditor::resized()
     processor.visualiser.setBounds(50, 50, getWidth() / 2 - 50, (getHeight() / 3));
 
     // ff meter
-    inputMeter->setBounds(0, 0, 40, getHeight() + 50);
-    outputMeter->setBounds(getWidth() - 40, 0, 40, getHeight() + 50);
+    inputMeter->setBounds(15, 0, 40, getHeight() + 50);
+    outputMeter->setBounds(getWidth() - 50, 0, 40, getHeight() + 50);
 
     // distortion menu
     distortionMode.setBounds(50, (getHeight() / 3) + 100, getWidth() / 2 - 50, 50);

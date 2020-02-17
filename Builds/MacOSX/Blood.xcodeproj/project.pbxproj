@@ -198,13 +198,6 @@
 			path = ../../JuceLibraryCode/AppConfig.h;
 			sourceTree = "SOURCE_ROOT";
 		};
-		1A144B697BD6B79BB3AFE8D9 = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "juce_gui_extra";
-			path = "/Applications/JUCE/modules/juce_gui_extra";
-			sourceTree = "<absolute>";
-		};
 		1FDBE0D8750D848FF53A32E8 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -226,13 +219,6 @@
 			path = "Info-AU.plist";
 			sourceTree = "SOURCE_ROOT";
 		};
-		268AB4DE69AA2A014726917C = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "juce_audio_utils";
-			path = "/Applications/JUCE/modules/juce_audio_utils";
-			sourceTree = "<absolute>";
-		};
 		29C1DFE7D80A54D38B6BC11C = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -252,13 +238,6 @@
 			lastKnownFileType = sourcecode.cpp.cpp;
 			name = "include_ff_meters_LevelMeter.cpp";
 			path = "../../JuceLibraryCode/include_ff_meters_LevelMeter.cpp";
-			sourceTree = "SOURCE_ROOT";
-		};
-		37389CB7B93E7AC2F030033B = {
-			isa = PBXFileReference;
-			lastKnownFileType = image.png;
-			name = blood.png;
-			path = ../../../../../Desktop/blood.png;
 			sourceTree = "SOURCE_ROOT";
 		};
 		40E5BC4D0F214273FAFF677D = {
@@ -288,6 +267,20 @@
 			includeInIndex = 0;
 			path = Blood.app;
 			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		1A144B697BD6B79BB3AFE8D9 = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "juce_gui_extra";
+			path = "/Applications/JUCE/modules/juce_gui_extra";
+			sourceTree = "<absolute>";
+		};
+		268AB4DE69AA2A014726917C = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "juce_audio_utils";
+			path = "/Applications/JUCE/modules/juce_audio_utils";
+			sourceTree = "<absolute>";
 		};
 		358CEE774D7C9D7037C1CDBE = {
 			isa = PBXFileReference;
@@ -415,6 +408,13 @@
 			path = System/Library/Frameworks/Cocoa.framework;
 			sourceTree = SDKROOT;
 		};
+		858D38E683153D9BAC3266F5 = {
+			isa = PBXFileReference;
+			lastKnownFileType = image.png;
+			name = blood.png;
+			path = ../../../../../Desktop/resource/blood.png;
+			sourceTree = "SOURCE_ROOT";
+		};
 		86190C3D36DEDD538FB95302 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.c.h;
@@ -449,6 +449,13 @@
 			name = OpenGL.framework;
 			path = System/Library/Frameworks/OpenGL.framework;
 			sourceTree = SDKROOT;
+		};
+		A13E9333AC7AE888B415115A = {
+			isa = PBXFileReference;
+			lastKnownFileType = image.png;
+			name = "blood_background.png";
+			path = "../../../../../Desktop/resource/blood_background.png";
+			sourceTree = "SOURCE_ROOT";
 		};
 		A324DEC13F3AC137B6FA137F = {
 			isa = PBXFileReference;
@@ -669,7 +676,8 @@
 		744089E6ED50BD160D37D5E3 = {
 			isa = PBXGroup;
 			children = (
-				37389CB7B93E7AC2F030033B,
+				A13E9333AC7AE888B415115A,
+				858D38E683153D9BAC3266F5,
 			);
 			name = Resource;
 			sourceTree = "<group>";

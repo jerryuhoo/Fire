@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.288"
+#define VERSION "0.300"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -121,7 +121,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.addItem("Hard Clipping", 5);
     distortionMode.addItem("Sin Foldback", 6);
     distortionMode.addItem("Linear Foldback", 7);
-    distortionMode.addItem("Bit Crusher", 8);
+    distortionMode.addItem("Downsample", 8);
     distortionMode.setJustificationType(Justification::centred);
     distortionMode.setColour(ComboBox::textColourId, mainColour);
     distortionMode.setColour(ComboBox::arrowColourId, mainColour);
@@ -181,7 +181,13 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     
     
     // wave visualiser boundary
-    g.drawRect(50 - 1, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 2);
+    g.setColour(mainColour);
+    g.drawRect(50 - 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 4, 2);
+    
+    // fill right rect background
+    g.setColour(secondColour);
+    g.fillRect(getWidth() / 2 + 2, 50, getWidth() / 2 - 50, (getHeight() / 3));
+    
     // mode visualiser boundary
     // g.drawRect(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
 
@@ -221,20 +227,30 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     float yPos;
     for (int i = 1; i < numPix; ++i)
     {
-
         value += valInc;
         xPos += posInc;
+        
         functionValue = distortionProcessor.distortionProcess(value);
+        
+        if (mode == 8) {
+            float rateDivide = distortionProcessor.controls.drive;
+            if (rateDivide > 1)
+                functionValue = ceilf(value*(64.f/rateDivide))/(64.f/rateDivide);
+            functionValue = (1.f - mix) * value + mix * functionValue;
+        }
+        
         mixValue = (2.0f / 3.0f) * functionValue;
         yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
 
         if (yPos < frame.getY())
         {
-            continue;
+            //continue;
+            yPos = frame.getY();
         }
         if (yPos > frame.getBottom())
         {
-            continue;
+            //continue;
+            yPos = frame.getBottom();
         }
         if (firstPoint == true)
         {
@@ -243,14 +259,18 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             p.startNewSubPath(xPos, yPos);
             firstPoint = false;
         }
-        p.lineTo(xPos, yPos); // replace f(x) with your function
+        p.lineTo(xPos, yPos);
     }
+    
+    
+    // draw right rect
     g.setColour(mainColour);
-    g.drawRect(frame, 1);
-    g.setColour(secondColour);
-    g.fillRect(getWidth() / 2 + 1, 50, getWidth() / 2 - 50, (getHeight() / 3));
+    g.drawRect(getWidth() / 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3+4), 2);
+    
     g.setColour(mainColour);
-    g.strokePath(p, PathStrokeType(3.0));
+    g.strokePath(p, PathStrokeType(2.0));
+    
+    
     repaint();
 }
 

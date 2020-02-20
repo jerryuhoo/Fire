@@ -188,7 +188,6 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     float currentGainInput = *inputGainValue;
     currentGainInput = Decibels::decibelsToGain(currentGainInput);
 
-    // (deleted drive)
     auto driveValue = treeState.getRawParameterValue("drive");
     float drive = *driveValue;
 
@@ -230,17 +229,21 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         auto *channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
+            auto cleanOut = channelData[sample];
+            
             distortionProcessor.controls.drive = driveSmoother.getNextValue();
             distortionProcessor.controls.output = outputSmoother.getNextValue();
             channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
-            
+
             if (mode == 8) {
-                
-                int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 200.f;
+                int rateDivide = distortionProcessor.controls.drive;
+                //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
                 if (rateDivide > 1)
                 {
                     if (sample%rateDivide != 0) data[sample] = data[sample - sample%rateDivide];
+                    channelData[sample] = (1.f - mix) * cleanOut + mix * channelData[sample];
                 }
+
             }
         }
 

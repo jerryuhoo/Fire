@@ -44,11 +44,15 @@ float Distortion::distortionProcess(float sample)
         input = hardClipping(input);
         break;
     case 6:
-        input = sinWaveClipping(input);
+        input = sinFoldback(input);
         break;
     case 7:
+        input = linFoldback(input);
+        break;
+    case 8:
         input = bitCrusher(input);
         break;
+    
     }
     input = input * controls.output;
     return (1.f - controls.mix) * cleanOut + controls.mix * input;
@@ -116,16 +120,26 @@ float Distortion::hardClipping(float input)
     return input;
 }
 
-float Distortion::sinWaveClipping(float input)
+float Distortion::sinFoldback(float input)
 {
     input = std::sin(input);
     
     return input;
 }
 
+float Distortion::linFoldback(float input)
+{
+    if (input > controls.thresh || input < -controls.thresh) {
+        input = fabs(fabs(fmod(input - controls.thresh, controls.thresh * 4))
+                     - controls.thresh * 2) - controls.thresh;
+    }
+    return input;
+}
+
 float Distortion::bitCrusher(float input)
 {
     input /= controls.drive;
-    input = std::ceil((64.f/controls.drive)*input)*(1.f/(64.f/controls.drive));
     return input;
 }
+
+

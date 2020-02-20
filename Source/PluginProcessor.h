@@ -25,7 +25,7 @@ public:
     {
         setBufferSize(128);
         setSamplesPerBlock(16);
-        setColours(Colour(50, 0, 0), Colours::red);
+        setColours(Colour(50, 0, 0), Colour(200, 0, 0));
     }
 };
 

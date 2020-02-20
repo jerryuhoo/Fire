@@ -54,18 +54,18 @@ public:
 class OtherLookAndFeelRed : public LookAndFeel_V4
 {
 public:
-    Colour mainColour = Colours::red;
-    Colour backgroundColour = Colours::black;
-    Colour secondColour = Colour(50, 0, 0);
+    Colour mainColour = Colour(200,0,0);
+    Colour backgroundColour = Colour(50, 0, 0);
+    Colour secondColour = Colours::darkred;
 
     OtherLookAndFeelRed()
     {
         setColour(Slider::textBoxTextColourId, mainColour);
         setColour(Slider::textBoxBackgroundColourId, backgroundColour);
-        setColour(Slider::textBoxOutlineColourId, mainColour);
+        setColour(Slider::textBoxOutlineColourId, secondColour);
         setColour(Slider::thumbColourId, Colours::red);
         setColour(Slider::rotarySliderFillColourId, Colour(200, 0, 0));
-        setColour(Slider::rotarySliderOutlineColourId, Colours::darkred);
+        setColour(Slider::rotarySliderOutlineColourId, secondColour);
     }
 };
 
@@ -94,7 +94,8 @@ public:
     void paint(Graphics &) override;
     void resized() override;
     // color setting
-    Colour mainColour = Colours::red;
+//    Colour mainColour = Colours::red;
+    Colour mainColour = Colour(200,0,0);
     Colour backgroundColour = Colour::fromFloatRGBA (0.0f, 0.0f, 0.0f, 0.0f); //Colours::black;
     Colour secondColour = Colour(50, 0, 0);
 

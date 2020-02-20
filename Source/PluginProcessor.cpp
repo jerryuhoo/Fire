@@ -23,9 +23,9 @@ BloodAudioProcessor::BloodAudioProcessor()
 #endif
                          ),treeState(*this, nullptr, "PARAMETERS",
                 {
-                    std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 7, 1), 1),
+                    std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 8, 1), 1),
                     std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f),
-                    std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f), // (deleted drive)
+                    std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f),
                     std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f),
                     std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f),
                     
@@ -171,7 +171,9 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
-
+    
+    
+    
     // This is the place where you'd normally do the guts of your plugin's
     // audio processing...
     // Make sure to reset the state if your inner loop is processing
@@ -221,13 +223,27 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
+        
+        float* data = buffer.getWritePointer(channel);
+        
+        
         auto *channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             distortionProcessor.controls.drive = driveSmoother.getNextValue();
             distortionProcessor.controls.output = outputSmoother.getNextValue();
             channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
+            
+            if (mode == 8) {
+                
+                int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 200.f;
+                if (rateDivide > 1)
+                {
+                    if (sample%rateDivide != 0) data[sample] = data[sample - sample%rateDivide];
+                }
+            }
         }
+
         //        visualiser.pushBuffer(buffer);
     }
 

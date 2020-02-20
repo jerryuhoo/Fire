@@ -26,6 +26,7 @@ public:
         setBufferSize(128);
         setSamplesPerBlock(16);
         setColours(Colour(50, 0, 0), Colour(200, 0, 0));
+        setBoundsInset(BorderSize<int>(2, 2, 2, 2));
     }
 };
 

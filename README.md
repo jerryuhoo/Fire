@@ -8,7 +8,11 @@
  - Tanh Soft Clipping
  - Cubic Soft Clipping
  - Hard Clipping
- - Sin Wave Clipping
+ - Sin Fold
+ - Linear Fold
+ - Downsample
+ 
+ 
  And four knobs:
  - Input knob
  - Drive knob
@@ -37,3 +41,7 @@ Hope you like it!
 
 2020-2-14 (version 0.28)
 1. Finally, I use smoothedValue to eliminate zipper noise when twist knobs quickly.
+
+2020-2-20 (version 0.3)
+1. add lin fold and downsample mode
+2. redesign the GUI

@@ -2,7 +2,7 @@
 ![Alt text](Blood.png?raw=true "Title")
 
  This is a distortion plugin.
- This plugin has 6 different distortion modes:
+ This plugin has 8 different distortion modes:
  - Arctan Soft Clipping
  - Exp Soft Clipping
  - Tanh Soft Clipping

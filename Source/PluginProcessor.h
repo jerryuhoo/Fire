@@ -73,9 +73,6 @@ public:
     
     // filter
     void updateFilter();
-    String filterState; // "off", "pre", "post"
-    String filterMode; //"low", "high", "band"
-    
     
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -106,9 +103,9 @@ private:
     float previousGainOutput;
     float previousDrive;
     
-    std::atomic<float> *inputGainValue = nullptr;
-    std::atomic<float> *outputGainValue = nullptr;
-    std::atomic<float> *previousDriveValue = nullptr;
+//    std::atomic<float> *inputGainValue = nullptr;
+//    std::atomic<float> *outputGainValue = nullptr;
+//    std::atomic<float> *previousDriveValue = nullptr;
     
     dsp::ProcessorDuplicator<dsp::StateVariableFilter::Filter<float>, dsp::StateVariableFilter::Parameters<float>> stateVariableFilter;
     

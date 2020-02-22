@@ -24,8 +24,6 @@ float Distortion::distortionProcess(float sample)
     
     input = cleanOut * controls.drive;
 
-    // controls.drive = driverSmoother.getNextValue();
-    
     switch (controls.mode)
     {
     case 1:
@@ -74,14 +72,12 @@ float Distortion::expSoftClipping(float input)
     {
         input = -1.0f + expf(input);
     }
-    //input = 2.0f/3.0f*input;
     return input;
 }
 
 float Distortion::tanhSoftClipping(float input)
 {
     input = tanh(input);
-    //input = 2.0f/3.0f*input;
     return input;
 }
 
@@ -116,7 +112,6 @@ float Distortion::hardClipping(float input)
     {
         input = input;
     }
-    //input = 2.0f/3.0f*input;
     return input;
 }
 

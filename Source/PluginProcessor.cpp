@@ -30,6 +30,13 @@ BloodAudioProcessor::BloodAudioProcessor()
                     std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f),
                     std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", NormalisableRange<float>(20.0f, 20000.0f, 1.0f), 20000.0f),
                     std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f),
+                             
+                    std::make_unique<AudioParameterBool>("off", "Off", true),
+                    std::make_unique<AudioParameterBool>("pre", "Pre", false),
+                    std::make_unique<AudioParameterBool>("post", "Post", false),
+                    std::make_unique<AudioParameterBool>("low", "Low", true),
+                    std::make_unique<AudioParameterBool>("band", "Band", false),
+                    std::make_unique<AudioParameterBool>("high", "High", false),
                 })
 #endif
 {
@@ -108,17 +115,13 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // initialisation that you need..
     
     // fix the artifacts (also called zipper noise)
-    inputGainValue = treeState.getRawParameterValue("inputGain");
-    // previousGainInput = (Decibels::decibelsToGain(*inputGainValue));
-    previousGainInput = (float)*inputGainValue;
+    previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
     previousGainInput = Decibels::decibelsToGain(previousGainInput);
     
-    outputGainValue = treeState.getRawParameterValue("outputGain");
-    previousGainOutput = (float)*outputGainValue;
+    previousGainOutput = (float)*treeState.getRawParameterValue("outputGain");
     previousGainOutput = Decibels::decibelsToGain(previousGainOutput);
     
-    previousDriveValue = treeState.getRawParameterValue("drive");
-    previousDrive = *previousDriveValue;
+    previousDrive = *treeState.getRawParameterValue("drive");
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
@@ -194,27 +197,21 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
     //    float menuChoiceValue = 1.0f;
-    auto modeValue = treeState.getRawParameterValue("mode");
-    float mode = *modeValue;
+    float mode = *treeState.getRawParameterValue("mode");
 
-    auto inputGainValue = treeState.getRawParameterValue("inputGain");
-    float currentGainInput = *inputGainValue;
+    float currentGainInput = *treeState.getRawParameterValue("inputGain");
     currentGainInput = Decibels::decibelsToGain(currentGainInput);
 
-    auto driveValue = treeState.getRawParameterValue("drive");
-    float drive = *driveValue;
+    float drive = *treeState.getRawParameterValue("drive");
 
-    auto outputGainValue = treeState.getRawParameterValue("outputGain");
-    float currentGainOutput = *outputGainValue;
+    float currentGainOutput = *treeState.getRawParameterValue("outputGain");
     currentGainOutput = Decibels::decibelsToGain(currentGainOutput);
 
-    auto mixValue = treeState.getRawParameterValue("mix");
-    float mix = *mixValue;
+    float mix = *treeState.getRawParameterValue("mix");
     
     distortionProcessor.controls.mode = mode;
-    // distortionProcessor.controls.drive = drive;
-    // distortionProcessor.controls.output = currentGainOutput;
     distortionProcessor.controls.mix = mix;
+    
     // ff input meter
     inputMeterSource.measureBlock(buffer);
 
@@ -236,13 +233,20 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     
     //pre-filter
     
-    
-    if (filterState == "pre")
+    bool preButton = *treeState.getRawParameterValue("pre");
+    if (preButton)
     {
         dsp::AudioBlock<float> block (buffer);
         stateVariableFilter.process(dsp::ProcessContextReplacing<float>(block));
         updateFilter();
     }
+
+    bool lowButton = *treeState.getRawParameterValue("low");
+    std::cout << "lowPassState:" << lowButton;
+    bool bandButton = *treeState.getRawParameterValue("band");
+    std::cout << "bandPassState:" << bandButton;
+    bool highButton = *treeState.getRawParameterValue("high");
+    std::cout << "lowPassState:" << highButton;
     
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -277,7 +281,8 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     }
 
     //post-filter
-    if (filterState == "post")
+    bool postButton = *treeState.getRawParameterValue("post");
+    if (postButton)
     {
         dsp::AudioBlock<float> block (buffer);
         stateVariableFilter.process(dsp::ProcessContextReplacing<float>(block));
@@ -331,29 +336,28 @@ void BloodAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
 AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 {
     return new BloodAudioProcessor();
-}
+} 
 
 
 //
 void BloodAudioProcessor::updateFilter()
 {
-    auto cutoffValue = treeState.getRawParameterValue("cutoff");
-    float cutoff = *cutoffValue;
-    auto resValue = treeState.getRawParameterValue("res");
-    float res = *resValue;
-    
-    if (filterMode == "low")
+    float cutoff = *treeState.getRawParameterValue("cutoff");
+    float res = *treeState.getRawParameterValue("res");
+    bool lowButton = *treeState.getRawParameterValue("low");
+    bool bandButton = *treeState.getRawParameterValue("band");
+    bool highButton = *treeState.getRawParameterValue("high");
+    if (lowButton == true)
     {
         stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::lowPass;
     }
-    else if (filterMode == "band")
+    else if (bandButton == true)
     {
         stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::bandPass;
     }
-    else if (filterMode == "high")
+    else if (highButton == true)
     {
         stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::highPass;
     }
     stateVariableFilter.state->setCutOffFrequency(getSampleRate(), cutoff, res);
-    
 }

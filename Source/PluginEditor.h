@@ -127,7 +127,8 @@ private:
         outputLabel,
         mixLabel,
         cutoffLabel,
-        resLabel;
+        resLabel,
+        debugLabel;
     
     // toggle buttons
     ToggleButton
@@ -149,7 +150,7 @@ private:
     
     void updateToggleState (Button* button, String name);
     
-    // slider attachment
+    // Slider attachment
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>
         driveAttachment,
         inputAttachment,
@@ -158,9 +159,18 @@ private:
         cutoffAttachment,
         resAttachment;
     
-    // mode menu
+    // Button attachment
+    std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
+        filterOffAttachment,
+        filterPreAttachment,
+        filterPostAttachment,
+        filterLowAttachment,
+        filterBandAttachment,
+        filterHighAttachment;
+    
+    // ComboBox attachment
     ComboBox distortionMode;
-    std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeSelection;
+    std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     OtherLookAndFeelRed otherLookAndFeelRed;

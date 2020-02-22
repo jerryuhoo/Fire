@@ -111,22 +111,53 @@ private:
     std::unique_ptr<FFAU::LevelMeter> outputMeter;
     std::unique_ptr<FFAU::LevelMeterLookAndFeel> lnf;
 
-    // create knobs and their labels
-    Slider driveKnob; // (deleted drive)
-    Slider inputKnob;
-    Slider outputKnob;
-    Slider mixKnob;
+    // sliders
+    Slider
+        driveKnob,
+        inputKnob,
+        outputKnob,
+        mixKnob,
+        cutoffKnob,
+        resKnob;
     
-    Label driveLabel; // (deleted drive)
-    Label inputLabel;
-    Label outputLabel;
-    Label mixLabel;
+    // labels
+    Label
+        driveLabel,
+        inputLabel,
+        outputLabel,
+        mixLabel,
+        cutoffLabel,
+        resLabel;
     
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> driveAttachment;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> outputAttachment;
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
-
+    // toggle buttons
+    ToggleButton
+        filterOffButton {"OFF"},
+        filterPreButton {"PRE"},
+        filterPostButton {"POST"},
+        filterLowButton {"Low Pass"},
+        filterBandButton {"Band Pass"},
+        filterHighButton {"High Pass"};
+    
+    // group toggle buttons
+    enum RadioButtonIds
+    {
+        // filter state: off, pre, post
+        filterStateButtons = 1001,
+        // filter mode: low, band, high
+        filterModeButtons = 1002
+    };
+    
+    void updateToggleState (Button* button, String name);
+    
+    // slider attachment
+    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>
+        driveAttachment,
+        inputAttachment,
+        outputAttachment,
+        mixAttachment,
+        cutoffAttachment,
+        resAttachment;
+    
     // mode menu
     ComboBox distortionMode;
     std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeSelection;

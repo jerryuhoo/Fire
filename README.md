@@ -45,3 +45,7 @@ Hope you like it!
 2020-2-20 (version 0.3)
 1. add lin fold and downsample mode
 2. redesign the GUI
+
+2020-2-20 (version 0.32)
+1. add 3 filter modes (low-pass, band-pass, high-pass)
+2. add 3 filter states (off, pre, post)

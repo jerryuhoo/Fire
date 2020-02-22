@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.300"
+#define VERSION "0.320"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -50,7 +50,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize(800, 600);
+    setSize(1000, 750);
 
     //input knob
     addAndMakeVisible(inputKnob);
@@ -60,12 +60,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
     addAndMakeVisible(inputLabel);
     inputLabel.setText("Input", dontSendNotification);
-    inputLabel.setFont (Font ("Cascadia Code", 30.0f, Font::bold));
+    inputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
     inputLabel.setColour(Label::textColourId, mainColour);
     inputLabel.attachToComponent(&inputKnob, false);
     inputLabel.setJustificationType (Justification::centred);
 
-    //drive knob (deleted)
+    //drive knob
     addAndMakeVisible(driveKnob);
     driveKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
@@ -73,7 +73,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", dontSendNotification);
-    driveLabel.setFont (Font ("Cascadia Code", 30.0f, Font::bold));
+    driveLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
     driveLabel.setColour(Label::textColourId, mainColour);
     driveLabel.attachToComponent(&driveKnob, false);
     driveLabel.setJustificationType (Justification::centred);
@@ -86,7 +86,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", dontSendNotification);
-    outputLabel.setFont (Font ("Cascadia Code", 30.0f, Font::bold));
+    outputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
     outputLabel.setColour(Label::textColourId, mainColour);
     outputLabel.attachToComponent(&outputKnob, false);
     outputLabel.setJustificationType (Justification::centred);
@@ -99,17 +99,98 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", dontSendNotification);
-    mixLabel.setFont (Font ("Cascadia Code", 30.0f, Font::bold));
+    mixLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
     mixLabel.setColour(Label::textColourId, mainColour);
     mixLabel.attachToComponent(&mixKnob, false);
     mixLabel.setJustificationType (Justification::centred);
+    
+    //cutoff knob
+    addAndMakeVisible(cutoffKnob);
+    cutoffKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    cutoffKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    cutoffKnob.setLookAndFeel(&otherLookAndFeelRed);
+
+    addAndMakeVisible(cutoffLabel);
+    cutoffLabel.setText("Cutoff", dontSendNotification);
+    cutoffLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+    cutoffLabel.setColour(Label::textColourId, mainColour);
+    cutoffLabel.attachToComponent(&cutoffKnob, false);
+    cutoffLabel.setJustificationType (Justification::centred);
+    
+    //res knob
+    addAndMakeVisible(resKnob);
+    resKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    resKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    resKnob.setLookAndFeel(&otherLookAndFeelRed);
+
+    addAndMakeVisible(cutoffLabel);
+    resLabel.setText("Resonance", dontSendNotification);
+    resLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+    resLabel.setColour(Label::textColourId, mainColour);
+    resLabel.attachToComponent(&resKnob, false);
+    resLabel.setJustificationType (Justification::centred);
+    
+    //buttons
+    
+    addAndMakeVisible(filterOffButton);
+    filterOffButton.setClickingTogglesState(true);
+    filterOffButton.setRadioGroupId(filterStateButtons);
+    filterOffButton.setToggleState(true, dontSendNotification);
+    filterOffButton.onClick = [this] { updateToggleState (&filterOffButton, "Off"); };
+    filterOffButton.setColour(ToggleButton::textColourId, mainColour);
+    filterOffButton.setColour(ToggleButton::tickColourId, mainColour);
+    filterOffButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    
+    addAndMakeVisible(filterPreButton);
+    filterPreButton.setClickingTogglesState(true);
+    filterPreButton.setRadioGroupId(filterStateButtons);
+    filterPreButton.onClick = [this] { updateToggleState (&filterPreButton, "Pre"); };
+    filterPreButton.setColour(ToggleButton::textColourId, mainColour);
+    filterPreButton.setColour(ToggleButton::tickColourId, mainColour);
+    filterPreButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    
+    addAndMakeVisible(filterPostButton);
+    filterPostButton.setClickingTogglesState(true);
+    filterPostButton.setRadioGroupId(filterStateButtons);
+    filterPostButton.onClick = [this] { updateToggleState (&filterPostButton, "Post"); };
+    filterPostButton.setColour(ToggleButton::textColourId, mainColour);
+    filterPostButton.setColour(ToggleButton::tickColourId, mainColour);
+    filterPostButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    
+    // button2
+    addAndMakeVisible(filterLowButton);
+    filterLowButton.setClickingTogglesState(true);
+    filterLowButton.setRadioGroupId(filterModeButtons);
+    filterLowButton.setToggleState(true, dontSendNotification);
+    filterLowButton.onClick = [this] { updateToggleState (&filterLowButton, "Low"); };
+    filterLowButton.setColour(ToggleButton::textColourId, mainColour);
+    filterLowButton.setColour(ToggleButton::tickColourId, mainColour);
+    filterLowButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    
+    addAndMakeVisible(filterBandButton);
+    filterBandButton.setClickingTogglesState(true);
+    filterBandButton.setRadioGroupId(filterModeButtons);
+    filterBandButton.onClick = [this] { updateToggleState (&filterBandButton, "Band"); };
+    filterBandButton.setColour(ToggleButton::textColourId, mainColour);
+    filterBandButton.setColour(ToggleButton::tickColourId, mainColour);
+    filterBandButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    
+    addAndMakeVisible(filterHighButton);
+    filterHighButton.setClickingTogglesState(true);
+    filterHighButton.setRadioGroupId(filterModeButtons);
+    filterHighButton.onClick = [this] { updateToggleState (&filterHighButton, "High"); };
+    filterHighButton.setColour(ToggleButton::textColourId, mainColour);
+    filterHighButton.setColour(ToggleButton::tickColourId, mainColour);
+    filterHighButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
     
     //Attachment
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
     inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     outputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
     mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix", mixKnob);
-
+    cutoffAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "cutoff", cutoffKnob);
+    resAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "res", resKnob);
+    
     //visualiser
     addAndMakeVisible(p.visualiser);
 
@@ -138,7 +219,8 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     modeSelection = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     addAndMakeVisible(distortionMode);
 
-    setResizeLimits(700, 525, 1500, 1125);
+    setResizeLimits(1000, 750, 1600, 1200); // set resize limits
+    getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
 }
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
@@ -175,7 +257,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     // set title picture "Blood"
     Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
     int x = getWidth() / 4 * 3 - title.getWidth() / 4;
-    int y = getHeight() / 2;
+    int y = getHeight() / 3 + 52;
     g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
     
     
@@ -270,6 +352,9 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     g.setColour(mainColour);
     g.strokePath(p, PathStrokeType(2.0));
     
+    // draw combobox outside rect
+    // g.setColour(mainColour);
+    // g.drawRect(50-2, (getHeight() / 3) + 50-2, getWidth() / 2 - 50+4, 50+4, 2);
     
     repaint();
 }
@@ -280,11 +365,22 @@ void BloodAudioProcessorEditor::resized()
     // subcomponents in your editor..
     
     // knobs
-    inputKnob.setBounds((getWidth() / 5) * 1 - 50, getHeight() - 150, 100, 100);
-    driveKnob.setBounds((getWidth() / 5) * 2 - 50, getHeight() - 150, 100, 100); // (deleted drive)
-    outputKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight() - 150, 100, 100);
-    mixKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight() - 150, 100, 100);
-
+    inputKnob.setBounds((getWidth() / 5) * 1 - 50, getHeight()/2+50, 100, 100);
+    driveKnob.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+50, 100, 100);
+    outputKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight()/2+50, 100, 100);
+    mixKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight()/2+50, 100, 100);
+    cutoffKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight()/2+200, 100, 100);
+    resKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight()/2+200, 100, 100);
+    
+    // buttons
+    
+    filterOffButton.setBounds((getWidth() / 5) * 1 - 25, getHeight()/2+200, 100, 25);
+    filterPreButton.setBounds((getWidth() / 5) * 1 - 25, getHeight()/2+200+25, 100, 25);
+    filterPostButton.setBounds((getWidth() / 5) * 1 - 25, getHeight()/2+200+50, 100, 25);
+    filterLowButton.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+200, 100, 25);
+    filterBandButton.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+200+25, 100, 25);
+    filterHighButton.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+200+50, 100, 25);
+    
     // visualiser
     processor.visualiser.setBounds(50, 50, getWidth() / 2 - 50, (getHeight() / 3));
 
@@ -292,9 +388,40 @@ void BloodAudioProcessorEditor::resized()
     // original
 //    inputMeter->setBounds(15, 0, 40, getHeight() + 50);
 //    outputMeter->setBounds(getWidth() - 50, 0, 40, getHeight() + 50);
-    inputMeter->setBounds(getWidth()/10*9-30, getHeight()/3*2, 50, 220);
-    outputMeter->setBounds(getWidth()/10*9+10, getHeight()/3*2, 50, 220);
+    inputMeter->setBounds(getWidth()/10*9-30, getHeight()-220, 50, 240);
+    outputMeter->setBounds(getWidth()/10*9+10, getHeight()-220, 50, 240);
     
     // distortion menu
-    distortionMode.setBounds(50, (getHeight() / 3) + 100, getWidth() / 2 - 50, 50);
+    distortionMode.setBounds(50 - 2, (getHeight() / 3) + 52, getWidth() / 2 - 50 +4, 54);
+    
+}
+
+void BloodAudioProcessorEditor::updateToggleState (Button* button, String name)
+{
+    auto state = button->getToggleState();
+    //processor.filterState = state;
+    if (name == "Off" && state == true)
+    {
+        processor.filterState = "off";
+    }
+    else if (name == "Pre" && state == true)
+    {
+        processor.filterState = "pre";
+    }
+    else if (name == "Post" && state == true)
+    {
+        processor.filterState = "post";
+    }
+    if (name == "Low" && state == true)
+    {
+        processor.filterMode = "low";
+    }
+    else if (name == "Band" && state == true)
+    {
+        processor.filterMode = "band";
+    }
+    else if (name == "High" && state == true)
+    {
+        processor.filterMode = "high";
+    }
 }

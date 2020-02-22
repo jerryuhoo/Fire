@@ -70,7 +70,13 @@ public:
     //==============================================================================
     void getStateInformation(MemoryBlock &destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
-
+    
+    // filter
+    void updateFilter();
+    String filterState; // "off", "pre", "post"
+    String filterMode; //"low", "high", "band"
+    
+    
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -103,6 +109,8 @@ private:
     std::atomic<float> *inputGainValue = nullptr;
     std::atomic<float> *outputGainValue = nullptr;
     std::atomic<float> *previousDriveValue = nullptr;
+    
+    dsp::ProcessorDuplicator<dsp::StateVariableFilter::Filter<float>, dsp::StateVariableFilter::Parameters<float>> stateVariableFilter;
     
     // fix the artifacts (also called zipper noise)
     SmoothedValue<float> driveSmoother;

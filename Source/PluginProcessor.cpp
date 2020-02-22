@@ -28,7 +28,8 @@ BloodAudioProcessor::BloodAudioProcessor()
                     std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f),
                     std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f),
                     std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f),
-                    
+                    std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", NormalisableRange<float>(20.0f, 20000.0f, 1.0f), 20000.0f),
+                    std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f),
                 })
 #endif
 {
@@ -125,7 +126,19 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     outputSmoother.reset(sampleRate, 0.05);
     outputSmoother.setCurrentAndTargetValue(previousGainOutput);
     
+    // clear visualiser
     visualiser.clear();
+    
+    // filter init
+    dsp::ProcessSpec spec;
+    spec.sampleRate = sampleRate;
+    spec.maximumBlockSize = samplesPerBlock;
+    spec.numChannels = getMainBusNumOutputChannels();
+    
+    stateVariableFilter.reset();
+    updateFilter();
+    stateVariableFilter.prepare(spec);
+    
 }
 
 void BloodAudioProcessor::releaseResources()
@@ -220,17 +233,30 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     driveSmoother.setTargetValue(drive);
     outputSmoother.setTargetValue(currentGainOutput);
     
+    
+    //pre-filter
+    
+    
+    if (filterState == "pre")
+    {
+        dsp::AudioBlock<float> block (buffer);
+        stateVariableFilter.process(dsp::ProcessContextReplacing<float>(block));
+        updateFilter();
+    }
+    
+    
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         
         float* data = buffer.getWritePointer(channel);
-        
+
         
         auto *channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             auto cleanOut = channelData[sample];
             
+            // distortion
             distortionProcessor.controls.drive = driveSmoother.getNextValue();
             distortionProcessor.controls.output = outputSmoother.getNextValue();
             channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
@@ -250,7 +276,14 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         //        visualiser.pushBuffer(buffer);
     }
 
-
+    //post-filter
+    if (filterState == "post")
+    {
+        dsp::AudioBlock<float> block (buffer);
+        stateVariableFilter.process(dsp::ProcessContextReplacing<float>(block));
+        updateFilter();
+    }
+    
     // ff output meter
     outputMeterSource.measureBlock(buffer);
     visualiser.pushBuffer(buffer);
@@ -298,4 +331,29 @@ void BloodAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
 AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 {
     return new BloodAudioProcessor();
+}
+
+
+//
+void BloodAudioProcessor::updateFilter()
+{
+    auto cutoffValue = treeState.getRawParameterValue("cutoff");
+    float cutoff = *cutoffValue;
+    auto resValue = treeState.getRawParameterValue("res");
+    float res = *resValue;
+    
+    if (filterMode == "low")
+    {
+        stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::lowPass;
+    }
+    else if (filterMode == "band")
+    {
+        stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::bandPass;
+    }
+    else if (filterMode == "high")
+    {
+        stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::highPass;
+    }
+    stateVariableFilter.state->setCutOffFrequency(getSampleRate(), cutoff, res);
+    
 }

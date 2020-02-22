@@ -13,11 +13,23 @@
  - Downsample
  
  
- And four knobs:
+ And 6 knobs:
  - Input knob
  - Drive knob
  - Mix knob
  - Output knob
+ - Cutoff knob
+ - Resonance knob
+ 
+ 
+ And 6 options for the filter
+ - Off
+ - Pre
+ - Post
+ - Low-pass
+ - Band-pass
+ - High-pass
+ 
  
 Hope you like it!
 

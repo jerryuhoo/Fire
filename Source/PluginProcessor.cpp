@@ -21,25 +21,11 @@ BloodAudioProcessor::BloodAudioProcessor()
 #endif
                          .withOutput("Output", AudioChannelSet::stereo(), true)
 #endif
-                         ),treeState(*this, nullptr, "PARAMETERS",
-                {
-                    std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 8, 1), 1),
-                    std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f),
-                    std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f),
-                    std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f),
-                    std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f),
-                    std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", NormalisableRange<float>(20.0f, 20000.0f, 1.0f), 20000.0f),
-                    std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f),
-                             
-                    std::make_unique<AudioParameterBool>("off", "Off", true),
-                    std::make_unique<AudioParameterBool>("pre", "Pre", false),
-                    std::make_unique<AudioParameterBool>("post", "Post", false),
-                    std::make_unique<AudioParameterBool>("low", "Low", true),
-                    std::make_unique<AudioParameterBool>("band", "Band", false),
-                    std::make_unique<AudioParameterBool>("high", "High", false),
-                })
+                         ), treeState(*this, nullptr, "PARAMETERS", createParameters())
 #endif
 {
+    NormalisableRange<float> cutoffRange (20.0f, 20000.0f, 1.0f);
+    cutoffRange.setSkewForCentre(1000.f);
 }
 
 BloodAudioProcessor::~BloodAudioProcessor()
@@ -138,9 +124,9 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.maximumBlockSize = samplesPerBlock;
     spec.numChannels = getMainBusNumOutputChannels();
     
-    stateVariableFilter.reset();
+    filterIIR.reset();
     updateFilter();
-    stateVariableFilter.prepare(spec);
+    filterIIR.prepare(spec);
     
 }
 
@@ -237,7 +223,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     if (preButton)
     {
         dsp::AudioBlock<float> block (buffer);
-        stateVariableFilter.process(dsp::ProcessContextReplacing<float>(block));
+        filterIIR.process(dsp::ProcessContextReplacing<float>(block));
         updateFilter();
     }
 
@@ -285,7 +271,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     if (postButton)
     {
         dsp::AudioBlock<float> block (buffer);
-        stateVariableFilter.process(dsp::ProcessContextReplacing<float>(block));
+        filterIIR.process(dsp::ProcessContextReplacing<float>(block));
         updateFilter();
     }
     
@@ -349,15 +335,38 @@ void BloodAudioProcessor::updateFilter()
     bool highButton = *treeState.getRawParameterValue("high");
     if (lowButton == true)
     {
-        stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::lowPass;
+        *filterIIR.state = *dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), cutoff, res);
     }
     else if (bandButton == true)
     {
-        stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::bandPass;
+        *filterIIR.state = *dsp::IIR::Coefficients<float>::makeBandPass(getSampleRate(), cutoff, res);
     }
     else if (highButton == true)
     {
-        stateVariableFilter.state->type = dsp::StateVariableFilter::Parameters<float>::Type::highPass;
+        *filterIIR.state = *dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), cutoff, res);
     }
-    stateVariableFilter.state->setCutOffFrequency(getSampleRate(), cutoff, res);
+}
+
+AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParameters()
+{
+    std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
+                 
+    parameters.push_back(std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 8, 1), 1));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
+    cutoffRange.setSkewForCentre(1000.f);
+    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20000.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+
+    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("low", "Low", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("band", "Band", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("high", "High", false));
+    
+    return { parameters.begin(), parameters.end() };
 }

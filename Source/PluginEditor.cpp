@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.322"
+#define VERSION "0.324"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -109,7 +109,8 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     cutoffKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     cutoffKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     cutoffKnob.setLookAndFeel(&otherLookAndFeelRed);
-
+    cutoffKnob.setSkewFactorFromMidPoint(1000.0f);
+    
     addAndMakeVisible(cutoffLabel);
     cutoffLabel.setText("Cutoff", dontSendNotification);
     cutoffLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
@@ -117,7 +118,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     cutoffLabel.attachToComponent(&cutoffKnob, false);
     cutoffLabel.setJustificationType (Justification::centred);
     
-    //r es knob
+    // res knob
     addAndMakeVisible(resKnob);
     resKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     resKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);

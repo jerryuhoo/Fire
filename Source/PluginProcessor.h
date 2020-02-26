@@ -75,7 +75,7 @@ public:
     void updateFilter();
     
     AudioProcessorValueTreeState treeState;
-    AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     // ff meter
     // ff meter
@@ -103,11 +103,8 @@ private:
     float previousGainOutput;
     float previousDrive;
     
-//    std::atomic<float> *inputGainValue = nullptr;
-//    std::atomic<float> *outputGainValue = nullptr;
-//    std::atomic<float> *previousDriveValue = nullptr;
-    
-    dsp::ProcessorDuplicator<dsp::StateVariableFilter::Filter<float>, dsp::StateVariableFilter::Parameters<float>> stateVariableFilter;
+    // filter
+    dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
     
     // fix the artifacts (also called zipper noise)
     SmoothedValue<float> driveSmoother;

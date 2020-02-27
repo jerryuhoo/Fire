@@ -25,7 +25,7 @@ public:
     {
         setBufferSize(128);
         setSamplesPerBlock(16);
-        setColours(Colour(50, 0, 0), Colour(200, 0, 0));
+        setColours(Colour(68, 7, 8), Colour(150, 0, 0)); //background transparent
         setBoundsInset(BorderSize<int>(2, 2, 2, 2));
     }
 };

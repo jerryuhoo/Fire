@@ -10,13 +10,13 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.324"
+#define VERSION "0.325"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
 {
-
-    setResizable(true, true);
+    // resize not avaialble
+    //setResizable(true, true);
 
     // ff meter
     lnf = std::make_unique<FFAU::LevelMeterLookAndFeel>();
@@ -34,8 +34,8 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     lnf->setColour(FFAU::LevelMeter::lmMeterMaxNormalColour, juce::Colours::yellow);
     lnf->setColour(FFAU::LevelMeter::lmMeterMaxWarnColour, juce::Colours::orange);
     lnf->setColour(FFAU::LevelMeter::lmMeterMaxOverColour, juce::Colours::darkred);
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientLowColour, Colour(50,0,0));
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMidColour, Colour(100,0,0));
+    lnf->setColour(FFAU::LevelMeter::lmMeterGradientLowColour, Colour(110,0,0));
+    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMidColour, Colour(130,0,0));
     lnf->setColour(FFAU::LevelMeter::lmMeterGradientMaxColour, Colour(150,0,0));
     lnf->setColour(FFAU::LevelMeter::lmMeterReductionColour, juce::Colours::orange);
     inputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
@@ -229,7 +229,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.setColour(ComboBox::textColourId, mainColour);
     distortionMode.setColour(ComboBox::arrowColourId, mainColour);
     distortionMode.setColour(ComboBox::buttonColourId, mainColour);
-    distortionMode.setColour(ComboBox::outlineColourId, mainColour);
+    distortionMode.setColour(ComboBox::outlineColourId, secondColour);
     distortionMode.setColour(ComboBox::focusedOutlineColourId, mainColour);
     distortionMode.setColour(ComboBox::backgroundColourId, secondColour);
     distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, mainColour);
@@ -241,8 +241,9 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     addAndMakeVisible(distortionMode);
 
-    setResizeLimits(1000, 750, 1600, 1200); // set resize limits
-    getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
+    // resize not available now
+    //setResizeLimits(1000, 750, 1500, 1125); // set resize limits
+    //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
 }
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
@@ -266,6 +267,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     Image background = ImageCache::getFromMemory(BinaryData::blood_background_png, (size_t) BinaryData::blood_background_pngSize);
     g.drawImage(background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
     
+    // draw version
     g.setFont(15.0f);
     String version = (String) "Wings - Blood(close beta test) - Version " + (String)VERSION;
     g.drawFittedText(version, getLocalBounds(), Justification::centredBottom, 1);
@@ -277,20 +279,20 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     // g.drawText("blood", area, Justification::centredTop);
     
     // set title picture "Blood"
-    Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
-    int x = getWidth() / 4 * 3 - title.getWidth() / 4;
-    int y = getHeight() / 3 + 52;
-    g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
+//    Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
+//    int x = getWidth() / 2 - title.getWidth() / 4;
+//    int y = getHeight() / 3 + 60;
+//    g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
     
     
     
     // wave visualiser boundary
-    g.setColour(mainColour);
-    g.drawRect(50 - 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 4, 2);
+//    g.setColour(mainColour);
+//    g.drawRect(50 - 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 4, 2);
     
     // fill right rect background
-    g.setColour(secondColour);
-    g.fillRect(getWidth() / 2 + 2, 50, getWidth() / 2 - 50, (getHeight() / 3));
+//    g.setColour(secondColour);
+//    g.fillRect(getWidth() / 2 + 2, 50, getWidth() / 2 - 50, (getHeight() / 3));
     
     // mode visualiser boundary
     // g.drawRect(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
@@ -308,7 +310,8 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     distortionProcessor.controls.mix = mix;
 
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
-    frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2));
+    // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
+    frame.setBounds(getWidth() / 2 + 10, 80, getWidth() / 2 - 50 + 2, getHeight() / 3 - 4);
     const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
     // float maxValue = 2.0f * drive * mix + 2.0f * (1 - mix);                  // maximum (rightmost) value for your graph
@@ -327,7 +330,8 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     Path p;
 
     bool firstPoint = true;
-
+    bool edgePointL = false;
+    bool edgePointR = false;
     float yPos;
     for (int i = 1; i < numPix; ++i)
     {
@@ -348,13 +352,28 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
 
         if (yPos < frame.getY())
         {
-            //continue;
-            yPos = frame.getY();
+            if (edgePointR == false)
+            {
+                yPos = frame.getY();
+                edgePointR = true;
+            }
+            else
+            {
+                continue;
+            }
+            
         }
         if (yPos > frame.getBottom())
         {
-            //continue;
-            yPos = frame.getBottom();
+            if (edgePointL == false)
+            {
+                continue;
+            }
+            else
+            {
+                yPos = frame.getBottom();
+                edgePointL = false;
+            }
         }
         if (firstPoint == true)
         {
@@ -362,16 +381,17 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
             p.startNewSubPath(xPos, yPos);
             firstPoint = false;
+            edgePointL = true;
         }
         p.lineTo(xPos, yPos);
     }
     
     
     // draw right rect
-    g.setColour(mainColour);
-    g.drawRect(getWidth() / 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3+4), 2);
+//    g.setColour(mainColour);
+//    g.drawRect(getWidth() / 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3+4), 2);
     
-    g.setColour(mainColour);
+    g.setColour(Colour(150,0,0));
     g.strokePath(p, PathStrokeType(2.0));
     
     // draw combobox outside rect
@@ -387,37 +407,37 @@ void BloodAudioProcessorEditor::resized()
     // subcomponents in your editor..
     
     // knobs
-    inputKnob.setBounds((getWidth() / 5) * 1 - 50, getHeight()/2+50, 100, 100);
-    driveKnob.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+50, 100, 100);
-    outputKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight()/2+50, 100, 100);
-    mixKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight()/2+50, 100, 100);
-    cutoffKnob.setBounds((getWidth() / 5) * 3 - 50, getHeight()/2+200, 100, 100);
-    resKnob.setBounds((getWidth() / 5) * 4 - 50, getHeight()/2+200, 100, 100);
+    inputKnob.setBounds((getWidth() / 5) * 1 - 85, getHeight()/2+7, 100, 100);
+    driveKnob.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+7, 100, 100);
+    outputKnob.setBounds((getWidth() / 5) * 3 - 85, getHeight()/2+7, 100, 100);
+    mixKnob.setBounds((getWidth() / 5) * 4 - 85, getHeight()/2+7, 100, 100);
+    cutoffKnob.setBounds((getWidth() / 5) * 3 - 85, getHeight()/2+175, 100, 100);
+    resKnob.setBounds((getWidth() / 5) * 4 - 85, getHeight()/2+175, 100, 100);
     
     // debug
     debugLabel.setBounds(0, 0, 300, 300);
     
     // buttons
     
-    filterOffButton.setBounds((getWidth() / 5) * 1 - 25, getHeight()/2+200, 100, 25);
-    filterPreButton.setBounds((getWidth() / 5) * 1 - 25, getHeight()/2+200+25, 100, 25);
-    filterPostButton.setBounds((getWidth() / 5) * 1 - 25, getHeight()/2+200+50, 100, 25);
-    filterLowButton.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+200, 100, 25);
-    filterBandButton.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+200+25, 100, 25);
-    filterHighButton.setBounds((getWidth() / 5) * 2 - 50, getHeight()/2+200+50, 100, 25);
+    filterOffButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175, 100, 25);
+    filterPreButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+25, 100, 25);
+    filterPostButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+50, 100, 25);
+    filterLowButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175, 100, 25);
+    filterBandButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175+25, 100, 25);
+    filterHighButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175+50, 100, 25);
     
     // visualiser
-    processor.visualiser.setBounds(50, 50, getWidth() / 2 - 50, (getHeight() / 3));
+    processor.visualiser.setBounds(38, 90, getWidth() / 2 - 50 + 2, getHeight() / 3 - 14);
 
     // ff meter
     // original
 //    inputMeter->setBounds(15, 0, 40, getHeight() + 50);
 //    outputMeter->setBounds(getWidth() - 50, 0, 40, getHeight() + 50);
-    inputMeter->setBounds(getWidth()/10*9-30, getHeight()-220, 50, 240);
-    outputMeter->setBounds(getWidth()/10*9+10, getHeight()-220, 50, 240);
+    inputMeter->setBounds(getWidth()/10*9-32, getHeight()-405, 50, 350);
+    outputMeter->setBounds(getWidth()/10*9+15, getHeight()-405, 50, 350);
     
     // distortion menu
-    distortionMode.setBounds(50 - 2, (getHeight() / 3) + 52, getWidth() / 2 - 50 +4, 54);
+    distortionMode.setBounds(37, 25, getWidth() / 4 - 50 +4, 38);
     
 }
 

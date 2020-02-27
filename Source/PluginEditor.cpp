@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.325"
+#define VERSION "0.400"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -58,12 +58,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     inputKnob.setLookAndFeel(&otherLookAndFeelRed);
 
-    addAndMakeVisible(inputLabel);
-    inputLabel.setText("Input", dontSendNotification);
-    inputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-    inputLabel.setColour(Label::textColourId, mainColour);
-    inputLabel.attachToComponent(&inputKnob, false);
-    inputLabel.setJustificationType (Justification::centred);
+//     addAndMakeVisible(inputLabel);
+//    inputLabel.setText("Input", dontSendNotification);
+//    inputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+//    inputLabel.setColour(Label::textColourId, mainColour);
+//    inputLabel.attachToComponent(&inputKnob, false);
+//    inputLabel.setJustificationType (Justification::centred);
 
     // drive knob
     addAndMakeVisible(driveKnob);
@@ -71,12 +71,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     driveKnob.setLookAndFeel(&otherLookAndFeelRed);
 
-    addAndMakeVisible(driveLabel);
-    driveLabel.setText("Drive", dontSendNotification);
-    driveLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-    driveLabel.setColour(Label::textColourId, mainColour);
-    driveLabel.attachToComponent(&driveKnob, false);
-    driveLabel.setJustificationType (Justification::centred);
+//    addAndMakeVisible(driveLabel);
+//    driveLabel.setText("Drive", dontSendNotification);
+//    driveLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+//    driveLabel.setColour(Label::textColourId, mainColour);
+//    driveLabel.attachToComponent(&driveKnob, false);
+//    driveLabel.setJustificationType (Justification::centred);
     
     // output knob
     addAndMakeVisible(outputKnob);
@@ -84,12 +84,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     outputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     outputKnob.setLookAndFeel(&otherLookAndFeelRed);
 
-    addAndMakeVisible(outputLabel);
-    outputLabel.setText("Output", dontSendNotification);
-    outputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-    outputLabel.setColour(Label::textColourId, mainColour);
-    outputLabel.attachToComponent(&outputKnob, false);
-    outputLabel.setJustificationType (Justification::centred);
+//    addAndMakeVisible(outputLabel);
+//    outputLabel.setText("Output", dontSendNotification);
+//    outputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+//    outputLabel.setColour(Label::textColourId, mainColour);
+//    outputLabel.attachToComponent(&outputKnob, false);
+//    outputLabel.setJustificationType (Justification::centred);
 
     // mix knob
     addAndMakeVisible(mixKnob);
@@ -97,12 +97,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     mixKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     mixKnob.setLookAndFeel(&otherLookAndFeelRed);
 
-    addAndMakeVisible(mixLabel);
-    mixLabel.setText("Mix", dontSendNotification);
-    mixLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-    mixLabel.setColour(Label::textColourId, mainColour);
-    mixLabel.attachToComponent(&mixKnob, false);
-    mixLabel.setJustificationType (Justification::centred);
+//    addAndMakeVisible(mixLabel);
+//    mixLabel.setText("Mix", dontSendNotification);
+//    mixLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+//    mixLabel.setColour(Label::textColourId, mainColour);
+//    mixLabel.attachToComponent(&mixKnob, false);
+//    mixLabel.setJustificationType (Justification::centred);
     
     // cutoff knob
     addAndMakeVisible(cutoffKnob);
@@ -111,12 +111,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     cutoffKnob.setLookAndFeel(&otherLookAndFeelRed);
     cutoffKnob.setSkewFactorFromMidPoint(1000.0f);
     
-    addAndMakeVisible(cutoffLabel);
-    cutoffLabel.setText("Cutoff", dontSendNotification);
-    cutoffLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-    cutoffLabel.setColour(Label::textColourId, mainColour);
-    cutoffLabel.attachToComponent(&cutoffKnob, false);
-    cutoffLabel.setJustificationType (Justification::centred);
+//    addAndMakeVisible(cutoffLabel);
+//    cutoffLabel.setText("Cutoff", dontSendNotification);
+//    cutoffLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+//    cutoffLabel.setColour(Label::textColourId, mainColour);
+//    cutoffLabel.attachToComponent(&cutoffKnob, false);
+//    cutoffLabel.setJustificationType (Justification::centred);
     
     // res knob
     addAndMakeVisible(resKnob);
@@ -124,12 +124,12 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     resKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     resKnob.setLookAndFeel(&otherLookAndFeelRed);
 
-    addAndMakeVisible(cutoffLabel);
-    resLabel.setText("Resonance", dontSendNotification);
-    resLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-    resLabel.setColour(Label::textColourId, mainColour);
-    resLabel.attachToComponent(&resKnob, false);
-    resLabel.setJustificationType (Justification::centred);
+//    addAndMakeVisible(resLabel);
+//    resLabel.setText("Resonance", dontSendNotification);
+//    resLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
+//    resLabel.setColour(Label::textColourId, mainColour);
+//    resLabel.attachToComponent(&resKnob, false);
+//    resLabel.setJustificationType (Justification::centred);
     
     // debug
     // debugLabel.setText("debug", dontSendNotification);
@@ -329,7 +329,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
 
     Path p;
 
-    bool firstPoint = true;
+    //bool firstPoint = true;
     bool edgePointL = false;
     bool edgePointR = false;
     float yPos;
@@ -361,8 +361,8 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             {
                 continue;
             }
-            
         }
+        
         if (yPos > frame.getBottom())
         {
             if (edgePointL == false)
@@ -372,17 +372,29 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             else
             {
                 yPos = frame.getBottom();
-                edgePointL = false;
             }
         }
-        if (firstPoint == true)
+        else if (edgePointL == false)
         {
-            //mixValue = ((1 - mix) * value) + (mix * functionValue);
-            //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
-            p.startNewSubPath(xPos, yPos);
-            firstPoint = false;
+            if (mode == 8)
+            {
+                p.startNewSubPath(xPos, frame.getBottom());
+                p.lineTo(xPos, yPos);
+            }
+            else
+            {
+                p.startNewSubPath(xPos, yPos);
+            }
             edgePointL = true;
         }
+//        if (firstPoint == true)
+//        {
+//            //mixValue = ((1 - mix) * value) + (mix * functionValue);
+//            //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+//            p.startNewSubPath(xPos, yPos);
+//            firstPoint = false;
+//            edgePointL = true;
+//        }
         p.lineTo(xPos, yPos);
     }
     
@@ -434,7 +446,7 @@ void BloodAudioProcessorEditor::resized()
 //    inputMeter->setBounds(15, 0, 40, getHeight() + 50);
 //    outputMeter->setBounds(getWidth() - 50, 0, 40, getHeight() + 50);
     inputMeter->setBounds(getWidth()/10*9-32, getHeight()-405, 50, 350);
-    outputMeter->setBounds(getWidth()/10*9+15, getHeight()-405, 50, 350);
+    outputMeter->setBounds(getWidth()/10*9+17, getHeight()-405, 50, 350);
     
     // distortion menu
     distortionMode.setBounds(37, 25, getWidth() / 4 - 50 +4, 38);

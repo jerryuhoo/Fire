@@ -54,9 +54,10 @@ public:
 class OtherLookAndFeelRed : public LookAndFeel_V4
 {
 public:
-    Colour mainColour = Colour(200,0,0);
-    Colour backgroundColour = Colour(68, 7, 8);
+    Colour mainColour = Colour(255, 0, 0);
     Colour secondColour = Colours::darkred;
+    Colour backgroundColour = Colour(68, 7, 8);
+    
 
     OtherLookAndFeelRed()
     {
@@ -94,8 +95,7 @@ public:
     void paint(Graphics &) override;
     void resized() override;
     // color setting
-//    Colour mainColour = Colours::red;
-    Colour mainColour = Colour(200,0,0);
+    Colour mainColour = Colour(255, 0, 0);
     Colour backgroundColour = Colour::fromFloatRGBA (0.0f, 0.0f, 0.0f, 0.0f); //Colours::black;
     Colour secondColour = Colour(68, 7, 8);
 
@@ -132,12 +132,12 @@ private:
     
     // toggle buttons
     ToggleButton
-        filterOffButton {"OFF"},
-        filterPreButton {"PRE"},
-        filterPostButton {"POST"},
-        filterLowButton {"Low Pass"},
-        filterBandButton {"Band Pass"},
-        filterHighButton {"High Pass"};
+        filterOffButton {""}, //{"OFF"},
+        filterPreButton {""}, //{"PRE"},
+        filterPostButton {""}, //{"POST"},
+        filterLowButton {""}, //{"Low Pass"},
+        filterBandButton {""}, //{"Band Pass"},
+        filterHighButton {""}; //{"High Pass"};
     
     // group toggle buttons
     enum RadioButtonIds

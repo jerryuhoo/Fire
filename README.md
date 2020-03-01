@@ -33,6 +33,9 @@
  
 Hope you like it!
 
+The level meter used ff_meters by Daniel Walz.
+Find the repository here: https://github.com/ffAudio/ff_meters
+
 # Release Notes:
 
 2019-12-30 (version 0.255)

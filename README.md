@@ -38,11 +38,11 @@ Hope you like it!
 
 follow my Neteast channel: 羽翼深蓝Wings
 
-![image](https://github.com/jerryuhoo/Blood/neteast.jpg)
+![image](https://github.com/jerryuhoo/Blood/blob/master/neteast.jpg)
 
 支付宝赞助！
 
-![image](https://github.com/jerryuhoo/Blood/alipay.JPG)
+![image](https://github.com/jerryuhoo/Blood/blob/master/alipay.JPG)
 
 # Reference
 The level meter used ff_meters by Daniel Walz.

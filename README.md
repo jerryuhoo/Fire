@@ -33,6 +33,13 @@
  
 Hope you like it!
 
+# Thanks for your support
+欢迎关注网易云音乐：羽翼深蓝Wings！（这次一定！）
+follow my Neteast channel: 羽翼深蓝Wings
+![image](https://github.com/jerryuhoo/Blood/neteast.jpg)
+支付宝赞助！
+![image](https://github.com/jerryuhoo/Blood/alipay.JPG)
+# Reference
 The level meter used ff_meters by Daniel Walz.
 Find the repository here: https://github.com/ffAudio/ff_meters
 

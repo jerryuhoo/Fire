@@ -38,7 +38,7 @@ Hope you like it!
 
 follow my Neteast channel: 羽翼深蓝Wings
 
-![image](neteast.jpg)
+![image-w70](neteast.jpg)
 
 支付宝赞助！
 

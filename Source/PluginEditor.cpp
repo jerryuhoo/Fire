@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.400"
+#define VERSION "0.410"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -240,7 +240,13 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     addAndMakeVisible(distortionMode);
-
+    
+    // about button
+    //addAndMakeVisible(aboutButton);
+    aboutButton.setColour(TextButton::buttonColourId, Colour(50, 0, 0));
+    aboutButton.setColour(TextButton::textColourOnId, Colour(100, 0, 0));
+    aboutButton.setColour(TextButton::textColourOffId, Colour(100, 0, 0));
+//    aboutButton.onClick = [this] { aboutDialog.showMessageBoxAsync(AlertWindow::InfoIcon, "Made by Wings", "And fuck you", "OK"); };
     // resize not available now
     //setResizeLimits(1000, 750, 1500, 1125); // set resize limits
     //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
@@ -261,16 +267,18 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     //g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
     //g.fillAll(backgroundColour);
-    g.setColour(mainColour);
+    //g.setColour(mainColour);
     
     // set background
     Image background = ImageCache::getFromMemory(BinaryData::blood_background_png, (size_t) BinaryData::blood_background_pngSize);
     g.drawImage(background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
     
     // draw version
-    g.setFont(15.0f);
-    String version = (String) "Wings - Blood(close beta test) - Version " + (String)VERSION;
-    g.drawFittedText(version, getLocalBounds(), Justification::centredBottom, 1);
+    g.setColour(Colour(100, 0, 0));
+    g.setFont (Font ("Times New Roman", 18.0f, Font::bold));
+    String version = (String) "Ver. " + (String)VERSION;
+    Rectangle<int> area(900, 720, 100, 50);
+    g.drawFittedText(version, area, Justification::topLeft, 1);
     
     // set title "Blood"
     // g.setFont(50.0f);
@@ -430,7 +438,6 @@ void BloodAudioProcessorEditor::resized()
     debugLabel.setBounds(0, 0, 300, 300);
     
     // buttons
-    
     filterOffButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175, 100, 25);
     filterPreButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+25, 100, 25);
     filterPostButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+50, 100, 25);
@@ -438,13 +445,14 @@ void BloodAudioProcessorEditor::resized()
     filterBandButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175+25, 100, 25);
     filterHighButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175+50, 100, 25);
     
+    // about
+    aboutButton.setBounds(getWidth() - 130, getHeight()-50, 100, 30);
+    
     // visualiser
-    processor.visualiser.setBounds(38, 90, getWidth() / 2 - 50 + 2, getHeight() / 3 - 14);
-
+    processor.visualiser.setBounds(55, 95, getWidth() / 2 - 80 + 2, getHeight() / 3 - 28);
+    //processor.visualiser.setBounds(38, 90, getWidth() / 2 - 50 + 2, getHeight() / 3 - 14); // old
+    
     // ff meter
-    // original
-//    inputMeter->setBounds(15, 0, 40, getHeight() + 50);
-//    outputMeter->setBounds(getWidth() - 50, 0, 40, getHeight() + 50);
     inputMeter->setBounds(getWidth()/10*9-32, getHeight()-405, 50, 350);
     outputMeter->setBounds(getWidth()/10*9+17, getHeight()-405, 50, 350);
     

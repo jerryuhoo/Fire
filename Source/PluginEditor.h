@@ -18,7 +18,7 @@ class OtherLookAndFeel : public LookAndFeel_V4
 public:
     Colour mainColour = Colours::red;
     Colour backgroundColour = Colours::black;
-    Colour secondColour = Colour(68, 7, 8);
+    Colour secondColour = Colour(77, 4, 4);
 
     OtherLookAndFeel()
     {
@@ -56,7 +56,7 @@ class OtherLookAndFeelRed : public LookAndFeel_V4
 public:
     Colour mainColour = Colour(255, 0, 0);
     Colour secondColour = Colours::darkred;
-    Colour backgroundColour = Colour(68, 7, 8);
+    Colour backgroundColour = Colour(77, 4, 4);
     
 
     OtherLookAndFeelRed()
@@ -97,7 +97,7 @@ public:
     // color setting
     Colour mainColour = Colour(255, 0, 0);
     Colour backgroundColour = Colour::fromFloatRGBA (0.0f, 0.0f, 0.0f, 0.0f); //Colours::black;
-    Colour secondColour = Colour(68, 7, 8);
+    Colour secondColour = Colour(77, 4, 4);
 
     //    Visualiser visualiser;
 
@@ -139,6 +139,9 @@ private:
         filterBandButton {""}, //{"Band Pass"},
         filterHighButton {""}; //{"High Pass"};
     
+    // about
+    TextButton aboutButton {"about"};
+//    AlertWindow aboutDialog;
     // group toggle buttons
     enum RadioButtonIds
     {

@@ -38,11 +38,11 @@ Hope you like it!
 
 follow my Neteast channel: 羽翼深蓝Wings
 
-![image](neteast.jpg)
+![image](neteast.png)
 
 支付宝赞助！
 
-![image](alipay.JPG)
+![image](alipay.png)
 
 # Reference
 The level meter used ff_meters by Daniel Walz.

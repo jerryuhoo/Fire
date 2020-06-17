@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.410"
+#define VERSION "0.5"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -70,6 +70,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     driveKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     driveKnob.setLookAndFeel(&otherLookAndFeelRed);
+    driveKnob.addListener(this);
 
 //    addAndMakeVisible(driveLabel);
 //    driveLabel.setText("Drive", dontSendNotification);
@@ -83,7 +84,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     outputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     outputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     outputKnob.setLookAndFeel(&otherLookAndFeelRed);
-
+    outputKnob.addListener(this);
 //    addAndMakeVisible(outputLabel);
 //    outputLabel.setText("Output", dontSendNotification);
 //    outputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
@@ -131,12 +132,18 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 //    resLabel.attachToComponent(&resKnob, false);
 //    resLabel.setJustificationType (Justification::centred);
     
-    // debug
-    // debugLabel.setText("debug", dontSendNotification);
-    // addAndMakeVisible(debugLabel);
+    // Linked Toggle Button
+    addAndMakeVisible(linkedButton);
+    linkedButton.setClickingTogglesState(true);
+    bool linkedButtonState = *processor.treeState.getRawParameterValue("off");
+    linkedButton.setToggleState(linkedButtonState, dontSendNotification);
+    linkedButton.onClick = [this] { updateToggleState (&linkedButton, "Off"); };
+    linkedButton.setColour(ToggleButton::textColourId, mainColour);
+    linkedButton.setColour(ToggleButton::tickColourId, mainColour);
+    linkedButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
     
-    // buttons
     
+    // Filter State Toggle Button
     addAndMakeVisible(filterOffButton);
     filterOffButton.setClickingTogglesState(true);
     filterOffButton.setRadioGroupId(filterStateButtons);
@@ -167,7 +174,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     filterPostButton.setColour(ToggleButton::tickColourId, mainColour);
     filterPostButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
     
-    // button2
+    // Filter Type Toggle Button
     addAndMakeVisible(filterLowButton);
     filterLowButton.setClickingTogglesState(true);
     filterLowButton.setRadioGroupId(filterModeButtons);
@@ -217,6 +224,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(p.visualiser);
 
     //distortion mode select
+    addAndMakeVisible(distortionMode);
     distortionMode.addItem("Arctan Soft Clipping", 1);
     distortionMode.addItem("Exp Soft Clipping", 2);
     distortionMode.addItem("Tanh Soft Clipping", 3);
@@ -225,6 +233,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.addItem("Sin Foldback", 6);
     distortionMode.addItem("Linear Foldback", 7);
     distortionMode.addItem("Downsample", 8);
+    // distortionMode.setSelectedId (1);
     distortionMode.setJustificationType(Justification::centred);
     distortionMode.setColour(ComboBox::textColourId, mainColour);
     distortionMode.setColour(ComboBox::arrowColourId, mainColour);
@@ -239,7 +248,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, secondColour);
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
-    addAndMakeVisible(distortionMode);
+    
     
     // about button
     //addAndMakeVisible(aboutButton);
@@ -437,7 +446,8 @@ void BloodAudioProcessorEditor::resized()
     // debug
     debugLabel.setBounds(0, 0, 300, 300);
     
-    // buttons
+    // toggle buttons
+    linkedButton.setBounds((getWidth() / 5) * 2 + 50, getHeight()/2+7+25, 100, 25);
     filterOffButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175, 100, 25);
     filterPreButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+25, 100, 25);
     filterPostButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+50, 100, 25);

@@ -183,7 +183,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
     //    float menuChoiceValue = 1.0f;
-    float mode = *treeState.getRawParameterValue("mode");
+    int mode = *treeState.getRawParameterValue("mode");
 
     float currentGainInput = *treeState.getRawParameterValue("inputGain");
     currentGainInput = Decibels::decibelsToGain(currentGainInput);
@@ -227,12 +227,9 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         updateFilter();
     }
 
-    bool lowButton = *treeState.getRawParameterValue("low");
-    std::cout << "lowPassState:" << lowButton;
-    bool bandButton = *treeState.getRawParameterValue("band");
-    std::cout << "bandPassState:" << bandButton;
-    bool highButton = *treeState.getRawParameterValue("high");
-    std::cout << "lowPassState:" << highButton;
+//    bool lowButton = *treeState.getRawParameterValue("low");
+//    bool bandButton = *treeState.getRawParameterValue("band");
+//    bool highButton = *treeState.getRawParameterValue("high");
     
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -351,7 +348,8 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
                  
-    parameters.push_back(std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 8, 1), 1));
+    //parameters.push_back(std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 8, 1), 1));
+    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 1, 8, 1));
     parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

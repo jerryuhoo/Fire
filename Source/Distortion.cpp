@@ -23,7 +23,6 @@ float Distortion::distortionProcess(float sample)
     cleanOut = sample;
     
     input = cleanOut * controls.drive;
-
     switch (controls.mode)
     {
     case 1:

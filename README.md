@@ -76,3 +76,6 @@ Find the repository here: https://github.com/ffAudio/ff_meters
 2020-2-20 (version 0.32)
 1. add 3 filter modes (low-pass, band-pass, high-pass)
 2. add 3 filter states (off, pre, post)
+
+2020-6-16 (version 0.5)
+1. add a linked bottom between drive and output knob.

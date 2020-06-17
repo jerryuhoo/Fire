@@ -36,7 +36,7 @@ public:
         float rx = centerX - radius;
         float ry = centerY - radius;
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
-        std::cout << rotaryStartAngle << " " << rotaryEndAngle << std::endl;
+//        std::cout << rotaryStartAngle << " " << rotaryEndAngle << std::endl;
         Rectangle<float> dialArea(rx, ry, diameter, diameter);
         g.setColour(secondColour);
         //g.drawRect(dialArea);
@@ -84,7 +84,8 @@ public:
 //==============================================================================
 /**
 */
-class BloodAudioProcessorEditor : public AudioProcessorEditor //edited 12/28
+class BloodAudioProcessorEditor : public AudioProcessorEditor,//edited 12/28
+                                  public Slider::Listener
 {
 public:
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
@@ -98,7 +99,34 @@ public:
     Colour mainColour = Colour(255, 0, 0);
     Colour backgroundColour = Colour::fromFloatRGBA (0.0f, 0.0f, 0.0f, 0.0f); //Colours::black;
     Colour secondColour = Colour(77, 4, 4);
-
+    
+    // linked
+    // linked
+    void sliderValueChanged (Slider* slider) override
+    {
+        if (linkedButton.getToggleState() == true)
+        {
+            if (slider == &driveKnob)
+            {
+                if (driveKnob.getValue()>2)
+                    outputKnob.setValue(-3 - (driveKnob.getValue()-1)/63*7);
+                else
+                    outputKnob.setValue((driveKnob.getValue()-1)*(-3));
+            }
+            else if (slider == &outputKnob)
+            {
+                if (outputKnob.getValue() < -3 && outputKnob.getValue() > -10)
+                    driveKnob.setValue(1-(outputKnob.getValue()+3)*63/7);
+                else if (outputKnob.getValue() >=-3 && outputKnob.getValue() <0)
+                    driveKnob.setValue(1 + outputKnob.getValue()/(-3));
+                else if (outputKnob.getValue() >= 0)
+                    driveKnob.setValue(1);
+                else if (outputKnob.getValue() <= -10)
+                    driveKnob.setValue(64);
+            }
+        }
+    }
+    
     //    Visualiser visualiser;
 
 private:
@@ -132,6 +160,7 @@ private:
     
     // toggle buttons
     ToggleButton
+        linkedButton {""},
         filterOffButton {""}, //{"OFF"},
         filterPreButton {""}, //{"PRE"},
         filterPostButton {""}, //{"POST"},
@@ -174,6 +203,8 @@ private:
     // ComboBox attachment
     ComboBox distortionMode;
     std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
+    
+    //ComboBoxParameterAttachment
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

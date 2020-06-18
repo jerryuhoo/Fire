@@ -358,7 +358,8 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
     cutoffRange.setSkewForCentre(1000.f);
     parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20000.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-
+    
+    parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));

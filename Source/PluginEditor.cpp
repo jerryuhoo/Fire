@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.5"
+#define VERSION "0.51"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -135,9 +135,9 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     // Linked Toggle Button
     addAndMakeVisible(linkedButton);
     linkedButton.setClickingTogglesState(true);
-    bool linkedButtonState = *processor.treeState.getRawParameterValue("off");
+    bool linkedButtonState = *processor.treeState.getRawParameterValue("linked");
     linkedButton.setToggleState(linkedButtonState, dontSendNotification);
-    linkedButton.onClick = [this] { updateToggleState (&linkedButton, "Off"); };
+    linkedButton.onClick = [this] { updateToggleState (&linkedButton, "Linked"); };
     linkedButton.setColour(ToggleButton::textColourId, mainColour);
     linkedButton.setColour(ToggleButton::tickColourId, mainColour);
     linkedButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
@@ -213,6 +213,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     cutoffAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "cutoff", cutoffKnob);
     resAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "res", resKnob);
     
+    linkedAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "linked", linkedButton);
     filterOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "off", filterOffButton);
     filterPreAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "pre", filterPreButton);
     filterPostAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "post", filterPostButton);

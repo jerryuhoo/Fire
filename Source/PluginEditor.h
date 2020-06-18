@@ -101,7 +101,6 @@ public:
     Colour secondColour = Colour(77, 4, 4);
     
     // linked
-    // linked
     void sliderValueChanged (Slider* slider) override
     {
         if (linkedButton.getToggleState() == true)
@@ -160,7 +159,7 @@ private:
     
     // toggle buttons
     ToggleButton
-        linkedButton {""},
+        linkedButton {""}, //{"Linked"},
         filterOffButton {""}, //{"OFF"},
         filterPreButton {""}, //{"PRE"},
         filterPostButton {""}, //{"POST"},
@@ -191,8 +190,9 @@ private:
         cutoffAttachment,
         resAttachment;
     
-    // Button attachment
+    // Toggle Button attachment
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
+        linkedAttachment,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,

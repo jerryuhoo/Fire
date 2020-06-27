@@ -1,0 +1,248 @@
+﻿  PluginProcessor.cpp
+  PluginEditor.cpp
+  Distortion.cpp
+  BinaryData.cpp
+  include_ff_meters_LevelMeter.cpp
+  include_juce_audio_basics.cpp
+  include_juce_audio_devices.cpp
+  include_juce_audio_formats.cpp
+  include_juce_audio_plugin_client_utils.cpp
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,32): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,27): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,37): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,23): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,33): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,82): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,77): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,87): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,73): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,83): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,50): warning C4100: 'rightIdx': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,50): warning C4100: 'leftIdx': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,69): warning C4100: 'bounds': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,32): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,56): warning C4100: 'g': unreferenced formal parameter (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,32): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,27): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,27): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,37): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,37): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,23): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,23): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,33): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,33): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,82): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,82): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,77): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,87): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,73): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,83): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,50): warning C4100: 'rightIdx': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,50): warning C4100: 'leftIdx': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,77): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,87): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,69): warning C4100: 'bounds': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,56): warning C4100: 'g': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,73): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,83): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,32): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,27): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,37): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,23): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,33): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,50): warning C4100: 'rightIdx': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,50): warning C4100: 'leftIdx': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,69): warning C4100: 'bounds': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,56): warning C4100: 'g': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(611,82): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(695,77): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(706,87): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(716,73): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(733,83): warning C4100: 'meterType': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(111,50): warning C4100: 'rightIdx': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(110,50): warning C4100: 'leftIdx': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(108,69): warning C4100: 'bounds': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h(107,56): warning C4100: 'g': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+  include_juce_audio_processors.cpp
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(58,44): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(64,41): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(77,42): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(83,43): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(100,38): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(117,37): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(124,37): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(133,36): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(37,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(32,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(34,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(35,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(47,56): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(30,148): warning C4100: 'slider': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(44,55): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(44,85): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(49,5): warning C4100: 'mods': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(49,5): warning C4100: 'channel': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(84,49): warning C4100: 'index': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(88,54): warning C4100: 'index': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(93,70): warning C4100: 'newName': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(93,49): warning C4100: 'index': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(51,56): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(51,86): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(186,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+          with
+          [
+              _Ty=float
+          ]
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(56,5): warning C4100: 'mods': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp(56,5): warning C4100: 'channel': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(252,32): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(162,80): warning C4100: 'midiMessages': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(32,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(34,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(35,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(47,56): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(30,148): warning C4100: 'slider': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(269,15): warning C4100: 'x': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(321,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+          with
+          [
+              _Ty=float
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(340,25): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(345,16): warning C4244: 'initializing': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(346,43): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(346,24): warning C4244: 'initializing': conversion from 'int' to 'const float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(375,34): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(392,39): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(399,56): warning C4244: 'argument': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(475,60): warning C4100: 'button': unreferenced formal parameter
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\Source\Distortion.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeterSource.h(105): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\Source\Distortion.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeterSource.h(105): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeterSource.h(105): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LevelMeterSource.h(105): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\Source\PluginProcessor.cpp)
+  include_juce_audio_utils.cpp
+  include_juce_core.cpp
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(187): warning C4702: unreachable code
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(234): warning C4702: unreachable code
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(150): warning C4702: unreachable code
+C:\Users\33277\Documents\GitHub\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h(100): warning C4702: unreachable code
+  include_juce_cryptography.cpp
+  include_juce_data_structures.cpp
+  include_juce_dsp.cpp
+  include_juce_events.cpp
+  include_juce_graphics.cpp
+  include_juce_gui_basics.cpp
+  include_juce_gui_extra.cpp
+  include_juce_opengl.cpp
+  Blood_SharedCode.vcxproj -> C:\Users\33277\Documents\GitHub\Blood\Builds\VisualStudio2019\x64\Debug\Shared Code\Blood.lib

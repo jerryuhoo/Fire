@@ -1,0 +1,2 @@
+C:\Users\33277\Documents\GitHub\Blood\Builds\VisualStudio2019\x64\Debug\VST3\Blood.vst3
+C:\Users\33277\Documents\GitHub\Blood\Builds\VisualStudio2019\x64\Debug\VST3\Blood.pdb

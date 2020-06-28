@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.52"
+#define VERSION "0.53"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -318,7 +318,8 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     // paint distortion function
     float functionValue;
     float mixValue;
-    int mode = *processor.treeState.getRawParameterValue("mode");
+    // int mode = *processor.treeState.getRawParameterValue("mode"); // for JUCE 5.4.7
+    int mode = *processor.treeState.getRawParameterValue("mode") + 1; // for JUCE 6
     float inputGain = *processor.treeState.getRawParameterValue("inputGain");
     float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
     float mix = *processor.treeState.getRawParameterValue("mix");

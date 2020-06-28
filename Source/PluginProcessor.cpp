@@ -128,6 +128,10 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     updateFilter();
     filterIIR.prepare(spec);
     
+    // ff meter
+    // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
+    inputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
+    outputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
 }
 
 void BloodAudioProcessor::releaseResources()

@@ -11,6 +11,15 @@
     <Filter Include="Blood">
       <UniqueIdentifier>{75E9A6C3-67F0-9752-FDA1-751DA7C59147}</UniqueIdentifier>
     </Filter>
+    <Filter Include="JUCE Modules\ff_meters\LevelMeter">
+      <UniqueIdentifier>{3AE092CF-C1AF-2DF4-C3A1-173B65603125}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="JUCE Modules\ff_meters\LookAndFeel">
+      <UniqueIdentifier>{7EECF665-9F50-8BF9-85F6-0803828C2D1E}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="JUCE Modules\ff_meters\Visualisers">
+      <UniqueIdentifier>{7BDFB80B-0F2B-D1F6-7BA0-2A226CE80510}</UniqueIdentifier>
+    </Filter>
     <Filter Include="JUCE Modules\ff_meters">
       <UniqueIdentifier>{0AC30A48-A53B-B6AA-4B97-8BC9982DB0FB}</UniqueIdentifier>
     </Filter>
@@ -490,7 +499,10 @@
     <ClCompile Include="..\..\Source\Distortion.cpp">
       <Filter>Blood\Source</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_LevelMeter.cpp">
+    <ClCompile Include="..\..\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp">
+      <Filter>JUCE Modules\ff_meters\LevelMeter</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\JuceLibraryCode\modules\ff_meters\ff_meters.cpp">
       <Filter>JUCE Modules\ff_meters</Filter>
     </ClCompile>
     <ClCompile Include="..\..\..\JUCE\modules\juce_audio_basics\buffers\juce_AudioChannelSet.cpp">
@@ -2650,7 +2662,7 @@
     <ClCompile Include="..\..\JuceLibraryCode\BinaryData.cpp">
       <Filter>JUCE Library Code</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\JuceLibraryCode\include_ff_meters_LevelMeter.cpp">
+    <ClCompile Include="..\..\JuceLibraryCode\include_ff_meters.cpp">
       <Filter>JUCE Library Code</Filter>
     </ClCompile>
     <ClCompile Include="..\..\JuceLibraryCode\include_juce_audio_basics.cpp">
@@ -2709,31 +2721,31 @@
     <ClInclude Include="..\..\Source\Distortion.h">
       <Filter>Blood\Source</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_LevelMeter.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.h">
+      <Filter>JUCE Modules\ff_meters\LevelMeter</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_LevelMeterSource.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeterSource.h">
+      <Filter>JUCE Modules\ff_meters\LevelMeter</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_LookAndFeel.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeel.h">
+      <Filter>JUCE Modules\ff_meters\LookAndFeel</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_LookAndFeelMethods.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h">
+      <Filter>JUCE Modules\ff_meters\LookAndFeel</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_OutlineBuffer.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h">
+      <Filter>JUCE Modules\ff_meters\LookAndFeel</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_SoundFieldLookAndFeelMethods.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\Visualisers\OutlineBuffer.h">
+      <Filter>JUCE Modules\ff_meters\Visualisers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_StereoFieldBuffer.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\Visualisers\StereoFieldBuffer.h">
+      <Filter>JUCE Modules\ff_meters\Visualisers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters_StereoFieldComponent.h">
-      <Filter>JUCE Modules\ff_meters</Filter>
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\Visualisers\StereoFieldComponent.h">
+      <Filter>JUCE Modules\ff_meters\Visualisers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\JUCE\user modules\ff_meters\ff_meters.h">
+    <ClInclude Include="..\..\JuceLibraryCode\modules\ff_meters\ff_meters.h">
       <Filter>JUCE Modules\ff_meters</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\JUCE\modules\juce_audio_basics\audio_play_head\juce_AudioPlayHead.h">

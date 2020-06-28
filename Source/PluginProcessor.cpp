@@ -352,8 +352,8 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
                  
-    //parameters.push_back(std::make_unique<AudioParameterFloat>("mode", "Mode", NormalisableRange<float>(1, 8, 1), 1));
-    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 1, 8, 1));
+    // parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 1, 8, 1)); // for JUCE 5.4.7
+    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 7, 0)); // for JUCE 6
     parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

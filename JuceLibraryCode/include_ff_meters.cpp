@@ -6,4 +6,4 @@
 */
 
 #include "AppConfig.h"
-#include <ff_meters/ff_meters_LevelMeter.cpp>
+#include <ff_meters/ff_meters.cpp>

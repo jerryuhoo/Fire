@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.511"
+#define VERSION "0.52"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -18,45 +18,48 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     // resize not avaialble
     //setResizable(true, true);
 
-    // ff meter
-    lnf = std::make_unique<FFAU::LevelMeterLookAndFeel>();
-    // adjust the colours to how you like them, e.g.
-    lnf->setColour(FFAU::LevelMeter::lmTextColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmTextClipColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmTextDeactiveColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmTicksColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmOutlineColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmBackgroundColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmBackgroundClipColour, mainColour);
-    lnf->setColour(FFAU::LevelMeter::lmMeterForegroundColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmMeterOutlineColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmMeterBackgroundColour, backgroundColour);
-    lnf->setColour(FFAU::LevelMeter::lmMeterMaxNormalColour, juce::Colours::yellow);
-    lnf->setColour(FFAU::LevelMeter::lmMeterMaxWarnColour, juce::Colours::orange);
-    lnf->setColour(FFAU::LevelMeter::lmMeterMaxOverColour, juce::Colours::darkred);
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientLowColour, Colour(110,0,0));
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMidColour, Colour(130,0,0));
-    lnf->setColour(FFAU::LevelMeter::lmMeterGradientMaxColour, Colour(150,0,0));
-    lnf->setColour(FFAU::LevelMeter::lmMeterReductionColour, juce::Colours::orange);
-    inputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
-    inputMeter->setLookAndFeel(lnf.get());
-    inputMeter->setMeterSource(&processor.getInputMeterSource());
-    addAndMakeVisible(*inputMeter); //暂时停用
-
-    outputMeter = std::make_unique<FFAU::LevelMeter>(); // See FFAU::LevelMeter::MeterFlags for options
-    outputMeter->setLookAndFeel(lnf.get());
-    outputMeter->setMeterSource(&processor.getOutputMeterSource());
-    addAndMakeVisible(*outputMeter); //暂时停用
     
+    // ff meter
+    //lnf = std::make_unique<foleys::LevelMeterLookAndFeel>();
+    // adjust the colours to how you like them, e.g.
+    lnf.setColour(foleys::LevelMeter::lmTextColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmTextClipColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmTextDeactiveColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmTicksColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmOutlineColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmBackgroundColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, mainColour);
+    lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, backgroundColour);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, juce::Colours::yellow);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, juce::Colours::orange);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, juce::Colours::darkred);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, Colour(110,0,0));
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, Colour(130,0,0));
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, Colour(150,0,0));
+    lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, juce::Colours::orange);
+    
+    inputMeter.setLookAndFeel(&lnf);
+    inputMeter.setMeterSource(&processor.getInputMeterSource());
+    addAndMakeVisible(inputMeter); //暂时停用
+
+    outputMeter.setLookAndFeel(&lnf);
+    outputMeter.setMeterSource(&processor.getOutputMeterSource());
+    addAndMakeVisible(outputMeter); //暂时停用
+    
+
+
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     setSize(1000, 750);
+
+    setLookAndFeel(&otherLookAndFeelRed);
 
     // input knob
     addAndMakeVisible(inputKnob);
     inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    inputKnob.setLookAndFeel(&otherLookAndFeelRed);
 
 //     addAndMakeVisible(inputLabel);
 //    inputLabel.setText("Input", dontSendNotification);
@@ -69,7 +72,6 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(driveKnob);
     driveKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    driveKnob.setLookAndFeel(&otherLookAndFeelRed);
     driveKnob.addListener(this);
 
 //    addAndMakeVisible(driveLabel);
@@ -83,7 +85,6 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(outputKnob);
     outputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     outputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    outputKnob.setLookAndFeel(&otherLookAndFeelRed);
     outputKnob.addListener(this);
 //    addAndMakeVisible(outputLabel);
 //    outputLabel.setText("Output", dontSendNotification);
@@ -96,7 +97,6 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(mixKnob);
     mixKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     mixKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    mixKnob.setLookAndFeel(&otherLookAndFeelRed);
 
 //    addAndMakeVisible(mixLabel);
 //    mixLabel.setText("Mix", dontSendNotification);
@@ -109,7 +109,6 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(cutoffKnob);
     cutoffKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     cutoffKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    cutoffKnob.setLookAndFeel(&otherLookAndFeelRed);
     
 //    addAndMakeVisible(cutoffLabel);
 //    cutoffLabel.setText("Cutoff", dontSendNotification);
@@ -122,7 +121,6 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     addAndMakeVisible(resKnob);
     resKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     resKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    resKnob.setLookAndFeel(&otherLookAndFeelRed);
 
 //    addAndMakeVisible(resLabel);
 //    resLabel.setText("Resonance", dontSendNotification);
@@ -263,6 +261,9 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
 {
+    inputMeter.setLookAndFeel(nullptr);
+    outputMeter.setLookAndFeel(nullptr);
+    setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
 }
 
 float f(float x)
@@ -463,8 +464,8 @@ void BloodAudioProcessorEditor::resized()
     //processor.visualiser.setBounds(38, 90, getWidth() / 2 - 50 + 2, getHeight() / 3 - 14); // old
     
     // ff meter
-    inputMeter->setBounds(getWidth()/10*9-32, getHeight()-405, 50, 350);
-    outputMeter->setBounds(getWidth()/10*9+17, getHeight()-405, 50, 350);
+    inputMeter.setBounds(getWidth()/10*9-28, getHeight()-405, 30, 320);
+    outputMeter.setBounds(getWidth()/10*9+21, getHeight()-405, 30, 320);
     
     // distortion menu
     distortionMode.setBounds(37, 25, getWidth() / 4 - 50 +4, 38);

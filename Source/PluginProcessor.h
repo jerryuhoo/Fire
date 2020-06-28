@@ -80,11 +80,11 @@ public:
 
     // ff meter
     // ff meter
-    FFAU::LevelMeterSource &getInputMeterSource()
+    foleys::LevelMeterSource &getInputMeterSource()
     {
         return inputMeterSource;
     }
-    FFAU::LevelMeterSource &getOutputMeterSource()
+    foleys::LevelMeterSource &getOutputMeterSource()
     {
         return outputMeterSource;
     }
@@ -97,8 +97,8 @@ private:
     //==============================================================================
 
     //ff meter
-    FFAU::LevelMeterSource inputMeterSource;
-    FFAU::LevelMeterSource outputMeterSource;
+    foleys::LevelMeterSource inputMeterSource;
+    foleys::LevelMeterSource outputMeterSource;
     
     float previousGainInput;
     float previousGainOutput;

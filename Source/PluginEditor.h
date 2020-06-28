@@ -36,7 +36,7 @@ public:
         float rx = centerX - radius;
         float ry = centerY - radius;
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
-//        std::cout << rotaryStartAngle << " " << rotaryEndAngle << std::endl;
+
         Rectangle<float> dialArea(rx, ry, diameter, diameter);
         g.setColour(secondColour);
         //g.drawRect(dialArea);
@@ -134,9 +134,9 @@ private:
     BloodAudioProcessor &processor;
 
     // ff meter
-    std::unique_ptr<FFAU::LevelMeter> inputMeter;
-    std::unique_ptr<FFAU::LevelMeter> outputMeter;
-    std::unique_ptr<FFAU::LevelMeterLookAndFeel> lnf;
+    foleys::LevelMeterLookAndFeel lnf;
+    foleys::LevelMeter inputMeter{ foleys::LevelMeter::Minimal };
+    foleys::LevelMeter outputMeter{ foleys::LevelMeter::Minimal };
 
     // sliders
     Slider

@@ -187,7 +187,9 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     // Alternatively, you can process the samples with the channels
     // interleaved by keeping the same state.
     //    float menuChoiceValue = 1.0f;
-    int mode = *treeState.getRawParameterValue("mode");
+
+    // int mode = *treeState.getRawParameterValue("mode"); // for JUCE 5.4.7
+    int mode = *treeState.getRawParameterValue("mode") + 1; // for JUCE 6
 
     float currentGainInput = *treeState.getRawParameterValue("inputGain");
     currentGainInput = Decibels::decibelsToGain(currentGainInput);

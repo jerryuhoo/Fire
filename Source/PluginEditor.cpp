@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.53"
+#define VERSION "0.54"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -323,7 +323,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     float inputGain = *processor.treeState.getRawParameterValue("inputGain");
     float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
     float mix = *processor.treeState.getRawParameterValue("mix");
-    
+
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
     distortionProcessor.controls.mix = mix;

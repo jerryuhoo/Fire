@@ -223,7 +223,19 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     outputSmoother.setTargetValue(currentGainOutput);
     
     
-    //pre-filter
+    // save clean signal
+    float* cleanSignal = new float[buffer.getNumSamples()]{0}; //test global mix 2020/6/30
+
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            cleanSignal[sample] = channelData[sample]; //test global mix 2020/6/30
+        }
+    }
+
+    // pre-filter
     
     bool preButton = *treeState.getRawParameterValue("pre");
     if (preButton)
@@ -242,17 +254,18 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     {
         
         float* data = buffer.getWritePointer(channel);
-
-        
         auto *channelData = buffer.getWritePointer(channel);
+
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            auto cleanOut = channelData[sample];
-            
+            // auto cleanOut = channelData[sample];
+
             // distortion
             distortionProcessor.controls.drive = driveSmoother.getNextValue();
             distortionProcessor.controls.output = outputSmoother.getNextValue();
             channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
+
+            // do post filter
 
             if (mode == 8) {
                 int rateDivide = distortionProcessor.controls.drive;
@@ -260,7 +273,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
                 if (rateDivide > 1)
                 {
                     if (sample%rateDivide != 0) data[sample] = data[sample - sample%rateDivide];
-                    channelData[sample] = (1.f - mix) * cleanOut + mix * channelData[sample];
+                    // channelData[sample] = (1.f - mix) * cleanOut + mix * channelData[sample];
                 }
 
             }
@@ -269,6 +282,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         //        visualiser.pushBuffer(buffer);
     }
 
+    
     //post-filter
     bool postButton = *treeState.getRawParameterValue("post");
     if (postButton)
@@ -278,6 +292,18 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         updateFilter();
     }
     
+    
+    // mix control
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
+        }
+    }
+    
+
     // ff output meter
     outputMeterSource.measureBlock(buffer);
     visualiser.pushBuffer(buffer);
@@ -357,7 +383,7 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
     // parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 1, 8, 1)); // for JUCE 5.4.7
     parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 7, 0)); // for JUCE 6
     parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 2.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.54"
+#define VERSION "0.55"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -359,13 +359,16 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
         
         functionValue = distortionProcessor.distortionProcess(value);
         
-        if (mode == 8) {
+
+        if (mode == 8) 
+        {
             float rateDivide = distortionProcessor.controls.drive;
             if (rateDivide > 1)
                 functionValue = ceilf(value*(64.f/rateDivide))/(64.f/rateDivide);
-            functionValue = (1.f - mix) * value + mix * functionValue;
         }
         
+        functionValue = (1.f - mix) * value + mix * functionValue;
+
         mixValue = (2.0f / 3.0f) * functionValue;
         yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
 

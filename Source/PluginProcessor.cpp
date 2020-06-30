@@ -118,6 +118,10 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // clear visualiser
     visualiser.clear();
     
+    // dry buffer init
+    dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    dryBuffer.clear();
+
     // filter init
     dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
@@ -224,19 +228,9 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     
     
     // save clean signal
-    float* cleanSignal = new float[buffer.getNumSamples()]{0}; //test global mix 2020/6/30
-
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer(channel);
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            cleanSignal[sample] = channelData[sample]; //test global mix 2020/6/30
-        }
-    }
+    dryBuffer.makeCopyOf(buffer);
 
     // pre-filter
-    
     bool preButton = *treeState.getRawParameterValue("pre");
     if (preButton)
     {
@@ -258,27 +252,23 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            // auto cleanOut = channelData[sample];
-
             // distortion
             distortionProcessor.controls.drive = driveSmoother.getNextValue();
             distortionProcessor.controls.output = outputSmoother.getNextValue();
             channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
 
-            // do post filter
-
-            if (mode == 8) {
+            // downsample
+            if (mode == 8) 
+            {
                 int rateDivide = distortionProcessor.controls.drive;
                 //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
                 if (rateDivide > 1)
                 {
                     if (sample%rateDivide != 0) data[sample] = data[sample - sample%rateDivide];
-                    // channelData[sample] = (1.f - mix) * cleanOut + mix * channelData[sample];
                 }
 
             }
         }
-
         //        visualiser.pushBuffer(buffer);
     }
 
@@ -297,6 +287,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer(channel);
+        auto* cleanSignal = dryBuffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];

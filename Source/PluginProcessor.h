@@ -97,7 +97,7 @@ public:
 private:
     //==============================================================================
 
-    //ff meter
+    // ff meter
     foleys::LevelMeterSource inputMeterSource;
     foleys::LevelMeterSource outputMeterSource;
     
@@ -105,6 +105,9 @@ private:
     float previousGainOutput;
     float previousDrive;
     
+    // dry audio buffer
+    AudioBuffer<float> dryBuffer;
+
     // filter
     dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
     

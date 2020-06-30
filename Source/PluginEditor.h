@@ -27,7 +27,7 @@ public:
         setColour(Slider::textBoxOutlineColourId, mainColour);
     }
 
-    void drawRotarySlider(Graphics &g, int x, int y, int width, int height, float sliderPos, float rotaryStartAngle, float rotaryEndAngle, Slider &slider) override
+    void drawRotarySlider(Graphics& g, int x, int y, int width, int height, float sliderPos, float rotaryStartAngle, float rotaryEndAngle, Slider& slider) override
     {
         float diameter = jmin(width, height) * 0.8;
         float radius = diameter / 2;
@@ -67,6 +67,30 @@ public:
         setColour(Slider::thumbColourId, Colours::red);
         setColour(Slider::rotarySliderFillColourId, mainColour);
         setColour(Slider::rotarySliderOutlineColourId, secondColour);
+    }
+
+    void drawTickBox(Graphics& g, Component& component,
+        float x, float y, float w, float h,
+        const bool ticked,
+        const bool isEnabled,
+        const bool shouldDrawButtonAsHighlighted,
+        const bool shouldDrawButtonAsDown) override
+    {
+        ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+
+        Rectangle<float> tickBounds(x, y, w, h);
+
+        g.setColour(component.findColour(ToggleButton::tickDisabledColourId));
+        g.drawRect(tickBounds, 1.0f);
+        
+        if (ticked)
+        {
+            g.setColour(component.findColour(ToggleButton::tickColourId));
+            // auto tick = getTickShape(0.75f);
+            // g.fillPath(tick, tick.getTransformToScaleToFit(tickBounds.reduced(4, 5).toFloat(), false));
+            Rectangle<float> tickInnerBounds(x + 1, y + 1, w - 2, h - 2);
+            g.fillRect(tickInnerBounds);
+        }
     }
 };
 

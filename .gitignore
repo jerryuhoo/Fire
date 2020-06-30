@@ -7,3 +7,4 @@ Builds/VisualStudio2019/.vs/Blood/v16/ipch/AutoPCH/bc7d59d55900450f/DISTORTION.i
 Builds/VisualStudio2019/.vs/Blood/v16/ipch/AutoPCH/c7e2b0ef33d6427/PLUGINPROCESSOR.ipch
 Builds/VisualStudio2019/.vs/Blood/v16/ipch/AutoPCH/ef6c0062b7b8ef5e/INCLUDE_FF_METERS_LEVELMETER.ipch
 *.ipch
+*.opendb

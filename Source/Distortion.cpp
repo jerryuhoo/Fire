@@ -52,7 +52,8 @@ float Distortion::distortionProcess(float sample)
     
     }
     input = input * controls.output;
-    return (1.f - controls.mix) * cleanOut + controls.mix * input;
+    //return (1.f - controls.mix) * cleanOut + controls.mix * input;
+    return input;
 }
 
 float Distortion::arctanSoftClipping(float input)

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.56"
+#define VERSION "0.60"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -129,7 +129,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 //    resLabel.attachToComponent(&resKnob, false);
 //    resLabel.setJustificationType (Justification::centred);
     
-    // Linked Toggle Button
+    // Linked Toggle Buttons
     addAndMakeVisible(linkedButton);
     linkedButton.setClickingTogglesState(true);
     bool linkedButtonState = *processor.treeState.getRawParameterValue("linked");
@@ -139,8 +139,38 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     linkedButton.setColour(ToggleButton::tickColourId, mainColour);
     linkedButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
     
-    
-    // Filter State Toggle Button
+    // Rectification Toggle Buttons
+    addAndMakeVisible(recOffButton);
+    recOffButton.setClickingTogglesState(true);
+    recOffButton.setRadioGroupId(recStateButtons);
+    bool refOffButtonState = *processor.treeState.getRawParameterValue("recOff");
+    recOffButton.setToggleState(refOffButtonState, dontSendNotification);
+    recOffButton.onClick = [this] { updateToggleState(&recOffButton, "RecOff"); };
+    recOffButton.setColour(ToggleButton::textColourId, mainColour);
+    recOffButton.setColour(ToggleButton::tickColourId, mainColour);
+    recOffButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+
+    addAndMakeVisible(recHalfButton);
+    recHalfButton.setClickingTogglesState(true);
+    recHalfButton.setRadioGroupId(recStateButtons);
+    bool refHalfButtonState = *processor.treeState.getRawParameterValue("recHalf");
+    recHalfButton.setToggleState(refHalfButtonState, dontSendNotification);
+    recHalfButton.onClick = [this] { updateToggleState(&recHalfButton, "RecHalf"); };
+    recHalfButton.setColour(ToggleButton::textColourId, mainColour);
+    recHalfButton.setColour(ToggleButton::tickColourId, mainColour);
+    recHalfButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+
+    addAndMakeVisible(recFullButton);
+    recFullButton.setClickingTogglesState(true);
+    recFullButton.setRadioGroupId(recStateButtons);
+    bool recFullButtonState = *processor.treeState.getRawParameterValue("recFull");
+    recFullButton.setToggleState(recFullButtonState, dontSendNotification);
+    recFullButton.onClick = [this] { updateToggleState(&recFullButton, "RecFull"); };
+    recFullButton.setColour(ToggleButton::textColourId, mainColour);
+    recFullButton.setColour(ToggleButton::tickColourId, mainColour);
+    recFullButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+
+    // Filter State Toggle Buttons
     addAndMakeVisible(filterOffButton);
     filterOffButton.setClickingTogglesState(true);
     filterOffButton.setRadioGroupId(filterStateButtons);
@@ -171,7 +201,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     filterPostButton.setColour(ToggleButton::tickColourId, mainColour);
     filterPostButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
     
-    // Filter Type Toggle Button
+    // Filter Type Toggle Buttons
     addAndMakeVisible(filterLowButton);
     filterLowButton.setClickingTogglesState(true);
     filterLowButton.setRadioGroupId(filterModeButtons);
@@ -211,6 +241,9 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     resAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "res", resKnob);
     
     linkedAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "linked", linkedButton);
+    recOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recOff", recOffButton);
+    recHalfAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recHalf", recHalfButton);
+    recFullAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recFull", recFullButton);
     filterOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "off", filterOffButton);
     filterPreAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "pre", filterPreButton);
     filterPostAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "post", filterPostButton);
@@ -221,16 +254,34 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     // Visualiser
     addAndMakeVisible(p.visualiser);
 
-    //distortion mode select
+    // Distortion mode select
     addAndMakeVisible(distortionMode);
+
+    distortionMode.addSectionHeading("Soft Clipping");
     distortionMode.addItem("Arctan Soft Clipping", 1);
     distortionMode.addItem("Exp Soft Clipping", 2);
     distortionMode.addItem("Tanh Soft Clipping", 3);
     distortionMode.addItem("Cubic Soft Clipping", 4);
+    distortionMode.addSeparator();
+
+    distortionMode.addSectionHeading("Hard Clipping");
     distortionMode.addItem("Hard Clipping", 5);
+    distortionMode.addSeparator();
+
+    distortionMode.addSectionHeading("Foldback");
     distortionMode.addItem("Sin Foldback", 6);
     distortionMode.addItem("Linear Foldback", 7);
+    distortionMode.addSeparator();
+    /*
+    distortionMode.addSectionHeading("Rectification");
+    distortionMode.addItem("Half Rectification", 8);
+    distortionMode.addItem("Full Rectification", 9);
+    distortionMode.addSeparator();
+    */
+    distortionMode.addSectionHeading("Downsample");
     distortionMode.addItem("Downsample", 8);
+    distortionMode.addSeparator();
+
     // distortionMode.setSelectedId (1);
     distortionMode.setJustificationType(Justification::centred);
     distortionMode.setColour(ComboBox::textColourId, mainColour);
@@ -359,7 +410,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
         
         functionValue = distortionProcessor.distortionProcess(value);
         
-
+        // downsample
         if (mode == 8) 
         {
             float rateDivide = distortionProcessor.controls.drive;
@@ -453,6 +504,9 @@ void BloodAudioProcessorEditor::resized()
     
     // toggle buttons
     linkedButton.setBounds((getWidth() / 5) * 2 + 50, getHeight()/2+7+25, 100, 25);
+    recOffButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7, 100, 25);
+    recHalfButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 25, 100, 25);
+    recFullButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 50, 100, 25);
     filterOffButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175, 100, 25);
     filterPreButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+25, 100, 25);
     filterPostButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+50, 100, 25);

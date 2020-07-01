@@ -184,9 +184,12 @@ private:
     // toggle buttons
     ToggleButton
         linkedButton {""}, //{"Linked"},
-        filterOffButton {""}, //{"OFF"},
-        filterPreButton {""}, //{"PRE"},
-        filterPostButton {""}, //{"POST"},
+        recOffButton{ "" }, 
+        recHalfButton{ "" }, 
+        recFullButton{ "" }, 
+        filterOffButton {""}, //{"Off"},
+        filterPreButton {""}, //{"Pre"},
+        filterPostButton {""}, //{"Post"},
         filterLowButton {""}, //{"Low Pass"},
         filterBandButton {""}, //{"Band Pass"},
         filterHighButton {""}; //{"High Pass"};
@@ -200,7 +203,9 @@ private:
         // filter state: off, pre, post
         filterStateButtons = 1001,
         // filter mode: low, band, high
-        filterModeButtons = 1002
+        filterModeButtons = 1002,
+        // rec state: off, half, full
+        recStateButtons = 1003
     };
     
     void updateToggleState (Button* button, String name);
@@ -217,6 +222,9 @@ private:
     // Toggle Button attachment
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
         linkedAttachment,
+        recOffAttachment,
+        recHalfAttachment,
+        recFullAttachment,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,

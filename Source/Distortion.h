@@ -26,11 +26,14 @@ public:
         float output;
         // Mix, [0., 1.] ratio between a dry and wet signal
         float mix;
+        // Rectification mode 0 = bypass, 1 = half, 2 = full
+        int rectification;
     } controls;
 
     Distortion();
     ~Distortion();
-    float distortionProcess(float sample);
+    float distortionProcess(float input);
+    float rectificationProcess(float input);
 
 private:
     // Intermediate values
@@ -44,6 +47,8 @@ private:
     float hardClipping(float input);
     float sinFoldback(float input);
     float linFoldback(float input);
+    float halfRectification(float input);
+    float fullRectification(float input);
     float bitCrusher(float input);
     
     // SmoothedValue<float> driverSmoother;

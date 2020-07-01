@@ -14,15 +14,14 @@ Distortion::Distortion()
     controls.drive = 1.f;
     controls.output = 1.f;
     controls.mix = 0.f;
+    controls.rectification = 0;
 }
 
 Distortion::~Distortion() {}
 
-float Distortion::distortionProcess(float sample)
-{
-    cleanOut = sample;
-    
-    input = cleanOut * controls.drive;
+float Distortion::distortionProcess(float input)
+{ 
+    input = input * controls.drive;
     switch (controls.mode)
     {
     case 1:
@@ -52,7 +51,23 @@ float Distortion::distortionProcess(float sample)
     
     }
     input = input * controls.output;
-    //return (1.f - controls.mix) * cleanOut + controls.mix * input;
+
+    return input;
+}
+
+float Distortion::rectificationProcess(float input)
+{
+    switch (controls.rectification)
+    {
+    case 0:
+        break;
+    case 1:
+        input = halfRectification(input);
+        break;
+    case 2:
+        input = fullRectification(input);
+        break;
+    }
     return input;
 }
 
@@ -124,9 +139,28 @@ float Distortion::sinFoldback(float input)
 
 float Distortion::linFoldback(float input)
 {
-    if (input > controls.thresh || input < -controls.thresh) {
+    if (input > controls.thresh || input < -controls.thresh)
+    {
         input = fabs(fabs(fmod(input - controls.thresh, controls.thresh * 4))
                      - controls.thresh * 2) - controls.thresh;
+    }
+    return input;
+}
+
+float Distortion::halfRectification(float input)
+{
+    if (input < 0) 
+    {
+        input = 0;
+    }
+    return input;
+}
+
+float Distortion::fullRectification(float input)
+{
+    if (input < 0) 
+    {
+        input = -input;
     }
     return input;
 }

@@ -247,7 +247,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         
-        float* data = buffer.getWritePointer(channel);
+        // float* data = buffer.getWritePointer(channel);
         auto *channelData = buffer.getWritePointer(channel);
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
@@ -264,10 +264,15 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
                 //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
                 if (rateDivide > 1)
                 {
-                    if (sample%rateDivide != 0) data[sample] = data[sample - sample%rateDivide];
+                    if (sample%rateDivide != 0) 
+                        channelData[sample] = channelData[sample - sample%rateDivide];
                 }
 
             }
+
+            // rectification
+            updateRectification();
+            channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
         }
         //        visualiser.pushBuffer(buffer);
     }
@@ -344,8 +349,27 @@ AudioProcessor *JUCE_CALLTYPE createPluginFilter()
     return new BloodAudioProcessor();
 } 
 
+// Rectification selection
+void BloodAudioProcessor::updateRectification()
+{
+    bool recOffButton = *treeState.getRawParameterValue("recOff");
+    bool recHalfButton = *treeState.getRawParameterValue("recHalf");
+    bool recFullButton = *treeState.getRawParameterValue("recFull");
+    if (recOffButton == true)
+    {
+        distortionProcessor.controls.rectification = 0;
+    }
+    else if (recHalfButton == true)
+    {
+        distortionProcessor.controls.rectification = 1;
+    }
+    else if (recFullButton == true)
+    {
+        distortionProcessor.controls.rectification = 2;
+    }
+}
 
-//
+// Filter selection
 void BloodAudioProcessor::updateFilter()
 {
     float cutoff = *treeState.getRawParameterValue("cutoff");
@@ -383,6 +407,9 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
     parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("recOff", "RecOff", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));

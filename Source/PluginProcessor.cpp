@@ -24,12 +24,18 @@ BloodAudioProcessor::BloodAudioProcessor()
                          ), treeState(*this, nullptr, "PARAMETERS", createParameters())
 #endif
 {
-    NormalisableRange<float> cutoffRange (20.0f, 20000.0f, 1.0f);
-    cutoffRange.setSkewForCentre(1000.f);
+    //NormalisableRange<float> cutoffRange (20.0f, 20000.0f, 1.0f);
+    //cutoffRange.setSkewForCentre(1000.f);
+    // factor = 2 means 2^2 = 4, 4x oversampling
+
+    oversampling.reset(new dsp::Oversampling<float>(getTotalNumInputChannels(), 1, dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
+    oversamplingHQ.reset(new dsp::Oversampling<float>(getTotalNumInputChannels(), 2, dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
+
 }
 
 BloodAudioProcessor::~BloodAudioProcessor()
 {
+    oversampling.reset();
 }
 
 //==============================================================================
@@ -122,16 +128,39 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
 
-    // filter init
-    dsp::ProcessSpec spec;
-    spec.sampleRate = sampleRate;
-    spec.maximumBlockSize = samplesPerBlock;
+    // oversampling init
+    oversampling->reset();
+    oversampling->initProcessing(static_cast<size_t> (samplesPerBlock));
+    oversamplingHQ->reset();
+    oversamplingHQ->initProcessing(static_cast<size_t> (samplesPerBlock));
+
+    // dsp init
+    // dsp::ProcessSpec spec;
+
+    int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
+
+    /*
+    if (*treeState.getRawParameterValue("hq")) // oversampling
+    {
+        spec.sampleRate = sampleRate * 4;
+    }
+    else
+    {
+         spec.sampleRate = sampleRate;
+    }
+    */
+
+    // spec.maximumBlockSize = samplesPerBlock;
+    spec.maximumBlockSize = newBlockSize;
     spec.numChannels = getMainBusNumOutputChannels();
-    
+
+    // filter init
     filterIIR.reset();
     updateFilter();
     filterIIR.prepare(spec);
     
+    
+
     // ff meter
     // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
     inputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
@@ -182,7 +211,51 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
     
-    
+    // TODO------put this in a new function--------
+
+    // oversampling
+    double newSampleRate = getSampleRate();
+    int newBufferSize = buffer.getNumSamples();
+    if (*treeState.getRawParameterValue("hq"))
+    {
+        oversampleFactor = oversamplingHQ->getOversamplingFactor();
+        newSampleRate *= oversampleFactor;
+        newBufferSize *= oversampleFactor;
+        oversamplingHQ->getLatencyInSamples();
+    }
+    else
+    {
+        oversampleFactor = oversampling->getOversamplingFactor();
+        newSampleRate *= oversampleFactor;
+        newBufferSize *= oversampleFactor;
+        oversampling->getLatencyInSamples();
+    }
+
+    // TODO------put this in a new function--------
+
+
+    dsp::AudioBlock<float> blockInput(buffer);
+    dsp::AudioBlock<float> blockOutput;
+    // oversampling
+    //if (*treeState.getRawParameterValue("hq")) // oversampling
+    //{
+        //dsp::AudioBlock<float> blockInput(buffer);
+        // blockOutput.clear();
+        // blockOutput = oversampling->processSamplesUp(blockInput);
+    //blockOutput.clear();
+    if (*treeState.getRawParameterValue("hq"))
+    {
+        blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
+        blockOutput = oversamplingHQ->processSamplesUp(blockInput);
+    }
+    else
+    {
+        //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
+        blockOutput = blockInput.getSubBlock(0, buffer.getNumSamples());
+    }
+        
+        
+        //}
     
     // This is the place where you'd normally do the guts of your plugin's
     // audio processing...
@@ -234,8 +307,9 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     bool preButton = *treeState.getRawParameterValue("pre");
     if (preButton)
     {
-        dsp::AudioBlock<float> block (buffer);
-        filterIIR.process(dsp::ProcessContextReplacing<float>(block));
+        //dsp::AudioBlock<float> block (buffer);
+        //filterIIR.process(dsp::ProcessContextReplacing<float>(block));
+        filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
         updateFilter();
     }
 
@@ -243,14 +317,13 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
 //    bool bandButton = *treeState.getRawParameterValue("band");
 //    bool highButton = *treeState.getRawParameterValue("high");
     
-    
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         
         // float* data = buffer.getWritePointer(channel);
-        auto *channelData = buffer.getWritePointer(channel);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+       // auto *channelData = buffer.getWritePointer(channel);
+        auto* channelData = blockOutput.getChannelPointer(channel);
+        for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
         {
             // distortion
             distortionProcessor.controls.drive = driveSmoother.getNextValue();
@@ -282,11 +355,21 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     bool postButton = *treeState.getRawParameterValue("post");
     if (postButton)
     {
-        dsp::AudioBlock<float> block (buffer);
-        filterIIR.process(dsp::ProcessContextReplacing<float>(block));
+        //dsp::AudioBlock<float> block (buffer);
+        //filterIIR.process(dsp::ProcessContextReplacing<float>(block));
+        filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
         updateFilter();
     }
     
+    // oversampling
+    if (*treeState.getRawParameterValue("hq")) // oversampling
+    {
+        oversamplingHQ->processSamplesDown(blockInput);
+    }
+    //else
+    //{
+    //    oversampling->processSamplesDown(blockInput);
+    //}
     
     // mix control
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -299,7 +382,6 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         }
     }
     
-
     // ff output meter
     outputMeterSource.measureBlock(buffer);
     visualiser.pushBuffer(buffer);
@@ -406,10 +488,11 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
     parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20000.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
+    parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("recOff", "RecOff", true));
-    parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", true));
-    parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));

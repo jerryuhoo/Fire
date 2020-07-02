@@ -29,7 +29,7 @@
  #define JucePlugin_Build_AAX              0
 #endif
 #ifndef  JucePlugin_Build_Standalone
- #define JucePlugin_Build_Standalone       1
+ #define JucePlugin_Build_Standalone       0
 #endif
 #ifndef  JucePlugin_Build_Unity
  #define JucePlugin_Build_Unity            0
@@ -74,13 +74,13 @@
  #define JucePlugin_EditorRequiresKeyboardFocus  0
 #endif
 #ifndef  JucePlugin_Version
- #define JucePlugin_Version                0.51
+ #define JucePlugin_Version                0.65
 #endif
 #ifndef  JucePlugin_VersionCode
- #define JucePlugin_VersionCode            0x3300
+ #define JucePlugin_VersionCode            0x4100
 #endif
 #ifndef  JucePlugin_VersionString
- #define JucePlugin_VersionString          "0.51"
+ #define JucePlugin_VersionString          "0.65"
 #endif
 #ifndef  JucePlugin_VSTUniqueID
  #define JucePlugin_VSTUniqueID            JucePlugin_PluginCode

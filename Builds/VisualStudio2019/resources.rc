@@ -9,16 +9,16 @@
 #include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION  0,51,0,0
+FILEVERSION  0,65,0,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
     BLOCK "040904E4"
     BEGIN
       VALUE "FileDescription",  "Blood\0"
-      VALUE "FileVersion",  "0.51\0"
+      VALUE "FileVersion",  "0.65\0"
       VALUE "ProductName",  "Blood\0"
-      VALUE "ProductVersion",  "0.51\0"
+      VALUE "ProductVersion",  "0.65\0"
     END
   END
 

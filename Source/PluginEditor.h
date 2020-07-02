@@ -39,7 +39,6 @@ public:
 
         Rectangle<float> dialArea(rx, ry, diameter, diameter);
         g.setColour(secondColour);
-        //g.drawRect(dialArea);
         g.fillEllipse(dialArea);
 
         g.setColour(mainColour);
@@ -183,6 +182,7 @@ private:
     
     // toggle buttons
     ToggleButton
+        hqButton{ "" }, // high quality (oversampling)
         linkedButton {""}, //{"Linked"},
         recOffButton{ "" }, 
         recHalfButton{ "" }, 
@@ -221,6 +221,7 @@ private:
     
     // Toggle Button attachment
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
+        hqAttachment,
         linkedAttachment,
         recOffAttachment,
         recHalfAttachment,

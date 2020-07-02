@@ -109,6 +109,8 @@ private:
     
     // dry audio buffer
     AudioBuffer<float> dryBuffer;
+    // dsp::AudioBlock<float> blockOutput;
+    dsp::ProcessSpec spec;
 
     // filter
     dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
@@ -119,5 +121,11 @@ private:
     
     Distortion distortionProcessor;
     
+    // oversampling
+    std::unique_ptr<dsp::Oversampling<float>> oversampling; // normal use 2x
+    std::unique_ptr<dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
+    int oversampleFactor = 1;
+    // dsp::AudioBlock<float> blockOutput;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloodAudioProcessor)
 };

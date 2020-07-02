@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.60"
+#define VERSION "0.65"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -129,6 +129,16 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 //    resLabel.attachToComponent(&resKnob, false);
 //    resLabel.setJustificationType (Justification::centred);
     
+    // HQ(oversampling) Toggle Buttons
+    addAndMakeVisible(hqButton);
+    hqButton.setClickingTogglesState(true);
+    bool hqButtonState = *processor.treeState.getRawParameterValue("hq");
+    hqButton.setToggleState(hqButtonState, dontSendNotification);
+    hqButton.onClick = [this] { updateToggleState(&hqButton, "Hq"); };
+    hqButton.setColour(ToggleButton::textColourId, mainColour);
+    hqButton.setColour(ToggleButton::tickColourId, mainColour);
+    hqButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+
     // Linked Toggle Buttons
     addAndMakeVisible(linkedButton);
     linkedButton.setClickingTogglesState(true);
@@ -240,6 +250,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     cutoffAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "cutoff", cutoffKnob);
     resAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "res", resKnob);
     
+    hqAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "hq", hqButton);
     linkedAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "linked", linkedButton);
     recOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recOff", recOffButton);
     recHalfAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recHalf", recHalfButton);
@@ -503,6 +514,7 @@ void BloodAudioProcessorEditor::resized()
     debugLabel.setBounds(0, 0, 300, 300);
     
     // toggle buttons
+    hqButton.setBounds((getWidth() / 5) * 1 - 120, getHeight() / 2 + 7 + 25, 100, 25);
     linkedButton.setBounds((getWidth() / 5) * 2 + 50, getHeight()/2+7+25, 100, 25);
     recOffButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7, 100, 25);
     recHalfButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 25, 100, 25);

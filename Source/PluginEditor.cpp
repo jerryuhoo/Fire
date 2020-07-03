@@ -10,11 +10,15 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.65"
+#define VERSION "0.66"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
 {
+    // timer
+    Timer::startTimerHz(20.0f);
+
+
     // resize not avaialble
     //setResizable(true, true);
 
@@ -323,6 +327,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
 BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
 {
+    stopTimer();
     inputMeter.setLookAndFeel(nullptr);
     outputMeter.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
@@ -494,7 +499,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     // g.setColour(mainColour);
     // g.drawRect(50-2, (getHeight() / 3) + 50-2, getWidth() / 2 - 50+4, 50+4, 2);
     
-    repaint();
+    // repaint(); // HIGH CPU WARNING!!!
 }
 
 void BloodAudioProcessorEditor::resized()
@@ -545,4 +550,9 @@ void BloodAudioProcessorEditor::resized()
 void BloodAudioProcessorEditor::updateToggleState (Button* button, String name)
 {
     //auto state = button->getToggleState();
+}
+
+void BloodAudioProcessorEditor::timerCallback()
+{
+    repaint();
 }

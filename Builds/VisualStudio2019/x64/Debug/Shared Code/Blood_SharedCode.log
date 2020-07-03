@@ -1,64 +1,198 @@
-﻿  PluginEditor.cpp
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(412,1): warning C4456: declaration of 'numChannels' hides previous local declaration
-C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(334,15): message : see declaration of 'numChannels'
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(32,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(34,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(35,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(46,56): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(30,148): warning C4100: 'slider': unreferenced formal parameter
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(331,15): warning C4100: 'x': unreferenced formal parameter
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(384,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
-          with
-          [
-              _Ty=float
-          ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(403,25): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(408,16): warning C4244: 'initializing': conversion from 'ValueType' to 'float', possible loss of data
-          with
-          [
-              ValueType=int
-          ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(409,43): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(409,24): warning C4244: 'initializing': conversion from 'int' to 'const float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(441,34): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
-          with
-          [
-              ValueType=int
-          ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(458,39): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
-          with
-          [
-              ValueType=int
-          ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(465,56): warning C4244: 'argument': conversion from 'ValueType' to 'float', possible loss of data
-          with
-          [
-              ValueType=int
-          ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(545,60): warning C4100: 'button': unreferenced formal parameter
+﻿  PluginProcessor.cpp
+  PluginEditor.cpp
+  Distortion.cpp
+  include_ff_meters.cpp
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(412,1): warning C4456: declaration of 'numChannels' hides previous local declaration (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(334,15): message : see declaration of 'numChannels' (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(412,1): warning C4456: declaration of 'numChannels' hides previous local declaration (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(334,15): message : see declaration of 'numChannels' (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(412,1): warning C4456: declaration of 'numChannels' hides previous local declaration (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(334,15): message : see declaration of 'numChannels' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(45,55): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(45,85): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(50,5): warning C4100: 'mods': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(50,5): warning C4100: 'channel': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(107,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(108,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(109,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(110,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\SoundFieldLookAndFeelMethods.h(111,25): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(52,56): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(52,86): warning C5051: attribute 'maybe_unused' requires at least '/std:c++17'; ignored (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(57,5): warning C4100: 'mods': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeter.cpp(57,5): warning C4100: 'channel': unreferenced formal parameter (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(412,1): warning C4456: declaration of 'numChannels' hides previous local declaration (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(334,15): message : see declaration of 'numChannels' (compiling source file ..\..\Source\PluginProcessor.cpp)
 C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
           with
           [
               _Ty=float
-          ]
+          ] (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
 C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
           with
           [
               _Ty=float,
               _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
               _Fn=std::plus<void>
-          ]
+          ] (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeterSource.h(102): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
           with
           [
               _Ty=float,
               _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\JuceLibraryCode\include_ff_meters.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(32,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(34,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(35,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(46,56): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(30,148): warning C4100: 'slider': unreferenced formal parameter (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(19,25): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(32,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(34,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(35,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(46,56): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(30,148): warning C4100: 'slider': unreferenced formal parameter (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(22,43): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(58,46): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(74,44): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(80,41): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(93,42): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(99,43): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(116,38): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(133,37): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(140,37): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(150,43): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(159,43): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.cpp(168,36): warning C4458: declaration of 'input' hides class member
+C:\Users\33277\Documents\GitHub\Blood\Source\Distortion.h(40,11): message : see declaration of 'Distortion::input' (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(336,15): warning C4100: 'x': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(389,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+          with
+          [
+              _Ty=float
           ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(408,25): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(413,16): warning C4244: 'initializing': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(414,43): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(414,24): warning C4244: 'initializing': conversion from 'int' to 'const float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(446,34): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(463,39): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(470,56): warning C4244: 'argument': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(550,60): warning C4100: 'button': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(90,49): warning C4100: 'index': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(94,54): warning C4100: 'index': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(99,70): warning C4100: 'newName': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(99,49): warning C4100: 'index': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(166,75): warning C4244: 'argument': conversion from 'double' to 'const int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(167,76): warning C4244: 'argument': conversion from 'double' to 'const int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(221,67): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(228,65): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(269,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+          with
+          [
+              _Ty=float
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(336,32): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginProcessor.cpp(199,80): warning C4100: 'midiMessages': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(102): warning C4702: unreachable code
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(245): warning C4702: unreachable code
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(191): warning C4702: unreachable code
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\Source\Distortion.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\Source\Distortion.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeterSource.h(102): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\Source\Distortion.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeterSource.h(102): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\Source\PluginEditor.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+          with
+          [
+              _Ty=float
+          ] (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(44): message : see reference to function template instantiation '_Ty std::accumulate<_InIt,_Ty,std::plus<void>>(const _InIt,const _InIt,_Ty,_Fn)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,
+              _Fn=std::plus<void>
+          ] (compiling source file ..\..\Source\PluginProcessor.cpp)
+C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMeter\LevelMeterSource.h(102): message : see reference to function template instantiation '_Ty std::accumulate<std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>,float>(const _InIt,const _InIt,_Ty)' being compiled
+          with
+          [
+              _Ty=float,
+              _InIt=std::_Vector_const_iterator<std::_Vector_val<std::_Simple_types<double>>>
+          ] (compiling source file ..\..\Source\PluginProcessor.cpp)
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(102): warning C4702: unreachable code
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(191): warning C4702: unreachable code
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(245): warning C4702: unreachable code

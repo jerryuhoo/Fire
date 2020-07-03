@@ -108,7 +108,8 @@ public:
 /**
 */
 class BloodAudioProcessorEditor : public AudioProcessorEditor,//edited 12/28
-                                  public Slider::Listener
+                                  public Slider::Listener,
+                                  public Timer //edited 2020/07/03 fps
 {
 public:
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
@@ -116,8 +117,9 @@ public:
     ~BloodAudioProcessorEditor();
 
     //==============================================================================
-    void paint(Graphics &) override;
+    void paint(Graphics& g) override;
     void resized() override;
+    void timerCallback() override;
     // color setting
     Colour mainColour = Colour(255, 0, 0);
     Colour backgroundColour = Colour::fromFloatRGBA (0.0f, 0.0f, 0.0f, 0.0f); //Colours::black;

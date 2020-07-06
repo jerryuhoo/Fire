@@ -17,20 +17,26 @@ BloodAudioProcessor::BloodAudioProcessor()
     : AudioProcessor(BusesProperties()
 #if !JucePlugin_IsMidiEffect
 #if !JucePlugin_IsSynth
-                         .withInput("Input", AudioChannelSet::stereo(), true)
+        .withInput("Input", AudioChannelSet::stereo(), true)
 #endif
-                         .withOutput("Output", AudioChannelSet::stereo(), true)
+        .withOutput("Output", AudioChannelSet::stereo(), true)
 #endif
-                         ), treeState(*this, nullptr, "PARAMETERS", createParameters())
+    ), treeState(*this, nullptr, "PARAMETERS", createParameters())
+    , VinL(0.f, 500.f)
+    , VinR(0.f, 500.f)
+    , R1L(80.0f)
+    , R1R(80.0f)
+    , C1L(3.5e-5, getSampleRate())
+    , C1R(3.5e-5, getSampleRate())
+    , RCL(&R1L, &C1L)
+    , RCR(&R1R, &C1R)
+    , rootL(&VinL, &RCL)
+    , rootR(&VinR, &RCR)
 #endif
 {
-    //NormalisableRange<float> cutoffRange (20.0f, 20000.0f, 1.0f);
-    //cutoffRange.setSkewForCentre(1000.f);
-    // factor = 2 means 2^2 = 4, 4x oversampling
-
+    // factor = 2 means 2^2 = 4, 4x oversampling    
     oversampling.reset(new dsp::Oversampling<float>(getTotalNumInputChannels(), 1, dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
     oversamplingHQ.reset(new dsp::Oversampling<float>(getTotalNumInputChannels(), 2, dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
-
 }
 
 BloodAudioProcessor::~BloodAudioProcessor()
@@ -160,6 +166,19 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     filterIIR.prepare(spec);
     
     
+    // mode 9 diode================
+    VdiodeL = 0.0f;
+    VdiodeR = 0.0f;
+    RiL = 1;
+    RiR = 1;
+    /*
+    Vin.Vs = 0.0f;
+    Vin.R = Ri;
+    R1.R = 80.f;
+    C1.R = getSampleRate() / (2.0 * 3.5e-5);
+    root = Serie(&Vin, &Serie(&R1, &C1));
+    // mode 9 diode================
+    */
 
     // ff meter
     // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
@@ -319,34 +338,72 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-        
+
         // float* data = buffer.getWritePointer(channel);
-       // auto *channelData = buffer.getWritePointer(channel);
+        // auto *channelData = buffer.getWritePointer(channel);
         auto* channelData = blockOutput.getChannelPointer(channel);
+
         for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
         {
+            inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
             // distortion
-            distortionProcessor.controls.drive = driveSmoother.getNextValue();
-            distortionProcessor.controls.output = outputSmoother.getNextValue();
-            channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
+            if (mode < 8) 
+            {
+                distortionProcessor.controls.drive = driveSmoother.getNextValue();
+                distortionProcessor.controls.output = outputSmoother.getNextValue();
+                channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
+            }
 
             // downsample
-            if (mode == 8) 
+            if (mode == 8)
             {
-                int rateDivide = distortionProcessor.controls.drive;
+                int rateDivide = driveSmoother.getNextValue();
                 //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
                 if (rateDivide > 1)
                 {
                     if (sample%rateDivide != 0) 
                         channelData[sample] = channelData[sample - sample%rateDivide];
                 }
-
             }
-
+            
             // rectification
             updateRectification();
             channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
         }
+        if (mode == 9)
+        {
+            /*
+            Array<float> outputTemp;
+
+            for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
+            {
+                outputTemp.add(0);
+            }
+            */
+
+            // outputTemp = diodeClipper(inputTemp, getSampleRate(), Vdiode);
+
+            // left channel diode
+            if (channel == 0)
+            {
+                VdiodeL = diodeClipper(inputTemp, getSampleRate(), VdiodeL, VinL, rootL, R1L);
+            }
+            else if (channel == 1)
+            {
+                VdiodeR = diodeClipper(inputTemp, getSampleRate(), VdiodeR, VinR, rootR, R1R);
+            }
+            
+            for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
+            {
+                channelData[sample] = inputTemp[sample];
+                channelData[sample] *= outputSmoother.getNextValue();
+                // rectification
+                updateRectification();
+                channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
+            }
+            inputTemp.clear();
+        }
+        
         //        visualiser.pushBuffer(buffer);
     }
 
@@ -376,6 +433,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     {
         auto* channelData = buffer.getWritePointer(channel);
         auto* cleanSignal = dryBuffer.getWritePointer(channel);
+
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
@@ -473,19 +531,20 @@ void BloodAudioProcessor::updateFilter()
     }
 }
 
+
+
 AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
                  
-    // parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 1, 8, 1)); // for JUCE 5.4.7
-    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 7, 0)); // for JUCE 6
+    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 8, 0)); // for JUCE 6
     parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 2.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.f);
-    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20000.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 50.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
     parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
@@ -493,12 +552,12 @@ AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParamet
     parameters.push_back(std::make_unique<AudioParameterBool>("recOff", "RecOff", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("low", "Low", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("low", "Low", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("band", "Band", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("high", "High", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("high", "High", true));
     
     return { parameters.begin(), parameters.end() };
 }

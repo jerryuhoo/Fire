@@ -10,6 +10,7 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include <cmath>
+#include "DiodeWDF.h"
 
 class Distortion
 {
@@ -49,8 +50,6 @@ private:
     float linFoldback(float input);
     float halfRectification(float input);
     float fullRectification(float input);
-    float bitCrusher(float input);
-    
     // SmoothedValue<float> driverSmoother;
 };
 

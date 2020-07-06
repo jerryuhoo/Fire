@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.66"
+#define VERSION "0.67"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -297,6 +297,10 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     distortionMode.addItem("Downsample", 8);
     distortionMode.addSeparator();
 
+    distortionMode.addSectionHeading("Asymmetrical Clipping");
+    distortionMode.addItem("Diode Clipping 1", 9);
+    distortionMode.addSeparator();
+
     // distortionMode.setSelectedId (1);
     distortionMode.setJustificationType(Justification::centred);
     distortionMode.setColour(ComboBox::textColourId, mainColour);
@@ -395,109 +399,117 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     distortionProcessor.controls.drive = drive;
     distortionProcessor.controls.mix = mix;
 
-    auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
+    if (mode <= 8)
+    {
+        auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
     // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
-    frame.setBounds(getWidth() / 2 + 10, 80, getWidth() / 2 - 50 + 2, getHeight() / 3 - 4);
-    const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
+        frame.setBounds(getWidth() / 2 + 10, 80, getWidth() / 2 - 50 + 2, getHeight() / 3 - 4);
+        const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
-    // float maxValue = 2.0f * drive * mix + 2.0f * (1 - mix);                  // maximum (rightmost) value for your graph
+        // float maxValue = 2.0f * drive * mix + 2.0f * (1 - mix);                  // maximum (rightmost) value for your graph
 
-    float driveScale = 1;
-    if (inputGain >= 0)
-    {
-        driveScale = pow(2, inputGain / 6.0f);
-    }
-    float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
-    float value = -maxValue; // minimum (leftmost)  value for your graph
-    float valInc = (maxValue - value) / numPix;
-    float xPos = frame.getX();
-    const float posInc = frame.getWidth() / numPix;
 
-    Path p;
-
-    //bool firstPoint = true;
-    bool edgePointL = false;
-    bool edgePointR = false;
-    float yPos;
-    for (int i = 1; i < numPix; ++i)
-    {
-        value += valInc;
-        xPos += posInc;
-        
-        functionValue = distortionProcessor.distortionProcess(value);
-        
-        // downsample
-        if (mode == 8) 
+        float driveScale = 1;
+        if (inputGain >= 0)
         {
-            float rateDivide = distortionProcessor.controls.drive;
-            if (rateDivide > 1)
-                functionValue = ceilf(value*(64.f/rateDivide))/(64.f/rateDivide);
+            driveScale = pow(2, inputGain / 6.0f);
         }
-        
-        functionValue = (1.f - mix) * value + mix * functionValue;
+        float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
+        float value = -maxValue; // minimum (leftmost)  value for your graph
+        float valInc = (maxValue - value) / numPix;
+        float xPos = frame.getX();
+        const float posInc = frame.getWidth() / numPix;
 
-        mixValue = (2.0f / 3.0f) * functionValue;
-        yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+        Path p;
 
-        if (yPos < frame.getY())
+        //bool firstPoint = true;
+        bool edgePointL = false;
+        bool edgePointR = false;
+        float yPos;
+        for (int i = 1; i < numPix; ++i)
         {
-            if (edgePointR == false)
+            value += valInc;
+            xPos += posInc;
+
+            // symmetrical distortion
+            if (mode < 8)
             {
-                yPos = frame.getY();
-                edgePointR = true;
+                functionValue = distortionProcessor.distortionProcess(value);
             }
-            else
-            {
-                continue;
-            }
-        }
-        
-        if (yPos > frame.getBottom())
-        {
-            if (edgePointL == false)
-            {
-                continue;
-            }
-            else
-            {
-                yPos = frame.getBottom();
-            }
-        }
-        else if (edgePointL == false)
-        {
+            
+            // downsample
             if (mode == 8)
             {
-                p.startNewSubPath(xPos, frame.getBottom());
-                p.lineTo(xPos, yPos);
+                float rateDivide = distortionProcessor.controls.drive;
+                if (rateDivide > 1)
+                    functionValue = ceilf(value * (64.f / rateDivide)) / (64.f / rateDivide);
             }
-            else
+
+            functionValue = (1.f - mix) * value + mix * functionValue;
+
+            mixValue = (2.0f / 3.0f) * functionValue;
+            yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+
+            if (yPos < frame.getY())
             {
-                p.startNewSubPath(xPos, yPos);
+                if (edgePointR == false)
+                {
+                    yPos = frame.getY();
+                    edgePointR = true;
+                }
+                else
+                {
+                    continue;
+                }
             }
-            edgePointL = true;
+
+            if (yPos > frame.getBottom())
+            {
+                if (edgePointL == false)
+                {
+                    continue;
+                }
+                else
+                {
+                    yPos = frame.getBottom();
+                }
+            }
+            else if (edgePointL == false)
+            {
+                if (mode == 8)
+                {
+                    p.startNewSubPath(xPos, frame.getBottom());
+                    p.lineTo(xPos, yPos);
+                }
+                else
+                {
+                    p.startNewSubPath(xPos, yPos);
+                }
+                edgePointL = true;
+            }
+            //        if (firstPoint == true)
+            //        {
+            //            //mixValue = ((1 - mix) * value) + (mix * functionValue);
+            //            //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+            //            p.startNewSubPath(xPos, yPos);
+            //            firstPoint = false;
+            //            edgePointL = true;
+            //        }
+            p.lineTo(xPos, yPos);
         }
-//        if (firstPoint == true)
-//        {
-//            //mixValue = ((1 - mix) * value) + (mix * functionValue);
-//            //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
-//            p.startNewSubPath(xPos, yPos);
-//            firstPoint = false;
-//            edgePointL = true;
-//        }
-        p.lineTo(xPos, yPos);
+
+        g.setColour(Colour(150, 0, 0));
+        g.strokePath(p, PathStrokeType(2.0));
+
+        // draw combobox outside rect
+        // g.setColour(mainColour);
+        // g.drawRect(50-2, (getHeight() / 3) + 50-2, getWidth() / 2 - 50+4, 50+4, 2);
     }
     
     
-    // draw right rect
-//    g.setColour(mainColour);
-//    g.drawRect(getWidth() / 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3+4), 2);
     
-    g.setColour(Colour(150,0,0));
-    g.strokePath(p, PathStrokeType(2.0));
     
-    // draw combobox outside rect
-    // g.setColour(mainColour);
-    // g.drawRect(50-2, (getHeight() / 3) + 50-2, getWidth() / 2 - 50+4, 50+4, 2);
+   
     
     // repaint(); // HIGH CPU WARNING!!!
 }
@@ -519,8 +531,8 @@ void BloodAudioProcessorEditor::resized()
     debugLabel.setBounds(0, 0, 300, 300);
     
     // toggle buttons
-    hqButton.setBounds((getWidth() / 5) * 1 - 120, getHeight() / 2 + 7 + 25, 100, 25);
-    linkedButton.setBounds((getWidth() / 5) * 2 + 50, getHeight()/2+7+25, 100, 25);
+    hqButton.setBounds((getWidth() / 5) * 1 - 120, getHeight() / 2 + 7 + 25, 25, 25);
+    linkedButton.setBounds((getWidth() / 5) * 2 + 50, getHeight()/2+7+25, 25, 25);
     recOffButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7, 100, 25);
     recHalfButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 25, 100, 25);
     recFullButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 50, 100, 25);

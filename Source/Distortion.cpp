@@ -45,10 +45,6 @@ float Distortion::distortionProcess(float input)
     case 7:
         input = linFoldback(input);
         break;
-    case 8:
-        input = bitCrusher(input);
-        break;
-    
     }
     input = input * controls.output;
 
@@ -149,9 +145,29 @@ float Distortion::linFoldback(float input)
 
 float Distortion::halfRectification(float input)
 {
+    /*
     if (input < 0) 
     {
         input = 0;
+    }
+    return input;
+    */
+
+    // x - input
+    // Q - work point.Controls the linearity of the transfer 
+    //      function for low input levels, more negative = more linear 
+    // dist - controls the distortion’s character, a higher number gives 
+    //      a harder distortion, > 0
+    float x = input;
+    float Q = 0.2f;
+    float dist = 8.0f;
+    if (x != 0 || x != Q)
+    {
+        input = (x - Q) / (1 - expf(-dist * (x - Q))) + Q / (1 - expf(dist * Q));
+    }
+    else
+    {
+        input = 1 / dist + Q / Q / (1 - expf(dist * Q));
     }
     return input;
 }
@@ -164,11 +180,4 @@ float Distortion::fullRectification(float input)
     }
     return input;
 }
-
-float Distortion::bitCrusher(float input)
-{
-    input /= controls.drive;
-    return input;
-}
-
 

@@ -222,6 +222,13 @@
 			path = "Info-AU.plist";
 			sourceTree = "SOURCE_ROOT";
 		};
+		2757D7D2BB665C01F8E4AF99 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			name = WDF.h;
+			path = ../../Source/WDF.h;
+			sourceTree = "SOURCE_ROOT";
+		};
 		29C1DFE7D80A54D38B6BC11C = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -327,18 +334,18 @@
 			path = "../../JuceLibraryCode/include_juce_opengl.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
+		62AAAB8745ABF47685457C99 = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "juce_core";
+			path = "~/JUCE/modules/juce_core";
+			sourceTree = "<absolute>";
+		};
 		65609A7B757485F4BADF7B70 = {
 			isa = PBXFileReference;
 			lastKnownFileType = file;
 			name = "juce_audio_formats";
 			path = "~/JUCE/modules/juce_audio_formats";
-			sourceTree = "<absolute>";
-		};
-		661D68E5F65146083A70F193 = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "juce_audio_utils";
-			path = "~/JUCE/modules/juce_audio_utils";
 			sourceTree = "<absolute>";
 		};
 		85717F97D2DB0F36823CFEA2 = {
@@ -355,11 +362,11 @@
 			path = Blood.component;
 			sourceTree = "BUILT_PRODUCTS_DIR";
 		};
-		62AAAB8745ABF47685457C99 = {
+		661D68E5F65146083A70F193 = {
 			isa = PBXFileReference;
 			lastKnownFileType = file;
-			name = "juce_core";
-			path = "~/JUCE/modules/juce_core";
+			name = "juce_audio_utils";
+			path = "~/JUCE/modules/juce_audio_utils";
 			sourceTree = "<absolute>";
 		};
 		6858999F30BA88913E22074A = {
@@ -424,6 +431,13 @@
 			name = Cocoa.framework;
 			path = System/Library/Frameworks/Cocoa.framework;
 			sourceTree = SDKROOT;
+		};
+		84F1E28A5283BFEED80A6036 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			name = DiodeWDF.h;
+			path = ../../Source/DiodeWDF.h;
+			sourceTree = "SOURCE_ROOT";
 		};
 		86190C3D36DEDD538FB95302 = {
 			isa = PBXFileReference;
@@ -659,6 +673,8 @@
 		3939E26A928C35AAB6A88B28 = {
 			isa = PBXGroup;
 			children = (
+				2757D7D2BB665C01F8E4AF99,
+				84F1E28A5283BFEED80A6036,
 				53B2DC6C3567914411A7F128,
 				86190C3D36DEDD538FB95302,
 				FD98AEE7569D98ACC1E293DA,
@@ -850,8 +866,8 @@
 					"_DEBUG=1",
 					"DEBUG=1",
 					"JUCER_XCODE_MAC_F6D2F4CF=1",
-					"JUCE_APP_VERSION=0.65",
-					"JUCE_APP_VERSION_HEX=0x4100",
+					"JUCE_APP_VERSION=0.67",
+					"JUCE_APP_VERSION_HEX=0x4300",
 					"JucePlugin_Build_VST=0",
 					"JucePlugin_Build_VST3=1",
 					"JucePlugin_Build_AU=0",
@@ -902,8 +918,8 @@
 					"_NDEBUG=1",
 					"NDEBUG=1",
 					"JUCER_XCODE_MAC_F6D2F4CF=1",
-					"JUCE_APP_VERSION=0.65",
-					"JUCE_APP_VERSION_HEX=0x4100",
+					"JUCE_APP_VERSION=0.67",
+					"JUCE_APP_VERSION_HEX=0x4300",
 					"JucePlugin_Build_VST=0",
 					"JucePlugin_Build_VST3=1",
 					"JucePlugin_Build_AU=0",
@@ -955,8 +971,8 @@
 					"_DEBUG=1",
 					"DEBUG=1",
 					"JUCER_XCODE_MAC_F6D2F4CF=1",
-					"JUCE_APP_VERSION=0.65",
-					"JUCE_APP_VERSION_HEX=0x4100",
+					"JUCE_APP_VERSION=0.67",
+					"JUCE_APP_VERSION_HEX=0x4300",
 					"JucePlugin_Build_VST=0",
 					"JucePlugin_Build_VST3=0",
 					"JucePlugin_Build_AU=1",
@@ -1008,8 +1024,8 @@
 					"_NDEBUG=1",
 					"NDEBUG=1",
 					"JUCER_XCODE_MAC_F6D2F4CF=1",
-					"JUCE_APP_VERSION=0.65",
-					"JUCE_APP_VERSION_HEX=0x4100",
+					"JUCE_APP_VERSION=0.67",
+					"JUCE_APP_VERSION_HEX=0x4300",
 					"JucePlugin_Build_VST=0",
 					"JucePlugin_Build_VST3=0",
 					"JucePlugin_Build_AU=1",
@@ -1060,8 +1076,8 @@
 					"_DEBUG=1",
 					"DEBUG=1",
 					"JUCER_XCODE_MAC_F6D2F4CF=1",
-					"JUCE_APP_VERSION=0.65",
-					"JUCE_APP_VERSION_HEX=0x4100",
+					"JUCE_APP_VERSION=0.67",
+					"JUCE_APP_VERSION_HEX=0x4300",
 					"JucePlugin_Build_VST=0",
 					"JucePlugin_Build_VST3=1",
 					"JucePlugin_Build_AU=1",
@@ -1106,8 +1122,8 @@
 					"_NDEBUG=1",
 					"NDEBUG=1",
 					"JUCER_XCODE_MAC_F6D2F4CF=1",
-					"JUCE_APP_VERSION=0.65",
-					"JUCE_APP_VERSION_HEX=0x4100",
+					"JUCE_APP_VERSION=0.67",
+					"JUCE_APP_VERSION_HEX=0x4300",
 					"JucePlugin_Build_VST=0",
 					"JucePlugin_Build_VST3=1",
 					"JucePlugin_Build_AU=1",

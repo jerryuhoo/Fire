@@ -12,6 +12,7 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
+
 //==============================================================================
 /**
 */
@@ -77,7 +78,7 @@ public:
 
     // filter
     void updateFilter();
-    
+
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -120,11 +121,30 @@ private:
     SmoothedValue<float> outputSmoother;
     
     Distortion distortionProcessor;
-    
+
     // oversampling
     std::unique_ptr<dsp::Oversampling<float>> oversampling; // normal use 2x
     std::unique_ptr<dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
     int oversampleFactor = 1;
+
+    // mode 9 diode================
+    Array<float> inputTemp;
+    float VdiodeL;
+    float VdiodeR;
+    float RiL;
+    float RiR;
+    VoltageSource VinL;
+    VoltageSource VinR;
+    Resistor R1L;
+    Resistor R1R;
+    Capacitor C1L;
+    Capacitor C1R;
+    Serie RCL;
+    Serie RCR;
+    Serie rootL;
+    Serie rootR;
+    // mode 9 diode=================
+
     // dsp::AudioBlock<float> blockOutput;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloodAudioProcessor)

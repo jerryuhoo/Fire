@@ -409,7 +409,6 @@ void drawMeterBars (juce::Graphics& g,
     }
     else
     {
-        const int numChannels = source->getNumChannels();
         const int numDrawnChannels = fixedNumChannels < 0 ? numChannels : fixedNumChannels;
         for (int channel=0; channel < numChannels; ++channel)
             drawMeterChannel (g, meterType,

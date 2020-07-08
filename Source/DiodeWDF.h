@@ -63,7 +63,7 @@
 
 */
 //==============================================================================
-static float diodeClipper (Array<float>& input, float Fs, 
+static inline float diodeClipper (Array<float>& input, float Fs, 
 	float Vdiode, VoltageSource& Vin, Serie& root, Resistor& R1)
 {
 	/*
@@ -122,25 +122,6 @@ static float diodeClipper (Array<float>& input, float Fs,
 
 	return the gain used as range limit by the Diagram/Plot component.
 */
-//==============================================================================
-static float testDiode (Array<float> &input, Array<float> &output)
-{
-    float Fs = 20000;		// sample rate (Hz)
-    float N = Fs / 10.0;	// number of samples to simulate
-    
-    // Excitation signal
-    float gain = 30.0;		// input signal gain parameter
-    float f0 = 100;		// excitation frequency (Hz)
 
-	// the excitation signal (30V 100Hz sine)
-	for (int t=0; t < N-1; ++t)
-		input.add (gain * sin(2.0*float_Pi*f0/Fs*t));       
-
-	// WDF diode clipper (blackbox)
-	// output = diodeClipper (input, Fs);
-
-	return gain;
-}
-//==============================================================================
 #endif  // __DIODE_H_4BF269BF__
 //==============================================================================

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.67"
+#define VERSION "0.685"
 //==============================================================================
 BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -26,51 +26,51 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     // ff meter
     //lnf = std::make_unique<foleys::LevelMeterLookAndFeel>();
     // adjust the colours to how you like them, e.g.
-    lnf.setColour(foleys::LevelMeter::lmTextColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmTextClipColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmTextDeactiveColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmTicksColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmOutlineColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmBackgroundColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, mainColour);
-    lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, backgroundColour);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, juce::Colours::yellow);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, juce::Colours::orange);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, juce::Colours::darkred);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, Colour(110,0,0));
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, Colour(130,0,0));
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, Colour(150,0,0));
-    lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, juce::Colours::orange);
+    lnf.setColour(foleys::LevelMeter::lmTextColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmTextClipColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmTextDeactiveColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmTicksColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmOutlineColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmBackgroundColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, Colour1);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, Colour3);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, Colour4);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, Colour3);
     
     inputMeter.setLookAndFeel(&lnf);
     inputMeter.setMeterSource(&processor.getInputMeterSource());
-    addAndMakeVisible(inputMeter); //暂时停用
+    addAndMakeVisible(inputMeter);
 
     outputMeter.setLookAndFeel(&lnf);
     outputMeter.setMeterSource(&processor.getOutputMeterSource());
-    addAndMakeVisible(outputMeter); //暂时停用
+    addAndMakeVisible(outputMeter);
     
 
 
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize(1000, 750);
+    setSize(1000, 500);
 
-    setLookAndFeel(&otherLookAndFeelRed);
+    setLookAndFeel(&otherLookAndFeel);
 
     // input knob
     addAndMakeVisible(inputKnob);
     inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
 
-//     addAndMakeVisible(inputLabel);
-//    inputLabel.setText("Input", dontSendNotification);
-//    inputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-//    inputLabel.setColour(Label::textColourId, mainColour);
-//    inputLabel.attachToComponent(&inputKnob, false);
-//    inputLabel.setJustificationType (Justification::centred);
+    addAndMakeVisible(inputLabel);
+    inputLabel.setText("Input", dontSendNotification);
+    inputLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
+    inputLabel.setColour(Label::textColourId, Colour5);
+    inputLabel.attachToComponent(&inputKnob, false);
+    inputLabel.setJustificationType (Justification::centred);
 
     // drive knob
     addAndMakeVisible(driveKnob);
@@ -78,60 +78,74 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     driveKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     driveKnob.addListener(this);
 
-//    addAndMakeVisible(driveLabel);
-//    driveLabel.setText("Drive", dontSendNotification);
-//    driveLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-//    driveLabel.setColour(Label::textColourId, mainColour);
-//    driveLabel.attachToComponent(&driveKnob, false);
-//    driveLabel.setJustificationType (Justification::centred);
+    addAndMakeVisible(driveLabel);
+    driveLabel.setText("Drive", dontSendNotification);
+    driveLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
+    driveLabel.setColour(Label::textColourId, Colour5);
+    driveLabel.attachToComponent(&driveKnob, false);
+    driveLabel.setJustificationType (Justification::centred);
     
+    // down sample knob
+    addAndMakeVisible(downSampleKnob);
+    downSampleKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    downSampleKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    downSampleKnob.addListener(this);
+
+    addAndMakeVisible(downSampleLabel);
+    downSampleLabel.setText("Downsample", dontSendNotification);
+    downSampleLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    downSampleLabel.setColour(Label::textColourId, Colour5);
+    downSampleLabel.attachToComponent(&downSampleKnob, false);
+    downSampleLabel.setJustificationType(Justification::centred);
+
     // output knob
     addAndMakeVisible(outputKnob);
     outputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     outputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     outputKnob.addListener(this);
-//    addAndMakeVisible(outputLabel);
-//    outputLabel.setText("Output", dontSendNotification);
-//    outputLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-//    outputLabel.setColour(Label::textColourId, mainColour);
-//    outputLabel.attachToComponent(&outputKnob, false);
-//    outputLabel.setJustificationType (Justification::centred);
+
+    addAndMakeVisible(outputLabel);
+    outputLabel.setText("Output", dontSendNotification);
+    outputLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
+    outputLabel.setColour(Label::textColourId, Colour5);
+    outputLabel.attachToComponent(&outputKnob, false);
+    outputLabel.setJustificationType (Justification::centred);
 
     // mix knob
     addAndMakeVisible(mixKnob);
     mixKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     mixKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
 
-//    addAndMakeVisible(mixLabel);
-//    mixLabel.setText("Mix", dontSendNotification);
-//    mixLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-//    mixLabel.setColour(Label::textColourId, mainColour);
-//    mixLabel.attachToComponent(&mixKnob, false);
-//    mixLabel.setJustificationType (Justification::centred);
+    addAndMakeVisible(mixLabel);
+    mixLabel.setText("Mix", dontSendNotification);
+    mixLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
+    mixLabel.setColour(Label::textColourId, Colour5);
+    mixLabel.attachToComponent(&mixKnob, false);
+    mixLabel.setJustificationType (Justification::centred);
     
     // cutoff knob
     addAndMakeVisible(cutoffKnob);
     cutoffKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     cutoffKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
     
-//    addAndMakeVisible(cutoffLabel);
-//    cutoffLabel.setText("Cutoff", dontSendNotification);
-//    cutoffLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-//    cutoffLabel.setColour(Label::textColourId, mainColour);
-//    cutoffLabel.attachToComponent(&cutoffKnob, false);
-//    cutoffLabel.setJustificationType (Justification::centred);
+    addAndMakeVisible(cutoffLabel);
+    cutoffLabel.setText("Cutoff", dontSendNotification);
+    cutoffLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
+    cutoffLabel.setColour(Label::textColourId, Colour5);
+    cutoffLabel.attachToComponent(&cutoffKnob, false);
+    cutoffLabel.setJustificationType (Justification::centred);
     
     // res knob
     addAndMakeVisible(resKnob);
     resKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     resKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
 
-//    addAndMakeVisible(resLabel);
-//    resLabel.setText("Resonance", dontSendNotification);
-//    resLabel.setFont (Font ("Cascadia Code", 20.0f, Font::bold));
-//    resLabel.setColour(Label::textColourId, mainColour);
-//    resLabel.attachToComponent(&resKnob, false);
-//    resLabel.setJustificationType (Justification::centred);
+    addAndMakeVisible(resLabel);
+    resLabel.setText("Q", dontSendNotification); // Resonance
+    resLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
+    resLabel.setColour(Label::textColourId, Colour5);
+    resLabel.attachToComponent(&resKnob, false);
+    resLabel.setJustificationType (Justification::centred);
     
     // HQ(oversampling) Toggle Buttons
     addAndMakeVisible(hqButton);
@@ -139,9 +153,16 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool hqButtonState = *processor.treeState.getRawParameterValue("hq");
     hqButton.setToggleState(hqButtonState, dontSendNotification);
     hqButton.onClick = [this] { updateToggleState(&hqButton, "Hq"); };
-    hqButton.setColour(ToggleButton::textColourId, mainColour);
-    hqButton.setColour(ToggleButton::tickColourId, mainColour);
-    hqButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    hqButton.setColour(ToggleButton::textColourId, Colour5);
+    hqButton.setColour(ToggleButton::tickColourId, Colour5);
+    hqButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+
+    //addAndMakeVisible(hqLabel);
+    //hqLabel.setText("HQ", dontSendNotification);
+    //hqLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    //hqLabel.setColour(Label::textColourId, Colour5);
+    //hqLabel.attachToComponent(&hqButton, false);
+    //hqLabel.setJustificationType(Justification::centredRight);
 
     // Linked Toggle Buttons
     addAndMakeVisible(linkedButton);
@@ -149,10 +170,18 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool linkedButtonState = *processor.treeState.getRawParameterValue("linked");
     linkedButton.setToggleState(linkedButtonState, dontSendNotification);
     linkedButton.onClick = [this] { updateToggleState (&linkedButton, "Linked"); };
-    linkedButton.setColour(ToggleButton::textColourId, mainColour);
-    linkedButton.setColour(ToggleButton::tickColourId, mainColour);
-    linkedButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    linkedButton.setColour(ToggleButton::textColourId, Colour5);
+    linkedButton.setColour(ToggleButton::tickColourId, Colour5);
+    linkedButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
+    //addAndMakeVisible(linkedLabel);
+    //linkedLabel.setText("Link", dontSendNotification);
+    //linkedLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    //linkedLabel.setColour(Label::textColourId, Colour5);
+    //linkedLabel.attachToComponent(&linkedButton, false);
+    //linkedLabel.setJustificationType(Justification::centredBottom);
+    //linkedLabel.setBounds(linkedButton.getX(), linkedButton.getY(), 100, 25);
+
     // Rectification Toggle Buttons
     addAndMakeVisible(recOffButton);
     recOffButton.setClickingTogglesState(true);
@@ -160,9 +189,16 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool refOffButtonState = *processor.treeState.getRawParameterValue("recOff");
     recOffButton.setToggleState(refOffButtonState, dontSendNotification);
     recOffButton.onClick = [this] { updateToggleState(&recOffButton, "RecOff"); };
-    recOffButton.setColour(ToggleButton::textColourId, mainColour);
-    recOffButton.setColour(ToggleButton::tickColourId, mainColour);
-    recOffButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    recOffButton.setColour(ToggleButton::textColourId, Colour5);
+    recOffButton.setColour(ToggleButton::tickColourId, Colour5);
+    recOffButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+
+    addAndMakeVisible(recOffLabel);
+    recOffLabel.setText("Rectification", dontSendNotification);
+    recOffLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    recOffLabel.setColour(Label::textColourId, Colour5);
+    recOffLabel.attachToComponent(&recOffButton, false);
+    recOffLabel.setJustificationType(Justification::centred);
 
     addAndMakeVisible(recHalfButton);
     recHalfButton.setClickingTogglesState(true);
@@ -170,9 +206,16 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool refHalfButtonState = *processor.treeState.getRawParameterValue("recHalf");
     recHalfButton.setToggleState(refHalfButtonState, dontSendNotification);
     recHalfButton.onClick = [this] { updateToggleState(&recHalfButton, "RecHalf"); };
-    recHalfButton.setColour(ToggleButton::textColourId, mainColour);
-    recHalfButton.setColour(ToggleButton::tickColourId, mainColour);
-    recHalfButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    recHalfButton.setColour(ToggleButton::textColourId, Colour5);
+    recHalfButton.setColour(ToggleButton::tickColourId, Colour5);
+    recHalfButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+
+    //addAndMakeVisible(recHalfLabel);
+    //recHalfLabel.setText("Rec Half", dontSendNotification);
+    //recHalfLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    //recHalfLabel.setColour(Label::textColourId, Colour5);
+    //recHalfLabel.attachToComponent(&recHalfButton, false);
+    //recHalfLabel.setJustificationType(Justification::bottomRight);
 
     addAndMakeVisible(recFullButton);
     recFullButton.setClickingTogglesState(true);
@@ -180,9 +223,16 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool recFullButtonState = *processor.treeState.getRawParameterValue("recFull");
     recFullButton.setToggleState(recFullButtonState, dontSendNotification);
     recFullButton.onClick = [this] { updateToggleState(&recFullButton, "RecFull"); };
-    recFullButton.setColour(ToggleButton::textColourId, mainColour);
-    recFullButton.setColour(ToggleButton::tickColourId, mainColour);
-    recFullButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    recFullButton.setColour(ToggleButton::textColourId, Colour5);
+    recFullButton.setColour(ToggleButton::tickColourId, Colour5);
+    recFullButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+
+    //addAndMakeVisible(recFullLabel);
+    //recFullLabel.setText("Rec Full", dontSendNotification);
+    //recFullLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    //recFullLabel.setColour(Label::textColourId, Colour5);
+    //recFullLabel.attachToComponent(&recFullButton, false);
+    //recFullLabel.setJustificationType(Justification::bottomRight);
 
     // Filter State Toggle Buttons
     addAndMakeVisible(filterOffButton);
@@ -191,30 +241,51 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool filterOffButtonState = *processor.treeState.getRawParameterValue("off");
     filterOffButton.setToggleState(filterOffButtonState, dontSendNotification);
     filterOffButton.onClick = [this] { updateToggleState (&filterOffButton, "Off"); };
-    filterOffButton.setColour(ToggleButton::textColourId, mainColour);
-    filterOffButton.setColour(ToggleButton::tickColourId, mainColour);
-    filterOffButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    filterOffButton.setColour(ToggleButton::textColourId, Colour5);
+    filterOffButton.setColour(ToggleButton::tickColourId, Colour5);
+    filterOffButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
+    addAndMakeVisible(filterOffLabel);
+    filterOffLabel.setText("Filter", dontSendNotification);
+    filterOffLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    filterOffLabel.setColour(Label::textColourId, Colour5);
+    filterOffLabel.attachToComponent(&filterOffButton, false);
+    filterOffLabel.setJustificationType(Justification::centred);
+
     addAndMakeVisible(filterPreButton);
     filterPreButton.setClickingTogglesState(true);
     filterPreButton.setRadioGroupId(filterStateButtons);
     bool filterPreButtonState = *processor.treeState.getRawParameterValue("pre");
     filterPreButton.setToggleState(filterPreButtonState, dontSendNotification);
     filterPreButton.onClick = [this] { updateToggleState (&filterPreButton, "Pre"); };
-    filterPreButton.setColour(ToggleButton::textColourId, mainColour);
-    filterPreButton.setColour(ToggleButton::tickColourId, mainColour);
-    filterPreButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    filterPreButton.setColour(ToggleButton::textColourId, Colour5);
+    filterPreButton.setColour(ToggleButton::tickColourId, Colour5);
+    filterPreButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
+    //addAndMakeVisible(filterPreLabel);
+    //filterPreLabel.setText("Filter Pre", dontSendNotification);
+    //filterPreLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    //filterPreLabel.setColour(Label::textColourId, Colour5);
+    //filterPreLabel.attachToComponent(&filterPreButton, false);
+    //filterPreLabel.setJustificationType(Justification::bottomRight);
+
     addAndMakeVisible(filterPostButton);
     filterPostButton.setClickingTogglesState(true);
     filterPostButton.setRadioGroupId(filterStateButtons);
     bool filterPostButtonState = *processor.treeState.getRawParameterValue("post");
     filterPostButton.setToggleState(filterPostButtonState, dontSendNotification);
     filterPostButton.onClick = [this] { updateToggleState (&filterPostButton, "Post"); };
-    filterPostButton.setColour(ToggleButton::textColourId, mainColour);
-    filterPostButton.setColour(ToggleButton::tickColourId, mainColour);
-    filterPostButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    filterPostButton.setColour(ToggleButton::textColourId, Colour5);
+    filterPostButton.setColour(ToggleButton::tickColourId, Colour5);
+    filterPostButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
+    //addAndMakeVisible(filterPostLabel);
+    //filterPostLabel.setText("Filter Post", dontSendNotification);
+    //filterPostLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
+    //filterPostLabel.setColour(Label::textColourId, Colour5);
+    //filterPostLabel.attachToComponent(&filterPostButton, false);
+    //filterPostLabel.setJustificationType(Justification::bottomRight);
+
     // Filter Type Toggle Buttons
     addAndMakeVisible(filterLowButton);
     filterLowButton.setClickingTogglesState(true);
@@ -222,9 +293,9 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool filterLowButtonState = *processor.treeState.getRawParameterValue("low");
     filterLowButton.setToggleState(filterLowButtonState, dontSendNotification);
     filterLowButton.onClick = [this] { updateToggleState (&filterLowButton, "Low"); };
-    filterLowButton.setColour(ToggleButton::textColourId, mainColour);
-    filterLowButton.setColour(ToggleButton::tickColourId, mainColour);
-    filterLowButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    filterLowButton.setColour(ToggleButton::textColourId, Colour5);
+    filterLowButton.setColour(ToggleButton::tickColourId, Colour5);
+    filterLowButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
     addAndMakeVisible(filterBandButton);
     filterBandButton.setClickingTogglesState(true);
@@ -232,9 +303,9 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool filterBandButtonState = *processor.treeState.getRawParameterValue("band");
     filterBandButton.setToggleState(filterBandButtonState, dontSendNotification);
     filterBandButton.onClick = [this] { updateToggleState (&filterBandButton, "Band"); };
-    filterBandButton.setColour(ToggleButton::textColourId, mainColour);
-    filterBandButton.setColour(ToggleButton::tickColourId, mainColour);
-    filterBandButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    filterBandButton.setColour(ToggleButton::textColourId, Colour5);
+    filterBandButton.setColour(ToggleButton::tickColourId, Colour5);
+    filterBandButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
     addAndMakeVisible(filterHighButton);
     filterHighButton.setClickingTogglesState(true);
@@ -242,13 +313,14 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     bool filterHighButtonState = *processor.treeState.getRawParameterValue("high");
     filterHighButton.setToggleState(filterHighButtonState, dontSendNotification);
     filterHighButton.onClick = [this] { updateToggleState (&filterHighButton, "High"); };
-    filterHighButton.setColour(ToggleButton::textColourId, mainColour);
-    filterHighButton.setColour(ToggleButton::tickColourId, mainColour);
-    filterHighButton.setColour(ToggleButton::tickDisabledColourId, mainColour);
+    filterHighButton.setColour(ToggleButton::textColourId, Colour5);
+    filterHighButton.setColour(ToggleButton::tickColourId, Colour5);
+    filterHighButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
     
     // Attachment
-    driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
     inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
+    driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
+    downSampleAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "downSample", downSampleKnob);
     outputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
     mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix", mixKnob);
     cutoffAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "cutoff", cutoffKnob);
@@ -272,29 +344,23 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     // Distortion mode select
     addAndMakeVisible(distortionMode);
 
+    distortionMode.addItem("None", 1);
+    distortionMode.addSeparator();
+
     distortionMode.addSectionHeading("Soft Clipping");
-    distortionMode.addItem("Arctan Soft Clipping", 1);
-    distortionMode.addItem("Exp Soft Clipping", 2);
-    distortionMode.addItem("Tanh Soft Clipping", 3);
-    distortionMode.addItem("Cubic Soft Clipping", 4);
+    distortionMode.addItem("Arctan Soft Clipping", 2);
+    distortionMode.addItem("Exp Soft Clipping", 3);
+    distortionMode.addItem("Tanh Soft Clipping", 4);
+    distortionMode.addItem("Cubic Soft Clipping", 5);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Hard Clipping");
-    distortionMode.addItem("Hard Clipping", 5);
+    distortionMode.addItem("Hard Clipping", 6);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Foldback");
-    distortionMode.addItem("Sin Foldback", 6);
-    distortionMode.addItem("Linear Foldback", 7);
-    distortionMode.addSeparator();
-    /*
-    distortionMode.addSectionHeading("Rectification");
-    distortionMode.addItem("Half Rectification", 8);
-    distortionMode.addItem("Full Rectification", 9);
-    distortionMode.addSeparator();
-    */
-    distortionMode.addSectionHeading("Downsample");
-    distortionMode.addItem("Downsample", 8);
+    distortionMode.addItem("Sin Foldback", 7);
+    distortionMode.addItem("Linear Foldback", 8);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Asymmetrical Clipping");
@@ -303,26 +369,26 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
     // distortionMode.setSelectedId (1);
     distortionMode.setJustificationType(Justification::centred);
-    distortionMode.setColour(ComboBox::textColourId, mainColour);
-    distortionMode.setColour(ComboBox::arrowColourId, mainColour);
-    distortionMode.setColour(ComboBox::buttonColourId, mainColour);
-    distortionMode.setColour(ComboBox::outlineColourId, secondColour);
-    distortionMode.setColour(ComboBox::focusedOutlineColourId, mainColour);
-    distortionMode.setColour(ComboBox::backgroundColourId, secondColour);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, mainColour);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, Colours::darkred);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, Colours::white);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, mainColour);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, secondColour);
+    distortionMode.setColour(ComboBox::textColourId, Colour1);
+    distortionMode.setColour(ComboBox::arrowColourId, Colour1);
+    distortionMode.setColour(ComboBox::buttonColourId, Colour1);
+    distortionMode.setColour(ComboBox::outlineColourId, Colour5);
+    distortionMode.setColour(ComboBox::focusedOutlineColourId, Colour1);
+    distortionMode.setColour(ComboBox::backgroundColourId, Colour5);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, Colour1);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, Colour2);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, Colour5);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, Colour1);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, Colour5);
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     
     
     // about button
-    //addAndMakeVisible(aboutButton);
-    aboutButton.setColour(TextButton::buttonColourId, Colour(50, 0, 0));
-    aboutButton.setColour(TextButton::textColourOnId, Colour(100, 0, 0));
-    aboutButton.setColour(TextButton::textColourOffId, Colour(100, 0, 0));
+    addAndMakeVisible(aboutButton);
+    aboutButton.setColour(TextButton::buttonColourId, Colour3);
+    aboutButton.setColour(TextButton::textColourOnId, Colour3);
+    aboutButton.setColour(TextButton::textColourOffId, Colour3);
 //    aboutButton.onClick = [this] { aboutDialog.showMessageBoxAsync(AlertWindow::InfoIcon, "Made by Wings", "And fuck you", "OK"); };
     // resize not available now
     //setResizeLimits(1000, 750, 1500, 1125); // set resize limits
@@ -346,19 +412,24 @@ float f(float x)
 void BloodAudioProcessorEditor::paint(Graphics &g)
 {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
-    //g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
-    //g.fillAll(backgroundColour);
-    //g.setColour(mainColour);
-    
+    g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
+    g.fillAll(Colour3);
+
+    // title
+    g.setColour(Colour5);
+    g.fillRect(0, 0, getWidth(), 50);
+
+    g.setColour(Colour1);
+    g.fillRoundedRectangle(25, getHeight() / 2 - 50, getWidth() - 50, getHeight() / 2 + 25, 25);
     // set background
-    Image background = ImageCache::getFromMemory(BinaryData::blood_background_png, (size_t) BinaryData::blood_background_pngSize);
-    g.drawImage(background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
+    // Image background = ImageCache::getFromMemory(BinaryData::blood_background_png, (size_t) BinaryData::blood_background_pngSize);
+    // g.drawImage(background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
     
     // draw version
-    g.setColour(Colour(100, 0, 0));
+    g.setColour(Colour5);
     g.setFont (Font ("Times New Roman", 18.0f, Font::bold));
     String version = (String) "Ver. " + (String)VERSION;
-    Rectangle<int> area(900, 720, 100, 50);
+    Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, Justification::topLeft, 1);
     
     // set title "Blood"
@@ -373,8 +444,10 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
 //    int y = getHeight() / 3 + 60;
 //    g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
     
-    
-    
+    // set background color
+    //g.setColour(Colour3);
+    //g.fillRect(25, getHeight() / 2 - 25, getWidth() - 175, getHeight() / 2);
+
     // wave visualiser boundary
 //    g.setColour(mainColour);
 //    g.drawRect(50 - 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 4, 2);
@@ -387,10 +460,10 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     // g.drawRect(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
 
     // paint distortion function
-    float functionValue;
+    float functionValue = 0;
     float mixValue;
-    // int mode = *processor.treeState.getRawParameterValue("mode"); // for JUCE 5.4.7
-    int mode = *processor.treeState.getRawParameterValue("mode") + 1; // for JUCE 6
+
+    int mode = *processor.treeState.getRawParameterValue("mode");
     float inputGain = *processor.treeState.getRawParameterValue("inputGain");
     float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
     float mix = *processor.treeState.getRawParameterValue("mix");
@@ -399,11 +472,15 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     distortionProcessor.controls.drive = drive;
     distortionProcessor.controls.mix = mix;
 
-    if (mode <= 8)
-    {
-        auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
+
+    auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
     // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
-        frame.setBounds(getWidth() / 2 + 10, 80, getWidth() / 2 - 50 + 2, getHeight() / 3 - 4);
+    frame.setBounds(getWidth() / 2, 50, getWidth() / 2, getHeight() / 2 - 125);
+    g.setColour(Colour4);
+    g.fillRect(getWidth() / 2, 50, getWidth() / 2, getHeight() / 2 - 125);
+
+    if (mode < 8)
+    {
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
         // float maxValue = 2.0f * drive * mix + 2.0f * (1 - mix);                  // maximum (rightmost) value for your graph
@@ -438,18 +515,18 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             }
             
             // downsample
-            if (mode == 8)
+            float rateDivide = *processor.treeState.getRawParameterValue("downSample");
+            if (rateDivide > 1)
             {
-                float rateDivide = distortionProcessor.controls.drive;
-                if (rateDivide > 1)
-                    functionValue = ceilf(value * (64.f / rateDivide)) / (64.f / rateDivide);
+                functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
             }
-
+            
+            // mix
             functionValue = (1.f - mix) * value + mix * functionValue;
-
             mixValue = (2.0f / 3.0f) * functionValue;
             yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
 
+            // draw points
             if (yPos < frame.getY())
             {
                 if (edgePointR == false)
@@ -498,18 +575,16 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             p.lineTo(xPos, yPos);
         }
 
-        g.setColour(Colour(150, 0, 0));
+        // g.setColour(Colour1);
+        ColourGradient grad(Colour1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
+            Colour4, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
+        g.setGradientFill(grad);
         g.strokePath(p, PathStrokeType(2.0));
 
         // draw combobox outside rect
         // g.setColour(mainColour);
         // g.drawRect(50-2, (getHeight() / 3) + 50-2, getWidth() / 2 - 50+4, 50+4, 2);
     }
-    
-    
-    
-    
-   
     
     // repaint(); // HIGH CPU WARNING!!!
 }
@@ -520,42 +595,41 @@ void BloodAudioProcessorEditor::resized()
     // subcomponents in your editor..
     
     // knobs
-    inputKnob.setBounds((getWidth() / 5) * 1 - 85, getHeight()/2+7, 100, 100);
-    driveKnob.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+7, 100, 100);
-    outputKnob.setBounds((getWidth() / 5) * 3 - 85, getHeight()/2+7, 100, 100);
-    mixKnob.setBounds((getWidth() / 5) * 4 - 85, getHeight()/2+7, 100, 100);
-    cutoffKnob.setBounds((getWidth() / 5) * 3 - 85, getHeight()/2+175, 100, 100);
-    resKnob.setBounds((getWidth() / 5) * 4 - 85, getHeight()/2+175, 100, 100);
-    
-    // debug
-    debugLabel.setBounds(0, 0, 300, 300);
+    inputKnob.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
+    driveKnob.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
+    downSampleKnob.setBounds((getWidth() / 7) * 3 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
+    outputKnob.setBounds((getWidth() / 7) * 5 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
+    mixKnob.setBounds((getWidth() / 7) * 6 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
+
+    cutoffKnob.setBounds((getWidth() / 7) * 5 - knobSize / 2, getHeight() / 4 * 3, knobSize, knobSize);
+    resKnob.setBounds((getWidth() / 7) * 6 - knobSize / 2, getHeight() / 4 * 3, knobSize, knobSize);
     
     // toggle buttons
-    hqButton.setBounds((getWidth() / 5) * 1 - 120, getHeight() / 2 + 7 + 25, 25, 25);
-    linkedButton.setBounds((getWidth() / 5) * 2 + 50, getHeight()/2+7+25, 25, 25);
-    recOffButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7, 100, 25);
-    recHalfButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 25, 100, 25);
-    recFullButton.setBounds((getWidth() / 5) * 3, getHeight() / 2 + 7 + 50, 100, 25);
-    filterOffButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175, 100, 25);
-    filterPreButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+25, 100, 25);
-    filterPostButton.setBounds((getWidth() / 5) * 1 - 60, getHeight()/2+175+50, 100, 25);
-    filterLowButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175, 100, 25);
-    filterBandButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175+25, 100, 25);
-    filterHighButton.setBounds((getWidth() / 5) * 2 - 85, getHeight()/2+175+50, 100, 25);
+    hqButton.setBounds((getWidth() / 7) * 1 - 120, getHeight() / 2 + 7 + 25 - 25, 100, 25);
+    linkedButton.setBounds((getWidth() / 7) * 5 + 25, getHeight() / 2 + 7 + 25 - 25, 100, 25);
+    recOffButton.setBounds((getWidth() / 7) * 4 - knobSize / 2, getHeight() / 2 + 7 - 25, 100, 25);
+    recHalfButton.setBounds((getWidth() / 7) * 4 - knobSize / 2, getHeight() / 2 + 7 + 25 - 25, 100, 25);
+    recFullButton.setBounds((getWidth() / 7) * 4 - knobSize / 2, getHeight() / 2 + 7 + 50 - 25, 100, 25);
+
+    filterOffButton.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 4 * 3, 100, 25);
+    filterPreButton.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 4 * 3 +25, 100, 25);
+    filterPostButton.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 4 * 3 +50, 100, 25);
+    filterLowButton.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 4 * 3, 100, 25);
+    filterBandButton.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 4 * 3 +25, 100, 25);
+    filterHighButton.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 4 * 3 +50, 100, 25);
     
     // about
-    aboutButton.setBounds(getWidth() - 130, getHeight()-50, 100, 30);
+    aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
     
     // visualiser
-    processor.visualiser.setBounds(55, 95, getWidth() / 2 - 80 + 2, getHeight() / 3 - 28);
-    //processor.visualiser.setBounds(38, 90, getWidth() / 2 - 50 + 2, getHeight() / 3 - 14); // old
-    
+    processor.visualiser.setBounds(0, 50, getWidth() / 2, getHeight() / 2 - 125);
+
     // ff meter
-    inputMeter.setBounds(getWidth()/10*9-28, getHeight()-405, 30, 320);
-    outputMeter.setBounds(getWidth()/10*9+21, getHeight()-405, 30, 320);
+    inputMeter.setBounds(getWidth() / 2 - 25, getHeight() - 175, 30, 150);
+    outputMeter.setBounds(getWidth() / 2 + 25, getHeight() - 175, 30, 150);
     
     // distortion menu
-    distortionMode.setBounds(37, 25, getWidth() / 4 - 50 +4, 38);
+    distortionMode.setBounds(getWidth() /2 - 100, 0, 200, 50);
     
 }
 

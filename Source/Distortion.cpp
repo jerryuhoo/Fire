@@ -24,6 +24,8 @@ float Distortion::distortionProcess(float input)
     input = input * controls.drive;
     switch (controls.mode)
     {
+    case 0:
+        break;
     case 1:
         input = arctanSoftClipping(input);
         break;

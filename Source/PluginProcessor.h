@@ -26,8 +26,7 @@ public:
     {
         setBufferSize(128);
         setSamplesPerBlock(16);
-        // setColours(Colour(78, 14, 5), Colour(150, 0, 0)); // for JUCE 5.4.7
-        setColours(Colour(68, 7, 8), Colour(150, 0, 0)); // for JUCE 6
+        setColours(Colour(201, 98, 97), Colour(234, 191, 191));
         setBoundsInset(BorderSize<int>(2, 2, 2, 2));
     }
 };
@@ -127,7 +126,7 @@ private:
     std::unique_ptr<dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
     int oversampleFactor = 1;
 
-    // mode 9 diode================
+    // mode 8 diode================
     Array<float> inputTemp;
     float VdiodeL;
     float VdiodeR;

@@ -196,7 +196,7 @@ public:
             const int         numSamples  = buffer.getNumSamples ();
 
 #if FF_AUDIO_ALLOW_ALLOCATIONS_IN_MEASURE_BLOCK
-//#warning The use of levels.resize() is not realtime safe. Please call resize from the message thread and set this config setting to 0 via Projucer.
+#warning The use of levels.resize() is not realtime safe. Please call resize from the message thread and set this config setting to 0 via Projucer.
             levels.resize (size_t (numChannels));
 #endif
 

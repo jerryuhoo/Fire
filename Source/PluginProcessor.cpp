@@ -22,8 +22,8 @@ BloodAudioProcessor::BloodAudioProcessor()
         .withOutput("Output", AudioChannelSet::stereo(), true)
 #endif
     ), treeState(*this, nullptr, "PARAMETERS", createParameters())
-    , VinL(0.f, 500.f)
-    , VinR(0.f, 500.f)
+    , VinL(500.f, 0.f) // VinL(0.f, 500.f)
+    , VinR(500.f, 0.f)
     , R1L(80.0f)
     , R1R(80.0f)
     , C1L(3.5e-5, getSampleRate())
@@ -166,7 +166,7 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     filterIIR.prepare(spec);
     
     
-    // mode 9 diode================
+    // mode 8 diode================
     inputTemp.clear();
     VdiodeL = 0.0f;
     VdiodeR = 0.0f;
@@ -253,8 +253,6 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     }
     */
     // TODO------put this in a new function--------
-
-    oversamplingHQ->reset();
     dsp::AudioBlock<float> blockInput(buffer);
     dsp::AudioBlock<float> blockOutput;
     // oversampling

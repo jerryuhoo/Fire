@@ -8,3 +8,6 @@ Builds/VisualStudio2019/.vs/Blood/v16/ipch/AutoPCH/c7e2b0ef33d6427/PLUGINPROCESS
 Builds/VisualStudio2019/.vs/Blood/v16/ipch/AutoPCH/ef6c0062b7b8ef5e/INCLUDE_FF_METERS_LEVELMETER.ipch
 *.ipch
 *.opendb
+*.ilk
+*.ilk
+Builds/VisualStudio2019/x64/Debug/VST3/Blood.ilk

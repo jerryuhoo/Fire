@@ -22,42 +22,53 @@ C:\Users\33277\Documents\GitHub\Blood\Source\DiodeWDF.h(137,19): warning C4244: 
               ElementType=float
           ]
 C:\Users\33277\Documents\GitHub\Blood\Source\DiodeWDF.h(126,60): warning C4100: 'output': unreferenced formal parameter
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(32,24): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(34,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(35,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(46,56): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(30,148): warning C4100: 'slider': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(84,29): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(86,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(87,23): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(98,66): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.h(202,23): warning C4100: 'backgroundColour': unreferenced formal parameter
 C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(19,25): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(340,15): warning C4100: 'x': unreferenced formal parameter
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(393,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(406,15): warning C4100: 'x': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(423,87): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(423,65): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(423,48): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(466,14): warning C4244: 'initializing': conversion from '_Ty' to 'int', possible loss of data
           with
           [
               _Ty=float
           ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(415,29): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(420,20): warning C4244: 'initializing': conversion from 'ValueType' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(492,29): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(497,20): warning C4244: 'initializing': conversion from 'ValueType' to 'float', possible loss of data
           with
           [
               ValueType=int
           ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(421,47): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(421,28): warning C4244: 'initializing': conversion from 'int' to 'const float', possible loss of data
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(457,38): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(498,47): warning C4244: 'initializing': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(498,28): warning C4244: 'initializing': conversion from 'int' to 'const float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(534,38): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
           with
           [
               ValueType=int
           ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(474,43): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(551,43): warning C4244: '=': conversion from 'ValueType' to 'float', possible loss of data
           with
           [
               ValueType=int
           ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(481,60): warning C4244: 'argument': conversion from 'ValueType' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(558,60): warning C4244: 'argument': conversion from 'ValueType' to 'float', possible loss of data
           with
           [
               ValueType=int
           ]
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(562,60): warning C4100: 'button': unreferenced formal parameter
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(580,49): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(580,32): warning C4244: 'argument': conversion from 'ValueType' to 'float', possible loss of data
+          with
+          [
+              ValueType=int
+          ]
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(579,88): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(579,51): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(636,60): warning C4100: 'button': unreferenced formal parameter
 C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.26.28801\include\numeric(35,26): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
           with
           [
@@ -78,7 +89,6 @@ C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LevelMet
           ]
 C:\Users\33277\Documents\GitHub\Blood\Source\DiodeWDF.h(66,14): warning C4505: 'diodeClipper': unreferenced local function has been removed
 C:\Users\33277\Documents\GitHub\Blood\Source\DiodeWDF.h(126,14): warning C4505: 'testDiode': unreferenced local function has been removed
-C:\Users\33277\Documents\GitHub\Blood\Source\PluginEditor.cpp(448): warning C4701: potentially uninitialized local variable 'functionValue' used
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(102): warning C4702: unreachable code
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(191): warning C4702: unreachable code
 C:\Users\33277\Documents\GitHub\Blood\JuceLibraryCode\modules\ff_meters\LookAndFeel\LevelMeterLookAndFeelMethods.h(245): warning C4702: unreachable code

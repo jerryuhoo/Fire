@@ -10,9 +10,9 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.688"
+#define VERSION "0.69"
 //==============================================================================
-BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
+FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
 {
     // timer
@@ -20,7 +20,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
 
 
     // resize not avaialble
-    //setResizable(true, true);
+    setResizable(true, true);
 
     
     // ff meter
@@ -32,13 +32,13 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     lnf.setColour(foleys::LevelMeter::lmTicksColour, Colour1);
     lnf.setColour(foleys::LevelMeter::lmOutlineColour, Colour1);
     lnf.setColour(foleys::LevelMeter::lmBackgroundColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, Colour1);
     lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, Colour1);
     lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, Colour1);
     lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, Colour1);
     lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, Colour3);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, Colour4);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, Colour5);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, Colour6);
     lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, Colour5);
     lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, Colour5);
     lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, Colour5);
@@ -339,7 +339,7 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     filterHighAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "high", filterHighButton);
     
     // Visualiser
-    addAndMakeVisible(p.visualiser);
+    // addAndMakeVisible(p.visualiser);
 
     // Distortion mode select
     addAndMakeVisible(distortionMode);
@@ -391,11 +391,11 @@ BloodAudioProcessorEditor::BloodAudioProcessorEditor(BloodAudioProcessor &p)
     aboutButton.setColour(TextButton::textColourOffId, Colour3);
 //    aboutButton.onClick = [this] { aboutDialog.showMessageBoxAsync(AlertWindow::InfoIcon, "Made by Wings", "And fuck you", "OK"); };
     // resize not available now
-    //setResizeLimits(1000, 750, 1500, 1125); // set resize limits
+    setResizeLimits(1000, 500, 2000, 1000); // set resize limits
     //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
 }
 
-BloodAudioProcessorEditor::~BloodAudioProcessorEditor()
+FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
     stopTimer();
     inputMeter.setLookAndFeel(nullptr);
@@ -409,7 +409,7 @@ float f(float x)
 }
 
 //==============================================================================
-void BloodAudioProcessorEditor::paint(Graphics &g)
+void FireAudioProcessorEditor::paint(Graphics &g)
 {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
@@ -432,32 +432,17 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, Justification::topLeft, 1);
     
-    // set title "Blood"
-    // g.setFont(50.0f);
-    // g.setFont (Font ("华文宋体", 50.0f, Font::bold));
-    // Rectangle<int> area(getWidth() / 2, (getHeight() / 3) + 100, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2));
-    // g.drawText("blood", area, Justification::centredTop);
+    // set title "Fire"
+    g.setFont (Font ("Times New Roman", 30.0f, Font::bold));
+    Rectangle<int> titleArea(5, 5, 300, 50);
+    g.drawText("BLOOD", titleArea, Justification::centred);
+
     
-    // set title picture "Blood"
+    // set title picture "Fire"
 //    Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
 //    int x = getWidth() / 2 - title.getWidth() / 4;
 //    int y = getHeight() / 3 + 60;
 //    g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
-    
-    // set background color
-    //g.setColour(Colour3);
-    //g.fillRect(25, getHeight() / 2 - 25, getWidth() - 175, getHeight() / 2);
-
-    // wave visualiser boundary
-//    g.setColour(mainColour);
-//    g.drawRect(50 - 2, 50 - 2, getWidth() / 2 - 50 + 2, (getHeight() / 3) + 4, 2);
-    
-    // fill right rect background
-//    g.setColour(secondColour);
-//    g.fillRect(getWidth() / 2 + 2, 50, getWidth() / 2 - 50, (getHeight() / 3));
-    
-    // mode visualiser boundary
-    // g.drawRect(getWidth()/2, 50-1, getWidth()/2-50+2, (getHeight() / 3+2));
 
     // paint distortion function
     float functionValue = 0;
@@ -476,15 +461,14 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
     // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
     frame.setBounds(getWidth() / 2, 50, getWidth() / 2, getHeight() / 2 - 125);
+    
+    // draw layer 2
     g.setColour(Colour4);
-    g.fillRect(getWidth() / 2, 50, getWidth() / 2, getHeight() / 2 - 125);
-
+    g.fillRect(0, 50, getWidth(), getHeight() / 2 - 125);
+    
     if (mode < 8)
     {
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
-
-        // float maxValue = 2.0f * drive * mix + 2.0f * (1 - mix);                  // maximum (rightmost) value for your graph
-
 
         float driveScale = 1;
         if (inputGain >= 0)
@@ -499,7 +483,6 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
 
         Path p;
 
-        //bool firstPoint = true;
         bool edgePointL = false;
         bool edgePointR = false;
         float yPos;
@@ -553,7 +536,7 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
             }
             else if (edgePointL == false)
             {
-                if (mode == 8)
+                if (mode == 0)
                 {
                     p.startNewSubPath(xPos, frame.getBottom());
                     p.lineTo(xPos, yPos);
@@ -564,14 +547,6 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
                 }
                 edgePointL = true;
             }
-            //        if (firstPoint == true)
-            //        {
-            //            //mixValue = ((1 - mix) * value) + (mix * functionValue);
-            //            //yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
-            //            p.startNewSubPath(xPos, yPos);
-            //            firstPoint = false;
-            //            edgePointL = true;
-            //        }
             p.lineTo(xPos, yPos);
         }
 
@@ -581,15 +556,29 @@ void BloodAudioProcessorEditor::paint(Graphics &g)
         g.setGradientFill(grad);
         g.strokePath(p, PathStrokeType(2.0));
 
+        
+        
         // draw combobox outside rect
         // g.setColour(mainColour);
         // g.drawRect(50-2, (getHeight() / 3) + 50-2, getWidth() / 2 - 50+4, 50+4, 2);
     }
     
+    // draw shadow 1
+    ColourGradient shadowGrad1(Colour(0, 0, 0).withAlpha(0.5f), 0, 50,
+                              Colour(0, 0, 0).withAlpha(0.f), 0, 55, false);
+    g.setGradientFill(shadowGrad1);
+    g.fillRect(0, 50, getWidth(), 25);
+    
+    // draw shadow 2
+    ColourGradient shadowGrad2(Colour(0, 0, 0).withAlpha(0.5f), getWidth()/2, getHeight() / 2 - 75,
+                              Colour(0, 0, 0).withAlpha(0.f), getWidth()/2, getHeight() / 2 - 70, false);
+    g.setGradientFill(shadowGrad2);
+    g.fillRect(0, getHeight() / 2 - 75, getWidth(), 25);
+    
     // repaint(); // HIGH CPU WARNING!!!
 }
 
-void BloodAudioProcessorEditor::resized()
+void FireAudioProcessorEditor::resized()
 {
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
@@ -622,7 +611,7 @@ void BloodAudioProcessorEditor::resized()
     aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
     
     // visualiser
-    processor.visualiser.setBounds(0, 50, getWidth() / 2, getHeight() / 2 - 125);
+    // processor.visualiser.setBounds(0, 50, getWidth() / 2, getHeight() / 2 - 125);
 
     // ff meter
     inputMeter.setBounds(getWidth() / 2 - 25, getHeight() - 175, 30, 150);
@@ -633,12 +622,12 @@ void BloodAudioProcessorEditor::resized()
     
 }
 
-void BloodAudioProcessorEditor::updateToggleState (Button* button, String name)
+void FireAudioProcessorEditor::updateToggleState (Button* button, String name)
 {
     //auto state = button->getToggleState();
 }
 
-void BloodAudioProcessorEditor::timerCallback()
+void FireAudioProcessorEditor::timerCallback()
 {
     repaint();
 }

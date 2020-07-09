@@ -12,7 +12,7 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-BloodAudioProcessor::BloodAudioProcessor()
+FireAudioProcessor::FireAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
     : AudioProcessor(BusesProperties()
 #if !JucePlugin_IsMidiEffect
@@ -39,18 +39,18 @@ BloodAudioProcessor::BloodAudioProcessor()
     oversamplingHQ.reset(new dsp::Oversampling<float>(getTotalNumInputChannels(), 2, dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
 }
 
-BloodAudioProcessor::~BloodAudioProcessor()
+FireAudioProcessor::~FireAudioProcessor()
 {
     oversampling.reset();
 }
 
 //==============================================================================
-const String BloodAudioProcessor::getName() const
+const String FireAudioProcessor::getName() const
 {
     return JucePlugin_Name;
 }
 
-bool BloodAudioProcessor::acceptsMidi() const
+bool FireAudioProcessor::acceptsMidi() const
 {
 #if JucePlugin_WantsMidiInput
     return true;
@@ -59,7 +59,7 @@ bool BloodAudioProcessor::acceptsMidi() const
 #endif
 }
 
-bool BloodAudioProcessor::producesMidi() const
+bool FireAudioProcessor::producesMidi() const
 {
 #if JucePlugin_ProducesMidiOutput
     return true;
@@ -68,7 +68,7 @@ bool BloodAudioProcessor::producesMidi() const
 #endif
 }
 
-bool BloodAudioProcessor::isMidiEffect() const
+bool FireAudioProcessor::isMidiEffect() const
 {
 #if JucePlugin_IsMidiEffect
     return true;
@@ -77,37 +77,37 @@ bool BloodAudioProcessor::isMidiEffect() const
 #endif
 }
 
-double BloodAudioProcessor::getTailLengthSeconds() const
+double FireAudioProcessor::getTailLengthSeconds() const
 {
     return 0.0;
 }
 
-int BloodAudioProcessor::getNumPrograms()
+int FireAudioProcessor::getNumPrograms()
 {
     return 1; // NB: some hosts don't cope very well if you tell them there are 0 programs,
               // so this should be at least 1, even if you're not really implementing programs.
 }
 
-int BloodAudioProcessor::getCurrentProgram()
+int FireAudioProcessor::getCurrentProgram()
 {
     return 0;
 }
 
-void BloodAudioProcessor::setCurrentProgram(int index)
+void FireAudioProcessor::setCurrentProgram(int index)
 {
 }
 
-const String BloodAudioProcessor::getProgramName(int index)
+const String FireAudioProcessor::getProgramName(int index)
 {
     return {};
 }
 
-void BloodAudioProcessor::changeProgramName(int index, const String &newName)
+void FireAudioProcessor::changeProgramName(int index, const String &newName)
 {
 }
 
 //==============================================================================
-void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
@@ -118,14 +118,19 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     
     previousGainOutput = (float)*treeState.getRawParameterValue("outputGain");
     previousGainOutput = Decibels::decibelsToGain(previousGainOutput);
-    
+
     previousDrive = *treeState.getRawParameterValue("drive");
+    
+    previousMix = (float)*treeState.getRawParameterValue("mix");
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
     
     outputSmoother.reset(sampleRate, 0.05);
     outputSmoother.setCurrentAndTargetValue(previousGainOutput);
+    
+    mixSmoother.reset(sampleRate, 0.05);
+    mixSmoother.setCurrentAndTargetValue(previousMix);
     
     // clear visualiser
     visualiser.clear();
@@ -187,14 +192,14 @@ void BloodAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     outputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
 }
 
-void BloodAudioProcessor::releaseResources()
+void FireAudioProcessor::releaseResources()
 {
     // When playback stops, you can use this as an opportunity to free up any
     // spare memory, etc.
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
-bool BloodAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const
+bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const
 {
 #if JucePlugin_IsMidiEffect
     ignoreUnused(layouts);
@@ -216,7 +221,7 @@ bool BloodAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) con
 }
 #endif
 
-void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &midiMessages)
+void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &midiMessages)
 {
     ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();
@@ -316,7 +321,7 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     // set zipper noise smoother target
     driveSmoother.setTargetValue(drive);
     outputSmoother.setTargetValue(currentGainOutput);
-    
+    mixSmoother.setTargetValue(mix);
     
     // save clean signal
     dryBuffer.makeCopyOf(buffer);
@@ -342,27 +347,19 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         // auto *channelData = buffer.getWritePointer(channel);
         auto* channelData = blockOutput.getChannelPointer(channel);
         inputTemp.clear();
+        
         for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
         {
             inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
-
             // distortion
             if (mode < 8) 
             {
                 distortionProcessor.controls.drive = driveSmoother.getNextValue();
                 distortionProcessor.controls.output = outputSmoother.getNextValue();
+
                 channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
             }
 
-            // downsample
-            int rateDivide = *treeState.getRawParameterValue("downSample");
-            //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
-            if (rateDivide > 1)
-            {
-                if (sample%rateDivide != 0) 
-                    channelData[sample] = channelData[sample - sample%rateDivide];
-            }
-            
             // rectification
             updateRectification();
             channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
@@ -379,11 +376,35 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
             {
                 VdiodeR = diodeClipper(inputTemp, getSampleRate(), VdiodeR, VinR, rootR, R1R);
             }
-            
+
             for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
             {
                 channelData[sample] = inputTemp[sample];
+                  
+                float smoothDriveValue = driveSmoother.getNextValue();
+                
+                // for rough normalize
+                if (smoothDriveValue < 10)
+                {
+                    channelData[sample] /= (0.5 + 5/smoothDriveValue);
+                }
+                channelData[sample] /= smoothDriveValue;
+                
+                if (smoothDriveValue > 4 && channelData[sample] != 0)
+                {
+                    if (smoothDriveValue < 8)
+                    {
+                        channelData[sample] += smoothDriveValue / 8 * 1.2 - 0.6;
+                    }
+                    else
+                    {
+                        channelData[sample] += smoothDriveValue / 32 * 0.9 + 0.375;
+                    }
+                }
+                
+
                 channelData[sample] *= outputSmoother.getNextValue();
+                
                 // rectification
                 updateRectification();
                 channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
@@ -394,7 +415,6 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
         //        visualiser.pushBuffer(buffer);
     }
 
-    
     //post-filter
     bool postButton = *treeState.getRawParameterValue("post");
     if (postButton)
@@ -415,15 +435,28 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
     //    oversampling->processSamplesDown(blockInput);
     //}
     
-    // mix control
+    //
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer(channel);
         auto* cleanSignal = dryBuffer.getWritePointer(channel);
-
+          
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
+            
+            // downsample
+            int rateDivide = *treeState.getRawParameterValue("downSample");
+            //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
+            if (rateDivide > 1)
+            {
+                if (sample%rateDivide != 0)
+                    channelData[sample] = channelData[sample - sample%rateDivide];
+            }
+            
+            // mix control
+            float smoothMixValue = mixSmoother.getNextValue();
+            // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
+            channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
         }
         
     }
@@ -436,18 +469,18 @@ void BloodAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &m
 }
 
 //==============================================================================
-bool BloodAudioProcessor::hasEditor() const
+bool FireAudioProcessor::hasEditor() const
 {
     return true; // (change this to false if you choose to not supply an editor)
 }
 
-AudioProcessorEditor *BloodAudioProcessor::createEditor()
+AudioProcessorEditor *FireAudioProcessor::createEditor()
 {
-    return new BloodAudioProcessorEditor(*this);
+    return new FireAudioProcessorEditor(*this);
 }
 
 //==============================================================================
-void BloodAudioProcessor::getStateInformation(MemoryBlock &destData)
+void FireAudioProcessor::getStateInformation(MemoryBlock &destData)
 {
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
@@ -459,7 +492,7 @@ void BloodAudioProcessor::getStateInformation(MemoryBlock &destData)
     copyXmlToBinary(*xml, destData);
 }
 
-void BloodAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
+void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
@@ -476,11 +509,11 @@ void BloodAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
 // This creates new instances of the plugin..
 AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 {
-    return new BloodAudioProcessor();
+    return new FireAudioProcessor();
 } 
 
 // Rectification selection
-void BloodAudioProcessor::updateRectification()
+void FireAudioProcessor::updateRectification()
 {
     bool recOffButton = *treeState.getRawParameterValue("recOff");
     bool recHalfButton = *treeState.getRawParameterValue("recHalf");
@@ -500,7 +533,7 @@ void BloodAudioProcessor::updateRectification()
 }
 
 // Filter selection
-void BloodAudioProcessor::updateFilter()
+void FireAudioProcessor::updateFilter()
 {
     float cutoff = *treeState.getRawParameterValue("cutoff");
     float res = *treeState.getRawParameterValue("res");
@@ -523,13 +556,13 @@ void BloodAudioProcessor::updateFilter()
 
 
 
-AudioProcessorValueTreeState::ParameterLayout BloodAudioProcessor::createParameters()
+AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
                  
     parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 8, 0));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-36.0f, 36.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 2.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 2.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));

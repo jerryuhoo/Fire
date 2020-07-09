@@ -98,7 +98,7 @@ static inline float diodeClipper (Array<float>& input, float Fs,
 	
     for (; n<max; ++n) 
     {
-        Vin.Vs = input[n];					// read the input signal for the voltage source
+        Vin.Vs = input[n]*20;					// read the input signal for the voltage source //*20 was added by me
         b = root.reflected();				// get the waves up to the root
 											// ** VALVE RESISTOR **
         Rdiode = Is * exp(-Vt * Vdiode);	// the nonlinear resistance of the diode

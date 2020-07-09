@@ -8,19 +8,19 @@
     <key>CFBundleIconFile</key>
     <string></string>
     <key>CFBundleIdentifier</key>
-    <string>com.Wings.Blood</string>
+    <string>com.Wings.Fire</string>
     <key>CFBundleName</key>
-    <string>Blood</string>
+    <string>Fire</string>
     <key>CFBundleDisplayName</key>
-    <string>Blood</string>
+    <string>Fire</string>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.67</string>
+    <string>0.7</string>
     <key>CFBundleVersion</key>
-    <string>0.67</string>
+    <string>0.7</string>
     <key>NSHumanReadableCopyright</key>
     <string></string>
     <key>NSHighResolutionCapable</key>
@@ -29,11 +29,11 @@
     <array>
       <dict>
         <key>name</key>
-        <string>Wings: Blood</string>
+        <string>Wings: Fire</string>
         <key>description</key>
-        <string>Blood</string>
+        <string>Fire</string>
         <key>factoryFunction</key>
-        <string>BloodAUFactory</string>
+        <string>FireAUFactory</string>
         <key>manufacturer</key>
         <string>Manu</string>
         <key>type</key>
@@ -41,7 +41,7 @@
         <key>subtype</key>
         <string>Nykr</string>
         <key>version</key>
-        <integer>17152</integer>
+        <integer>1792</integer>
         <key>resourceUsage</key>
         <dict>
           <key>network.client</key>

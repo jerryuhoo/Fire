@@ -1,5 +1,5 @@
-# Blood
-![Alt text](Blood.png?raw=true "Title")
+# Fire
+![Alt text](Fire.png?raw=true "Title")
 
  This is a distortion plugin.
  This plugin has 8 different distortion modes:

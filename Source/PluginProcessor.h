@@ -31,13 +31,13 @@ public:
     }
 };
 
-class BloodAudioProcessor : public AudioProcessor
+class FireAudioProcessor : public AudioProcessor
 {
 
 public:
     //==============================================================================
-    BloodAudioProcessor();
-    ~BloodAudioProcessor();
+    FireAudioProcessor();
+    ~FireAudioProcessor();
 
     //==============================================================================
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
@@ -102,11 +102,7 @@ private:
     // ff meter
     foleys::LevelMeterSource inputMeterSource;
     foleys::LevelMeterSource outputMeterSource;
-    
-    float previousGainInput;
-    float previousGainOutput;
-    float previousDrive;
-    
+
     // dry audio buffer
     AudioBuffer<float> dryBuffer;
     // dsp::AudioBlock<float> blockOutput;
@@ -116,8 +112,14 @@ private:
     dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
     
     // fix the artifacts (also called zipper noise)
+    float previousGainInput;
+    float previousGainOutput;
+    float previousDrive;
+    float previousMix;
+    
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;
+    SmoothedValue<float> mixSmoother;
     
     Distortion distortionProcessor;
 
@@ -146,5 +148,5 @@ private:
 
     // dsp::AudioBlock<float> blockOutput;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloodAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

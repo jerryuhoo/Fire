@@ -13,12 +13,12 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
 
-#define Colour1 Colour(234, 191, 191)
-#define Colour2 Colour(224, 160, 159)
-#define Colour3 Colour(212, 128, 127)
-#define Colour4 Colour(201, 98, 97)
-#define Colour5 Colour(189, 67, 66)
-#define Colour6 Colour(157, 57, 56)
+#define Colour1 Colour(244, 208, 63)
+#define Colour2 Colour(243, 156, 18)
+#define Colour3 Colour(230, 126, 34)
+#define Colour4 Colour(211, 84, 0)
+#define Colour5 Colour(192, 57, 43)
+#define Colour6 Colour(192, 57, 43)
 
 class OtherLookAndFeel : public LookAndFeel_V4
 {
@@ -196,6 +196,94 @@ public:
         g.fillEllipse(tickInnerBounds);
     }
 
+    void drawPopupMenuItem (Graphics& g, const Rectangle<int>& area,
+                                            const bool isSeparator, const bool isActive,
+                                            const bool isHighlighted, const bool isTicked,
+                                            const bool hasSubMenu, const String& text,
+                                            const String& shortcutKeyText,
+                                            const Drawable* icon, const Colour* const textColourToUse) override
+    {
+        if (isSeparator)
+        {
+            auto r  = area.reduced (5, 0);
+            r.removeFromTop (roundToInt (((float) r.getHeight() * 0.5f) - 0.5f));
+    
+            g.setColour (findColour (PopupMenu::textColourId).withAlpha (0.3f));
+            g.fillRect (r.removeFromTop (1));
+        }
+        else
+        {
+            auto textColour = (textColourToUse == nullptr ? findColour (PopupMenu::textColourId)
+                                                          : *textColourToUse);
+    
+            auto r  = area.reduced (1);
+    
+            if (isHighlighted && isActive)
+            {
+                g.setColour (findColour (PopupMenu::highlightedBackgroundColourId));
+                g.fillRect (r);
+    
+                g.setColour (findColour (PopupMenu::highlightedTextColourId));
+            }
+            else
+            {
+                g.setColour (textColour.withMultipliedAlpha (isActive ? 1.0f : 0.5f));
+            }
+    
+            r.reduce (jmin (5, area.getWidth() / 20), 0);
+    
+            auto font = getPopupMenuFont();
+    
+            auto maxFontHeight = (float) r.getHeight() / 1.3f;
+    
+            if (font.getHeight() > maxFontHeight)
+                font.setHeight (maxFontHeight);
+    
+            g.setFont (font);
+    
+            auto iconArea = r.removeFromLeft (roundToInt (maxFontHeight)).toFloat();
+    
+            if (icon != nullptr)
+            {
+                icon->drawWithin (g, iconArea, RectanglePlacement::centred | RectanglePlacement::onlyReduceInSize, 1.0f);
+                r.removeFromLeft (roundToInt (maxFontHeight * 0.5f));
+            }
+            else if (isTicked)
+            {
+                //auto tick = getTickShape (1.0f);
+                //g.fillPath (tick, tick.getTransformToScaleToFit (iconArea.reduced (iconArea.getWidth() / 5, 0).toFloat(), true));
+                g.fillEllipse(iconArea.getX() + 15, iconArea.getY() + 20, iconArea.getWidth() - 30, iconArea.getWidth() - 30);
+            }
+    
+            if (hasSubMenu)
+            {
+                auto arrowH = 0.6f * getPopupMenuFont().getAscent();
+    
+                auto x = static_cast<float> (r.removeFromRight ((int) arrowH).getX());
+                auto halfH = static_cast<float> (r.getCentreY());
+    
+                Path path;
+                path.startNewSubPath (x, halfH - arrowH * 0.5f);
+                path.lineTo (x + arrowH * 0.6f, halfH);
+                path.lineTo (x, halfH + arrowH * 0.5f);
+    
+                g.strokePath (path, PathStrokeType (2.0f));
+            }
+    
+            r.removeFromRight (3);
+            g.drawFittedText (text, r, Justification::centredLeft, 1);
+    
+            if (shortcutKeyText.isNotEmpty())
+            {
+                auto f2 = font;
+                f2.setHeight (f2.getHeight() * 0.75f);
+                f2.setHorizontalScale (0.95f);
+                g.setFont (f2);
+    
+                g.drawText (shortcutKeyText, r, Justification::centredRight, true);
+            }
+        }
+    }
 
     void drawButtonBackground(Graphics& g,
         Button& button,
@@ -303,14 +391,14 @@ public:
 //==============================================================================
 /**
 */
-class BloodAudioProcessorEditor : public AudioProcessorEditor,//edited 12/28
+class FireAudioProcessorEditor : public AudioProcessorEditor,//edited 12/28
                                   public Slider::Listener,
                                   public Timer //edited 2020/07/03 fps
 {
 public:
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
-    BloodAudioProcessorEditor(BloodAudioProcessor &);
-    ~BloodAudioProcessorEditor();
+    FireAudioProcessorEditor(FireAudioProcessor &);
+    ~FireAudioProcessorEditor();
 
     //==============================================================================
     void paint(Graphics& g) override;
@@ -320,25 +408,27 @@ public:
     // linked
     void sliderValueChanged (Slider* slider) override
     {
+        float thresh = 20.f;
+        float changeThresh = 3.f;
         if (linkedButton.getToggleState() == true)
         {
             if (slider == &driveKnob)
             {
                 if (driveKnob.getValue()>2)
-                    outputKnob.setValue(-3 - (driveKnob.getValue()-1)/63*7);
+                    outputKnob.setValue(-changeThresh - (driveKnob.getValue()-1)/31*(thresh-changeThresh));
                 else
                     outputKnob.setValue((driveKnob.getValue()-1)*(-3));
             }
             else if (slider == &outputKnob)
             {
-                if (outputKnob.getValue() < -3 && outputKnob.getValue() > -10)
-                    driveKnob.setValue(1-(outputKnob.getValue()+3)*63/7);
-                else if (outputKnob.getValue() >=-3 && outputKnob.getValue() <0)
-                    driveKnob.setValue(1 + outputKnob.getValue()/(-3));
+                if (outputKnob.getValue() < -changeThresh && outputKnob.getValue() > -thresh)
+                    driveKnob.setValue(1-(outputKnob.getValue()+changeThresh)*31/(thresh-changeThresh));
+                else if (outputKnob.getValue() >=-changeThresh && outputKnob.getValue() <0)
+                    driveKnob.setValue(1 + outputKnob.getValue()/(-changeThresh));
                 else if (outputKnob.getValue() >= 0)
                     driveKnob.setValue(1);
                 else if (outputKnob.getValue() <= -10)
-                    driveKnob.setValue(64);
+                    driveKnob.setValue(32);
             }
         }
     }
@@ -348,7 +438,7 @@ public:
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
-    BloodAudioProcessor &processor;
+    FireAudioProcessor &processor;
 
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;
@@ -454,7 +544,7 @@ private:
     Distortion distortionProcessor;
 
     //return function value by different modes
-    //float getFunctionValue(BloodAudioProcessor& processor, float value);
+    //float getFunctionValue(FireAudioProcessor& processor, float value);
     //int modeChoice;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloodAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

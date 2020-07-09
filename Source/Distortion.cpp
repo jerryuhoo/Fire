@@ -1,6 +1,6 @@
 //
 //  Distortion.cpp
-//  Blood
+//  Fire
 //
 //  Created by 羽翼深蓝Wings on 2/11/20.
 //
@@ -147,14 +147,14 @@ float Distortion::linFoldback(float input)
 
 float Distortion::halfRectification(float input)
 {
-    /*
+    
     if (input < 0) 
     {
         input = 0;
     }
     return input;
-    */
-
+    
+/*
     // x - input
     // Q - work point.Controls the linearity of the transfer 
     //      function for low input levels, more negative = more linear 
@@ -171,7 +171,7 @@ float Distortion::halfRectification(float input)
     {
         input = 1 / dist + Q / Q / (1 - expf(dist * Q));
     }
-    return input;
+    return input;*/
 }
 
 float Distortion::fullRectification(float input)

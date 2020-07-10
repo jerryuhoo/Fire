@@ -222,6 +222,13 @@
 			path = ../../JuceLibraryCode/JuceHeader.h;
 			sourceTree = "SOURCE_ROOT";
 		};
+		236A67C51570259CE9D45FAA = {
+			isa = PBXFileReference;
+			lastKnownFileType = image.png;
+			name = firelogo.png;
+			path = ../../resource/firelogo.png;
+			sourceTree = "SOURCE_ROOT";
+		};
 		263F39E6D007ABD763AD8094 = {
 			isa = PBXFileReference;
 			lastKnownFileType = text.plist.xml;
@@ -283,13 +290,6 @@
 			lastKnownFileType = file.nib;
 			name = RecentFilesMenuTemplate.nib;
 			path = RecentFilesMenuTemplate.nib;
-			sourceTree = "SOURCE_ROOT";
-		};
-		411F818C525F3440ECEA772F = {
-			isa = PBXFileReference;
-			lastKnownFileType = image.png;
-			name = "blood_background.png";
-			path = "../../resource/blood_background.png";
 			sourceTree = "SOURCE_ROOT";
 		};
 		44529AB7D8FB3D18D8DDE9D0 = {
@@ -600,13 +600,6 @@
 			path = "../../JuceLibraryCode/include_juce_cryptography.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
-		E456F4730572290DAF9CA0AC = {
-			isa = PBXFileReference;
-			lastKnownFileType = image.png;
-			name = blood.png;
-			path = ../../resource/blood.png;
-			sourceTree = "SOURCE_ROOT";
-		};
 		E48DD4E6D5CA1AAAD1EFBD23 = {
 			isa = PBXFileReference;
 			lastKnownFileType = wrapper.framework;
@@ -620,6 +613,13 @@
 			name = "juce_events";
 			path = "/Applications/JUCE/modules/juce_events";
 			sourceTree = "<absolute>";
+		};
+		EE15CD831B3DFF7AEF3DE2D9 = {
+			isa = PBXFileReference;
+			lastKnownFileType = image.png;
+			name = firewingslogo.png;
+			path = ../../resource/firewingslogo.png;
+			sourceTree = "SOURCE_ROOT";
 		};
 		F5ADAF524D604F118D6A3EC4 = {
 			isa = PBXFileReference;
@@ -688,8 +688,8 @@
 		744089E6ED50BD160D37D5E3 = {
 			isa = PBXGroup;
 			children = (
-				411F818C525F3440ECEA772F,
-				E456F4730572290DAF9CA0AC,
+				236A67C51570259CE9D45FAA,
+				EE15CD831B3DFF7AEF3DE2D9,
 			);
 			name = Resource;
 			sourceTree = "<group>";

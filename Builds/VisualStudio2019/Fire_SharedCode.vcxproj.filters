@@ -5186,10 +5186,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\resource\blood_background.png">
+    <None Include="..\..\resource\firelogo.png">
       <Filter>Fire\Resource</Filter>
     </None>
-    <None Include="..\..\resource\blood.png">
+    <None Include="..\..\resource\firewingslogo.png">
       <Filter>Fire\Resource</Filter>
     </None>
     <None Include="..\..\JuceLibraryCode\modules\ff_meters\LICENSE.md">

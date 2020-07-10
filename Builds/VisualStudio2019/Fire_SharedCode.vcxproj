@@ -3021,8 +3021,8 @@
     <ClInclude Include="..\..\JuceLibraryCode\JucePluginDefines.h"/>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\resource\blood_background.png"/>
-    <None Include="..\..\resource\blood.png"/>
+    <None Include="..\..\resource\firelogo.png"/>
+    <None Include="..\..\resource\firewingslogo.png"/>
     <None Include="..\..\JuceLibraryCode\modules\ff_meters\LICENSE.md"/>
     <None Include="..\..\JuceLibraryCode\modules\ff_meters\README.md"/>
     <None Include="C:\JUCE\modules\juce_audio_devices\native\oboe\CMakeLists.txt"/>

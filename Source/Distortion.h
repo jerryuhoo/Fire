@@ -27,8 +27,8 @@ public:
         float output;
         // Mix, [0., 1.] ratio between a dry and wet signal
         float mix;
-        // Rectification mode 0 = bypass, 1 = half, 2 = full
-        int rectification;
+        // Rectification mode 0 = bypass, 0.5 = half, 1 = full
+        float rectification;
     } controls;
 
     Distortion();

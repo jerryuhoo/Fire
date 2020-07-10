@@ -515,21 +515,23 @@ AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 // Rectification selection
 void FireAudioProcessor::updateRectification()
 {
-    bool recOffButton = *treeState.getRawParameterValue("recOff");
-    bool recHalfButton = *treeState.getRawParameterValue("recHalf");
-    bool recFullButton = *treeState.getRawParameterValue("recFull");
-    if (recOffButton == true)
-    {
-        distortionProcessor.controls.rectification = 0;
-    }
-    else if (recHalfButton == true)
-    {
-        distortionProcessor.controls.rectification = 1;
-    }
-    else if (recFullButton == true)
-    {
-        distortionProcessor.controls.rectification = 2;
-    }
+//    bool recOffButton = *treeState.getRawParameterValue("recOff");
+//    bool recHalfButton = *treeState.getRawParameterValue("recHalf");
+//    bool recFullButton = *treeState.getRawParameterValue("recFull");
+//    if (recOffButton == true)
+//    {
+//        distortionProcessor.controls.rectification = 0;
+//    }
+//    else if (recHalfButton == true)
+//    {
+//        distortionProcessor.controls.rectification = 1;
+//    }
+//    else if (recFullButton == true)
+//    {
+//        distortionProcessor.controls.rectification = 2;
+//    }
+    float rec = *treeState.getRawParameterValue("rec");
+    distortionProcessor.controls.rectification = rec;
 }
 
 // Filter selection
@@ -564,6 +566,7 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 2.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("rec", "Rec", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
@@ -573,9 +576,9 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     
     parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
-    parameters.push_back(std::make_unique<AudioParameterBool>("recOff", "RecOff", true));
-    parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", false));
+    //parameters.push_back(std::make_unique<AudioParameterBool>("recOff", "RecOff", true));
+    //parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", false));
+    //parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", true));

@@ -13,12 +13,14 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
 
-#define Colour1 Colour(244, 208, 63)
-#define Colour2 Colour(243, 156, 18)
-#define Colour3 Colour(230, 126, 34)
-#define Colour4 Colour(211, 84, 0)
-#define Colour5 Colour(192, 57, 43)
-#define Colour6 Colour(192, 57, 43)
+#define COLOUR0 Colour(244, 244, 210)
+#define COLOUR1 Colour(244, 208, 63)
+#define COLOUR2 Colour(243, 156, 18)
+#define COLOUR3 Colour(230, 126, 34)
+#define COLOUR4 Colour(211, 84, 0)
+#define COLOUR5 Colour(192, 57, 43)
+
+#define KNOB_FONT "Futura"
 
 class OtherLookAndFeel : public LookAndFeel_V4
 {
@@ -26,16 +28,16 @@ public:
 
     OtherLookAndFeel()
     {
-        setColour(Slider::textBoxTextColourId, Colour5);
-        setColour(Slider::textBoxBackgroundColourId, Colour1.withAlpha(0.0f));
-        setColour(Slider::textBoxOutlineColourId, Colour1.withAlpha(0.0f));
+        setColour(Slider::textBoxTextColourId, COLOUR5);
+        setColour(Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
+        setColour(Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
     }
 
     void drawRotarySlider(Graphics& g, int x, int y, int width, int height, float sliderPos,
         const float rotaryStartAngle, const float rotaryEndAngle, Slider& slider) override
     {
-        auto outline = Colour2;
-        auto fill = Colour5;
+        auto outline = COLOUR2;
+        auto fill = COLOUR5;
 
         auto bounds = Rectangle<int>(x, y, width, height).toFloat().reduced(10);
 
@@ -77,7 +79,7 @@ public:
         //Point<float> thumbPoint(bounds.getCentreX() + arcRadius * std::cos(toAngle - MathConstants<float>::halfPi),
         //    bounds.getCentreY() + arcRadius * std::sin(toAngle - MathConstants<float>::halfPi));
 
-        //g.setColour(Colour5);
+        //g.setColour(COLOUR5);
         //g.fillEllipse(Rectangle<float>(thumbWidth, thumbWidth).withCentre(thumbPoint));
 
         // draw inner circle
@@ -90,14 +92,14 @@ public:
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
 
         Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
-        g.setColour(Colour5);
+        g.setColour(COLOUR5);
         g.fillEllipse(dialArea);
 
-        g.setColour(Colour2);
+        g.setColour(COLOUR2);
         Path dialTick;
         dialTick.addRectangle(0, -radiusInner, 2.0f, radiusInner * 0.3);
         g.fillPath(dialTick, AffineTransform::rotation(angle).translated(centerX, centerY));
-        //g.setColour(Colour5);
+        //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
     }
 
@@ -181,7 +183,7 @@ public:
 
         Rectangle<float> tickBounds(x, y, w, h);
         
-        g.setColour(Colour2);
+        g.setColour(COLOUR2);
         g.fillEllipse(tickBounds);
 
         if (ticked)
@@ -190,7 +192,7 @@ public:
         }
         else
         {
-            g.setColour(Colour2);
+            g.setColour(COLOUR2);
         }
         Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
@@ -294,7 +296,7 @@ public:
         auto cornerSize = 0.0f;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
-        auto baseColour = Colour5.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 0.9f)
+        auto baseColour = COLOUR5.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 0.9f)
             .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
 
         if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
@@ -320,13 +322,13 @@ public:
 
             g.fillPath(path);
 
-            g.setColour(Colour5);
+            g.setColour(COLOUR5);
             g.strokePath(path, PathStrokeType(1.0f));
         }
         else
         {
             g.fillRoundedRectangle(bounds, cornerSize);
-            g.setColour(Colour5);
+            g.setColour(COLOUR5);
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
         }
     }
@@ -451,6 +453,7 @@ private:
         driveKnob,
         downSampleKnob,
         outputKnob,
+        recKnob,
         mixKnob,
         cutoffKnob,
         resKnob;
@@ -463,6 +466,7 @@ private:
         driveLabel,
         downSampleLabel,
         outputLabel,
+        recLabel,
         mixLabel,
         cutoffLabel,
         resLabel,
@@ -471,19 +475,16 @@ private:
         recHalfLabel,
         recFullLabel,
         filterOffLabel,
-        filterPreLabel,
-        filterPostLabel,
-        filterLowLabel,
-        filterBandLabel,
-        filterHighLabel;
+        filterLowLabel;
+
 
     // toggle buttons
     ToggleButton
         hqButton{ "HQ" }, // high quality (oversampling)
         linkedButton{ "Link" },
-        recOffButton{ "Off" },
-        recHalfButton{ "Half" },
-        recFullButton{ "Full" },
+        //recOffButton{ "Off" },
+        //recHalfButton{ "Half" },
+        //recFullButton{ "Full" },
         filterOffButton{ "Off" },
         filterPreButton{ "Pre" },
         filterPostButton{ "Post" },
@@ -502,7 +503,7 @@ private:
         // filter mode: low, band, high
         filterModeButtons = 1002,
         // rec state: off, half, full
-        recStateButtons = 1003
+        //recStateButtons = 1003
     };
     
     void updateToggleState (Button* button, String name);
@@ -512,6 +513,7 @@ private:
         inputAttachment,
         driveAttachment,
         downSampleAttachment,
+        recAttachment,
         outputAttachment,
         mixAttachment,
         cutoffAttachment,
@@ -521,9 +523,9 @@ private:
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
         linkedAttachment,
-        recOffAttachment,
-        recHalfAttachment,
-        recFullAttachment,
+        //recOffAttachment,
+        //recHalfAttachment,
+        //recFullAttachment,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,

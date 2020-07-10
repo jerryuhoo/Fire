@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.69"
+#define VERSION "0.695"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -26,23 +26,24 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // ff meter
     //lnf = std::make_unique<foleys::LevelMeterLookAndFeel>();
     // adjust the colours to how you like them, e.g.
-    lnf.setColour(foleys::LevelMeter::lmTextColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmTextClipColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmTextDeactiveColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmTicksColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmOutlineColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmBackgroundColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, Colour1);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, Colour3);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, Colour5);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, Colour6);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, Colour5);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, Colour5);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, Colour5);
-    lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, Colour3);
+    lnf.setColour(foleys::LevelMeter::lmTextColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmTextClipColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmTextDeactiveColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmTicksColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmOutlineColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmBackgroundColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, COLOUR0.withAlpha(0.f));
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, COLOUR3);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, COLOUR5);
+    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, COLOUR5);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, COLOUR2);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, COLOUR2);
+    lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, COLOUR4);
+    lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, COLOUR3);
+    
     
     inputMeter.setLookAndFeel(&lnf);
     inputMeter.setMeterSource(&processor.getInputMeterSource());
@@ -67,8 +68,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     addAndMakeVisible(inputLabel);
     inputLabel.setText("Input", dontSendNotification);
-    inputLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
-    inputLabel.setColour(Label::textColourId, Colour5);
+    inputLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    inputLabel.setColour(Label::textColourId, COLOUR5);
     inputLabel.attachToComponent(&inputKnob, false);
     inputLabel.setJustificationType (Justification::centred);
 
@@ -80,8 +81,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", dontSendNotification);
-    driveLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
-    driveLabel.setColour(Label::textColourId, Colour5);
+    driveLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    driveLabel.setColour(Label::textColourId, COLOUR5);
     driveLabel.attachToComponent(&driveKnob, false);
     driveLabel.setJustificationType (Justification::centred);
     
@@ -93,8 +94,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     addAndMakeVisible(downSampleLabel);
     downSampleLabel.setText("Downsample", dontSendNotification);
-    downSampleLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    downSampleLabel.setColour(Label::textColourId, Colour5);
+    downSampleLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    downSampleLabel.setColour(Label::textColourId, COLOUR5);
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(Justification::centred);
 
@@ -106,11 +107,24 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", dontSendNotification);
-    outputLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
-    outputLabel.setColour(Label::textColourId, Colour5);
+    outputLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    outputLabel.setColour(Label::textColourId, COLOUR5);
     outputLabel.attachToComponent(&outputKnob, false);
     outputLabel.setJustificationType (Justification::centred);
 
+    // rec knob
+    addAndMakeVisible(recKnob);
+    recKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    recKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    recKnob.addListener(this);
+
+    addAndMakeVisible(recLabel);
+    recLabel.setText("Rectification", dontSendNotification);
+    recLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    recLabel.setColour(Label::textColourId, COLOUR5);
+    recLabel.attachToComponent(&recKnob, false);
+    recLabel.setJustificationType (Justification::centred);
+    
     // mix knob
     addAndMakeVisible(mixKnob);
     mixKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
@@ -118,8 +132,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", dontSendNotification);
-    mixLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
-    mixLabel.setColour(Label::textColourId, Colour5);
+    mixLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    mixLabel.setColour(Label::textColourId, COLOUR5);
     mixLabel.attachToComponent(&mixKnob, false);
     mixLabel.setJustificationType (Justification::centred);
     
@@ -130,8 +144,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     addAndMakeVisible(cutoffLabel);
     cutoffLabel.setText("Cutoff", dontSendNotification);
-    cutoffLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
-    cutoffLabel.setColour(Label::textColourId, Colour5);
+    cutoffLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    cutoffLabel.setColour(Label::textColourId, COLOUR5);
     cutoffLabel.attachToComponent(&cutoffKnob, false);
     cutoffLabel.setJustificationType (Justification::centred);
     
@@ -142,8 +156,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     addAndMakeVisible(resLabel);
     resLabel.setText("Q", dontSendNotification); // Resonance
-    resLabel.setFont (Font ("Cascadia Code", 16.0f, Font::plain));
-    resLabel.setColour(Label::textColourId, Colour5);
+    resLabel.setFont (Font (KNOB_FONT, 16.0f, Font::plain));
+    resLabel.setColour(Label::textColourId, COLOUR5);
     resLabel.attachToComponent(&resKnob, false);
     resLabel.setJustificationType (Justification::centred);
     
@@ -153,14 +167,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool hqButtonState = *processor.treeState.getRawParameterValue("hq");
     hqButton.setToggleState(hqButtonState, dontSendNotification);
     hqButton.onClick = [this] { updateToggleState(&hqButton, "Hq"); };
-    hqButton.setColour(ToggleButton::textColourId, Colour5);
-    hqButton.setColour(ToggleButton::tickColourId, Colour5);
-    hqButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    hqButton.setColour(ToggleButton::textColourId, COLOUR5);
+    hqButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    hqButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
 
     //addAndMakeVisible(hqLabel);
     //hqLabel.setText("HQ", dontSendNotification);
-    //hqLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    //hqLabel.setColour(Label::textColourId, Colour5);
+    //hqLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    //hqLabel.setColour(Label::textColourId, COLOUR5);
     //hqLabel.attachToComponent(&hqButton, false);
     //hqLabel.setJustificationType(Justification::centredRight);
 
@@ -170,69 +184,48 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool linkedButtonState = *processor.treeState.getRawParameterValue("linked");
     linkedButton.setToggleState(linkedButtonState, dontSendNotification);
     linkedButton.onClick = [this] { updateToggleState (&linkedButton, "Linked"); };
-    linkedButton.setColour(ToggleButton::textColourId, Colour5);
-    linkedButton.setColour(ToggleButton::tickColourId, Colour5);
-    linkedButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
-    
+    linkedButton.setColour(ToggleButton::textColourId, COLOUR5);
+    linkedButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    linkedButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
+
     //addAndMakeVisible(linkedLabel);
     //linkedLabel.setText("Link", dontSendNotification);
-    //linkedLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    //linkedLabel.setColour(Label::textColourId, Colour5);
+    //linkedLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    //linkedLabel.setColour(Label::textColourId, COLOUR5);
     //linkedLabel.attachToComponent(&linkedButton, false);
     //linkedLabel.setJustificationType(Justification::centredBottom);
     //linkedLabel.setBounds(linkedButton.getX(), linkedButton.getY(), 100, 25);
 
     // Rectification Toggle Buttons
-    addAndMakeVisible(recOffButton);
-    recOffButton.setClickingTogglesState(true);
-    recOffButton.setRadioGroupId(recStateButtons);
-    bool refOffButtonState = *processor.treeState.getRawParameterValue("recOff");
-    recOffButton.setToggleState(refOffButtonState, dontSendNotification);
-    recOffButton.onClick = [this] { updateToggleState(&recOffButton, "RecOff"); };
-    recOffButton.setColour(ToggleButton::textColourId, Colour5);
-    recOffButton.setColour(ToggleButton::tickColourId, Colour5);
-    recOffButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    //addAndMakeVisible(recOffButton);
+//    recOffButton.setClickingTogglesState(true);
+//    recOffButton.setRadioGroupId(recStateButtons);
+//    bool refOffButtonState = *processor.treeState.getRawParameterValue("recOff");
+//    recOffButton.setToggleState(refOffButtonState, dontSendNotification);
+//    recOffButton.onClick = [this] { updateToggleState(&recOffButton, "RecOff"); };
+//    recOffButton.setColour(ToggleButton::textColourId, COLOUR5);
+//    recOffButton.setColour(ToggleButton::tickColourId, COLOUR5);
+//    recOffButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
 
-    addAndMakeVisible(recOffLabel);
-    recOffLabel.setText("Rectification", dontSendNotification);
-    recOffLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    recOffLabel.setColour(Label::textColourId, Colour5);
-    recOffLabel.attachToComponent(&recOffButton, false);
-    recOffLabel.setJustificationType(Justification::centred);
+    //addAndMakeVisible(recHalfButton);
+//    recHalfButton.setClickingTogglesState(true);
+//    recHalfButton.setRadioGroupId(recStateButtons);
+//    bool refHalfButtonState = *processor.treeState.getRawParameterValue("recHalf");
+//    recHalfButton.setToggleState(refHalfButtonState, dontSendNotification);
+//    recHalfButton.onClick = [this] { updateToggleState(&recHalfButton, "RecHalf"); };
+//    recHalfButton.setColour(ToggleButton::textColourId, COLOUR5);
+//    recHalfButton.setColour(ToggleButton::tickColourId, COLOUR5);
+//    recHalfButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
 
-    addAndMakeVisible(recHalfButton);
-    recHalfButton.setClickingTogglesState(true);
-    recHalfButton.setRadioGroupId(recStateButtons);
-    bool refHalfButtonState = *processor.treeState.getRawParameterValue("recHalf");
-    recHalfButton.setToggleState(refHalfButtonState, dontSendNotification);
-    recHalfButton.onClick = [this] { updateToggleState(&recHalfButton, "RecHalf"); };
-    recHalfButton.setColour(ToggleButton::textColourId, Colour5);
-    recHalfButton.setColour(ToggleButton::tickColourId, Colour5);
-    recHalfButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
-
-    //addAndMakeVisible(recHalfLabel);
-    //recHalfLabel.setText("Rec Half", dontSendNotification);
-    //recHalfLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    //recHalfLabel.setColour(Label::textColourId, Colour5);
-    //recHalfLabel.attachToComponent(&recHalfButton, false);
-    //recHalfLabel.setJustificationType(Justification::bottomRight);
-
-    addAndMakeVisible(recFullButton);
-    recFullButton.setClickingTogglesState(true);
-    recFullButton.setRadioGroupId(recStateButtons);
-    bool recFullButtonState = *processor.treeState.getRawParameterValue("recFull");
-    recFullButton.setToggleState(recFullButtonState, dontSendNotification);
-    recFullButton.onClick = [this] { updateToggleState(&recFullButton, "RecFull"); };
-    recFullButton.setColour(ToggleButton::textColourId, Colour5);
-    recFullButton.setColour(ToggleButton::tickColourId, Colour5);
-    recFullButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
-
-    //addAndMakeVisible(recFullLabel);
-    //recFullLabel.setText("Rec Full", dontSendNotification);
-    //recFullLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    //recFullLabel.setColour(Label::textColourId, Colour5);
-    //recFullLabel.attachToComponent(&recFullButton, false);
-    //recFullLabel.setJustificationType(Justification::bottomRight);
+    //addAndMakeVisible(recFullButton);
+//    recFullButton.setClickingTogglesState(true);
+//    recFullButton.setRadioGroupId(recStateButtons);
+//    bool recFullButtonState = *processor.treeState.getRawParameterValue("recFull");
+//    recFullButton.setToggleState(recFullButtonState, dontSendNotification);
+//    recFullButton.onClick = [this] { updateToggleState(&recFullButton, "RecFull"); };
+//    recFullButton.setColour(ToggleButton::textColourId, COLOUR5);
+//    recFullButton.setColour(ToggleButton::tickColourId, COLOUR5);
+//    recFullButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
 
     // Filter State Toggle Buttons
     addAndMakeVisible(filterOffButton);
@@ -241,14 +234,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool filterOffButtonState = *processor.treeState.getRawParameterValue("off");
     filterOffButton.setToggleState(filterOffButtonState, dontSendNotification);
     filterOffButton.onClick = [this] { updateToggleState (&filterOffButton, "Off"); };
-    filterOffButton.setColour(ToggleButton::textColourId, Colour5);
-    filterOffButton.setColour(ToggleButton::tickColourId, Colour5);
-    filterOffButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    filterOffButton.setColour(ToggleButton::textColourId, COLOUR5);
+    filterOffButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    filterOffButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
     
     addAndMakeVisible(filterOffLabel);
     filterOffLabel.setText("Filter", dontSendNotification);
-    filterOffLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    filterOffLabel.setColour(Label::textColourId, Colour5);
+    filterOffLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    filterOffLabel.setColour(Label::textColourId, COLOUR5);
     filterOffLabel.attachToComponent(&filterOffButton, false);
     filterOffLabel.setJustificationType(Justification::centred);
 
@@ -258,14 +251,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool filterPreButtonState = *processor.treeState.getRawParameterValue("pre");
     filterPreButton.setToggleState(filterPreButtonState, dontSendNotification);
     filterPreButton.onClick = [this] { updateToggleState (&filterPreButton, "Pre"); };
-    filterPreButton.setColour(ToggleButton::textColourId, Colour5);
-    filterPreButton.setColour(ToggleButton::tickColourId, Colour5);
-    filterPreButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    filterPreButton.setColour(ToggleButton::textColourId, COLOUR5);
+    filterPreButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    filterPreButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
     
     //addAndMakeVisible(filterPreLabel);
     //filterPreLabel.setText("Filter Pre", dontSendNotification);
-    //filterPreLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    //filterPreLabel.setColour(Label::textColourId, Colour5);
+    //filterPreLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    //filterPreLabel.setColour(Label::textColourId, COLOUR5);
     //filterPreLabel.attachToComponent(&filterPreButton, false);
     //filterPreLabel.setJustificationType(Justification::bottomRight);
 
@@ -275,14 +268,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool filterPostButtonState = *processor.treeState.getRawParameterValue("post");
     filterPostButton.setToggleState(filterPostButtonState, dontSendNotification);
     filterPostButton.onClick = [this] { updateToggleState (&filterPostButton, "Post"); };
-    filterPostButton.setColour(ToggleButton::textColourId, Colour5);
-    filterPostButton.setColour(ToggleButton::tickColourId, Colour5);
-    filterPostButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    filterPostButton.setColour(ToggleButton::textColourId, COLOUR5);
+    filterPostButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    filterPostButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
     
     //addAndMakeVisible(filterPostLabel);
     //filterPostLabel.setText("Filter Post", dontSendNotification);
-    //filterPostLabel.setFont(Font("Cascadia Code", 16.0f, Font::plain));
-    //filterPostLabel.setColour(Label::textColourId, Colour5);
+    //filterPostLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    //filterPostLabel.setColour(Label::textColourId, COLOUR5);
     //filterPostLabel.attachToComponent(&filterPostButton, false);
     //filterPostLabel.setJustificationType(Justification::bottomRight);
 
@@ -293,9 +286,16 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool filterLowButtonState = *processor.treeState.getRawParameterValue("low");
     filterLowButton.setToggleState(filterLowButtonState, dontSendNotification);
     filterLowButton.onClick = [this] { updateToggleState (&filterLowButton, "Low"); };
-    filterLowButton.setColour(ToggleButton::textColourId, Colour5);
-    filterLowButton.setColour(ToggleButton::tickColourId, Colour5);
-    filterLowButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    filterLowButton.setColour(ToggleButton::textColourId, COLOUR5);
+    filterLowButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    filterLowButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
+    
+    addAndMakeVisible(filterLowLabel);
+    filterLowLabel.setText("Type", dontSendNotification);
+    filterLowLabel.setFont(Font(KNOB_FONT, 16.0f, Font::plain));
+    filterLowLabel.setColour(Label::textColourId, COLOUR5);
+    filterLowLabel.attachToComponent(&filterLowButton, false);
+    filterLowLabel.setJustificationType(Justification::centred);
     
     addAndMakeVisible(filterBandButton);
     filterBandButton.setClickingTogglesState(true);
@@ -303,9 +303,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool filterBandButtonState = *processor.treeState.getRawParameterValue("band");
     filterBandButton.setToggleState(filterBandButtonState, dontSendNotification);
     filterBandButton.onClick = [this] { updateToggleState (&filterBandButton, "Band"); };
-    filterBandButton.setColour(ToggleButton::textColourId, Colour5);
-    filterBandButton.setColour(ToggleButton::tickColourId, Colour5);
-    filterBandButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    filterBandButton.setColour(ToggleButton::textColourId, COLOUR5);
+    filterBandButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    filterBandButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
     
     addAndMakeVisible(filterHighButton);
     filterHighButton.setClickingTogglesState(true);
@@ -313,14 +313,15 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     bool filterHighButtonState = *processor.treeState.getRawParameterValue("high");
     filterHighButton.setToggleState(filterHighButtonState, dontSendNotification);
     filterHighButton.onClick = [this] { updateToggleState (&filterHighButton, "High"); };
-    filterHighButton.setColour(ToggleButton::textColourId, Colour5);
-    filterHighButton.setColour(ToggleButton::tickColourId, Colour5);
-    filterHighButton.setColour(ToggleButton::tickDisabledColourId, Colour5);
+    filterHighButton.setColour(ToggleButton::textColourId, COLOUR5);
+    filterHighButton.setColour(ToggleButton::tickColourId, COLOUR5);
+    filterHighButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
     
     // Attachment
     inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
     downSampleAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "downSample", downSampleKnob);
+    recAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "rec", recKnob);
     outputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
     mixAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix", mixKnob);
     cutoffAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "cutoff", cutoffKnob);
@@ -328,9 +329,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     hqAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "hq", hqButton);
     linkedAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "linked", linkedButton);
-    recOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recOff", recOffButton);
-    recHalfAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recHalf", recHalfButton);
-    recFullAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recFull", recFullButton);
+    //recOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recOff", recOffButton);
+    //recHalfAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recHalf", recHalfButton);
+    //recFullAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recFull", recFullButton);
     filterOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "off", filterOffButton);
     filterPreAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "pre", filterPreButton);
     filterPostAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "post", filterPostButton);
@@ -369,26 +370,26 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // distortionMode.setSelectedId (1);
     distortionMode.setJustificationType(Justification::centred);
-    distortionMode.setColour(ComboBox::textColourId, Colour1);
-    distortionMode.setColour(ComboBox::arrowColourId, Colour1);
-    distortionMode.setColour(ComboBox::buttonColourId, Colour1);
-    distortionMode.setColour(ComboBox::outlineColourId, Colour5);
-    distortionMode.setColour(ComboBox::focusedOutlineColourId, Colour1);
-    distortionMode.setColour(ComboBox::backgroundColourId, Colour5);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, Colour1);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, Colour2);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, Colour5);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, Colour1);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, Colour5);
+    distortionMode.setColour(ComboBox::textColourId, COLOUR1);
+    distortionMode.setColour(ComboBox::arrowColourId, COLOUR1);
+    distortionMode.setColour(ComboBox::buttonColourId, COLOUR1);
+    distortionMode.setColour(ComboBox::outlineColourId, COLOUR5);
+    distortionMode.setColour(ComboBox::focusedOutlineColourId, COLOUR1);
+    distortionMode.setColour(ComboBox::backgroundColourId, COLOUR5);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, COLOUR1);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, COLOUR2);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, COLOUR5);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, COLOUR1);
+    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, COLOUR5);
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     
     
     // about button
     addAndMakeVisible(aboutButton);
-    aboutButton.setColour(TextButton::buttonColourId, Colour3);
-    aboutButton.setColour(TextButton::textColourOnId, Colour3);
-    aboutButton.setColour(TextButton::textColourOffId, Colour3);
+    aboutButton.setColour(TextButton::buttonColourId, COLOUR3);
+    aboutButton.setColour(TextButton::textColourOnId, COLOUR3);
+    aboutButton.setColour(TextButton::textColourOffId, COLOUR3);
 //    aboutButton.onClick = [this] { aboutDialog.showMessageBoxAsync(AlertWindow::InfoIcon, "Made by Wings", "And fuck you", "OK"); };
     // resize not available now
     setResizeLimits(1000, 500, 2000, 1000); // set resize limits
@@ -413,37 +414,39 @@ void FireAudioProcessorEditor::paint(Graphics &g)
 {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (getLookAndFeel().findColour (ResizableWindow::backgroundColourId));
-    g.fillAll(Colour3);
+    g.fillAll(COLOUR3);
 
     // title
-    g.setColour(Colour5);
+    g.setColour(COLOUR5);
     g.fillRect(0, 0, getWidth(), 50);
 
-    g.setColour(Colour1);
+    // draw knob background
+    g.setColour(COLOUR1);
     g.fillRoundedRectangle(25, getHeight() / 2 - 50, getWidth() - 50, getHeight() / 2 + 25, 25);
+    
+    // draw ff meter background
+    int ffBackgroundWidth = getWidth() / 4;
+    g.setColour(COLOUR0);
+    g.fillRoundedRectangle(getWidth() / 2 - ffBackgroundWidth / 2, getHeight() / 4 * 3 - 25, ffBackgroundWidth, getHeight() / 4 - 25, 25);
     // set background
     // Image background = ImageCache::getFromMemory(BinaryData::blood_background_png, (size_t) BinaryData::blood_background_pngSize);
     // g.drawImage(background, 0, 0, getWidth(), getHeight(), 0, 0, background.getWidth(), background.getHeight());
     
     // draw version
-    g.setColour(Colour5);
+    g.setColour(COLOUR5);
     g.setFont (Font ("Times New Roman", 18.0f, Font::bold));
     String version = (String) "Ver. " + (String)VERSION;
     Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, Justification::topLeft, 1);
+       
+    // set logo "Fire"
+    Image logo = ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
+    g.drawImage(logo, 0, 0, logo.getWidth()/4, logo.getHeight()/4, 0, 0, logo.getWidth(), logo.getHeight());
     
-    // set title "Fire"
-    g.setFont (Font ("Times New Roman", 30.0f, Font::bold));
-    Rectangle<int> titleArea(5, 5, 300, 50);
-    g.drawText("BLOOD", titleArea, Justification::centred);
-
+    // set logo "Wings"
+    Image logoWings = ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
+    g.drawImage(logoWings, getWidth() - 50, 0, logoWings.getWidth()/4, logoWings.getHeight()/4, 0, 0, logoWings.getWidth(), logoWings.getHeight());
     
-    // set title picture "Fire"
-//    Image title = ImageCache::getFromMemory(BinaryData::blood_png, (size_t) BinaryData::blood_pngSize);
-//    int x = getWidth() / 2 - title.getWidth() / 4;
-//    int y = getHeight() / 3 + 60;
-//    g.drawImage(title, x, y, title.getWidth()/2, title.getHeight()/2, 0, 0, title.getWidth(), title.getHeight());
-
     // paint distortion function
     float functionValue = 0;
     float mixValue;
@@ -463,7 +466,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     frame.setBounds(getWidth() / 2, 50, getWidth() / 2, getHeight() / 2 - 125);
     
     // draw layer 2
-    g.setColour(Colour4);
+    g.setColour(COLOUR4);
     g.fillRect(0, 50, getWidth(), getHeight() / 2 - 125);
     
     if (mode < 8)
@@ -550,9 +553,9 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             p.lineTo(xPos, yPos);
         }
 
-        // g.setColour(Colour1);
-        ColourGradient grad(Colour1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
-            Colour4, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
+        // g.setColour(COLOUR1);
+        ColourGradient grad(COLOUR1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
+            COLOUR4, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
         g.setGradientFill(grad);
         g.strokePath(p, PathStrokeType(2.0));
 
@@ -584,38 +587,55 @@ void FireAudioProcessorEditor::resized()
     // subcomponents in your editor..
     
     // knobs
-    inputKnob.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
-    driveKnob.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
-    downSampleKnob.setBounds((getWidth() / 7) * 3 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
-    outputKnob.setBounds((getWidth() / 7) * 5 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
-    mixKnob.setBounds((getWidth() / 7) * 6 - knobSize / 2, getHeight() / 2 + 7 - 25, knobSize, knobSize);
-
-    cutoffKnob.setBounds((getWidth() / 7) * 5 - knobSize / 2, getHeight() / 4 * 3, knobSize, knobSize);
-    resKnob.setBounds((getWidth() / 7) * 6 - knobSize / 2, getHeight() / 4 * 3, knobSize, knobSize);
+    int knobNum = 7;
+    float scale = jmin(getHeight() / 500.f, getWidth() / 1000.f);
+    int newKnobSize = static_cast<int> (knobSize * scale);
+    int startX = getWidth() / knobNum;
+    int secondShadowY = getHeight() / 2 - 75;
+    int firstLineY = secondShadowY + (getHeight() - secondShadowY) / 4 + 25 - newKnobSize / 2;
+    int secondLineY = secondShadowY + (getHeight() - secondShadowY) / 4 * 3 - newKnobSize / 2;
+    
+    // first line
+    inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    driveKnob.setBounds(startX * 2 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    recKnob.setBounds(startX * 4 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    outputKnob.setBounds(startX * 5 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    mixKnob.setBounds(startX * 6 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    
+    // second line
+    cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
+    resKnob.setBounds(startX * 6 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
     
     // toggle buttons
-    hqButton.setBounds((getWidth() / 7) * 1 - 120, getHeight() / 2 + 7 + 25 - 25, 100, 25);
-    linkedButton.setBounds((getWidth() / 7) * 5 + 25, getHeight() / 2 + 7 + 25 - 25, 100, 25);
-    recOffButton.setBounds((getWidth() / 7) * 4 - knobSize / 2, getHeight() / 2 + 7 - 25, 100, 25);
-    recHalfButton.setBounds((getWidth() / 7) * 4 - knobSize / 2, getHeight() / 2 + 7 + 25 - 25, 100, 25);
-    recFullButton.setBounds((getWidth() / 7) * 4 - knobSize / 2, getHeight() / 2 + 7 + 50 - 25, 100, 25);
+    
+    // first line
+    hqButton.setBounds(startX * 1 - 120, firstLineY, 100, 25);
+    linkedButton.setBounds(startX * 5 + newKnobSize / 2, firstLineY, 100, 25);
+    //recOffButton.setBounds(startX * 4 - knobSize / 2, getHeight() / 2 + 7 - 25, 100, 25);
+    //recHalfButton.setBounds(startX * 4 - knobSize / 2, getHeight() / 2 + 7 + 25 - 25, 100, 25);
+    //recFullButton.setBounds(startX * 4 - knobSize / 2, getHeight() / 2 + 7 + 50 - 25, 100, 25);
 
-    filterOffButton.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 4 * 3, 100, 25);
-    filterPreButton.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 4 * 3 +25, 100, 25);
-    filterPostButton.setBounds((getWidth() / 7) * 1 - knobSize / 2, getHeight() / 4 * 3 +50, 100, 25);
-    filterLowButton.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 4 * 3, 100, 25);
-    filterBandButton.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 4 * 3 +25, 100, 25);
-    filterHighButton.setBounds((getWidth() / 7) * 2 - knobSize / 2, getHeight() / 4 * 3 +50, 100, 25);
+    // second line
+    filterOffButton.setBounds(startX * 1 - knobSize / 2, secondLineY, 100, 25);
+    filterPreButton.setBounds(startX * 1 - knobSize / 2, secondLineY +25, 100, 25);
+    filterPostButton.setBounds(startX * 1 - knobSize / 2, secondLineY +50, 100, 25);
+    filterLowButton.setBounds(startX * 2 - knobSize / 2, secondLineY, 100, 25);
+    filterBandButton.setBounds(startX * 2 - knobSize / 2, secondLineY +25, 100, 25);
+    filterHighButton.setBounds(startX * 2 - knobSize / 2, secondLineY +50, 100, 25);
     
     // about
-    aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
+    // aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
     
     // visualiser
     // processor.visualiser.setBounds(0, 50, getWidth() / 2, getHeight() / 2 - 125);
 
     // ff meter
-    inputMeter.setBounds(getWidth() / 2 - 25, getHeight() - 175, 30, 150);
-    outputMeter.setBounds(getWidth() / 2 + 25, getHeight() - 175, 30, 150);
+    int ffWidth = 50;
+    int ffHeightStart = getHeight() / 4 * 3 - 25;
+    int ffHeight = getHeight() / 4 - 25;
+    inputMeter.setBounds(getWidth() / 2 - ffWidth - 10, ffHeightStart, ffWidth, ffHeight + 2);
+    outputMeter.setBounds(getWidth() / 2 + 10, ffHeightStart, ffWidth, ffHeight + 2);
     
     // distortion menu
     distortionMode.setBounds(getWidth() /2 - 100, 0, 200, 50);

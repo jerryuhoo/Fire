@@ -14,7 +14,7 @@ Distortion::Distortion()
     controls.drive = 1.f;
     controls.output = 1.f;
     controls.mix = 0.f;
-    controls.rectification = 0;
+    controls.rectification = 0.f;
 }
 
 Distortion::~Distortion() {}
@@ -55,16 +55,20 @@ float Distortion::distortionProcess(float input)
 
 float Distortion::rectificationProcess(float input)
 {
-    switch (controls.rectification)
+//    switch (controls.rectification)
+//    {
+//    case 0:
+//        break;
+//    case 1:
+//        input = halfRectification(input);
+//        break;
+//    case 2:
+//        input = fullRectification(input);
+//        break;
+//    }
+    if (input < 0)
     {
-    case 0:
-        break;
-    case 1:
-        input = halfRectification(input);
-        break;
-    case 2:
-        input = fullRectification(input);
-        break;
+        input *= (0.5 - controls.rectification) * 2;
     }
     return input;
 }

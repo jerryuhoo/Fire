@@ -8,11 +8,11 @@
 
 namespace BinaryData
 {
-    extern const char*   blood_background_png;
-    const int            blood_background_pngSize = 145286;
+    extern const char*   firelogo_png;
+    const int            firelogo_pngSize = 9722;
 
-    extern const char*   blood_png;
-    const int            blood_pngSize = 20679;
+    extern const char*   firewingslogo_png;
+    const int            firewingslogo_pngSize = 11396;
 
     // Number of elements in the namedResourceList and originalFileNames arrays.
     const int namedResourceListSize = 2;

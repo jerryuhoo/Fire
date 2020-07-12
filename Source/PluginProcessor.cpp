@@ -335,10 +335,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
         updateFilter();
     }
-
-//    bool lowButton = *treeState.getRawParameterValue("low");
-//    bool bandButton = *treeState.getRawParameterValue("band");
-//    bool highButton = *treeState.getRawParameterValue("high");
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -515,21 +511,6 @@ AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 // Rectification selection
 void FireAudioProcessor::updateRectification()
 {
-//    bool recOffButton = *treeState.getRawParameterValue("recOff");
-//    bool recHalfButton = *treeState.getRawParameterValue("recHalf");
-//    bool recFullButton = *treeState.getRawParameterValue("recFull");
-//    if (recOffButton == true)
-//    {
-//        distortionProcessor.controls.rectification = 0;
-//    }
-//    else if (recHalfButton == true)
-//    {
-//        distortionProcessor.controls.rectification = 1;
-//    }
-//    else if (recFullButton == true)
-//    {
-//        distortionProcessor.controls.rectification = 2;
-//    }
     float rec = *treeState.getRawParameterValue("rec");
     distortionProcessor.controls.rectification = rec;
 }
@@ -576,9 +557,6 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     
     parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
-    //parameters.push_back(std::make_unique<AudioParameterBool>("recOff", "RecOff", true));
-    //parameters.push_back(std::make_unique<AudioParameterBool>("recHalf", "RecHalf", false));
-    //parameters.push_back(std::make_unique<AudioParameterBool>("recFull", "RecFull", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", true));

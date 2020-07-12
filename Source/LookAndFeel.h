@@ -25,7 +25,10 @@
 class OtherLookAndFeel : public LookAndFeel_V4
 {
 public:
-
+    
+    // resize scale
+    float scale = 1.f;
+    
     OtherLookAndFeel()
     {
         setColour(Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
@@ -95,18 +98,12 @@ public:
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
         
         Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
-        if (slider.isEnabled())
-        {
-            g.setColour(COLOUR5);
-        }
-        else
-        {
-            g.setColour(Colour(85, 80, 80));
-        }
+
+        g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         g.fillEllipse(dialArea);
         
         // draw tick
-        g.setColour(COLOUR0);
+        g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         Path dialTick;
         dialTick.addRectangle(0, -radiusInner, 2.0f, radiusInner * 0.3);
         g.fillPath(dialTick, AffineTransform::rotation(angle).translated(centerX, centerY));
@@ -131,8 +128,8 @@ public:
 
         auto localBounds = slider.getLocalBounds();
 
-        auto textBoxWidth = jmax(0, jmin(slider.getTextBoxWidth(), localBounds.getWidth() - minXSpace));
-        auto textBoxHeight = jmax(0, jmin(25, localBounds.getHeight() - minYSpace));
+        auto textBoxWidth = jmax(0, jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
+        auto textBoxHeight = jmax(0, jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
 
         Slider::SliderLayout layout;
 
@@ -299,14 +296,15 @@ public:
             }
         }
     }
-
+    
+    // customize button
     void drawButtonBackground(Graphics& g,
         Button& button,
         const Colour& backgroundColour,
         bool shouldDrawButtonAsHighlighted,
         bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 15.0f;
+        auto cornerSize = 15.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
@@ -345,7 +343,28 @@ public:
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
         }
     }
-
+    
+    Font getTextButtonFont (TextButton&, int buttonHeight) override
+    {
+        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+    
+    // combobox customize font
+    Font getComboBoxFont (ComboBox& /*box*/) override
+    {
+        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+    
+    Font getPopupMenuFont() override
+    {
+        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+    
+    // label customize font
+    Font getLabelFont (Label& label) override
+    {
+        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);;
+    }
 };
 
 class OtherLookAndFeelRed : public LookAndFeel_V4
@@ -395,6 +414,7 @@ public:
 class ButtonLnf : public LookAndFeel_V4
 {
 public:
+    float scale = 1.f;
     void drawButtonBackground(Graphics& g,
         Button& button,
         const Colour& backgroundColour,
@@ -439,5 +459,9 @@ public:
             g.setColour(button.findColour (ComboBox::outlineColourId));
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
         }
+    }
+    Font getTextButtonFont (TextButton&, int buttonHeight) override
+    {
+        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
 };

@@ -70,7 +70,6 @@ public:
         }
     }
     
-    void setKnobState(Slider* slider);
     
     //    Visualiser visualiser;
 
@@ -153,6 +152,8 @@ private:
     };
     
     void updateToggleState (Button* button, String name);
+    void setKnobState(Slider* slider);
+    void setButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
     
     // Slider attachment
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.696"
+#define VERSION "0.697"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p)
@@ -167,7 +167,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     resLabel.attachToComponent(&resKnob, false);
     resLabel.setJustificationType (Justification::centred);
     
-    // HQ(oversampling) Toggle Buttons
+    // HQ(oversampling) Button
     addAndMakeVisible(hqButton);
     hqButton.setClickingTogglesState(true);
     bool hqButtonState = *processor.treeState.getRawParameterValue("hq");
@@ -181,7 +181,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     hqButton.setButtonText("HQ");
     hqButton.setLookAndFeel(&buttonLnf);
 
-    // Linked Toggle Buttons
+    // Linked Button
     addAndMakeVisible(linkedButton);
     linkedButton.setClickingTogglesState(true);
     bool linkedButtonState = *processor.treeState.getRawParameterValue("linked");
@@ -194,46 +194,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     linkedButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     linkedButton.setButtonText("Link");
 
-    //addAndMakeVisible(linkedLabel);
-    //linkedLabel.setText("Link", dontSendNotification);
-    //linkedLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
-    //linkedLabel.setColour(Label::textColourId, COLOUR5);
-    //linkedLabel.attachToComponent(&linkedButton, false);
-    //linkedLabel.setJustificationType(Justification::centredBottom);
-    //linkedLabel.setBounds(linkedButton.getX(), linkedButton.getY(), 100, 25);
-
-    // Rectification Toggle Buttons
-    //addAndMakeVisible(recOffButton);
-//    recOffButton.setClickingTogglesState(true);
-//    recOffButton.setRadioGroupId(recStateButtons);
-//    bool refOffButtonState = *processor.treeState.getRawParameterValue("recOff");
-//    recOffButton.setToggleState(refOffButtonState, dontSendNotification);
-//    recOffButton.onClick = [this] { updateToggleState(&recOffButton, "RecOff"); };
-//    recOffButton.setColour(ToggleButton::textColourId, COLOUR5);
-//    recOffButton.setColour(ToggleButton::tickColourId, COLOUR5);
-//    recOffButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
-
-    //addAndMakeVisible(recHalfButton);
-//    recHalfButton.setClickingTogglesState(true);
-//    recHalfButton.setRadioGroupId(recStateButtons);
-//    bool refHalfButtonState = *processor.treeState.getRawParameterValue("recHalf");
-//    recHalfButton.setToggleState(refHalfButtonState, dontSendNotification);
-//    recHalfButton.onClick = [this] { updateToggleState(&recHalfButton, "RecHalf"); };
-//    recHalfButton.setColour(ToggleButton::textColourId, COLOUR5);
-//    recHalfButton.setColour(ToggleButton::tickColourId, COLOUR5);
-//    recHalfButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
-
-    //addAndMakeVisible(recFullButton);
-//    recFullButton.setClickingTogglesState(true);
-//    recFullButton.setRadioGroupId(recStateButtons);
-//    bool recFullButtonState = *processor.treeState.getRawParameterValue("recFull");
-//    recFullButton.setToggleState(recFullButtonState, dontSendNotification);
-//    recFullButton.onClick = [this] { updateToggleState(&recFullButton, "RecFull"); };
-//    recFullButton.setColour(ToggleButton::textColourId, COLOUR5);
-//    recFullButton.setColour(ToggleButton::tickColourId, COLOUR5);
-//    recFullButton.setColour(ToggleButton::tickDisabledColourId, COLOUR5);
-
-    // Filter State Toggle Buttons
+    // Filter State Buttons
     addAndMakeVisible(filterOffButton);
     filterOffButton.setClickingTogglesState(true);
     filterOffButton.setRadioGroupId(filterStateButtons);
@@ -266,13 +227,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterPreButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterPreButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterPreButton.setButtonText("PRE");
-    
-    //addAndMakeVisible(filterPreLabel);
-    //filterPreLabel.setText("Filter Pre", dontSendNotification);
-    //filterPreLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
-    //filterPreLabel.setColour(Label::textColourId, COLOUR5);
-    //filterPreLabel.attachToComponent(&filterPreButton, false);
-    //filterPreLabel.setJustificationType(Justification::bottomRight);
 
     addAndMakeVisible(filterPostButton);
     filterPostButton.setClickingTogglesState(true);
@@ -286,13 +240,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterPostButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterPostButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterPostButton.setButtonText("POST");
-    
-    //addAndMakeVisible(filterPostLabel);
-    //filterPostLabel.setText("Filter Post", dontSendNotification);
-    //filterPostLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
-    //filterPostLabel.setColour(Label::textColourId, COLOUR5);
-    //filterPostLabel.attachToComponent(&filterPostButton, false);
-    //filterPostLabel.setJustificationType(Justification::bottomRight);
 
     // Filter Type Toggle Buttons
     addAndMakeVisible(filterLowButton);
@@ -402,6 +349,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, COLOUR1);
     distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, COLOUR1);
     distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, COLOUR6);
+    
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     
@@ -412,7 +360,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     aboutButton.setColour(TextButton::textColourOnId, COLOUR3);
     aboutButton.setColour(TextButton::textColourOffId, COLOUR3);
 //    aboutButton.onClick = [this] { aboutDialog.showMessageBoxAsync(AlertWindow::InfoIcon, "Made by Wings", "And fuck you", "OK"); };
-    // resize not available now
+    // resize limit
     setResizeLimits(1000, 500, 2000, 1000); // set resize limits
     //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
 }
@@ -433,7 +381,12 @@ float f(float x)
 //==============================================================================
 void FireAudioProcessorEditor::paint(Graphics &g)
 {
+    // set states
     setKnobState(&driveKnob);
+    setButtonState(&filterLowButton, &cutoffKnob, &resKnob);
+    setButtonState(&filterBandButton, &cutoffKnob, &resKnob);
+    setButtonState(&filterHighButton, &cutoffKnob, &resKnob);
+    
     int part1 = getHeight()/10;
     int part2 = part1 * 3;
     // (Our component is opaque, so we must completely fill the background with a solid colour)
@@ -591,10 +544,9 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     g.setGradientFill(shadowGrad2);
     g.fillRect(0, part1 + part2, getWidth(), 25);
     
-    //g.setColour(COLOUR0);
-    //g.fillRect(driveKnob.getX(), driveKnob.getY(), driveKnob.getWidth(), driveKnob.getHeight());
+    //g.setColour(COLOUR1);
     //g.fillRect(outputKnob.getX(), outputKnob.getY(), outputKnob.getWidth(), outputKnob.getHeight());
-    // repaint(); // HIGH CPU WARNING!!!
+    //g.fillRect(cutoffKnob.getX(), cutoffKnob.getY(), cutoffKnob.getWidth(), cutoffKnob.getHeight());
 }
 
 void FireAudioProcessorEditor::resized()
@@ -609,8 +561,8 @@ void FireAudioProcessorEditor::resized()
     int newKnobSize = static_cast<int> (knobSize * scale);
     int startX = getWidth() / knobNum;
     int secondShadowY = getHeight() / 10 * 4;
-    int firstLineY = secondShadowY + (getHeight() - secondShadowY) / 3 - newKnobSize / 2;
-    int secondLineY = secondShadowY + (getHeight() - secondShadowY) / 3 * 2 - newKnobSize / 2 + 25;
+    int firstLineY = secondShadowY + (getHeight() - secondShadowY) * 2 / 5 - newKnobSize / 2;
+    int secondLineY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5  - newKnobSize / 2;
     
     // first line
     // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
@@ -624,23 +576,17 @@ void FireAudioProcessorEditor::resized()
     cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
     resKnob.setBounds(startX * 6 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
     
-    // toggle buttons
-    
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
-    // hqButton.setBounds(50, 0, 50, 50);
-    linkedButton.setBounds(startX * 5 + newKnobSize / 4, firstLineY, newKnobSize / 2, 25);
-    //recOffButton.setBounds(startX * 4 - knobSize / 2, getHeight() / 2 + 7 - 25, 100, 25);
-    //recHalfButton.setBounds(startX * 4 - knobSize / 2, getHeight() / 2 + 7 + 25 - 25, 100, 25);
-    //recFullButton.setBounds(startX * 4 - knobSize / 2, getHeight() / 2 + 7 + 50 - 25, 100, 25);
+    linkedButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
 
     // second line
     filterOffButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY, newKnobSize / 2, 0.05 * getHeight());
-    filterPreButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.05 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterPostButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.1 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterPreButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterPostButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
     filterLowButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY, newKnobSize / 2, 0.05 * getHeight());
-    filterBandButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY + 0.05 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterHighButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY + 0.1 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterBandButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterHighButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
     
     // about
     // aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
@@ -658,17 +604,8 @@ void FireAudioProcessorEditor::resized()
     // distortion menu
     distortionMode.setBounds(0, getHeight() / 10 * 4, getWidth() / 5, getHeight() / 10);
     
-    // label
-    // inputLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    driveLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    downSampleLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    outputLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    recLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    mixLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    cutoffLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    resLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    filterOffLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
-    filterLowLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE * scale, Font::plain));
+    otherLookAndFeel.scale = scale;
+    buttonLnf.scale = scale;
 }
 
 void FireAudioProcessorEditor::updateToggleState (Button* button, String name)
@@ -692,4 +629,26 @@ void FireAudioProcessorEditor::setKnobState(Slider* slider)
     {
         slider->setEnabled(true);
     }
+}
+
+// if filter is off, set lp, bp, hp buttons and cutoff knob disable.
+void FireAudioProcessorEditor::setButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
+{
+    if (*processor.treeState.getRawParameterValue("off"))
+    {
+        textButton->setEnabled(false);
+        slider1->setEnabled(false);
+        slider2->setEnabled(false);
+    }
+    else
+    {
+        textButton->setEnabled(true);
+        slider1->setEnabled(true);
+        slider2->setEnabled(true);
+    }
+}
+
+void setEnableStates ()
+{
+    
 }

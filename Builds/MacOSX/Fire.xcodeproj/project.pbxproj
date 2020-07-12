@@ -355,6 +355,13 @@
 			path = Fire.component;
 			sourceTree = "BUILT_PRODUCTS_DIR";
 		};
+		65DF29A51176A5F8A40895E6 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			name = LookAndFeel.h;
+			path = ../../Source/LookAndFeel.h;
+			sourceTree = "SOURCE_ROOT";
+		};
 		6858999F30BA88913E22074A = {
 			isa = PBXFileReference;
 			lastKnownFileType = wrapper.framework;
@@ -673,6 +680,7 @@
 		3939E26A928C35AAB6A88B28 = {
 			isa = PBXGroup;
 			children = (
+				65DF29A51176A5F8A40895E6,
 				2757D7D2BB665C01F8E4AF99,
 				84F1E28A5283BFEED80A6036,
 				53B2DC6C3567914411A7F128,

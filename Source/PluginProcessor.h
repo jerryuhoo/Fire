@@ -12,7 +12,8 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
-
+#define COLOUR1 Colour(244, 208, 63)
+#define COLOUR6 Colour(45, 40, 40)
 //==============================================================================
 /**
 */
@@ -26,8 +27,21 @@ public:
     {
         setBufferSize(128);
         setSamplesPerBlock(16);
-        setColours(Colour(201, 98, 97), Colour(234, 191, 191));
+        setColours(COLOUR6, COLOUR1);
         setBoundsInset(BorderSize<int>(2, 2, 2, 2));
+    }
+
+    void paintChannel (Graphics& g, Rectangle<float> area,
+                                                 const Range<float>* levels, int numLevels, int nextSample) override
+    {
+        Path p;
+        getChannelAsPath (p, levels, numLevels, nextSample);
+        ColourGradient grad(COLOUR1, area.getX() + area.getWidth() / 2, area.getY() + area.getHeight() / 2,
+            COLOUR6, area.getX(), area.getY() + area.getHeight() / 2, true);
+        g.setGradientFill(grad);
+        g.fillPath (p, AffineTransform::fromTargetPoints (0.0f, -1.0f,               area.getX(), area.getY(),
+                                                          0.0f, 1.0f,                area.getX(), area.getBottom(),
+                                                          (float) numLevels, -1.0f,  area.getRight(), area.getY()));
     }
 };
 

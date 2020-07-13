@@ -490,6 +490,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\Source\Preset.cpp">
+      <Filter>Fire\Source</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\Source\PluginProcessor.cpp">
       <Filter>Fire\Source</Filter>
     </ClCompile>
@@ -2712,6 +2715,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Source\Preset.h">
+      <Filter>Fire\Source</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Source\LookAndFeel.h">
       <Filter>Fire\Source</Filter>
     </ClInclude>

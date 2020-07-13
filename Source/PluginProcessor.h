@@ -12,6 +12,8 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
+#include "Preset.h"
+
 #define COLOUR1 Colour(244, 208, 63)
 #define COLOUR6 Colour(45, 40, 40)
 //==============================================================================
@@ -109,7 +111,11 @@ public:
     // temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
     // probably use fifo
     Visualiser visualiser;
-
+    
+    // save presets
+    state::StateAB stateAB;
+    state::StatePresets statePresets;
+    
 private:
     //==============================================================================
 

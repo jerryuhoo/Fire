@@ -136,6 +136,7 @@
     </Bscmake>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\Source\Preset.cpp"/>
     <ClCompile Include="..\..\Source\PluginProcessor.cpp"/>
     <ClCompile Include="..\..\Source\PluginEditor.cpp"/>
     <ClCompile Include="..\..\Source\Distortion.cpp"/>
@@ -2195,6 +2196,7 @@
     <ClCompile Include="..\..\JuceLibraryCode\include_juce_opengl.cpp"/>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Source\Preset.h"/>
     <ClInclude Include="..\..\Source\LookAndFeel.h"/>
     <ClInclude Include="..\..\Source\WDF.h"/>
     <ClInclude Include="..\..\Source\DiodeWDF.h"/>

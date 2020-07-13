@@ -16,7 +16,7 @@
 #define COLOUR4 Colour(211, 84, 0)
 #define COLOUR5 Colour(192, 57, 43)
 #define COLOUR6 Colour(45, 40, 40)
-#define COLOUR7 Colour(20, 10, 10)
+#define COLOUR7 Colour(15, 10, 10)
 
 #define KNOB_FONT "Futura"
 #define KNOB_FONT_SIZE 18.0f
@@ -103,9 +103,9 @@ public:
         g.fillEllipse(dialArea);
         
         // draw tick
-        g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
+        g.setColour(COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         Path dialTick;
-        dialTick.addRectangle(0, -radiusInner, 2.0f, radiusInner * 0.3);
+        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
         g.fillPath(dialTick, AffineTransform::rotation(angle).translated(centerX, centerY));
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
@@ -297,6 +297,21 @@ public:
         }
     }
     
+    void drawComboBoxTextWhenNothingSelected (Graphics& g, ComboBox& box, Label& label) override
+    {
+        //g.setColour (findColour (ComboBox::textColourId).withMultipliedAlpha (0.5f));
+        g.setColour(COLOUR1.withMultipliedAlpha(0.5f));
+        auto font = label.getLookAndFeel().getLabelFont (label);
+
+        g.setFont (font);
+        
+        auto textArea = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
+
+        g.drawFittedText (box.getTextWhenNothingSelected(), textArea, label.getJustificationType(),
+                          jmax (1, (int) ((float) textArea.getHeight() / font.getHeight())),
+                          label.getMinimumHorizontalScale());
+    }
+    
     // customize button
     void drawButtonBackground(Graphics& g,
         Button& button,
@@ -304,7 +319,7 @@ public:
         bool shouldDrawButtonAsHighlighted,
         bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 15.0f * scale;
+        auto cornerSize = 0.0f;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
@@ -344,10 +359,12 @@ public:
         }
     }
     
+    
     Font getTextButtonFont (TextButton&, int buttonHeight) override
     {
         return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
+    
     
     // combobox customize font
     Font getComboBoxFont (ComboBox& /*box*/) override
@@ -411,7 +428,7 @@ public:
     }
 };
 
-class ButtonLnf : public LookAndFeel_V4
+class RoundedButtonLnf : public LookAndFeel_V4
 {
 public:
     float scale = 1.f;
@@ -421,7 +438,7 @@ public:
         bool shouldDrawButtonAsHighlighted,
         bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 0.0f;
+        auto cornerSize = 15.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
@@ -460,6 +477,7 @@ public:
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
         }
     }
+    
     Font getTextButtonFont (TextButton&, int buttonHeight) override
     {
         return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);

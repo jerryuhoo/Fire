@@ -10,10 +10,12 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.697"
+#define VERSION "0.698"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
-    : AudioProcessorEditor(&p), processor(p)
+    : AudioProcessorEditor(&p)
+    , processor(p)
+    , stateComponent {p.stateAB, p.statePresets}
 {
     // timer
     Timer::startTimerHz(20.0f);
@@ -24,6 +26,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // Visualiser
     addAndMakeVisible(p.visualiser);
+    
+    // presets
+    addAndMakeVisible(stateComponent);
     
     // ff meter
     //lnf = std::make_unique<foleys::LevelMeterLookAndFeel>();
@@ -179,7 +184,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     hqButton.setColour(TextButton::textColourOnId, COLOUR1);
     hqButton.setColour(TextButton::textColourOffId, Colour(100, 20, 20));
     hqButton.setButtonText("HQ");
-    hqButton.setLookAndFeel(&buttonLnf);
 
     // Linked Button
     addAndMakeVisible(linkedButton);
@@ -192,7 +196,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     linkedButton.setColour(ComboBox::outlineColourId, COLOUR6);
     linkedButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     linkedButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    linkedButton.setButtonText("Link");
+    linkedButton.setButtonText("LINK");
+    linkedButton.setLookAndFeel(&roundedButtonLnf);
 
     // Filter State Buttons
     addAndMakeVisible(filterOffButton);
@@ -207,6 +212,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterOffButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterOffButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterOffButton.setButtonText("OFF");
+    filterOffButton.setLookAndFeel(&roundedButtonLnf);
     
     addAndMakeVisible(filterOffLabel);
     filterOffLabel.setText("Filter", dontSendNotification);
@@ -227,7 +233,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterPreButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterPreButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterPreButton.setButtonText("PRE");
-
+    filterPreButton.setLookAndFeel(&roundedButtonLnf);
+    
     addAndMakeVisible(filterPostButton);
     filterPostButton.setClickingTogglesState(true);
     filterPostButton.setRadioGroupId(filterStateButtons);
@@ -240,7 +247,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterPostButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterPostButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterPostButton.setButtonText("POST");
-
+    filterPostButton.setLookAndFeel(&roundedButtonLnf);
+    
     // Filter Type Toggle Buttons
     addAndMakeVisible(filterLowButton);
     filterLowButton.setClickingTogglesState(true);
@@ -254,6 +262,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterLowButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterLowButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterLowButton.setButtonText("LP");
+    filterLowButton.setLookAndFeel(&roundedButtonLnf);
     
     addAndMakeVisible(filterLowLabel);
     filterLowLabel.setText("Type", dontSendNotification);
@@ -274,6 +283,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterBandButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterBandButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterBandButton.setButtonText("BP");
+    filterBandButton.setLookAndFeel(&roundedButtonLnf);
     
     addAndMakeVisible(filterHighButton);
     filterHighButton.setClickingTogglesState(true);
@@ -287,6 +297,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterHighButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
     filterHighButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterHighButton.setButtonText("HP");
+    filterHighButton.setLookAndFeel(&roundedButtonLnf);
     
     // Attachment
     inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
@@ -371,6 +382,13 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     inputMeter.setLookAndFeel(nullptr);
     outputMeter.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
+    linkedButton.setLookAndFeel(nullptr);
+    filterOffButton.setLookAndFeel(nullptr);
+    filterPreButton.setLookAndFeel(nullptr);
+    filterPostButton.setLookAndFeel(nullptr);
+    filterLowButton.setLookAndFeel(nullptr);
+    filterBandButton.setLookAndFeel(nullptr);
+    filterHighButton.setLookAndFeel(nullptr);
 }
 
 float f(float x)
@@ -554,16 +572,24 @@ void FireAudioProcessorEditor::resized()
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
     
-    
     // knobs
     int knobNum = 7;
     float scale = jmin(getHeight() / 500.f, getWidth() / 1000.f);
+    float scaleMax = jmax(getHeight() / 500.f, getWidth() / 1000.f);
     int newKnobSize = static_cast<int> (knobSize * scale);
     int startX = getWidth() / knobNum;
     int secondShadowY = getHeight() / 10 * 4;
     int firstLineY = secondShadowY + (getHeight() - secondShadowY) * 2 / 5 - newKnobSize / 2;
     int secondLineY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5  - newKnobSize / 2;
     
+    // save presets
+    Rectangle<int> r (getLocalBounds());
+    r = r.removeFromTop (50 * getHeight() / 500);
+    r.removeFromLeft(100 * scaleMax);
+    r.removeFromRight(50 * scaleMax);
+    
+    stateComponent.setBounds (r);
+        
     // first line
     // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     driveKnob.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
@@ -605,7 +631,7 @@ void FireAudioProcessorEditor::resized()
     distortionMode.setBounds(0, getHeight() / 10 * 4, getWidth() / 5, getHeight() / 10);
     
     otherLookAndFeel.scale = scale;
-    buttonLnf.scale = scale;
+    roundedButtonLnf.scale = scale;
 }
 
 void FireAudioProcessorEditor::updateToggleState (Button* button, String name)

@@ -22,6 +22,12 @@ FireAudioProcessor::FireAudioProcessor()
         .withOutput("Output", AudioChannelSet::stereo(), true)
 #endif
     ), treeState(*this, nullptr, "PARAMETERS", createParameters())
+    , stateAB {*this}
+#if JUCE_MAC
+    , statePresets {*this, "Audio/Presets/Wings/presets.xml"}
+#else
+    , statePresets {*this, "Wings/presets.xml"}
+#endif
     , VinL(500.f, 0.f) // VinL(0.f, 500.f)
     , VinR(500.f, 0.f)
     , R1L(80.0f)
@@ -32,6 +38,7 @@ FireAudioProcessor::FireAudioProcessor()
     , RCR(&R1R, &C1R)
     , rootL(&VinL, &RCL)
     , rootR(&VinR, &RCR)
+    
 #endif
 {
     // factor = 2 means 2^2 = 4, 4x oversampling    

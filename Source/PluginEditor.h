@@ -77,7 +77,8 @@ private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor &processor;
-
+    state::StateComponent stateComponent;
+    
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;
     foleys::LevelMeter inputMeter{ foleys::LevelMeter::Minimal };
@@ -189,7 +190,7 @@ private:
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     OtherLookAndFeelRed otherLookAndFeelRed;
-    ButtonLnf buttonLnf;
+    RoundedButtonLnf roundedButtonLnf;
     
     Distortion distortionProcessor;
 

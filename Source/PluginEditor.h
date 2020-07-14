@@ -189,7 +189,6 @@ private:
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
-    OtherLookAndFeelRed otherLookAndFeelRed;
     RoundedButtonLnf roundedButtonLnf;
     
     Distortion distortionProcessor;

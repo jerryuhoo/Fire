@@ -24,9 +24,9 @@ FireAudioProcessor::FireAudioProcessor()
     ), treeState(*this, nullptr, "PARAMETERS", createParameters())
     , stateAB {*this}
 #if JUCE_MAC
-    , statePresets {*this, "Audio/Presets/Wings/presets.xml"}
+    , statePresets {*this, "Audio/Presets/Wings/Fire"}
 #else
-    , statePresets {*this, "Wings/presets.xml"}
+    , statePresets {*this, "Wings/Fire"} //AppData/Roaming/...
 #endif
     , VinL(500.f, 0.f) // VinL(0.f, 500.f)
     , VinR(500.f, 0.f)

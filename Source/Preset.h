@@ -18,107 +18,123 @@
 namespace state
 {
 
-    //==============================================================================
-    void saveStateToXml(const AudioProcessor &processor, XmlElement &xml);
-    void loadStateFromXml(const XmlElement &xml, AudioProcessor &processor);
+//==============================================================================
+void saveStateToXml(const AudioProcessor &processor, XmlElement &xml);
+void loadStateFromXml(const XmlElement &xml, AudioProcessor &processor);
 
-    //==============================================================================
-    /** Handler for AB state toggling and copying in plugin.                        // improve descriptions
-    Create public instance in processor and call .toggleAB() and .copyAB()
-    methods from button callback in editor.
+//==============================================================================
+/** Handler for AB state toggling and copying in plugin.                        // improve descriptions
+Create public instance in processor and call .toggleAB() and .copyAB()
+methods from button callback in editor.
 */
-    class StateAB
-    {
-    public:
-        explicit StateAB(AudioProcessor &p);
+class StateAB
+{
+public:
+    explicit StateAB(AudioProcessor &p);
 
-        void toggleAB();
-        void copyAB();
+    void toggleAB();
+    void copyAB();
 
-    private:
-        AudioProcessor &pluginProcessor;
-        XmlElement ab{"AB"};
+private:
+    AudioProcessor &pluginProcessor;
+    XmlElement ab{"AB"};
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB);
-    };
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB);
+};
 
-    //==============================================================================
-    void createFileIfNonExistant(const File &file);
-    void parseFileToXmlElement(const File &file, XmlElement &xml);
-    void writeXmlElementToFile(const XmlElement &xml, File &file);
-    String getNextAvailablePresetID(const XmlElement &presetXml);
+//==============================================================================
+//int createFileIfNonExistant(const File &file);
+void parseFileToXmlElement(const File &file, XmlElement &xml);
+int writeXmlElementToFile(const XmlElement &xml, File &file);
+String getNextAvailablePresetID(const XmlElement &presetXml);
 
-    //==============================================================================
-    /** Create StatePresets object with XML file saved relative to user
-    data directory.
-    e.g. StatePresets my_sps {"JohnFlynnPlugins/ThisPlugin/presets.xml"}
-    Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
+//==============================================================================
+/** Create StatePresets object with XML file saved relative to user
+data directory.
+e.g. StatePresets my_sps {"JohnFlynnPlugins/ThisPlugin/presets.xml"}
+Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
 */
-    class StatePresets
-    {
-    public:
-        StatePresets(AudioProcessor &proc, const String &presetFileLocation);
-        ~StatePresets();
+class StatePresets
+{
+public:
+    StatePresets(AudioProcessor &proc, const String &presetFileLocation);
+    ~StatePresets();
 
-        void savePreset(const String &presetName); // preset already exists? confirm overwrite
-        void loadPreset(int presetID);
-        void deletePreset();
+    int savePreset(const String &presetName); // preset already exists? confirm overwrite
+    void loadPreset(int presetID);
+    void deletePreset();
 
-        StringArray getPresetNames() const;
-        int getNumPresets() const;
-        int getCurrentPresetId() const;
+    StringArray getPresetNames() const;
+    int getNumPresets() const;
+    int getCurrentPresetId() const;
+    void setPresetName(String name);
+    StringRef getPresetName();
+    void scanAllPresets();
+    
+    
+private:
+    AudioProcessor &pluginProcessor;
+    XmlElement presetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
+    XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
+    File presetFile;                 // on-disk representation
+    String presetName{""};
+    int currentPresetID{0};
+    
+    
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets);
+};
 
-    private:
-        AudioProcessor &pluginProcessor;
-        XmlElement presetXml{"PRESETS"}; // local, in-plugin representation
-        File presetFile;                 // on-disk representation
-        int currentPresetID{0};
-
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets);
-    };
-
-    //==============================================================================
-    /** GUI-side component for the State objects. Handles GUI visual layout and
-    logic of the state handlers.
-    Make private member of the PluginEditor. Initialise with the StateAB
-    and StatePresets objects (these should be public members of the
-    PluginProcessor).
+//==============================================================================
+/** GUI-side component for the State objects. Handles GUI visual layout and
+logic of the state handlers.
+Make private member of the PluginEditor. Initialise with the StateAB
+and StatePresets objects (these should be public members of the
+PluginProcessor).
 */
-    class StateComponent : public Component,
-                           public Button::Listener,
-                           public ComboBox::Listener
-    {
-    public:
-        StateComponent(StateAB &sab, StatePresets &sp);
+class StateComponent : public Component,
+                       public Button::Listener,
+                       public ComboBox::Listener
+{
+public:
+    StateComponent(StateAB &sab, StatePresets &sp);
 
-        void paint(Graphics &) override;
-        void resized() override;
+    void paint(Graphics &) override;
+    void resized() override;
+    
+    String getPresetName();
+    
+private:
+    StateAB &procStateAB;
+    StatePresets &procStatePresets;
 
-    private:
-        StateAB &procStateAB;
-        StatePresets &procStatePresets;
+    OtherLookAndFeel otherLookAndFeel;
+    
+    TextButton toggleABButton;
+    TextButton copyABButton;
+    ComboBox presetBox;
+    TextButton savePresetButton;
+    TextButton deletePresetButton;
+    TextButton openFolderButton;
+    
+    void buttonClicked(Button *clickedButton) override;
+    void comboBoxChanged(ComboBox *changedComboBox) override;
 
-        TextButton toggleABButton;
-        TextButton copyABButton;
-        ComboBox presetBox;
-        TextButton savePresetButton;
-        TextButton deletePresetButton;
+    void refreshPresetBox();
+    void ifPresetActiveShowInBox();
+    void deletePresetAndRefresh();
+    void savePresetAlertWindow();
+    void openPresetFolder();
+    void creatFolderIfNotExist(File userFile);
+    
+    String presetName;
+    
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent);
+};
 
-        void buttonClicked(Button *clickedButton) override;
-        void comboBoxChanged(ComboBox *changedComboBox) override;
+//==============================================================================
+// JF_DECLARE_UNIT_TEST_WITH_STATIC_INSTANCE (StateTests)
 
-        void refreshPresetBox();
-        void ifPresetActiveShowInBox();
-        void deletePresetAndRefresh();
-        void savePresetAlertWindow();
-
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent);
-    };
-
-    //==============================================================================
-    // JF_DECLARE_UNIT_TEST_WITH_STATIC_INSTANCE (StateTests)
-
-    //==============================================================================
+//==============================================================================
 } // namespace state
 
 #endif // STATE_H_INCLUDED

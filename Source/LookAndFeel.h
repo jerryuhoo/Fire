@@ -382,51 +382,124 @@ public:
     {
         return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);;
     }
-};
-
-class OtherLookAndFeelRed : public LookAndFeel_V4
-{
-public:
     
-    Colour mainColour = Colour(255, 0, 0);
-    Colour secondColour = Colours::darkred;
-    Colour backgroundColour = Colour(77, 4, 4);
-    
-
-    OtherLookAndFeelRed()
+    void drawAlertBox (Graphics& g, AlertWindow& alert,
+                                       const Rectangle<int>& textArea, TextLayout& textLayout) override
     {
-        setColour(Slider::textBoxTextColourId, mainColour);
-        setColour(Slider::textBoxBackgroundColourId, backgroundColour);
-        setColour(Slider::textBoxOutlineColourId, backgroundColour); // old is secondColour
-        setColour(Slider::thumbColourId, Colours::red);
-        setColour(Slider::rotarySliderFillColourId, mainColour);
-        setColour(Slider::rotarySliderOutlineColourId, secondColour);
-    }
+        auto cornerSize = 1.0f;
 
-    void drawTickBox(Graphics& g, Component& component,
-        float x, float y, float w, float h,
-        const bool ticked,
-        const bool isEnabled,
-        const bool shouldDrawButtonAsHighlighted,
-        const bool shouldDrawButtonAsDown) override
-    {
-        ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+        g.setColour (alert.findColour (AlertWindow::outlineColourId));
+        g.drawRoundedRectangle (alert.getLocalBounds().toFloat(), cornerSize, 2.0f);
 
-        Rectangle<float> tickBounds(x, y, w, h);
+        auto bounds = alert.getLocalBounds().reduced (1);
+        g.reduceClipRegion (bounds);
 
-        g.setColour(component.findColour(ToggleButton::tickDisabledColourId));
-        g.drawRect(tickBounds, 1.0f);
-        
-        if (ticked)
+        g.setColour (alert.findColour (AlertWindow::backgroundColourId));
+        g.fillRoundedRectangle (bounds.toFloat(), cornerSize);
+
+        auto iconSpaceUsed = 0;
+
+        auto iconWidth = 80;
+        auto iconSize = jmin (iconWidth + 50, bounds.getHeight() + 20);
+
+        if (alert.containsAnyExtraComponents() || alert.getNumButtons() > 2)
+            iconSize = jmin (iconSize, textArea.getHeight() + 50);
+
+        Rectangle<int> iconRect (iconSize / -10, iconSize / -10,
+                                 iconSize, iconSize);
+
+        if (alert.getAlertType() != AlertWindow::NoIcon)
         {
-            g.setColour(component.findColour(ToggleButton::tickColourId));
-            // auto tick = getTickShape(0.75f);
-            // g.fillPath(tick, tick.getTransformToScaleToFit(tickBounds.reduced(4, 5).toFloat(), false));
-            Rectangle<float> tickInnerBounds(x + 1, y + 1, w - 2, h - 2);
-            g.fillRect(tickInnerBounds);
+            Path icon;
+            char character;
+            uint32 colour;
+
+            if (alert.getAlertType() == AlertWindow::WarningIcon)
+            {
+                character = '!';
+
+                icon.addTriangle ((float) iconRect.getX() + (float) iconRect.getWidth() * 0.5f, (float) iconRect.getY(),
+                                  static_cast<float> (iconRect.getRight()), static_cast<float> (iconRect.getBottom()),
+                                  static_cast<float> (iconRect.getX()), static_cast<float> (iconRect.getBottom()));
+
+                icon = icon.createPathWithRoundedCorners (5.0f);
+                colour = 0x66ff2a00;
+            }   
+            else
+            {
+                colour = Colour (0xff00b0b9).withAlpha (0.4f).getARGB();
+                character = alert.getAlertType() == AlertWindow::InfoIcon ? 'i' : '?';
+
+                icon.addEllipse (iconRect.toFloat());
+            }
+
+            GlyphArrangement ga;
+            ga.addFittedText ({ (float) iconRect.getHeight() * 0.9f, Font::bold },
+                              String::charToString ((juce_wchar) (uint8) character),
+                              static_cast<float> (iconRect.getX()), static_cast<float> (iconRect.getY()),
+                              static_cast<float> (iconRect.getWidth()), static_cast<float> (iconRect.getHeight()),
+                              Justification::centred, false);
+            ga.createPath (icon);
+
+            icon.setUsingNonZeroWinding (false);
+            g.setColour (Colour (colour));
+            g.fillPath (icon);
+
+            iconSpaceUsed = iconWidth;
         }
+
+        g.setColour (alert.findColour (AlertWindow::textColourId));
+
+        Rectangle<int> alertBounds (bounds.getX() + iconSpaceUsed, 30,
+                                    bounds.getWidth(), bounds.getHeight() - getAlertWindowButtonHeight() - 20);
+
+        textLayout.draw (g, alertBounds.toFloat());
     }
 };
+
+//class OtherLookAndFeelRed : public LookAndFeel_V4
+//{
+//public:
+//
+//    Colour mainColour = Colour(255, 0, 0);
+//    Colour secondColour = Colours::darkred;
+//    Colour backgroundColour = Colour(77, 4, 4);
+//
+//
+//    OtherLookAndFeelRed()
+//    {
+//        setColour(Slider::textBoxTextColourId, mainColour);
+//        setColour(Slider::textBoxBackgroundColourId, backgroundColour);
+//        setColour(Slider::textBoxOutlineColourId, backgroundColour); // old is secondColour
+//        setColour(Slider::thumbColourId, Colours::red);
+//        setColour(Slider::rotarySliderFillColourId, mainColour);
+//        setColour(Slider::rotarySliderOutlineColourId, secondColour);
+//    }
+//
+//    void drawTickBox(Graphics& g, Component& component,
+//        float x, float y, float w, float h,
+//        const bool ticked,
+//        const bool isEnabled,
+//        const bool shouldDrawButtonAsHighlighted,
+//        const bool shouldDrawButtonAsDown) override
+//    {
+//        ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+//
+//        Rectangle<float> tickBounds(x, y, w, h);
+//
+//        g.setColour(component.findColour(ToggleButton::tickDisabledColourId));
+//        g.drawRect(tickBounds, 1.0f);
+//
+//        if (ticked)
+//        {
+//            g.setColour(component.findColour(ToggleButton::tickColourId));
+//            // auto tick = getTickShape(0.75f);
+//            // g.fillPath(tick, tick.getTransformToScaleToFit(tickBounds.reduced(4, 5).toFloat(), false));
+//            Rectangle<float> tickInnerBounds(x + 1, y + 1, w - 2, h - 2);
+//            g.fillRect(tickInnerBounds);
+//        }
+//    }
+//};
 
 class RoundedButtonLnf : public LookAndFeel_V4
 {

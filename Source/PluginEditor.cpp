@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.698"
+#define VERSION "0.699"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -67,7 +67,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setSize(1000, 500);
 
     setLookAndFeel(&otherLookAndFeel);
-
+    
     /*
     // input knob
     addAndMakeVisible(inputKnob);

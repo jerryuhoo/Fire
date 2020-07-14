@@ -85,7 +85,7 @@ void parseFileToXmlElement(const File &file, XmlElement &xml)
         xml = *parsed;
 }
 
-int writeXmlElementToFile(const XmlElement &xml, File &file)
+int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName)
 {
     //createFileIfNonExistant(file);
     // 1 saved a new file
@@ -99,8 +99,8 @@ int writeXmlElementToFile(const XmlElement &xml, File &file)
     }
     else
     {
-        bool choice = NativeMessageBox::showOkCancelBox(AlertWindow::NoIcon,
-        "Warning", "Preset already exists, replace it?", nullptr, nullptr);
+        bool choice = NativeMessageBox::showOkCancelBox(AlertWindow::WarningIcon,
+        "\""+presetName + ".fire\" already exists. Do you want to replace it?", "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.", nullptr, nullptr);
         if (choice)
         {
             file.replaceFileIn(file.getFullPathName());
@@ -166,7 +166,7 @@ void StatePresets::scanAllPresets()
 }
 
 
-int StatePresets::savePreset(const String &presetName)
+int StatePresets::savePreset(const String &presetName, bool hasExtension)
 {
     int saveResult;
     
@@ -177,7 +177,16 @@ int StatePresets::savePreset(const String &presetName)
     File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
     //presetFile = "~/Library/Audio/Presets/Wings/Fire/User/"+getPresetName();
     //DBG(userPresetFile.getFullPathName());
-    saveResult = writeXmlElementToFile(presetXmlSingle, userPresetFile);
+    if (hasExtension)
+    {
+        userPresetFile.replaceFileIn(userPresetFile.getFullPathName());
+        presetXmlSingle.writeTo(userPresetFile);
+        saveResult = 2;
+    }
+    else
+    {
+        saveResult = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName);
+    }
     
     // save temp xml which includes all presets
     if (saveResult == 1)
@@ -260,6 +269,11 @@ int StatePresets::getNumPresets() const
 int StatePresets::getCurrentPresetId() const
 {
     return currentPresetID;
+}
+
+File StatePresets::getFile()
+{
+    return presetFile;
 }
 
 //==============================================================================
@@ -461,15 +475,23 @@ void StateComponent::savePresetAlertWindow()
 //            refreshPresetBox();
 //            presetBox.setSelectedId(procStatePresets.getNumPresets());
 //        }
-    File userFile ("~/Library/Audio/Presets/Wings/Fire/User"); // need to get userfile path from sp?
-
+    //File userFile ("~/Library/Audio/Presets/Wings/Fire/User"); // need to get userfile path from sp?
+    File userFile = procStatePresets.getFile().getChildFile("User");
     creatFolderIfNotExist(userFile);
     FileChooser filechooser("save preset", userFile, "*", true, false,nullptr);
     if (filechooser.browseForFileToSave(true)) {
         int numPresets;
-        presetName = filechooser.getResult().getFileName();
+        // this is really shit code, but I don't have any other way to solve this shit problem!!!
+        File inputName = filechooser.getResult();
+        bool hasExtension = false;
+        if (inputName.hasFileExtension(".fire")) // for example, this input is "a.fire"
+        {
+            procStatePresets.setPresetName(presetName);
+            hasExtension = true;    // if hasExtension is true, it will not pop-up a self-defined warning window
+        }
+        presetName = inputName.getFileNameWithoutExtension();
         procStatePresets.setPresetName(presetName);
-        numPresets = procStatePresets.savePreset(presetName);
+        numPresets = procStatePresets.savePreset(presetName, hasExtension);
         if (numPresets > 0)
         {
             refreshPresetBox();
@@ -481,7 +503,8 @@ void StateComponent::openPresetFolder()
 {
     // open preset folder
     
-    File userFile ("~/Library/Audio/Presets/Wings/Fire");
+    //File userFile ("~/Library/Audio/Presets/Wings/Fire");
+    File userFile = procStatePresets.getFile();
     creatFolderIfNotExist(userFile);
     if (!userFile.existsAsFile())
     {

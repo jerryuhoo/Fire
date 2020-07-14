@@ -45,7 +45,7 @@ private:
 //==============================================================================
 //int createFileIfNonExistant(const File &file);
 void parseFileToXmlElement(const File &file, XmlElement &xml);
-int writeXmlElementToFile(const XmlElement &xml, File &file);
+int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName);
 String getNextAvailablePresetID(const XmlElement &presetXml);
 
 //==============================================================================
@@ -60,7 +60,7 @@ public:
     StatePresets(AudioProcessor &proc, const String &presetFileLocation);
     ~StatePresets();
 
-    int savePreset(const String &presetName); // preset already exists? confirm overwrite
+    int savePreset(const String &presetName, bool hasExtension); // preset already exists? confirm overwrite
     void loadPreset(int presetID);
     void deletePreset();
 
@@ -70,7 +70,7 @@ public:
     void setPresetName(String name);
     StringRef getPresetName();
     void scanAllPresets();
-    
+    File getFile();
     
 private:
     AudioProcessor &pluginProcessor;

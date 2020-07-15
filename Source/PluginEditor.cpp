@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.700"
+#define VERSION "0.702"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -453,13 +453,14 @@ void FireAudioProcessorEditor::paint(Graphics &g)
 
     int mode = *processor.treeState.getRawParameterValue("mode");
     float inputGain = *processor.treeState.getRawParameterValue("inputGain");
-    float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
+    float drive = *processor.treeState.getRawParameterValue("drive");
+    float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
 
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
     distortionProcessor.controls.mix = mix;
-
+    distortionProcessor.controls.rectification = rec;
     
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
     // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
@@ -506,6 +507,9 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             {
                 functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
             }
+            
+            // retification
+            functionValue = distortionProcessor.rectificationProcess(functionValue);
             
             // mix
             functionValue = (1.f - mix) * value + mix * functionValue;

@@ -4,6 +4,3 @@ TODO
 3. smooth filter?
 4. adjust the position of ff meters
 5. add sub menu for different folders
-6. bug when choosing folder (always .../User)
-7. add init preset in menu
-8. move open folder into menu

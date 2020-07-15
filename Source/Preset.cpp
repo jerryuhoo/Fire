@@ -31,6 +31,7 @@ void loadStateFromXml(const XmlElement &xml, AudioProcessor &proc)
             p->setValueNotifyingHost((float)xml.getDoubleAttribute(p->paramID, p->getValue()));
 }
 
+
 //==============================================================================
 StateAB::StateAB(AudioProcessor &p)
     : pluginProcessor{p}
@@ -85,7 +86,7 @@ void parseFileToXmlElement(const File &file, XmlElement &xml)
         xml = *parsed;
 }
 
-int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName)
+int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension)
 {
     //createFileIfNonExistant(file);
     // 1 saved a new file
@@ -99,18 +100,29 @@ int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName)
     }
     else
     {
-        bool choice = NativeMessageBox::showOkCancelBox(AlertWindow::WarningIcon,
-        "\""+presetName + ".fire\" already exists. Do you want to replace it?", "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.", nullptr, nullptr);
-        if (choice)
+        if (!hasExtension) // pop up alert window
         {
+            bool choice = NativeMessageBox::showOkCancelBox(AlertWindow::WarningIcon,
+            "\""+presetName + ".fire\" already exists. Do you want to replace it?", "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.", nullptr, nullptr);
+            if (choice)
+            {
+                file.replaceFileIn(file.getFullPathName());
+                xml.writeTo(file);
+                return 2;
+            }
+            else
+            {
+                return 3;
+            }
+        }
+        else // no alert window
+        {
+            // replace existing file and return 2
             file.replaceFileIn(file.getFullPathName());
             xml.writeTo(file);
             return 2;
         }
-        else
-        {
-            return 3;
-        }
+        
     }
     
 }
@@ -166,41 +178,44 @@ void StatePresets::scanAllPresets()
 }
 
 
-int StatePresets::savePreset(const String &presetName, bool hasExtension)
+int StatePresets::savePreset(File savePath)
 {
     int saveResult;
-    
+    File userPresetFile;
+    bool hasExtension = false;
+    String presetName = savePath.getFileNameWithoutExtension();
+
+    if (!savePath.hasFileExtension(".fire"))
+    {
+        userPresetFile = savePath.getFullPathName() + ".fire";
+        
+    }
+    else
+    {
+        userPresetFile = savePath.getFullPathName();
+        hasExtension = true;
+    }
     // save single to real file
     presetXmlSingle.removeAllAttributes(); // clear all first
     presetXmlSingle.setAttribute("presetName", presetName); // set preset name
     saveStateToXml(pluginProcessor, presetXmlSingle);
-    File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
-    //presetFile = "~/Library/Audio/Presets/Wings/Fire/User/"+getPresetName();
-    //DBG(userPresetFile.getFullPathName());
-    if (hasExtension)
-    {
-        userPresetFile.replaceFileIn(userPresetFile.getFullPathName());
-        presetXmlSingle.writeTo(userPresetFile);
-        saveResult = 2;
-    }
-    else
-    {
-        saveResult = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName);
-    }
-    
+    //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
+
+    saveResult = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
+
     // save temp xml which includes all presets
     if (saveResult == 1)
     {
         String newPresetID = getNextAvailablePresetID(presetXml); // presetID format: "preset##"
-        std::unique_ptr<XmlElement> currentState{new XmlElement{newPresetID}}; // must be pointer as
-        saveStateToXml(pluginProcessor, *currentState);                        // parent takes ownership
+        std::unique_ptr<XmlElement> currentState{new XmlElement{newPresetID}}; // must be pointer
         currentState->setAttribute("presetName", presetName);
+        saveStateToXml(pluginProcessor, *currentState);
         presetXml.addChildElement(currentState.release()); // will be deleted by parent element
         return getNumPresets();
     }
     else if (saveResult == 2)
     {
-        int currentPresetId;
+        int currentPresetId = -1;
         int index = 1;
         forEachXmlChildElement (presetXml, e)
         {
@@ -229,6 +244,7 @@ void StatePresets::loadPreset(int presetID)
     }
     currentPresetID = presetID; // allow 0 for 'no preset selected' (?)
 }
+
 
 void StatePresets::deletePreset()
 {
@@ -276,6 +292,15 @@ File StatePresets::getFile()
     return presetFile;
 }
 
+void StatePresets::initPreset()
+{
+    for (const auto &param : pluginProcessor.getParameters())
+        if (auto *p = dynamic_cast<AudioProcessorParameterWithID *>(param))
+            // if not in xml set current
+            p->setValueNotifyingHost(p->getDefaultValue());
+    //set preset combobox to 0
+}
+
 //==============================================================================
 void populateComboBox(ComboBox &comboBox, const StringArray &listItems)
 {
@@ -291,7 +316,7 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
   copyABButton{"Copy"},
   savePresetButton{"Save"},
   deletePresetButton{"Delete"},
-  openFolderButton{"Folder"}
+  menuButton{"Menu"}
 {
     addAndMakeVisible(toggleABButton);
     addAndMakeVisible(copyABButton);
@@ -315,8 +340,8 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
     savePresetButton.addListener(this);
     //addAndMakeVisible(deletePresetButton);
     //deletePresetButton.addListener(this);
-    addAndMakeVisible(openFolderButton);
-    openFolderButton.addListener(this);
+    addAndMakeVisible(menuButton);
+    menuButton.addListener(this);
     
     toggleABButton.setColour(TextButton::textColourOffId, COLOUR1);
     toggleABButton.setColour(TextButton::buttonColourId, COLOUR5);
@@ -330,9 +355,20 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
     //deletePresetButton.setColour(TextButton::textColourOffId, COLOUR1);
     //deletePresetButton.setColour(TextButton::buttonColourId, COLOUR5);
     //deletePresetButton.setColour(ComboBox::outlineColourId, COLOUR5);
-    openFolderButton.setColour(TextButton::textColourOffId, COLOUR1);
-    openFolderButton.setColour(TextButton::buttonColourId, COLOUR5);
-    openFolderButton.setColour(ComboBox::outlineColourId, COLOUR5);
+    menuButton.setColour(TextButton::textColourOffId, COLOUR1);
+    menuButton.setColour(TextButton::buttonColourId, COLOUR5);
+    menuButton.setColour(ComboBox::outlineColourId, COLOUR5);
+    menuButton.getLookAndFeel().setColour(ComboBox::textColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(ComboBox::arrowColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(ComboBox::buttonColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(ComboBox::outlineColourId, COLOUR7);
+    menuButton.getLookAndFeel().setColour(ComboBox::focusedOutlineColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(ComboBox::backgroundColourId, COLOUR7);
+    menuButton.getLookAndFeel().setColour(PopupMenu::textColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, COLOUR5);
+    menuButton.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(PopupMenu::headerTextColourId, COLOUR1);
+    menuButton.getLookAndFeel().setColour(PopupMenu::backgroundColourId, COLOUR6);
     
 }
 
@@ -353,7 +389,7 @@ void StateComponent::resized()
     presetBox.setBounds(r.removeFromLeft(componentWidth * 2));
     savePresetButton.setBounds(r.removeFromLeft(componentWidth));
     //deletePresetButton.setBounds(r.removeFromLeft(componentWidth));
-    openFolderButton.setBounds(r.removeFromLeft(componentWidth));
+    menuButton.setBounds(r.removeFromLeft(componentWidth));
 }
 
 void StateComponent::buttonClicked(Button *clickedButton)
@@ -366,8 +402,9 @@ void StateComponent::buttonClicked(Button *clickedButton)
         savePresetAlertWindow();
     //if (clickedButton == &deletePresetButton)
     //    deletePresetAndRefresh();
-    if (clickedButton == &openFolderButton)
-        openPresetFolder();
+    if (clickedButton == &menuButton)
+        //openPresetFolder();
+        popPresetMenu();
 }
 
 void StateComponent::comboBoxChanged(ComboBox *changedComboBox)
@@ -483,15 +520,17 @@ void StateComponent::savePresetAlertWindow()
         int numPresets;
         // this is really shit code, but I don't have any other way to solve this shit problem!!!
         File inputName = filechooser.getResult();
-        bool hasExtension = false;
-        if (inputName.hasFileExtension(".fire")) // for example, this input is "a.fire"
-        {
-            procStatePresets.setPresetName(presetName);
-            hasExtension = true;    // if hasExtension is true, it will not pop-up a self-defined warning window
-        }
-        presetName = inputName.getFileNameWithoutExtension();
-        procStatePresets.setPresetName(presetName);
-        numPresets = procStatePresets.savePreset(presetName, hasExtension);
+        //DBG(inputName.getFullPathName());
+//        bool hasExtension = false;
+//        if (inputName.hasFileExtension(".fire")) // for example, this input is "a.fire"
+//        {
+//            procStatePresets.setPresetName(presetName);
+//            hasExtension = true;    // if hasExtension is true, it will not pop-up a self-defined warning window
+//        }
+//        presetName = inputName.getFileNameWithoutExtension();
+//        procStatePresets.setPresetName(presetName);
+        //numPresets = procStatePresets.savePreset(presetName, hasExtension);
+        numPresets = procStatePresets.savePreset(inputName);
         if (numPresets > 0)
         {
             refreshPresetBox();
@@ -525,4 +564,29 @@ String StateComponent::getPresetName()
     return presetName;
 }
 
+void StateComponent::popPresetMenu()
+{
+    
+    presetMenu.clear();
+    presetMenu.addItem(1, "Init", true);
+    presetMenu.addItem(2, "Open Preset Folder", true);
+
+    
+    int result = presetMenu.show();
+    if (result == 1)
+    {
+        procStatePresets.initPreset();
+        presetBox.setSelectedId(0);
+    }
+    if (result == 2)
+    {
+        openPresetFolder();
+    }
+}
+
+
+
+
 } // namespace state
+
+

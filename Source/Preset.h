@@ -45,7 +45,7 @@ private:
 //==============================================================================
 //int createFileIfNonExistant(const File &file);
 void parseFileToXmlElement(const File &file, XmlElement &xml);
-int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName);
+int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension);
 String getNextAvailablePresetID(const XmlElement &presetXml);
 
 //==============================================================================
@@ -60,7 +60,7 @@ public:
     StatePresets(AudioProcessor &proc, const String &presetFileLocation);
     ~StatePresets();
 
-    int savePreset(const String &presetName, bool hasExtension); // preset already exists? confirm overwrite
+    int savePreset(File savePath);
     void loadPreset(int presetID);
     void deletePreset();
 
@@ -71,6 +71,7 @@ public:
     StringRef getPresetName();
     void scanAllPresets();
     File getFile();
+    void initPreset();
     
 private:
     AudioProcessor &pluginProcessor;
@@ -114,7 +115,8 @@ private:
     ComboBox presetBox;
     TextButton savePresetButton;
     TextButton deletePresetButton;
-    TextButton openFolderButton;
+    TextButton menuButton;
+    PopupMenu presetMenu;
     
     void buttonClicked(Button *clickedButton) override;
     void comboBoxChanged(ComboBox *changedComboBox) override;
@@ -125,6 +127,7 @@ private:
     void savePresetAlertWindow();
     void openPresetFolder();
     void creatFolderIfNotExist(File userFile);
+    void popPresetMenu();
     
     String presetName;
     

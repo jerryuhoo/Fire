@@ -347,20 +347,31 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     distortionMode.addItem("Diode Clipping 1", 9);
     distortionMode.addSeparator();
 
-    // distortionMode.setSelectedId (1);
     distortionMode.setJustificationType(Justification::centred);
-    distortionMode.setColour(ComboBox::textColourId, COLOUR1);
-    distortionMode.setColour(ComboBox::arrowColourId, COLOUR1);
-    distortionMode.setColour(ComboBox::buttonColourId, COLOUR1);
-    distortionMode.setColour(ComboBox::outlineColourId, COLOUR7);
-    distortionMode.setColour(ComboBox::focusedOutlineColourId, COLOUR1);
-    distortionMode.setColour(ComboBox::backgroundColourId, COLOUR7);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, COLOUR1);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, COLOUR5);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, COLOUR1);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, COLOUR1);
-    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, COLOUR6);
+//    distortionMode.setColour(ComboBox::textColourId, COLOUR1);
+//    distortionMode.setColour(ComboBox::arrowColourId, COLOUR1);
+//    distortionMode.setColour(ComboBox::buttonColourId, COLOUR1);
+//    distortionMode.setColour(ComboBox::outlineColourId, COLOUR7);
+//    distortionMode.setColour(ComboBox::focusedOutlineColourId, COLOUR1);
+//    distortionMode.setColour(ComboBox::backgroundColourId, COLOUR7);
+//    distortionMode.getLookAndFeel().setColour(PopupMenu::textColourId, COLOUR1);
+//    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, COLOUR5);
+//    distortionMode.getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, COLOUR1);
+//    distortionMode.getLookAndFeel().setColour(PopupMenu::headerTextColourId, COLOUR1);
+//    distortionMode.getLookAndFeel().setColour(PopupMenu::backgroundColourId, COLOUR6);
     
+    // use global lookandfeel
+    getLookAndFeel().setColour(ComboBox::textColourId, COLOUR1);
+    getLookAndFeel().setColour(ComboBox::arrowColourId, COLOUR1);
+    getLookAndFeel().setColour(ComboBox::buttonColourId, COLOUR1);
+    getLookAndFeel().setColour(ComboBox::outlineColourId, COLOUR7);
+    getLookAndFeel().setColour(ComboBox::focusedOutlineColourId, COLOUR1);
+    getLookAndFeel().setColour(ComboBox::backgroundColourId, COLOUR7);
+    getLookAndFeel().setColour(PopupMenu::textColourId, COLOUR1);
+    getLookAndFeel().setColour(PopupMenu::highlightedBackgroundColourId, COLOUR5);
+    getLookAndFeel().setColour(PopupMenu::highlightedTextColourId, COLOUR1);
+    getLookAndFeel().setColour(PopupMenu::headerTextColourId, COLOUR1);
+    getLookAndFeel().setColour(PopupMenu::backgroundColourId, COLOUR6);
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     
@@ -672,9 +683,4 @@ void FireAudioProcessorEditor::setButtonState(TextButton* textButton, Slider* sl
         slider1->setEnabled(true);
         slider2->setEnabled(true);
     }
-}
-
-void setEnableStates ()
-{
-    
 }

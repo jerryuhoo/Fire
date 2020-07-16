@@ -46,7 +46,6 @@ private:
 //int createFileIfNonExistant(const File &file);
 void parseFileToXmlElement(const File &file, XmlElement &xml);
 int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension);
-String getNextAvailablePresetID(const XmlElement &presetXml);
 
 //==============================================================================
 /** Create StatePresets object with XML file saved relative to user
@@ -59,19 +58,23 @@ class StatePresets
 public:
     StatePresets(AudioProcessor &proc, const String &presetFileLocation);
     ~StatePresets();
-
+    
     int savePreset(File savePath);
-    void loadPreset(int presetID);
+    void loadPreset(String selectedName);
     void deletePreset();
 
-    StringArray getPresetNames() const;
+    void setPresetAndFolderNames(ComboBox &menu);
     int getNumPresets() const;
+    String getNextAvailablePresetID(const XmlElement &presetXml);
     int getCurrentPresetId() const;
     void setPresetName(String name);
     StringRef getPresetName();
     void scanAllPresets();
     File getFile();
     void initPreset();
+    void recursiveFileSearch(XmlElement &parentXML, File dir);
+    void recursivePresetLoad(XmlElement parentXml, String presetID);
+    void recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, int &index);
     
 private:
     AudioProcessor &pluginProcessor;
@@ -80,7 +83,7 @@ private:
     File presetFile;                 // on-disk representation
     String presetName{""};
     int currentPresetID{0};
-    
+    int numPresets = 0;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets);
 };
@@ -126,6 +129,7 @@ private:
     void deletePresetAndRefresh();
     void savePresetAlertWindow();
     void openPresetFolder();
+    void rescanPresetFolder();
     void creatFolderIfNotExist(File userFile);
     void popPresetMenu();
     

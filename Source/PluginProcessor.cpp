@@ -549,7 +549,10 @@ void FireAudioProcessor::updateFilter()
 AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
-                 
+       
+    parameters.push_back(std::make_unique<AudioParameterInt>("preset", "Preset", 0, 1000, 0));
+    //parameters.push_back(std::make_unique<AudioParameterBool>("sideAB", "SideAB", false));
+    
     parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 8, 1));
     parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));

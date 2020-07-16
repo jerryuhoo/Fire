@@ -127,11 +127,7 @@ int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, 
     
 }
 
-String getNextAvailablePresetID(const XmlElement &presetXml)
-{
-    int newPresetIDNumber = presetXml.getNumChildElements() + 1; // 1 indexed to match ComboBox
-    return "preset" + static_cast<String>(newPresetIDNumber);    // format: preset##
-}
+
 
 //==============================================================================
 StatePresets::StatePresets(AudioProcessor &proc, const String &presetFileLocation)
@@ -148,17 +144,61 @@ StatePresets::~StatePresets()
 
 }
 
-void StatePresets::scanAllPresets()
+String StatePresets::getNextAvailablePresetID(const XmlElement &presetXml)
 {
-    RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
+    int newPresetIDNumber = getNumPresets();
+    return "preset" + static_cast<String>(newPresetIDNumber);    // format: preset##
+}
+
+void StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
+{
+    RangedDirectoryIterator iterator(dir, false, "*", 3); // findDirectories = 1, findFiles = 2, findFilesAndDirectories = 3, ignoreHiddenFiles = 4
     for(auto file : iterator)
     {
-        String newPresetID = getNextAvailablePresetID(presetXml); // presetID format: "preset##"
-        std::unique_ptr<XmlElement> currentState{new XmlElement{newPresetID}}; // must be pointer as parent takes ownership
-        parseFileToXmlElement(file.getFile(), *currentState);
-        presetXml.addChildElement(currentState.release()); // will be deleted by parent element
+        if (file.isDirectory())
+        {
+            String folderName;
+            folderName = file.getFile().getFileName();
+            std::unique_ptr<XmlElement> currentState{new XmlElement{folderName}}; // must be pointer as parent takes ownership
+            DBG(dir.getChildFile(file.getFile().getFileName()).getFullPathName());
+            recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName()));
+            parentXML.addChildElement(currentState.release()); // will be deleted by parent element
+        }
+        else if (file.getFile().hasFileExtension(".fire"))
+        {
+            numPresets++;
+            String newPresetID = getNextAvailablePresetID(presetXml); // presetID format: "preset##"
+            std::unique_ptr<XmlElement> currentState{new XmlElement{newPresetID}}; // must be pointer as parent takes ownership
+            parseFileToXmlElement(file.getFile(), *currentState);
+            currentState->setTagName(newPresetID);
+            
+            // if file name differs from preset name in .fire
+            String newName = file.getFile().getFileNameWithoutExtension();
+            if (newName != currentState->getStringAttribute("presetName")) {
+                currentState->setAttribute("presetName", newName);
+            }
+            
+            //presetXml.addChildElement(currentState.release()); // will be deleted by parent element
+            parentXML.addChildElement(currentState.release()); // will be deleted by parent element
+        }
+        else
+        {
+            // not a fire preset, maybe popup alert window?
+            //jassertfalse;
+        }
+        
     }
+}
 
+void StatePresets::scanAllPresets()
+{
+    numPresets = 0;
+    presetXml.deleteAllChildElements();
+    //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
+    
+    recursiveFileSearch(presetXml, presetFile);
+    //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
+    
     //  presetFile
 //    DirectoryIterator iter(presetFile, true, "*.fire", 2);
 //    DBG(presetFile.getFileName());
@@ -208,7 +248,8 @@ int StatePresets::savePreset(File savePath)
     {
         String newPresetID = getNextAvailablePresetID(presetXml); // presetID format: "preset##"
         std::unique_ptr<XmlElement> currentState{new XmlElement{newPresetID}}; // must be pointer
-        currentState->setAttribute("presetName", presetName);
+        //std::unique_ptr<XmlElement> currentState{new XmlElement{"preset"}}; // must be pointer
+        currentState->setAttribute("presetName", newPresetID);
         saveStateToXml(pluginProcessor, *currentState);
         presetXml.addChildElement(currentState.release()); // will be deleted by parent element
         return getNumPresets();
@@ -235,14 +276,36 @@ int StatePresets::savePreset(File savePath)
     
 }
 
-void StatePresets::loadPreset(int presetID)
+void StatePresets::recursivePresetLoad(XmlElement parentXml, String presetID)
 {
-    if (1 <= presetID && presetID <= presetXml.getNumChildElements()) // 1 indexed to match ComboBox
+    
+    int index = 0;
+    forEachXmlChildElement(parentXml, child)
     {
-        XmlElement loadThisChild{*presetXml.getChildElement(presetID - 1)}; // (0 indexed method)
-        loadStateFromXml(loadThisChild, pluginProcessor);
+        DBG(child->getTagName());
+        DBG(presetID);
+        if (child->hasAttribute("presetName") && child->getTagName() == presetID)
+        {
+            XmlElement loadThisChild{*child}; // (0 indexed method)
+            loadStateFromXml(loadThisChild, pluginProcessor);
+        }
+        else
+        {
+            recursivePresetLoad(*child, presetID);
+        }
+        index++;
     }
-    currentPresetID = presetID; // allow 0 for 'no preset selected' (?)
+}
+
+void StatePresets::loadPreset(String presetID)
+{
+    recursivePresetLoad(presetXml, presetID);
+//    if (1 <= presetID && presetID <= getNumPresets()) // 1 indexed to match ComboBox
+//    {
+//        XmlElement loadThisChild{*presetXml.getChildElement(presetID - 1)}; // (0 indexed method)
+//        loadStateFromXml(loadThisChild, pluginProcessor);
+//    }
+    //currentPresetID = presetID; // allow 0 for 'no preset selected' (?)
 }
 
 
@@ -263,23 +326,43 @@ StringRef StatePresets::getPresetName()
     return presetName;
 }
 
-StringArray StatePresets::getPresetNames() const
+void StatePresets::recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, int &index)
 {
-    StringArray names;
-
-    forEachXmlChildElement(presetXml, child) // should avoid macro?
+    forEachXmlChildElement(parentXml, child) // should avoid macro?
     {
-        String n = child->getStringAttribute("presetName");
-        if (n == "")
-            n = "(Unnamed preset)";
-        names.add(n);
+        if (child->hasAttribute("presetName"))
+        {
+            // is preset
+            index++;
+            String n = child->getStringAttribute("presetName");
+            if (n == "")
+                n = "(Unnamed preset)";
+            menu.addItem(n, index);
+        }
+        else
+        {
+            // is folder
+            if (index != 0) {
+                menu.addSeparator();
+            }
+            String n = child->getTagName();
+            menu.addSectionHeading(n);
+            
+            recursivePresetNameAdd(*child, menu, index);
+        }
     }
-    return names; // hopefully moves
+}
+
+void StatePresets::setPresetAndFolderNames(ComboBox &menu)
+{
+    int index = 0;
+    recursivePresetNameAdd(presetXml, menu, index);
 }
 
 int StatePresets::getNumPresets() const
 {
-    return presetXml.getNumChildElements();
+    //return presetXml.getNumChildElements();
+    return numPresets;
 }
 
 int StatePresets::getCurrentPresetId() const
@@ -302,11 +385,7 @@ void StatePresets::initPreset()
 }
 
 //==============================================================================
-void populateComboBox(ComboBox &comboBox, const StringArray &listItems)
-{
-    for (int i = 0; i < listItems.size(); ++i)
-        comboBox.addItem(listItems[i], i + 1); // 1-indexed ID for ComboBox
-}
+
 
 //==============================================================================
 StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
@@ -409,16 +488,15 @@ void StateComponent::buttonClicked(Button *clickedButton)
 
 void StateComponent::comboBoxChanged(ComboBox *changedComboBox)
 {
-    const int selectedId{changedComboBox->getSelectedId()};
-    procStatePresets.loadPreset(selectedId);
+    
+    const String presetID{"preset" + (String)changedComboBox->getSelectedId()};
+    procStatePresets.loadPreset(presetID);
 }
 
 void StateComponent::refreshPresetBox()
 {
     presetBox.clear();
-    StringArray presetNames{procStatePresets.getPresetNames()};
-
-    populateComboBox(presetBox, presetNames);
+    procStatePresets.setPresetAndFolderNames(presetBox);
 }
 
 void StateComponent::ifPresetActiveShowInBox()
@@ -512,7 +590,7 @@ void StateComponent::savePresetAlertWindow()
 //            refreshPresetBox();
 //            presetBox.setSelectedId(procStatePresets.getNumPresets());
 //        }
-    //File userFile ("~/Library/Audio/Presets/Wings/Fire/User"); // need to get userfile path from sp?
+
     File userFile = procStatePresets.getFile().getChildFile("User");
     creatFolderIfNotExist(userFile);
     FileChooser filechooser("save preset", userFile, "*", true, false,nullptr);
@@ -520,16 +598,6 @@ void StateComponent::savePresetAlertWindow()
         int numPresets;
         // this is really shit code, but I don't have any other way to solve this shit problem!!!
         File inputName = filechooser.getResult();
-        //DBG(inputName.getFullPathName());
-//        bool hasExtension = false;
-//        if (inputName.hasFileExtension(".fire")) // for example, this input is "a.fire"
-//        {
-//            procStatePresets.setPresetName(presetName);
-//            hasExtension = true;    // if hasExtension is true, it will not pop-up a self-defined warning window
-//        }
-//        presetName = inputName.getFileNameWithoutExtension();
-//        procStatePresets.setPresetName(presetName);
-        //numPresets = procStatePresets.savePreset(presetName, hasExtension);
         numPresets = procStatePresets.savePreset(inputName);
         if (numPresets > 0)
         {
@@ -541,14 +609,18 @@ void StateComponent::savePresetAlertWindow()
 void StateComponent::openPresetFolder()
 {
     // open preset folder
-    
-    //File userFile ("~/Library/Audio/Presets/Wings/Fire");
     File userFile = procStatePresets.getFile();
     creatFolderIfNotExist(userFile);
     if (!userFile.existsAsFile())
     {
         File(userFile).startAsProcess();
     }
+}
+
+void StateComponent::rescanPresetFolder()
+{
+    procStatePresets.scanAllPresets();
+    refreshPresetBox();
 }
 
 void StateComponent::creatFolderIfNotExist(File userFile)
@@ -570,7 +642,7 @@ void StateComponent::popPresetMenu()
     presetMenu.clear();
     presetMenu.addItem(1, "Init", true);
     presetMenu.addItem(2, "Open Preset Folder", true);
-
+    presetMenu.addItem(3, "Rescan Preset Folder", true);
     
     int result = presetMenu.show();
     if (result == 1)
@@ -581,6 +653,10 @@ void StateComponent::popPresetMenu()
     if (result == 2)
     {
         openPresetFolder();
+    }
+    if (result == 3)
+    {
+        rescanPresetFolder();
     }
 }
 

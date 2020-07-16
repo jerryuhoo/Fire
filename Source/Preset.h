@@ -69,10 +69,10 @@ public:
     int getCurrentPresetId() const;
     void setPresetName(String name);
     StringRef getPresetName();
-    void scanAllPresets();
+    int scanAllPresets();
     File getFile();
     void initPreset();
-    void recursiveFileSearch(XmlElement &parentXML, File dir);
+    int recursiveFileSearch(XmlElement &parentXML, File dir);
     void recursivePresetLoad(XmlElement parentXml, String presetID);
     void recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, int &index);
     
@@ -81,7 +81,7 @@ private:
     XmlElement presetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
     XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
     File presetFile;                 // on-disk representation
-    String presetName{""};
+    String statePresetName{""};
     int currentPresetID{0};
     int numPresets = 0;
     

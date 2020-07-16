@@ -7,22 +7,6 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "B3C2EBC7-1373-4786-863E-1C8509F9EE6E"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "223"
-            endingLineNumber = "223"
-            landmarkName = "StatePresets::savePreset(savePath)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
             uuid = "56FA3F55-B94D-4A87-96A3-04B86DC30969"
             shouldBeEnabled = "No"
             ignoreCount = "0"
@@ -39,54 +23,6 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "94EC29B0-7030-49C0-B3CF-1FE0492BA5EA"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "246"
-            endingLineNumber = "246"
-            landmarkName = "StatePresets::savePreset(savePath)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "C582015C-9AA2-43A4-90AE-35F4CE4B73FA"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "257"
-            endingLineNumber = "257"
-            landmarkName = "StatePresets::savePreset(savePath)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "21F847AE-E0AD-440B-B026-47F752BBD8E7"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "238"
-            endingLineNumber = "238"
-            landmarkName = "StatePresets::savePreset(savePath)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
             uuid = "B5CF58AA-B481-4534-81B1-3E744F8BCA93"
             shouldBeEnabled = "No"
             ignoreCount = "0"
@@ -94,8 +30,8 @@
             filePath = "../../Source/Preset.cpp"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "197"
-            endingLineNumber = "197"
+            startingLineNumber = "206"
+            endingLineNumber = "206"
             landmarkName = "StatePresets::scanAllPresets()"
             landmarkType = "7">
          </BreakpointContent>
@@ -110,8 +46,8 @@
             filePath = "../../Source/Preset.cpp"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "196"
-            endingLineNumber = "196"
+            startingLineNumber = "205"
+            endingLineNumber = "205"
             landmarkName = "StatePresets::scanAllPresets()"
             landmarkType = "7">
          </BreakpointContent>
@@ -119,15 +55,15 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "29F2E49A-08BA-481E-9C4C-9A9A03542858"
+            uuid = "A3C39953-E70F-4E5B-8D06-3D370DE0A52A"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "../../Source/Preset.cpp"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "160"
-            endingLineNumber = "160"
+            startingLineNumber = "187"
+            endingLineNumber = "187"
             landmarkName = "StatePresets::recursiveFileSearch(parentXML, dir)"
             landmarkType = "7">
          </BreakpointContent>
@@ -135,128 +71,32 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "8934C623-856A-414D-9226-93319C956CB0"
+            uuid = "BC6F4D99-712A-43D4-B03B-E652430F9A1B"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "../../Source/Preset.cpp"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "356"
-            endingLineNumber = "356"
-            landmarkName = "StatePresets::setPresetAndFolderNames(menu)"
+            startingLineNumber = "256"
+            endingLineNumber = "256"
+            landmarkName = "StatePresets::savePreset(savePath)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "88A33166-BF51-4881-A5AF-7DDC2D74E44A"
+            uuid = "1EB28561-0B77-4166-B534-8754DCF19821"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "../../Source/Preset.cpp"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "300"
-            endingLineNumber = "300"
-            landmarkName = "StatePresets::loadPreset(presetID)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "4C1F8243-2FD5-4715-A946-ADA2185BCEDF"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "329"
-            endingLineNumber = "329"
-            landmarkName = "StatePresets::recursivePresetNameAdd(parentXml, menu, index)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "2B33BDE8-F397-480F-844B-AA2AE49F1505"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "284"
-            endingLineNumber = "284"
-            landmarkName = "StatePresets::recursivePresetLoad(parentXml, presetID)"
-            landmarkType = "7">
-            <Locations>
-               <Location
-                  uuid = "2B33BDE8-F397-480F-844B-AA2AE49F1505 - 501c13ed639d5f73"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "state::StatePresets::recursivePresetLoad(juce::XmlElement, juce::String)"
-                  moduleName = "Fire"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/yuyifeng/Documents/GitHub/Fire/Source/Preset.cpp"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "278"
-                  endingLineNumber = "278"
-                  offsetFromSymbolStart = "63">
-               </Location>
-               <Location
-                  uuid = "2B33BDE8-F397-480F-844B-AA2AE49F1505 - 501c13ed639d5f73"
-                  shouldBeEnabled = "Yes"
-                  ignoreCount = "0"
-                  continueAfterRunningActions = "No"
-                  symbolName = "state::StatePresets::recursivePresetLoad(juce::XmlElement, juce::String)"
-                  moduleName = "Fire"
-                  usesParentBreakpointCondition = "Yes"
-                  urlString = "file:///Users/yuyifeng/Documents/GitHub/Fire/Source/Preset.cpp"
-                  startingColumnNumber = "9223372036854775807"
-                  endingColumnNumber = "9223372036854775807"
-                  startingLineNumber = "278"
-                  endingLineNumber = "278"
-                  offsetFromSymbolStart = "72">
-               </Location>
-            </Locations>
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "2E11D927-F974-49A4-82B4-3E030CC18DB0"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "175"
-            endingLineNumber = "175"
+            startingLineNumber = "183"
+            endingLineNumber = "183"
             landmarkName = "StatePresets::recursiveFileSearch(parentXML, dir)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            uuid = "065DF73F-2410-49A3-B1D2-0A7898C6E650"
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "../../Source/Preset.cpp"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "491"
-            endingLineNumber = "491"
-            landmarkName = "StateComponent::comboBoxChanged(changedComboBox)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

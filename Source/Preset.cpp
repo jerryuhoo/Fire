@@ -150,8 +150,9 @@ String StatePresets::getNextAvailablePresetID(const XmlElement &presetXml)
     return "preset" + static_cast<String>(newPresetIDNumber);    // format: preset##
 }
 
-void StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
+int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
 {
+    int newPresetIndex = 0;
     RangedDirectoryIterator iterator(dir, false, "*", 3); // findDirectories = 1, findFiles = 2, findFilesAndDirectories = 3, ignoreHiddenFiles = 4
     for(auto file : iterator)
     {
@@ -160,8 +161,10 @@ void StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
             String folderName;
             folderName = file.getFile().getFileName();
             std::unique_ptr<XmlElement> currentState{new XmlElement{folderName}}; // must be pointer as parent takes ownership
-            DBG(dir.getChildFile(file.getFile().getFileName()).getFullPathName());
-            recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName()));
+            //DBG(dir.getChildFile(file.getFile().getFileName()).getFullPathName());
+            
+            // save a new preset, then rescan. find the index number, use jmax to avoid the situation that you find folder next and return 0
+            newPresetIndex = jmax(newPresetIndex, recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName())));
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
         }
         else if (file.getFile().hasFileExtension(".fire"))
@@ -178,6 +181,11 @@ void StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
                 currentState->setAttribute("presetName", newName);
             }
             
+            // save new preset and rescan, this will return new preset index
+            if (statePresetName == currentState->getStringAttribute("presetName"))
+            {
+                newPresetIndex = getNumPresets();
+            }
             //presetXml.addChildElement(currentState.release()); // will be deleted by parent element
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
         }
@@ -188,15 +196,16 @@ void StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
         }
         
     }
+    return newPresetIndex;
 }
 
-void StatePresets::scanAllPresets()
+int StatePresets::scanAllPresets()
 {
     numPresets = 0;
     presetXml.deleteAllChildElements();
     //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
     
-    recursiveFileSearch(presetXml, presetFile);
+    return recursiveFileSearch(presetXml, presetFile);
     //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
     
     //  presetFile
@@ -235,45 +244,25 @@ int StatePresets::savePreset(File savePath)
         userPresetFile = savePath.getFullPathName();
         hasExtension = true;
     }
+    
     // save single to real file
     presetXmlSingle.removeAllAttributes(); // clear all first
     presetXmlSingle.setAttribute("presetName", presetName); // set preset name
     saveStateToXml(pluginProcessor, presetXmlSingle);
+    //presetXmlSingle.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
     //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
-
+    
+    statePresetName = presetName;
     saveResult = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
-
-    // save temp xml which includes all presets
-    if (saveResult == 1)
+    
+    if (saveResult != 3)
     {
-        String newPresetID = getNextAvailablePresetID(presetXml); // presetID format: "preset##"
-        std::unique_ptr<XmlElement> currentState{new XmlElement{newPresetID}}; // must be pointer
-        //std::unique_ptr<XmlElement> currentState{new XmlElement{"preset"}}; // must be pointer
-        currentState->setAttribute("presetName", newPresetID);
-        saveStateToXml(pluginProcessor, *currentState);
-        presetXml.addChildElement(currentState.release()); // will be deleted by parent element
-        return getNumPresets();
-    }
-    else if (saveResult == 2)
-    {
-        int currentPresetId = -1;
-        int index = 1;
-        forEachXmlChildElement (presetXml, e)
-        {
-            if (e->getAttributeValue(0) == presetName)
-            {
-                currentPresetId = index;
-                saveStateToXml(pluginProcessor, *e);
-            }
-            index++;
-        }
-        return currentPresetId;
+        return scanAllPresets();
     }
     else
     {
         return -1;
     }
-    
 }
 
 void StatePresets::recursivePresetLoad(XmlElement parentXml, String presetID)
@@ -282,8 +271,8 @@ void StatePresets::recursivePresetLoad(XmlElement parentXml, String presetID)
     int index = 0;
     forEachXmlChildElement(parentXml, child)
     {
-        DBG(child->getTagName());
-        DBG(presetID);
+        //DBG(child->getTagName());
+        //DBG(presetID);
         if (child->hasAttribute("presetName") && child->getTagName() == presetID)
         {
             XmlElement loadThisChild{*child}; // (0 indexed method)
@@ -318,12 +307,12 @@ void StatePresets::deletePreset()
 
 void StatePresets::setPresetName(String name)
 {
-    presetName = name + ".fire";
+    statePresetName = name + ".fire";
 }
 
 StringRef StatePresets::getPresetName()
 {
-    return presetName;
+    return statePresetName;
 }
 
 void StatePresets::recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, int &index)

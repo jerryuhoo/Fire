@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.702"
+#define VERSION "0.703"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -19,7 +19,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 {
     // timer
     Timer::startTimerHz(20.0f);
-
 
     // resize not avaialble
     setResizable(true, true);
@@ -50,8 +49,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, COLOUR1);
     lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, COLOUR5);
     lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, COLOUR3);
-    
-    
+
     inputMeter.setLookAndFeel(&lnf);
     inputMeter.setMeterSource(&processor.getInputMeterSource());
     addAndMakeVisible(inputMeter);
@@ -59,8 +57,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputMeter.setLookAndFeel(&lnf);
     outputMeter.setMeterSource(&processor.getOutputMeterSource());
     addAndMakeVisible(outputMeter);
-    
-
 
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
@@ -74,8 +70,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     // inputKnob.setSliderStyle(Slider::LinearVertical);
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    
-    
+
     addAndMakeVisible(inputLabel);
     inputLabel.setText("Input", dontSendNotification);
     inputLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
@@ -375,7 +370,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     
-    
     // about button
     addAndMakeVisible(aboutButton);
     aboutButton.setColour(TextButton::buttonColourId, COLOUR3);
@@ -426,11 +420,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     g.setColour(COLOUR5);
     // g.fillRect(0, 0, getWidth(), static_cast<int> (getHeight()/10.f));
     g.fillRect(0, 0, getWidth(), part1);
-        
-    // draw ff meter background
-    //int ffBackgroundWidth = getWidth() / 4;
-    //g.setColour(COLOUR6);
-    //g.fillRoundedRectangle(getWidth() / 2 - ffBackgroundWidth / 2, getHeight() / 4 * 3 - 25, ffBackgroundWidth, getHeight() / 4 - 25, 25);
     
     // draw version
     g.setColour(COLOUR5);
@@ -463,12 +452,10 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     distortionProcessor.controls.rectification = rec;
     
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
-    // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
     frame.setBounds(getWidth() / 2, part1, getWidth() / 2, part2);
     
     // draw layer 2
     g.setColour(COLOUR6);
-    // g.fillRect(0, 50, getWidth(), getHeight() / 2 - 125);
     g.fillRect(0, part1, getWidth(), part2);
     if (mode < 8)
     {
@@ -557,7 +544,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             p.lineTo(xPos, yPos);
         }
 
-        // g.setColour(COLOUR1);
         ColourGradient grad(COLOUR1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
             COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
         g.setGradientFill(grad);
@@ -566,16 +552,16 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     }
     
     // draw shadow 1
-    ColourGradient shadowGrad1(Colour(0, 0, 0).withAlpha(0.5f), 0, 50,
-                              Colour(0, 0, 0).withAlpha(0.f), 0, 55, false);
-    g.setGradientFill(shadowGrad1);
-    g.fillRect(0, part1, getWidth(), 25);
+    //ColourGradient shadowGrad1(Colour(0, 0, 0).withAlpha(0.5f), 0, 50,
+    //                          Colour(0, 0, 0).withAlpha(0.f), 0, 55, false);
+    //g.setGradientFill(shadowGrad1);
+    //g.fillRect(0, part1, getWidth(), 25);
     
     // draw shadow 2
     ColourGradient shadowGrad2(Colour(0, 0, 0).withAlpha(0.5f), getWidth()/2, getHeight() / 2 - 75,
                               Colour(0, 0, 0).withAlpha(0.f), getWidth()/2, getHeight() / 2 - 70, false);
-    g.setGradientFill(shadowGrad2);
-    g.fillRect(0, part1 + part2, getWidth(), 25);
+    //g.setGradientFill(shadowGrad2);
+    //g.fillRect(0, part1 + part2, getWidth(), 25);
     
     //g.setColour(COLOUR1);
     //g.fillRect(outputKnob.getX(), outputKnob.getY(), outputKnob.getWidth(), outputKnob.getHeight());

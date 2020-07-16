@@ -50,7 +50,7 @@ follow my Neteast channel: 羽翼深蓝Wings
 Find the repository here: https://github.com/ffAudio/ff_meters
 2. A great example of using XML to save presets to file example. I changed the code to save presets as mutiple files.
 https://github.com/johnflynnjohnflynn/TestParameters02
-
+3. Diode Clipping 1 is an algorithm from https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227
 
 # Release Notes:
 

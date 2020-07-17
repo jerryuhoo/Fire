@@ -120,8 +120,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // initialisation that you need..
     
     // fix the artifacts (also called zipper noise)
-    previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
-    previousGainInput = Decibels::decibelsToGain(previousGainInput);
+    //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
+    //previousGainInput = Decibels::decibelsToGain(previousGainInput);
     
     previousGainOutput = (float)*treeState.getRawParameterValue("outputGain");
     previousGainOutput = Decibels::decibelsToGain(previousGainOutput);
@@ -298,8 +298,8 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
 
     int mode = *treeState.getRawParameterValue("mode");
 
-    float currentGainInput = *treeState.getRawParameterValue("inputGain");
-    currentGainInput = Decibels::decibelsToGain(currentGainInput);
+    //float currentGainInput = *treeState.getRawParameterValue("inputGain");
+    //currentGainInput = Decibels::decibelsToGain(currentGainInput);
 
     float drive = *treeState.getRawParameterValue("drive");
 
@@ -315,15 +315,15 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     inputMeterSource.measureBlock(buffer);
 
     // input volume fix
-    if (currentGainInput == previousGainInput)
-    {
-        buffer.applyGain(currentGainInput);
-    }
-    else
-    {
-        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
-        previousGainInput = currentGainInput;
-    }
+//    if (currentGainInput == previousGainInput)
+//    {
+//        buffer.applyGain(currentGainInput);
+//    }
+//    else
+//    {
+//        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
+//        previousGainInput = currentGainInput;
+//    }
     
     // set zipper noise smoother target
     driveSmoother.setTargetValue(drive);
@@ -573,11 +573,14 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
        
-    parameters.push_back(std::make_unique<AudioParameterInt>("preset", "Preset", 0, 1000, 0));
+    //parameters.push_back(std::make_unique<AudioParameterInt>("preset", "Preset", 0, 1000, 0));
     //parameters.push_back(std::make_unique<AudioParameterBool>("sideAB", "SideAB", false));
     
     parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 8, 1));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
+    
+    //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("rec", "Rec", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
@@ -588,8 +591,6 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 50.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
-    parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", true));

@@ -233,7 +233,7 @@ void StatePresets::scanAllPresets()
     
     recursiveFileSearch(presetXml, presetFile);
     
-    presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
+    //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
 }
 
 

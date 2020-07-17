@@ -132,7 +132,7 @@ private:
     dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
     
     // fix the artifacts (also called zipper noise)
-    float previousGainInput;
+    //float previousGainInput;
     float previousGainOutput;
     float previousDrive;
     float previousMix;

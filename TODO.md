@@ -4,5 +4,4 @@ TODO
 3. smooth filter?
 4. adjust the position of ff meters
 5. add left and right preset selection button
-6. save preset mode and A/B mode into processor.cpp
-(maybe need to delete preset.cpp and only use preset.h)
+6. save the xml of AB mode in processor.cpp get/set state function.

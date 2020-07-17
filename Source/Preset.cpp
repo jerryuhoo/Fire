@@ -156,6 +156,7 @@ int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
     RangedDirectoryIterator iterator(dir, false, "*", 3); // findDirectories = 1, findFiles = 2, findFilesAndDirectories = 3, ignoreHiddenFiles = 4
     for(auto file : iterator)
     {
+        // is folder
         if (file.isDirectory())
         {
             String folderName;
@@ -167,6 +168,7 @@ int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
             newPresetIndex = jmax(newPresetIndex, recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName())));
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
         }
+        // is preset
         else if (file.getFile().hasFileExtension(".fire"))
         {
             numPresets++;
@@ -207,23 +209,7 @@ int StatePresets::scanAllPresets()
     
     return recursiveFileSearch(presetXml, presetFile);
     //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
-    
-    //  presetFile
-//    DirectoryIterator iter(presetFile, true, "*.fire", 2);
-//    DBG(presetFile.getFileName());
-//    while( iter.next() )
-//    {
-//        File f(iter.getFile() );
-//        DBG(f.getFileName());
-//        parseFileToXmlElement(f, presetXml);
-//        if( f.hasExtension(".fire" ) { menu.addItem(f.getgetFileNameWithoutExtension(), ...); }
-//        else if( f.isDirectory() )
-//        {
-//            PopupMenu subMenu;
-//            func( subMenu, f );
-//            menu.addSubMenu( subMenu, ... );
-//        }
-//    }
+
 }
 
 
@@ -289,18 +275,12 @@ void StatePresets::recursivePresetLoad(XmlElement parentXml, String presetID)
 void StatePresets::loadPreset(String presetID)
 {
     recursivePresetLoad(presetXml, presetID);
-//    if (1 <= presetID && presetID <= getNumPresets()) // 1 indexed to match ComboBox
-//    {
-//        XmlElement loadThisChild{*presetXml.getChildElement(presetID - 1)}; // (0 indexed method)
-//        loadStateFromXml(loadThisChild, pluginProcessor);
-//    }
-    //currentPresetID = presetID; // allow 0 for 'no preset selected' (?)
 }
 
 
 void StatePresets::deletePreset()
 {
-    XmlElement *childToDelete{presetXml.getChildElement(currentPresetID - 1)};
+    XmlElement *childToDelete{presetXml.getChildElement(mCurrentPresetID - 1)};
     if (childToDelete)
         presetXml.removeChildElement(childToDelete, true);
 }
@@ -336,7 +316,7 @@ void StatePresets::recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, 
             }
             String n = child->getTagName();
             menu.addSectionHeading(n);
-            
+
             recursivePresetNameAdd(*child, menu, index);
         }
     }
@@ -356,7 +336,12 @@ int StatePresets::getNumPresets() const
 
 int StatePresets::getCurrentPresetId() const
 {
-    return currentPresetID;
+    return mCurrentPresetID;
+}
+
+void StatePresets::setCurrentPresetId(int currentPresetID)
+{
+    mCurrentPresetID = currentPresetID;
 }
 
 File StatePresets::getFile()
@@ -479,6 +464,9 @@ void StateComponent::comboBoxChanged(ComboBox *changedComboBox)
 {
     
     const String presetID{"preset" + (String)changedComboBox->getSelectedId()};
+    procStatePresets.setCurrentPresetId(changedComboBox->getSelectedId());
+    //DBG(procStatePresets.getCurrentPresetId());
+    
     procStatePresets.loadPreset(presetID);
 }
 
@@ -490,10 +478,10 @@ void StateComponent::refreshPresetBox()
 
 void StateComponent::ifPresetActiveShowInBox()
 {
-    const int currentPreset{procStatePresets.getCurrentPresetId()};
+    const int currentPresetID{procStatePresets.getCurrentPresetId()};
     const int numPresets{procStatePresets.getNumPresets()};
-    if (1 <= currentPreset && currentPreset <= numPresets)
-        presetBox.setSelectedId(currentPreset);
+    if (1 <= currentPresetID && currentPresetID <= numPresets)
+        presetBox.setSelectedId(currentPresetID);
 }
 
 void StateComponent::deletePresetAndRefresh()

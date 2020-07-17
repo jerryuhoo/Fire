@@ -489,10 +489,20 @@ void FireAudioProcessor::getStateInformation(MemoryBlock &destData)
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
 
-    //MemoryOutputStream (destData, true).writeFloat (*gain);
+    int xmlIndex = 0;
+    XmlElement xmlState {"state"};
+    
+    // 1. save treestate
     auto state = treeState.copyState();
-    std::unique_ptr<XmlElement> xml(state.createXml());
-    copyXmlToBinary(*xml, destData);
+    std::unique_ptr<XmlElement> treeStateXml(state.createXml());
+    xmlState.insertChildElement(treeStateXml.release(), xmlIndex++);
+    
+    // 2. save current preset ID
+    std::unique_ptr<XmlElement> currentStateXml{new XmlElement{"currentPresetID"}};
+    currentStateXml->setAttribute("ID", statePresets.getCurrentPresetId());
+    xmlState.insertChildElement(currentStateXml.release(), xmlIndex++);
+    
+    copyXmlToBinary(xmlState, destData);
 }
 
 void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
@@ -500,12 +510,25 @@ void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
 
-    //*gain = MemoryInputStream (data, static_cast<size_t> (sizeInBytes), false).readFloat();
-    std::unique_ptr<XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-
-    if (xmlState.get() != nullptr)
-        if (xmlState->hasTagName(treeState.state.getType()))
-            treeState.replaceState(ValueTree::fromXml(*xmlState));
+    int xmlIndex = 0;
+    std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    if (xmlState.get() != nullptr && xmlState->hasTagName ("state"))
+    {
+        // 1. set treestate
+        const auto xmlTreeState = xmlState->getChildElement (xmlIndex++);
+        if (xmlTreeState != nullptr)
+        {
+            treeState.replaceState(ValueTree::fromXml(*xmlTreeState));
+        }
+        
+        // 2. set current preset ID
+        const auto xmlCurrentState = xmlState->getChildElement (xmlIndex++);
+        if (xmlCurrentState != nullptr)
+        {
+            int presetID = xmlCurrentState->getIntAttribute("ID", 0);
+            statePresets.setCurrentPresetId(presetID);
+        }
+    }
 }
 
 //==============================================================================

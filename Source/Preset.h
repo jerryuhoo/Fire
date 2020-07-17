@@ -67,6 +67,7 @@ public:
     int getNumPresets() const;
     String getNextAvailablePresetID(const XmlElement &presetXml);
     int getCurrentPresetId() const;
+    void setCurrentPresetId(int currentPresetID);
     void setPresetName(String name);
     StringRef getPresetName();
     int scanAllPresets();
@@ -82,7 +83,7 @@ private:
     XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
     File presetFile;                 // on-disk representation
     String statePresetName{""};
-    int currentPresetID{0};
+    int mCurrentPresetID{0};
     int numPresets = 0;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets);

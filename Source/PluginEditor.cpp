@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.707"
+#define VERSION "0.708"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -295,7 +295,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterHighButton.setLookAndFeel(&roundedButtonLnf);
     
     // Attachment
-    inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
+    //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
     downSampleAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "downSample", downSampleKnob);
     recAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "rec", recKnob);
@@ -441,7 +441,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     float mixValue;
 
     int mode = *processor.treeState.getRawParameterValue("mode");
-    float inputGain = *processor.treeState.getRawParameterValue("inputGain");
+    //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
     float drive = *processor.treeState.getRawParameterValue("drive");
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
@@ -462,10 +462,10 @@ void FireAudioProcessorEditor::paint(Graphics &g)
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
         float driveScale = 1;
-        if (inputGain >= 0)
-        {
-            driveScale = pow(2, inputGain / 6.0f);
-        }
+//        if (inputGain >= 0)
+//        {
+//            driveScale = pow(2, inputGain / 6.0f);
+//        }
         float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
         float value = -maxValue; // minimum (leftmost)  value for your graph
         float valInc = (maxValue - value) / numPix;

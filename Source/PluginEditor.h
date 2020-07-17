@@ -86,7 +86,7 @@ private:
 
     // sliders
     Slider
-        inputKnob,
+        //inputKnob,
         driveKnob,
         downSampleKnob,
         outputKnob,
@@ -99,7 +99,7 @@ private:
     // labels
     Label
         hqLabel,
-        inputLabel,
+        //inputLabel,
         driveLabel,
         downSampleLabel,
         outputLabel,
@@ -158,7 +158,7 @@ private:
     
     // Slider attachment
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>
-        inputAttachment,
+        //inputAttachment,
         driveAttachment,
         downSampleAttachment,
         recAttachment,

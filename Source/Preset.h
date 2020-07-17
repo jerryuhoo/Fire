@@ -45,7 +45,7 @@ private:
 //==============================================================================
 //int createFileIfNonExistant(const File &file);
 void parseFileToXmlElement(const File &file, XmlElement &xml);
-int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension);
+bool writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension);
 
 //==============================================================================
 /** Create StatePresets object with XML file saved relative to user
@@ -59,7 +59,7 @@ public:
     StatePresets(AudioProcessor &proc, const String &presetFileLocation);
     ~StatePresets();
     
-    int savePreset(File savePath);
+    bool savePreset(File savePath);
     void loadPreset(String selectedName);
     void deletePreset();
 
@@ -70,10 +70,10 @@ public:
     void setCurrentPresetId(int currentPresetID);
     void setPresetName(String name);
     StringRef getPresetName();
-    int scanAllPresets();
+    void scanAllPresets();
     File getFile();
     void initPreset();
-    int recursiveFileSearch(XmlElement &parentXML, File dir);
+    void recursiveFileSearch(XmlElement &parentXML, File dir);
     void recursivePresetLoad(XmlElement parentXml, String presetID);
     void recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, int &index);
     

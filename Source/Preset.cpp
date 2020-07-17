@@ -86,7 +86,7 @@ void parseFileToXmlElement(const File &file, XmlElement &xml)
         xml = *parsed;
 }
 
-int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension)
+bool writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension)
 {
     //createFileIfNonExistant(file);
     // 1 saved a new file
@@ -96,7 +96,7 @@ int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, 
     {
         file.create();
         xml.writeTo(file);
-        return 1;
+        return true;
     }
     else
     {
@@ -108,11 +108,11 @@ int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, 
             {
                 file.replaceFileIn(file.getFullPathName());
                 xml.writeTo(file);
-                return 2;
+                return true;
             }
             else
             {
-                return 3;
+                return false;
             }
         }
         else // no alert window
@@ -120,14 +120,43 @@ int writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, 
             // replace existing file and return 2
             file.replaceFileIn(file.getFullPathName());
             xml.writeTo(file);
-            return 2;
+            return true;
         }
         
     }
     
 }
 
+//==============================================================================
+//sorter
+class PresetNameSorter
+{
+public:
+    PresetNameSorter (const juce::String& attributeToSortBy, bool forwards)
+        : attributeToSort (attributeToSortBy),
+          direction (forwards ? 1 : -1)
+    {}
 
+    int compareElements (juce::XmlElement* first, juce::XmlElement* second) const
+    {
+        auto result = first->getStringAttribute (attributeToSort)
+                            .compareNatural (second->getStringAttribute (attributeToSort));
+        
+        // exchange preset tag
+        if (result == -1)
+        {
+            String tempPresetTag = "";
+            tempPresetTag = first->getTagName();
+            first->setTagName(second->getTagName());
+            second->setTagName(tempPresetTag);
+        }
+        return direction * result;
+    }
+
+private:
+    juce::String attributeToSort;
+    int direction;
+};
 
 //==============================================================================
 StatePresets::StatePresets(AudioProcessor &proc, const String &presetFileLocation)
@@ -150,9 +179,8 @@ String StatePresets::getNextAvailablePresetID(const XmlElement &presetXml)
     return "preset" + static_cast<String>(newPresetIDNumber);    // format: preset##
 }
 
-int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
+void StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
 {
-    int newPresetIndex = 0;
     RangedDirectoryIterator iterator(dir, false, "*", 3); // findDirectories = 1, findFiles = 2, findFilesAndDirectories = 3, ignoreHiddenFiles = 4
     for(auto file : iterator)
     {
@@ -163,9 +191,7 @@ int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
             folderName = file.getFile().getFileName();
             std::unique_ptr<XmlElement> currentState{new XmlElement{folderName}}; // must be pointer as parent takes ownership
             //DBG(dir.getChildFile(file.getFile().getFileName()).getFullPathName());
-            
-            // save a new preset, then rescan. find the index number, use jmax to avoid the situation that you find folder next and return 0
-            newPresetIndex = jmax(newPresetIndex, recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName())));
+            recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName()));
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
         }
         // is preset
@@ -183,13 +209,12 @@ int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
                 currentState->setAttribute("presetName", newName);
             }
             
-            // save new preset and rescan, this will return new preset index
-            if (statePresetName == currentState->getStringAttribute("presetName"))
-            {
-                newPresetIndex = getNumPresets();
-            }
             //presetXml.addChildElement(currentState.release()); // will be deleted by parent element
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
+            
+            // sort
+            PresetNameSorter sorter ("presetName", true);
+            parentXML.sortChildElements (sorter);
         }
         else
         {
@@ -198,24 +223,22 @@ int StatePresets::recursiveFileSearch(XmlElement &parentXML, File dir)
         }
         
     }
-    return newPresetIndex;
 }
 
-int StatePresets::scanAllPresets()
+void StatePresets::scanAllPresets()
 {
     numPresets = 0;
     presetXml.deleteAllChildElements();
     //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
     
-    return recursiveFileSearch(presetXml, presetFile);
-    //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
-
+    recursiveFileSearch(presetXml, presetFile);
+    
+    presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
 }
 
 
-int StatePresets::savePreset(File savePath)
+bool StatePresets::savePreset(File savePath)
 {
-    int saveResult;
     File userPresetFile;
     bool hasExtension = false;
     String presetName = savePath.getFileNameWithoutExtension();
@@ -239,15 +262,16 @@ int StatePresets::savePreset(File savePath)
     //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
     
     statePresetName = presetName;
-    saveResult = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
+    bool isSaved = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
     
-    if (saveResult != 3)
+    if (isSaved)
     {
-        return scanAllPresets();
+        scanAllPresets();
+        return true;
     }
     else
     {
-        return -1;
+        return false;
     }
 }
 
@@ -307,6 +331,11 @@ void StatePresets::recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, 
             if (n == "")
                 n = "(Unnamed preset)";
             menu.addItem(n, index);
+            // save new preset and rescan, this will return new preset index
+            if (statePresetName == n)
+            {
+                mCurrentPresetID = index;
+            }
         }
         else
         {
@@ -572,14 +601,14 @@ void StateComponent::savePresetAlertWindow()
     creatFolderIfNotExist(userFile);
     FileChooser filechooser("save preset", userFile, "*", true, false,nullptr);
     if (filechooser.browseForFileToSave(true)) {
-        int numPresets;
+        
         // this is really shit code, but I don't have any other way to solve this shit problem!!!
         File inputName = filechooser.getResult();
-        numPresets = procStatePresets.savePreset(inputName);
-        if (numPresets > 0)
+        bool isSaved = procStatePresets.savePreset(inputName);
+        if (isSaved)
         {
             refreshPresetBox();
-            presetBox.setSelectedId(numPresets); // c
+            presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
         }
     }
 }
@@ -596,8 +625,22 @@ void StateComponent::openPresetFolder()
 
 void StateComponent::rescanPresetFolder()
 {
+    int presetID = procStatePresets.getCurrentPresetId();
+    int currentPresetNum;
+    int previousPresetNum = procStatePresets.getNumPresets();
     procStatePresets.scanAllPresets();
     refreshPresetBox();
+    currentPresetNum = procStatePresets.getNumPresets();
+    // if some presets are deleted, set presetID to 0
+    if (currentPresetNum < previousPresetNum)
+    {
+        procStatePresets.setCurrentPresetId(presetID-1);
+    }
+    else
+    {
+        procStatePresets.setCurrentPresetId(presetID);
+    }
+    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
 }
 
 void StateComponent::creatFolderIfNotExist(File userFile)

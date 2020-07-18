@@ -317,6 +317,13 @@
 			path = "../../JuceLibraryCode/include_juce_audio_processors.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
+		4C9F37ED9025BF4932D093A1 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			name = Delay.h;
+			path = ../../Source/Delay.h;
+			sourceTree = "SOURCE_ROOT";
+		};
 		4D08B62D917FAD132485C48A = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.cpp;
@@ -366,13 +373,6 @@
 			path = ../../Source/LookAndFeel.h;
 			sourceTree = "SOURCE_ROOT";
 		};
-		71B126409FFD7AE7BF637427 = {
-			isa = PBXFileReference;
-			lastKnownFileType = sourcecode.cpp.objcpp;
-			name = "include_juce_dsp.mm";
-			path = "../../JuceLibraryCode/include_juce_dsp.mm";
-			sourceTree = "SOURCE_ROOT";
-		};
 		78B911580CD2F1907F66554E = {
 			isa = PBXFileReference;
 			lastKnownFileType = file;
@@ -407,6 +407,13 @@
 			includeInIndex = 0;
 			path = libFire.a;
 			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		71B126409FFD7AE7BF637427 = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			name = "include_juce_dsp.mm";
+			path = "../../JuceLibraryCode/include_juce_dsp.mm";
+			sourceTree = "SOURCE_ROOT";
 		};
 		798C666CCEA7ADB56C16A864 = {
 			isa = PBXFileReference;
@@ -698,6 +705,7 @@
 		3939E26A928C35AAB6A88B28 = {
 			isa = PBXGroup;
 			children = (
+				4C9F37ED9025BF4932D093A1,
 				4D08B62D917FAD132485C48A,
 				391CD57AFB93376FA7AA657B,
 				65DF29A51176A5F8A40895E6,

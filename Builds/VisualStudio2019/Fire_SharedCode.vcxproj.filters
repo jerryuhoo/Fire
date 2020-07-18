@@ -2715,6 +2715,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Source\Delay.h">
+      <Filter>Fire\Source</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\Source\Preset.h">
       <Filter>Fire\Source</Filter>
     </ClInclude>

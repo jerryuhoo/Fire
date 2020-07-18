@@ -6,6 +6,7 @@
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
+      <FILE id="hoCyHn" name="Delay.h" compile="0" resource="0" file="Source/Delay.h"/>
       <FILE id="LOpR42" name="Preset.cpp" compile="1" resource="0" file="Source/Preset.cpp"/>
       <FILE id="lhFpz1" name="Preset.h" compile="0" resource="0" file="Source/Preset.h"/>
       <FILE id="QaLa2z" name="LookAndFeel.h" compile="0" resource="0" file="Source/LookAndFeel.h"/>

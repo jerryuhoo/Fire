@@ -2196,6 +2196,7 @@
     <ClCompile Include="..\..\JuceLibraryCode\include_juce_opengl.cpp"/>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Source\Delay.h"/>
     <ClInclude Include="..\..\Source\Preset.h"/>
     <ClInclude Include="..\..\Source\LookAndFeel.h"/>
     <ClInclude Include="..\..\Source\WDF.h"/>

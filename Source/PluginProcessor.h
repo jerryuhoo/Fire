@@ -13,6 +13,7 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
 #include "Preset.h"
+#include "Delay.h"
 
 #define COLOUR1 Colour(244, 208, 63)
 #define COLOUR6 Colour(45, 40, 40)
@@ -147,7 +148,10 @@ private:
     std::unique_ptr<dsp::Oversampling<float>> oversampling; // normal use 2x
     std::unique_ptr<dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
     int oversampleFactor = 1;
-
+    
+    // oversampling delay, set to dry buffer
+    Delay mDelay{0};
+    
     // mode 8 diode================
     Array<float> inputTemp;
     float VdiodeL;

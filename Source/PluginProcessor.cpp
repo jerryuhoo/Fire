@@ -151,11 +151,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     oversampling->initProcessing(static_cast<size_t> (samplesPerBlock));
     oversamplingHQ->reset();
     oversamplingHQ->initProcessing(static_cast<size_t> (samplesPerBlock));
-
+    mDelay.reset(0);
     // dsp init
     // dsp::ProcessSpec spec;
 
-    int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
+    //int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
 
     /*
     if (*treeState.getRawParameterValue("hq")) // oversampling
@@ -169,7 +169,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     */
 
     // spec.maximumBlockSize = samplesPerBlock;
-    spec.maximumBlockSize = newBlockSize;
+    spec.maximumBlockSize = /*newBlockSize;*/ samplesPerBlock;
     spec.numChannels = getMainBusNumOutputChannels();
 
     // filter init
@@ -243,6 +243,26 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
     
+    
+    // save clean signal
+    dryBuffer.makeCopyOf(buffer);
+    
+    // ff input meter
+    inputMeterSource.measureBlock(buffer);
+    
+    
+    
+    // pre-filter
+    bool preButton = *treeState.getRawParameterValue("pre");
+    if (preButton)
+    {
+        dsp::AudioBlock<float> block (buffer);
+        filterIIR.process(dsp::ProcessContextReplacing<float>(block));
+        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
+        updateFilter();
+    }
+    
+    
     // TODO------put this in a new function--------
 
     // oversampling
@@ -278,23 +298,30 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     {
         blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
         blockOutput = oversamplingHQ->processSamplesUp(blockInput);
+        
+        
+        // the wet in high quality mode will have a latency of 3~4 samples.
+        // so I must add the same latency to drybuffer.
+        // But I don't know why the drybuffer is still 1 sample slower than the wet one.
+        // So I added 1.  really weird :(
+        int latency = roundToInt(oversamplingHQ->getLatencyInSamples()) + 1;
+        
+        
+        mDelay.setLatency(latency);
+        mDelay.setState(true);
+        
+        // report latency to the host
+        //setLatencySamples(latency);
+        
     }
     else
     {
         //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
         blockOutput = blockInput.getSubBlock(0, buffer.getNumSamples());
+        mDelay.setState(false);
+        // latency = 0
+        //setLatencySamples(0);
     }
-        
-        
-        //}
-    
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
-    //    float menuChoiceValue = 1.0f;
 
     int mode = *treeState.getRawParameterValue("mode");
 
@@ -310,9 +337,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.mix = mix;
-    
-    // ff input meter
-    inputMeterSource.measureBlock(buffer);
+
 
     // input volume fix
 //    if (currentGainInput == previousGainInput)
@@ -330,18 +355,9 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     outputSmoother.setTargetValue(currentGainOutput);
     mixSmoother.setTargetValue(mix);
     
-    // save clean signal
-    dryBuffer.makeCopyOf(buffer);
+    
 
-    // pre-filter
-    bool preButton = *treeState.getRawParameterValue("pre");
-    if (preButton)
-    {
-        //dsp::AudioBlock<float> block (buffer);
-        //filterIIR.process(dsp::ProcessContextReplacing<float>(block));
-        filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
-        updateFilter();
-    }
+    
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -418,15 +434,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         //        visualiser.pushBuffer(buffer);
     }
 
-    //post-filter
-    bool postButton = *treeState.getRawParameterValue("post");
-    if (postButton)
-    {
-        //dsp::AudioBlock<float> block (buffer);
-        //filterIIR.process(dsp::ProcessContextReplacing<float>(block));
-        filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
-        updateFilter();
-    }
+    
     
     // oversampling
     if (*treeState.getRawParameterValue("hq")) // oversampling
@@ -438,16 +446,14 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     //    oversampling->processSamplesDown(blockInput);
     //}
     
-    //
+    
+    
+    // downsample
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto* channelData = buffer.getWritePointer(channel);
-        auto* cleanSignal = dryBuffer.getWritePointer(channel);
-          
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            
-            // downsample
             int rateDivide = *treeState.getRawParameterValue("downSample");
             //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
             if (rateDivide > 1)
@@ -455,11 +461,35 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
                 if (sample%rateDivide != 0)
                     channelData[sample] = channelData[sample - sample%rateDivide];
             }
-            
-            // mix control
+        }
+    }
+    
+
+    //post-filter
+    bool postButton = *treeState.getRawParameterValue("post");
+    if (postButton)
+    {
+        dsp::AudioBlock<float> block (buffer);
+        filterIIR.process(dsp::ProcessContextReplacing<float>(block));
+        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
+        updateFilter();
+    }
+    
+
+    // mix control
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        auto* channelData = buffer.getWritePointer(channel);
+        auto* cleanSignal = dryBuffer.getWritePointer(channel);
+        //auto* cleanSignal = mDelayBuffer.getWritePointer(channel);
+        
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
             float smoothMixValue = mixSmoother.getNextValue();
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
-            channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
+            //channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
+            channelData[sample] = (1.f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
+            // mDelay is delayed clean signal
         }
         
     }
@@ -566,7 +596,6 @@ void FireAudioProcessor::updateFilter()
         *filterIIR.state = *dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), cutoff, res);
     }
 }
-
 
 
 AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()

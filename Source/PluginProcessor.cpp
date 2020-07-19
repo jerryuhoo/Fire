@@ -323,21 +323,30 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         //setLatencySamples(0);
     }
 
+    // get parameters from sliders
     int mode = *treeState.getRawParameterValue("mode");
 
     //float currentGainInput = *treeState.getRawParameterValue("inputGain");
     //currentGainInput = Decibels::decibelsToGain(currentGainInput);
 
     float drive = *treeState.getRawParameterValue("drive");
-
+    
+    // sausage max is 4.3 * input
+    if (mode == 6) {
+        drive = 1 + (drive - 1)* 3.3f / 31.f;
+    }
+    
+    float color = *treeState.getRawParameterValue("color");
+    
     float currentGainOutput = *treeState.getRawParameterValue("outputGain");
     currentGainOutput = Decibels::decibelsToGain(currentGainOutput);
 
     float mix = *treeState.getRawParameterValue("mix");
     
+    // set distortion processor parameters
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.mix = mix;
-
+    distortionProcessor.controls.color = color;
 
     // input volume fix
 //    if (currentGainInput == previousGainInput)
@@ -375,7 +384,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             {
                 distortionProcessor.controls.drive = driveSmoother.getNextValue();
                 distortionProcessor.controls.output = outputSmoother.getNextValue();
-
+                
                 channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
             }
 
@@ -605,12 +614,13 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     //parameters.push_back(std::make_unique<AudioParameterInt>("preset", "Preset", 0, 1000, 0));
     //parameters.push_back(std::make_unique<AudioParameterBool>("sideAB", "SideAB", false));
     
-    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 8, 1));
+    parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 9, 1));
     parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
     
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("color", "Color", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("rec", "Rec", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

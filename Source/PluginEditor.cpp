@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.709"
+#define VERSION "0.710"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -91,6 +91,19 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     driveLabel.setColour(Label::textColourId, KNOB_FONT_COLOUR);
     driveLabel.attachToComponent(&driveKnob, false);
     driveLabel.setJustificationType (Justification::centred);
+    
+    // color knob
+    addAndMakeVisible(colorKnob);
+    colorKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    colorKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    colorKnob.addListener(this);
+
+    addAndMakeVisible(colorLabel);
+    colorLabel.setText("Color", dontSendNotification);
+    colorLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
+    colorLabel.setColour(Label::textColourId, KNOB_FONT_COLOUR);
+    colorLabel.attachToComponent(&colorKnob, false);
+    colorLabel.setJustificationType (Justification::centred);
     
     // down sample knob
     addAndMakeVisible(downSampleKnob);
@@ -297,6 +310,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // Attachment
     //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
+    colorAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "color", colorKnob);
     downSampleAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "downSample", downSampleKnob);
     recAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "rec", recKnob);
     outputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
@@ -331,15 +345,16 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     distortionMode.addSectionHeading("Hard Clipping");
     distortionMode.addItem("Hard Clipping", 6);
+    distortionMode.addItem("Sausage Fattener", 7);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Foldback");
-    distortionMode.addItem("Sin Foldback", 7);
-    distortionMode.addItem("Linear Foldback", 8);
+    distortionMode.addItem("Sin Foldback", 8);
+    distortionMode.addItem("Linear Foldback", 9);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Asymmetrical Clipping");
-    distortionMode.addItem("Diode Clipping 1", 9);
+    distortionMode.addItem("Diode Clipping 1", 10);
     distortionMode.addSeparator();
 
     distortionMode.setJustificationType(Justification::centred);
@@ -405,10 +420,11 @@ float f(float x)
 void FireAudioProcessorEditor::paint(Graphics &g)
 {
     // set states
-    setKnobState(&driveKnob);
-    setButtonState(&filterLowButton, &cutoffKnob, &resKnob);
-    setButtonState(&filterBandButton, &cutoffKnob, &resKnob);
-    setButtonState(&filterHighButton, &cutoffKnob, &resKnob);
+    setDriveKnobState(&driveKnob);
+    setColorKnobState(&colorKnob);
+    setCutoffButtonState(&filterLowButton, &cutoffKnob, &resKnob);
+    setCutoffButtonState(&filterBandButton, &cutoffKnob, &resKnob);
+    setCutoffButtonState(&filterHighButton, &cutoffKnob, &resKnob);
     
     int part1 = getHeight()/10;
     int part2 = part1 * 3;
@@ -443,11 +459,19 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     int mode = *processor.treeState.getRawParameterValue("mode");
     //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
     float drive = *processor.treeState.getRawParameterValue("drive");
+    float color = *processor.treeState.getRawParameterValue("color");
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
 
+    // sausage max is 4.3 * input
+    if (mode == 6) {
+        drive = 1 + (drive - 1)* 3.3f / 31.f;
+    }
+    
+    
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
+    distortionProcessor.controls.color = color;
     distortionProcessor.controls.mix = mix;
     distortionProcessor.controls.rectification = rec;
     
@@ -457,7 +481,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     // draw layer 2
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
-    if (mode < 8)
+    if (mode < 9)
     {
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
@@ -483,7 +507,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             xPos += posInc;
 
             // symmetrical distortion
-            if (mode < 8)
+            if (mode < 9)
             {
                 functionValue = distortionProcessor.distortionProcess(value);
             }
@@ -594,6 +618,7 @@ void FireAudioProcessorEditor::resized()
     // first line
     // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     driveKnob.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    colorKnob.setBounds(startX * 1 + newKnobSize * 1.2, secondLineY, newKnobSize, newKnobSize);
     downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     recKnob.setBounds(startX * 4 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     outputKnob.setBounds(startX * 5 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
@@ -645,7 +670,7 @@ void FireAudioProcessorEditor::timerCallback()
     repaint();
 }
 
-void FireAudioProcessorEditor::setKnobState(Slider* slider)
+void FireAudioProcessorEditor::setDriveKnobState(Slider* slider)
 {
     if (*processor.treeState.getRawParameterValue("mode") == 0)
     {
@@ -658,8 +683,21 @@ void FireAudioProcessorEditor::setKnobState(Slider* slider)
     }
 }
 
+void FireAudioProcessorEditor::setColorKnobState(Slider* slider)
+{
+    if (*processor.treeState.getRawParameterValue("mode") == 6)
+    {
+        slider->setEnabled(true);
+    }
+    else
+    {
+        //slider->setValue(0);
+        slider->setEnabled(false);
+    }
+}
+
 // if filter is off, set lp, bp, hp buttons and cutoff knob disable.
-void FireAudioProcessorEditor::setButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
+void FireAudioProcessorEditor::setCutoffButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
 {
     if (*processor.treeState.getRawParameterValue("off"))
     {

@@ -21,6 +21,8 @@ public:
         int mode;
         // Drive, [1., ?), the amount of gain prior to the non-linearity
         float drive;
+        // Color [0, 1] the mix of hard clipping in sausage fattener
+        float color;
         // Threshold, [0., 1], the amplitude at which to start fold-back distortion
         float thresh;
         // output
@@ -46,6 +48,7 @@ private:
     float tanhSoftClipping(float input);
     float cubicSoftClipping(float input);
     float hardClipping(float input);
+    float sausageFattener(float input);
     float sinFoldback(float input);
     float linFoldback(float input);
     float halfRectification(float input);

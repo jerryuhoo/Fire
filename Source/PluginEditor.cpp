@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.710"
+#define VERSION "0.711"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -463,9 +463,10 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
 
-    // sausage max is 4.3 * input
+    // sausage max is 40/3 * input | 15% = *2 | 30% = *4 | 100% = *40/3
     if (mode == 6) {
-        drive = 1 + (drive - 1)* 3.3f / 31.f;
+        drive = (drive - 1) * 6.5 / 31.f;
+        drive = powf(2, drive);
     }
     
     

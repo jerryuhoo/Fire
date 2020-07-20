@@ -9,3 +9,7 @@ TODO
 8. Enhancing Even Harmonics
 https://ccrma.stanford.edu/~jos/pasp/Enhancing_Even_Harmonics.html
 9. add audio end smooth
+10. add bias
+11. maybe color can used by all modes
+12. maybe protection can used by all modes
+so there will be two more knobs?

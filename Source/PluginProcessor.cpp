@@ -132,6 +132,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
+    driveThresh = 1000;
+    newDriveThresh = 1000;
     
     outputSmoother.reset(sampleRate, 0.05);
     outputSmoother.setCurrentAndTargetValue(previousGainOutput);
@@ -174,9 +176,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // filter init
     filterIIR.reset();
+    filterSausage.reset();
     updateFilter();
     filterIIR.prepare(spec);
-    
+    filterSausage.prepare(spec);
     
     // mode 8 diode================
     inputTemp.clear();
@@ -250,7 +253,96 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     // ff input meter
     inputMeterSource.measureBlock(buffer);
     
+    // get parameters from sliders
+    int mode = *treeState.getRawParameterValue("mode");
+
+    //float currentGainInput = *treeState.getRawParameterValue("inputGain");
+    //currentGainInput = Decibels::decibelsToGain(currentGainInput);
+
+    float drive = *treeState.getRawParameterValue("drive");
     
+    float color = *treeState.getRawParameterValue("color");
+    
+    float currentGainOutput = *treeState.getRawParameterValue("outputGain");
+    currentGainOutput = Decibels::decibelsToGain(currentGainOutput);
+
+    float mix = *treeState.getRawParameterValue("mix");
+    
+    // set distortion processor parameters
+    distortionProcessor.controls.mode = mode;
+    distortionProcessor.controls.mix = mix;
+    distortionProcessor.controls.color = color;
+    
+    // input volume fix
+    //    if (currentGainInput == previousGainInput)
+    //    {
+    //        buffer.applyGain(currentGainInput);
+    //    }
+    //    else
+    //    {
+    //        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
+    //        previousGainInput = currentGainInput;
+    //    }
+        
+    
+    
+    // sausage
+    if (mode == 6)
+    {
+        //drive = 1 + (drive - 1) * (6 - 1) / 31.f;
+        drive = (drive - 1) * 6.5 / 31.f;
+        drive = powf(2, drive);
+        
+        dsp::AudioBlock<float> block (buffer);
+        filterSausage.process(dsp::ProcessContextReplacing<float>(block));
+        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
+        updateFilter();
+        
+    }
+    
+    // protection
+    float driveScale = 1;
+    
+    
+    float sampleMaxValue = 0;
+    
+    sampleMaxValue = buffer.getMagnitude (0, buffer.getNumSamples());
+    
+    
+    // distortionProcessor.controls.protection = true;
+    
+    if (sampleMaxValue != 0 /* && driveThresh == 1000*/) // if audio is not slient and doesn't have driveThresh
+    {
+        newDriveThresh = driveScale / sampleMaxValue; // for example, sampleMaxValue = 0.5, driveScale = 2, then driveThresh = 4
+        
+        if (fabs(newDriveThresh - driveThresh) > 2)
+        {
+                    driveThresh = newDriveThresh;
+        }
+        
+        if (driveThresh > 90.5096) // 2^ 6.5
+        {
+            driveThresh = 90.5096;
+        }
+        
+    }
+    if (sampleMaxValue == 0)
+    {
+        driveThresh = 1000;
+    }
+    
+    if (distortionProcessor.controls.protection == true)
+    {
+        if (drive > driveThresh)
+        {
+            drive = driveThresh + sqrt(drive) * 0.2;
+        }
+    }
+
+    // set zipper noise smoother target
+    driveSmoother.setTargetValue(drive);
+    outputSmoother.setTargetValue(currentGainOutput);
+    mixSmoother.setTargetValue(mix);
     
     // pre-filter
     bool preButton = *treeState.getRawParameterValue("pre");
@@ -322,50 +414,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         // latency = 0
         //setLatencySamples(0);
     }
-
-    // get parameters from sliders
-    int mode = *treeState.getRawParameterValue("mode");
-
-    //float currentGainInput = *treeState.getRawParameterValue("inputGain");
-    //currentGainInput = Decibels::decibelsToGain(currentGainInput);
-
-    float drive = *treeState.getRawParameterValue("drive");
-    
-    // sausage max is 4.3 * input
-    if (mode == 6) {
-        drive = 1 + (drive - 1)* 3.3f / 31.f;
-    }
-    
-    float color = *treeState.getRawParameterValue("color");
-    
-    float currentGainOutput = *treeState.getRawParameterValue("outputGain");
-    currentGainOutput = Decibels::decibelsToGain(currentGainOutput);
-
-    float mix = *treeState.getRawParameterValue("mix");
-    
-    // set distortion processor parameters
-    distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.mix = mix;
-    distortionProcessor.controls.color = color;
-
-    // input volume fix
-//    if (currentGainInput == previousGainInput)
-//    {
-//        buffer.applyGain(currentGainInput);
-//    }
-//    else
-//    {
-//        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
-//        previousGainInput = currentGainInput;
-//    }
-    
-    // set zipper noise smoother target
-    driveSmoother.setTargetValue(drive);
-    outputSmoother.setTargetValue(currentGainOutput);
-    mixSmoother.setTargetValue(mix);
-    
-    
-
     
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -375,6 +423,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         // auto *channelData = buffer.getWritePointer(channel);
         auto* channelData = blockOutput.getChannelPointer(channel);
         inputTemp.clear();
+
         
         for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
         {
@@ -592,6 +641,19 @@ void FireAudioProcessor::updateFilter()
     bool lowButton = *treeState.getRawParameterValue("low");
     bool bandButton = *treeState.getRawParameterValue("band");
     bool highButton = *treeState.getRawParameterValue("high");
+    float color = *treeState.getRawParameterValue("color");
+    float centreFreqSausage;
+    if (color < 0.5)
+    {
+        centreFreqSausage = 500 + color * 1000;
+    }
+    else
+    {
+        centreFreqSausage = 1000 + (color - 0.5) * 13000;
+    }
+    
+    *filterSausage.state = *dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 1, color + 1);
+    
     if (lowButton == true)
     {
         *filterIIR.state = *dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), cutoff, res);

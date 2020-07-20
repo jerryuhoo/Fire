@@ -31,6 +31,8 @@ public:
         float mix;
         // Rectification mode 0 = bypass, 0.5 = half, 1 = full
         float rectification;
+        // reduce drive if it is too loud
+        float protection;
     } controls;
 
     Distortion();

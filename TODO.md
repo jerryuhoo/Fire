@@ -8,3 +8,4 @@ TODO
 7. aliasing reduction https://www.eurasip.org/Proceedings/Eusipco/Eusipco2015/papers/1570104119.pdf
 8. Enhancing Even Harmonics
 https://ccrma.stanford.edu/~jos/pasp/Enhancing_Even_Harmonics.html
+9. add audio end smooth

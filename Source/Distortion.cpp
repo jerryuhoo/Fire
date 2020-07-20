@@ -16,6 +16,7 @@ Distortion::Distortion()
     controls.output = 1.f;
     controls.mix = 0.f;
     controls.rectification = 0.f;
+    controls.protection = true;
 }
 
 Distortion::~Distortion() {}
@@ -167,6 +168,18 @@ float Distortion::sausageFattener(float input)
 //        input = input;
 //    }
     // 0.9 -1.1 smooth
+    
+    input = input * 1.1;
+    
+    //if (controls.protection == false)
+    //{
+
+    //}
+    //else
+    //{
+        
+    //}
+    
     float cleanInput = input;
     if (input >= 1.1f)
     {

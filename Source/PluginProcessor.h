@@ -131,12 +131,15 @@ private:
 
     // filter
     dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
+    dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterSausage;
     
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
     float previousGainOutput;
     float previousDrive;
     float previousMix;
+    float driveThresh;
+    float newDriveThresh;
     
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;

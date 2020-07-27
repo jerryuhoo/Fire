@@ -94,7 +94,8 @@ private:
         mixKnob,
         cutoffKnob,
         resKnob,
-        colorKnob;
+        colorKnob,
+        biasKnob;
     int knobSize = 100;
 
     // labels
@@ -109,16 +110,19 @@ private:
         cutoffLabel,
         resLabel,
         linkedLabel,
+        safeLabel,
         recOffLabel,
         recHalfLabel,
         recFullLabel,
         filterOffLabel,
         filterLowLabel,
-        colorLabel;
+        colorLabel,
+        biasLabel;
 
     TextButton
         hqButton,
         linkedButton,
+        safeButton,
         filterOffButton,
         filterPreButton,
         filterPostButton,
@@ -156,7 +160,7 @@ private:
     
     void updateToggleState (Button* button, String name);
     void setDriveKnobState(Slider* slider);
-    void setColorKnobState(Slider* slider);
+    //void setColorKnobState(Slider* slider);
     void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
     
     // Slider attachment
@@ -169,15 +173,14 @@ private:
         mixAttachment,
         cutoffAttachment,
         resAttachment,
-        colorAttachment;
+        colorAttachment,
+        biasAttachment;
     
     // Toggle Button attachment
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
         linkedAttachment,
-        //recOffAttachment,
-        //recHalfAttachment,
-        //recFullAttachment,
+        safeAttachment,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,

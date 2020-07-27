@@ -176,10 +176,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // filter init
     filterIIR.reset();
-    filterSausage.reset();
+    filterColor.reset();
     updateFilter();
     filterIIR.prepare(spec);
-    filterSausage.prepare(spec);
+    filterColor.prepare(spec);
     
     // mode 8 diode================
     inputTemp.clear();
@@ -267,12 +267,13 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     currentGainOutput = Decibels::decibelsToGain(currentGainOutput);
 
     float mix = *treeState.getRawParameterValue("mix");
-    
+    float bias = *treeState.getRawParameterValue("bias");
+
     // set distortion processor parameters
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.mix = mix;
     distortionProcessor.controls.color = color;
-    
+    distortionProcessor.controls.bias = bias;
     // input volume fix
     //    if (currentGainInput == previousGainInput)
     //    {
@@ -292,14 +293,13 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         //drive = 1 + (drive - 1) * (6 - 1) / 31.f;
         drive = (drive - 1) * 6.5 / 31.f;
         drive = powf(2, drive);
-        
-        dsp::AudioBlock<float> block (buffer);
-        filterSausage.process(dsp::ProcessContextReplacing<float>(block));
-        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
-        updateFilter();
-        
     }
     
+    // color eq filter
+    dsp::AudioBlock<float> block(buffer);
+    filterColor.process(dsp::ProcessContextReplacing<float>(block));
+    updateFilter();
+
     // protection
     float driveScale = 1;
     
@@ -309,7 +309,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     sampleMaxValue = buffer.getMagnitude (0, buffer.getNumSamples());
     
     
-    // distortionProcessor.controls.protection = true;
+    distortionProcessor.controls.protection = *treeState.getRawParameterValue("safe");
     
     if (sampleMaxValue != 0 /* && driveThresh == 1000*/) // if audio is not slient and doesn't have driveThresh
     {
@@ -652,7 +652,7 @@ void FireAudioProcessor::updateFilter()
         centreFreqSausage = 1000 + (color - 0.5) * 13000;
     }
     
-    *filterSausage.state = *dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 1, color + 1);
+    *filterColor.state = *dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 1, color + 1);
     
     if (lowButton == true)
     {
@@ -672,17 +672,16 @@ void FireAudioProcessor::updateFilter()
 AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
-       
-    //parameters.push_back(std::make_unique<AudioParameterInt>("preset", "Preset", 0, 1000, 0));
-    //parameters.push_back(std::make_unique<AudioParameterBool>("sideAB", "SideAB", false));
     
     parameters.push_back(std::make_unique<AudioParameterInt>("mode", "Mode", 0, 9, 1));
     parameters.push_back(std::make_unique<AudioParameterBool>("hq", "Hq", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("linked", "Linked", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("safe", "Safe", true));
     
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("color", "Color", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("rec", "Rec", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

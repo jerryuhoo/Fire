@@ -32,7 +32,9 @@ public:
         // Rectification mode 0 = bypass, 0.5 = half, 1 = full
         float rectification;
         // reduce drive if it is too loud
-        float protection;
+        bool protection;
+        // bias [-0.5, 0.5]
+        float bias;
     } controls;
 
     Distortion();
@@ -42,7 +44,7 @@ public:
 
 private:
     // Intermediate values
-    float input, cleanOut = 0.f;
+    float cleanOut = 0.f;
 
     // Nonlinearities
     float arctanSoftClipping(float input);

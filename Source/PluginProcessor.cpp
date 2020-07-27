@@ -125,10 +125,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     
     previousGainOutput = (float)*treeState.getRawParameterValue("outputGain");
     previousGainOutput = Decibels::decibelsToGain(previousGainOutput);
-
     previousDrive = *treeState.getRawParameterValue("drive");
-    
     previousMix = (float)*treeState.getRawParameterValue("mix");
+    previousColor = (float)*treeState.getRawParameterValue("color");
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
@@ -137,6 +136,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     
     outputSmoother.reset(sampleRate, 0.05);
     outputSmoother.setCurrentAndTargetValue(previousGainOutput);
+    
+    colorSmoother.reset(sampleRate, 0.05);
+    colorSmoother.setCurrentAndTargetValue(previousColor);
     
     mixSmoother.reset(sampleRate, 0.05);
     mixSmoother.setCurrentAndTargetValue(previousMix);
@@ -268,12 +270,11 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
 
     float mix = *treeState.getRawParameterValue("mix");
     float bias = *treeState.getRawParameterValue("bias");
-
+    
     // set distortion processor parameters
     distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.mix = mix;
-    distortionProcessor.controls.color = color;
     distortionProcessor.controls.bias = bias;
+    
     // input volume fix
     //    if (currentGainInput == previousGainInput)
     //    {
@@ -308,6 +309,11 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     
     sampleMaxValue = buffer.getMagnitude (0, buffer.getNumSamples());
     
+    // bias
+    if (sampleMaxValue == 0)
+    {
+        distortionProcessor.controls.bias = 0;
+    }
     
     distortionProcessor.controls.protection = *treeState.getRawParameterValue("safe");
     
@@ -338,11 +344,14 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             drive = driveThresh + sqrt(drive) * 0.2;
         }
     }
-
+    
     // set zipper noise smoother target
     driveSmoother.setTargetValue(drive);
     outputSmoother.setTargetValue(currentGainOutput);
     mixSmoother.setTargetValue(mix);
+    colorSmoother.setTargetValue(color);
+    
+    distortionProcessor.controls.color = colorSmoother.getNextValue();
     
     // pre-filter
     bool preButton = *treeState.getRawParameterValue("pre");
@@ -668,6 +677,13 @@ void FireAudioProcessor::updateFilter()
     }
 }
 
+bool FireAudioProcessor::isSlient(AudioBuffer<float> buffer)
+{
+    if (buffer.getMagnitude (0, buffer.getNumSamples()) == 0)
+        return true;
+    else
+        return false;
+}
 
 AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
@@ -681,7 +697,7 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("color", "Color", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.1f, 0.1f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("rec", "Rec", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

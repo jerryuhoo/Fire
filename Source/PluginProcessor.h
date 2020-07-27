@@ -94,7 +94,9 @@ public:
 
     // filter
     void updateFilter();
-
+    
+    bool isSlient(AudioBuffer<float> buffer);
+    
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -137,12 +139,14 @@ private:
     //float previousGainInput;
     float previousGainOutput;
     float previousDrive;
+    float previousColor;
     float previousMix;
     float driveThresh;
     float newDriveThresh;
     
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;
+    SmoothedValue<float> colorSmoother;
     SmoothedValue<float> mixSmoother;
     
     Distortion distortionProcessor;

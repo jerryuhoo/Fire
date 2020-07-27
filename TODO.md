@@ -9,4 +9,4 @@ TODO
 8. Enhancing Even Harmonics
 https://ccrma.stanford.edu/~jos/pasp/Enhancing_Even_Harmonics.html
 9. add audio end smooth
-10. add bias
+10. smooth color

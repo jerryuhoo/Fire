@@ -126,8 +126,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousGainOutput = (float)*treeState.getRawParameterValue("outputGain");
     previousGainOutput = Decibels::decibelsToGain(previousGainOutput);
     previousDrive = *treeState.getRawParameterValue("drive");
-    previousMix = (float)*treeState.getRawParameterValue("mix");
+    previousCutoff = (float)*treeState.getRawParameterValue("cutoff");
     previousColor = (float)*treeState.getRawParameterValue("color");
+    previousMix = (float)*treeState.getRawParameterValue("mix");
+    
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
@@ -137,7 +139,16 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     outputSmoother.reset(sampleRate, 0.05);
     outputSmoother.setCurrentAndTargetValue(previousGainOutput);
     
-    colorSmoother.reset(sampleRate, 0.05);
+    cutoffSmoother.reset(sampleRate, 0.001);
+    cutoffSmoother.setCurrentAndTargetValue(previousCutoff);
+    
+    recSmoother.reset(sampleRate, 0.05);
+    recSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue("rec"));
+    
+    biasSmoother.reset(sampleRate, 0.001);
+    biasSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue("bias"));
+    
+    colorSmoother.reset(sampleRate, 0.001);
     colorSmoother.setCurrentAndTargetValue(previousColor);
     
     mixSmoother.reset(sampleRate, 0.05);
@@ -273,7 +284,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     
     // set distortion processor parameters
     distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.bias = bias;
     
     // input volume fix
     //    if (currentGainInput == previousGainInput)
@@ -309,11 +319,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     
     sampleMaxValue = buffer.getMagnitude (0, buffer.getNumSamples());
     
-    // bias
-    if (sampleMaxValue == 0)
-    {
-        distortionProcessor.controls.bias = 0;
-    }
+    
     
     distortionProcessor.controls.protection = *treeState.getRawParameterValue("safe");
     
@@ -350,8 +356,18 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     outputSmoother.setTargetValue(currentGainOutput);
     mixSmoother.setTargetValue(mix);
     colorSmoother.setTargetValue(color);
+    biasSmoother.setTargetValue(bias);
     
+    
+    // set distortion processor smooth parameters
     distortionProcessor.controls.color = colorSmoother.getNextValue();
+    distortionProcessor.controls.bias = biasSmoother.getNextValue();
+    // bias
+    if (sampleMaxValue == 0)
+    {
+        distortionProcessor.controls.bias = 0;
+    }
+    
     
     // pre-filter
     bool preButton = *treeState.getRawParameterValue("pre");
@@ -438,7 +454,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         {
             inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
             // distortion
-            if (mode < 8) 
+            if (mode < 9)
             {
                 distortionProcessor.controls.drive = driveSmoother.getNextValue();
                 distortionProcessor.controls.output = outputSmoother.getNextValue();
@@ -450,7 +466,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             updateRectification();
             channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
         }
-        if (mode == 8)
+        if (mode == 9)
         {
             // left channel diode
             if (channel == 0)
@@ -467,27 +483,27 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             {
                 channelData[sample] = inputTemp[sample];
                   
-                float smoothDriveValue = driveSmoother.getNextValue();
+                // float smoothDriveValue = driveSmoother.getNextValue();
                 
                 // for rough normalize
-                if (smoothDriveValue < 10)
-                {
-                    channelData[sample] /= (0.5 + 5/smoothDriveValue);
-                }
-                channelData[sample] /= smoothDriveValue;
-                
-                if (smoothDriveValue > 4 && channelData[sample] != 0)
-                {
-                    if (smoothDriveValue < 8)
-                    {
-                        channelData[sample] += smoothDriveValue / 8 * 1.2 - 0.6;
-                    }
-                    else
-                    {
-                        channelData[sample] += smoothDriveValue / 32 * 0.9 + 0.375;
-                    }
-                }
-                
+//                if (smoothDriveValue < 10)
+//                {
+//                    channelData[sample] /= (0.5 + 5/smoothDriveValue);
+//                }
+//                channelData[sample] /= smoothDriveValue;
+//
+//                if (smoothDriveValue > 4 && channelData[sample] != 0)
+//                {
+//                    if (smoothDriveValue < 8)
+//                    {
+//                        channelData[sample] += smoothDriveValue / 8 * 1.2 - 0.6;
+//                    }
+//                    else
+//                    {
+//                        channelData[sample] += smoothDriveValue / 32 * 0.9 + 0.375;
+//                    }
+//                }
+//
 
                 channelData[sample] *= outputSmoother.getNextValue();
                 
@@ -639,7 +655,8 @@ AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 void FireAudioProcessor::updateRectification()
 {
     float rec = *treeState.getRawParameterValue("rec");
-    distortionProcessor.controls.rectification = rec;
+    recSmoother.setTargetValue(rec);
+    distortionProcessor.controls.rectification = recSmoother.getNextValue();
 }
 
 // Filter selection
@@ -652,6 +669,16 @@ void FireAudioProcessor::updateFilter()
     bool highButton = *treeState.getRawParameterValue("high");
     float color = *treeState.getRawParameterValue("color");
     float centreFreqSausage;
+    
+    colorSmoother.setTargetValue(color);
+    color = colorSmoother.getNextValue();
+    
+    // smooth cutoff value
+    cutoffSmoother.setTargetValue(cutoff);
+    cutoff = cutoffSmoother.getNextValue();
+    
+        
+    
     if (color < 0.5)
     {
         centreFreqSausage = 500 + color * 1000;

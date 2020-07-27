@@ -27,8 +27,6 @@ public:
         float thresh;
         // output
         float output;
-        // Mix, [0., 1.] ratio between a dry and wet signal
-        float mix;
         // Rectification mode 0 = bypass, 0.5 = half, 1 = full
         float rectification;
         // reduce drive if it is too loud
@@ -43,9 +41,6 @@ public:
     float rectificationProcess(float input);
 
 private:
-    // Intermediate values
-    float cleanOut = 0.f;
-
     // Nonlinearities
     float arctanSoftClipping(float input);
     float expSoftClipping(float input);

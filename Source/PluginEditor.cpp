@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.711"
+#define VERSION "0.712"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -502,7 +502,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
     distortionProcessor.controls.color = color;
-    distortionProcessor.controls.mix = mix;
     distortionProcessor.controls.rectification = rec;
     distortionProcessor.controls.bias = bias;
 

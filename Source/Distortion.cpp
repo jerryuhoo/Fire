@@ -14,7 +14,6 @@ Distortion::Distortion()
     controls.drive = 1.f;
     controls.color = 0;
     controls.output = 1.f;
-    controls.mix = 0.f;
     controls.rectification = 0.f;
     controls.protection = false;
     controls.bias = 0;
@@ -28,10 +27,9 @@ float Distortion::distortionProcess(float input)
 //    if (controls.mode == 6) {
 //        controls.drive = 1 + (controls.drive - 1)* 3.3f / 31.f;
 //    }
-    if (input != 0)
-    {
-        input += controls.bias;
-    }
+
+    input += controls.bias;
+
     
     input = input * controls.drive;
     

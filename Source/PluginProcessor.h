@@ -140,6 +140,7 @@ private:
     float previousGainOutput;
     float previousDrive;
     float previousColor;
+    float previousCutoff;
     float previousMix;
     float driveThresh;
     float newDriveThresh;
@@ -147,6 +148,9 @@ private:
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;
     SmoothedValue<float> colorSmoother;
+    SmoothedValue<float> cutoffSmoother;
+    SmoothedValue<float> recSmoother;
+    SmoothedValue<float> biasSmoother;
     SmoothedValue<float> mixSmoother;
     
     Distortion distortionProcessor;

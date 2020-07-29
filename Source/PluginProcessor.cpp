@@ -312,7 +312,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     updateFilter();
 
     // protection
-    float driveScale = 1;
+//    float driveScale = 1.9;
     
     
     float sampleMaxValue = 0;
@@ -323,31 +323,40 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     
     distortionProcessor.controls.protection = *treeState.getRawParameterValue("safe");
     
-    if (sampleMaxValue != 0 /* && driveThresh == 1000*/) // if audio is not slient and doesn't have driveThresh
-    {
-        newDriveThresh = driveScale / sampleMaxValue; // for example, sampleMaxValue = 0.5, driveScale = 2, then driveThresh = 4
-        
-        if (fabs(newDriveThresh - driveThresh) > 2)
-        {
-                    driveThresh = newDriveThresh;
-        }
-        
-        if (driveThresh > 90.5096) // 2^ 6.5
-        {
-            driveThresh = 90.5096;
-        }
-        
-    }
-    if (sampleMaxValue == 0)
-    {
-        driveThresh = 1000;
-    }
+//    if (sampleMaxValue != 0 /* && driveThresh == 1000*/) // if audio is not slient and doesn't have driveThresh
+//    {
+//        newDriveThresh = driveScale / sampleMaxValue; // for example, sampleMaxValue = 0.5, driveScale = 2, then driveThresh = 4
+//
+//        if (fabs(newDriveThresh - driveThresh) > 0.2)
+//        {
+//                    driveThresh = newDriveThresh;
+//        }
+//
+//        if (driveThresh > 90.5096) // 2^ 6.5
+//        {
+//            driveThresh = 90.5096;
+//        }
+//
+//    }
+//    if (sampleMaxValue == 0)
+//    {
+//        driveThresh = 1000;
+//    }
     
     if (distortionProcessor.controls.protection == true)
     {
-        if (drive > driveThresh)
+//        if (drive > driveThresh)
+//        {
+//            drive = driveThresh + (drive - driveThresh) * 0.006;
+//        }
+        if (sampleMaxValue * drive > 2.f)
         {
-            drive = driveThresh + sqrt(drive) * 0.2;
+            drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
+            //DBG("protect");
+        }
+        else
+        {
+            //DBG("no");
         }
     }
     
@@ -678,17 +687,17 @@ void FireAudioProcessor::updateFilter()
     cutoff = cutoffSmoother.getNextValue();
     
         
-    
+    // 20 - 800 - 8000
     if (color < 0.5)
     {
-        centreFreqSausage = 500 + color * 1000;
+        centreFreqSausage = 20 + color * 1560;
     }
     else
     {
-        centreFreqSausage = 1000 + (color - 0.5) * 13000;
+        centreFreqSausage = 800 + (color - 0.5) * 14400;
     }
     
-    *filterColor.state = *dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 1, color + 1);
+    *filterColor.state = *dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 0.4, color + 1);
     
     if (lowButton == true)
     {

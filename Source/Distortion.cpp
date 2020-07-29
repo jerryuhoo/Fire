@@ -174,14 +174,14 @@ float Distortion::sausageFattener(float input)
     
     input = input * 1.1;
     
-    //if (controls.protection == false)
-    //{
-
-    //}
-    //else
-    //{
-        
-    //}
+//    if (controls.protection == true)
+//    {
+//        if (input > 1)
+//        {
+//            input = 1 + input * 0.05;
+//        }
+//    }
+   
     
     float cleanInput = input;
     if (input >= 1.1f)

@@ -133,8 +133,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
-    driveThresh = 1000;
-    newDriveThresh = 1000;
     
     outputSmoother.reset(sampleRate, 0.05);
     outputSmoother.setCurrentAndTargetValue(previousGainOutput);
@@ -312,43 +310,14 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     updateFilter();
 
     // protection
-//    float driveScale = 1.9;
-    
-    
     float sampleMaxValue = 0;
     
     sampleMaxValue = buffer.getMagnitude (0, buffer.getNumSamples());
     
-    
-    
     distortionProcessor.controls.protection = *treeState.getRawParameterValue("safe");
-    
-//    if (sampleMaxValue != 0 /* && driveThresh == 1000*/) // if audio is not slient and doesn't have driveThresh
-//    {
-//        newDriveThresh = driveScale / sampleMaxValue; // for example, sampleMaxValue = 0.5, driveScale = 2, then driveThresh = 4
-//
-//        if (fabs(newDriveThresh - driveThresh) > 0.2)
-//        {
-//                    driveThresh = newDriveThresh;
-//        }
-//
-//        if (driveThresh > 90.5096) // 2^ 6.5
-//        {
-//            driveThresh = 90.5096;
-//        }
-//
-//    }
-//    if (sampleMaxValue == 0)
-//    {
-//        driveThresh = 1000;
-//    }
-    
+
     if (distortionProcessor.controls.protection == true)
     {
-//        if (drive > driveThresh)
-//        {
-//            drive = driveThresh + (drive - driveThresh) * 0.006;
-//        }
         if (sampleMaxValue * drive > 2.f)
         {
             drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
@@ -461,6 +430,11 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         
         for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
         {
+            // smooth end and start of bias
+            if (channelData[sample] == 0 && channelData[sample + 1] == 0 && sample < blockOutput.getNumSamples() - 1) {
+                distortionProcessor.controls.bias = 0;
+            }
+            
             inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
             // distortion
             if (mode < 9)

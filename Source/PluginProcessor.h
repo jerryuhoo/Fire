@@ -142,8 +142,6 @@ private:
     float previousColor;
     float previousCutoff;
     float previousMix;
-    float driveThresh;
-    float newDriveThresh;
     
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;

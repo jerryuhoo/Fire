@@ -334,12 +334,14 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     outputSmoother.setTargetValue(currentGainOutput);
     mixSmoother.setTargetValue(mix);
     colorSmoother.setTargetValue(color);
-    biasSmoother.setTargetValue(bias);
+    biasSmoother.setTargetValue(bias * roundToInt(sampleMaxValue * 100) / 100.f);
     
     
     // set distortion processor smooth parameters
     distortionProcessor.controls.color = colorSmoother.getNextValue();
     distortionProcessor.controls.bias = biasSmoother.getNextValue();
+    // DBG(distortionProcessor.controls.bias);
+    
     // bias
     if (sampleMaxValue == 0)
     {
@@ -707,7 +709,7 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("color", "Color", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.1f, 0.1f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("rec", "Rec", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("outputGain", "OutputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

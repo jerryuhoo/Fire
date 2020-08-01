@@ -555,7 +555,7 @@ void drawMeterBar (juce::Graphics& g,
                    juce::Rectangle<float> bounds,
                    float rms, float peak) override
 {
-    const auto infinity = meterType & foleys::LevelMeter::Reduction ? -30.0f :  -80.0f;
+    const auto infinity = meterType & foleys::LevelMeter::Reduction ? -30.0f :  -100.0f;
     const auto rmsDb  = juce::Decibels::gainToDecibels (rms,  infinity);
     const auto peakDb = juce::Decibels::gainToDecibels (peak, infinity);
 
@@ -663,7 +663,7 @@ void drawTickMarks (juce::Graphics& g,
                     foleys::LevelMeter::MeterFlags meterType,
                     juce::Rectangle<float> bounds) override
 {
-    const auto infinity = meterType & foleys::LevelMeter::Reduction ? -30.0f :  -80.0f;
+    const auto infinity = meterType & foleys::LevelMeter::Reduction ? -30.0f :  -100.0f;
 
     g.setColour (findColour (foleys::LevelMeter::lmTicksColour));
     if (meterType & foleys::LevelMeter::Minimal)
@@ -778,7 +778,7 @@ void drawMaxNumber (juce::Graphics& g,
 
     g.setColour (findColour (foleys::LevelMeter::lmMeterBackgroundColour));
     g.fillRect (bounds);
-    const float maxDb = juce::Decibels::gainToDecibels (maxGain, -80.0f);
+    const float maxDb = juce::Decibels::gainToDecibels (maxGain, -100.0f);
     g.setColour (findColour (maxDb > 0.0 ? foleys::LevelMeter::lmTextClipColour : foleys::LevelMeter::lmTextColour));
     g.setFont (bounds.getHeight() * 0.5f);
     g.drawFittedText (juce::String (maxDb, 1) + " dB",

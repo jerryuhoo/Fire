@@ -150,6 +150,8 @@ private:
     SmoothedValue<float> recSmoother;
     SmoothedValue<float> biasSmoother;
     SmoothedValue<float> mixSmoother;
+    SmoothedValue<float> centralSmoother;
+    SmoothedValue<float> normalSmoother;
     
     Distortion distortionProcessor;
 

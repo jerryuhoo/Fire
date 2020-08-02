@@ -94,11 +94,11 @@ static inline float diodeClipper (Array<float>& input, float Fs,
 	Array<float> output;
 
     // the simulation loop
-    int n=0; int max=input.size();
+    int n = 0; int max = input.size();
 	
-    for (; n<max; ++n) 
+    for (; n < max; ++n)
     {
-        Vin.Vs = input[n]*20;					// read the input signal for the voltage source //*20 was added by me
+        Vin.Vs = input[n] * 13;                  // read the input signal for the voltage source
         b = root.reflected();				// get the waves up to the root
 											// ** VALVE RESISTOR **
         Rdiode = Is * exp(-Vt * Vdiode);	// the nonlinear resistance of the diode
@@ -113,15 +113,6 @@ static inline float diodeClipper (Array<float>& input, float Fs,
 	input = output;
 	return Vdiode;
 }
-//==============================================================================
-/**
-	testDiode
-	---------
-	fill the two buffer provided (input & output) with a sine wave +/-30V at 100Hz
-	for the input, and with the nonlinear valve diode simulation for the output.
-
-	return the gain used as range limit by the Diagram/Plot component.
-*/
 
 #endif  // __DIODE_H_4BF269BF__
 //==============================================================================

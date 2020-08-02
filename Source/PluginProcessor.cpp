@@ -152,6 +152,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mixSmoother.reset(sampleRate, 0.05);
     mixSmoother.setCurrentAndTargetValue(previousMix);
     
+    centralSmoother.reset(sampleRate, 0.1);
+    centralSmoother.setCurrentAndTargetValue(0);
+    
+    normalSmoother.reset(sampleRate, 0.5);
+    normalSmoother.setCurrentAndTargetValue(1);
+    
     // clear visualiser
     visualiser.clear();
     
@@ -442,8 +448,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             if (mode < 9)
             {
                 distortionProcessor.controls.drive = driveSmoother.getNextValue();
-                distortionProcessor.controls.output = outputSmoother.getNextValue();
-                
+                // distortionProcessor.controls.output = outputSmoother.getNextValue();
                 channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
             }
 
@@ -467,31 +472,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
             {
                 channelData[sample] = inputTemp[sample];
-                  
-                // float smoothDriveValue = driveSmoother.getNextValue();
-                
-                // for rough normalize
-//                if (smoothDriveValue < 10)
-//                {
-//                    channelData[sample] /= (0.5 + 5/smoothDriveValue);
-//                }
-//                channelData[sample] /= smoothDriveValue;
-//
-//                if (smoothDriveValue > 4 && channelData[sample] != 0)
-//                {
-//                    if (smoothDriveValue < 8)
-//                    {
-//                        channelData[sample] += smoothDriveValue / 8 * 1.2 - 0.6;
-//                    }
-//                    else
-//                    {
-//                        channelData[sample] += smoothDriveValue / 32 * 0.9 + 0.375;
-//                    }
-//                }
-//
-
-                channelData[sample] *= outputSmoother.getNextValue();
-                
+                //channelData[sample] *= outputSmoother.getNextValue();
                 // rectification
                 updateRectification();
                 channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
@@ -513,6 +494,54 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     //{
     //    oversampling->processSamplesDown(blockInput);
     //}
+    
+    
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        
+        auto* channelData = buffer.getWritePointer(channel);
+ 
+        Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());
+        float min = range.getStart();
+        float max = range.getEnd();
+        float magnitude = range.getLength() / 2.f;
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            // centralization
+            if (mode == 9 || recSmoother.getNextValue() > 0)
+            {
+                centralSmoother.setTargetValue((max + min) / 2.f);
+                channelData[sample] = channelData[sample] - centralSmoother.getNextValue();
+            }
+            
+            
+            // normalization
+            if (mode == 9)
+            {
+                normalSmoother.setTargetValue(magnitude);
+                if (normalSmoother.getNextValue() != 0 && channelData[sample] != 0)
+                {
+                    channelData[sample] = channelData[sample] / normalSmoother.getNextValue();
+                }
+                
+                // final protection
+                if (channelData[sample] > 1)
+                {
+                    channelData[sample] = 1;
+                }
+                else if (channelData[sample] < -1)
+                {
+                    channelData[sample] = -1;
+                }
+            }
+            
+            
+            // output control
+            channelData[sample] *= outputSmoother.getNextValue();
+        }
+    }
+    
     
     
     

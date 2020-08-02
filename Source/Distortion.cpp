@@ -13,7 +13,7 @@ Distortion::Distortion()
     controls.mode = 0;
     controls.drive = 1.f;
     controls.color = 0;
-    controls.output = 1.f;
+    //controls.output = 1.f;
     controls.rectification = 0.f;
     controls.protection = false;
     controls.bias = 0;
@@ -63,7 +63,7 @@ float Distortion::distortionProcess(float input)
         input = linFoldback(input);
         break;
     }
-    input = input * controls.output;
+    //input = input * controls.output;
 
     return input;
 }

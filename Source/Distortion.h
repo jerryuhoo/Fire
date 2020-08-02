@@ -26,7 +26,7 @@ public:
         // Threshold, [0., 1], the amplitude at which to start fold-back distortion
         float thresh;
         // output
-        float output;
+        //float output;
         // Rectification mode 0 = bypass, 0.5 = half, 1 = full
         float rectification;
         // reduce drive if it is too loud

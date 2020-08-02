@@ -13,6 +13,7 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 #include "Distortion.h"
 #include "Preset.h"
+#include "Delay.h"
 
 #define COLOUR1 Colour(244, 208, 63)
 #define COLOUR6 Colour(45, 40, 40)
@@ -93,7 +94,9 @@ public:
 
     // filter
     void updateFilter();
-
+    
+    bool isSlient(AudioBuffer<float> buffer);
+    
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -130,16 +133,25 @@ private:
 
     // filter
     dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
+    dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterColor;
     
     // fix the artifacts (also called zipper noise)
-    float previousGainInput;
+    //float previousGainInput;
     float previousGainOutput;
     float previousDrive;
+    float previousColor;
+    float previousCutoff;
     float previousMix;
     
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;
+    SmoothedValue<float> colorSmoother;
+    SmoothedValue<float> cutoffSmoother;
+    SmoothedValue<float> recSmoother;
+    SmoothedValue<float> biasSmoother;
     SmoothedValue<float> mixSmoother;
+    SmoothedValue<float> centralSmoother;
+    SmoothedValue<float> normalSmoother;
     
     Distortion distortionProcessor;
 
@@ -147,7 +159,10 @@ private:
     std::unique_ptr<dsp::Oversampling<float>> oversampling; // normal use 2x
     std::unique_ptr<dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
     int oversampleFactor = 1;
-
+    
+    // oversampling delay, set to dry buffer
+    Delay mDelay{0};
+    
     // mode 8 diode================
     Array<float> inputTemp;
     float VdiodeL;

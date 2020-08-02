@@ -99,8 +99,8 @@ private:
         float getAvgRMS () const
         {
             if (rmsHistory.size() > 0)
-                return std::sqrtf (std::accumulate (rmsHistory.begin(), rmsHistory.end(), 0.0f) / rmsHistory.size());
-
+                return std::sqrt(std::accumulate (rmsHistory.begin(), rmsHistory.end(), 0.0f) / static_cast<float>(rmsHistory.size()));
+                
             return float (std::sqrt (rmsSum));
         }
 
@@ -330,7 +330,7 @@ public:
      */
     void clearMaxNum (const int channel)
     {
-        levels.at (size_t (channel)).maxOverall = -80.0f;
+        levels.at (size_t (channel)).maxOverall = infinity;
     }
 
     /**
@@ -339,7 +339,7 @@ public:
     void clearAllMaxNums ()
     {
         for (ChannelData& l : levels) {
-            l.maxOverall = -80.0f;
+            l.maxOverall = infinity;
         }
     }
 
@@ -374,6 +374,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LevelMeterSource)
     juce::WeakReference<LevelMeterSource>::Master masterReference;
     friend class juce::WeakReference<LevelMeterSource>;
+
+    constexpr static float infinity = -100.0f;
 
     std::vector<ChannelData> levels;
 

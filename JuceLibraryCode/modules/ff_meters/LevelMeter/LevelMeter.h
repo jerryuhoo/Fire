@@ -286,7 +286,8 @@ public:
      \internal
     */
     void mouseDown (const juce::MouseEvent& event) override;
-
+    
+    void parentHierarchyChanged() override;
     void lookAndFeelChanged() override;
 
     /**

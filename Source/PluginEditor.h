@@ -86,20 +86,22 @@ private:
 
     // sliders
     Slider
-        inputKnob,
+        //inputKnob,
         driveKnob,
         downSampleKnob,
         outputKnob,
         recKnob,
         mixKnob,
         cutoffKnob,
-        resKnob;
+        resKnob,
+        colorKnob,
+        biasKnob;
     int knobSize = 100;
 
     // labels
     Label
         hqLabel,
-        inputLabel,
+        //inputLabel,
         driveLabel,
         downSampleLabel,
         outputLabel,
@@ -108,15 +110,19 @@ private:
         cutoffLabel,
         resLabel,
         linkedLabel,
+        safeLabel,
         recOffLabel,
         recHalfLabel,
         recFullLabel,
         filterOffLabel,
-        filterLowLabel;
+        filterLowLabel,
+        colorLabel,
+        biasLabel;
 
     TextButton
         hqButton,
         linkedButton,
+        safeButton,
         filterOffButton,
         filterPreButton,
         filterPostButton,
@@ -153,27 +159,28 @@ private:
     };
     
     void updateToggleState (Button* button, String name);
-    void setKnobState(Slider* slider);
-    void setButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
+    void setDriveKnobState(Slider* slider);
+    //void setColorKnobState(Slider* slider);
+    void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
     
     // Slider attachment
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>
-        inputAttachment,
+        //inputAttachment,
         driveAttachment,
         downSampleAttachment,
         recAttachment,
         outputAttachment,
         mixAttachment,
         cutoffAttachment,
-        resAttachment;
+        resAttachment,
+        colorAttachment,
+        biasAttachment;
     
     // Toggle Button attachment
     std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
         linkedAttachment,
-        //recOffAttachment,
-        //recHalfAttachment,
-        //recFullAttachment,
+        safeAttachment,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,

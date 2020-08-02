@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.700"
+#define VERSION "0.717"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -19,7 +19,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 {
     // timer
     Timer::startTimerHz(20.0f);
-
 
     // resize not avaialble
     setResizable(true, true);
@@ -50,8 +49,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, COLOUR1);
     lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, COLOUR5);
     lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, COLOUR3);
-    
-    
+
     inputMeter.setLookAndFeel(&lnf);
     inputMeter.setMeterSource(&processor.getInputMeterSource());
     addAndMakeVisible(inputMeter);
@@ -59,8 +57,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputMeter.setLookAndFeel(&lnf);
     outputMeter.setMeterSource(&processor.getOutputMeterSource());
     addAndMakeVisible(outputMeter);
-    
-
 
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
@@ -74,8 +70,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     // inputKnob.setSliderStyle(Slider::LinearVertical);
     inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    
-    
+
     addAndMakeVisible(inputLabel);
     inputLabel.setText("Input", dontSendNotification);
     inputLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
@@ -97,7 +92,33 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     driveLabel.attachToComponent(&driveKnob, false);
     driveLabel.setJustificationType (Justification::centred);
     
-    // down sample knob
+    // color knob
+    addAndMakeVisible(colorKnob);
+    colorKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    colorKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    colorKnob.addListener(this);
+
+    addAndMakeVisible(colorLabel);
+    colorLabel.setText("Color", dontSendNotification);
+    colorLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
+    colorLabel.setColour(Label::textColourId, KNOB_FONT_COLOUR);
+    colorLabel.attachToComponent(&colorKnob, false);
+    colorLabel.setJustificationType (Justification::centred);
+
+    // bias knob
+    addAndMakeVisible(biasKnob);
+    biasKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    biasKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
+    biasKnob.addListener(this);
+
+    addAndMakeVisible(biasLabel);
+    biasLabel.setText("Bias", dontSendNotification);
+    biasLabel.setFont(Font(KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
+    biasLabel.setColour(Label::textColourId, KNOB_FONT_COLOUR);
+    biasLabel.attachToComponent(&biasKnob, false);
+    biasLabel.setJustificationType(Justification::centred);
+    
+    // downsample knob
     addAndMakeVisible(downSampleKnob);
     downSampleKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     downSampleKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
@@ -198,6 +219,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     linkedButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
     linkedButton.setButtonText("LINK");
     linkedButton.setLookAndFeel(&roundedButtonLnf);
+
+    // safe overload Button
+    addAndMakeVisible(safeButton);
+    safeButton.setClickingTogglesState(true);
+    bool safeButtonState = *processor.treeState.getRawParameterValue("safe");
+    safeButton.setToggleState(safeButtonState, dontSendNotification);
+    safeButton.onClick = [this] { updateToggleState(&safeButton, "Safe"); };
+    safeButton.setColour(TextButton::buttonColourId, COLOUR6);
+    safeButton.setColour(TextButton::buttonOnColourId, COLOUR5);
+    safeButton.setColour(ComboBox::outlineColourId, COLOUR6);
+    safeButton.setColour(TextButton::textColourOnId, KNOB_FONT_COLOUR);
+    safeButton.setColour(TextButton::textColourOffId, KNOB_FONT_COLOUR);
+    safeButton.setButtonText("SAFE");
+    safeButton.setLookAndFeel(&roundedButtonLnf);
 
     // Filter State Buttons
     addAndMakeVisible(filterOffButton);
@@ -300,8 +335,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterHighButton.setLookAndFeel(&roundedButtonLnf);
     
     // Attachment
-    inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
+    //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     driveAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
+    colorAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "color", colorKnob);
+    biasAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "bias", biasKnob);
     downSampleAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "downSample", downSampleKnob);
     recAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "rec", recKnob);
     outputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
@@ -311,9 +348,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     hqAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "hq", hqButton);
     linkedAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "linked", linkedButton);
-    //recOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recOff", recOffButton);
-    //recHalfAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recHalf", recHalfButton);
-    //recFullAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "recFull", recFullButton);
+    safeAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "safe", safeButton);
     filterOffAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "off", filterOffButton);
     filterPreAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "pre", filterPreButton);
     filterPostAttachment = std::make_unique<AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "post", filterPostButton);
@@ -336,15 +371,16 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     distortionMode.addSectionHeading("Hard Clipping");
     distortionMode.addItem("Hard Clipping", 6);
+    distortionMode.addItem("Sausage Fattener", 7);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Foldback");
-    distortionMode.addItem("Sin Foldback", 7);
-    distortionMode.addItem("Linear Foldback", 8);
+    distortionMode.addItem("Sin Foldback", 8);
+    distortionMode.addItem("Linear Foldback", 9);
     distortionMode.addSeparator();
 
     distortionMode.addSectionHeading("Asymmetrical Clipping");
-    distortionMode.addItem("Diode Clipping 1", 9);
+    distortionMode.addItem("Diode Clipping 1", 10);
     distortionMode.addSeparator();
 
     distortionMode.setJustificationType(Justification::centred);
@@ -375,7 +411,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     modeAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
     
-    
     // about button
     addAndMakeVisible(aboutButton);
     aboutButton.setColour(TextButton::buttonColourId, COLOUR3);
@@ -394,6 +429,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     outputMeter.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
     linkedButton.setLookAndFeel(nullptr);
+    safeButton.setLookAndFeel(nullptr);
     filterOffButton.setLookAndFeel(nullptr);
     filterPreButton.setLookAndFeel(nullptr);
     filterPostButton.setLookAndFeel(nullptr);
@@ -411,10 +447,11 @@ float f(float x)
 void FireAudioProcessorEditor::paint(Graphics &g)
 {
     // set states
-    setKnobState(&driveKnob);
-    setButtonState(&filterLowButton, &cutoffKnob, &resKnob);
-    setButtonState(&filterBandButton, &cutoffKnob, &resKnob);
-    setButtonState(&filterHighButton, &cutoffKnob, &resKnob);
+    setDriveKnobState(&driveKnob);
+    //setColorKnobState(&colorKnob);
+    setCutoffButtonState(&filterLowButton, &cutoffKnob, &resKnob);
+    setCutoffButtonState(&filterBandButton, &cutoffKnob, &resKnob);
+    setCutoffButtonState(&filterHighButton, &cutoffKnob, &resKnob);
     
     int part1 = getHeight()/10;
     int part2 = part1 * 3;
@@ -426,11 +463,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     g.setColour(COLOUR5);
     // g.fillRect(0, 0, getWidth(), static_cast<int> (getHeight()/10.f));
     g.fillRect(0, 0, getWidth(), part1);
-        
-    // draw ff meter background
-    //int ffBackgroundWidth = getWidth() / 4;
-    //g.setColour(COLOUR6);
-    //g.fillRoundedRectangle(getWidth() / 2 - ffBackgroundWidth / 2, getHeight() / 4 * 3 - 25, ffBackgroundWidth, getHeight() / 4 - 25, 25);
     
     // draw version
     g.setColour(COLOUR5);
@@ -452,32 +484,42 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     float mixValue;
 
     int mode = *processor.treeState.getRawParameterValue("mode");
-    float inputGain = *processor.treeState.getRawParameterValue("inputGain");
-    float drive = *processor.treeState.getRawParameterValue("drive"); // (deleted drive)
+    //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
+    float drive = *processor.treeState.getRawParameterValue("drive");
+    float color = *processor.treeState.getRawParameterValue("color");
+    float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
+    float bias = *processor.treeState.getRawParameterValue("bias");
+    bool safe = *processor.treeState.getRawParameterValue("safe");
 
+    // sausage max is 40/3 * input | 15% = *2 | 30% = *4 | 100% = *40/3
+    if (mode == 6) {
+        drive = (drive - 1) * 6.5 / 31.f;
+        drive = powf(2, drive);
+    }
+    
+    
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
-    distortionProcessor.controls.mix = mix;
+    distortionProcessor.controls.color = color;
+    distortionProcessor.controls.rectification = rec;
+    distortionProcessor.controls.bias = bias;
 
-    
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
-    // frame.setBounds(getWidth() / 2, 50 - 1, getWidth() / 2 - 50 + 2, (getHeight() / 3 + 2)); // this is old
     frame.setBounds(getWidth() / 2, part1, getWidth() / 2, part2);
     
     // draw layer 2
     g.setColour(COLOUR6);
-    // g.fillRect(0, 50, getWidth(), getHeight() / 2 - 125);
     g.fillRect(0, part1, getWidth(), part2);
-    if (mode < 8)
+    if (mode < 9)
     {
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
         float driveScale = 1;
-        if (inputGain >= 0)
-        {
-            driveScale = pow(2, inputGain / 6.0f);
-        }
+//        if (inputGain >= 0)
+//        {
+//            driveScale = pow(2, inputGain / 6.0f);
+//        }
         float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
         float value = -maxValue; // minimum (leftmost)  value for your graph
         float valInc = (maxValue - value) / numPix;
@@ -495,7 +537,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             xPos += posInc;
 
             // symmetrical distortion
-            if (mode < 8)
+            if (mode < 9)
             {
                 functionValue = distortionProcessor.distortionProcess(value);
             }
@@ -506,6 +548,9 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             {
                 functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
             }
+            
+            // retification
+            functionValue = distortionProcessor.rectificationProcess(functionValue);
             
             // mix
             functionValue = (1.f - mix) * value + mix * functionValue;
@@ -553,7 +598,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             p.lineTo(xPos, yPos);
         }
 
-        // g.setColour(COLOUR1);
         ColourGradient grad(COLOUR1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
             COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
         g.setGradientFill(grad);
@@ -562,16 +606,16 @@ void FireAudioProcessorEditor::paint(Graphics &g)
     }
     
     // draw shadow 1
-    ColourGradient shadowGrad1(Colour(0, 0, 0).withAlpha(0.5f), 0, 50,
-                              Colour(0, 0, 0).withAlpha(0.f), 0, 55, false);
-    g.setGradientFill(shadowGrad1);
-    g.fillRect(0, part1, getWidth(), 25);
+    //ColourGradient shadowGrad1(Colour(0, 0, 0).withAlpha(0.5f), 0, 50,
+    //                          Colour(0, 0, 0).withAlpha(0.f), 0, 55, false);
+    //g.setGradientFill(shadowGrad1);
+    //g.fillRect(0, part1, getWidth(), 25);
     
     // draw shadow 2
-    ColourGradient shadowGrad2(Colour(0, 0, 0).withAlpha(0.5f), getWidth()/2, getHeight() / 2 - 75,
-                              Colour(0, 0, 0).withAlpha(0.f), getWidth()/2, getHeight() / 2 - 70, false);
-    g.setGradientFill(shadowGrad2);
-    g.fillRect(0, part1 + part2, getWidth(), 25);
+    ColourGradient shadowGrad2(Colour(0, 0, 0).withAlpha(0.5f), getWidth() / 2.f, getHeight() / 2.f - 75,
+                              Colour(0, 0, 0).withAlpha(0.f), getWidth() / 2.f, getHeight() / 2.f - 70, false);
+    //g.setGradientFill(shadowGrad2);
+    //g.fillRect(0, part1 + part2, getWidth(), 25);
     
     //g.setColour(COLOUR1);
     //g.fillRect(outputKnob.getX(), outputKnob.getY(), outputKnob.getWidth(), outputKnob.getHeight());
@@ -584,7 +628,7 @@ void FireAudioProcessorEditor::resized()
     // subcomponents in your editor..
     
     // knobs
-    int knobNum = 7;
+    int knobNum = 8;
     float scale = jmin(getHeight() / 500.f, getWidth() / 1000.f);
     float scaleMax = jmax(getHeight() / 500.f, getWidth() / 1000.f);
     int newKnobSize = static_cast<int> (knobSize * scale);
@@ -604,20 +648,26 @@ void FireAudioProcessorEditor::resized()
     // first line
     // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     driveKnob.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    //colorKnob.setBounds(startX * 1 + newKnobSize * 1.2, secondLineY, newKnobSize, newKnobSize);
     downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     recKnob.setBounds(startX * 4 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    outputKnob.setBounds(startX * 5 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    mixKnob.setBounds(startX * 6 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    colorKnob.setBounds(startX * 5 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    biasKnob.setBounds(startX * 6 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    outputKnob.setBounds(startX * 7 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    
     
     // second line
     cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
     resKnob.setBounds(startX * 6 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
-    
+    mixKnob.setBounds(startX * 7 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
+
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
     linkedButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
+    
 
     // second line
+    safeButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondLineY, newKnobSize / 2, 0.05 * getHeight());
     filterOffButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY, newKnobSize / 2, 0.05 * getHeight());
     filterPreButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
     filterPostButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
@@ -655,7 +705,7 @@ void FireAudioProcessorEditor::timerCallback()
     repaint();
 }
 
-void FireAudioProcessorEditor::setKnobState(Slider* slider)
+void FireAudioProcessorEditor::setDriveKnobState(Slider* slider)
 {
     if (*processor.treeState.getRawParameterValue("mode") == 0)
     {
@@ -668,8 +718,21 @@ void FireAudioProcessorEditor::setKnobState(Slider* slider)
     }
 }
 
+//void FireAudioProcessorEditor::setColorKnobState(Slider* slider)
+//{
+//    if (*processor.treeState.getRawParameterValue("mode") == 6)
+//    {
+//        slider->setEnabled(true);
+//    }
+//    else
+//    {
+//        //slider->setValue(0);
+//        slider->setEnabled(false);
+//    }
+//}
+
 // if filter is off, set lp, bp, hp buttons and cutoff knob disable.
-void FireAudioProcessorEditor::setButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
+void FireAudioProcessorEditor::setCutoffButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
 {
     if (*processor.treeState.getRawParameterValue("off"))
     {

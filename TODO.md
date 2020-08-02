@@ -7,6 +7,5 @@ TODO
 6. aliasing reduction https://www.eurasip.org/Proceedings/Eusipco/Eusipco2015/papers/1570104119.pdf
 7. Enhancing Even Harmonics
 https://ccrma.stanford.edu/~jos/pasp/Enhancing_Even_Harmonics.html
-8. normalize the average sample value to 0 for every modes. and also use smooth value for normalizatiom.
-9. investigate why there is a short click at the beginning
+8. investigate why there is a short click at the beginning
 of an audio. only non-hq mode

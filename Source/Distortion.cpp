@@ -12,18 +12,30 @@ Distortion::Distortion()
     controls.thresh = 1.f;
     controls.mode = 0;
     controls.drive = 1.f;
-    controls.output = 1.f;
-    controls.mix = 0.f;
+    controls.color = 0;
+    //controls.output = 1.f;
     controls.rectification = 0.f;
+    controls.protection = false;
+    controls.bias = 0;
 }
 
 Distortion::~Distortion() {}
 
 float Distortion::distortionProcess(float input)
 { 
+    // sausage max is 4.3 * input
+//    if (controls.mode == 6) {
+//        controls.drive = 1 + (controls.drive - 1)* 3.3f / 31.f;
+//    }
+
+    input += controls.bias;
+
+    
     input = input * controls.drive;
+    
     switch (controls.mode)
     {
+            // controls.mode + 1 = the ith mode in menu
     case 0:
         break;
     case 1:
@@ -42,13 +54,16 @@ float Distortion::distortionProcess(float input)
         input = hardClipping(input);
         break;
     case 6:
-        input = sinFoldback(input);
+        input = sausageFattener(input);
         break;
     case 7:
+        input = sinFoldback(input);
+        break;
+    case 8:
         input = linFoldback(input);
         break;
     }
-    input = input * controls.output;
+    //input = input * controls.output;
 
     return input;
 }
@@ -129,6 +144,67 @@ float Distortion::hardClipping(float input)
     {
         input = input;
     }
+    return input;
+}
+
+float Distortion::sausageFattener(float input)
+{
+    // 0.8 - 1.2 smooth
+//    if (input >= 1.2f)
+//    {
+//        input = controls.thresh;
+//    }
+//    else if (input <= -1.2f)
+//    {
+//        input = -controls.thresh;
+//    }
+//    else if (input > 0.8f && input < 1.2f)
+//    {
+//        input = -1.25 * input * input + 3 * input - 0.8;
+//    }
+//    else if (input < -0.8f && input > -1.2f)
+//    {
+//        input = 1.25 * input * input + 3 * input + 0.8;
+//    }
+//    else
+//    {
+//        input = input;
+//    }
+    // 0.9 -1.1 smooth
+    
+    input = input * 1.1;
+    
+//    if (controls.protection == true)
+//    {
+//        if (input > 1)
+//        {
+//            input = 1 + input * 0.05;
+//        }
+//    }
+   
+    
+    float cleanInput = input;
+    if (input >= 1.1f)
+    {
+        input = controls.thresh;
+    }
+    else if (input <= -1.1f)
+    {
+        input = -controls.thresh;
+    }
+    else if (input > 0.9f && input < 1.1f)
+    {
+        input = -2.5 * input * input + 5.5 * input - 2.025;
+    }
+    else if (input < -0.9f && input > -1.1f)
+    {
+        input = 2.5 * input * input + 5.5 * input + 2.025;
+    }
+    else
+    {
+        input = input;
+    }
+    input = (1.f - controls.color) * input + controls.color * hardClipping(cleanInput);
     return input;
 }
 

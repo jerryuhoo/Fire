@@ -2,28 +2,31 @@
 ![Alt text](Fire.png?raw=true "Title")
 
  This is a distortion plugin.
- This plugin has 8 different distortion modes:
+ This plugin has 9 different distortion modes:
  - Arctan Soft Clipping
  - Exp Soft Clipping
  - Tanh Soft Clipping
  - Cubic Soft Clipping
  - Hard Clipping
+ - Sausage Fattener
  - Sin Fold
  - Linear Fold
  - Diode Clipping
  
  
- And 7 knobs:
+9 knobs:
  - Drive knob
  - Downsample knob
  - Rectification knob
+ - Color knob
+ - Bias knob
  - Output knob
- - Mix knob
  - Cutoff knob
  - Q (Resonance) knob
+ - Mix knob
  
  
- And 6 options for the filter
+6 options for the filter
  - Off
  - Pre
  - Post
@@ -31,6 +34,7 @@
  - Band-pass
  - High-pass
  
+ And other features such as HQ, link mode, safe mode
  
 Hope you like it!
 
@@ -50,7 +54,7 @@ follow my Neteast channel: 羽翼深蓝Wings
 Find the repository here: https://github.com/ffAudio/ff_meters
 2. A great example of using XML to save presets to file example. I changed the code to save presets as mutiple files.
 https://github.com/johnflynnjohnflynn/TestParameters02
-
+3. Diode Clipping 1 is an algorithm from https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227
 
 # Release Notes:
 

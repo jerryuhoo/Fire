@@ -117,8 +117,10 @@ private:
     TextButton toggleABButton;
     TextButton copyABButton;
     ComboBox presetBox;
+    TextButton previousButton;
+    TextButton nextButton;
     TextButton savePresetButton;
-    TextButton deletePresetButton;
+    //TextButton deletePresetButton;
     TextButton menuButton;
     PopupMenu presetMenu;
     
@@ -133,6 +135,8 @@ private:
     void rescanPresetFolder();
     void creatFolderIfNotExist(File userFile);
     void popPresetMenu();
+    void setPreviousPreset();
+    void setNextPreset();
     
     String presetName;
     

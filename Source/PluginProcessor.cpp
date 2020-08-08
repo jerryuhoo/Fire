@@ -299,8 +299,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     //        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
     //        previousGainInput = currentGainInput;
     //    }
-        
-    
     
     // sausage
     if (mode == 6)
@@ -327,11 +325,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         if (sampleMaxValue * drive > 2.f)
         {
             drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
-            //DBG("protect");
-        }
-        else
-        {
-            //DBG("no");
         }
     }
     
@@ -391,17 +384,11 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     dsp::AudioBlock<float> blockInput(buffer);
     dsp::AudioBlock<float> blockOutput;
     // oversampling
-    //if (*treeState.getRawParameterValue("hq")) // oversampling
-    //{
-        //dsp::AudioBlock<float> blockInput(buffer);
-        // blockOutput.clear();
-        // blockOutput = oversampling->processSamplesUp(blockInput);
-    //blockOutput.clear();
+
     if (*treeState.getRawParameterValue("hq"))
     {
         blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
         blockOutput = oversamplingHQ->processSamplesUp(blockInput);
-        
         
         // the wet in high quality mode will have a latency of 3~4 samples.
         // so I must add the same latency to drybuffer.
@@ -480,7 +467,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             inputTemp.clear();
         }
         
-        //        visualiser.pushBuffer(buffer);
     }
 
     
@@ -745,12 +731,12 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.f);
-    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 50.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
-    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("low", "Low", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("band", "Band", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("high", "High", true));

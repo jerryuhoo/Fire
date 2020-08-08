@@ -160,7 +160,7 @@ private:
     
     void updateToggleState (Button* button, String name);
     void setDriveKnobState(Slider* slider);
-    //void setColorKnobState(Slider* slider);
+    void setBiasKnobState(Slider* slider);
     void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
     
     // Slider attachment

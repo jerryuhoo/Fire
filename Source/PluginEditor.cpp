@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.72"
+#define VERSION "0.721"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -448,7 +448,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
 {
     // set states
     setDriveKnobState(&driveKnob);
-    //setColorKnobState(&colorKnob);
+    setBiasKnobState(&biasKnob);
     setCutoffButtonState(&filterLowButton, &cutoffKnob, &resKnob);
     setCutoffButtonState(&filterBandButton, &cutoffKnob, &resKnob);
     setCutoffButtonState(&filterHighButton, &cutoffKnob, &resKnob);
@@ -718,18 +718,17 @@ void FireAudioProcessorEditor::setDriveKnobState(Slider* slider)
     }
 }
 
-//void FireAudioProcessorEditor::setColorKnobState(Slider* slider)
-//{
-//    if (*processor.treeState.getRawParameterValue("mode") == 6)
-//    {
-//        slider->setEnabled(true);
-//    }
-//    else
-//    {
-//        //slider->setValue(0);
-//        slider->setEnabled(false);
-//    }
-//}
+void FireAudioProcessorEditor::setBiasKnobState(Slider* slider)
+{
+    if (*processor.treeState.getRawParameterValue("mode") == 9)
+    {
+        slider->setEnabled(false);
+    }
+    else
+    {
+        slider->setEnabled(true);
+    }
+}
 
 // if filter is off, set lp, bp, hp buttons and cutoff knob disable.
 void FireAudioProcessorEditor::setCutoffButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)

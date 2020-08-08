@@ -117,7 +117,7 @@ private:
         filterModeButtons = 1002,
     };
     
-    void updateToggleState (Button* button, String name);
+    void updateToggleState ();
     //void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
     
     // override listener functions

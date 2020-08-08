@@ -28,9 +28,10 @@
 //==============================================================================
 /**
 */
-class FireAudioProcessorEditor : public AudioProcessorEditor,//edited 12/28
-                                  public Slider::Listener,
-                                  public Timer //edited 2020/07/03 fps
+class FireAudioProcessorEditor : public AudioProcessorEditor,//2019/12/28
+                                 public Slider::Listener,
+                                 public ComboBox::Listener, //2020/08/08
+                                 public Timer //edited 2020/07/03 fps
 {
 public:
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
@@ -41,35 +42,6 @@ public:
     void paint(Graphics& g) override;
     void resized() override;
     void timerCallback() override;
-    
-    // linked
-    void sliderValueChanged (Slider* slider) override
-    {
-        float thresh = 20.f;
-        float changeThresh = 3.f;
-        if (linkedButton.getToggleState() == true)
-        {
-            if (slider == &driveKnob)
-            {
-                if (driveKnob.getValue()>2)
-                    outputKnob.setValue(-changeThresh - (driveKnob.getValue()-1)/31*(thresh-changeThresh));
-                else
-                    outputKnob.setValue((driveKnob.getValue()-1)*(-3));
-            }
-            else if (slider == &outputKnob && driveKnob.isEnabled())
-            {
-                if (outputKnob.getValue() < -changeThresh && outputKnob.getValue() > -thresh)
-                    driveKnob.setValue(1-(outputKnob.getValue()+changeThresh)*31/(thresh-changeThresh));
-                else if (outputKnob.getValue() >=-changeThresh && outputKnob.getValue() <0)
-                    driveKnob.setValue(1 + outputKnob.getValue()/(-changeThresh));
-                else if (outputKnob.getValue() >= 0)
-                    driveKnob.setValue(1);
-                else if (outputKnob.getValue() <= -10)
-                    driveKnob.setValue(32);
-            }
-        }
-    }
-    
     
     //    Visualiser visualiser;
 
@@ -97,7 +69,9 @@ private:
         colorKnob,
         biasKnob;
     int knobSize = 100;
-
+    float tempDriveValue = 1;
+    float tempBiasValue = 0;
+    
     // labels
     Label
         hqLabel,
@@ -119,6 +93,7 @@ private:
         colorLabel,
         biasLabel;
 
+    // buttons
     TextButton
         hqButton,
         linkedButton,
@@ -129,24 +104,10 @@ private:
         filterLowButton,
         filterBandButton,
         filterHighButton;
-        
-    
-    // toggle buttons
-//    ToggleButton linkedButton{ "Link" };
-        //hqButton{ "HQ" }, // high quality (oversampling)
-        //recOffButton{ "Off" },
-        //recHalfButton{ "Half" },
-        //recFullButton{ "Full" },
-//        filterOffButton{ "Off" },
-//        filterPreButton{ "Pre" },
-//        filterPostButton{ "Post" },
-//        filterLowButton{ "Low Pass" },
-//        filterBandButton{ "Band Pass" },
-//        filterHighButton{ "High Pass" };
-    
+
     // about
     TextButton aboutButton {"about"};
-//    AlertWindow aboutDialog;
+
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -154,15 +115,17 @@ private:
         filterStateButtons = 1001,
         // filter mode: low, band, high
         filterModeButtons = 1002,
-        // rec state: off, half, full
-        //recStateButtons = 1003
     };
     
     void updateToggleState (Button* button, String name);
-    void setDriveKnobState(Slider* slider);
-    void setBiasKnobState(Slider* slider);
-    void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
+    //void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
     
+    // override listener functions
+    // linked
+    void sliderValueChanged (Slider* slider) override;
+    // combobox changed and set knob enable/disable
+    void comboBoxChanged (ComboBox *combobox) override;
+
     // Slider attachment
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>
         //inputAttachment,
@@ -191,8 +154,6 @@ private:
     // ComboBox attachment
     ComboBox distortionMode;
     std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
-    
-    //ComboBoxParameterAttachment
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

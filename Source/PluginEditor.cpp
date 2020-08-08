@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.721"
+#define VERSION "0.722"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -96,7 +96,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(colorKnob);
     colorKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     colorKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    colorKnob.addListener(this);
 
     addAndMakeVisible(colorLabel);
     colorLabel.setText("Color", dontSendNotification);
@@ -109,7 +108,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(biasKnob);
     biasKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     biasKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    biasKnob.addListener(this);
 
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", dontSendNotification);
@@ -122,7 +120,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(downSampleKnob);
     downSampleKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     downSampleKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    downSampleKnob.addListener(this);
 
     addAndMakeVisible(downSampleLabel);
     downSampleLabel.setText("Downsample", dontSendNotification);
@@ -148,7 +145,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(recKnob);
     recKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     recKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    recKnob.addListener(this);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", dontSendNotification);
@@ -384,6 +380,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     distortionMode.addSeparator();
 
     distortionMode.setJustificationType(Justification::centred);
+    distortionMode.addListener(this);
 //    distortionMode.setColour(ComboBox::textColourId, COLOUR1);
 //    distortionMode.setColour(ComboBox::arrowColourId, COLOUR1);
 //    distortionMode.setColour(ComboBox::buttonColourId, COLOUR1);
@@ -447,11 +444,9 @@ float f(float x)
 void FireAudioProcessorEditor::paint(Graphics &g)
 {
     // set states
-    setDriveKnobState(&driveKnob);
-    setBiasKnobState(&biasKnob);
-    setCutoffButtonState(&filterLowButton, &cutoffKnob, &resKnob);
-    setCutoffButtonState(&filterBandButton, &cutoffKnob, &resKnob);
-    setCutoffButtonState(&filterHighButton, &cutoffKnob, &resKnob);
+    //setCutoffButtonState(&filterLowButton, &cutoffKnob, &resKnob);
+    //setCutoffButtonState(&filterBandButton, &cutoffKnob, &resKnob);
+    //setCutoffButtonState(&filterHighButton, &cutoffKnob, &resKnob);
     
     int part1 = getHeight()/10;
     int part2 = part1 * 3;
@@ -697,7 +692,24 @@ void FireAudioProcessorEditor::resized()
 
 void FireAudioProcessorEditor::updateToggleState (Button* button, String name)
 {
-    //auto state = button->getToggleState();
+    if (button == &filterOffButton || button == &filterPreButton || button == &filterPostButton) {
+        if (*processor.treeState.getRawParameterValue("off"))
+        {
+            filterLowButton.setEnabled(false);
+            filterBandButton.setEnabled(false);
+            filterHighButton.setEnabled(false);
+            cutoffKnob.setEnabled(false);
+            resKnob.setEnabled(false);
+        }
+        else
+        {
+            filterLowButton.setEnabled(true);
+            filterBandButton.setEnabled(true);
+            filterHighButton.setEnabled(true);
+            cutoffKnob.setEnabled(true);
+            resKnob.setEnabled(true);
+        }
+    }
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -705,44 +717,68 @@ void FireAudioProcessorEditor::timerCallback()
     repaint();
 }
 
-void FireAudioProcessorEditor::setDriveKnobState(Slider* slider)
+void FireAudioProcessorEditor::sliderValueChanged (Slider* slider)
 {
-    if (*processor.treeState.getRawParameterValue("mode") == 0)
+    float thresh = 20.f;
+    float changeThresh = 3.f;
+    if (linkedButton.getToggleState() == true)
     {
-        slider->setValue(1);
-        slider->setEnabled(false);
-    }
-    else
-    {
-        slider->setEnabled(true);
+        if (slider == &driveKnob)
+        {
+            if (driveKnob.getValue()>2)
+                outputKnob.setValue(-changeThresh - (driveKnob.getValue()-1)/31*(thresh-changeThresh));
+            else
+                outputKnob.setValue((driveKnob.getValue()-1)*(-3));
+        }
+        else if (slider == &outputKnob && driveKnob.isEnabled())
+        {
+            if (outputKnob.getValue() < -changeThresh && outputKnob.getValue() > -thresh)
+                driveKnob.setValue(1-(outputKnob.getValue()+changeThresh)*31/(thresh-changeThresh));
+            else if (outputKnob.getValue() >=-changeThresh && outputKnob.getValue() <0)
+                driveKnob.setValue(1 + outputKnob.getValue()/(-changeThresh));
+            else if (outputKnob.getValue() >= 0)
+                driveKnob.setValue(1);
+            else if (outputKnob.getValue() <= -10)
+                driveKnob.setValue(32);
+        }
     }
 }
 
-void FireAudioProcessorEditor::setBiasKnobState(Slider* slider)
+void FireAudioProcessorEditor::comboBoxChanged(ComboBox *combobox)
 {
-    if (*processor.treeState.getRawParameterValue("mode") == 9)
+    if (combobox == &distortionMode)
     {
-        slider->setEnabled(false);
-    }
-    else
-    {
-        slider->setEnabled(true);
-    }
-}
-
-// if filter is off, set lp, bp, hp buttons and cutoff knob disable.
-void FireAudioProcessorEditor::setCutoffButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
-{
-    if (*processor.treeState.getRawParameterValue("off"))
-    {
-        textButton->setEnabled(false);
-        slider1->setEnabled(false);
-        slider2->setEnabled(false);
-    }
-    else
-    {
-        textButton->setEnabled(true);
-        slider1->setEnabled(true);
-        slider2->setEnabled(true);
+        // set drive knob
+        if (*processor.treeState.getRawParameterValue("mode") == 0)
+        {
+            tempDriveValue = driveKnob.getValue();
+            driveKnob.setValue(1);
+            driveKnob.setEnabled(false);
+        }
+        else
+        {
+            if (driveKnob.getValue() == 1)
+            {
+                driveKnob.setValue(tempDriveValue);
+            }
+            driveKnob.setEnabled(true);
+        }
+        
+        // set bias knob
+        int mode = *processor.treeState.getRawParameterValue("mode");
+        if (mode == 9 || mode == 0)
+        {
+            tempBiasValue = biasKnob.getValue();
+            biasKnob.setValue(0);
+            biasKnob.setEnabled(false);
+        }
+        else
+        {
+            if (biasKnob.getValue() == 0)
+            {
+                biasKnob.setValue(tempBiasValue);
+            }
+            biasKnob.setEnabled(true);
+        }
     }
 }

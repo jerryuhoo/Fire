@@ -10,3 +10,4 @@ https://ccrma.stanford.edu/~jos/pasp/Enhancing_Even_Harmonics.html
 of an audio. only non-hq mode
 8. maybe add auto-update function?
 9. multi-band distortion? (future plan)
+10. maybe add overload alarm? (like sausage fattener)

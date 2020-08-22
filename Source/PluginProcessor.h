@@ -97,6 +97,9 @@ public:
     
     bool isSlient(AudioBuffer<float> buffer);
     
+    // new drive after protection
+    float getNewDrive();
+    
     AudioProcessorValueTreeState treeState;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -142,6 +145,7 @@ private:
     float previousColor;
     float previousCutoff;
     float previousMix;
+    float newDrive;
     
     SmoothedValue<float> driveSmoother;
     SmoothedValue<float> outputSmoother;

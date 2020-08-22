@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.723"
+#define VERSION "0.73"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -474,19 +474,13 @@ void FireAudioProcessorEditor::paint(Graphics &g)
 
     int mode = *processor.treeState.getRawParameterValue("mode");
     //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
-    float drive = *processor.treeState.getRawParameterValue("drive");
+    //float drive = *processor.treeState.getRawParameterValue("drive");
     float color = *processor.treeState.getRawParameterValue("color");
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
     float bias = *processor.treeState.getRawParameterValue("bias");
-    bool safe = *processor.treeState.getRawParameterValue("safe");
 
-    // sausage max is 40/3 * input | 15% = *2 | 30% = *4 | 100% = *40/3
-    if (mode == 6) {
-        drive = (drive - 1) * 6.5 / 31.f;
-        drive = powf(2, drive);
-    }
-    
+    float drive = processor.getNewDrive();
     
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
@@ -505,10 +499,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
         float driveScale = 1;
-//        if (inputGain >= 0)
-//        {
-//            driveScale = pow(2, inputGain / 6.0f);
-//        }
         float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
         float value = -maxValue; // minimum (leftmost)  value for your graph
         float valInc = (maxValue - value) / numPix;
@@ -587,7 +577,11 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             p.lineTo(xPos, yPos);
         }
 
-        ColourGradient grad(COLOUR1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
+        int colour_r = 244;
+        int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
+        int colour_b = 63;
+        
+        ColourGradient grad(Colour(colour_r, colour_g, colour_b), frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
             COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
         g.setGradientFill(grad);
         g.strokePath(p, PathStrokeType(2.0));
@@ -711,27 +705,34 @@ void FireAudioProcessorEditor::timerCallback()
 
 void FireAudioProcessorEditor::sliderValueChanged (Slider* slider)
 {
-    float thresh = 20.f;
-    float changeThresh = 3.f;
+//    float thresh = 20.f;
+//    float changeThresh = 3.f;
     if (linkedButton.getToggleState() == true)
     {
         if (slider == &driveKnob)
         {
-            if (driveKnob.getValue()>2)
-                outputKnob.setValue(-changeThresh - (driveKnob.getValue()-1)/31*(thresh-changeThresh));
-            else
-                outputKnob.setValue((driveKnob.getValue()-1)*(-3));
+            outputKnob.setValue(-driveKnob.getValue() * 0.1);
+//            if (driveKnob.getValue()>2)
+//                outputKnob.setValue(-changeThresh - (driveKnob.getValue()-1)/31*(thresh-changeThresh));
+//            else
+//                outputKnob.setValue((driveKnob.getValue()-1)*(-3));
         }
         else if (slider == &outputKnob && driveKnob.isEnabled())
         {
-            if (outputKnob.getValue() < -changeThresh && outputKnob.getValue() > -thresh)
-                driveKnob.setValue(1-(outputKnob.getValue()+changeThresh)*31/(thresh-changeThresh));
-            else if (outputKnob.getValue() >=-changeThresh && outputKnob.getValue() <0)
-                driveKnob.setValue(1 + outputKnob.getValue()/(-changeThresh));
-            else if (outputKnob.getValue() >= 0)
-                driveKnob.setValue(1);
-            else if (outputKnob.getValue() <= -10)
-                driveKnob.setValue(32);
+//            if (outputKnob.getValue() < -changeThresh && outputKnob.getValue() > -thresh)
+//                driveKnob.setValue(1-(outputKnob.getValue()+changeThresh)*31/(thresh-changeThresh));
+//            else if (outputKnob.getValue() >=-changeThresh && outputKnob.getValue() <0)
+//                driveKnob.setValue(1 + outputKnob.getValue()/(-changeThresh));
+//            else if (outputKnob.getValue() >= 0)
+//                driveKnob.setValue(1);
+//            else if (outputKnob.getValue() <= -10)
+//                driveKnob.setValue(32);
+            if (outputKnob.getValue() <= 0 && outputKnob.getValue() >= -10)
+                driveKnob.setValue(-outputKnob.getValue() * 10);
+            else if (outputKnob.getValue() > 0)
+                driveKnob.setValue(0);
+            else if (outputKnob.getValue() < -10)
+                driveKnob.setValue(100);
         }
     }
 }

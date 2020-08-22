@@ -129,7 +129,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousCutoff = (float)*treeState.getRawParameterValue("cutoff");
     previousColor = (float)*treeState.getRawParameterValue("color");
     previousMix = (float)*treeState.getRawParameterValue("mix");
-    
+    newDrive = 0;
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
@@ -301,12 +301,13 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     //    }
     
     // sausage
-    if (mode == 6)
-    {
-        //drive = 1 + (drive - 1) * (6 - 1) / 31.f;
-        drive = (drive - 1) * 6.5 / 31.f;
-        drive = powf(2, drive);
-    }
+//    if (mode == 6)
+//    {
+//        drive = (drive - 1) * 6.5 / 31.f;
+//        drive = powf(2, drive);
+//    }
+    drive = drive * 6.5 / 100.f;
+    drive = powf(2, drive);
     
     // color eq filter
     dsp::AudioBlock<float> block(buffer);
@@ -327,6 +328,7 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
         }
     }
+    newDrive = drive;
     
     // set zipper noise smoother target
     driveSmoother.setTargetValue(drive);
@@ -712,6 +714,11 @@ bool FireAudioProcessor::isSlient(AudioBuffer<float> buffer)
         return false;
 }
 
+float FireAudioProcessor::getNewDrive()
+{
+    return newDrive;
+}
+
 AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
@@ -722,7 +729,7 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     parameters.push_back(std::make_unique<AudioParameterBool>("safe", "Safe", true));
     
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("color", "Color", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));

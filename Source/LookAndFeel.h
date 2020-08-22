@@ -264,7 +264,7 @@ public:
             {
                 //auto tick = getTickShape (1.0f);
                 //g.fillPath (tick, tick.getTransformToScaleToFit (iconArea.reduced (iconArea.getWidth() / 5, 0).toFloat(), true));
-                g.fillEllipse(iconArea.getX() + 15, iconArea.getY() + 20, iconArea.getWidth() - 30, iconArea.getWidth() - 30);
+                g.fillEllipse(iconArea.getX()+scale*12, iconArea.getY()+scale*17, iconArea.getWidth()-scale*24, iconArea.getWidth()-scale*24);
             }
     
             if (hasSubMenu)

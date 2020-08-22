@@ -424,7 +424,7 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
     presetBox.setColour(ComboBox::buttonColourId, COLOUR1);
     presetBox.setColour(ComboBox::outlineColourId, COLOUR5);
     presetBox.setColour(ComboBox::focusedOutlineColourId, COLOUR1);
-    presetBox.setColour(ComboBox::backgroundColourId, COLOUR5);
+    presetBox.setColour(ComboBox::backgroundColourId, COLOUR4);
     presetBox.setTextWhenNothingSelected("- Init -");
     refreshPresetBox();
     ifPresetActiveShowInBox();
@@ -480,13 +480,12 @@ void StateComponent::paint(Graphics & /*g*/)
 void StateComponent::resized()
 {
     Rectangle<int> r(getLocalBounds());
-
     const int numComponents{6};
     const int componentWidth{getWidth() / numComponents};
 
     toggleABButton.setBounds(r.removeFromLeft(componentWidth));
     copyABButton.setBounds(r.removeFromLeft(componentWidth));
-    presetBox.setBounds(r.removeFromLeft(componentWidth * 2));
+    presetBox.setBounds(r.removeFromLeft(componentWidth * 2).reduced(getHeight() / 15)); // if reduced value is getHeight() / 10, juce has a bug?
     previousButton.setBounds(r.removeFromLeft(componentWidth / 4));
     nextButton.setBounds(r.removeFromLeft(componentWidth / 4));
     savePresetButton.setBounds(r.removeFromLeft(componentWidth));

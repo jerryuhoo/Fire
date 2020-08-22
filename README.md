@@ -1,4 +1,4 @@
-# Fire (Version 0.74)
+# Fire (Version 0.75)
 ![Alt text](Fire.png?raw=true "Title")
 
  This is a distortion plugin.

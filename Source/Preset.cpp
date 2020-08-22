@@ -20,7 +20,12 @@ void saveStateToXml(const AudioProcessor &proc, XmlElement &xml)
 
     for (const auto &param : proc.getParameters())
         if (auto *p = dynamic_cast<AudioProcessorParameterWithID *>(param))
-            xml.setAttribute(p->paramID, p->getValue()); // 0to1
+        {
+            if (p->paramID != "hq")
+            {
+                xml.setAttribute(p->paramID, p->getValue());
+            }
+        }
 }
 
 void loadStateFromXml(const XmlElement &xml, AudioProcessor &proc)

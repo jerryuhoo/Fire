@@ -129,7 +129,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousCutoff = (float)*treeState.getRawParameterValue("cutoff");
     previousColor = (float)*treeState.getRawParameterValue("color");
     previousMix = (float)*treeState.getRawParameterValue("mix");
-    
+    newDrive = 0;
     
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother.setCurrentAndTargetValue(previousDrive);
@@ -299,16 +299,15 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     //        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
     //        previousGainInput = currentGainInput;
     //    }
-        
-    
     
     // sausage
-    if (mode == 6)
-    {
-        //drive = 1 + (drive - 1) * (6 - 1) / 31.f;
-        drive = (drive - 1) * 6.5 / 31.f;
-        drive = powf(2, drive);
-    }
+//    if (mode == 6)
+//    {
+//        drive = (drive - 1) * 6.5 / 31.f;
+//        drive = powf(2, drive);
+//    }
+    drive = drive * 6.5 / 100.f;
+    drive = powf(2, drive);
     
     // color eq filter
     dsp::AudioBlock<float> block(buffer);
@@ -327,13 +326,9 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
         if (sampleMaxValue * drive > 2.f)
         {
             drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
-            //DBG("protect");
-        }
-        else
-        {
-            //DBG("no");
         }
     }
+    newDrive = drive;
     
     // set zipper noise smoother target
     driveSmoother.setTargetValue(drive);
@@ -391,17 +386,11 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
     dsp::AudioBlock<float> blockInput(buffer);
     dsp::AudioBlock<float> blockOutput;
     // oversampling
-    //if (*treeState.getRawParameterValue("hq")) // oversampling
-    //{
-        //dsp::AudioBlock<float> blockInput(buffer);
-        // blockOutput.clear();
-        // blockOutput = oversampling->processSamplesUp(blockInput);
-    //blockOutput.clear();
+
     if (*treeState.getRawParameterValue("hq"))
     {
         blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
         blockOutput = oversamplingHQ->processSamplesUp(blockInput);
-        
         
         // the wet in high quality mode will have a latency of 3~4 samples.
         // so I must add the same latency to drybuffer.
@@ -480,7 +469,6 @@ void FireAudioProcessor::processBlock(AudioBuffer<float> &buffer, MidiBuffer &mi
             inputTemp.clear();
         }
         
-        //        visualiser.pushBuffer(buffer);
     }
 
     
@@ -726,6 +714,11 @@ bool FireAudioProcessor::isSlient(AudioBuffer<float> buffer)
         return false;
 }
 
+float FireAudioProcessor::getNewDrive()
+{
+    return newDrive;
+}
+
 AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<RangedAudioParameter>> parameters;
@@ -736,7 +729,7 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     parameters.push_back(std::make_unique<AudioParameterBool>("safe", "Safe", true));
     
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(1.0f, 32.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("drive", "Drive", NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("color", "Color", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("bias", "Bias", NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("downSample", "DownSample", NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
@@ -745,12 +738,12 @@ AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParamete
     parameters.push_back(std::make_unique<AudioParameterFloat>("mix", "Mix", NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.f);
-    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 50.0f));
+    parameters.push_back(std::make_unique<AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20.0f));
     parameters.push_back(std::make_unique<AudioParameterFloat>("res", "Res", NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
-    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", false));
+    parameters.push_back(std::make_unique<AudioParameterBool>("off", "Off", true));
     parameters.push_back(std::make_unique<AudioParameterBool>("pre", "Pre", false));
-    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", true));
+    parameters.push_back(std::make_unique<AudioParameterBool>("post", "Post", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("low", "Low", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("band", "Band", false));
     parameters.push_back(std::make_unique<AudioParameterBool>("high", "High", true));

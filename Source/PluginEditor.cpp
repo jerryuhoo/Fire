@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.717"
+#define VERSION "0.75"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p)
@@ -96,7 +96,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(colorKnob);
     colorKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     colorKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    colorKnob.addListener(this);
 
     addAndMakeVisible(colorLabel);
     colorLabel.setText("Color", dontSendNotification);
@@ -109,7 +108,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(biasKnob);
     biasKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     biasKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    biasKnob.addListener(this);
 
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", dontSendNotification);
@@ -122,7 +120,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(downSampleKnob);
     downSampleKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     downSampleKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    downSampleKnob.addListener(this);
 
     addAndMakeVisible(downSampleLabel);
     downSampleLabel.setText("Downsample", dontSendNotification);
@@ -148,7 +145,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(recKnob);
     recKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     recKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-    recKnob.addListener(this);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", dontSendNotification);
@@ -198,7 +194,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     hqButton.setClickingTogglesState(true);
     bool hqButtonState = *processor.treeState.getRawParameterValue("hq");
     hqButton.setToggleState(hqButtonState, dontSendNotification);
-    hqButton.onClick = [this] { updateToggleState(&hqButton, "Hq"); };
     hqButton.setColour(TextButton::buttonColourId, COLOUR5);
     hqButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     hqButton.setColour(ComboBox::outlineColourId, COLOUR5);
@@ -211,7 +206,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     linkedButton.setClickingTogglesState(true);
     bool linkedButtonState = *processor.treeState.getRawParameterValue("linked");
     linkedButton.setToggleState(linkedButtonState, dontSendNotification);
-    linkedButton.onClick = [this] { updateToggleState (&linkedButton, "Linked"); };
     linkedButton.setColour(TextButton::buttonColourId, COLOUR6);
     linkedButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     linkedButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -225,7 +219,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     safeButton.setClickingTogglesState(true);
     bool safeButtonState = *processor.treeState.getRawParameterValue("safe");
     safeButton.setToggleState(safeButtonState, dontSendNotification);
-    safeButton.onClick = [this] { updateToggleState(&safeButton, "Safe"); };
     safeButton.setColour(TextButton::buttonColourId, COLOUR6);
     safeButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     safeButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -240,7 +233,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterOffButton.setRadioGroupId(filterStateButtons);
     bool filterOffButtonState = *processor.treeState.getRawParameterValue("off");
     filterOffButton.setToggleState(filterOffButtonState, dontSendNotification);
-    filterOffButton.onClick = [this] { updateToggleState (&filterOffButton, "Off"); };
+    filterOffButton.onClick = [this] { updateToggleState(); };
     filterOffButton.setColour(TextButton::buttonColourId, COLOUR6);
     filterOffButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     filterOffButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -261,7 +254,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterPreButton.setRadioGroupId(filterStateButtons);
     bool filterPreButtonState = *processor.treeState.getRawParameterValue("pre");
     filterPreButton.setToggleState(filterPreButtonState, dontSendNotification);
-    filterPreButton.onClick = [this] { updateToggleState (&filterPreButton, "Pre"); };
+    filterPreButton.onClick = [this] { updateToggleState (); };
     filterPreButton.setColour(TextButton::buttonColourId, COLOUR6);
     filterPreButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     filterPreButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -275,7 +268,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterPostButton.setRadioGroupId(filterStateButtons);
     bool filterPostButtonState = *processor.treeState.getRawParameterValue("post");
     filterPostButton.setToggleState(filterPostButtonState, dontSendNotification);
-    filterPostButton.onClick = [this] { updateToggleState (&filterPostButton, "Post"); };
+    filterPostButton.onClick = [this] { updateToggleState (); };
     filterPostButton.setColour(TextButton::buttonColourId, COLOUR6);
     filterPostButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     filterPostButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -290,7 +283,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterLowButton.setRadioGroupId(filterModeButtons);
     bool filterLowButtonState = *processor.treeState.getRawParameterValue("low");
     filterLowButton.setToggleState(filterLowButtonState, dontSendNotification);
-    filterLowButton.onClick = [this] { updateToggleState (&filterLowButton, "Low"); };
+    filterLowButton.onClick = [this] { updateToggleState (); };
     filterLowButton.setColour(TextButton::buttonColourId, COLOUR6);
     filterLowButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     filterLowButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -311,7 +304,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterBandButton.setRadioGroupId(filterModeButtons);
     bool filterBandButtonState = *processor.treeState.getRawParameterValue("band");
     filterBandButton.setToggleState(filterBandButtonState, dontSendNotification);
-    filterBandButton.onClick = [this] { updateToggleState (&filterBandButton, "Band"); };
+    filterBandButton.onClick = [this] { updateToggleState (); };
     filterBandButton.setColour(TextButton::buttonColourId, COLOUR6);
     filterBandButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     filterBandButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -325,7 +318,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterHighButton.setRadioGroupId(filterModeButtons);
     bool filterHighButtonState = *processor.treeState.getRawParameterValue("high");
     filterHighButton.setToggleState(filterHighButtonState, dontSendNotification);
-    filterHighButton.onClick = [this] { updateToggleState (&filterHighButton, "High"); };
+    filterHighButton.onClick = [this] { updateToggleState (); };
     filterHighButton.setColour(TextButton::buttonColourId, COLOUR6);
     filterHighButton.setColour(TextButton::buttonOnColourId, COLOUR5);
     filterHighButton.setColour(ComboBox::outlineColourId, COLOUR6);
@@ -384,6 +377,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     distortionMode.addSeparator();
 
     distortionMode.setJustificationType(Justification::centred);
+    distortionMode.addListener(this);
 //    distortionMode.setColour(ComboBox::textColourId, COLOUR1);
 //    distortionMode.setColour(ComboBox::arrowColourId, COLOUR1);
 //    distortionMode.setColour(ComboBox::buttonColourId, COLOUR1);
@@ -420,6 +414,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // resize limit
     setResizeLimits(1000, 500, 2000, 1000); // set resize limits
     //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
+    
+    updateToggleState();
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
@@ -446,13 +442,6 @@ float f(float x)
 //==============================================================================
 void FireAudioProcessorEditor::paint(Graphics &g)
 {
-    // set states
-    setDriveKnobState(&driveKnob);
-    //setColorKnobState(&colorKnob);
-    setCutoffButtonState(&filterLowButton, &cutoffKnob, &resKnob);
-    setCutoffButtonState(&filterBandButton, &cutoffKnob, &resKnob);
-    setCutoffButtonState(&filterHighButton, &cutoffKnob, &resKnob);
-    
     int part1 = getHeight()/10;
     int part2 = part1 * 3;
     // (Our component is opaque, so we must completely fill the background with a solid colour)
@@ -485,19 +474,13 @@ void FireAudioProcessorEditor::paint(Graphics &g)
 
     int mode = *processor.treeState.getRawParameterValue("mode");
     //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
-    float drive = *processor.treeState.getRawParameterValue("drive");
+    //float drive = *processor.treeState.getRawParameterValue("drive");
     float color = *processor.treeState.getRawParameterValue("color");
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
     float bias = *processor.treeState.getRawParameterValue("bias");
-    bool safe = *processor.treeState.getRawParameterValue("safe");
 
-    // sausage max is 40/3 * input | 15% = *2 | 30% = *4 | 100% = *40/3
-    if (mode == 6) {
-        drive = (drive - 1) * 6.5 / 31.f;
-        drive = powf(2, drive);
-    }
-    
+    float drive = processor.getNewDrive();
     
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
@@ -516,10 +499,6 @@ void FireAudioProcessorEditor::paint(Graphics &g)
         const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
         float driveScale = 1;
-//        if (inputGain >= 0)
-//        {
-//            driveScale = pow(2, inputGain / 6.0f);
-//        }
         float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
         float value = -maxValue; // minimum (leftmost)  value for your graph
         float valInc = (maxValue - value) / numPix;
@@ -598,7 +577,11 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             p.lineTo(xPos, yPos);
         }
 
-        ColourGradient grad(COLOUR1, frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
+        int colour_r = 244;
+        int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
+        int colour_b = 63;
+        
+        ColourGradient grad(Colour(colour_r, colour_g, colour_b), frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
             COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
         g.setGradientFill(grad);
         g.strokePath(p, PathStrokeType(2.0));
@@ -695,9 +678,24 @@ void FireAudioProcessorEditor::resized()
     roundedButtonLnf.scale = scale;
 }
 
-void FireAudioProcessorEditor::updateToggleState (Button* button, String name)
+void FireAudioProcessorEditor::updateToggleState ()
 {
-    //auto state = button->getToggleState();
+    if (*processor.treeState.getRawParameterValue("off"))
+    {
+        filterLowButton.setEnabled(false);
+        filterBandButton.setEnabled(false);
+        filterHighButton.setEnabled(false);
+        cutoffKnob.setEnabled(false);
+        resKnob.setEnabled(false);
+    }
+    else
+    {
+        filterLowButton.setEnabled(true);
+        filterBandButton.setEnabled(true);
+        filterHighButton.setEnabled(true);
+        cutoffKnob.setEnabled(true);
+        resKnob.setEnabled(true);
+    }
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -705,45 +703,75 @@ void FireAudioProcessorEditor::timerCallback()
     repaint();
 }
 
-void FireAudioProcessorEditor::setDriveKnobState(Slider* slider)
+void FireAudioProcessorEditor::sliderValueChanged (Slider* slider)
 {
-    if (*processor.treeState.getRawParameterValue("mode") == 0)
+//    float thresh = 20.f;
+//    float changeThresh = 3.f;
+    if (linkedButton.getToggleState() == true)
     {
-        slider->setValue(1);
-        slider->setEnabled(false);
-    }
-    else
-    {
-        slider->setEnabled(true);
+        if (slider == &driveKnob)
+        {
+            outputKnob.setValue(-driveKnob.getValue() * 0.1);
+//            if (driveKnob.getValue()>2)
+//                outputKnob.setValue(-changeThresh - (driveKnob.getValue()-1)/31*(thresh-changeThresh));
+//            else
+//                outputKnob.setValue((driveKnob.getValue()-1)*(-3));
+        }
+        else if (slider == &outputKnob && driveKnob.isEnabled())
+        {
+//            if (outputKnob.getValue() < -changeThresh && outputKnob.getValue() > -thresh)
+//                driveKnob.setValue(1-(outputKnob.getValue()+changeThresh)*31/(thresh-changeThresh));
+//            else if (outputKnob.getValue() >=-changeThresh && outputKnob.getValue() <0)
+//                driveKnob.setValue(1 + outputKnob.getValue()/(-changeThresh));
+//            else if (outputKnob.getValue() >= 0)
+//                driveKnob.setValue(1);
+//            else if (outputKnob.getValue() <= -10)
+//                driveKnob.setValue(32);
+            if (outputKnob.getValue() <= 0 && outputKnob.getValue() >= -10)
+                driveKnob.setValue(-outputKnob.getValue() * 10);
+            else if (outputKnob.getValue() > 0)
+                driveKnob.setValue(0);
+            else if (outputKnob.getValue() < -10)
+                driveKnob.setValue(100);
+        }
     }
 }
 
-//void FireAudioProcessorEditor::setColorKnobState(Slider* slider)
-//{
-//    if (*processor.treeState.getRawParameterValue("mode") == 6)
-//    {
-//        slider->setEnabled(true);
-//    }
-//    else
-//    {
-//        //slider->setValue(0);
-//        slider->setEnabled(false);
-//    }
-//}
-
-// if filter is off, set lp, bp, hp buttons and cutoff knob disable.
-void FireAudioProcessorEditor::setCutoffButtonState(TextButton* textButton, Slider* slider1, Slider* slider2)
+void FireAudioProcessorEditor::comboBoxChanged(ComboBox *combobox)
 {
-    if (*processor.treeState.getRawParameterValue("off"))
+    if (combobox == &distortionMode)
     {
-        textButton->setEnabled(false);
-        slider1->setEnabled(false);
-        slider2->setEnabled(false);
-    }
-    else
-    {
-        textButton->setEnabled(true);
-        slider1->setEnabled(true);
-        slider2->setEnabled(true);
+        // set drive knob
+        if (*processor.treeState.getRawParameterValue("mode") == 0)
+        {
+            tempDriveValue = driveKnob.getValue();
+            driveKnob.setValue(1);
+            driveKnob.setEnabled(false);
+        }
+        else
+        {
+            if (driveKnob.getValue() == 1)
+            {
+                driveKnob.setValue(tempDriveValue);
+            }
+            driveKnob.setEnabled(true);
+        }
+        
+        // set bias knob
+        int mode = *processor.treeState.getRawParameterValue("mode");
+        if (mode == 9 || mode == 0)
+        {
+            tempBiasValue = biasKnob.getValue();
+            biasKnob.setValue(0);
+            biasKnob.setEnabled(false);
+        }
+        else
+        {
+            if (biasKnob.getValue() == 0)
+            {
+                biasKnob.setValue(tempBiasValue);
+            }
+            biasKnob.setEnabled(true);
+        }
     }
 }

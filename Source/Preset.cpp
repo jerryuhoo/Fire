@@ -20,7 +20,12 @@ void saveStateToXml(const AudioProcessor &proc, XmlElement &xml)
 
     for (const auto &param : proc.getParameters())
         if (auto *p = dynamic_cast<AudioProcessorParameterWithID *>(param))
-            xml.setAttribute(p->paramID, p->getValue()); // 0to1
+        {
+            if (p->paramID != "hq")
+            {
+                xml.setAttribute(p->paramID, p->getValue());
+            }
+        }
 }
 
 void loadStateFromXml(const XmlElement &xml, AudioProcessor &proc)
@@ -396,8 +401,10 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
   procStatePresets{sp},
   toggleABButton{"A-B"},
   copyABButton{"Copy"},
+  previousButton{"<"},
+  nextButton{">"},
   savePresetButton{"Save"},
-  deletePresetButton{"Delete"},
+  //deletePresetButton{"Delete"},
   menuButton{"Menu"}
 {
     addAndMakeVisible(toggleABButton);
@@ -405,6 +412,11 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
     toggleABButton.addListener(this);
     copyABButton.addListener(this);
 
+    addAndMakeVisible(previousButton);
+    addAndMakeVisible(nextButton);
+    previousButton.addListener(this);
+    nextButton.addListener(this);
+    
     addAndMakeVisible(presetBox);
     presetBox.setJustificationType(Justification::centred);
     presetBox.setColour(ComboBox::textColourId, COLOUR1);
@@ -412,7 +424,7 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
     presetBox.setColour(ComboBox::buttonColourId, COLOUR1);
     presetBox.setColour(ComboBox::outlineColourId, COLOUR5);
     presetBox.setColour(ComboBox::focusedOutlineColourId, COLOUR1);
-    presetBox.setColour(ComboBox::backgroundColourId, COLOUR5);
+    presetBox.setColour(ComboBox::backgroundColourId, COLOUR4);
     presetBox.setTextWhenNothingSelected("- Init -");
     refreshPresetBox();
     ifPresetActiveShowInBox();
@@ -431,6 +443,12 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
     copyABButton.setColour(TextButton::textColourOffId, COLOUR1);
     copyABButton.setColour(TextButton::buttonColourId, COLOUR5);
     copyABButton.setColour(ComboBox::outlineColourId, COLOUR5);
+    previousButton.setColour(TextButton::textColourOffId, COLOUR1);
+    previousButton.setColour(TextButton::buttonColourId, COLOUR5);
+    previousButton.setColour(ComboBox::outlineColourId, COLOUR5);
+    nextButton.setColour(TextButton::textColourOffId, COLOUR1);
+    nextButton.setColour(TextButton::buttonColourId, COLOUR5);
+    nextButton.setColour(ComboBox::outlineColourId, COLOUR5);
     savePresetButton.setColour(TextButton::textColourOffId, COLOUR1);
     savePresetButton.setColour(TextButton::buttonColourId, COLOUR5);
     savePresetButton.setColour(ComboBox::outlineColourId, COLOUR5);
@@ -462,13 +480,14 @@ void StateComponent::paint(Graphics & /*g*/)
 void StateComponent::resized()
 {
     Rectangle<int> r(getLocalBounds());
-
     const int numComponents{6};
     const int componentWidth{getWidth() / numComponents};
 
     toggleABButton.setBounds(r.removeFromLeft(componentWidth));
     copyABButton.setBounds(r.removeFromLeft(componentWidth));
-    presetBox.setBounds(r.removeFromLeft(componentWidth * 2));
+    presetBox.setBounds(r.removeFromLeft(componentWidth * 2).reduced(getHeight() / 15)); // if reduced value is getHeight() / 10, juce has a bug?
+    previousButton.setBounds(r.removeFromLeft(componentWidth / 4));
+    nextButton.setBounds(r.removeFromLeft(componentWidth / 4));
     savePresetButton.setBounds(r.removeFromLeft(componentWidth));
     //deletePresetButton.setBounds(r.removeFromLeft(componentWidth));
     menuButton.setBounds(r.removeFromLeft(componentWidth));
@@ -480,6 +499,10 @@ void StateComponent::buttonClicked(Button *clickedButton)
         procStateAB.toggleAB();
     if (clickedButton == &copyABButton)
         procStateAB.copyAB();
+    if (clickedButton == &previousButton)
+        setPreviousPreset();
+    if (clickedButton == &nextButton)
+        setNextPreset();
     if (clickedButton == &savePresetButton)
         savePresetAlertWindow();
     //if (clickedButton == &deletePresetButton)
@@ -489,13 +512,35 @@ void StateComponent::buttonClicked(Button *clickedButton)
         popPresetMenu();
 }
 
+void StateComponent::setPreviousPreset()
+{
+    int presetIndex = procStatePresets.getCurrentPresetId() - 1;
+    DBG(presetIndex);
+    if (presetIndex > 0) {
+        String presetID = (String) presetIndex;
+        procStatePresets.setCurrentPresetId(presetIndex);
+        procStatePresets.loadPreset(presetID);
+    }
+    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+}
+
+void StateComponent::setNextPreset()
+{
+    int presetIndex = procStatePresets.getCurrentPresetId() + 1;
+    DBG(presetIndex);
+    if (presetIndex <= procStatePresets.getNumPresets()) {
+        String presetID = (String) presetIndex;
+        procStatePresets.setCurrentPresetId(presetIndex);
+        procStatePresets.loadPreset(presetID);
+    }
+    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+}
+
 void StateComponent::comboBoxChanged(ComboBox *changedComboBox)
 {
-    
     const String presetID{"preset" + (String)changedComboBox->getSelectedId()};
     procStatePresets.setCurrentPresetId(changedComboBox->getSelectedId());
     //DBG(procStatePresets.getCurrentPresetId());
-    
     procStatePresets.loadPreset(presetID);
 }
 
@@ -534,72 +579,15 @@ void StateComponent::deletePresetAndRefresh()
     }
     else
     {
-//            AlertWindow alert2{"No preset!", "", AlertWindow::AlertIconType::NoIcon};
-//            alert2.addButton("OK", choice::ok, KeyPress(KeyPress::returnKey, 0, 0));
-//            alert2.setColour(AlertWindow::textColourId, COLOUR1);
-//            alert2.setColour(AlertWindow::outlineColourId, COLOUR5);
-//            alert2.setColour(AlertWindow::backgroundColourId, COLOUR7);
-//            alert2.setLookAndFeel(&otherLookAndFeel);
-//            alert2.getLookAndFeel().setColour(TextButton::textColourOffId, COLOUR1);
-//            alert2.getLookAndFeel().setColour(TextButton::textColourOnId, COLOUR1);
-//            alert2.getLookAndFeel().setColour(TextButton::buttonColourId, COLOUR6);
-//            alert2.getLookAndFeel().setColour(ComboBox::outlineColourId, COLOUR6);
-//            alert2.getLookAndFeel().setColour(TextEditor::outlineColourId, COLOUR6);
-//            alert2.getLookAndFeel().setColour(TextEditor::backgroundColourId, COLOUR6);
-//            alert2.getLookAndFeel().setColour(TextEditor::textColourId, COLOUR1);
-//            alert2.getLookAndFeel().setColour(TextEditor::highlightColourId, COLOUR1);
-//            alert2.getLookAndFeel().setColour(TextEditor::highlightedTextColourId, COLOUR6);
-//            alert2.getLookAndFeel().setColour(TextEditor::shadowColourId, COLOUR7);
-//            if (alert2.runModalLoop() == choice::ok) // LEAKS when quit while open !!!
-//            {
-//
-//            }
         NativeMessageBox::showMessageBox (AlertWindow::NoIcon, "Warning", "No preset!");
-        
     }
-    
-    
 }
 
 void StateComponent::savePresetAlertWindow()
 {
-//        enum choice
-//        {
-//            ok,
-//            cancel
-//        };
-//
-//        AlertWindow alert{"Save preset", "", AlertWindow::AlertIconType::NoIcon};
-//        alert.addTextEditor("presetEditorID", "");
-//        alert.addButton("Cancel", choice::cancel, KeyPress(KeyPress::escapeKey, 0, 0));
-//        alert.addButton("OK", choice::ok, KeyPress(KeyPress::returnKey, 0, 0));
-//        alert.setColour(AlertWindow::textColourId, COLOUR1);
-//        alert.setColour(AlertWindow::outlineColourId, COLOUR5);
-//        alert.setColour(AlertWindow::backgroundColourId, COLOUR7);
-//        alert.setLookAndFeel(&otherLookAndFeel);
-//        alert.getLookAndFeel().setColour(TextButton::textColourOffId, COLOUR1);
-//        alert.getLookAndFeel().setColour(TextButton::textColourOnId, COLOUR1);
-//        alert.getLookAndFeel().setColour(TextButton::buttonColourId, COLOUR6);
-//        alert.getLookAndFeel().setColour(ComboBox::outlineColourId, COLOUR6);
-//        alert.getLookAndFeel().setColour(TextEditor::outlineColourId, COLOUR6);
-//        alert.getLookAndFeel().setColour(TextEditor::backgroundColourId, COLOUR6);
-//        alert.getLookAndFeel().setColour(TextEditor::textColourId, COLOUR1);
-//        alert.getLookAndFeel().setColour(TextEditor::highlightColourId, COLOUR1);
-//        alert.getLookAndFeel().setColour(TextEditor::highlightedTextColourId, COLOUR6);
-//        alert.getLookAndFeel().setColour(TextEditor::shadowColourId, COLOUR7);
-//
-//        if (alert.runModalLoop() == choice::ok) // LEAKS when quit while open !!!
-//        {
-//            String presetName{alert.getTextEditorContents("presetEditorID")};
-//
-//            procStatePresets.savePreset(presetName);
-//            refreshPresetBox();
-//            presetBox.setSelectedId(procStatePresets.getNumPresets());
-//        }
-
     File userFile = procStatePresets.getFile().getChildFile("User");
     creatFolderIfNotExist(userFile);
-    FileChooser filechooser("save preset", userFile, "*", true, false,nullptr);
+    FileChooser filechooser("save preset", userFile, "*", true, false,  nullptr);
     if (filechooser.browseForFileToSave(true)) {
         
         // this is really shit code, but I don't have any other way to solve this shit problem!!!
@@ -612,6 +600,7 @@ void StateComponent::savePresetAlertWindow()
         }
     }
 }
+
 void StateComponent::openPresetFolder()
 {
     // open preset folder
@@ -663,6 +652,7 @@ void StateComponent::popPresetMenu()
     presetMenu.addItem(1, "Init", true);
     presetMenu.addItem(2, "Open Preset Folder", true);
     presetMenu.addItem(3, "Rescan Preset Folder", true);
+    presetMenu.addItem(4, "Give a Star on GitHub!", true);
     
     int result = presetMenu.show();
     if (result == 1)
@@ -677,6 +667,11 @@ void StateComponent::popPresetMenu()
     if (result == 3)
     {
         rescanPresetFolder();
+    }
+    if (result == 4)
+    {
+        URL gitHubWebsite ("https://github.com/jerryuhoo/Fire");
+        gitHubWebsite.launchInDefaultBrowser();
     }
 }
 

@@ -16,7 +16,7 @@ matrix:
         - PROJUCER="$TRAVIS_BUILD_DIR/JUCE/extras/Projucer/Builds/MacOSX/build/Debug/Projucer.app/Contents/MacOS/Projucer"
     - os: windows
       env:
-        - MSBUILD_PATH="C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin"
+        - MSBUILD_PATH="c:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\MSBuild\15.0\Bin"
         - BUILD_FOLDER="VisualStudio2019"
         - PROJUCER="$TRAVIS_BUILD_DIR/JUCE/extras/Projucer/Builds/VisualStudio2019/x64/Debug/App/Projucer.exe"
 

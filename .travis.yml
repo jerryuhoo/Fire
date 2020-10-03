@@ -1,99 +1,44 @@
+notifications:
+  email: false
+  
 language: cpp
 sudo: false
 
+# if pull request: always build
+# if push: only build for master branch
+if: (type != push) OR (type = push AND branch = master)
+
 matrix:
   include:
-  - os: linux
-    addons:
-      apt:
-        sources:
-          - ubuntu-toolchain-r-test
-          - sourceline: 'ppa:webkit-team/ppa'
-        packages:
-          - g++-6
-          - libasound2-dev
-          - libxrandr-dev
-          - libxinerama-dev
-          - libx11-dev
-          - mesa-common-dev
-          - freeglut3-dev
-          - libxcomposite-dev
-          - libfreetype6-dev
-          - libcurl4-gnutls-dev
-          - libxcursor-dev
-          - libgtk-3-dev
-          - libgl1-mesa-dev
-          - libwebkit2gtk-4.0-dev
-    env: CXX_COMPILER='g++-6' C_COMPILER='gcc-6' Fortran_COMPILER='gfortran' BUILD_TYPE='Debug'
-  - os: linux
-    addons:
-      apt:
-        sources:
-          - ubuntu-toolchain-r-test
-          - sourceline: 'ppa:webkit-team/ppa'
-        packages:
-          - g++-6
-          - libasound2-dev
-          - libxrandr-dev
-          - libxinerama-dev
-          - libx11-dev
-          - mesa-common-dev
-          - freeglut3-dev
-          - libxcomposite-dev
-          - libfreetype6-dev
-          - libcurl4-gnutls-dev
-          - libxcursor-dev
-          - libgtk-3-dev
-          - libgl1-mesa-dev
-          - libwebkit2gtk-4.0-dev
-    env: CXX_COMPILER='g++-6' C_COMPILER='gcc-6' Fortran_COMPILER='gfortran' BUILD_TYPE='Release'
-  - os: osx
-    compiler: clang
-    env: CXX_COMPILER='clang++' C_COMPILER='clang' Fortran_COMPILER='gfortran' GENERATOR='-G Xcode' BUILD_TYPE='Debug'
-  - os: osx
-    compiler: clang
-    env: CXX_COMPILER='clang++' C_COMPILER='clang' Fortran_COMPILER='gfortran' GENERATOR='-G Xcode' BUILD_TYPE='Release'
-      PROJECT_DEPLOY_TARGET="osx"
-install:
-- DEPS_DIR="${TRAVIS_BUILD_DIR}/deps"
-- mkdir ${DEPS_DIR} && cd ${DEPS_DIR}
-before_script:
-- export CXX=${CXX_COMPILER}
-- export CC=${C_COMPILER}
-- export FC=${Fortran_COMPILER}
-- export PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:$PATH
+    - os: osx
+      env:
+        - BUILD_FOLDER="MacOSX"
+        - PROJUCER="$TRAVIS_BUILD_DIR/JUCE/extras/Projucer/Builds/MacOSX/build/Debug/Projucer.app/Contents/MacOS/Projucer"
+    - os: windows
+      env:
+        - MSBUILD_PATH="c:\Program Files (x86)\Microsoft Visual Studio\2017\BuildTools\MSBuild\15.0\Bin"
+        - BUILD_FOLDER="VisualStudio2017"
+        - PROJUCER="$TRAVIS_BUILD_DIR/JUCE/extras/Projucer/Builds/VisualStudio2017/x64/Debug/App/Projucer.exe"
+
+before_install:
+  # mac installs
+  - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then gem install xcpretty; fi
+  - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then gem install xcpretty-travis-formatter; fi
+  # windows setup msbuild path
+  - if [[ $TRAVIS_OS_NAME == 'windows' ]]; then export PATH=$MSBUILD_PATH:$PATH; fi
+  
+  #Build Projucer
+  - cd $TRAVIS_BUILD_DIR/JUCE/extras/Projucer/Builds/$BUILD_FOLDER
+  - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then xcodebuild -project Projucer.xcodeproj > /dev/null; fi
+  - if [[ $TRAVIS_OS_NAME == 'windows' ]]; then msbuild.exe -v:quiet Projucer.sln; fi
+  
 script:
-- cd ${TRAVIS_BUILD_DIR}
-- mkdir build
-- cd build
-- CXX=${CXX_COMPILER} CC=${C_COMPILER} FC=${Fortran_COMPILER} cmake $GENERATOR .. -DCMAKE_BUILD_TYPE=${BUILD_TYPE} -DCMAKE_OSX_ARCHITECTURES="i386;x86_64"
-- cd ..
-- cmake --build build --config $BUILD_TYPE
-after_success:
-- |
-  if [ -n "${PROJECT_DEPLOY_TARGET+set}" ]; then
-    echo "Deploying package $PROJECT_DEPLOY_TARGET"
-    mkdir build/$PROJECT_DEPLOY_TARGET
-    mkdir build/deploy
-    cp -r build/$BUILD_TYPE/*.vst build/$PROJECT_DEPLOY_TARGET/.
-    cp -r build/$BUILD_TYPE/*.vst3 build/$PROJECT_DEPLOY_TARGET/.
-    cp -r build/$BUILD_TYPE/*.component build/$PROJECT_DEPLOY_TARGET/.
-    cd build
-    zip -r ${PROJECT_DEPLOY_TARGET}.zip $PROJECT_DEPLOY_TARGET
-    mv ${PROJECT_DEPLOY_TARGET}.zip deploy
-    cd ..
-  fi
-before_deploy:
-- export FILE_TO_UPLOAD=$(ls build/deploy/*.zip)
-deploy:
-  provider: releases
-  api_key:
-    secure: C9f82rXaWCvFt9EvKf4+IT0CC8ksZar0r2Y2e2mMu27DJglexVPi0onX3b1L5NN6q4BGeJtAF2/CWOF6fIQdm2aiyA00qwxLYySCQTCYMqw27evpXa37QHTUIYyfiGiQ51Vl87TPxko/etLmiZQkjAZKjJjMOUm+Qkgo17TD8oNvVkEs7EXyXQERyQiBNlSoPFLCG79gKvBuBF6tKk5MfFQEpkw2zgRcHALynLZZJrq3ShFiuI/MXfAJwr1C5kgwtE4ED0R44wUoYJbovbHP2IpglCvPQi1YKkKjvQwdwLr3J5NFYjoQfd97Zz0PQuKUQ11OXFGfRITDeLOC21+kalrS4yJTQlpz/ixI/4bgyCYHknDZB0fhzV/a5tAFX5IPEP2PeVteQXd0ihy5PA4EIIs7kudf+Vubai/+hbBcyZlXPWg1+kUcacg7Kw/0YlxD9lNF64/Q+Vlajq6Y/Yp45wzCb7LmEHKEcGvoh8xcO+1CqyIWRmhWSJ0DW+UQ9pbJZU8ZswflR705Y1oH7/PRUcN4Y7Ca7DyOxHBNbG4UHT9EFfBTKyjhv9UYDVU0KW0MThQguqEMwBdnN0WSJU+aEjFxg5ckE762PBedOjX2rO1LQyZPaEV87UjSzuDzlXn62GiRRgKe9CqU6Ji8NBanGYhCOyqQpy1yO0G4fz2P2R8=
-  file_glob: true
-  file: ${FILE_TO_UPLOAD}
-  skip_cleanup: true
-  overwrite: true
-  on:
-    branch: master
-    condition: -n "${PROJECT_DEPLOY_TARGET+set}"
-    tags: true
+  - cd $TRAVIS_BUILD_DIR/
+  - $PROJUCER --set-global-search-path $TRAVIS_OS_NAME defaultJuceModulePath  $TRAVIS_BUILD_DIR/JUCE/modules
+  - $PROJUCER --resave Fire.jucer
+  - cd $TRAVIS_BUILD_DIR/Builds/$BUILD_FOLDER/
+  
+  - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then xcodebuild -project Fire.xcodeproj/ clean; fi
+  - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then xcodebuild -project Fire.xcodeproj/ -configuration Release | xcpretty -s -f `xcpretty-travis-formatter`; fi
+  - if [[ $TRAVIS_OS_NAME == 'windows' ]]; then msbuild.exe -v:normal Fire.sln; fi
+  - echo "SUCCESS"

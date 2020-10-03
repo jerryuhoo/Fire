@@ -50,7 +50,7 @@
         <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
         <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
         <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
-        <MODULEPATH id="ff_meters" path="JUCE/juceUserModules"/>
+        <MODULEPATH id="ff_meters" path="juceUserModules"/>
       </MODULEPATHS>
     </XCODE_MAC>
     <VS2019 targetFolder="Builds/VisualStudio2019">
@@ -74,7 +74,7 @@
         <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
         <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
         <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
-        <MODULEPATH id="ff_meters" path="JUCE/juceUserModules"/>
+        <MODULEPATH id="ff_meters" path="juceUserModules"/>
       </MODULEPATHS>
     </VS2019>
   </EXPORTFORMATS>

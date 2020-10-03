@@ -1,0 +1,8 @@
+os: osx
+osx_image: xcode12.0
+before_install:
+    - gem install xcpretty
+    - gem install xcpretty-travis-formatter
+script:
+    - xcodebuild -configuration Release -project build/MacOSX/Fire.xcodeproj CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO | xcpretty -f `xcpretty-travis-formatter` && exit ${PIPESTATUS[0]}
+    - xcodebuild -configuration Debug -project build/MacOSX/Fire.xcodeproj CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO | xcpretty -f `xcpretty-travis-formatter` && exit ${PIPESTATUS[0]}

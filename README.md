@@ -1,4 +1,4 @@
-# Fire (Version 0.75)
+# Fire (Version 0.75) [![Build Status](https://travis-ci.com/travis-ci/docs-travis-ci-com.svg?branch=master)](https://travis-ci.com/travis-ci/docs-travis-ci-com)
 ![Alt text](Fire.png?raw=true "Title")
 
  This is a distortion plugin.

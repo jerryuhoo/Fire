@@ -515,7 +515,6 @@ void StateComponent::buttonClicked(Button *clickedButton)
 void StateComponent::setPreviousPreset()
 {
     int presetIndex = procStatePresets.getCurrentPresetId() - 1;
-    DBG(presetIndex);
     if (presetIndex > 0) {
         String presetID = (String) presetIndex;
         procStatePresets.setCurrentPresetId(presetIndex);
@@ -527,7 +526,6 @@ void StateComponent::setPreviousPreset()
 void StateComponent::setNextPreset()
 {
     int presetIndex = procStatePresets.getCurrentPresetId() + 1;
-    DBG(presetIndex);
     if (presetIndex <= procStatePresets.getNumPresets()) {
         String presetID = (String) presetIndex;
         procStatePresets.setCurrentPresetId(presetIndex);

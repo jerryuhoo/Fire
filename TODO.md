@@ -1,4 +1,5 @@
-TODO
+# TODO
+
 1. reduce CPU usage (future plan)
 2. adjust the position of ff meters
 3. save the xml of AB mode in processor.cpp get/set state function.

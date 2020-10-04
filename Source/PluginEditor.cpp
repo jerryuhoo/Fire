@@ -509,7 +509,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
 
         bool edgePointL = false;
         bool edgePointR = false;
-        float yPos;
+
         for (int i = 1; i < numPix; ++i)
         {
             value += valInc;
@@ -534,7 +534,7 @@ void FireAudioProcessorEditor::paint(Graphics &g)
             // mix
             functionValue = (1.f - mix) * value + mix * functionValue;
             mixValue = (2.0f / 3.0f) * functionValue;
-            yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+            float yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
 
             // draw points
             if (yPos < frame.getY())

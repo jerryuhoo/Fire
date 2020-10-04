@@ -140,10 +140,6 @@ float Distortion::hardClipping(float input)
     {
         input = -controls.thresh;
     }
-    else
-    {
-        input = input;
-    }
     return input;
 }
 
@@ -166,10 +162,7 @@ float Distortion::sausageFattener(float input)
 //    {
 //        input = 1.25 * input * input + 3 * input + 0.8;
 //    }
-//    else
-//    {
-//        input = input;
-//    }
+    
     // 0.9 -1.1 smooth
     
     input = input * 1.1;
@@ -199,10 +192,6 @@ float Distortion::sausageFattener(float input)
     else if (input < -0.9f && input > -1.1f)
     {
         input = 2.5 * input * input + 5.5 * input + 2.025;
-    }
-    else
-    {
-        input = input;
     }
     input = (1.f - controls.color) * input + controls.color * hardClipping(cleanInput);
     return input;

@@ -79,7 +79,7 @@
     </VS2019>
   </EXPORTFORMATS>
   <MODULES>
-    <MODULE id="ff_meters" showAllCode="1" useLocalCopy="1" useGlobalPath="0"/>
+    <MODULE id="ff_meters" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>

@@ -184,13 +184,6 @@
 			path = "../../JuceLibraryCode/include_juce_audio_formats.mm";
 			sourceTree = "SOURCE_ROOT";
 		};
-		0CCC5677E0565832FC99F648 = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "ff_meters";
-			path = "../../JuceLibraryCode/modules/ff_meters";
-			sourceTree = "SOURCE_ROOT";
-		};
 		0D4F820C92FD8475622E8D89 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.c.h;
@@ -387,6 +380,13 @@
 			path = ../../Source/LookAndFeel.h;
 			sourceTree = "SOURCE_ROOT";
 		};
+		6CB2E9764E6D1A13B5165E59 = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "juce_data_structures";
+			path = "../../JUCE/modules/juce_data_structures";
+			sourceTree = "SOURCE_ROOT";
+		};
 		85717F97D2DB0F36823CFEA2 = {
 			isa = PBXFileReference;
 			explicitFileType = wrapper.cfbundle;
@@ -407,13 +407,6 @@
 			name = Accelerate.framework;
 			path = System/Library/Frameworks/Accelerate.framework;
 			sourceTree = SDKROOT;
-		};
-		6CB2E9764E6D1A13B5165E59 = {
-			isa = PBXFileReference;
-			lastKnownFileType = file;
-			name = "juce_data_structures";
-			path = "../../JUCE/modules/juce_data_structures";
-			sourceTree = "SOURCE_ROOT";
 		};
 		6E3E18BCFFD0A4D4643435F3 = {
 			isa = PBXFileReference;
@@ -632,6 +625,13 @@
 			path = ../../Source/PluginEditor.h;
 			sourceTree = "SOURCE_ROOT";
 		};
+		DF556F44436F3547A5A933CC = {
+			isa = PBXFileReference;
+			lastKnownFileType = file;
+			name = "ff_meters";
+			path = "../../juceUserModules/ff_meters";
+			sourceTree = "SOURCE_ROOT";
+		};
 		E1679B24B2177F8B57D9CD68 = {
 			isa = PBXFileReference;
 			lastKnownFileType = sourcecode.cpp.objcpp;
@@ -742,7 +742,7 @@
 		5181AA9B5E9DE63D4A293B9D = {
 			isa = PBXGroup;
 			children = (
-				0CCC5677E0565832FC99F648,
+				DF556F44436F3547A5A933CC,
 				65CA92FFA1F1E0DBE7A9FD2F,
 				245C6C7A43658EA3CBB4ECB3,
 				B8C054F15576D93A39B15E3B,
@@ -918,7 +918,7 @@
 				HEADER_SEARCH_PATHS = (
 					"../../JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
-					"../../JuceLibraryCode/modules",
+					"../../juceUserModules",
 					"../../JUCE/modules",
 					"../../JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -970,7 +970,7 @@
 				HEADER_SEARCH_PATHS = (
 					"../../JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
-					"../../JuceLibraryCode/modules",
+					"../../juceUserModules",
 					"../../JUCE/modules",
 					"../../JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -1023,7 +1023,7 @@
 				HEADER_SEARCH_PATHS = (
 					"../../JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
-					"../../JuceLibraryCode/modules",
+					"../../juceUserModules",
 					"../../JUCE/modules",
 					"../../JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -1076,7 +1076,7 @@
 				HEADER_SEARCH_PATHS = (
 					"../../JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
-					"../../JuceLibraryCode/modules",
+					"../../juceUserModules",
 					"../../JUCE/modules",
 					"../../JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -1128,7 +1128,7 @@
 				HEADER_SEARCH_PATHS = (
 					"../../JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
-					"../../JuceLibraryCode/modules",
+					"../../juceUserModules",
 					"../../JUCE/modules",
 					"../../JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",
@@ -1174,7 +1174,7 @@
 				HEADER_SEARCH_PATHS = (
 					"../../JUCE/modules/juce_audio_processors/format_types/VST3_SDK",
 					"../../JuceLibraryCode",
-					"../../JuceLibraryCode/modules",
+					"../../juceUserModules",
 					"../../JUCE/modules",
 					"../../JUCE/modules/juce_audio_plugin_client",
 					"$(inherited)",

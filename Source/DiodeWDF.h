@@ -63,8 +63,8 @@
 
 */
 //==============================================================================
-static inline float diodeClipper (Array<float>& input, float Fs, 
-	float Vdiode, VoltageSource& Vin, Serie& root, Resistor& R1)
+static inline float diodeClipper(juce::Array<float> &input, float Fs,
+								 float Vdiode, VoltageSource &Vin, Serie &root, Resistor &R1)
 {
 	/*
     // 1 ohm is the Ri voltage source resistor
@@ -83,36 +83,36 @@ static inline float diodeClipper (Array<float>& input, float Fs,
 	// Resistor R1(80.0);
 
 	// accurate simulation of GZ34 valve diode.
-	float Is = 125.56;	// reverse saturation current
-	float Vt = 0.036;	// thermal voltage
+	float Is = 125.56; // reverse saturation current
+	float Vt = 0.036;  // thermal voltage
 
 	// initial value for the voltage over the diode (n-1 memory)
 	// float Vdiode = 0.0f;
-	
+
 	// for simulation
 	float b, r, Rdiode;
-	Array<float> output;
+	juce::Array<float> output;
 
-    // the simulation loop
-    int n = 0; int max = input.size();
-	
-    for (; n < max; ++n)
-    {
-        Vin.Vs = input[n] * 13;                  // read the input signal for the voltage source
-        b = root.reflected();				// get the waves up to the root
-											// ** VALVE RESISTOR **
-        Rdiode = Is * exp(-Vt * Vdiode);	// the nonlinear resistance of the diode
-        r = (Rdiode - root.R)				// update scattering coefficient (KCL)
-		  / (Rdiode + root.R);						
-        root.incident (r * b);				// evaluate the wave leaving the diode (root element)
-											// ** UPDATE **
-        Vdiode = root.voltage();			// update the diode voltage for next time sample
-        output.add (R1.voltage());			// the output is the voltage over the resistor R1
+	// the simulation loop
+	int n = 0;
+	int max = input.size();
 
-    }
+	for (; n < max; ++n)
+	{
+		Vin.Vs = input[n] * 13;			 // read the input signal for the voltage source
+		b = root.reflected();			 // get the waves up to the root
+										 // ** VALVE RESISTOR **
+		Rdiode = Is * exp(-Vt * Vdiode); // the nonlinear resistance of the diode
+		r = (Rdiode - root.R)			 // update scattering coefficient (KCL)
+			/ (Rdiode + root.R);
+		root.incident(r * b);	  // evaluate the wave leaving the diode (root element)
+								  // ** UPDATE **
+		Vdiode = root.voltage();  // update the diode voltage for next time sample
+		output.add(R1.voltage()); // the output is the voltage over the resistor R1
+	}
 	input = output;
 	return Vdiode;
 }
 
-#endif  // __DIODE_H_4BF269BF__
+#endif // __DIODE_H_4BF269BF__
 //==============================================================================

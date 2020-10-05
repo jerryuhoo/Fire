@@ -9,76 +9,75 @@
 */
 #pragma once
 
-#define COLOUR0 Colour(244, 244, 210)
-#define COLOUR1 Colour(244, 208, 63)
-#define COLOUR2 Colour(243, 156, 18)
-#define COLOUR3 Colour(230, 126, 34)
-#define COLOUR4 Colour(211, 84, 0)
-#define COLOUR5 Colour(192, 57, 43)
-#define COLOUR6 Colour(45, 40, 40)
-#define COLOUR7 Colour(15, 10, 10)
+#define COLOUR0 juce::Colour(244, 244, 210)
+#define COLOUR1 juce::Colour(244, 208, 63)
+#define COLOUR2 juce::Colour(243, 156, 18)
+#define COLOUR3 juce::Colour(230, 126, 34)
+#define COLOUR4 juce::Colour(211, 84, 0)
+#define COLOUR5 juce::Colour(192, 57, 43)
+#define COLOUR6 juce::Colour(45, 40, 40)
+#define COLOUR7 juce::Colour(15, 10, 10)
 
 #define KNOB_FONT "Futura"
 #define KNOB_FONT_SIZE 18.0f
 #define KNOB_FONT_COLOUR COLOUR1
 
-class OtherLookAndFeel : public LookAndFeel_V4
+class OtherLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    
     // resize scale
     float scale = 1.f;
-    
+
     OtherLookAndFeel()
     {
-        setColour(Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
-        setColour(Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
-        setColour(Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
+        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
     }
 
     // customize knobs
-    void drawRotarySlider(Graphics& g, int x, int y, int width, int height, float sliderPos,
-        const float rotaryStartAngle, const float rotaryEndAngle, Slider& slider) override
+    void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
+                          const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
     {
         // draw outline
         auto outline = COLOUR6;
         auto fill = COLOUR1;
 
-        auto bounds = Rectangle<int>(x, y, width, height).toFloat().reduced(10);
+        auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10);
 
-        auto radius = jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+        auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         // auto lineW = jmin(8.0f, radius * 0.2f);
         auto lineW = radius * 0.6f;
         auto arcRadius = radius - lineW * 0.5f;
 
-        Path backgroundArc;
+        juce::Path backgroundArc;
         backgroundArc.addCentredArc(bounds.getCentreX(),
-            bounds.getCentreY(),
-            arcRadius,
-            arcRadius,
-            0.0f,
-            rotaryStartAngle,
-            rotaryEndAngle,
-            true);
+                                    bounds.getCentreY(),
+                                    arcRadius,
+                                    arcRadius,
+                                    0.0f,
+                                    rotaryStartAngle,
+                                    rotaryEndAngle,
+                                    true);
 
         g.setColour(outline);
-        g.strokePath(backgroundArc, PathStrokeType(lineW, PathStrokeType::curved, PathStrokeType::butt));
+        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
 
         if (slider.isEnabled())
         {
-            Path valueArc;
+            juce::Path valueArc;
             valueArc.addCentredArc(bounds.getCentreX(),
-                bounds.getCentreY(),
-                arcRadius,
-                arcRadius,
-                0.0f,
-                rotaryStartAngle,
-                toAngle,
-                true);
+                                   bounds.getCentreY(),
+                                   arcRadius,
+                                   arcRadius,
+                                   0.0f,
+                                   rotaryStartAngle,
+                                   toAngle,
+                                   true);
 
             g.setColour(fill);
-            g.strokePath(valueArc, PathStrokeType(lineW, PathStrokeType::curved, PathStrokeType::butt));
+            g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
         }
 
         //auto thumbWidth = lineW * 1.0f;
@@ -89,30 +88,30 @@ public:
         //g.fillEllipse(Rectangle<float>(thumbWidth, thumbWidth).withCentre(thumbPoint));
 
         // draw inner circle
-        float diameterInner = jmin(width, height) * 0.4;
+        float diameterInner = juce::jmin(width, height) * 0.4;
         float radiusInner = diameterInner / 2;
         float centerX = x + width / 2;
         float centerY = y + height / 2;
         float rx = centerX - radiusInner;
         float ry = centerY - radiusInner;
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
-        
-        Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
+
+        juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
 
         g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         g.fillEllipse(dialArea);
-        
+
         // draw tick
         g.setColour(COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
-        Path dialTick;
+        juce::Path dialTick;
         dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
-        g.fillPath(dialTick, AffineTransform::rotation(angle).translated(centerX, centerY));
+        g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
     }
 
     // resize slider and textbox size
-    Slider::SliderLayout getSliderLayout(Slider& slider) override
+    juce::Slider::SliderLayout getSliderLayout(juce::Slider &slider) override
     {
         // 1. compute the actually visible textBox size from the slider textBox size and some additional constraints
 
@@ -121,21 +120,21 @@ public:
 
         auto textBoxPos = slider.getTextBoxPosition();
 
-        if (textBoxPos == Slider::TextBoxLeft || textBoxPos == Slider::TextBoxRight)
+        if (textBoxPos == juce::Slider::TextBoxLeft || textBoxPos == juce::Slider::TextBoxRight)
             minXSpace = 30;
         else
             minYSpace = 15;
 
         auto localBounds = slider.getLocalBounds();
 
-        auto textBoxWidth = jmax(0, jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
-        auto textBoxHeight = jmax(0, jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
+        auto textBoxWidth = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
+        auto textBoxHeight = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
 
-        Slider::SliderLayout layout;
+        juce::Slider::SliderLayout layout;
 
         // 2. set the textBox bounds
 
-        if (textBoxPos != Slider::NoTextBox)
+        if (textBoxPos != juce::Slider::NoTextBox)
         {
             if (slider.isBar())
             {
@@ -146,13 +145,19 @@ public:
                 layout.textBoxBounds.setWidth(textBoxWidth);
                 layout.textBoxBounds.setHeight(textBoxHeight);
 
-                if (textBoxPos == Slider::TextBoxLeft)           layout.textBoxBounds.setX(0);
-                else if (textBoxPos == Slider::TextBoxRight)     layout.textBoxBounds.setX(localBounds.getWidth() - textBoxWidth);
-                else /* above or below -> centre horizontally */ layout.textBoxBounds.setX((localBounds.getWidth() - textBoxWidth) / 2);
+                if (textBoxPos == juce::Slider::TextBoxLeft)
+                    layout.textBoxBounds.setX(0);
+                else if (textBoxPos == juce::Slider::TextBoxRight)
+                    layout.textBoxBounds.setX(localBounds.getWidth() - textBoxWidth);
+                else /* above or below -> centre horizontally */
+                    layout.textBoxBounds.setX((localBounds.getWidth() - textBoxWidth) / 2);
 
-                if (textBoxPos == Slider::TextBoxAbove)          layout.textBoxBounds.setY(0);
-                else if (textBoxPos == Slider::TextBoxBelow)     layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight - 10); // changed here!
-                else /* left or right -> centre vertically */    layout.textBoxBounds.setY((localBounds.getHeight() - textBoxHeight) / 2);
+                if (textBoxPos == juce::Slider::TextBoxAbove)
+                    layout.textBoxBounds.setY(0);
+                else if (textBoxPos == juce::Slider::TextBoxBelow)
+                    layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight - 10); // changed here!
+                else                                                                         /* left or right -> centre vertically */
+                    layout.textBoxBounds.setY((localBounds.getHeight() - textBoxHeight) / 2);
             }
         }
 
@@ -162,168 +167,173 @@ public:
 
         if (slider.isBar())
         {
-            layout.sliderBounds.reduce(1, 1);   // bar border
+            layout.sliderBounds.reduce(1, 1); // bar border
         }
         else
         {
-            if (textBoxPos == Slider::TextBoxLeft)       layout.sliderBounds.removeFromLeft(textBoxWidth);
-            else if (textBoxPos == Slider::TextBoxRight) layout.sliderBounds.removeFromRight(textBoxWidth);
-            else if (textBoxPos == Slider::TextBoxAbove) layout.sliderBounds.removeFromTop(textBoxHeight);
-            else if (textBoxPos == Slider::TextBoxBelow) layout.sliderBounds.removeFromBottom(textBoxHeight);
+            if (textBoxPos == juce::Slider::TextBoxLeft)
+                layout.sliderBounds.removeFromLeft(textBoxWidth);
+            else if (textBoxPos == juce::Slider::TextBoxRight)
+                layout.sliderBounds.removeFromRight(textBoxWidth);
+            else if (textBoxPos == juce::Slider::TextBoxAbove)
+                layout.sliderBounds.removeFromTop(textBoxHeight);
+            else if (textBoxPos == juce::Slider::TextBoxBelow)
+                layout.sliderBounds.removeFromBottom(textBoxHeight);
 
             const int thumbIndent = getSliderThumbRadius(slider);
 
-            if (slider.isHorizontal())    layout.sliderBounds.reduce(thumbIndent, 0);
-            else if (slider.isVertical()) layout.sliderBounds.reduce(0, thumbIndent);
+            if (slider.isHorizontal())
+                layout.sliderBounds.reduce(thumbIndent, 0);
+            else if (slider.isVertical())
+                layout.sliderBounds.reduce(0, thumbIndent);
         }
 
         return layout;
-
     }
-    
-    // draw rounded tickbox (toggle button)
-    void drawTickBox(Graphics& g, Component& component,
-        float x, float y, float w, float h,
-        const bool ticked,
-        const bool isEnabled,
-        const bool shouldDrawButtonAsHighlighted,
-        const bool shouldDrawButtonAsDown) override
-    {
-        ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
 
-        Rectangle<float> tickBounds(x, y, w, h);
-        
+    // draw rounded tickbox (toggle button)
+    void drawTickBox(juce::Graphics &g, juce::Component &component,
+                     float x, float y, float w, float h,
+                     const bool ticked,
+                     const bool isEnabled,
+                     const bool shouldDrawButtonAsHighlighted,
+                     const bool shouldDrawButtonAsDown) override
+    {
+        juce::ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+
+        juce::Rectangle<float> tickBounds(x, y, w, h);
+
         g.setColour(COLOUR2);
         g.fillEllipse(tickBounds);
 
         if (ticked)
         {
-            g.setColour(component.findColour(ToggleButton::tickColourId));
+            g.setColour(component.findColour(juce::ToggleButton::tickColourId));
         }
         else
         {
             g.setColour(COLOUR2);
         }
-        Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
+        juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
     }
 
-    void drawPopupMenuItem (Graphics& g, const Rectangle<int>& area,
-                                            const bool isSeparator, const bool isActive,
-                                            const bool isHighlighted, const bool isTicked,
-                                            const bool hasSubMenu, const String& text,
-                                            const String& shortcutKeyText,
-                                            const Drawable* icon, const Colour* const textColourToUse) override
+    void drawPopupMenuItem(juce::Graphics &g, const juce::Rectangle<int> &area,
+                           const bool isSeparator, const bool isActive,
+                           const bool isHighlighted, const bool isTicked,
+                           const bool hasSubMenu, const juce::String &text,
+                           const juce::String &shortcutKeyText,
+                           const juce::Drawable *icon, const juce::Colour *const textColourToUse) override
     {
         if (isSeparator)
         {
-            auto r  = area.reduced (5, 0);
-            r.removeFromTop (roundToInt (((float) r.getHeight() * 0.5f) - 0.5f));
-    
-            g.setColour (findColour (PopupMenu::textColourId).withAlpha (0.3f));
-            g.fillRect (r.removeFromTop (1));
+            auto r = area.reduced(5, 0);
+            r.removeFromTop(juce::roundToInt(((float)r.getHeight() * 0.5f) - 0.5f));
+
+            g.setColour(findColour(juce::PopupMenu::textColourId).withAlpha(0.3f));
+            g.fillRect(r.removeFromTop(1));
         }
         else
         {
-            auto textColour = (textColourToUse == nullptr ? findColour (PopupMenu::textColourId)
+            auto textColour = (textColourToUse == nullptr ? findColour(juce::PopupMenu::textColourId)
                                                           : *textColourToUse);
-    
-            auto r  = area.reduced (1);
-    
+
+            auto r = area.reduced(1);
+
             if (isHighlighted && isActive)
             {
-                g.setColour (findColour (PopupMenu::highlightedBackgroundColourId));
-                g.fillRect (r);
-    
-                g.setColour (findColour (PopupMenu::highlightedTextColourId));
+                g.setColour(findColour(juce::PopupMenu::highlightedBackgroundColourId));
+                g.fillRect(r);
+
+                g.setColour(findColour(juce::PopupMenu::highlightedTextColourId));
             }
             else
             {
-                g.setColour (textColour.withMultipliedAlpha (isActive ? 1.0f : 0.5f));
+                g.setColour(textColour.withMultipliedAlpha(isActive ? 1.0f : 0.5f));
             }
-    
-            r.reduce (jmin (5, area.getWidth() / 20), 0);
-    
+
+            r.reduce(juce::jmin(5, area.getWidth() / 20), 0);
+
             auto font = getPopupMenuFont();
-    
-            auto maxFontHeight = (float) r.getHeight() / 1.3f;
-    
+
+            auto maxFontHeight = (float)r.getHeight() / 1.3f;
+
             if (font.getHeight() > maxFontHeight)
-                font.setHeight (maxFontHeight);
-    
-            g.setFont (font);
-    
-            auto iconArea = r.removeFromLeft (roundToInt (maxFontHeight)).toFloat();
-    
+                font.setHeight(maxFontHeight);
+
+            g.setFont(font);
+
+            auto iconArea = r.removeFromLeft(juce::roundToInt(maxFontHeight)).toFloat();
+
             if (icon != nullptr)
             {
-                icon->drawWithin (g, iconArea, RectanglePlacement::centred | RectanglePlacement::onlyReduceInSize, 1.0f);
-                r.removeFromLeft (roundToInt (maxFontHeight * 0.5f));
+                icon->drawWithin(g, iconArea, juce::RectanglePlacement::centred | juce::RectanglePlacement::onlyReduceInSize, 1.0f);
+                r.removeFromLeft(juce::roundToInt(maxFontHeight * 0.5f));
             }
             else if (isTicked)
             {
                 //auto tick = getTickShape (1.0f);
                 //g.fillPath (tick, tick.getTransformToScaleToFit (iconArea.reduced (iconArea.getWidth() / 5, 0).toFloat(), true));
-                g.fillEllipse(iconArea.getX()+scale*12, iconArea.getY()+scale*17, iconArea.getWidth()-scale*24, iconArea.getWidth()-scale*24);
+                g.fillEllipse(iconArea.getX() + scale * 12, iconArea.getY() + scale * 17, iconArea.getWidth() - scale * 24, iconArea.getWidth() - scale * 24);
             }
-    
+
             if (hasSubMenu)
             {
                 auto arrowH = 0.6f * getPopupMenuFont().getAscent();
-    
-                auto x = static_cast<float> (r.removeFromRight ((int) arrowH).getX());
-                auto halfH = static_cast<float> (r.getCentreY());
-    
-                Path path;
-                path.startNewSubPath (x, halfH - arrowH * 0.5f);
-                path.lineTo (x + arrowH * 0.6f, halfH);
-                path.lineTo (x, halfH + arrowH * 0.5f);
-    
-                g.strokePath (path, PathStrokeType (2.0f));
+
+                auto x = static_cast<float>(r.removeFromRight((int)arrowH).getX());
+                auto halfH = static_cast<float>(r.getCentreY());
+
+                juce::Path path;
+                path.startNewSubPath(x, halfH - arrowH * 0.5f);
+                path.lineTo(x + arrowH * 0.6f, halfH);
+                path.lineTo(x, halfH + arrowH * 0.5f);
+
+                g.strokePath(path, juce::PathStrokeType(2.0f));
             }
-    
-            r.removeFromRight (3);
-            g.drawFittedText (text, r, Justification::centredLeft, 1);
-    
+
+            r.removeFromRight(3);
+            g.drawFittedText(text, r, juce::Justification::centredLeft, 1);
+
             if (shortcutKeyText.isNotEmpty())
             {
                 auto f2 = font;
-                f2.setHeight (f2.getHeight() * 0.75f);
-                f2.setHorizontalScale (0.95f);
-                g.setFont (f2);
-    
-                g.drawText (shortcutKeyText, r, Justification::centredRight, true);
+                f2.setHeight(f2.getHeight() * 0.75f);
+                f2.setHorizontalScale(0.95f);
+                g.setFont(f2);
+
+                g.drawText(shortcutKeyText, r, juce::Justification::centredRight, true);
             }
         }
     }
-    
-    void drawComboBoxTextWhenNothingSelected (Graphics& g, ComboBox& box, Label& label) override
+
+    void drawComboBoxTextWhenNothingSelected(juce::Graphics &g, juce::ComboBox &box, juce::Label &label) override
     {
         //g.setColour (findColour (ComboBox::textColourId).withMultipliedAlpha (0.5f));
         g.setColour(COLOUR1.withMultipliedAlpha(0.5f));
-        auto font = label.getLookAndFeel().getLabelFont (label);
+        auto font = label.getLookAndFeel().getLabelFont(label);
 
-        g.setFont (font);
-        
-        auto textArea = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
+        g.setFont(font);
 
-        g.drawFittedText (box.getTextWhenNothingSelected(), textArea, label.getJustificationType(),
-                          jmax (1, (int) ((float) textArea.getHeight() / font.getHeight())),
-                          label.getMinimumHorizontalScale());
+        auto textArea = getLabelBorderSize(label).subtractedFrom(label.getLocalBounds());
+
+        g.drawFittedText(box.getTextWhenNothingSelected(), textArea, label.getJustificationType(),
+                         juce::jmax(1, (int)((float)textArea.getHeight() / font.getHeight())),
+                         label.getMinimumHorizontalScale());
     }
-    
+
     // customize button
-    void drawButtonBackground(Graphics& g,
-        Button& button,
-        const Colour& backgroundColour,
-        bool shouldDrawButtonAsHighlighted,
-        bool shouldDrawButtonAsDown) override
+    void drawButtonBackground(juce::Graphics &g,
+                              juce::Button &button,
+                              const juce::Colour &backgroundColour,
+                              bool shouldDrawButtonAsHighlighted,
+                              bool shouldDrawButtonAsDown) override
     {
         auto cornerSize = 0.0f;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
-            .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
+                              .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
 
         if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
             baseColour = baseColour.contrasting(shouldDrawButtonAsDown ? 0.2f : 0.05f);
@@ -335,125 +345,124 @@ public:
         auto flatOnTop = button.isConnectedOnTop();
         auto flatOnBottom = button.isConnectedOnBottom();
 
-       if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
-       {
-            Path path;
+        if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
+        {
+            juce::Path path;
             path.addRoundedRectangle(bounds.getX(), bounds.getY(),
-                bounds.getWidth(), bounds.getHeight(),
-                cornerSize, cornerSize,
-                !(flatOnLeft || flatOnTop),
-                !(flatOnRight || flatOnTop),
-                !(flatOnLeft || flatOnBottom),
-                !(flatOnRight || flatOnBottom));
+                                     bounds.getWidth(), bounds.getHeight(),
+                                     cornerSize, cornerSize,
+                                     !(flatOnLeft || flatOnTop),
+                                     !(flatOnRight || flatOnTop),
+                                     !(flatOnLeft || flatOnBottom),
+                                     !(flatOnRight || flatOnBottom));
 
             g.fillPath(path);
 
-            g.setColour(button.findColour (ComboBox::outlineColourId));
-            g.strokePath(path, PathStrokeType(1.0f));
+            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
+            g.strokePath(path, juce::PathStrokeType(1.0f));
         }
         else
         {
             g.fillRoundedRectangle(bounds, cornerSize);
-            g.setColour(button.findColour (ComboBox::outlineColourId));
+            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
         }
     }
-    
-    
-    Font getTextButtonFont (TextButton&, int buttonHeight) override
+
+    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
     {
-        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
-    
-    
+
     // combobox customize font
-    Font getComboBoxFont (ComboBox& /*box*/) override
+    juce::Font getComboBoxFont(juce::ComboBox & /*box*/) override
     {
-        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
-    
-    Font getPopupMenuFont() override
+
+    juce::Font getPopupMenuFont() override
     {
-        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
-    
+
     // label customize font
-    Font getLabelFont (Label& label) override
+    juce::Font getLabelFont(juce::Label &label) override
     {
-        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);;
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        ;
     }
-    
-    void drawAlertBox (Graphics& g, AlertWindow& alert,
-                                       const Rectangle<int>& textArea, TextLayout& textLayout) override
+
+    void drawAlertBox(juce::Graphics &g, juce::AlertWindow &alert,
+                      const juce::Rectangle<int> &textArea, juce::TextLayout &textLayout) override
     {
         auto cornerSize = 1.0f;
 
-        g.setColour (alert.findColour (AlertWindow::outlineColourId));
-        g.drawRoundedRectangle (alert.getLocalBounds().toFloat(), cornerSize, 2.0f);
+        g.setColour(alert.findColour(juce::AlertWindow::outlineColourId));
+        g.drawRoundedRectangle(alert.getLocalBounds().toFloat(), cornerSize, 2.0f);
 
-        auto bounds = alert.getLocalBounds().reduced (1);
-        g.reduceClipRegion (bounds);
+        auto bounds = alert.getLocalBounds().reduced(1);
+        g.reduceClipRegion(bounds);
 
-        g.setColour (alert.findColour (AlertWindow::backgroundColourId));
-        g.fillRoundedRectangle (bounds.toFloat(), cornerSize);
+        g.setColour(alert.findColour(juce::AlertWindow::backgroundColourId));
+        g.fillRoundedRectangle(bounds.toFloat(), cornerSize);
 
         auto iconSpaceUsed = 0;
 
         auto iconWidth = 80;
-        auto iconSize = jmin (iconWidth + 50, bounds.getHeight() + 20);
+        auto iconSize = juce::jmin(iconWidth + 50, bounds.getHeight() + 20);
 
         if (alert.containsAnyExtraComponents() || alert.getNumButtons() > 2)
-            iconSize = jmin (iconSize, textArea.getHeight() + 50);
+            iconSize = juce::jmin(iconSize, textArea.getHeight() + 50);
 
-        Rectangle<int> iconRect (iconSize / -10, iconSize / -10,
-                                 iconSize, iconSize);
+        juce::Rectangle<int> iconRect(iconSize / -10, iconSize / -10,
+                                      iconSize, iconSize);
 
-        if (alert.getAlertType() != AlertWindow::NoIcon)
+        if (alert.getAlertType() != juce::AlertWindow::NoIcon)
         {
-            Path icon;
+            juce::Path icon;
             char character;
-            uint32 colour;
+            juce::uint32 colour;
 
-            if (alert.getAlertType() == AlertWindow::WarningIcon)
+            if (alert.getAlertType() == juce::AlertWindow::WarningIcon)
             {
                 character = '!';
 
-                icon.addTriangle ((float) iconRect.getX() + (float) iconRect.getWidth() * 0.5f, (float) iconRect.getY(),
-                                  static_cast<float> (iconRect.getRight()), static_cast<float> (iconRect.getBottom()),
-                                  static_cast<float> (iconRect.getX()), static_cast<float> (iconRect.getBottom()));
+                icon.addTriangle((float)iconRect.getX() + (float)iconRect.getWidth() * 0.5f, (float)iconRect.getY(),
+                                 static_cast<float>(iconRect.getRight()), static_cast<float>(iconRect.getBottom()),
+                                 static_cast<float>(iconRect.getX()), static_cast<float>(iconRect.getBottom()));
 
-                icon = icon.createPathWithRoundedCorners (5.0f);
+                icon = icon.createPathWithRoundedCorners(5.0f);
                 colour = 0x66ff2a00;
-            }   
+            }
             else
             {
-                colour = Colour (0xff00b0b9).withAlpha (0.4f).getARGB();
-                character = alert.getAlertType() == AlertWindow::InfoIcon ? 'i' : '?';
+                colour = juce::Colour(0xff00b0b9).withAlpha(0.4f).getARGB();
+                character = alert.getAlertType() == juce::AlertWindow::InfoIcon ? 'i' : '?';
 
-                icon.addEllipse (iconRect.toFloat());
+                icon.addEllipse(iconRect.toFloat());
             }
 
-            GlyphArrangement ga;
-            ga.addFittedText ({ (float) iconRect.getHeight() * 0.9f, Font::bold },
-                              String::charToString ((juce_wchar) (uint8) character),
-                              static_cast<float> (iconRect.getX()), static_cast<float> (iconRect.getY()),
-                              static_cast<float> (iconRect.getWidth()), static_cast<float> (iconRect.getHeight()),
-                              Justification::centred, false);
-            ga.createPath (icon);
+            juce::GlyphArrangement ga;
+            ga.addFittedText({(float)iconRect.getHeight() * 0.9f, juce::Font::bold},
+                             juce::String::charToString((juce::juce_wchar)(juce::uint8)character),
+                             static_cast<float>(iconRect.getX()), static_cast<float>(iconRect.getY()),
+                             static_cast<float>(iconRect.getWidth()), static_cast<float>(iconRect.getHeight()),
+                             juce::Justification::centred, false);
+            ga.createPath(icon);
 
-            icon.setUsingNonZeroWinding (false);
-            g.setColour (Colour (colour));
-            g.fillPath (icon);
+            icon.setUsingNonZeroWinding(false);
+            g.setColour(juce::Colour(colour));
+            g.fillPath(icon);
 
             iconSpaceUsed = iconWidth;
         }
 
-        g.setColour (alert.findColour (AlertWindow::textColourId));
+        g.setColour(alert.findColour(juce::AlertWindow::textColourId));
 
-        Rectangle<int> alertBounds (bounds.getX() + iconSpaceUsed, 30,
-                                    bounds.getWidth(), bounds.getHeight() - getAlertWindowButtonHeight() - 20);
+        juce::Rectangle<int> alertBounds(bounds.getX() + iconSpaceUsed, 30,
+                                         bounds.getWidth(), bounds.getHeight() - getAlertWindowButtonHeight() - 20);
 
-        textLayout.draw (g, alertBounds.toFloat());
+        textLayout.draw(g, alertBounds.toFloat());
     }
 };
 
@@ -501,21 +510,21 @@ public:
 //    }
 //};
 
-class RoundedButtonLnf : public LookAndFeel_V4
+class RoundedButtonLnf : public juce::LookAndFeel_V4
 {
 public:
     float scale = 1.f;
-    void drawButtonBackground(Graphics& g,
-        Button& button,
-        const Colour& backgroundColour,
-        bool shouldDrawButtonAsHighlighted,
-        bool shouldDrawButtonAsDown) override
+    void drawButtonBackground(juce::Graphics &g,
+                              juce::Button &button,
+                              const juce::Colour &backgroundColour,
+                              bool shouldDrawButtonAsHighlighted,
+                              bool shouldDrawButtonAsDown) override
     {
         auto cornerSize = 15.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
-            .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
+                              .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
 
         if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
             baseColour = baseColour.contrasting(shouldDrawButtonAsDown ? 0.2f : 0.05f);
@@ -527,32 +536,32 @@ public:
         auto flatOnTop = button.isConnectedOnTop();
         auto flatOnBottom = button.isConnectedOnBottom();
 
-       if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
-       {
-            Path path;
+        if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
+        {
+            juce::Path path;
             path.addRoundedRectangle(bounds.getX(), bounds.getY(),
-                bounds.getWidth(), bounds.getHeight(),
-                cornerSize, cornerSize,
-                !(flatOnLeft || flatOnTop),
-                !(flatOnRight || flatOnTop),
-                !(flatOnLeft || flatOnBottom),
-                !(flatOnRight || flatOnBottom));
+                                     bounds.getWidth(), bounds.getHeight(),
+                                     cornerSize, cornerSize,
+                                     !(flatOnLeft || flatOnTop),
+                                     !(flatOnRight || flatOnTop),
+                                     !(flatOnLeft || flatOnBottom),
+                                     !(flatOnRight || flatOnBottom));
 
             g.fillPath(path);
 
-            g.setColour(button.findColour (ComboBox::outlineColourId));
-            g.strokePath(path, PathStrokeType(1.0f));
+            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
+            g.strokePath(path, juce::PathStrokeType(1.0f));
         }
         else
         {
             g.fillRoundedRectangle(bounds, cornerSize);
-            g.setColour(button.findColour (ComboBox::outlineColourId));
+            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
         }
     }
-    
-    Font getTextButtonFont (TextButton&, int buttonHeight) override
+
+    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
     {
-        return Font (KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
 };

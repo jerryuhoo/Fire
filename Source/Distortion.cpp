@@ -22,20 +22,19 @@ Distortion::Distortion()
 Distortion::~Distortion() {}
 
 float Distortion::distortionProcess(float input)
-{ 
+{
     // sausage max is 4.3 * input
-//    if (controls.mode == 6) {
-//        controls.drive = 1 + (controls.drive - 1)* 3.3f / 31.f;
-//    }
+    //    if (controls.mode == 6) {
+    //        controls.drive = 1 + (controls.drive - 1)* 3.3f / 31.f;
+    //    }
 
     input += controls.bias;
 
-    
     input = input * controls.drive;
-    
+
     switch (controls.mode)
     {
-            // controls.mode + 1 = the ith mode in menu
+        // controls.mode + 1 = the ith mode in menu
     case 0:
         break;
     case 1:
@@ -70,17 +69,17 @@ float Distortion::distortionProcess(float input)
 
 float Distortion::rectificationProcess(float input)
 {
-//    switch (controls.rectification)
-//    {
-//    case 0:
-//        break;
-//    case 1:
-//        input = halfRectification(input);
-//        break;
-//    case 2:
-//        input = fullRectification(input);
-//        break;
-//    }
+    //    switch (controls.rectification)
+    //    {
+    //    case 0:
+    //        break;
+    //    case 1:
+    //        input = halfRectification(input);
+    //        break;
+    //    case 2:
+    //        input = fullRectification(input);
+    //        break;
+    //    }
     if (input < 0)
     {
         input *= (0.5 - controls.rectification) * 2;
@@ -146,36 +145,35 @@ float Distortion::hardClipping(float input)
 float Distortion::sausageFattener(float input)
 {
     // 0.8 - 1.2 smooth
-//    if (input >= 1.2f)
-//    {
-//        input = controls.thresh;
-//    }
-//    else if (input <= -1.2f)
-//    {
-//        input = -controls.thresh;
-//    }
-//    else if (input > 0.8f && input < 1.2f)
-//    {
-//        input = -1.25 * input * input + 3 * input - 0.8;
-//    }
-//    else if (input < -0.8f && input > -1.2f)
-//    {
-//        input = 1.25 * input * input + 3 * input + 0.8;
-//    }
-    
+    //    if (input >= 1.2f)
+    //    {
+    //        input = controls.thresh;
+    //    }
+    //    else if (input <= -1.2f)
+    //    {
+    //        input = -controls.thresh;
+    //    }
+    //    else if (input > 0.8f && input < 1.2f)
+    //    {
+    //        input = -1.25 * input * input + 3 * input - 0.8;
+    //    }
+    //    else if (input < -0.8f && input > -1.2f)
+    //    {
+    //        input = 1.25 * input * input + 3 * input + 0.8;
+    //    }
+
     // 0.9 -1.1 smooth
-    
+
     input = input * 1.1;
-    
-//    if (controls.protection == true)
-//    {
-//        if (input > 1)
-//        {
-//            input = 1 + input * 0.05;
-//        }
-//    }
-   
-    
+
+    //    if (controls.protection == true)
+    //    {
+    //        if (input > 1)
+    //        {
+    //            input = 1 + input * 0.05;
+    //        }
+    //    }
+
     float cleanInput = input;
     if (input >= 1.1f)
     {
@@ -200,7 +198,7 @@ float Distortion::sausageFattener(float input)
 float Distortion::sinFoldback(float input)
 {
     input = std::sin(input);
-    
+
     return input;
 }
 
@@ -208,22 +206,21 @@ float Distortion::linFoldback(float input)
 {
     if (input > controls.thresh || input < -controls.thresh)
     {
-        input = fabs(fabs(fmod(input - controls.thresh, controls.thresh * 4))
-                     - controls.thresh * 2) - controls.thresh;
+        input = fabs(fabs(fmod(input - controls.thresh, controls.thresh * 4)) - controls.thresh * 2) - controls.thresh;
     }
     return input;
 }
 
 float Distortion::halfRectification(float input)
 {
-    
-    if (input < 0) 
+
+    if (input < 0)
     {
         input = 0;
     }
     return input;
-    
-/*
+
+    /*
     // x - input
     // Q - work point.Controls the linearity of the transfer 
     //      function for low input levels, more negative = more linear 
@@ -245,10 +242,9 @@ float Distortion::halfRectification(float input)
 
 float Distortion::fullRectification(float input)
 {
-    if (input < 0) 
+    if (input < 0)
     {
         input = -input;
     }
     return input;
 }
-

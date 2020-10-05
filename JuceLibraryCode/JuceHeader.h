@@ -42,18 +42,13 @@
  #error "This project was last saved using an outdated version of the Projucer! Re-save this project with the latest version to fix this error."
 #endif
 
-#if ! DONT_SET_USING_JUCE_NAMESPACE
- // If your code uses a lot of JUCE classes, then this will obviously save you
- // a lot of typing, but can be disabled by setting DONT_SET_USING_JUCE_NAMESPACE.
- using namespace juce;
-#endif
 
 #if ! JUCE_DONT_DECLARE_PROJECTINFO
 namespace ProjectInfo
 {
     const char* const  projectName    = "Fire";
     const char* const  companyName    = "";
-    const char* const  versionString  = "0.75";
-    const int          versionNumber  = 0x4b00;
+    const char* const  versionString  = "0.751";
+    const int          versionNumber  = 0x2ef00;
 }
 #endif

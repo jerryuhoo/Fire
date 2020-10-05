@@ -10,20 +10,20 @@
 
 #pragma once
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include <JuceHeader.h>
 #include "Distortion.h"
 #include "Preset.h"
 #include "Delay.h"
 
-#define COLOUR1 Colour(244, 208, 63)
-#define COLOUR6 Colour(45, 40, 40)
+//#define COLOUR1 Colour(244, 208, 63)
+//#define COLOUR6 Colour(45, 40, 40)
 //==============================================================================
 /**
 */
 
 // temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
 // probably use fifo
-class Visualiser : public AudioVisualiserComponent
+class Visualiser : public juce::AudioVisualiserComponent
 {
 public:
     Visualiser() : AudioVisualiserComponent(2)
@@ -31,24 +31,24 @@ public:
         setBufferSize(128);
         setSamplesPerBlock(16);
         setColours(COLOUR6, COLOUR1);
-        setBoundsInset(BorderSize<int>(2, 2, 2, 2));
+        setBoundsInset(juce::BorderSize<int>(2, 2, 2, 2));
     }
 
-    void paintChannel (Graphics& g, Rectangle<float> area,
-                                                 const Range<float>* levels, int numLevels, int nextSample) override
+    void paintChannel(juce::Graphics &g, juce::Rectangle<float> area,
+                      const juce::Range<float> *levels, int numLevels, int nextSample) override
     {
-        Path p;
-        getChannelAsPath (p, levels, numLevels, nextSample);
-        ColourGradient grad(COLOUR1, area.getX() + area.getWidth() / 2, area.getY() + area.getHeight() / 2,
-            COLOUR6, area.getX(), area.getY() + area.getHeight() / 2, true);
+        juce::Path p;
+        getChannelAsPath(p, levels, numLevels, nextSample);
+        juce::ColourGradient grad(COLOUR1, area.getX() + area.getWidth() / 2, area.getY() + area.getHeight() / 2,
+                                  COLOUR6, area.getX(), area.getY() + area.getHeight() / 2, true);
         g.setGradientFill(grad);
-        g.fillPath (p, AffineTransform::fromTargetPoints (0.0f, -1.0f,               area.getX(), area.getY(),
-                                                          0.0f, 1.0f,                area.getX(), area.getBottom(),
-                                                          (float) numLevels, -1.0f,  area.getRight(), area.getY()));
+        g.fillPath(p, juce::AffineTransform::fromTargetPoints(0.0f, -1.0f, area.getX(), area.getY(),
+                                                              0.0f, 1.0f, area.getX(), area.getBottom(),
+                                                              (float)numLevels, -1.0f, area.getRight(), area.getY()));
     }
 };
 
-class FireAudioProcessor : public AudioProcessor
+class FireAudioProcessor : public juce::AudioProcessor
 {
 
 public:
@@ -64,14 +64,14 @@ public:
     bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
 #endif
 
-    void processBlock(AudioBuffer<float> &, MidiBuffer &) override;
+    void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
 
     //==============================================================================
-    AudioProcessorEditor *createEditor() override;
+    juce::AudioProcessorEditor *createEditor() override;
     bool hasEditor() const override;
 
     //==============================================================================
-    const String getName() const override;
+    const juce::String getName() const override;
 
     bool acceptsMidi() const override;
     bool producesMidi() const override;
@@ -82,26 +82,26 @@ public:
     int getNumPrograms() override;
     int getCurrentProgram() override;
     void setCurrentProgram(int index) override;
-    const String getProgramName(int index) override;
-    void changeProgramName(int index, const String &newName) override;
+    const juce::String getProgramName(int index) override;
+    void changeProgramName(int index, const juce::String &newName) override;
 
     //==============================================================================
-    void getStateInformation(MemoryBlock &destData) override;
+    void getStateInformation(juce::MemoryBlock &destData) override;
     void setStateInformation(const void *data, int sizeInBytes) override;
-    
+
     // Rectification
     void updateRectification();
 
     // filter
     void updateFilter();
-    
-    bool isSlient(AudioBuffer<float> buffer);
-    
+
+    bool isSlient(juce::AudioBuffer<float> buffer);
+
     // new drive after protection
     float getNewDrive();
-    
-    AudioProcessorValueTreeState treeState;
-    AudioProcessorValueTreeState::ParameterLayout createParameters();
+
+    juce::AudioProcessorValueTreeState treeState;
+    juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     // ff meter
     // ff meter
@@ -117,11 +117,11 @@ public:
     // temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
     // probably use fifo
     Visualiser visualiser;
-    
+
     // save presets
     state::StateAB stateAB;
     state::StatePresets statePresets;
-    
+
 private:
     //==============================================================================
 
@@ -130,14 +130,14 @@ private:
     foleys::LevelMeterSource outputMeterSource;
 
     // dry audio buffer
-    AudioBuffer<float> dryBuffer;
+    juce::AudioBuffer<float> dryBuffer;
     // dsp::AudioBlock<float> blockOutput;
-    dsp::ProcessSpec spec;
+    juce::dsp::ProcessSpec spec;
 
     // filter
-    dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterIIR;
-    dsp::ProcessorDuplicator<dsp::IIR::Filter<float>, dsp::IIR::Coefficients<float>> filterColor;
-    
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> filterIIR;
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> filterColor;
+
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
     float previousGainOutput;
@@ -146,29 +146,29 @@ private:
     float previousCutoff;
     float previousMix;
     float newDrive;
-    
-    SmoothedValue<float> driveSmoother;
-    SmoothedValue<float> outputSmoother;
-    SmoothedValue<float> colorSmoother;
-    SmoothedValue<float> cutoffSmoother;
-    SmoothedValue<float> recSmoother;
-    SmoothedValue<float> biasSmoother;
-    SmoothedValue<float> mixSmoother;
-    SmoothedValue<float> centralSmoother;
-    SmoothedValue<float> normalSmoother;
-    
+
+    juce::SmoothedValue<float> driveSmoother;
+    juce::SmoothedValue<float> outputSmoother;
+    juce::SmoothedValue<float> colorSmoother;
+    juce::SmoothedValue<float> cutoffSmoother;
+    juce::SmoothedValue<float> recSmoother;
+    juce::SmoothedValue<float> biasSmoother;
+    juce::SmoothedValue<float> mixSmoother;
+    juce::SmoothedValue<float> centralSmoother;
+    juce::SmoothedValue<float> normalSmoother;
+
     Distortion distortionProcessor;
 
     // oversampling
-    std::unique_ptr<dsp::Oversampling<float>> oversampling; // normal use 2x
-    std::unique_ptr<dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
     int oversampleFactor = 1;
-    
+
     // oversampling delay, set to dry buffer
     Delay mDelay{0};
-    
+
     // mode 8 diode================
-    Array<float> inputTemp;
+    juce::Array<float> inputTemp;
     float VdiodeL;
     float VdiodeR;
     float RiL;

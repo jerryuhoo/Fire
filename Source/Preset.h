@@ -12,15 +12,15 @@
 #ifndef STATE_H_INCLUDED
 #define STATE_H_INCLUDED
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include <JuceHeader.h>
 #include "LookAndFeel.h"
 
 namespace state
 {
 
 //==============================================================================
-void saveStateToXml(const AudioProcessor &processor, XmlElement &xml);
-void loadStateFromXml(const XmlElement &xml, AudioProcessor &processor);
+void saveStateToXml(const juce::AudioProcessor &processor, juce::XmlElement &xml);
+void loadStateFromXml(const juce::XmlElement &xml, juce::AudioProcessor &processor);
 
 //==============================================================================
 /** Handler for AB state toggling and copying in plugin.                        // improve descriptions
@@ -30,22 +30,22 @@ methods from button callback in editor.
 class StateAB
 {
 public:
-    explicit StateAB(AudioProcessor &p);
+    explicit StateAB(juce::AudioProcessor &p);
 
     void toggleAB();
     void copyAB();
 
 private:
-    AudioProcessor &pluginProcessor;
-    XmlElement ab{"AB"};
+    juce::AudioProcessor &pluginProcessor;
+    juce::XmlElement ab{"AB"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB);
 };
 
 //==============================================================================
 //int createFileIfNonExistant(const File &file);
-void parseFileToXmlElement(const File &file, XmlElement &xml);
-bool writeXmlElementToFile(const XmlElement &xml, File &file, String presetName, bool hasExtension);
+void parseFileToXmlElement(const juce::File &file, juce::XmlElement &xml);
+bool writeXmlElementToFile(const juce::XmlElement &xml, juce::File &file, juce::String presetName, bool hasExtension);
 
 //==============================================================================
 /** Create StatePresets object with XML file saved relative to user
@@ -56,33 +56,33 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
 class StatePresets
 {
 public:
-    StatePresets(AudioProcessor &proc, const String &presetFileLocation);
+    StatePresets(juce::AudioProcessor &proc, const juce::String &presetFileLocation);
     ~StatePresets();
     
-    bool savePreset(File savePath);
-    void loadPreset(String selectedName);
+    bool savePreset(juce::File savePath);
+    void loadPreset(juce::String selectedName);
     void deletePreset();
 
-    void setPresetAndFolderNames(ComboBox &menu);
+    void setPresetAndFolderNames(juce::ComboBox &menu);
     int getNumPresets() const;
-    String getNextAvailablePresetID(const XmlElement &presetXml);
+    juce::String getNextAvailablePresetID(const juce::XmlElement &presetXml);
     int getCurrentPresetId() const;
     void setCurrentPresetId(int currentPresetID);
-    void setPresetName(String name);
-    StringRef getPresetName();
+    void setPresetName(juce::String name);
+    juce::StringRef getPresetName();
     void scanAllPresets();
-    File getFile();
+    juce::File getFile();
     void initPreset();
-    void recursiveFileSearch(XmlElement &parentXML, File dir);
-    void recursivePresetLoad(XmlElement parentXml, String presetID);
-    void recursivePresetNameAdd(XmlElement parentXml ,ComboBox &menu, int &index);
+    void recursiveFileSearch(juce::XmlElement &parentXML, juce::File dir);
+    void recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID);
+    void recursivePresetNameAdd(juce::XmlElement parentXml ,juce::ComboBox &menu, int &index);
     
 private:
-    AudioProcessor &pluginProcessor;
-    XmlElement presetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
-    XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
-    File presetFile;                 // on-disk representation
-    String statePresetName{""};
+    juce::AudioProcessor &pluginProcessor;
+    juce::XmlElement presetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
+    juce::XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
+    juce::File presetFile;                 // on-disk representation
+    juce::String statePresetName{""};
     int mCurrentPresetID{0};
     int numPresets = 0;
     
@@ -96,17 +96,17 @@ Make private member of the PluginEditor. Initialise with the StateAB
 and StatePresets objects (these should be public members of the
 PluginProcessor).
 */
-class StateComponent : public Component,
-                       public Button::Listener,
-                       public ComboBox::Listener
+class StateComponent : public juce::Component,
+public juce::Button::Listener,
+public juce::ComboBox::Listener
 {
 public:
     StateComponent(StateAB &sab, StatePresets &sp);
 
-    void paint(Graphics &) override;
+    void paint(juce::Graphics &) override;
     void resized() override;
     
-    String getPresetName();
+    juce::String getPresetName();
     
 private:
     StateAB &procStateAB;
@@ -114,18 +114,18 @@ private:
 
     OtherLookAndFeel otherLookAndFeel;
     
-    TextButton toggleABButton;
-    TextButton copyABButton;
-    ComboBox presetBox;
-    TextButton previousButton;
-    TextButton nextButton;
-    TextButton savePresetButton;
+    juce::TextButton toggleABButton;
+    juce::TextButton copyABButton;
+    juce::ComboBox presetBox;
+    juce::TextButton previousButton;
+    juce::TextButton nextButton;
+    juce::TextButton savePresetButton;
     //TextButton deletePresetButton;
-    TextButton menuButton;
-    PopupMenu presetMenu;
+    juce::TextButton menuButton;
+    juce::PopupMenu presetMenu;
     
-    void buttonClicked(Button *clickedButton) override;
-    void comboBoxChanged(ComboBox *changedComboBox) override;
+    void buttonClicked(juce::Button *clickedButton) override;
+    void comboBoxChanged(juce::ComboBox *changedComboBox) override;
 
     void refreshPresetBox();
     void ifPresetActiveShowInBox();
@@ -133,12 +133,12 @@ private:
     void savePresetAlertWindow();
     void openPresetFolder();
     void rescanPresetFolder();
-    void creatFolderIfNotExist(File userFile);
+    void creatFolderIfNotExist(juce::File userFile);
     void popPresetMenu();
     void setPreviousPreset();
     void setNextPreset();
     
-    String presetName;
+    juce::String presetName;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent);
 };

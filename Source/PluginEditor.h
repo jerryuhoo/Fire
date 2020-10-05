@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include <JuceHeader.h>
 #include "Distortion.h"
 #include "LookAndFeel.h"
 
@@ -28,10 +28,10 @@
 //==============================================================================
 /**
 */
-class FireAudioProcessorEditor : public AudioProcessorEditor,//2019/12/28
-                                 public Slider::Listener,
-                                 public ComboBox::Listener, //2020/08/08
-                                 public Timer //edited 2020/07/03 fps
+class FireAudioProcessorEditor : public juce::AudioProcessorEditor, //2019/12/28
+                                 public juce::Slider::Listener,
+                                 public juce::ComboBox::Listener, //2020/08/08
+                                 public juce::Timer               //edited 2020/07/03 fps
 {
 public:
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
@@ -39,10 +39,10 @@ public:
     ~FireAudioProcessorEditor();
 
     //==============================================================================
-    void paint(Graphics& g) override;
+    void paint(juce::Graphics &g) override;
     void resized() override;
     void timerCallback() override;
-    
+
     //    Visualiser visualiser;
 
 private:
@@ -50,14 +50,14 @@ private:
     // access the processor object that created it.
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
-    
+
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;
-    foleys::LevelMeter inputMeter{ foleys::LevelMeter::Minimal };
-    foleys::LevelMeter outputMeter{ foleys::LevelMeter::Minimal };
+    foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};
+    foleys::LevelMeter outputMeter{foleys::LevelMeter::Minimal};
 
     // sliders
-    Slider
+    juce::Slider
         //inputKnob,
         driveKnob,
         downSampleKnob,
@@ -71,9 +71,9 @@ private:
     int knobSize = 100;
     float tempDriveValue = 1;
     float tempBiasValue = 0;
-    
+
     // labels
-    Label
+    juce::Label
         hqLabel,
         //inputLabel,
         driveLabel,
@@ -94,7 +94,7 @@ private:
         biasLabel;
 
     // buttons
-    TextButton
+    juce::TextButton
         hqButton,
         linkedButton,
         safeButton,
@@ -106,7 +106,7 @@ private:
         filterHighButton;
 
     // about
-    TextButton aboutButton {"about"};
+    //    juce::TextButton aboutButton {"about"};
 
     // group toggle buttons
     enum RadioButtonIds
@@ -116,18 +116,18 @@ private:
         // filter mode: low, band, high
         filterModeButtons = 1002,
     };
-    
-    void updateToggleState ();
+
+    void updateToggleState();
     //void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
-    
+
     // override listener functions
     // linked
-    void sliderValueChanged (Slider* slider) override;
+    void sliderValueChanged(juce::Slider *slider) override;
     // combobox changed and set knob enable/disable
-    void comboBoxChanged (ComboBox *combobox) override;
+    void comboBoxChanged(juce::ComboBox *combobox) override;
 
     // Slider attachment
-    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment>
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         //inputAttachment,
         driveAttachment,
         downSampleAttachment,
@@ -138,9 +138,9 @@ private:
         resAttachment,
         colorAttachment,
         biasAttachment;
-    
+
     // Toggle Button attachment
-    std::unique_ptr<AudioProcessorValueTreeState::ButtonAttachment>
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
         linkedAttachment,
         safeAttachment,
@@ -150,15 +150,15 @@ private:
         filterLowAttachment,
         filterBandAttachment,
         filterHighAttachment;
-    
+
     // ComboBox attachment
-    ComboBox distortionMode;
-    std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
-    
+    juce::ComboBox distortionMode;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
+
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
-    
+
     Distortion distortionProcessor;
 
     //return function value by different modes

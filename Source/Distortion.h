@@ -8,7 +8,7 @@
 #ifndef Distortion_h
 #define Distortion_h
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include <JuceHeader.h>
 #include <cmath>
 #include "DiodeWDF.h"
 
@@ -34,12 +34,12 @@ public:
         // bias [-0.5, 0.5]
         float bias;
     } controls;
-
+    
     Distortion();
     ~Distortion();
     float distortionProcess(float input);
     float rectificationProcess(float input);
-
+    
 private:
     // Nonlinearities
     float arctanSoftClipping(float input);

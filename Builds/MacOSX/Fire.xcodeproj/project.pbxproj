@@ -932,6 +932,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Fire;
 				PRODUCT_NAME = "Fire";
 				USE_HEADERMAP = NO;
+				VALID_ARCHS = "i386 x86_64 arm64 arm64e";
 				WRAPPER_EXTENSION = vst3;
 			};
 			name = Debug;
@@ -985,6 +986,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Fire;
 				PRODUCT_NAME = "Fire";
 				USE_HEADERMAP = NO;
+				VALID_ARCHS = "i386 x86_64 arm64 arm64e";
 				WRAPPER_EXTENSION = vst3;
 			};
 			name = Release;
@@ -1038,6 +1040,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Fire;
 				PRODUCT_NAME = "Fire";
 				USE_HEADERMAP = NO;
+				VALID_ARCHS = "i386 x86_64 arm64 arm64e";
 				WRAPPER_EXTENSION = component;
 			};
 			name = Debug;
@@ -1092,6 +1095,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.Wings.Fire;
 				PRODUCT_NAME = "Fire";
 				USE_HEADERMAP = NO;
+				VALID_ARCHS = "i386 x86_64 arm64 arm64e";
 				WRAPPER_EXTENSION = component;
 			};
 			name = Release;
@@ -1139,6 +1143,7 @@
 				PRODUCT_NAME = "Fire";
 				SKIP_INSTALL = YES;
 				USE_HEADERMAP = NO;
+				VALID_ARCHS = "i386 x86_64 arm64 arm64e";
 			};
 			name = Debug;
 		};
@@ -1186,6 +1191,7 @@
 				PRODUCT_NAME = "Fire";
 				SKIP_INSTALL = YES;
 				USE_HEADERMAP = NO;
+				VALID_ARCHS = "i386 x86_64 arm64 arm64e";
 			};
 			name = Release;
 		};

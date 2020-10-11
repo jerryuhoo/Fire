@@ -99,7 +99,7 @@
         <MODULEPATH id="juce_audio_formats"/>
         <MODULEPATH id="juce_audio_devices"/>
         <MODULEPATH id="juce_audio_basics"/>
-        <MODULEPATH id="ff_meters"/>
+        <MODULEPATH id="ff_meters" path="juceUserModules"/>
       </MODULEPATHS>
     </VS2017>
   </EXPORTFORMATS>

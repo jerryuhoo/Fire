@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.751"
+#define VERSION "0.76"
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets}
@@ -324,7 +324,36 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterHighButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterHighButton.setButtonText("HP");
     filterHighButton.setLookAndFeel(&roundedButtonLnf);
-
+    
+    // Window Left Button
+    addAndMakeVisible(windowLeftButton);
+    windowLeftButton.setClickingTogglesState(true);
+    windowLeftButton.setRadioGroupId(windowButtons);
+    bool windowLeftButtonState = *processor.treeState.getRawParameterValue("windowLeft");
+    windowLeftButton.setToggleState(windowLeftButtonState, juce::dontSendNotification);
+    windowLeftButton.onClick = [this] { updateWindowState(); };
+    windowLeftButton.setColour(juce::TextButton::buttonColourId, COLOUR1.withAlpha(0.2f));
+    windowLeftButton.setColour(juce::TextButton::buttonOnColourId, COLOUR1.withAlpha(0.8f));
+    windowLeftButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.f));
+    windowLeftButton.setColour(juce::TextButton::textColourOnId, COLOUR5);
+    windowLeftButton.setColour(juce::TextButton::textColourOffId, juce::Colour(100, 20, 20));
+    //windowLeftButton.setButtonText("1");
+    windowLeftButton.setLookAndFeel(&otherLookAndFeel);
+    
+    // Window Right Button
+    addAndMakeVisible(windowRightButton);
+    windowRightButton.setClickingTogglesState(true);
+    windowRightButton.setRadioGroupId(windowButtons);
+    bool windowRightButtonState = *processor.treeState.getRawParameterValue("windowRight");
+    windowRightButton.setToggleState(windowRightButtonState, juce::dontSendNotification);
+    windowRightButton.onClick = [this] { updateWindowState(); };
+    windowRightButton.setColour(juce::TextButton::buttonColourId, COLOUR1.withAlpha(0.2f));
+    windowRightButton.setColour(juce::TextButton::buttonOnColourId, COLOUR1.withAlpha(0.8f));
+    windowRightButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.f));
+    windowRightButton.setColour(juce::TextButton::textColourOnId, COLOUR5);
+    windowRightButton.setColour(juce::TextButton::textColourOffId, juce::Colour(100, 20, 20));
+    windowRightButton.setLookAndFeel(&otherLookAndFeel);
+    
     // Attachment
     //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
@@ -346,6 +375,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterLowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "low", filterLowButton);
     filterBandAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "band", filterBandButton);
     filterHighAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "high", filterHighButton);
+    
+    windowLeftButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "windowLeft", windowLeftButton);
+    windowRightButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "windowRight", windowRightButton);
 
     // Distortion mode select
     addAndMakeVisible(distortionMode);
@@ -430,6 +462,8 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     filterLowButton.setLookAndFeel(nullptr);
     filterBandButton.setLookAndFeel(nullptr);
     filterHighButton.setLookAndFeel(nullptr);
+    windowRightButton.setLookAndFeel(nullptr);
+    windowLeftButton.setLookAndFeel(nullptr);
 }
 
 float f(float x)
@@ -467,6 +501,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.drawImage(logoWings, getWidth() - part1, 0, part1, part1, 0, 0, logoWings.getWidth(), logoWings.getHeight());
 
     // paint distortion function
+    bool left = *processor.treeState.getRawParameterValue("windowLeft");
+    bool right = *processor.treeState.getRawParameterValue("windowRight");
+    
     float functionValue = 0;
     float mixValue;
 
@@ -488,101 +525,112 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 
     auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
     frame.setBounds(getWidth() / 2, part1, getWidth() / 2, part2);
-
+    
     // draw layer 2
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
-    if (mode < 9)
-    {
-        const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
-
-        float driveScale = 1;
-        float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
-        float value = -maxValue; // minimum (leftmost)  value for your graph
-        float valInc = (maxValue - value) / numPix;
-        float xPos = frame.getX();
-        const float posInc = frame.getWidth() / numPix;
-
-        juce::Path p;
-
-        bool edgePointL = false;
-        bool edgePointR = false;
-
-        for (int i = 1; i < numPix; ++i)
+    
+    if (left) {
+        if (mode < 9)
         {
-            value += valInc;
-            xPos += posInc;
+            const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
 
-            // symmetrical distortion
-            if (mode < 9)
+            float driveScale = 1;
+            float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
+            float value = -maxValue; // minimum (leftmost)  value for your graph
+            float valInc = (maxValue - value) / numPix;
+            float xPos = frame.getX();
+            const float posInc = frame.getWidth() / numPix;
+
+            juce::Path p;
+
+            bool edgePointL = false;
+            bool edgePointR = false;
+
+            for (int i = 1; i < numPix; ++i)
             {
-                functionValue = distortionProcessor.distortionProcess(value);
+                value += valInc;
+                xPos += posInc;
+
+                // symmetrical distortion
+                if (mode < 9)
+                {
+                    functionValue = distortionProcessor.distortionProcess(value);
+                }
+
+                // downsample
+                float rateDivide = *processor.treeState.getRawParameterValue("downSample");
+                if (rateDivide > 1)
+                {
+                    functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
+                }
+
+                // retification
+                functionValue = distortionProcessor.rectificationProcess(functionValue);
+
+                // mix
+                functionValue = (1.f - mix) * value + mix * functionValue;
+                mixValue = (2.0f / 3.0f) * functionValue;
+                float yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+
+                // draw points
+                if (yPos < frame.getY())
+                {
+                    if (edgePointR == false)
+                    {
+                        yPos = frame.getY();
+                        edgePointR = true;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+
+                if (yPos > frame.getBottom())
+                {
+                    if (edgePointL == false)
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        yPos = frame.getBottom();
+                    }
+                }
+                else if (edgePointL == false)
+                {
+                    if (mode == 0)
+                    {
+                        p.startNewSubPath(xPos, frame.getBottom());
+                        p.lineTo(xPos, yPos);
+                    }
+                    else
+                    {
+                        p.startNewSubPath(xPos, yPos);
+                    }
+                    edgePointL = true;
+                }
+                p.lineTo(xPos, yPos);
             }
 
-            // downsample
-            float rateDivide = *processor.treeState.getRawParameterValue("downSample");
-            if (rateDivide > 1)
-            {
-                functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
-            }
+            int colour_r = 244;
+            int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
+            int colour_b = 63;
 
-            // retification
-            functionValue = distortionProcessor.rectificationProcess(functionValue);
-
-            // mix
-            functionValue = (1.f - mix) * value + mix * functionValue;
-            mixValue = (2.0f / 3.0f) * functionValue;
-            float yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
-
-            // draw points
-            if (yPos < frame.getY())
-            {
-                if (edgePointR == false)
-                {
-                    yPos = frame.getY();
-                    edgePointR = true;
-                }
-                else
-                {
-                    continue;
-                }
-            }
-
-            if (yPos > frame.getBottom())
-            {
-                if (edgePointL == false)
-                {
-                    continue;
-                }
-                else
-                {
-                    yPos = frame.getBottom();
-                }
-            }
-            else if (edgePointL == false)
-            {
-                if (mode == 0)
-                {
-                    p.startNewSubPath(xPos, frame.getBottom());
-                    p.lineTo(xPos, yPos);
-                }
-                else
-                {
-                    p.startNewSubPath(xPos, yPos);
-                }
-                edgePointL = true;
-            }
-            p.lineTo(xPos, yPos);
+            juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
+                                      COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
+            g.setGradientFill(grad);
+            g.strokePath(p, juce::PathStrokeType(2.0));
         }
-
-        int colour_r = 244;
-        int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
-        int colour_b = 63;
-
-        juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
-                                  COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
-        g.setGradientFill(grad);
-        g.strokePath(p, juce::PathStrokeType(2.0));
+        
+        processor.visualiser.setVisible(true);
+        // WARNING!! should write my own visualiser instead because it flashes when switching to right window
+    }
+    else if (right)
+    {
+        processor.visualiser.setVisible(false);
+        // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     }
 
     // draw shadow 1
@@ -643,7 +691,10 @@ void FireAudioProcessorEditor::resized()
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
     linkedButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
-
+    
+    windowLeftButton.setBounds(0, secondShadowY - getHeight() / 50, getWidth() / 2, getHeight() / 50);
+    windowRightButton.setBounds(getWidth() / 2, secondShadowY - getHeight() / 50, getWidth() / 2, getHeight() / 50);
+    
     // second line
     safeButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondLineY, newKnobSize / 2, 0.05 * getHeight());
     filterOffButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY, newKnobSize / 2, 0.05 * getHeight());
@@ -657,8 +708,9 @@ void FireAudioProcessorEditor::resized()
     // aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
 
     // visualiser
+    // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
-
+    
     // ff meter
     int ffWidth = 20;
     int ffHeightStart = getHeight() / 10;
@@ -691,6 +743,11 @@ void FireAudioProcessorEditor::updateToggleState()
         cutoffKnob.setEnabled(true);
         resKnob.setEnabled(true);
     }
+}
+
+void FireAudioProcessorEditor::updateWindowState()
+{
+    
 }
 
 void FireAudioProcessorEditor::timerCallback()

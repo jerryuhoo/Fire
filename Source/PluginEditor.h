@@ -56,7 +56,7 @@ private:
     foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};
     foleys::LevelMeter outputMeter{foleys::LevelMeter::Minimal};
 
-    // sliders
+    // Sliders
     juce::Slider
         //inputKnob,
         driveKnob,
@@ -72,7 +72,7 @@ private:
     float tempDriveValue = 1;
     float tempBiasValue = 0;
 
-    // labels
+    // Labels
     juce::Label
         hqLabel,
         //inputLabel,
@@ -93,7 +93,7 @@ private:
         colorLabel,
         biasLabel;
 
-    // buttons
+    // Buttons
     juce::TextButton
         hqButton,
         linkedButton,
@@ -103,7 +103,9 @@ private:
         filterPostButton,
         filterLowButton,
         filterBandButton,
-        filterHighButton;
+        filterHighButton,
+        windowLeftButton,
+        windowRightButton;
 
     // about
     //    juce::TextButton aboutButton {"about"};
@@ -115,11 +117,15 @@ private:
         filterStateButtons = 1001,
         // filter mode: low, band, high
         filterModeButtons = 1002,
+        // window selection: left, right
+        windowButtons = 1003,
     };
 
     void updateToggleState();
     //void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
-
+    
+    void updateWindowState();
+    
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;
@@ -139,7 +145,7 @@ private:
         colorAttachment,
         biasAttachment;
 
-    // Toggle Button attachment
+    // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
         linkedAttachment,
@@ -149,7 +155,9 @@ private:
         filterPostAttachment,
         filterLowAttachment,
         filterBandAttachment,
-        filterHighAttachment;
+        filterHighAttachment,
+        windowLeftButtonAttachment,
+        windowRightButtonAttachment;
 
     // ComboBox attachment
     juce::ComboBox distortionMode;
@@ -158,7 +166,8 @@ private:
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
-
+    //FlatButtonLnf flatButtonLnf;
+    
     Distortion distortionProcessor;
 
     //return function value by different modes

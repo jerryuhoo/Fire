@@ -729,6 +729,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("low", "Low", false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("band", "Band", false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("high", "High", true));
-
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowLeft", "WindowLeft", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowRight", "WindowRight", false));
+    
     return {parameters.begin(), parameters.end()};
 }

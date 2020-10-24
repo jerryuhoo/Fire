@@ -6,4 +6,4 @@
 4. maybe add auto-update function?
 5. multi-band distortion? (future plan)
 6. replace visualiser with own function
-7. add multi-band vertical lines
+7. add right click to delete lines

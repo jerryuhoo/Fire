@@ -10,7 +10,10 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.76"
+#define VERSION "0.761"
+#define PART1 getHeight() / 10
+#define PART2 PART1 * 3
+
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets}
@@ -474,8 +477,8 @@ float f(float x)
 //==============================================================================
 void FireAudioProcessorEditor::paint(juce::Graphics &g)
 {
-    int part1 = getHeight() / 10;
-    int part2 = part1 * 3;
+    int part1 = PART1;//getHeight() / 10;
+    int part2 = PART2;//part1 * 3;
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
     g.fillAll(COLOUR7);
@@ -523,24 +526,28 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     distortionProcessor.controls.rectification = rec;
     distortionProcessor.controls.bias = bias;
 
-    auto frame = getLocalBounds(); // adjust here, if you want to paint in a special location
-    frame.setBounds(getWidth() / 2, part1, getWidth() / 2, part2);
+    auto frameRight = getLocalBounds();
+    auto frameLeft = getLocalBounds();
+    auto frame = getLocalBounds();
+    frameRight.setBounds(getWidth() / 2, part1, getWidth() / 2, part2);
+    frameLeft.setBounds(0, part1, getWidth() / 2, part2);
+    frame.setBounds(0, part1, getWidth(), part2);
     
     // draw layer 2
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
     
-    if (left) {
+    if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
         if (mode < 9)
         {
-            const int numPix = frame.getWidth(); // you might experiment here, if you want less steps to speed up
+            const int numPix = frameRight.getWidth(); // you might experiment here, if you want less steps to speed up
 
             float driveScale = 1;
             float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
             float value = -maxValue; // minimum (leftmost)  value for your graph
             float valInc = (maxValue - value) / numPix;
-            float xPos = frame.getX();
-            const float posInc = frame.getWidth() / numPix;
+            float xPos = frameRight.getX();
+            const float posInc = frameRight.getWidth() / numPix;
 
             juce::Path p;
 
@@ -571,14 +578,14 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
                 // mix
                 functionValue = (1.f - mix) * value + mix * functionValue;
                 mixValue = (2.0f / 3.0f) * functionValue;
-                float yPos = frame.getCentreY() - frame.getHeight() * mixValue / 2.0f;
+                float yPos = frameRight.getCentreY() - frameRight.getHeight() * mixValue / 2.0f;
 
                 // draw points
-                if (yPos < frame.getY())
+                if (yPos < frameRight.getY())
                 {
                     if (edgePointR == false)
                     {
-                        yPos = frame.getY();
+                        yPos = frameRight.getY();
                         edgePointR = true;
                     }
                     else
@@ -587,7 +594,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
                     }
                 }
 
-                if (yPos > frame.getBottom())
+                if (yPos > frameRight.getBottom())
                 {
                     if (edgePointL == false)
                     {
@@ -595,14 +602,14 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
                     }
                     else
                     {
-                        yPos = frame.getBottom();
+                        yPos = frameRight.getBottom();
                     }
                 }
                 else if (edgePointL == false)
                 {
                     if (mode == 0)
                     {
-                        p.startNewSubPath(xPos, frame.getBottom());
+                        p.startNewSubPath(xPos, frameRight.getBottom());
                         p.lineTo(xPos, yPos);
                     }
                     else
@@ -618,8 +625,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
             int colour_b = 63;
 
-            juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frame.getX() + frame.getWidth() / 2, frame.getY() + frame.getHeight() / 2,
-                                      COLOUR6, frame.getX(), frame.getY() + frame.getHeight() / 2, true);
+            juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
+                                      COLOUR6, frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
             g.setGradientFill(grad);
             g.strokePath(p, juce::PathStrokeType(2.0));
         }
@@ -627,10 +634,34 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         processor.visualiser.setVisible(true);
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     }
-    else if (right)
+    else if (right) // if you select the left window, you can use muti-band distortion
     {
         processor.visualiser.setVisible(false);
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
+        
+        // draw line that will be added next
+        g.setColour(COLOUR1.withAlpha(0.2f));
+        float startY = frame.getY();
+        float endY = frame.getBottom();
+        auto mousePos = getMouseXYRelative();
+        float xPos = mousePos.getX();
+        float yPos = mousePos.getY();
+        
+        if (yPos >= startY && yPos <= endY && lineNum < 3)
+        {
+            g.drawLine(xPos, startY, xPos, endY, 2);
+        }
+        
+
+        // draw added lines
+        g.setColour(COLOUR1);
+        if (lineNum >= 1)
+            g.drawLine(firstLineX, startY, firstLineX, endY, 2);
+        if (lineNum >= 2)
+            g.drawLine(secondLineX, startY, secondLineX, endY, 2);
+        if (lineNum >= 3)
+            g.drawLine(thirdLineX, startY, thirdLineX, endY, 2);
+        
     }
 
     // draw shadow 1
@@ -712,11 +743,11 @@ void FireAudioProcessorEditor::resized()
     processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
     
     // ff meter
-    int ffWidth = 20;
-    int ffHeightStart = getHeight() / 10;
-    int ffHeight = getHeight() / 10 * 3;
-    inputMeter.setBounds(getWidth() / 2 - ffWidth - 2, ffHeightStart, ffWidth, ffHeight + 2);
-    outputMeter.setBounds(getWidth() / 2 + 2, ffHeightStart, ffWidth, ffHeight + 2);
+//    int ffWidth = 20;
+//    int ffHeightStart = getHeight() / 10;
+//    int ffHeight = getHeight() / 10 * 3;
+//    inputMeter.setBounds(getWidth() / 2 - ffWidth - 2, ffHeightStart, ffWidth, ffHeight + 2);
+//    outputMeter.setBounds(getWidth() / 2 + 2, ffHeightStart, ffWidth, ffHeight + 2);
 
     // distortion menu
     distortionMode.setBounds(0, getHeight() / 10 * 4, getWidth() / 5, getHeight() / 10);
@@ -753,6 +784,116 @@ void FireAudioProcessorEditor::updateWindowState()
 void FireAudioProcessorEditor::timerCallback()
 {
     repaint();
+}
+
+void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
+{
+    switch (lineNum)
+    {
+        case 0:
+            firstLineX = getMouseXYRelative().getX();
+            lineNum++;
+            break;
+        case 1:
+            secondLineX = getMouseXYRelative().getX();
+            lineNum++;
+            break;
+        case 2:
+            thirdLineX = getMouseXYRelative().getX();
+            lineNum++;
+            break;
+    }
+    
+    if (lineNum >= 3 && secondLineX > thirdLineX)
+    {
+        std::swap(secondLineX, thirdLineX);
+    }
+    if (lineNum >= 2 && firstLineX > secondLineX)
+    {
+        std::swap(firstLineX, secondLineX);
+    }
+    
+    if (lineNum >= 2 && secondLineX - firstLineX < 50)
+    {
+        secondLineX = firstLineX + 50;
+    }
+    if (lineNum >= 3 && thirdLineX - secondLineX < 50)
+    {
+        thirdLineX = secondLineX + 50;
+    }
+    isMovingFirst = false;
+    isMovingSecond = false;
+    isMovingThird = false;
+    
+//    DBG("========");
+//    DBG(firstLineX);
+//    DBG(secondLineX);
+//    DBG(thirdLineX);
+}
+
+void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
+{
+    if (e.y > PART1 && e.y< PART1 + PART2)
+    {
+        bool nearFirst = abs(e.getMouseDownX() - firstLineX) <= 10;
+        bool nearSecond = abs(e.getMouseDownX() - secondLineX) <= 10;
+        bool nearThird = abs(e.getMouseDownX() - thirdLineX) <= 10;
+        
+        // only do this when mouse first clicked
+        if (isMovingFirst == false && nearFirst)
+        {
+            isMovingFirst = true;
+        }
+        else if (isMovingSecond == false && nearSecond)
+        {
+            isMovingSecond = true;
+        }
+        else if (isMovingThird == false && nearThird)
+        {
+            isMovingThird = true;
+        }
+        
+        // adjust line x position when dragging
+        if (isMovingFirst == true && e.x > 50 && e.x < getWidth() - 150)
+        {
+            firstLineX = e.x;
+            // adjust other lines
+            if (firstLineX > secondLineX - 50)
+            {
+                secondLineX = firstLineX + 50;
+            }
+            if (secondLineX > thirdLineX - 50)
+            {
+                thirdLineX = secondLineX + 50;
+            }
+        }
+        else if (isMovingSecond == true && e.x > 100 && e.x < getWidth() - 100)
+        {
+            secondLineX = e.x;
+            // adjust other lines
+            if (firstLineX > secondLineX - 50)
+            {
+                firstLineX = secondLineX - 50;
+            }
+            if (secondLineX > thirdLineX - 50)
+            {
+                thirdLineX = secondLineX + 50;
+            }
+        }
+        else if (isMovingThird == true && e.x > 150 && e.x < getWidth() - 50)
+        {
+            thirdLineX = e.x;
+            // adjust other lines
+            if (firstLineX > secondLineX - 50)
+            {
+                firstLineX = secondLineX - 50;
+            }
+            if (secondLineX > thirdLineX - 50)
+            {
+                secondLineX = thirdLineX - 50;
+            }
+        }
+    }   
 }
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)

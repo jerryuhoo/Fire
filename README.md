@@ -1,4 +1,4 @@
-# Fire (Version 0.75) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
+# Fire (Version 0.76) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
 
 ![Alt text](Fire.png?raw=true "Title")
 
@@ -42,7 +42,17 @@
 
 Hope you like it!
 
-## 2. Support the author
+## 2. How to install
+
+### Download from Release Page
+
+currently not avaliable
+
+### Build by JUCE
+
+Open .jucer file by Projucer then select your IDE to build Fire. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from JUCE website <https://juce.com/>
+
+## 3. Support the author
 
 欢迎关注网易云音乐：羽翼深蓝Wings！（这次一定！）
 
@@ -54,7 +64,7 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ![image](alipay.png)
 
-## 3. References
+## 4. References
 
 1. The level meter used ff_meters by Daniel Walz.
 
@@ -67,7 +77,7 @@ follow my Neteast channel: 羽翼深蓝Wings
 3. Diode Clipping algorithm
     from: <https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227>
 
-## 4. Update Notes
+## 5. Update Notes
 
 2020-7-15 (version 0.7)
 

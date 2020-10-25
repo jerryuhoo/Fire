@@ -137,6 +137,7 @@ private:
     bool isMovingFirst = false;
     bool isMovingSecond = false;
     bool isMovingThird = false;
+    bool isRightDragging = false;
     
     // override listener functions
     // linked

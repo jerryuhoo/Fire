@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.761"
+#define VERSION "0.762"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -21,7 +21,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // timer
     juce::Timer::startTimerHz(20.0f);
 
-    // resize not avaialble
+    // set resize
     setResizable(true, true);
 
     // Visualiser
@@ -655,6 +655,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 
         // draw added lines
         g.setColour(COLOUR1);
+        float firstLineX = firstLinePercent * getWidth();
+        float secondLineX = secondLinePercent * getWidth();
+        float thirdLineX = thirdLinePercent * getWidth();
         if (lineNum >= 1)
             g.drawLine(firstLineX, startY, firstLineX, endY, 2);
         if (lineNum >= 2)
@@ -693,9 +696,10 @@ void FireAudioProcessorEditor::resized()
     int newKnobSize = static_cast<int>(knobSize * scale);
     int startX = getWidth() / knobNum;
     int secondShadowY = getHeight() / 10 * 4;
-    int firstLineY = secondShadowY + (getHeight() - secondShadowY) * 2 / 5 - newKnobSize / 2;
-    int secondLineY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5 - newKnobSize / 2;
+    int firstPartY = secondShadowY + (getHeight() - secondShadowY) * 2 / 5 - newKnobSize / 2;
+    int secondPartY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5 - newKnobSize / 2;
 
+    
     // save presets
     juce::Rectangle<int> r(getLocalBounds());
     r = r.removeFromTop(50 * getHeight() / 500);
@@ -708,16 +712,16 @@ void FireAudioProcessorEditor::resized()
     // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
     driveKnob.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
     //colorKnob.setBounds(startX * 1 + newKnobSize * 1.2, secondLineY, newKnobSize, newKnobSize);
-    downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    recKnob.setBounds(startX * 4 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    colorKnob.setBounds(startX * 5 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    biasKnob.setBounds(startX * 6 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    outputKnob.setBounds(startX * 7 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    recKnob.setBounds(startX * 4 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    colorKnob.setBounds(startX * 5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    biasKnob.setBounds(startX * 6 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    outputKnob.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
 
     // second line
-    cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
-    resKnob.setBounds(startX * 6 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
-    mixKnob.setBounds(startX * 7 - newKnobSize / 2, secondLineY, newKnobSize, newKnobSize);
+    cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    resKnob.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    mixKnob.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
 
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
@@ -727,13 +731,13 @@ void FireAudioProcessorEditor::resized()
     windowRightButton.setBounds(getWidth() / 2, secondShadowY - getHeight() / 50, getWidth() / 2, getHeight() / 50);
     
     // second line
-    safeButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondLineY, newKnobSize / 2, 0.05 * getHeight());
-    filterOffButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY, newKnobSize / 2, 0.05 * getHeight());
-    filterPreButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterPostButton.setBounds(startX * 3 - newKnobSize / 4, secondLineY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterLowButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY, newKnobSize / 2, 0.05 * getHeight());
-    filterBandButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterHighButton.setBounds(startX * 4 - newKnobSize / 4, secondLineY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    safeButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondPartY, newKnobSize / 2, 0.05 * getHeight());
+    filterOffButton.setBounds(startX * 3 - newKnobSize / 4, secondPartY, newKnobSize / 2, 0.05 * getHeight());
+    filterPreButton.setBounds(startX * 3 - newKnobSize / 4, secondPartY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterPostButton.setBounds(startX * 3 - newKnobSize / 4, secondPartY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterLowButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY, newKnobSize / 2, 0.05 * getHeight());
+    filterBandButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    filterHighButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
 
     // about
     // aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
@@ -786,22 +790,33 @@ void FireAudioProcessorEditor::timerCallback()
     repaint();
 }
 
+
+
+void FireAudioProcessorEditor::mouseEnter(const juce::MouseEvent &e)
+{
+    
+}
+
 void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
 {
-    switch (lineNum)
+    float firstLineX = firstLinePercent * getWidth();
+    float secondLineX = secondLinePercent * getWidth();
+    float thirdLineX = thirdLinePercent * getWidth();
+    
+    if (lineNum == 0)
     {
-        case 0:
-            firstLineX = getMouseXYRelative().getX();
-            lineNum++;
-            break;
-        case 1:
-            secondLineX = getMouseXYRelative().getX();
-            lineNum++;
-            break;
-        case 2:
-            thirdLineX = getMouseXYRelative().getX();
-            lineNum++;
-            break;
+        firstLineX = getMouseXYRelative().getX();
+        lineNum++;
+    }
+    else if (lineNum == 1 && !isMovingFirst)
+    {
+        secondLineX = getMouseXYRelative().getX();
+        lineNum++;
+    }
+    else if (lineNum == 2 && !isMovingSecond)
+    {
+        thirdLineX = getMouseXYRelative().getX();
+        lineNum++;
     }
     
     if (lineNum >= 3 && secondLineX > thirdLineX)
@@ -821,20 +836,30 @@ void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
     {
         thirdLineX = secondLineX + 50;
     }
+    
+    firstLinePercent = firstLineX / static_cast<float>(getWidth());
+    secondLinePercent = secondLineX / static_cast<float>(getWidth());
+    thirdLinePercent = thirdLineX / static_cast<float>(getWidth());
+    
     isMovingFirst = false;
     isMovingSecond = false;
     isMovingThird = false;
     
 //    DBG("========");
-//    DBG(firstLineX);
-//    DBG(secondLineX);
-//    DBG(thirdLineX);
+//    DBG(firstLinePercent);
+//    DBG(secondLinePercent);
+//    DBG(thirdLinePercent);
 }
 
 void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
 {
     if (e.y > PART1 && e.y< PART1 + PART2)
     {
+        
+        float firstLineX = firstLinePercent * getWidth();
+        float secondLineX = secondLinePercent * getWidth();
+        float thirdLineX = thirdLinePercent * getWidth();
+        
         bool nearFirst = abs(e.getMouseDownX() - firstLineX) <= 10;
         bool nearSecond = abs(e.getMouseDownX() - secondLineX) <= 10;
         bool nearThird = abs(e.getMouseDownX() - thirdLineX) <= 10;
@@ -893,6 +918,11 @@ void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
                 secondLineX = thirdLineX - 50;
             }
         }
+        
+        firstLinePercent = firstLineX / static_cast<float>(getWidth());
+        secondLinePercent = secondLineX / static_cast<float>(getWidth());
+        thirdLinePercent = thirdLineX / static_cast<float>(getWidth());
+        
     }   
 }
 

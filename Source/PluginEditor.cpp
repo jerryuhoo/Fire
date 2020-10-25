@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.762"
+#define VERSION "0.763"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -647,11 +647,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         float xPos = mousePos.getX();
         float yPos = mousePos.getY();
         
-        if (yPos >= startY && yPos <= endY && lineNum < 3)
+        if (yPos >= startY && yPos <= startY + frame.getHeight() / 5 && lineNum < 3)
         {
             g.drawLine(xPos, startY, xPos, endY, 2);
         }
         
+        g.drawLine(0, startY + frame.getHeight() / 5, getWidth(), startY + frame.getHeight() / 5, 1);
 
         // draw added lines
         g.setColour(COLOUR1);
@@ -799,71 +800,76 @@ void FireAudioProcessorEditor::mouseEnter(const juce::MouseEvent &e)
 
 void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
 {
-    float firstLineX = firstLinePercent * getWidth();
-    float secondLineX = secondLinePercent * getWidth();
-    float thirdLineX = thirdLinePercent * getWidth();
-    
-    if (lineNum == 0)
+    if (e.mods.isLeftButtonDown() && e.y > PART1 && e.y < (PART1 + PART2 / 5))
     {
-        firstLineX = getMouseXYRelative().getX();
-        lineNum++;
-    }
-    else if (lineNum == 1 && !isMovingFirst)
-    {
-        secondLineX = getMouseXYRelative().getX();
-        lineNum++;
-    }
-    else if (lineNum == 2 && !isMovingSecond)
-    {
-        thirdLineX = getMouseXYRelative().getX();
-        lineNum++;
-    }
-    
-    if (lineNum >= 3 && secondLineX > thirdLineX)
-    {
-        std::swap(secondLineX, thirdLineX);
-    }
-    if (lineNum >= 2 && firstLineX > secondLineX)
-    {
-        std::swap(firstLineX, secondLineX);
-    }
-    
-    if (lineNum >= 2 && secondLineX - firstLineX < 50)
-    {
-        secondLineX = firstLineX + 50;
-    }
-    if (lineNum >= 3 && thirdLineX - secondLineX < 50)
-    {
-        thirdLineX = secondLineX + 50;
-    }
-    
-    firstLinePercent = firstLineX / static_cast<float>(getWidth());
-    secondLinePercent = secondLineX / static_cast<float>(getWidth());
-    thirdLinePercent = thirdLineX / static_cast<float>(getWidth());
-    
-    isMovingFirst = false;
-    isMovingSecond = false;
-    isMovingThird = false;
-    
-//    DBG("========");
-//    DBG(firstLinePercent);
-//    DBG(secondLinePercent);
-//    DBG(thirdLinePercent);
-}
-
-void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
-{
-    if (e.y > PART1 && e.y< PART1 + PART2)
-    {
-        
         float firstLineX = firstLinePercent * getWidth();
         float secondLineX = secondLinePercent * getWidth();
         float thirdLineX = thirdLinePercent * getWidth();
         
-        bool nearFirst = abs(e.getMouseDownX() - firstLineX) <= 10;
-        bool nearSecond = abs(e.getMouseDownX() - secondLineX) <= 10;
-        bool nearThird = abs(e.getMouseDownX() - thirdLineX) <= 10;
+        if (lineNum == 0)
+        {
+            firstLineX = getMouseXYRelative().getX();
+            lineNum++;
+        }
+        else if (lineNum == 1 && !isMovingFirst)
+        {
+            secondLineX = getMouseXYRelative().getX();
+            lineNum++;
+        }
+        else if (lineNum == 2 && !isMovingSecond)
+        {
+            thirdLineX = getMouseXYRelative().getX();
+            lineNum++;
+        }
         
+        if (lineNum >= 3 && secondLineX > thirdLineX)
+        {
+            std::swap(secondLineX, thirdLineX);
+        }
+        if (lineNum >= 2 && firstLineX > secondLineX)
+        {
+            std::swap(firstLineX, secondLineX);
+        }
+        
+        if (lineNum >= 2 && secondLineX - firstLineX < 50)
+        {
+            secondLineX = firstLineX + 50;
+        }
+        if (lineNum >= 3 && thirdLineX - secondLineX < 50)
+        {
+            thirdLineX = secondLineX + 50;
+        }
+        
+        firstLinePercent = firstLineX / static_cast<float>(getWidth());
+        secondLinePercent = secondLineX / static_cast<float>(getWidth());
+        thirdLinePercent = thirdLineX / static_cast<float>(getWidth());
+        
+        isMovingFirst = false;
+        isMovingSecond = false;
+        isMovingThird = false;
+    }
+    isRightDragging = false;
+}
+
+void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
+{
+
+    float firstLineX = firstLinePercent * getWidth();
+    float secondLineX = secondLinePercent * getWidth();
+    float thirdLineX = thirdLinePercent * getWidth();
+    
+    bool nearFirst = abs(e.getMouseDownX() - firstLineX) <= 10;
+    bool nearSecond = abs(e.getMouseDownX() - secondLineX) <= 10;
+    bool nearThird = abs(e.getMouseDownX() - thirdLineX) <= 10;
+    
+    if (e.mods.isRightButtonDown() && !isRightDragging)
+    {
+        isRightDragging = true;
+    }
+    
+    // left drag to drag lines
+    if (e.mods.isLeftButtonDown())
+    {
         // only do this when mouse first clicked
         if (isMovingFirst == false && nearFirst)
         {
@@ -879,18 +885,31 @@ void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
         }
         
         // adjust line x position when dragging
-        if (isMovingFirst == true && e.x > 50 && e.x < getWidth() - 150)
+        if (isMovingFirst == true)
         {
-            firstLineX = e.x;
+            
             // adjust other lines
-            if (firstLineX > secondLineX - 50)
+            if (e.x > 50 && e.x < getWidth() - 150)
             {
-                secondLineX = firstLineX + 50;
+                firstLineX = e.x;
+                if (firstLineX > secondLineX - 50)
+                {
+                    secondLineX = firstLineX + 50;
+                }
+                if (secondLineX > thirdLineX - 50)
+                {
+                    thirdLineX = secondLineX + 50;
+                }
             }
-            if (secondLineX > thirdLineX - 50)
+            else if (e.x <= 50)
             {
-                thirdLineX = secondLineX + 50;
+                firstLineX = 50;
             }
+            else if (e.x >= 150)
+            {
+                firstLineX = getWidth() - 150;
+            }
+            
         }
         else if (isMovingSecond == true && e.x > 100 && e.x < getWidth() - 100)
         {
@@ -922,8 +941,37 @@ void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
         firstLinePercent = firstLineX / static_cast<float>(getWidth());
         secondLinePercent = secondLineX / static_cast<float>(getWidth());
         thirdLinePercent = thirdLineX / static_cast<float>(getWidth());
+    }
+    // right drag or click to delete lines
+    else if (isRightDragging && e.y > PART1 && e.y< PART1 + PART2)
+    {
+        if (abs(e.x - firstLineX) <= 10 && lineNum >= 1)
+        {
+            if (lineNum == 3)
+            {
+                firstLinePercent = secondLinePercent;
+                secondLinePercent = thirdLinePercent;
+            }
+            else if (lineNum == 2)
+            {
+                firstLinePercent = secondLinePercent;
+            }
+            lineNum--;
+        }
+        else if (abs(e.x - secondLineX) <= 10  && lineNum >= 2)
+        {
+            if (lineNum == 3)
+            {
+                secondLinePercent = thirdLinePercent;
+            }
+            lineNum--;
+        }
+        else if (abs(e.x - thirdLineX) <= 10  && lineNum == 3)
+        {
+            lineNum--;
+        }
+    }
         
-    }   
 }
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)

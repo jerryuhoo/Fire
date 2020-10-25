@@ -129,10 +129,11 @@ private:
     // multi-band
     void mouseUp(const juce::MouseEvent &e) override;
     void mouseDrag(const juce::MouseEvent &e) override;
+    void mouseEnter(const juce::MouseEvent &e) override;
     int lineNum = 0;
-    float firstLineX;
-    float secondLineX;
-    float thirdLineX;
+    float firstLinePercent;
+    float secondLinePercent;
+    float thirdLinePercent;
     bool isMovingFirst = false;
     bool isMovingSecond = false;
     bool isMovingThird = false;

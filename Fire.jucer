@@ -2,11 +2,14 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.Wings.Fire" bundleIdentifier="com.Wings.Fire"
-              version="0.761" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.762" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
+      <FILE id="RUEaa8" name="VerticalLine.cpp" compile="1" resource="0"
+            file="Source/VerticalLine.cpp"/>
+      <FILE id="CfnhcY" name="VerticalLine.h" compile="0" resource="0" file="Source/VerticalLine.h"/>
       <FILE id="hoCyHn" name="Delay.h" compile="0" resource="0" file="Source/Delay.h"/>
       <FILE id="LOpR42" name="Preset.cpp" compile="1" resource="0" file="Source/Preset.cpp"/>
       <FILE id="lhFpz1" name="Preset.h" compile="0" resource="0" file="Source/Preset.h"/>

@@ -1,4 +1,4 @@
-# Fire (Version 0.76) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
+# Fire (Version 0.77) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
 
 ![Alt text](Fire.png?raw=true "Title")
 
@@ -50,11 +50,11 @@ currently not avaliable
 
 ### Build by JUCE
 
-Open .jucer file by Projucer then select your IDE to build Fire. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from JUCE website <https://juce.com/>
+Open .jucer file by Projucer then select your IDE to build Fire. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the <a href="https://www.juce.com" rel="nofollow">latest JUCE release</a>.</li>
 
 ## 3. Support the author
 
-欢迎关注网易云音乐：羽翼深蓝Wings！（这次一定！）
+欢迎关注网易云音乐：<a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings</a>（这次一定！）
 
 follow my Neteast channel: 羽翼深蓝Wings
 
@@ -66,16 +66,11 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ## 4. References
 
-1. The level meter used ff_meters by Daniel Walz.
+1. The level meter used <a href="https://github.com/ffAudio/ff_meters">ff_meters</a> by Daniel Walz.
 
-    from: <https://github.com/ffAudio/ff_meters>
+2. A great example of using XML by <a href="https://github.com/johnflynnjohnflynn/TestParameters02">johnflynnjohnflynn</a> to save presets to file example. I changed the code to save presets as mutiple files.
 
-2. A great example of using XML to save presets to file example. I changed the code to save presets as mutiple files.
-
-    from: <https://github.com/johnflynnjohnflynn/TestParameters02>
-
-3. Diode Clipping algorithm
-    from: <https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227>
+3. <a href="https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227">Diode Clipping algorithm</a> from JUCE forum
 
 ## 5. Update Notes
 

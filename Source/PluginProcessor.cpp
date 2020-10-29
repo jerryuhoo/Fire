@@ -161,8 +161,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     normalSmoother.setCurrentAndTargetValue(1);
 
     // clear visualiser
-    visualiser.clear();
-
+    //visualiser.clear();
+    historyBuffer.clear();
+    
     // dry buffer init
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
@@ -566,7 +567,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
     // ff output meter
     outputMeterSource.measureBlock(buffer);
-    visualiser.pushBuffer(buffer);
+    //visualiser.pushBuffer(buffer);
+    
+    historyBuffer.makeCopyOf(buffer);
 }
 
 //==============================================================================
@@ -699,6 +702,11 @@ bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
 float FireAudioProcessor::getNewDrive()
 {
     return newDrive;
+}
+
+juce::AudioBuffer<float> FireAudioProcessor::getHistoryBuffer()
+{
+    return historyBuffer;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()

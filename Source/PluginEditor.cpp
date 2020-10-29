@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.763"
+#define VERSION "0.77"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -19,14 +19,15 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets}
 {
     // timer
-    juce::Timer::startTimerHz(20.0f);
+    juce::Timer::startTimerHz(30.0f);
 
     // set resize
     setResizable(true, true);
 
     // Visualiser
-    addAndMakeVisible(p.visualiser);
-
+    //addAndMakeVisible(p.visualiser);
+    addAndMakeVisible(oscilloscope);
+    
     // presets
     addAndMakeVisible(stateComponent);
 
@@ -631,12 +632,23 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             g.strokePath(p, juce::PathStrokeType(2.0));
         }
         
-        processor.visualiser.setVisible(true);
+        //processor.visualiser.setVisible(true);
+        oscilloscope.setVisible(true);
+        
+        
+        historyBuffer = processor.getHistoryBuffer();
+        
+        for (int i = 1; i < historyBuffer.getNumSamples(); ++i)
+        {
+            
+        }
+        
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     }
     else if (right) // if you select the left window, you can use muti-band distortion
     {
-        processor.visualiser.setVisible(false);
+        oscilloscope.setVisible(false);
+        //processor.visualiser.setVisible(false);
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
         
         // draw line that will be added next
@@ -745,7 +757,8 @@ void FireAudioProcessorEditor::resized()
 
     // visualiser
     // WARNING!! should write my own visualiser instead because it flashes when switching to right window
-    processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
+    //processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
+    oscilloscope.setBounds(0, getHeight() / 10, getWidth() / 2, getHeight() / 10 * 3);
     
     // ff meter
 //    int ffWidth = 20;
@@ -914,6 +927,7 @@ void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
         else if (isMovingSecond == true && e.x > 100 && e.x < getWidth() - 100)
         {
             secondLineX = e.x;
+            DBG(firstLineX);
             // adjust other lines
             if (firstLineX > secondLineX - 50)
             {

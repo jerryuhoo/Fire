@@ -13,6 +13,7 @@
 #include <JuceHeader.h>
 #include "Distortion.h"
 #include "LookAndFeel.h"
+#include "Oscilloscope.h"
 
 //class Visualiser : public AudioVisualiserComponent
 //{
@@ -50,7 +51,11 @@ private:
     // access the processor object that created it.
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
-
+    
+    // Oscilloscope
+    Oscilloscope oscilloscope {processor};
+    juce::AudioBuffer<float> historyBuffer;
+    
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;
     foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};

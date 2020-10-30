@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.77"
+#define VERSION "0.771"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -634,14 +634,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         //processor.visualiser.setVisible(true);
         oscilloscope.setVisible(true);
-        
-        
-        historyBuffer = processor.getHistoryBuffer();
-        
-        for (int i = 1; i < historyBuffer.getNumSamples(); ++i)
-        {
-            
-        }
+
         
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     }

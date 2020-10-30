@@ -17,7 +17,7 @@ Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
-    
+
 }
 
 Oscilloscope::~Oscilloscope()
@@ -46,9 +46,10 @@ void Oscilloscope::paint (juce::Graphics& g)
                               COLOUR6, 0, getHeight() / 2, true);
     g.setGradientFill(grad);
     
-    juce::AudioBuffer<float> history = processor.getHistoryBuffer();
-    float* dataL = history.getWritePointer (0);
-    float* dataR = history.getWritePointer (1);
+    
+    
+    historyL = processor.getHistoryArrayL();
+    historyR = processor.getHistoryArrayR();
     
     juce::Path pathL;
     juce::Path pathR;
@@ -57,9 +58,11 @@ void Oscilloscope::paint (juce::Graphics& g)
     
     //TODO: this may cause high CPU usage! maybe use i += 2?
     for (int i = 0; i < getWidth(); i++) {
+        
+        int scaledIndex = static_cast<int>(i * (float)historyL.size() / (float)getWidth());
 
-        float valL = dataL[i];
-        float valR = dataR[i];
+        float valL = historyL[scaledIndex];
+        float valR = historyR[scaledIndex];
         
         valL = juce::jlimit<float>(-1, 1, valL);
         valR = juce::jlimit<float>(-1, 1, valR);
@@ -67,7 +70,7 @@ void Oscilloscope::paint (juce::Graphics& g)
         if (i == 0)
         {
             pathL.startNewSubPath(0, amp);
-            pathL.startNewSubPath(0, amp * 3);
+            pathR.startNewSubPath(0, amp * 3);
         }
         else
         {

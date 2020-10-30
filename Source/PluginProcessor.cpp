@@ -162,7 +162,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // clear visualiser
     //visualiser.clear();
-    historyBuffer.clear();
+    for (int i = 0; i < historyLength; i++)
+    {
+        historyArrayL.add(0);
+        historyArrayR.add(0);
+    }
     
     // dry buffer init
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
@@ -560,6 +564,25 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             //channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
             channelData[sample] = (1.f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
             // mDelay is delayed clean signal
+            if (sample % 10 == 0)
+            {
+                if (channel == 0)
+                {
+                    historyArrayL.add(channelData[sample]);
+                }
+                else if (channel == 1)
+                {
+                    historyArrayR.add(channelData[sample]);
+                }
+                if (historyArrayL.size() > historyLength)
+                {
+                    historyArrayL.remove(0);
+                }
+                if (historyArrayR.size() > historyLength)
+                {
+                    historyArrayR.remove(0);
+                }
+            }
         }
     }
 
@@ -569,7 +592,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     outputMeterSource.measureBlock(buffer);
     //visualiser.pushBuffer(buffer);
     
-    historyBuffer.makeCopyOf(buffer);
+//    historyBuffer.makeCopyOf(buffer);
+    
 }
 
 //==============================================================================
@@ -704,9 +728,14 @@ float FireAudioProcessor::getNewDrive()
     return newDrive;
 }
 
-juce::AudioBuffer<float> FireAudioProcessor::getHistoryBuffer()
+juce::Array<float> FireAudioProcessor::getHistoryArrayL()
 {
-    return historyBuffer;
+    return historyArrayL;
+}
+
+juce::Array<float> FireAudioProcessor::getHistoryArrayR()
+{
+    return historyArrayR;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()

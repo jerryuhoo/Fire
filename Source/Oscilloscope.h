@@ -27,5 +27,10 @@ public:
 
 private:
     FireAudioProcessor &processor;
+    
+    juce::Array<float> historyL;
+    juce::Array<float> historyR;
+    juce::Image historyImage;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Oscilloscope)
 };

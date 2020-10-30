@@ -118,7 +118,8 @@ public:
     // probably use fifo
     //Visualiser visualiser;
 
-    juce::AudioBuffer<float> getHistoryBuffer();
+    juce::Array<float> getHistoryArrayL();
+    juce::Array<float> getHistoryArrayR();
     
     // save presets
     state::StateAB stateAB;
@@ -128,7 +129,9 @@ private:
     //==============================================================================
     
     // Oscilloscope
-    juce::AudioBuffer<float> historyBuffer;
+    juce::Array<float> historyArrayL;
+    juce::Array<float> historyArrayR;
+    int historyLength = 400;
     
     // ff meter
     foleys::LevelMeterSource inputMeterSource;

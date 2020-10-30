@@ -54,7 +54,6 @@ private:
     
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
-    juce::AudioBuffer<float> historyBuffer;
     
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;

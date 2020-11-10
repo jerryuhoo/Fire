@@ -23,7 +23,33 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-
+    
+    bool isMoving();
+    bool getState();
+    void setState(bool state);
+    void setXPercent(float x);
+    float getXPercent();
+    void setLeft(int leftIndex);
+    float getLeft();
+    void setRight(int rightIndex);
+    float getRight();
+    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[]);
+    
 private:
+    bool isEntered = false;
+    
+    void mouseUp(const juce::MouseEvent &e) override;
+    void mouseEnter(const juce::MouseEvent &e) override;
+    void mouseExit(const juce::MouseEvent &e) override;
+    void mouseDrag(const juce::MouseEvent &e) override;
+    
+    bool move = false;
+    bool state = false;
+    
+    float xPercent = 0.f;
+    int leftIndex; // left index
+    int rightIndex; // right index
+    bool canMoveLeft = true;
+    bool canMoveRight = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

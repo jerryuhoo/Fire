@@ -14,7 +14,9 @@
 #include "Distortion.h"
 #include "LookAndFeel.h"
 #include "Oscilloscope.h"
-
+#include "VerticalLine.h"
+#include "CloseButton.h"
+#include <vector>
 //class Visualiser : public AudioVisualiserComponent
 //{
 //public:
@@ -143,6 +145,23 @@ private:
     bool isMovingThird = false;
     bool isRightDragging = false;
     
+//    VerticalLine verticalLine1;
+//    VerticalLine verticalLine2;
+//    VerticalLine verticalLine3;
+//    CloseButton closeButton1 {verticalLine1};
+//    CloseButton closeButton2 {verticalLine2};
+//    CloseButton closeButton3 {verticalLine3};
+    
+    std::array<int, 3> sortedIndex = {-1, -1, -1};
+    
+    
+    std::unique_ptr<VerticalLine> verticalLines[3];
+    std::unique_ptr<CloseButton> closeButtons[3];
+//    std::vector<VerticalLine> verticalLines;
+//    std::vector<CloseButton> closeButtons;
+    
+    
+    //    CloseButton testClose{*verticalLines[0]};
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;

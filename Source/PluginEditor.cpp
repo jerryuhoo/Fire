@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.773"
+#define VERSION "0.774"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -699,16 +699,24 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         if (yPos >= startY && yPos <= startY + frame.getHeight() / 5 && lineNum < 3)
         {
-            g.drawLine(xPos, startY, xPos, endY, 2);
+            float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+            for (int i = 0; i < 3; i++)
+            {
+                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) < 0.05f))
+                {
+                    break;
+                }
+                g.drawLine(xPos, startY, xPos, endY, 2);
+            }
         }
         
         g.drawLine(0, startY + frame.getHeight() / 5, getWidth(), startY + frame.getHeight() / 5, 1);
 
 //        DBG(lineNum);
         
-        float firstLineX = firstLinePercent * getWidth();
-        float secondLineX = secondLinePercent * getWidth();
-        float thirdLineX = thirdLinePercent * getWidth();
+//        float firstLineX = firstLinePercent * getWidth();
+//        float secondLineX = secondLinePercent * getWidth();
+//        float thirdLineX = thirdLinePercent * getWidth();
         
         
         // delete
@@ -755,7 +763,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         for (int i = 0; i < 3; i++)
         {
-            if (verticalLines[i]->getState()) {
+            if (verticalLines[i]->getState())
+            {
                 verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
                 closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, verticalLines[i]->getY() + margin, size, size);
             }
@@ -1031,39 +1040,73 @@ void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
     if (e.mods.isLeftButtonDown() && e.y > PART1 && e.y < (PART1 + PART2 / 5))
     {
         
-        if (lineNum < 3)
-        {
+//        if (lineNum < 3)
+//        {
+            float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
             {
+                // can't create near existed lines
+                if (verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) <= 0.05f)
+                {
+                    break;
+                }
+                // create lines and close buttons and then set state
                 if (verticalLines[i]->getState() == false)
                 {
-                    verticalLines[i]->setLeft(i - 1);
-                    verticalLines[i]->setRight(i + 1);
-
-                    float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-//                    lineXPos[i] = xPercent;
+//                    verticalLines[i]->setLeft(i - 1);
+//                    verticalLines[i]->setRight(i + 1);
                     verticalLines[i]->setState(true);
                     verticalLines[i]->setXPercent(xPercent);
                     closeButtons[i]->setVisible(true);
                     lineNum++;
-
                     break;
                 }
             }
-//            int count = 0;
-//            for (int i = 0; i < 3; i++)
-//            {
-//                if (verticalLines[i]->getState() == true)
-//                {
-//
-//                    sortedIndex[count++] = i;
-//                }
-//            }
-//            for (int i = 0; i < sortedIndex.size(); i++)
-//            {
-//                <#statements#>
-//            }
+            
+//        }
+          
+        // save the sorted index into sortedIndex array
+        int count = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            if (verticalLines[i]->getState() == true)
+            {
+                sortedIndex[count++] = i;
+            }
         }
+        
+        for(int j = 1; j < count; j++)
+        {
+            for(int k = 0; k < count - j; k++)
+            {
+                if(verticalLines[sortedIndex[k]]->getXPercent() > verticalLines[sortedIndex[k + 1]]->getXPercent())
+                {
+                    std::swap(sortedIndex[k], sortedIndex[k + 1]);
+                }
+            }
+        }
+        
+        for (int i = 0; i < count; i++)
+        {
+            if (i == 0)
+            {
+                verticalLines[sortedIndex[i]]->setLeft(-1); // this left index is the index that in verticalLines array
+            }
+            else
+            {
+                verticalLines[sortedIndex[i]]->setLeft(sortedIndex[i - 1]);
+            }
+            if (i == count - 1)
+            {
+                verticalLines[sortedIndex[i]]->setRight(count);
+            }
+            else
+            {
+                verticalLines[sortedIndex[i]]->setRight(sortedIndex[i + 1]);
+            }
+            verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
+        }
+        
 //        for (int i = 0; i < 3; i++)
 //        {
 //            if (lineNum == 0)

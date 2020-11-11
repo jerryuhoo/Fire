@@ -364,7 +364,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         updateFilter();
     }
 
-    // TODO------put this in a new function--------
+    // TODO: ------put this in a new function--------
 
     // oversampling
     /*
@@ -385,7 +385,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         oversampling->getLatencyInSamples();
     }
     */
-    // TODO------put this in a new function--------
+    // TODO: ------put this in a new function--------
     juce::dsp::AudioBlock<float> blockInput(buffer);
     juce::dsp::AudioBlock<float> blockOutput;
     // oversampling

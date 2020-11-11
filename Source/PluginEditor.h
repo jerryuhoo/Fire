@@ -17,16 +17,6 @@
 #include "VerticalLine.h"
 #include "CloseButton.h"
 #include <vector>
-//class Visualiser : public AudioVisualiserComponent
-//{
-//public:
-//    Visualiser() : AudioVisualiserComponent (2)
-//    {
-//        setBufferSize(512);
-//        setSamplesPerBlock(256);
-//        setColours(Colour (50, 0, 0), Colours::red);
-//    }
-//};
 
 //==============================================================================
 /**
@@ -113,9 +103,6 @@ private:
         windowLeftButton,
         windowRightButton;
 
-    // about
-    //    juce::TextButton aboutButton {"about"};
-
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -134,34 +121,15 @@ private:
     
     // multi-band
     void mouseUp(const juce::MouseEvent &e) override;
-    void mouseDrag(const juce::MouseEvent &e) override;
-    void mouseEnter(const juce::MouseEvent &e) override;
     int lineNum = 0;
-    float firstLinePercent;
-    float secondLinePercent;
-    float thirdLinePercent;
-    bool isMovingFirst = false;
-    bool isMovingSecond = false;
-    bool isMovingThird = false;
-    bool isRightDragging = false;
+    int lastLineNum = 0;
+    void updateLines(float margin, float size, float width);
     
-//    VerticalLine verticalLine1;
-//    VerticalLine verticalLine2;
-//    VerticalLine verticalLine3;
-//    CloseButton closeButton1 {verticalLine1};
-//    CloseButton closeButton2 {verticalLine2};
-//    CloseButton closeButton3 {verticalLine3};
-    
-    std::array<int, 3> sortedIndex = {-1, -1, -1};
-    
+    std::array<int, 3> sortedIndex = {0, 0, 0};
     
     std::unique_ptr<VerticalLine> verticalLines[3];
     std::unique_ptr<CloseButton> closeButtons[3];
-//    std::vector<VerticalLine> verticalLines;
-//    std::vector<CloseButton> closeButtons;
-    
-    
-    //    CloseButton testClose{*verticalLines[0]};
+
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;

@@ -26,12 +26,6 @@ Oscilloscope::~Oscilloscope()
 
 void Oscilloscope::paint (juce::Graphics& g)
 {
-    /* This demo code just fills the component's background and
-       draws some placeholder text to get you started.
-
-       You should replace everything in this method with your own
-       drawing code..
-    */
 
     //g.setColour (juce::Colours::green);
 

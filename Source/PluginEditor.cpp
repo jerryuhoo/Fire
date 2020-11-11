@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.774"
+#define VERSION "0.775"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -25,17 +25,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setResizable(true, true);
 
     // Visualiser
-    //addAndMakeVisible(p.visualiser);
     addAndMakeVisible(oscilloscope);
     
-    // Vertical Lines
-//    addAndMakeVisible(verticalLine1);
-//    addAndMakeVisible(verticalLine2);
-//    addAndMakeVisible(verticalLine3);
-//    addAndMakeVisible(closeButton1);
-//    addAndMakeVisible(closeButton2);
-//    addAndMakeVisible(closeButton3);
-    
+    // Init Vertical Lines
     for (int i = 0; i < 3; i++)
     {
         verticalLines[i] = std::make_unique<VerticalLine>();
@@ -44,8 +36,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
         closeButtons[i] = std::make_unique<CloseButton>(*verticalLines[i]);
         addAndMakeVisible(*closeButtons[i]);
     }
-
-//    addAndMakeVisible(testClose);
     
     // presets
     addAndMakeVisible(stateComponent);
@@ -458,12 +448,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     modeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, "mode", distortionMode);
 
-    // about button
-    //    addAndMakeVisible(aboutButton);
-    //    aboutButton.setColour(juce::TextButton::buttonColourId, COLOUR3);
-    //    aboutButton.setColour(juce::TextButton::textColourOnId, COLOUR3);
-    //    aboutButton.setColour(juce::TextButton::textColourOffId, COLOUR3);
-    //    aboutButton.onClick = [this] { aboutDialog.showMessageBoxAsync(AlertWindow::InfoIcon, "Made by Wings", "And fuck you", "OK"); };
     // resize limit
     setResizeLimits(1000, 500, 2000, 1000); // set resize limits
     //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
@@ -558,13 +542,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.fillRect(0, part1, getWidth(), part2);
     
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
-        
-//        verticalLine1.setVisible(false);
-//        verticalLine2.setVisible(false);
-//        verticalLine3.setVisible(false);
-//        closeButton1.setVisible(false);
-//        closeButton2.setVisible(false);
-//        closeButton3.setVisible(false);
+
         for (int i = 0; i < 3; i++)
         {
             verticalLines[i]->setVisible(false);
@@ -666,7 +644,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         //processor.visualiser.setVisible(true);
         oscilloscope.setVisible(true);
-
         
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     }
@@ -675,20 +652,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         oscilloscope.setVisible(false);
         //processor.visualiser.setVisible(false);
         // WARNING!! should write my own visualiser instead because it flashes when switching to right window
-        
-        int count = 0;
-        for (int i = 0; i < 3; i++)
-        {
-            if (verticalLines[i]->getState() == true)
-            {
-                verticalLines[i]->setVisible(true);
-                verticalLines[i]->setVisible(true);
-                count++;
-            }
-        }
-        lineNum = count;
-        
-        
+
         // draw line that will be added next
         g.setColour(COLOUR1.withAlpha(0.2f));
         float startY = frame.getY();
@@ -699,141 +663,35 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         if (yPos >= startY && yPos <= startY + frame.getHeight() / 5 && lineNum < 3)
         {
+            bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
             {
-                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) < 0.05f))
+                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) < 0.05f) || xPercent < 0.05f || xPercent > 0.95f)
                 {
+                    canCreate = false;
                     break;
                 }
+                
+            }
+            if (canCreate)
+            {
                 g.drawLine(xPos, startY, xPos, endY, 2);
             }
         }
         
         g.drawLine(0, startY + frame.getHeight() / 5, getWidth(), startY + frame.getHeight() / 5, 1);
 
-//        DBG(lineNum);
-        
-//        float firstLineX = firstLinePercent * getWidth();
-//        float secondLineX = secondLinePercent * getWidth();
-//        float thirdLineX = thirdLinePercent * getWidth();
-        
-        
-        // delete
-//        if (verticalLine1.isVisible() && !verticalLine1.getState())
-//        {
-//            // 1(x) 2 3
-//            if (lineNum == 3)
-//            {
-//                thirdLinePercent = secondLinePercent;
-//                secondLinePercent = firstLinePercent;
-//            }
-//            // 1(x) 2
-//            else if (lineNum == 2)
-//            {
-//                secondLinePercent = firstLinePercent;
-//            }
-//            verticalLine1.setVisible(false);
-//            lineNum--;
-//        }
-//        else if (verticalLine2.isVisible() && !verticalLine2.getState())
-//        {
-//            // 1 2(x) 3
-//
-//            if (lineNum == 3)
-//            {
-//                thirdLinePercent = secondLinePercent;
-//            }
-//            verticalLine2.setVisible(false);
-//            lineNum--;
-//        }
-//        else if (verticalLine3.isVisible() && !verticalLine3.getState())
-//        {
-//            verticalLine3.setVisible(false);
-//            lineNum--;
-//        }
         
         // create
-//        float margin = frame.getHeight() / 20.f;
-//        float size = verticalLine1.getHeight() / 10.f;
-//        float width = verticalLine1.getWidth() / 2.f;
         float margin = frame.getHeight() / 20.f;
         float size = verticalLines[0]->getHeight() / 10.f;
         float width = verticalLines[0]->getWidth() / 2.f;
+//        int count = 0;
         
-        for (int i = 0; i < 3; i++)
-        {
-            if (verticalLines[i]->getState())
-            {
-                verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
-                closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, verticalLines[i]->getY() + margin, size, size);
-            }
-            
-        }
-            
-        
-        
-//        testClose.setBounds(verticalLines[0]->getX() + width + margin, verticalLines[0]->getY() + margin, size, size);
-        
-//        verticalLine1.setBounds(firstLinePercent * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
-//        closeButton1.setBounds(verticalLine1.getX() + width + margin, verticalLine1.getY() + margin, size, size);
-//
-//        verticalLine2.setBounds(secondLinePercent * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
-//        closeButton2.setBounds(verticalLine2.getX() + width + margin, verticalLine2.getY() + margin, size, size);
-//
-//        verticalLine3.setBounds(thirdLinePercent * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
-//        closeButton3.setBounds(verticalLine3.getX() + width + margin, verticalLine3.getY() + margin, size, size);
-        
-//        if (lineNum <= 0)
-//        {
-//            verticalLine1.setVisible(false);
-//            verticalLine2.setVisible(false);
-//            verticalLine3.setVisible(false);
-//            closeButton1.setVisible(false);
-//            closeButton2.setVisible(false);
-//            closeButton3.setVisible(false);
-//        }
-//        if (lineNum >= 1)
-//        {
-//            verticalLine1.setState(true);
-//            verticalLine1.setBounds(firstLineX - getWidth() / 200, PART1, getWidth() / 100, PART2);
-//            verticalLine1.setVisible(true);
-//
-//
-//            closeButton1.setBounds(verticalLine1.getX() + width + margin, verticalLine1.getY() + margin, size, size);
-//            closeButton1.setVisible(true);
-        
-        
-        
-        
-        
-//        }
-//        if (lineNum >= 2)
-//        {
-////            g.drawLine(secondLineX, startY, secondLineX, endY, 2);
-//            verticalLine2.setState(true);
-//            verticalLine2.setBounds(secondLineX - getWidth() / 200, PART1, getWidth() / 100, PART2);
-//            verticalLine2.setVisible(true);
-//
-//            closeButton2.setBounds(verticalLine2.getX() + width + margin, verticalLine2.getY() + margin, size, size);
-//            closeButton2.setVisible(true);
-        
-        
-        
-        
-        
-        
-//        }
-//        if (lineNum >= 3)
-//        {
-////            g.drawLine(thirdLineX, startY, thirdLineX, endY, 2);
-//            verticalLine3.setState(true);
-//            verticalLine3.setBounds(thirdLineX - getWidth() / 200, PART1, getWidth() / 100, PART2);
-//            verticalLine3.setVisible(true);
-//
-//            closeButton3.setBounds(verticalLine3.getX() + width + margin, verticalLine3.getY() + margin, size, size);
-//            closeButton3.setVisible(true);
-        
+        //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
+        updateLines(margin, size, width);
+
         
         // drag
         for (int i = 0; i < 3; i++)
@@ -841,62 +699,10 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             if (verticalLines[i]->isMoving())
             {
                 float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-//                verticalLines[i]->setXPercent(xPercent);
                 verticalLines[i]->moveToX(lineNum, xPercent, 0.05f, verticalLines);
-//                lineXPos[i] = xPercent;
             }
         }
-        
-//        if (firstLinePercent <= 0.05f)
-//        {
-//            firstLinePercent = 0.05f;
-//        }
-//
-//        if (thirdLinePercent >= 0.95f)
-//        {
-//            thirdLinePercent = 0.95f;
-//        }
-        
-        
-        // delete
-//
-//        if (isRightDragging && yPos > PART1 && yPos< PART1 + PART2)
-//        {
-//            if (verticalLine1.isMouseOver() && lineNum >= 1)
-//            {
-//                if (lineNum == 3)
-//                {
-//                    firstLinePercent = secondLinePercent;
-//                    secondLinePercent = thirdLinePercent;
-//                    verticalLine3.setVisible(false);
-//                }
-//                else if (lineNum == 2)
-//                {
-//                    firstLinePercent = secondLinePercent;
-//                    verticalLine2.setVisible(false);
-//                }
-//                lineNum--;
-//                verticalLine1.setVisible(false);
-//            }
-//            else if (verticalLine2.isMouseOver()  && lineNum >= 2)
-//            {
-//                if (lineNum == 3)
-//                {
-//                    secondLinePercent = thirdLinePercent;
-//                    verticalLine3.setVisible(false);
-//                }
-//                lineNum--;
-//                verticalLine2.setVisible(false);
-//            }
-//            else if (verticalLine3.isMouseOver()  && lineNum == 3)
-//            {
-//                lineNum--;
-//                verticalLine3.setVisible(false);
-//            }
-//        }
-        
-        
-        
+
         
         
     }
@@ -974,9 +780,6 @@ void FireAudioProcessorEditor::resized()
     filterBandButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
     filterHighButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
 
-    // about
-    // aboutButton.setBounds(getWidth() - 100, 0, 100, 50);
-
     // visualiser
     // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     //processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
@@ -1023,16 +826,65 @@ void FireAudioProcessorEditor::updateWindowState()
     
 }
 
+void FireAudioProcessorEditor::updateLines(float margin, float size, float width)
+{
+    // create
+    int count = 0;
+    
+    for (int i = 0; i < 3; i++)
+    {
+        if (verticalLines[i]->getState())
+        {
+            verticalLines[i]->setVisible(true);
+            
+            verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
+            closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, verticalLines[i]->getY() + margin, size, size);
+            
+            sortedIndex[count] = i;
+            count++;
+        }
+    }
+    lineNum = count;
+
+    // sort
+    for(int j = 1; j < count; j++)
+    {
+        for(int k = 0; k < count - j; k++)
+        {
+            if(verticalLines[sortedIndex[k]]->getXPercent() > verticalLines[sortedIndex[k + 1]]->getXPercent())
+            {
+                std::swap(sortedIndex[k], sortedIndex[k + 1]);
+            }
+        }
+    }
+    
+    // set left right index
+    for (int i = 0; i < count; i++)
+    {
+        if (i == 0)
+        {
+            verticalLines[sortedIndex[i]]->setLeft(-1); // this left index is the index that in verticalLines array
+        }
+        else
+        {
+            verticalLines[sortedIndex[i]]->setLeft(sortedIndex[i - 1]);
+        }
+        if (i == count - 1)
+        {
+            verticalLines[sortedIndex[i]]->setRight(count);
+        }
+        else
+        {
+            verticalLines[sortedIndex[i]]->setRight(sortedIndex[i + 1]);
+        }
+        verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
+    }
+
+}
+
 void FireAudioProcessorEditor::timerCallback()
 {
     repaint();
-}
-
-
-
-void FireAudioProcessorEditor::mouseEnter(const juce::MouseEvent &e)
-{
-    
 }
 
 void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
@@ -1040,291 +892,35 @@ void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
     if (e.mods.isLeftButtonDown() && e.y > PART1 && e.y < (PART1 + PART2 / 5))
     {
         
-//        if (lineNum < 3)
-//        {
+        if (lineNum < 3)
+        {
+            bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
             {
                 // can't create near existed lines
-                if (verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) <= 0.05f)
+                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) <= 0.05f) || xPercent < 0.05f || xPercent > 0.95f)
                 {
-                    break;
-                }
-                // create lines and close buttons and then set state
-                if (verticalLines[i]->getState() == false)
-                {
-//                    verticalLines[i]->setLeft(i - 1);
-//                    verticalLines[i]->setRight(i + 1);
-                    verticalLines[i]->setState(true);
-                    verticalLines[i]->setXPercent(xPercent);
-                    closeButtons[i]->setVisible(true);
-                    lineNum++;
+                    canCreate = false;
                     break;
                 }
             }
-            
-//        }
-          
-        // save the sorted index into sortedIndex array
-        int count = 0;
-        for (int i = 0; i < 3; i++)
-        {
-            if (verticalLines[i]->getState() == true)
+            if (canCreate)
             {
-                sortedIndex[count++] = i;
-            }
-        }
-        
-        for(int j = 1; j < count; j++)
-        {
-            for(int k = 0; k < count - j; k++)
-            {
-                if(verticalLines[sortedIndex[k]]->getXPercent() > verticalLines[sortedIndex[k + 1]]->getXPercent())
+                for (int i = 0; i < 3; i++)
                 {
-                    std::swap(sortedIndex[k], sortedIndex[k + 1]);
+                    // create lines and close buttons and then set state
+                    if (verticalLines[i]->getState() == false)
+                    {
+                        verticalLines[i]->setState(true);
+                        verticalLines[i]->setXPercent(xPercent);
+                        closeButtons[i]->setVisible(true);
+                        break;
+                    }
                 }
             }
         }
-        
-        for (int i = 0; i < count; i++)
-        {
-            if (i == 0)
-            {
-                verticalLines[sortedIndex[i]]->setLeft(-1); // this left index is the index that in verticalLines array
-            }
-            else
-            {
-                verticalLines[sortedIndex[i]]->setLeft(sortedIndex[i - 1]);
-            }
-            if (i == count - 1)
-            {
-                verticalLines[sortedIndex[i]]->setRight(count);
-            }
-            else
-            {
-                verticalLines[sortedIndex[i]]->setRight(sortedIndex[i + 1]);
-            }
-            verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
-        }
-        
-//        for (int i = 0; i < 3; i++)
-//        {
-//            if (lineNum == 0)
-//            {
-//                if (verticalLines[i]->getState() == false)
-//                {
-//                    DBG("gaga");
-//                    verticalLines[i]->setState(true);
-//                    closeButtons[i]->setVisible(true);
-//                    break;
-//                }
-//            }
-//
-//        }
-        
-//        float firstLineX;
-//        float secondLineX;
-//        float thirdLineX;
-//
-//
-//        if (lineNum == 0)
-//        {
-//            firstLineX = getMouseXYRelative().getX();
-//            for (int i = 0; i < 3; i++)
-//            {
-//                if(lineStates[0] == false)
-//                {
-//                    verticalLine1.setState(true);
-//                    verticalLine1.setVisible(true);
-//                    closeButton1.setVisible(true);
-//                }
-//            }
-//
-//            lineNum++;
-//        }
-//        else if (lineNum == 1 && !isMovingFirst)
-//        {
-//            secondLineX = getMouseXYRelative().getX();
-//            verticalLine2.setState(true);
-//            verticalLine2.setVisible(true);
-//            closeButton2.setVisible(true);
-//            lineNum++;
-//        }
-//        else if (lineNum == 2 && !isMovingSecond)
-//        {
-//            thirdLineX = getMouseXYRelative().getX();
-//            verticalLine3.setState(true);
-//            verticalLine3.setVisible(true);
-//            closeButton3.setVisible(true);
-//            lineNum++;
-//        }
-//
-//        if (lineNum >= 3 && secondLineX > thirdLineX)
-//        {
-//            std::swap(secondLineX, thirdLineX);
-//        }
-//        if (lineNum >= 2 && firstLineX > secondLineX)
-//        {
-//            std::swap(firstLineX, secondLineX);
-//        }
-//
-//        if (lineNum >= 2 && secondLineX - firstLineX < 50)
-//        {
-//            secondLineX = firstLineX + 50;
-//        }
-//        if (lineNum >= 3 && thirdLineX - secondLineX < 50)
-//        {
-//            thirdLineX = secondLineX + 50;
-//        }
-//
-//        lineXPos[0] = firstLineX / static_cast<float>(getWidth());
-//        lineXPos[1] = secondLineX / static_cast<float>(getWidth());
-//        lineXPos[2] = thirdLineX / static_cast<float>(getWidth());
-//
-//        isMovingFirst = false;
-//        isMovingSecond = false;
-//        isMovingThird = false;
     }
-    isRightDragging = false;
-}
-
-void FireAudioProcessorEditor::mouseDrag(const juce::MouseEvent &e)
-{
-
-//    float firstLineX = firstLinePercent * getWidth();
-//    float secondLineX = secondLinePercent * getWidth();
-//    float thirdLineX = thirdLinePercent * getWidth();
-//
-//    bool nearFirst = abs(e.getMouseDownX() - firstLineX) <= 10;
-//    bool nearSecond = abs(e.getMouseDownX() - secondLineX) <= 10;
-//    bool nearThird = abs(e.getMouseDownX() - thirdLineX) <= 10;
-//
-    if (e.mods.isRightButtonDown() && !isRightDragging)
-    {
-        isRightDragging = true;
-    }
-//
-//    // left drag to drag lines
-//    if (e.mods.isLeftButtonDown())
-//    {
-//
-//        // only do this when mouse first clicked
-//        if (isMovingFirst == false && nearFirst)
-//        {
-//            isMovingFirst = true;
-//        }
-//        else if (isMovingSecond == false && nearSecond)
-//        {
-//            isMovingSecond = true;
-//        }
-//        else if (isMovingThird == false && nearThird)
-//        {
-//            isMovingThird = true;
-//        }
-//
-//        // adjust line x position when dragging
-//        if (isMovingFirst == true)
-//        {
-//
-//            // adjust other lines
-//            if (e.x > 50 && e.x < getWidth() - 150)
-//            {
-//                firstLineX = e.x;
-//                if (firstLineX > secondLineX - 50)
-//                {
-//                    secondLineX = firstLineX + 50;
-//                }
-//                if (secondLineX > thirdLineX - 50)
-//                {
-//                    thirdLineX = secondLineX + 50;
-//                }
-//            }
-//            else if (e.x <= 50)
-//            {
-//                firstLineX = 50;
-//            }
-//            else if (e.x >= 150)
-//            {
-//                firstLineX = getWidth() - 150;
-//            }
-//
-//        }
-//        else if (isMovingSecond == true && e.x > 100 && e.x < getWidth() - 100)
-//        {
-//            secondLineX = e.x;
-//            DBG(firstLineX);
-//            // adjust other lines
-//            if (firstLineX > secondLineX - 50)
-//            {
-//                firstLineX = secondLineX - 50;
-//            }
-//            if (secondLineX > thirdLineX - 50)
-//            {
-//                thirdLineX = secondLineX + 50;
-//            }
-//        }
-//        else if (isMovingThird == true && e.x > 150 && e.x < getWidth() - 50)
-//        {
-//            thirdLineX = e.x;
-//            // adjust other lines
-//            if (firstLineX > secondLineX - 50)
-//            {
-//                firstLineX = secondLineX - 50;
-//            }
-//            if (secondLineX > thirdLineX - 50)
-//            {
-//                secondLineX = thirdLineX - 50;
-//            }
-//        }
-//
-//        firstLinePercent = firstLineX / static_cast<float>(getWidth());
-//        secondLinePercent = secondLineX / static_cast<float>(getWidth());
-//        thirdLinePercent = thirdLineX / static_cast<float>(getWidth());
-//    }
-//    // right drag or click to delete lines
-//    else if (isRightDragging && e.y > PART1 && e.y< PART1 + PART2)
-    
-    
-    
-//    if (isRightDragging && e.y > PART1 && e.y< PART1 + PART2)
-//    {
-//
-//        if (e.x >= verticalLine1.getX() && e.x <= verticalLine1.getX() + verticalLine1.getWidth() && lineNum >= 1)
-//        {
-//            if (lineNum == 3)
-//            {
-//                firstLinePercent = secondLinePercent;
-//                secondLinePercent = thirdLinePercent;
-//                verticalLine3.setVisible(false);
-//            }
-//            else if (lineNum == 2)
-//            {
-//                firstLinePercent = secondLinePercent;
-//                verticalLine2.setVisible(false);
-//            }
-//            lineNum--;
-//            verticalLine1.setVisible(false);
-//        }
-//        else if (e.x >= verticalLine2.getX() && e.x <= verticalLine2.getX() + verticalLine2.getWidth() && lineNum >= 2)
-//        {
-//            if (lineNum == 3)
-//            {
-//                secondLinePercent = thirdLinePercent;
-//                verticalLine3.setVisible(false);
-//            }
-//            lineNum--;
-//            verticalLine2.setVisible(false);
-//        }
-//        else if (e.x >= verticalLine3.getX() && e.x <= verticalLine3.getX() + verticalLine3.getWidth()  && lineNum == 3)
-//        {
-//
-//            lineNum--;
-//            verticalLine3.setVisible(false);
-//        }
-//
-//
-//    }
-//
 }
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)

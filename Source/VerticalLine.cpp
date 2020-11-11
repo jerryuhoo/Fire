@@ -27,7 +27,6 @@ void VerticalLine::paint (juce::Graphics& g)
 {
     // draw line that will be added next
     g.setColour(COLOUR1);
-//    g.drawLine(x, y, x, y + height, 2);
     
     g.fillRect(getWidth() / 10.f * 4.f, 0.f, getWidth() / 10.f * 2.f, static_cast<float> (getHeight()));
 
@@ -37,10 +36,7 @@ void VerticalLine::paint (juce::Graphics& g)
         g.setColour(COLOUR1.withAlpha(0.2f));
         g.fillAll();
     }
-    
-    
-    
-    
+
 }
 
 void VerticalLine::resized()
@@ -111,6 +107,16 @@ float VerticalLine::getXPercent()
     return xPercent;
 }
 
+void VerticalLine::setIndex(int index)
+{
+    this->index = index;
+}
+
+float VerticalLine::getIndex()
+{
+    return index;
+}
+
 void VerticalLine::setLeft(int leftIndex)
 {
     this->leftIndex = leftIndex;
@@ -136,7 +142,7 @@ void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::un
     float leftLimit;
     float rightLimit;
 
-    int index = leftIndex + 1;
+//    int index = leftIndex + 1;
     leftLimit = (index + 1) * margin;
     rightLimit = 1 - (lineNum - index) * margin;
 
@@ -146,12 +152,10 @@ void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::un
     if (leftIndex >= 0 && newXPercent - verticalLines[leftIndex]->getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
         verticalLines[leftIndex]->moveToX(lineNum, newXPercent - margin, margin, verticalLines);
-//        verticalLines[leftIndex]->setXPercent(newXPercent - margin);
     }
     if (rightIndex < lineNum && verticalLines[rightIndex]->getXPercent() - newXPercent - margin < -0.00001f)
     {
         verticalLines[rightIndex]->moveToX(lineNum, newXPercent + margin, margin, verticalLines);
-//        verticalLines[rightIndex]->setXPercent(newXPercent + margin);
     }
     xPercent = newXPercent;
 

@@ -29,6 +29,8 @@ public:
     void setState(bool state);
     void setXPercent(float x);
     float getXPercent();
+    void setIndex(int index);
+    float getIndex();
     void setLeft(int leftIndex);
     float getLeft();
     void setRight(int rightIndex);
@@ -49,7 +51,6 @@ private:
     float xPercent = 0.f;
     int leftIndex; // left index
     int rightIndex; // right index
-    bool canMoveLeft = true;
-    bool canMoveRight = true;
+    int index;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

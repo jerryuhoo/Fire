@@ -44,6 +44,7 @@
 
 *******************************************************************************/
 
+#include "PluginProcessor.h"
 
 #pragma once
 
@@ -52,17 +53,20 @@ class AnalyserComponent   : public juce::Component,
                             private juce::Timer
 {
 public:
-    AnalyserComponent()
-        : forwardFFT (fftOrder),
+    AnalyserComponent(FireAudioProcessor &p)
+        : processor(p),
+          forwardFFT (fftOrder),
           window (fftSize, juce::dsp::WindowingFunction<float>::hann)
+          
     {
         setOpaque (false);
 //        setAudioChannels (2, 0);  // we want a couple of input channels but no outputs
         startTimerHz (30);
 //        setSize (700, 500);
+        
     }
 
-    ~AnalyserComponent() override
+    ~AnalyserComponent()
     {
 //        shutdownAudio();
     }
@@ -71,25 +75,27 @@ public:
 //    void prepareToPlay (int, double) override {}
 //    void releaseResources() override          {}
 
-//    void getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) override
-//    {
-//        if (bufferToFill.buffer->getNumChannels() > 0)
-//        {
-//            auto* channelData = bufferToFill.buffer->getReadPointer (0, bufferToFill.startSample);
-//
-//            for (auto i = 0; i < bufferToFill.numSamples; ++i)
-//                pushNextSampleIntoFifo (channelData[i]);
-//        }
-//    }
+    void getNextAudioBlock ()
+    {
+        juce::Array<float> historyL = processor.getHistoryArrayL();
+        juce::Array<float> historyR = processor.getHistoryArrayR();
+        
+        for (auto i = 0; i < historyL.size(); ++i)
+            pushNextSampleIntoFifo ((historyL[i] + historyR[i]) / 2.f);
+        
+    }
 
     //==============================================================================
     void paint (juce::Graphics& g) override
     {
-        g.fillAll (juce::Colours::red.withAlpha(0.2f));
+        //g.fillAll (juce::Colours::red.withAlpha(0.2f));
 
-//        g.setOpacity (0.4f);
-//        g.setColour (juce::Colours::white);
-//        drawFrame (g);
+        g.setOpacity (0.4f);
+        g.setColour (juce::Colours::yellow);
+        
+        getNextAudioBlock();
+        
+        drawFrame (g);
     }
 
     void timerCallback() override
@@ -166,6 +172,11 @@ public:
     };
 
 private:
+    
+    FireAudioProcessor &processor;
+    juce::Array<float> historyL;
+    juce::Array<float> historyR;
+    
     juce::dsp::FFT forwardFFT;                      // [4]
     juce::dsp::WindowingFunction<float> window;     // [5]
 
@@ -173,7 +184,7 @@ private:
     float fftData [2 * fftSize];                    // [7]
     int fifoIndex = 0;                              // [8]
     bool nextFFTBlockReady = false;                 // [9]
-    float scopeData [scopeSize];                    // [10]
+    float scopeData [scopeSize] = {0};                    // [10]
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnalyserComponent)
 };

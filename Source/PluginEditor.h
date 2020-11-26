@@ -17,6 +17,7 @@
 #include "VerticalLine.h"
 #include "CloseButton.h"
 #include <vector>
+#include "SpectrumAnalyserTutorial_02.h"
 
 //==============================================================================
 /**
@@ -174,6 +175,8 @@ private:
     
     Distortion distortionProcessor;
 
+    AnalyserComponent spectrum;
+    
     //return function value by different modes
     //float getFunctionValue(FireAudioProcessor& processor, float value);
     //int modeChoice;

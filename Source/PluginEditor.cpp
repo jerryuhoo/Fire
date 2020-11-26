@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.775"
+#define VERSION "0.776"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -26,6 +26,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // Visualiser
     addAndMakeVisible(oscilloscope);
+    
+    // Spectrum
+    addAndMakeVisible(spectrum);
     
     // Init Vertical Lines
     for (int i = 0; i < 3; i++)
@@ -645,14 +648,15 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         //processor.visualiser.setVisible(true);
         oscilloscope.setVisible(true);
         
-        // WARNING!! should write my own visualiser instead because it flashes when switching to right window
+        // Spectrum
+        spectrum.setVisible(false);
     }
     else if (right) // if you select the left window, you can use muti-band distortion
     {
         oscilloscope.setVisible(false);
-        //processor.visualiser.setVisible(false);
-        // WARNING!! should write my own visualiser instead because it flashes when switching to right window
-
+        // Spectrum
+        spectrum.setVisible(true);
+        spectrum.setInterceptsMouseClicks(false, false);
         // draw line that will be added next
         g.setColour(COLOUR1.withAlpha(0.2f));
         float startY = frame.getY();
@@ -784,6 +788,9 @@ void FireAudioProcessorEditor::resized()
     // WARNING!! should write my own visualiser instead because it flashes when switching to right window
     //processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
     oscilloscope.setBounds(0, getHeight() / 10, getWidth() / 2, getHeight() / 10 * 3);
+    
+    // spectrum
+    spectrum.setBounds(0, getHeight() / 10, getWidth(), getHeight() / 10 * 3 - 10);
     
     // ff meter
 //    int ffWidth = 20;

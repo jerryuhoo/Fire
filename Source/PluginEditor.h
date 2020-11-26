@@ -48,6 +48,9 @@ private:
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
     
+    // Spectrum
+    AnalyserComponent spectrum {processor};
+    
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;
     foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};
@@ -175,7 +178,6 @@ private:
     
     Distortion distortionProcessor;
 
-    AnalyserComponent spectrum;
     
     //return function value by different modes
     //float getFunctionValue(FireAudioProcessor& processor, float value);

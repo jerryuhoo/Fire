@@ -11,9 +11,10 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "Distortion.h"
+#include "DSP/Distortion.h"
 #include "Preset.h"
-#include "Delay.h"
+#include "DSP/Delay.h"
+#include "Graph Components/FFTProcessor.h"
 
 //#define COLOUR1 Colour(244, 208, 63)
 //#define COLOUR6 Colour(45, 40, 40)
@@ -124,7 +125,11 @@ public:
     // save presets
     state::StateAB stateAB;
     state::StatePresets statePresets;
-
+    
+    float * getFFTData();
+    int getFFTSize();//TMP!!!!!!!!!!!
+    bool isFFTBlockReady();
+    void processFFT();
 private:
     //==============================================================================
     
@@ -132,6 +137,9 @@ private:
     juce::Array<float> historyArrayL;
     juce::Array<float> historyArrayR;
     int historyLength = 400;
+    
+    // Spectrum
+    SpectrumProcessor spectrum_processor;
     
     // ff meter
     foleys::LevelMeterSource inputMeterSource;

@@ -11,14 +11,15 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "Distortion.h"
+#include "DSP/Distortion.h"
 #include "LookAndFeel.h"
-#include "Oscilloscope.h"
+#include "Graph Components/Oscilloscope.h"
 #include "VerticalLine.h"
 #include "CloseButton.h"
 #include <vector>
 #include "SpectrumAnalyserTutorial_02.h"
-
+#include "Graph Components/SpectrumComponent.h"
+#include "Graph Components/DistortionGraph.h"
 //==============================================================================
 /**
 */
@@ -48,8 +49,12 @@ private:
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
     
+    // Distortion graph
+    DistortionGraph distortionGraph;
+    
     // Spectrum
-    AnalyserComponent spectrum {processor};
+//    AnalyserComponent spectrum {processor};
+    SpectrumComponent spectrum;
     
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;

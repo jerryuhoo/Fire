@@ -162,7 +162,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // clear visualiser
     //visualiser.clear();
-    for (int i = 0; i < historyLength; i++)
+    for (int i = 0; i < samplesPerBlock; i++)
     {
         historyArrayL.add(0);
         historyArrayR.add(0);
@@ -586,6 +586,19 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
+    
+    // Spectrum
+    if (buffer.getNumChannels() > 0)
+    {
+        auto* channelData = buffer.getReadPointer(0);
+
+        for (auto i = 0; i < buffer.getNumSamples(); ++i)
+            spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
+//            spectrum_processor.pushNextSampleIntoFifo (std::sin(0.14*i));
+    }
+    
+    
+    
     dryBuffer.clear();
 
     // ff output meter
@@ -736,6 +749,27 @@ juce::Array<float> FireAudioProcessor::getHistoryArrayL()
 juce::Array<float> FireAudioProcessor::getHistoryArrayR()
 {
     return historyArrayR;
+}
+
+float * FireAudioProcessor::getFFTData()
+{
+    return spectrum_processor.fftData;
+}
+
+int FireAudioProcessor::getFFTSize()
+{
+    return spectrum_processor.fftSize/2 ;
+}
+
+bool FireAudioProcessor::isFFTBlockReady()
+{
+    return spectrum_processor.nextFFTBlockReady;
+}
+
+void FireAudioProcessor::processFFT()
+{
+    spectrum_processor.doProcessing();
+    spectrum_processor.nextFFTBlockReady = false;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()

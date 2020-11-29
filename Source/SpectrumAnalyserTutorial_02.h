@@ -47,6 +47,8 @@
 #include "PluginProcessor.h"
 
 #pragma once
+const int frequenciesForLines[] = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000 };
+const int numberOfLines = 28;
 
 //==============================================================================
 class AnalyserComponent   : public juce::Component,
@@ -56,7 +58,7 @@ public:
     AnalyserComponent(FireAudioProcessor &p)
         : processor(p),
           forwardFFT (fftOrder),
-          window (fftSize, juce::dsp::WindowingFunction<float>::hann)
+          window (fftSize, juce::dsp::WindowingFunction<float>::blackman)
           
     {
         setOpaque (false);
@@ -92,6 +94,27 @@ public:
 
         g.setOpacity (0.4f);
         g.setColour (juce::Colours::yellow);
+        
+        // paint lines and numbers
+        g.setColour(COLOUR1.withAlpha(0.2f));
+        for (int i = 0; i < numberOfLines; ++i)
+        {
+            const double proportion = frequenciesForLines[i] / (44100 / 2.0);
+            int xPos = transformToLog(proportion) * (getWidth());
+            g.drawVerticalLine(xPos, getHeight() / 5, getHeight());
+            if (frequenciesForLines[i] == 10 || frequenciesForLines[i] == 100 || frequenciesForLines[i] == 20 || frequenciesForLines[i] == 200)
+                g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i]), xPos - 5, 0, 60, 30, juce::Justification::left, 2);
+            else if ( frequenciesForLines[i] == 1000 || frequenciesForLines[i] == 10000 || frequenciesForLines[i] == 2000 || frequenciesForLines[i] == 20000)
+                g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i] / 1000) + "k", xPos - 20, 0, 60, 30, juce::Justification::left, 2);
+        }
+        
+    
+        
+        g.setColour (COLOUR1);
+                
+        juce::ColourGradient grad(COLOUR2, 0, 0,
+                                  COLOUR6, 0, getLocalBounds().getHeight(), false);
+        g.setGradientFill(grad);
         
         getNextAudioBlock();
         
@@ -152,16 +175,23 @@ public:
 
     void drawFrame (juce::Graphics& g)
     {
-        for (int i = 1; i < scopeSize; ++i)
+        auto width = getLocalBounds().getWidth();
+        auto height = getLocalBounds().getHeight();
+        
+        juce::Path p;
+        p.startNewSubPath(0, height);
+        //p.lineTo(0, juce::jmap (scopeData[0], 0.0f, 1.0f, (float) height, 0.0f));
+        for (int i = 0; i < scopeSize; i++)
         {
-            auto width  = getLocalBounds().getWidth();
-            auto height = getLocalBounds().getHeight();
-
-            g.drawLine ({ (float) juce::jmap (i - 1, 0, scopeSize - 1, 0, width),
-                                  juce::jmap (scopeData[i - 1], 0.0f, 1.0f, (float) height, 0.0f),
-                          (float) juce::jmap (i,     0, scopeSize - 1, 0, width),
-                                  juce::jmap (scopeData[i],     0.0f, 1.0f, (float) height, 0.0f) });
+            p.lineTo(transformToLog((float)i / (scopeSize - 1)) * width,
+                             juce::jmap (scopeData[i], 0.0f, 1.0f, (float) height, 0.0f));
+//            p.lineTo(transformToLog((float)i / scopeSize) * width,
+//                             height - height * scopeData[i]);
+            
         }
+        p.lineTo(width, height);
+        p.lineTo(0, height);
+        g.fillPath(p);
     }
 
     enum
@@ -186,5 +216,12 @@ private:
     bool nextFFTBlockReady = false;                 // [9]
     float scopeData [scopeSize] = {0};                    // [10]
 
+    float transformToLog(float between0and1)
+    {
+        const float minimum = 1.0f;
+        const float maximum = 1000.0f;
+        return log10(minimum + ((maximum - minimum) * between0and1)) / log10(maximum);
+    }
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AnalyserComponent)
 };

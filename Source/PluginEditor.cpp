@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.777"
+#define VERSION "0.778"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -26,6 +26,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // Visualiser
     addAndMakeVisible(oscilloscope);
+    
+    // Distortion graph
+    addAndMakeVisible(distortionGraph);
     
     // Spectrum
     addAndMakeVisible(spectrum);
@@ -513,9 +516,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     // paint distortion function
     bool left = *processor.treeState.getRawParameterValue("windowLeft");
     bool right = *processor.treeState.getRawParameterValue("windowRight");
-    
-    float functionValue = 0;
-    float mixValue;
 
     int mode = *processor.treeState.getRawParameterValue("mode");
     //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
@@ -524,20 +524,16 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
     float bias = *processor.treeState.getRawParameterValue("bias");
-
     float drive = processor.getNewDrive();
-
+    float rateDivide = *processor.treeState.getRawParameterValue("downSample");
+    
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
     distortionProcessor.controls.color = color;
     distortionProcessor.controls.rectification = rec;
     distortionProcessor.controls.bias = bias;
 
-    auto frameRight = getLocalBounds();
-    auto frameLeft = getLocalBounds();
     auto frame = getLocalBounds();
-    frameRight.setBounds(getWidth() / 2, part1, getWidth() / 2, part2);
-    frameLeft.setBounds(0, part1, getWidth() / 2, part2);
     frame.setBounds(0, part1, getWidth(), part2);
     
     // draw layer 2
@@ -552,99 +548,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             closeButtons[i]->setVisible(false);
         }
         
-        if (mode < 9)
-        {
-            const int numPix = frameRight.getWidth(); // you might experiment here, if you want less steps to speed up
+        distortionGraph.setVisible(true);
+        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 
-            float driveScale = 1;
-            float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
-            float value = -maxValue; // minimum (leftmost)  value for your graph
-            float valInc = (maxValue - value) / numPix;
-            float xPos = frameRight.getX();
-            const float posInc = frameRight.getWidth() / numPix;
-
-            juce::Path p;
-
-            bool edgePointL = false;
-            bool edgePointR = false;
-
-            for (int i = 1; i < numPix; ++i)
-            {
-                value += valInc;
-                xPos += posInc;
-
-                // symmetrical distortion
-                if (mode < 9)
-                {
-                    functionValue = distortionProcessor.distortionProcess(value);
-                }
-
-                // downsample
-                float rateDivide = *processor.treeState.getRawParameterValue("downSample");
-                if (rateDivide > 1)
-                {
-                    functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
-                }
-
-                // retification
-                functionValue = distortionProcessor.rectificationProcess(functionValue);
-
-                // mix
-                functionValue = (1.f - mix) * value + mix * functionValue;
-                mixValue = (2.0f / 3.0f) * functionValue;
-                float yPos = frameRight.getCentreY() - frameRight.getHeight() * mixValue / 2.0f;
-
-                // draw points
-                if (yPos < frameRight.getY())
-                {
-                    if (edgePointR == false)
-                    {
-                        yPos = frameRight.getY();
-                        edgePointR = true;
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-
-                if (yPos > frameRight.getBottom())
-                {
-                    if (edgePointL == false)
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        yPos = frameRight.getBottom();
-                    }
-                }
-                else if (edgePointL == false)
-                {
-                    if (mode == 0)
-                    {
-                        p.startNewSubPath(xPos, frameRight.getBottom());
-                        p.lineTo(xPos, yPos);
-                    }
-                    else
-                    {
-                        p.startNewSubPath(xPos, yPos);
-                    }
-                    edgePointL = true;
-                }
-                p.lineTo(xPos, yPos);
-            }
-
-            int colour_r = 244;
-            int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
-            int colour_b = 63;
-
-            juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
-                                      COLOUR6, frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
-            g.setGradientFill(grad);
-            g.strokePath(p, juce::PathStrokeType(2.0));
-        }
-        
         //processor.visualiser.setVisible(true);
         oscilloscope.setVisible(true);
         
@@ -654,9 +560,13 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     else if (right) // if you select the left window, you can use muti-band distortion
     {
         oscilloscope.setVisible(false);
+        distortionGraph.setVisible(false);
         // Spectrum
         spectrum.setVisible(true);
         spectrum.setInterceptsMouseClicks(false, false);
+        
+        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
+        
         // draw line that will be added next
         g.setColour(COLOUR1.withAlpha(0.2f));
         float startY = frame.getY();
@@ -789,6 +699,8 @@ void FireAudioProcessorEditor::resized()
     //processor.visualiser.setBounds(0, getHeight() / 10 + 10, getWidth() / 2, getHeight() / 10 * 3 - 10);
     oscilloscope.setBounds(0, getHeight() / 10, getWidth() / 2, getHeight() / 10 * 3);
     
+    distortionGraph.setBounds(getWidth() / 2, PART1, getWidth() / 2, PART2);
+    
     // spectrum
     spectrum.setBounds(0, getHeight() / 10, getWidth(), getHeight() / 10 * 3 - 10);
     
@@ -891,7 +803,17 @@ void FireAudioProcessorEditor::updateLines(float margin, float size, float width
 
 void FireAudioProcessorEditor::timerCallback()
 {
-    repaint();
+    // spectrum
+    if (processor.isFFTBlockReady())
+    {
+        processor.processFFT();
+        spectrum.prepareToPaintSpectrum(processor.getFFTSize() , processor.getFFTData());
+        spectrum.repaint();
+        
+    }
+    oscilloscope.repaint();
+    distortionGraph.repaint();
+//    repaint();
 }
 
 void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)

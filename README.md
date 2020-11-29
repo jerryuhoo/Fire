@@ -72,6 +72,8 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 3. <a href="https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227">Diode Clipping algorithm</a> from JUCE forum
 
+4. <a href="https://github.com/adriannaziel/SpectrumAnalyser_et">Spectrum Analyser</a> by adriannaziel
+
 ## 5. Update Notes
 
 2020-7-15 (version 0.7)

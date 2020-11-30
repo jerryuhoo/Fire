@@ -41,9 +41,9 @@ void SpectrumComponent::paint (juce::Graphics& g)
         int xPos = transformToLog(proportion) * (getWidth());
         g.drawVerticalLine(xPos, getHeight() / 5, getHeight());
         if (frequenciesForLines[i] == 10 || frequenciesForLines[i] == 100 || frequenciesForLines[i] == 20 || frequenciesForLines[i] == 200)
-            g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i]), xPos - 5, 0, 60, 30, juce::Justification::left, 2);
+            g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i]), xPos - 30, 0, 60, getHeight() / 5, juce::Justification::centred, 2);
         else if ( frequenciesForLines[i] == 1000 || frequenciesForLines[i] == 10000 || frequenciesForLines[i] == 2000 || frequenciesForLines[i] == 20000)
-            g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i] / 1000) + "k", xPos - 20, 0, 60, 30, juce::Justification::left, 2);
+            g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i] / 1000) + "k", xPos - 30, 0, 60, getHeight() / 5, juce::Justification::centred, 2);
     }
 	paintSpectrum(g);
 }
@@ -58,13 +58,13 @@ void SpectrumComponent::resized()
 void SpectrumComponent::paintSpectrum(juce::Graphics & g)
 {
 
-	float yPercent = spectrum_data[0]> 0 ? float(0.5 + (juce::Decibels::gainToDecibels(spectrum_data[0]) / 150)) : -0.01;
+    float yPercent;
     auto width = getLocalBounds().getWidth();
     auto height = getLocalBounds().getHeight();
     
     juce::Path p;
     p.startNewSubPath(0, height);
-    //p.lineTo(0, juce::jmap (scopeData[0], 0.0f, 1.0f, (float) height, 0.0f));
+    
     for (int i = 0; i < number_of_bins; i++)
     {
         yPercent = spectrum_data[i]> 0 ? float(0.5 + (juce::Decibels::gainToDecibels(spectrum_data[i]) / 150)) : -0.01;

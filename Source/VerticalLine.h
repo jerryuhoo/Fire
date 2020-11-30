@@ -49,8 +49,8 @@ private:
     bool state = false;
     
     float xPercent = 0.f;
-    int leftIndex; // left index
-    int rightIndex; // right index
-    int index;
+    int leftIndex = -1; // left index
+    int rightIndex = -1; // right index
+    int index = -1;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

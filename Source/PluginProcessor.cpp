@@ -648,10 +648,11 @@ void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
 
-    int xmlIndex = 0;
+    
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState.get() != nullptr && xmlState->hasTagName("state"))
     {
+        int xmlIndex = 0;
         // 1. set treestate
         const auto xmlTreeState = xmlState->getChildElement(xmlIndex++);
         if (xmlTreeState != nullptr)

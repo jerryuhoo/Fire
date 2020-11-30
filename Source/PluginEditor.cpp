@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.778"
+#define VERSION "0.779"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -80,21 +80,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setSize(1000, 500);
 
     setLookAndFeel(&otherLookAndFeel);
-
-    /*
-    // input knob
-    addAndMakeVisible(inputKnob);
-    inputKnob.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    // inputKnob.setSliderStyle(Slider::LinearVertical);
-    inputKnob.setTextBoxStyle(Slider::TextBoxBelow, false, 50, 30);
-
-    addAndMakeVisible(inputLabel);
-    inputLabel.setText("Input", dontSendNotification);
-    inputLabel.setFont (Font (KNOB_FONT, KNOB_FONT_SIZE, Font::plain));
-    inputLabel.setColour(Label::textColourId, COLOUR5);
-    inputLabel.attachToComponent(&inputKnob, false);
-    inputLabel.setJustificationType (Justification::centred);
-    */
 
     // drive knob
     addAndMakeVisible(driveKnob);
@@ -456,7 +441,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // resize limit
     setResizeLimits(1000, 500, 2000, 1000); // set resize limits
-    //getConstrainer ()->setFixedAspectRatio (1.33); // set fixed resize rate: 700/525
+    //getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
 
     updateToggleState();
 }
@@ -489,13 +474,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 {
     int part1 = PART1;//getHeight() / 10;
     int part2 = PART2;//part1 * 3;
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
-    g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+
+    // background
     g.fillAll(COLOUR7);
 
     // title
     g.setColour(COLOUR5);
-    // g.fillRect(0, 0, getWidth(), static_cast<int> (getHeight()/10.f));
     g.fillRect(0, 0, getWidth(), part1);
 
     // draw version
@@ -513,18 +497,17 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t)BinaryData::firewingslogo_pngSize);
     g.drawImage(logoWings, getWidth() - part1, 0, part1, part1, 0, 0, logoWings.getWidth(), logoWings.getHeight());
 
-    // paint distortion function
     bool left = *processor.treeState.getRawParameterValue("windowLeft");
     bool right = *processor.treeState.getRawParameterValue("windowRight");
 
+    // paint distortion function
     int mode = *processor.treeState.getRawParameterValue("mode");
-    //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
     //float drive = *processor.treeState.getRawParameterValue("drive");
+    float drive = processor.getNewDrive();
     float color = *processor.treeState.getRawParameterValue("color");
     float rec = *processor.treeState.getRawParameterValue("rec");
     float mix = *processor.treeState.getRawParameterValue("mix");
     float bias = *processor.treeState.getRawParameterValue("bias");
-    float drive = processor.getNewDrive();
     float rateDivide = *processor.treeState.getRawParameterValue("downSample");
     
     distortionProcessor.controls.mode = mode;
@@ -601,7 +584,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         float margin = frame.getHeight() / 20.f;
         float size = verticalLines[0]->getHeight() / 10.f;
         float width = verticalLines[0]->getWidth() / 2.f;
-//        int count = 0;
         
         //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
         updateLines(margin, size, width);
@@ -682,8 +664,8 @@ void FireAudioProcessorEditor::resized()
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
     linkedButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
     
-    windowLeftButton.setBounds(0, secondShadowY - getHeight() / 50, getWidth() / 2, getHeight() / 50);
-    windowRightButton.setBounds(getWidth() / 2, secondShadowY - getHeight() / 50, getWidth() / 2, getHeight() / 50);
+    windowLeftButton.setBounds(0, secondShadowY, getWidth() / 2, getHeight() / 50);
+    windowRightButton.setBounds(getWidth() / 2, secondShadowY, getWidth() / 2, getHeight() / 50);
     
     // second line
     safeButton.setBounds(startX * 1 + newKnobSize * 3 / 2, secondPartY, newKnobSize / 2, 0.05 * getHeight());
@@ -702,7 +684,7 @@ void FireAudioProcessorEditor::resized()
     distortionGraph.setBounds(getWidth() / 2, PART1, getWidth() / 2, PART2);
     
     // spectrum
-    spectrum.setBounds(0, getHeight() / 10, getWidth(), getHeight() / 10 * 3 - 10);
+    spectrum.setBounds(0, getHeight() / 10, getWidth(), getHeight() / 10 * 3);
     
     // ff meter
 //    int ffWidth = 20;
@@ -712,7 +694,7 @@ void FireAudioProcessorEditor::resized()
 //    outputMeter.setBounds(getWidth() / 2 + 2, ffHeightStart, ffWidth, ffHeight + 2);
 
     // distortion menu
-    distortionMode.setBounds(0, getHeight() / 10 * 4, getWidth() / 5, getHeight() / 10);
+    distortionMode.setBounds(0, secondShadowY + getHeight() / 50, getWidth() / 5, getHeight() / 12);
 
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;

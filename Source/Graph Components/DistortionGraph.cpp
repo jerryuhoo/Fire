@@ -14,7 +14,13 @@
 //==============================================================================
 DistortionGraph::DistortionGraph()
 {
-
+    // to ensure these parameters are assigned values, otherwise may assert errors.
+    mode = -1;
+    drive = -1.f;
+    color = -1.f;
+    mix = -1.f;
+    bias = -1.f;
+    rateDivide = -1.f;
 }
 
 DistortionGraph::~DistortionGraph()

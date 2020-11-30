@@ -30,12 +30,7 @@ public:
 	void paintSpectrum(juce::Graphics & g);
 
 
-
-
-
 private:
-	float last_x;
-	float last_y;
 	int number_of_bins;
 	float* spectrum_data;
 	static const int frequenciesForLines[];

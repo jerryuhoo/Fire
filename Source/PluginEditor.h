@@ -38,8 +38,6 @@ public:
     void resized() override;
     void timerCallback() override;
 
-    //    Visualiser visualiser;
-
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
@@ -63,7 +61,6 @@ private:
 
     // Sliders
     juce::Slider
-        //inputKnob,
         driveKnob,
         downSampleKnob,
         outputKnob,
@@ -80,7 +77,6 @@ private:
     // Labels
     juce::Label
         hqLabel,
-        //inputLabel,
         driveLabel,
         downSampleLabel,
         outputLabel,

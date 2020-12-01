@@ -137,7 +137,7 @@ float VerticalLine::getRight()
     return rightIndex;
 }
 
-void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[])
+void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[], int sortedIndex[])
 {
     float leftLimit;
     float rightLimit;
@@ -149,13 +149,16 @@ void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::un
     
     if (newXPercent < leftLimit) newXPercent = leftLimit;
     if (newXPercent > rightLimit) newXPercent = rightLimit;
-    if (leftIndex >= 0 && newXPercent - verticalLines[leftIndex]->getXPercent() - margin < -0.00001f) // float is not accurate!!!!
+
+    int idx = sortedIndex[leftIndex];
+
+    if (leftIndex >= 0 && newXPercent - verticalLines[idx]->getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
-        verticalLines[leftIndex]->moveToX(lineNum, newXPercent - margin, margin, verticalLines);
+        verticalLines[sortedIndex[leftIndex]]->moveToX(lineNum, newXPercent - margin, margin, verticalLines, sortedIndex);
     }
-    if (rightIndex < lineNum && verticalLines[rightIndex]->getXPercent() - newXPercent - margin < -0.00001f)
+    if (rightIndex < lineNum && verticalLines[sortedIndex[rightIndex]]->getXPercent() - newXPercent - margin < -0.00001f)
     {
-        verticalLines[rightIndex]->moveToX(lineNum, newXPercent + margin, margin, verticalLines);
+        verticalLines[sortedIndex[rightIndex]]->moveToX(lineNum, newXPercent + margin, margin, verticalLines, sortedIndex);
     }
     xPercent = newXPercent;
 

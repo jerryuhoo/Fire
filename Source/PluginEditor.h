@@ -130,7 +130,7 @@ private:
     int lastLineNum = 0;
     void updateLines(float margin, float size, float width);
     
-    std::array<int, 3> sortedIndex = {0, 0, 0};
+    int sortedIndex[3] = {0, 0, 0};
     
     std::unique_ptr<VerticalLine> verticalLines[3];
     std::unique_ptr<CloseButton> closeButtons[3];

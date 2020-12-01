@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.779"
+#define VERSION "0.7992"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -595,7 +595,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             if (verticalLines[i]->isMoving())
             {
                 float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-                verticalLines[i]->moveToX(lineNum, xPercent, 0.05f, verticalLines);
+                verticalLines[i]->moveToX(lineNum, xPercent, 0.05f, verticalLines, sortedIndex);
             }
         }
 
@@ -759,6 +759,11 @@ void FireAudioProcessorEditor::updateLines(float margin, float size, float width
         }
     }
     
+    // should set self index first, then set left and right index
+    for (int i = 0; i < count; i++)
+    {
+        verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
+    }
     // set left right index
     for (int i = 0; i < count; i++)
     {
@@ -768,7 +773,7 @@ void FireAudioProcessorEditor::updateLines(float margin, float size, float width
         }
         else
         {
-            verticalLines[sortedIndex[i]]->setLeft(sortedIndex[i - 1]);
+            verticalLines[sortedIndex[i]]->setLeft(verticalLines[sortedIndex[i - 1]]->getIndex());
         }
         if (i == count - 1)
         {
@@ -776,9 +781,9 @@ void FireAudioProcessorEditor::updateLines(float margin, float size, float width
         }
         else
         {
-            verticalLines[sortedIndex[i]]->setRight(sortedIndex[i + 1]);
+            verticalLines[sortedIndex[i]]->setRight(verticalLines[sortedIndex[i + 1]]->getIndex());
         }
-        verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
+        
     }
 
 }

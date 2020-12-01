@@ -35,7 +35,7 @@ public:
     float getLeft();
     void setRight(int rightIndex);
     float getRight();
-    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[]);
+    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[], int sortedIndex[]);
     
 private:
     bool isEntered = false;

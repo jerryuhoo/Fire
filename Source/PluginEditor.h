@@ -17,7 +17,6 @@
 #include "VerticalLine.h"
 #include "CloseButton.h"
 #include <vector>
-#include "SpectrumAnalyserTutorial_02.h"
 #include "Graph Components/SpectrumComponent.h"
 #include "Graph Components/DistortionGraph.h"
 //==============================================================================

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.7992"
+#define VERSION "0.780"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -558,13 +558,17 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         float xPos = mousePos.getX();
         float yPos = mousePos.getY();
         
+        float limitLeft = 0.1f;
+        float limitRight = 0.9f;
+        
+        
         if (yPos >= startY && yPos <= startY + frame.getHeight() / 5 && lineNum < 3)
         {
             bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
             {
-                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) < 0.05f) || xPercent < 0.05f || xPercent > 0.95f)
+                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) < limitLeft) || xPercent < limitLeft || xPercent > limitRight)
                 {
                     canCreate = false;
                     break;
@@ -595,7 +599,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             if (verticalLines[i]->isMoving())
             {
                 float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-                verticalLines[i]->moveToX(lineNum, xPercent, 0.05f, verticalLines, sortedIndex);
+                verticalLines[i]->moveToX(lineNum, xPercent, limitLeft, verticalLines, sortedIndex);
             }
         }
 
@@ -812,10 +816,12 @@ void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
         {
             bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+            float limitLeft = 0.1f;
+            float limitRight = 0.9f;
             for (int i = 0; i < 3; i++)
             {
                 // can't create near existed lines
-                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) <= 0.05f) || xPercent < 0.05f || xPercent > 0.95f)
+                if ((verticalLines[i]->getState() == true && fabs(verticalLines[i]->getXPercent() - xPercent) <= limitLeft) || xPercent < limitLeft || xPercent > limitRight)
                 {
                     canCreate = false;
                     break;

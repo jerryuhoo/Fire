@@ -2,27 +2,41 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.781" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.782" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
-      <FILE id="CBOGvL" name="FreqTextLabel.cpp" compile="1" resource="0"
-            file="Source/FreqTextLabel.cpp"/>
-      <FILE id="WLHSsB" name="FreqTextLabel.h" compile="0" resource="0" file="Source/FreqTextLabel.h"/>
+      <GROUP id="{43790AD2-FCF5-17E2-2CA5-275101E55D0C}" name="Multiband">
+        <FILE id="dJCE91" name="CloseButton.cpp" compile="1" resource="0" file="Source/Multiband/CloseButton.cpp"/>
+        <FILE id="IXiios" name="CloseButton.h" compile="0" resource="0" file="Source/Multiband/CloseButton.h"/>
+        <FILE id="M6ppzu" name="EnableButton.cpp" compile="1" resource="0"
+              file="Source/Multiband/EnableButton.cpp"/>
+        <FILE id="oP0mFa" name="EnableButton.h" compile="0" resource="0" file="Source/Multiband/EnableButton.h"/>
+        <FILE id="atUkXY" name="FFTProcessor.h" compile="0" resource="0" file="Source/Multiband/FFTProcessor.h"/>
+        <FILE id="nMHiiJ" name="FreqTextLabel.cpp" compile="1" resource="0"
+              file="Source/Multiband/FreqTextLabel.cpp"/>
+        <FILE id="XdJ5us" name="FreqTextLabel.h" compile="0" resource="0" file="Source/Multiband/FreqTextLabel.h"/>
+        <FILE id="RpFiax" name="Multiband.cpp" compile="1" resource="0" file="Source/Multiband/Multiband.cpp"/>
+        <FILE id="pzGWbq" name="Multiband.h" compile="0" resource="0" file="Source/Multiband/Multiband.h"/>
+        <FILE id="lPbBhH" name="SoloButton.cpp" compile="1" resource="0" file="Source/Multiband/SoloButton.cpp"/>
+        <FILE id="gHhz5m" name="SoloButton.h" compile="0" resource="0" file="Source/Multiband/SoloButton.h"/>
+        <FILE id="DBs4lI" name="SpectrumComponent.cpp" compile="1" resource="0"
+              file="Source/Multiband/SpectrumComponent.cpp"/>
+        <FILE id="ifEFAh" name="SpectrumComponent.h" compile="0" resource="0"
+              file="Source/Multiband/SpectrumComponent.h"/>
+        <FILE id="hljfgV" name="VerticalLine.cpp" compile="1" resource="0"
+              file="Source/Multiband/VerticalLine.cpp"/>
+        <FILE id="MaKcKJ" name="VerticalLine.h" compile="0" resource="0" file="Source/Multiband/VerticalLine.h"/>
+      </GROUP>
       <GROUP id="{73C0DD74-3F41-42AE-EE70-095B104040A5}" name="Graph Components">
         <FILE id="xcmEri" name="DistortionGraph.cpp" compile="1" resource="0"
               file="Source/Graph Components/DistortionGraph.cpp"/>
         <FILE id="PowGLk" name="DistortionGraph.h" compile="0" resource="0"
               file="Source/Graph Components/DistortionGraph.h"/>
-        <FILE id="A4sfhj" name="FFTProcessor.h" compile="0" resource="0" file="Source/Graph Components/FFTProcessor.h"/>
         <FILE id="jojgh1" name="Oscilloscope.cpp" compile="1" resource="0"
               file="Source/Graph Components/Oscilloscope.cpp"/>
         <FILE id="Mqbfgf" name="Oscilloscope.h" compile="0" resource="0" file="Source/Graph Components/Oscilloscope.h"/>
-        <FILE id="HNZHSF" name="SpectrumComponent.cpp" compile="1" resource="0"
-              file="Source/Graph Components/SpectrumComponent.cpp"/>
-        <FILE id="SU7jaZ" name="SpectrumComponent.h" compile="0" resource="0"
-              file="Source/Graph Components/SpectrumComponent.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
         <FILE id="fGPNaV" name="Delay.h" compile="0" resource="0" file="Source/DSP/Delay.h"/>
@@ -31,11 +45,6 @@
         <FILE id="ZZw8w0" name="Distortion.h" compile="0" resource="0" file="Source/DSP/Distortion.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>
       </GROUP>
-      <FILE id="VfSKhn" name="CloseButton.cpp" compile="1" resource="0" file="Source/CloseButton.cpp"/>
-      <FILE id="C02WRV" name="CloseButton.h" compile="0" resource="0" file="Source/CloseButton.h"/>
-      <FILE id="RUEaa8" name="VerticalLine.cpp" compile="1" resource="0"
-            file="Source/VerticalLine.cpp"/>
-      <FILE id="CfnhcY" name="VerticalLine.h" compile="0" resource="0" file="Source/VerticalLine.h"/>
       <FILE id="LOpR42" name="Preset.cpp" compile="1" resource="0" file="Source/Preset.cpp"/>
       <FILE id="lhFpz1" name="Preset.h" compile="0" resource="0" file="Source/Preset.h"/>
       <FILE id="QaLa2z" name="LookAndFeel.h" compile="0" resource="0" file="Source/LookAndFeel.h"/>

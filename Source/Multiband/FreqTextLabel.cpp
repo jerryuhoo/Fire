@@ -3,14 +3,14 @@
 
     FreqTextLabel.cpp
     Created: 2 Dec 2020 7:53:08pm
-    Author:  俞轶风
+    Author:  羽翼深蓝Wings
 
   ==============================================================================
 */
 
 #include <JuceHeader.h>
 #include "FreqTextLabel.h"
-#include "LookAndFeel.h"
+#include "../LookAndFeel.h"
 
 //==============================================================================
 FreqTextLabel::FreqTextLabel(VerticalLine &v) : verticalLine(v)

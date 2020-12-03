@@ -10,7 +10,7 @@
 
 #include <JuceHeader.h>
 #include "VerticalLine.h"
-#include "LookAndFeel.h"
+#include "../LookAndFeel.h"
 
 //==============================================================================
 VerticalLine::VerticalLine()

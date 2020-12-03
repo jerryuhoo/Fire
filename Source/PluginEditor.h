@@ -14,12 +14,9 @@
 #include "DSP/Distortion.h"
 #include "LookAndFeel.h"
 #include "Graph Components/Oscilloscope.h"
-#include "VerticalLine.h"
-#include "CloseButton.h"
-#include "FreqTextLabel.h"
-#include <vector>
-#include "Graph Components/SpectrumComponent.h"
 #include "Graph Components/DistortionGraph.h"
+#include "Multiband/Multiband.h"
+
 //==============================================================================
 /**
 */
@@ -50,8 +47,10 @@ private:
     // Distortion graph
     DistortionGraph distortionGraph;
     
+    // Multiband
+    Multiband multiband;
+    
     // Spectrum
-//    AnalyserComponent spectrum {processor};
     SpectrumComponent spectrum;
     
     // ff meter
@@ -70,6 +69,7 @@ private:
         resKnob,
         colorKnob,
         biasKnob;
+    
     int knobSize = 100;
     float tempDriveValue = 1;
     float tempBiasValue = 0;
@@ -124,17 +124,7 @@ private:
     
     void updateWindowState();
     
-    // multi-band
-    void mouseUp(const juce::MouseEvent &e) override;
-    int lineNum = 0;
-    int lastLineNum = 0;
-    void updateLines(float margin, float size, float width);
     
-    int sortedIndex[3] = {0, 0, 0};
-    
-    std::unique_ptr<VerticalLine> verticalLines[3];
-    std::unique_ptr<CloseButton> closeButtons[3];
-    std::unique_ptr<FreqTextLabel> freqTextLabel[3];
 
     // override listener functions
     // linked

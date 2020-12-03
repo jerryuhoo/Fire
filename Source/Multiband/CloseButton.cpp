@@ -10,7 +10,7 @@
 
 #include <JuceHeader.h>
 #include "CloseButton.h"
-#include "LookAndFeel.h"
+
 
 
 //==============================================================================

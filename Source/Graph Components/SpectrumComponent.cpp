@@ -104,3 +104,11 @@ float SpectrumComponent::transformToLog(float between0and1)
 	const float maximum = 1000.0f;
 	return log10(minimum + ((maximum - minimum) * between0and1)) / log10(maximum);
 }
+
+float SpectrumComponent::transformFromLog(float valueToTransform)
+{
+    const float minimum = 1.0f;
+    const float maximum = 1000.0f;
+    return (std::pow(10, valueToTransform * log10(maximum)) - minimum) / static_cast<float>(maximum - minimum);
+}
+

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.780"
+#define VERSION "0.781"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -39,8 +39,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
         verticalLines[i] = std::make_unique<VerticalLine>();
         verticalLines[i]->setState(false);
         addAndMakeVisible(*verticalLines[i]);
+        
         closeButtons[i] = std::make_unique<CloseButton>(*verticalLines[i]);
         addAndMakeVisible(*closeButtons[i]);
+        
+        freqTextLabel[i] = std::make_unique<FreqTextLabel>(*verticalLines[i]);
+        addAndMakeVisible(*freqTextLabel[i]);
     }
     
     // presets
@@ -529,6 +533,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         {
             verticalLines[i]->setVisible(false);
             closeButtons[i]->setVisible(false);
+            freqTextLabel[i]->setVisible(false);
         }
         
         distortionGraph.setVisible(true);
@@ -745,6 +750,9 @@ void FireAudioProcessorEditor::updateLines(float margin, float size, float width
             verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, PART1, getWidth() / 100, PART2);
             closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, verticalLines[i]->getY() + margin, size, size);
             
+            freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, verticalLines[i]->getY() + margin, size * 4, size);
+            freqTextLabel[i]->setFreq(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
+            freqTextLabel[i]->setVisible(verticalLines[i]->isMoving() || verticalLines[i]->isMouseOver());
             sortedIndex[count] = i;
             count++;
         }
@@ -837,6 +845,7 @@ void FireAudioProcessorEditor::mouseUp(const juce::MouseEvent &e)
                         verticalLines[i]->setState(true);
                         verticalLines[i]->setXPercent(xPercent);
                         closeButtons[i]->setVisible(true);
+                        freqTextLabel[i]->setVisible(true);
                         break;
                     }
                 }

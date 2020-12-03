@@ -25,7 +25,8 @@ public:
 
 	void paint(juce::Graphics& g) override;
 	void prepareToPaintSpectrum(int numberOfBins, float * spectrumData);
-	float transformToLog(float valueToTransform); 
+	static float transformToLog(float valueToTransform);
+    static float transformFromLog(float valueToTransform); 
 	void resized() override;
 	void paintSpectrum(juce::Graphics & g);
 

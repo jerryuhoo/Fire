@@ -2,11 +2,14 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.78" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.781" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
+      <FILE id="CBOGvL" name="FreqTextLabel.cpp" compile="1" resource="0"
+            file="Source/FreqTextLabel.cpp"/>
+      <FILE id="WLHSsB" name="FreqTextLabel.h" compile="0" resource="0" file="Source/FreqTextLabel.h"/>
       <GROUP id="{73C0DD74-3F41-42AE-EE70-095B104040A5}" name="Graph Components">
         <FILE id="xcmEri" name="DistortionGraph.cpp" compile="1" resource="0"
               file="Source/Graph Components/DistortionGraph.cpp"/>

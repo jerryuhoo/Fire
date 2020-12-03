@@ -33,6 +33,6 @@ private:
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
 
-    bool state = false;
+//    bool mState = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloseButton)
 };

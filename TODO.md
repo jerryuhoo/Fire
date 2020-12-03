@@ -10,3 +10,5 @@
 8. maybe improve code quality about the vertical lines part (for example use Vector)
 9. updateLines function should be called only when mouse clicking (but when clicking closebutton, the editor won't detect a mouse event)
 10. save x positions of vertical lines and implement that on muti-band distortion
+11. add mid-side / width / pan knobs
+12. add solo/enable button between vertical lines

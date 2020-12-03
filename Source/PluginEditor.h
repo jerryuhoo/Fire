@@ -16,6 +16,7 @@
 #include "Graph Components/Oscilloscope.h"
 #include "VerticalLine.h"
 #include "CloseButton.h"
+#include "FreqTextLabel.h"
 #include <vector>
 #include "Graph Components/SpectrumComponent.h"
 #include "Graph Components/DistortionGraph.h"
@@ -133,6 +134,7 @@ private:
     
     std::unique_ptr<VerticalLine> verticalLines[3];
     std::unique_ptr<CloseButton> closeButtons[3];
+    std::unique_ptr<FreqTextLabel> freqTextLabel[3];
 
     // override listener functions
     // linked

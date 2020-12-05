@@ -25,20 +25,12 @@ EnableButton::~EnableButton()
 
 void EnableButton::paint (juce::Graphics& g)
 {
-    if (isEntered)
-    {
-        g.setColour(COLOUR1.withAlpha(0.2f));
-        g.fillEllipse(0, 0, getWidth(), getHeight());
-        g.setColour(COLOUR7);
-        g.drawText(".", 0, 0, getWidth(), getHeight(), juce::Justification::centred);
-    }
-    else
-    {
-        g.setColour(juce::Colours::grey);
-        g.fillEllipse(0, 0, getWidth(), getHeight());
-        g.setColour(COLOUR7);
-        g.drawText(".", 0, 0, getWidth(), getHeight(), juce::Justification::centred);
-    }
+    g.setColour(getColour());
+    g.fillEllipse(0, 0, getWidth(), getHeight());
+    g.setColour(COLOUR7);
+    g.fillEllipse(1, 1, getWidth() - 2, getHeight() - 2);
+    g.setColour(getColour());
+    g.fillEllipse(getWidth() / 4.f, getHeight() / 4.f, getWidth() / 2.f, getHeight() / 2.f);
 }
 
 void EnableButton::resized()
@@ -50,13 +42,13 @@ void EnableButton::resized()
 
 void EnableButton::mouseUp(const juce::MouseEvent &e)
 {
-    if (state = true)
+    if (mState)
     {
-        state = false;
+        mState = false;
     }
     else
     {
-        state = true;
+        mState = true;
     }
 }
 
@@ -68,4 +60,36 @@ void EnableButton::mouseEnter(const juce::MouseEvent &e)
 void EnableButton::mouseExit(const juce::MouseEvent &e)
 {
     isEntered = false;
+}
+
+bool EnableButton::getState()
+{
+    return mState;
+}
+
+juce::Colour EnableButton::getColour()
+{
+    if (isEntered)
+    {
+        if (!mState)
+        {
+            return juce::Colours::grey.withAlpha(0.8f);
+        }
+        else
+        {
+            return COLOUR1.withAlpha(0.8f);
+        }
+        
+    }
+    else
+    {
+        if (!mState)
+        {
+            return juce::Colours::grey;
+        }
+        else
+        {
+            return COLOUR1;
+        }
+    }
 }

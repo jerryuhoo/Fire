@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.782"
+#define VERSION "0.783"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 

@@ -108,6 +108,25 @@ void Multiband::paint (juce::Graphics& g)
         //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
         updateLines(margin, size, width);
 
+        // set black masks
+        int margin2 = getWidth() / 250; // 1/100 * 4 / 10
+        int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
+        g.setColour(juce::Colours::black.withAlpha(0.8f));
+        if (lineNum > 0 && enableButton[0]->getState() == false)
+        {
+            g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
+        }
+        for (int i = 1; i < lineNum; i++)
+        {
+            if (lineNum > 1 && enableButton[i]->getState() == false)
+            {
+                g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
+            }
+        }
+        if (lineNum > 0 && enableButton[lineNum]->getState() == false)
+        {
+            g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+        }
         
         // drag
         for (int i = 0; i < 3; i++)
@@ -172,22 +191,24 @@ void Multiband::updateLines(float margin, float size, float width)
         if (i <= count && count != 0)
         {
             soloButton[i]->setVisible(true);
+            enableButton[i]->setVisible(true);
         }
         else
         {
             soloButton[i]->setVisible(false);
+            enableButton[i]->setVisible(false);
         }
     }
     
     // setBounds of soloButtons and enableButtons
     if (count >= 1)
     {
-        soloButton[0]->setBounds(verticalLines[sortedIndex[0]]->getX() / 2, margin, size, size);
+        enableButton[0]->setBounds(verticalLines[sortedIndex[0]]->getX() / 2, margin, size, size);
         for (int i = 1; i < count; i++)
         {
-            soloButton[i]->setBounds((verticalLines[sortedIndex[i]]->getX() + verticalLines[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
+            enableButton[i]->setBounds((verticalLines[sortedIndex[i]]->getX() + verticalLines[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
         }
-        soloButton[count]->setBounds((verticalLines[sortedIndex[count - 1]]->getX() + getWidth()) / 2, margin, size, size);
+        enableButton[count]->setBounds((verticalLines[sortedIndex[count - 1]]->getX() + getWidth()) / 2, margin, size, size);
     }
     
     // should set self index first, then set left and right index

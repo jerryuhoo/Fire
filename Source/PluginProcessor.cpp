@@ -195,6 +195,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     */
 
     // spec.maximumBlockSize = samplesPerBlock;
+    spec.sampleRate = sampleRate;
     spec.maximumBlockSize = /*newBlockSize;*/ samplesPerBlock;
     spec.numChannels = getMainBusNumOutputChannels();
 
@@ -224,6 +225,36 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
     inputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
     outputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
+    
+    
+    // multiband filters
+    mBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    mBuffer2.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    mBuffer3.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    mBuffer4.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    mBuffer1.clear();
+    mBuffer2.clear();
+    mBuffer3.clear();
+    mBuffer4.clear();
+    
+    lowpass1.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+    lowpass2.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+    lowpass3.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+    highpass1.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
+    highpass2.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
+    highpass3.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
+    lowpass1.reset();
+    lowpass2.reset();
+    lowpass3.reset();
+    highpass1.reset();
+    highpass2.reset();
+    highpass3.reset();
+    lowpass1.prepare(spec);
+    lowpass2.prepare(spec);
+    lowpass3.prepare(spec);
+    highpass1.prepare(spec);
+    highpass2.prepare(spec);
+    highpass3.prepare(spec);
 }
 
 void FireAudioProcessor::releaseResources()
@@ -348,12 +379,105 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     distortionProcessor.controls.bias = biasSmoother.getNextValue();
     // DBG(distortionProcessor.controls.bias);
 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     // bias
     if (sampleMaxValue == 0)
     {
         distortionProcessor.controls.bias = 0;
     }
 
+    // multiband process
+    int freqValue1 = 200;
+    int freqValue2 = 1000;
+    int freqValue3 = 4000;
+    int freqValue4 = 8000;
+    
+    auto numSamples  = buffer.getNumSamples();
+    mBuffer1.makeCopyOf(buffer);
+    mBuffer2.makeCopyOf(buffer);
+    mBuffer3.makeCopyOf(buffer);
+    mBuffer4.makeCopyOf(buffer);
+    
+    // test
+    multibandState1 = true;
+    multibandState2 = true;
+    multibandState3 = true;
+    multibandState4 = true;
+    // test
+    
+    
+    
+    if (multibandState1)
+    {
+        auto multibandBlock1 = juce::dsp::AudioBlock<float> (mBuffer1);
+        auto context1 = juce::dsp::ProcessContextReplacing<float> (multibandBlock1);
+        lowpass1.setCutoffFrequency(freqValue1);
+        lowpass1.process (context1);
+    }
+    
+    if (multibandState2)
+    {
+        auto multibandBlock2 = juce::dsp::AudioBlock<float> (mBuffer2);
+        auto context2 = juce::dsp::ProcessContextReplacing<float> (multibandBlock2);
+        highpass1.setCutoffFrequency(freqValue1);
+        highpass1.process (context2);
+
+        lowpass2.setCutoffFrequency(freqValue2);
+        lowpass2.process (context2);
+    }
+    
+    if (multibandState3)
+    {
+        auto multibandBlock3 = juce::dsp::AudioBlock<float> (mBuffer3);
+        auto context3 = juce::dsp::ProcessContextReplacing<float> (multibandBlock3);
+        highpass2.setCutoffFrequency(freqValue2);
+        highpass2.process (context3);
+
+        lowpass3.setCutoffFrequency(freqValue3);
+        lowpass3.process (context3);
+    }
+    
+    if (multibandState4)
+    {
+        auto multibandBlock4 = juce::dsp::AudioBlock<float> (mBuffer4);
+        auto context4 = juce::dsp::ProcessContextReplacing<float> (multibandBlock4);
+        highpass3.setCutoffFrequency(freqValue4);
+        highpass3.process (context4);
+    }
+    
+    
+    
+    buffer.clear();
+    if (multibandState1)
+    {
+        buffer.addFrom(0, 0, mBuffer1, 0, 0, numSamples);
+        buffer.addFrom(1, 0, mBuffer1, 1, 0, numSamples);
+    }
+    if (multibandState2)
+    {
+        buffer.addFrom(0, 0, mBuffer2, 0, 0, numSamples);
+        buffer.addFrom(1, 0, mBuffer2, 1, 0, numSamples);
+    }
+    if (multibandState3)
+    {
+        buffer.addFrom(0, 0, mBuffer3, 0, 0, numSamples);
+        buffer.addFrom(1, 0, mBuffer3, 1, 0, numSamples);
+    }
+    if (multibandState4)
+    {
+        buffer.addFrom(0, 0, mBuffer4, 0, 0, numSamples);
+        buffer.addFrom(1, 0, mBuffer4, 1, 0, numSamples);
+    }
+    
     // pre-filter
     bool preButton = *treeState.getRawParameterValue("pre");
     if (preButton)
@@ -804,5 +928,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowLeft", "WindowLeft", true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowRight", "WindowRight", false));
     
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("lineNum", "LineNum", 0, 3, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq1", "Freq1", 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq2", "Freq2", 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq3", "Freq3", 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq4", "Freq4", 0, 22100, 0));
     return {parameters.begin(), parameters.end()};
 }

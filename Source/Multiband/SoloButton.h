@@ -29,8 +29,10 @@ public:
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
     
+    bool getState();
+    
 private:
     bool isEntered = false;
-    bool state = false;
+    bool mState = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SoloButton)
 };

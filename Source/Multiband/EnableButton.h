@@ -28,9 +28,11 @@ public:
     void mouseUp(const juce::MouseEvent &e) override;
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
+    bool getState();
     
 private:
     bool isEntered = false;
-    bool state = false;
+    bool mState = true;
+    juce::Colour getColour();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EnableButton)
 };

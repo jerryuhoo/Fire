@@ -203,5 +203,17 @@ private:
 
     // dsp::AudioBlock<float> blockOutput;
 
+    // multiband dsp
+    juce::dsp::LinkwitzRileyFilter<float> lowpass1, highpass1,
+                                          lowpass2, highpass2,
+                                          lowpass3, highpass3;
+    
+    juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
+    bool multibandState1 = false;
+    bool multibandState2 = false;
+    bool multibandState3 = false;
+    bool multibandState4 = false;
+    
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

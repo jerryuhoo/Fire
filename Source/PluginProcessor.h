@@ -214,6 +214,10 @@ private:
     bool multibandState3 = false;
     bool multibandState4 = false;
     
+    bool multibandFocus1 = true;
+    bool multibandFocus2 = false;
+    bool multibandFocus3 = false;
+    bool multibandFocus4 = false;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

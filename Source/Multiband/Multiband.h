@@ -32,6 +32,9 @@ public:
     void resized() override;
     int getLineNum();
     
+    void getFocusArray(bool (&input)[4]);
+    void getStateArray(bool (&input)[4]);
+    
 private:
     
 //    // Spectrum
@@ -52,6 +55,7 @@ private:
     std::unique_ptr<SoloButton> soloButton[4];
     std::unique_ptr<EnableButton> enableButton[4];
     
+    bool multibandFocus[4] = {true, false, false, false};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)
 };

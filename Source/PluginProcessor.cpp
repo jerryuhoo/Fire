@@ -396,10 +396,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // multiband process
-    int freqValue1 = 200;
-    int freqValue2 = 1000;
-    int freqValue3 = 4000;
-    int freqValue4 = 8000;
+    int freqValue1 = *treeState.getRawParameterValue("freq1");
+    int freqValue2 = *treeState.getRawParameterValue("freq2");
+    int freqValue3 = *treeState.getRawParameterValue("freq3");
     
     auto numSamples  = buffer.getNumSamples();
     mBuffer1.makeCopyOf(buffer);
@@ -408,11 +407,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     mBuffer4.makeCopyOf(buffer);
     
     // test
-    multibandState1 = true;
-    multibandState2 = true;
-    multibandState3 = true;
-    multibandState4 = true;
-    // test
+    multibandState1 = *treeState.getRawParameterValue("multibandState1");
+    multibandState2 = *treeState.getRawParameterValue("multibandState2");
+    multibandState3 = *treeState.getRawParameterValue("multibandState3");
+    multibandState4 = *treeState.getRawParameterValue("multibandState4");
+    
+    multibandFocus1 = *treeState.getRawParameterValue("multibandFocus1");
+    multibandFocus2 = *treeState.getRawParameterValue("multibandFocus2");
+    multibandFocus3 = *treeState.getRawParameterValue("multibandFocus3");
+    multibandFocus4 = *treeState.getRawParameterValue("multibandFocus4");
+    
     
     
     
@@ -450,7 +454,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     {
         auto multibandBlock4 = juce::dsp::AudioBlock<float> (mBuffer4);
         auto context4 = juce::dsp::ProcessContextReplacing<float> (multibandBlock4);
-        highpass3.setCutoffFrequency(freqValue4);
+        highpass3.setCutoffFrequency(freqValue3);
         highpass3.process (context4);
     }
     
@@ -560,7 +564,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             // distortion
             if (mode < 9)
             {
-                distortionProcessor.controls.drive = driveSmoother.getNextValue();
+                if (multibandFocus1) // 2020/12/6
+                {
+                    distortionProcessor.controls.drive = driveSmoother.getNextValue();
+                }
+                else
+                {
+                    distortionProcessor.controls.drive = 1; // just for testing
+                }
+                
+                
                 // distortionProcessor.controls.output = outputSmoother.getNextValue();
                 channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
             }
@@ -929,9 +942,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowRight", "WindowRight", false));
     
     parameters.push_back(std::make_unique<juce::AudioParameterInt>("lineNum", "LineNum", 0, 3, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq1", "Freq1", 0, 22100, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq2", "Freq2", 0, 22100, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq3", "Freq3", 0, 22100, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq4", "Freq4", 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq1", "Freq1", 0, 22100, 500));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq2", "Freq2", 0, 22100, 2000));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq3", "Freq3", 0, 22100, 9000));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState1", "MultibandState1", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState2", "MultibandState2", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState3", "MultibandState3", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState4", "MultibandState4", true));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus1", "MultibandFocus1", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus2", "MultibandFocus2", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus3", "MultibandFocus3", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus4", "MultibandFocus4", false));
+    
     return {parameters.begin(), parameters.end()};
 }

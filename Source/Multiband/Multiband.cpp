@@ -108,23 +108,41 @@ void Multiband::paint (juce::Graphics& g)
         //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
         updateLines(margin, size, width);
 
-        // set black masks
+        // set black and focus masks
         int margin2 = getWidth() / 250; // 1/100 * 4 / 10
         int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
-        g.setColour(juce::Colours::black.withAlpha(0.8f));
+        
         if (lineNum > 0 && enableButton[0]->getState() == false)
         {
+            g.setColour(juce::Colours::black.withAlpha(0.8f));
+            g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
+        }
+        if (multibandFocus[0])
+        {
+            g.setColour(juce::Colours::red.withAlpha(0.1f));
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
         for (int i = 1; i < lineNum; i++)
         {
             if (lineNum > 1 && enableButton[i]->getState() == false)
             {
+                g.setColour(juce::Colours::black.withAlpha(0.8f));
+                g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
+            }
+            if (multibandFocus[i])
+            {
+                g.setColour(juce::Colours::red.withAlpha(0.1f));
                 g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
             }
         }
         if (lineNum > 0 && enableButton[lineNum]->getState() == false)
         {
+            g.setColour(juce::Colours::black.withAlpha(0.8f));
+            g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+        }
+        if (multibandFocus[lineNum - 1])
+        {
+            g.setColour(juce::Colours::red.withAlpha(0.1f));
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         
@@ -238,12 +256,12 @@ void Multiband::updateLines(float margin, float size, float width)
         }
         
     }
-
+    
 }
 
 void Multiband::mouseUp(const juce::MouseEvent &e)
 {
-    if (e.mods.isLeftButtonDown())
+    if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.f) // create new lines
     {
         
         if (lineNum < 3)
@@ -278,9 +296,57 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
             }
         }
     }
+    else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.f) // focus on one band
+    {
+        int num = 4;
+        for (int i = 0; i < num; i++)
+        {
+            multibandFocus[i] = false;
+        }
+        
+        if (e.x >= 0 && e.x < verticalLines[sortedIndex[0]]->getX())
+        {
+            multibandFocus[0] = true;
+        }
+        
+        for (int i = 1; i < num - 1; i++)
+        {
+            if (e.x >= verticalLines[sortedIndex[i - 1]]->getX() && e.x < verticalLines[sortedIndex[i]]->getX())
+            {
+                multibandFocus[i] = true;
+            }
+        }
+        
+        if (e.x >= verticalLines[sortedIndex[num - 2]]->getX() && e.x <= getWidth())
+        {
+            multibandFocus[num - 1] = true;
+        }
+        
+        for (int i = 0; i < num; i++) {
+            if (multibandFocus[i]) {
+//                DBG(i);
+            }
+        }
+    }
 }
 
 int Multiband::getLineNum()
 {
     return lineNum;
+}
+
+void Multiband::getFocusArray(bool (&input)[4])
+{
+    for (int i = 0; i < 4; i++)
+    {
+        input[i] = multibandFocus[i];
+    }
+}
+
+void Multiband::getStateArray(bool (&input)[4])
+{
+    for (int i = 0; i < 4; i++)
+    {
+        input[i] = enableButton[i]->getState();
+    }
 }

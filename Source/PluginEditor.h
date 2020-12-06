@@ -50,6 +50,17 @@ private:
     // Multiband
     Multiband multiband;
     
+    // TODO: this is temporary method. Maybe should create custom attachments. juce::ParameterAttachment?
+    
+    juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
+    juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
+    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiStateAttachment1, multiStateAttachment2, multiStateAttachment3, multiStateAttachment4;
+    
+    bool multibandFocus[4];
+    bool multibandState[4];
+    
     // Spectrum
     SpectrumComponent spectrum;
     

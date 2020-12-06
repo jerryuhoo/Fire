@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.783"
+#define VERSION "0.784"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -376,6 +376,29 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowLeftButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "windowLeft", windowLeftButton);
     windowRightButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, "windowRight", windowRightButton);
 
+    
+    multiband.getFocusArray(multibandFocus);
+    multiFocusSlider1.setValue(multibandFocus[0]);
+    multiFocusSlider2.setValue(multibandFocus[1]);
+    multiFocusSlider3.setValue(multibandFocus[2]);
+    multiFocusSlider4.setValue(multibandFocus[3]);
+    
+    multiband.getStateArray(multibandState);
+    multiStateSlider1.setValue(multibandState[0]);
+    multiStateSlider2.setValue(multibandState[1]);
+    multiStateSlider3.setValue(multibandState[2]);
+    multiStateSlider4.setValue(multibandState[3]);
+    
+    multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus1", multiFocusSlider1);
+    multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus2", multiFocusSlider2);
+    multiFocusAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus3", multiFocusSlider3);
+    multiFocusAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus4", multiFocusSlider4);
+    
+    multiStateAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState1", multiStateSlider1);
+    multiStateAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState2", multiStateSlider2);
+    multiStateAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState3", multiStateSlider3);
+    multiStateAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState4", multiStateSlider4);
+    
     // Distortion mode select
     addAndMakeVisible(distortionMode);
 
@@ -562,6 +585,16 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     //g.setColour(COLOUR1);
     //g.fillRect(outputKnob.getX(), outputKnob.getY(), outputKnob.getWidth(), outputKnob.getHeight());
     //g.fillRect(cutoffKnob.getX(), cutoffKnob.getY(), cutoffKnob.getWidth(), cutoffKnob.getHeight());
+    
+    
+    // temporary, just for testing
+    multiband.getFocusArray(multibandFocus);
+    multiFocusSlider1.setValue(multibandFocus[0]);
+    multiFocusSlider2.setValue(multibandFocus[1]);
+    multiFocusSlider3.setValue(multibandFocus[2]);
+    multiFocusSlider4.setValue(multibandFocus[3]);
+    
+    
 }
 
 void FireAudioProcessorEditor::resized()

@@ -125,12 +125,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
     //previousGainInput = Decibels::decibelsToGain(previousGainInput);
 
-    previousGainOutput = (float)*treeState.getRawParameterValue("outputGain");
+    previousGainOutput = (float)*treeState.getRawParameterValue("output1");
     previousGainOutput = juce::Decibels::decibelsToGain(previousGainOutput);
-    previousDrive = *treeState.getRawParameterValue("drive");
+    previousDrive = *treeState.getRawParameterValue("drive1");
     previousCutoff = (float)*treeState.getRawParameterValue("cutoff");
     previousColor = (float)*treeState.getRawParameterValue("color");
-    previousMix = (float)*treeState.getRawParameterValue("mix");
+    previousMix = (float)*treeState.getRawParameterValue("mix1");
     newDrive = 0;
 
     driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
@@ -172,6 +172,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
 
+    // width buffer init
+    midSideBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock); // channel = 2? 0 = mid 1 = side?
+    midSideBuffer.clear();
+    
     // oversampling init
     oversampling->reset();
     oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
@@ -313,14 +317,14 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     //float currentGainInput = *treeState.getRawParameterValue("inputGain");
     //currentGainInput = Decibels::decibelsToGain(currentGainInput);
 
-    float drive = *treeState.getRawParameterValue("drive");
+    float drive = *treeState.getRawParameterValue("drive1");
 
     float color = *treeState.getRawParameterValue("color");
 
-    float currentGainOutput = *treeState.getRawParameterValue("outputGain");
+    float currentGainOutput = *treeState.getRawParameterValue("output1");
     currentGainOutput = juce::Decibels::decibelsToGain(currentGainOutput);
 
-    float mix = *treeState.getRawParameterValue("mix");
+    float mix = *treeState.getRawParameterValue("mix1");
     float bias = *treeState.getRawParameterValue("bias");
 
     // set distortion processor parameters
@@ -399,7 +403,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     int freqValue1 = *treeState.getRawParameterValue("freq1");
     int freqValue2 = *treeState.getRawParameterValue("freq2");
     int freqValue3 = *treeState.getRawParameterValue("freq3");
-    
+
     auto numSamples  = buffer.getNumSamples();
     mBuffer1.makeCopyOf(buffer);
     mBuffer2.makeCopyOf(buffer);
@@ -570,7 +574,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
                 }
                 else
                 {
-                    distortionProcessor.controls.drive = 1; // just for testing
+                    distortionProcessor.controls.drive = driveSmoother.getNextValue(); // just for testing
                 }
                 
                 
@@ -677,6 +681,61 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
+    // width
+    /**
+    M = (L+R)/sqrt(2);   // obtain mid-signal from left and right
+    S = (L-R)/sqrt(2);   // obtain side-signal from left and right
+
+    // amplify mid and side signal seperately:
+    M *= 2*(1-width);
+    S *= 2*width;
+
+    L = (M+S)/sqrt(2);   // obtain left signal from mid and side
+    R = (M-S)/sqrt(2);   // obtain right signal from mid and side
+     
+     ======
+
+    mSignal = 0.5 * (left + right);
+    sSignal = left - right;
+
+    float pan; // [-1; +1]
+    left  = 0.5 * (1.0 + pan) * mSignal + sSignal;
+    right = 0.5 * (1.0 - pan) * mSignal - sSignal;
+    */
+    
+    auto* channeldataL = buffer.getWritePointer(0);
+    auto* channeldataR = buffer.getWritePointer(1);
+    auto* midBuffer = midSideBuffer.getWritePointer(0);
+    auto* sideBuffer = midSideBuffer.getWritePointer(1);
+    float width = 0.5f;
+    float pan = 0.f;
+    
+//    for (int i = 0; i < buffer.getNumSamples(); i++)
+//    {
+//
+//        midBuffer[i] = (channeldataL[i] + channeldataR[i]) * 0.5f;
+//        sideBuffer[i] = (channeldataL[i] - channeldataR[i]);
+//        midBuffer[i] *= 2 * (1 - width);
+//        sideBuffer[i] *= 2 * width;
+//        channeldataL[i] = (midBuffer[i] + sideBuffer[i]) / sqrt(2);
+//        channeldataR[i] = (midBuffer[i] - sideBuffer[i]) / sqrt(2);
+//
+//    }
+
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        float tmp = 1 / fmax(1 + width, 2);
+        float coef_M = 1 * tmp;
+        float coef_S = width * tmp;
+
+        float mid = (channeldataL[i] + channeldataR[i])*coef_M;
+        float sides = (channeldataR[i] - channeldataL[i])*coef_S;
+
+        channeldataL[i] = mid - sides;
+        channeldataR[i] = mid + sides;
+
+    }
+    
     //post-filter
     bool postButton = *treeState.getRawParameterValue("post");
     if (postButton)
@@ -920,13 +979,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>("safe", "Safe", true));
 
     //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive", "Drive", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive1", "Drive1", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive2", "Drive2", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive3", "Drive3", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive4", "Drive4", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic1", "Dynamic1", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic2", "Dynamic2", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic3", "Dynamic3", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic4", "Dynamic4", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output1", "Output1", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output2", "Output2", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output3", "Output3", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output4", "Output4", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix1", "Mix1", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix2", "Mix2", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix3", "Mix3", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix4", "Mix4", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("color", "Color", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("bias", "Bias", juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("downSample", "DownSample", juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("rec", "Rec", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("outputGain", "OutputGain", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.f);
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20.0f));

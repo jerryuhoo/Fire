@@ -54,12 +54,15 @@ private:
     
     juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
     juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
+    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiStateAttachment1, multiStateAttachment2, multiStateAttachment3, multiStateAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
     
     bool multibandFocus[4];
     bool multibandState[4];
+    int multibandFreq[3];
     
     // Spectrum
     SpectrumComponent spectrum;
@@ -71,11 +74,28 @@ private:
 
     // Sliders
     juce::Slider
-        driveKnob,
-        downSampleKnob,
-        outputKnob,
+        driveKnob1,
+        outputKnob1,
+        mixKnob1,
+        dynamicKnob1,
+    
+        driveKnob2,
+        outputKnob2,
+        mixKnob2,
+        dynamicKnob2,
+        
+        driveKnob3,
+        outputKnob3,
+        mixKnob3,
+        dynamicKnob3,
+        
+        driveKnob4,
+        outputKnob4,
+        mixKnob4,
+        dynamicKnob4,
+    
         recKnob,
-        mixKnob,
+        downSampleKnob,
         cutoffKnob,
         resKnob,
         colorKnob,
@@ -89,6 +109,7 @@ private:
     juce::Label
         hqLabel,
         driveLabel,
+        dynamicLabel,
         downSampleLabel,
         outputLabel,
         recLabel,
@@ -146,11 +167,28 @@ private:
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         //inputAttachment,
-        driveAttachment,
+        driveAttachment1,
+        driveAttachment2,
+        driveAttachment3,
+        driveAttachment4,
+    
+        outputAttachment1,
+        outputAttachment2,
+        outputAttachment3,
+        outputAttachment4,
+    
+        mixAttachment1,
+        mixAttachment2,
+        mixAttachment3,
+        mixAttachment4,
+    
+        dynamicAttachment1,
+        dynamicAttachment2,
+        dynamicAttachment3,
+        dynamicAttachment4,
+    
         downSampleAttachment,
         recAttachment,
-        outputAttachment,
-        mixAttachment,
         cutoffAttachment,
         resAttachment,
         colorAttachment,

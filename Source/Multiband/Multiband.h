@@ -34,6 +34,7 @@ public:
     
     void getFocusArray(bool (&input)[4]);
     void getStateArray(bool (&input)[4]);
+    void getFreqArray(int (&input)[3]);
     
 private:
     

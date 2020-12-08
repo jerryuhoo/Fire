@@ -350,3 +350,11 @@ void Multiband::getStateArray(bool (&input)[4])
         input[i] = enableButton[i]->getState();
     }
 }
+
+void Multiband::getFreqArray(int (&input)[3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        input[i] = frequency[i];
+    }
+}

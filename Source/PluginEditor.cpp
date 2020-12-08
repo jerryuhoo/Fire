@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "0.784"
+#define VERSION "[Early Beta] 0.785"
 #define PART1 getHeight() / 10
 #define PART2 PART1 * 3
 
@@ -74,19 +74,88 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     setLookAndFeel(&otherLookAndFeel);
 
-    // drive knob
-    addAndMakeVisible(driveKnob);
-    driveKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    driveKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
-    driveKnob.addListener(this);
+    // drive knob 1
+    addAndMakeVisible(driveKnob1);
+    driveKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    driveKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    driveKnob1.addListener(this);
+    
+    addAndMakeVisible(driveKnob2);
+    driveKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    driveKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    driveKnob2.addListener(this);
+    
+    addAndMakeVisible(driveKnob3);
+    driveKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    driveKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    driveKnob3.addListener(this);
+    
+    addAndMakeVisible(driveKnob4);
+    driveKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    driveKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    driveKnob4.addListener(this);
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", juce::dontSendNotification);
     driveLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     driveLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    driveLabel.attachToComponent(&driveKnob, false);
+    driveLabel.attachToComponent(&driveKnob1, false);
     driveLabel.setJustificationType(juce::Justification::centred);
 
+    
+    // output knob
+    addAndMakeVisible(outputKnob1);
+    outputKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    outputKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    outputKnob1.addListener(this);
+
+    addAndMakeVisible(outputKnob2);
+    outputKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    outputKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    outputKnob2.addListener(this);
+    
+    addAndMakeVisible(outputKnob3);
+    outputKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    outputKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    outputKnob3.addListener(this);
+    
+    addAndMakeVisible(outputKnob4);
+    outputKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    outputKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    outputKnob4.addListener(this);
+    
+    addAndMakeVisible(outputLabel);
+    outputLabel.setText("Output", juce::dontSendNotification);
+    outputLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    outputLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    outputLabel.attachToComponent(&outputKnob1, false);
+    outputLabel.setJustificationType(juce::Justification::centred);
+    
+    // mix knob
+    addAndMakeVisible(mixKnob1);
+    mixKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    mixKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    
+    addAndMakeVisible(mixKnob2);
+    mixKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    mixKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    
+    addAndMakeVisible(mixKnob3);
+    mixKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    mixKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+    
+    addAndMakeVisible(mixKnob4);
+    mixKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    mixKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
+
+    addAndMakeVisible(mixLabel);
+    mixLabel.setText("Mix", juce::dontSendNotification);
+    mixLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    mixLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    mixLabel.attachToComponent(&mixKnob1, false);
+    mixLabel.setJustificationType(juce::Justification::centred);
+    
+    
     // color knob
     addAndMakeVisible(colorKnob);
     colorKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -123,18 +192,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
-    // output knob
-    addAndMakeVisible(outputKnob);
-    outputKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
-    outputKnob.addListener(this);
-
-    addAndMakeVisible(outputLabel);
-    outputLabel.setText("Output", juce::dontSendNotification);
-    outputLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    outputLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    outputLabel.attachToComponent(&outputKnob, false);
-    outputLabel.setJustificationType(juce::Justification::centred);
+    
 
     // rec knob
     addAndMakeVisible(recKnob);
@@ -148,17 +206,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     recLabel.attachToComponent(&recKnob, false);
     recLabel.setJustificationType(juce::Justification::centred);
 
-    // mix knob
-    addAndMakeVisible(mixKnob);
-    mixKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 30);
-
-    addAndMakeVisible(mixLabel);
-    mixLabel.setText("Mix", juce::dontSendNotification);
-    mixLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    mixLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    mixLabel.attachToComponent(&mixKnob, false);
-    mixLabel.setJustificationType(juce::Justification::centred);
+    
 
     // cutoff knob
     addAndMakeVisible(cutoffKnob);
@@ -353,13 +401,32 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     // Attachment
     //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
-    driveAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive", driveKnob);
+    driveAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive1", driveKnob1);
+    driveAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive2", driveKnob2);
+    driveAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive3", driveKnob3);
+    driveAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "drive4", driveKnob4);
+    
+    dynamicAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "dynamic1", dynamicKnob1);
+    dynamicAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "dynamic2", dynamicKnob2);
+    dynamicAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "dynamic3", dynamicKnob3);
+    dynamicAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "dynamic4", dynamicKnob4);
+    
+    outputAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "output1", outputKnob1);
+    outputAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "output2", outputKnob2);
+    outputAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "output3", outputKnob3);
+    outputAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "output4", outputKnob4);
+    
+    mixAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix1", mixKnob1);
+    mixAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix2", mixKnob2);
+    mixAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix3", mixKnob3);
+    mixAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix4", mixKnob4);
+    
     colorAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "color", colorKnob);
     biasAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "bias", biasKnob);
     downSampleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "downSample", downSampleKnob);
     recAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "rec", recKnob);
-    outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "outputGain", outputKnob);
-    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "mix", mixKnob);
+    
+    
     cutoffAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "cutoff", cutoffKnob);
     resAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "res", resKnob);
 
@@ -389,6 +456,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     multiStateSlider3.setValue(multibandState[2]);
     multiStateSlider4.setValue(multibandState[3]);
     
+    multiband.getFreqArray(multibandFreq);
+    multiFreqSlider1.setValue(multibandFreq[0]);
+    multiFreqSlider2.setValue(multibandFreq[1]);
+    multiFreqSlider3.setValue(multibandFreq[2]);
+    
     multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus1", multiFocusSlider1);
     multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus2", multiFocusSlider2);
     multiFocusAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandFocus3", multiFocusSlider3);
@@ -398,6 +470,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     multiStateAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState2", multiStateSlider2);
     multiStateAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState3", multiStateSlider3);
     multiStateAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "multibandState4", multiStateSlider4);
+    
+    multiFreqAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "freq1", multiFreqSlider1);
+    multiFreqAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "freq2", multiFreqSlider2);
+    multiFreqAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "freq3", multiFreqSlider3);
     
     // Distortion mode select
     addAndMakeVisible(distortionMode);
@@ -490,7 +566,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 {
     int part1 = PART1;//getHeight() / 10;
     int part2 = PART2;//part1 * 3;
-
+    
     // background
     g.fillAll(COLOUR7);
 
@@ -501,8 +577,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     // draw version
     g.setColour(COLOUR5);
     g.setFont(juce::Font("Times New Roman", 18.0f, juce::Font::bold));
-    juce::String version = (juce::String) "Ver. " + (juce::String)VERSION;
-    juce::Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
+    juce::String version = (juce::String)VERSION;
+    juce::Rectangle<int> area(getWidth() - 150, getHeight() - 25, 150, 50);
     g.drawFittedText(version, area, juce::Justification::topLeft, 1);
 
     // set logo "Fire"
@@ -522,7 +598,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     float drive = processor.getNewDrive();
     float color = *processor.treeState.getRawParameterValue("color");
     float rec = *processor.treeState.getRawParameterValue("rec");
-    float mix = *processor.treeState.getRawParameterValue("mix");
+    float mix = *processor.treeState.getRawParameterValue("mix1");
     float bias = *processor.treeState.getRawParameterValue("bias");
     float rateDivide = *processor.treeState.getRawParameterValue("downSample");
     
@@ -566,7 +642,118 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
         spectrum.setVisible(true);
         multiband.setVisible(true);
-
+        
+        
+        // temporary, just for testing
+        multiband.getFocusArray(multibandFocus);
+        multiFocusSlider1.setValue(multibandFocus[0]);
+        multiFocusSlider2.setValue(multibandFocus[1]);
+        multiFocusSlider3.setValue(multibandFocus[2]);
+        multiFocusSlider4.setValue(multibandFocus[3]);
+        
+        multiband.getStateArray(multibandState);
+        multiStateSlider1.setValue(multibandState[0]);
+        multiStateSlider2.setValue(multibandState[1]);
+        multiStateSlider3.setValue(multibandState[2]);
+        multiStateSlider4.setValue(multibandState[3]);
+        
+        multiband.getFreqArray(multibandFreq);
+        multiFreqSlider1.setValue(multibandFreq[0]);
+        multiFreqSlider2.setValue(multibandFreq[1]);
+        multiFreqSlider3.setValue(multibandFreq[2]);
+        
+        if (multibandFocus[0])
+        {
+            driveKnob1.setVisible(true);
+            driveKnob2.setVisible(false);
+            driveKnob3.setVisible(false);
+            driveKnob4.setVisible(false);
+            
+            dynamicKnob1.setVisible(true);
+            dynamicKnob2.setVisible(false);
+            dynamicKnob3.setVisible(false);
+            dynamicKnob4.setVisible(false);
+            
+            outputKnob1.setVisible(true);
+            outputKnob2.setVisible(false);
+            outputKnob3.setVisible(false);
+            outputKnob4.setVisible(false);
+            
+            mixKnob1.setVisible(true);
+            mixKnob2.setVisible(false);
+            mixKnob3.setVisible(false);
+            mixKnob4.setVisible(false);
+        }
+        else if (multibandFocus[1])
+        {
+            driveKnob1.setVisible(false);
+            driveKnob2.setVisible(true);
+            driveKnob3.setVisible(false);
+            driveKnob4.setVisible(false);
+            
+            dynamicKnob1.setVisible(false);
+            dynamicKnob2.setVisible(true);
+            dynamicKnob3.setVisible(false);
+            dynamicKnob4.setVisible(false);
+            
+            outputKnob1.setVisible(false);
+            outputKnob2.setVisible(true);
+            outputKnob3.setVisible(false);
+            outputKnob4.setVisible(false);
+            
+            mixKnob1.setVisible(false);
+            mixKnob2.setVisible(true);
+            mixKnob3.setVisible(false);
+            mixKnob4.setVisible(false);
+        }
+        else if (multibandFocus[2])
+        {
+            driveKnob1.setVisible(false);
+            driveKnob2.setVisible(false);
+            driveKnob3.setVisible(true);
+            driveKnob4.setVisible(false);
+            
+            dynamicKnob1.setVisible(false);
+            dynamicKnob2.setVisible(false);
+            dynamicKnob3.setVisible(true);
+            dynamicKnob4.setVisible(false);
+            
+            outputKnob1.setVisible(false);
+            outputKnob2.setVisible(false);
+            outputKnob3.setVisible(true);
+            outputKnob4.setVisible(false);
+            
+            mixKnob1.setVisible(false);
+            mixKnob2.setVisible(false);
+            mixKnob3.setVisible(true);
+            mixKnob4.setVisible(false);
+        }
+        else if (multibandFocus[3])
+        {
+            driveKnob1.setVisible(false);
+            driveKnob2.setVisible(false);
+            driveKnob3.setVisible(false);
+            driveKnob4.setVisible(true);
+            
+            dynamicKnob1.setVisible(false);
+            dynamicKnob2.setVisible(false);
+            dynamicKnob3.setVisible(false);
+            dynamicKnob4.setVisible(true);
+            
+            outputKnob1.setVisible(false);
+            outputKnob2.setVisible(false);
+            outputKnob3.setVisible(false);
+            outputKnob4.setVisible(true);
+            
+            mixKnob1.setVisible(false);
+            mixKnob2.setVisible(false);
+            mixKnob3.setVisible(false);
+            mixKnob4.setVisible(true);
+        }
+        driveLabel.setVisible(true);
+        outputLabel.setVisible(true);
+        mixLabel.setVisible(true);
+        
     }
 
     // draw shadow 1
@@ -587,12 +774,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     //g.fillRect(cutoffKnob.getX(), cutoffKnob.getY(), cutoffKnob.getWidth(), cutoffKnob.getHeight());
     
     
-    // temporary, just for testing
-    multiband.getFocusArray(multibandFocus);
-    multiFocusSlider1.setValue(multibandFocus[0]);
-    multiFocusSlider2.setValue(multibandFocus[1]);
-    multiFocusSlider3.setValue(multibandFocus[2]);
-    multiFocusSlider4.setValue(multibandFocus[3]);
+    
     
     
 }
@@ -623,18 +805,29 @@ void FireAudioProcessorEditor::resized()
 
     // first line
     // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
-    driveKnob.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    driveKnob1.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    driveKnob2.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    driveKnob3.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    driveKnob4.setBounds(startX * 1 - newKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize * 2, newKnobSize * 2);
+    
     //colorKnob.setBounds(startX * 1 + newKnobSize * 1.2, secondLineY, newKnobSize, newKnobSize);
     downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
     recKnob.setBounds(startX * 4 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
     colorKnob.setBounds(startX * 5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
     biasKnob.setBounds(startX * 6 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    outputKnob.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    
+    outputKnob1.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    outputKnob2.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    outputKnob3.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    outputKnob4.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
 
     // second line
     cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
     resKnob.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    mixKnob.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    mixKnob1.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    mixKnob2.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    mixKnob3.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    mixKnob4.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
 
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
@@ -731,18 +924,18 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
     //    float changeThresh = 3.f;
     if (linkedButton.getToggleState() == true)
     {
-        if (slider == &driveKnob)
+        if (slider == &driveKnob1)
         {
-            outputKnob.setValue(-driveKnob.getValue() * 0.1);
+            outputKnob1.setValue(-driveKnob1.getValue() * 0.1);
         }
-        else if (slider == &outputKnob && driveKnob.isEnabled())
+        else if (slider == &outputKnob1 && driveKnob1.isEnabled())
         {
-            if (outputKnob.getValue() <= 0 && outputKnob.getValue() >= -10)
-                driveKnob.setValue(-outputKnob.getValue() * 10);
-            else if (outputKnob.getValue() > 0)
-                driveKnob.setValue(0);
-            else if (outputKnob.getValue() < -10)
-                driveKnob.setValue(100);
+            if (outputKnob1.getValue() <= 0 && outputKnob1.getValue() >= -10)
+                driveKnob1.setValue(-outputKnob1.getValue() * 10);
+            else if (outputKnob1.getValue() > 0)
+                driveKnob1.setValue(0);
+            else if (outputKnob1.getValue() < -10)
+                driveKnob1.setValue(100);
         }
     }
 }
@@ -754,17 +947,17 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
         // set drive knob
         if (*processor.treeState.getRawParameterValue("mode") == 0)
         {
-            tempDriveValue = driveKnob.getValue();
-            driveKnob.setValue(1);
-            driveKnob.setEnabled(false);
+            tempDriveValue = driveKnob1.getValue();
+            driveKnob1.setValue(1);
+            driveKnob1.setEnabled(false);
         }
         else
         {
-            if (driveKnob.getValue() == 1)
+            if (driveKnob1.getValue() == 1)
             {
-                driveKnob.setValue(tempDriveValue);
+                driveKnob1.setValue(tempDriveValue);
             }
-            driveKnob.setEnabled(true);
+            driveKnob1.setEnabled(true);
         }
 
         // set bias knob

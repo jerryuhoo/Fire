@@ -219,5 +219,9 @@ private:
     bool multibandFocus3 = false;
     bool multibandFocus4 = false;
     
+    
+    // mid-side width
+    juce::AudioBuffer<float> midSideBuffer;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

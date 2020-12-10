@@ -117,7 +117,7 @@ void Multiband::paint (juce::Graphics& g)
             g.setColour(juce::Colours::black.withAlpha(0.8f));
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
-        if (multibandFocus[0])
+        if (lineNum > 0 && multibandFocus[0])
         {
             g.setColour(juce::Colours::red.withAlpha(0.1f));
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
@@ -129,7 +129,7 @@ void Multiband::paint (juce::Graphics& g)
                 g.setColour(juce::Colours::black.withAlpha(0.8f));
                 g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
             }
-            if (multibandFocus[i])
+            if (lineNum > 1 && multibandFocus[i])
             {
                 g.setColour(juce::Colours::red.withAlpha(0.1f));
                 g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
@@ -140,7 +140,7 @@ void Multiband::paint (juce::Graphics& g)
             g.setColour(juce::Colours::black.withAlpha(0.8f));
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
-        if (multibandFocus[lineNum - 1])
+        if (lineNum > 0 && multibandFocus[lineNum])
         {
             g.setColour(juce::Colours::red.withAlpha(0.1f));
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
@@ -322,11 +322,11 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
             multibandFocus[num - 1] = true;
         }
         
-        for (int i = 0; i < num; i++) {
-            if (multibandFocus[i]) {
+//        for (int i = 0; i < num; i++) {
+//            if (multibandFocus[i]) {
 //                DBG(i);
-            }
-        }
+//            }
+//        }
     }
 }
 

@@ -42,6 +42,9 @@ void DistortionGraph::paint (juce::Graphics& g)
 
     auto frameRight = getLocalBounds();
     
+    g.setColour(COLOUR6);
+    g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 25);
+    
     if (mode < 9)
     {
         const int numPix = frameRight.getWidth(); // you might experiment here, if you want less steps to speed up
@@ -128,7 +131,7 @@ void DistortionGraph::paint (juce::Graphics& g)
         int colour_b = 63;
 
         juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
-                                  COLOUR6, frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
+                                  juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
         g.setGradientFill(grad);
         g.strokePath(p, juce::PathStrokeType(2.0));
     }

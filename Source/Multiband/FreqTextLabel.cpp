@@ -10,7 +10,6 @@
 
 #include <JuceHeader.h>
 #include "FreqTextLabel.h"
-#include "../LookAndFeel.h"
 
 //==============================================================================
 FreqTextLabel::FreqTextLabel(VerticalLine &v) : verticalLine(v)

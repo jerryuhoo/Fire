@@ -13,7 +13,7 @@
 #define STATE_H_INCLUDED
 
 #include <JuceHeader.h>
-#include "LookAndFeel.h"
+#include "GUI/LookAndFeel.h"
 
 namespace state
 {

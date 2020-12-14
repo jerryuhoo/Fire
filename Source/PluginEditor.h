@@ -12,10 +12,12 @@
 
 #include <JuceHeader.h>
 #include "DSP/Distortion.h"
-#include "LookAndFeel.h"
+#include "GUI/LookAndFeel.h"
 #include "Graph Components/Oscilloscope.h"
 #include "Graph Components/DistortionGraph.h"
+#include "Graph Components/WidthGraph.h"
 #include "Multiband/Multiband.h"
+#include "GUI/InterfaceDefines.h"
 
 //==============================================================================
 /**
@@ -46,6 +48,9 @@ private:
     
     // Distortion graph
     DistortionGraph distortionGraph;
+    
+    // Width graph
+    WidthGraph widthGraph;
     
     // Multiband
     Multiband multiband;
@@ -78,21 +83,25 @@ private:
         outputKnob1,
         mixKnob1,
         dynamicKnob1,
+        widthKnob1,
     
         driveKnob2,
         outputKnob2,
         mixKnob2,
         dynamicKnob2,
-        
+        widthKnob2,
+    
         driveKnob3,
         outputKnob3,
         mixKnob3,
         dynamicKnob3,
-        
+        widthKnob3,
+    
         driveKnob4,
         outputKnob4,
         mixKnob4,
         dynamicKnob4,
+        widthKnob4,
     
         recKnob,
         downSampleKnob,
@@ -101,7 +110,7 @@ private:
         colorKnob,
         biasKnob;
     
-    int knobSize = 100;
+    int knobSize = KNOBSIZE;
     float tempDriveValue = 1;
     float tempBiasValue = 0;
 
@@ -110,6 +119,7 @@ private:
         hqLabel,
         driveLabel,
         dynamicLabel,
+        widthLabel,
         downSampleLabel,
         outputLabel,
         recLabel,
@@ -129,8 +139,14 @@ private:
     // Buttons
     juce::TextButton
         hqButton,
-        linkedButton,
-        safeButton,
+        linkedButton1,
+        linkedButton2,
+        linkedButton3,
+        linkedButton4,
+        safeButton1,
+        safeButton2,
+        safeButton3,
+        safeButton4,
         filterOffButton,
         filterPreButton,
         filterPostButton,
@@ -152,10 +168,6 @@ private:
     };
 
     void updateToggleState();
-    //void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
-    
-    void updateWindowState();
-    
     
 
     // override listener functions
@@ -181,11 +193,16 @@ private:
         mixAttachment2,
         mixAttachment3,
         mixAttachment4,
-    
+
         dynamicAttachment1,
         dynamicAttachment2,
         dynamicAttachment3,
         dynamicAttachment4,
+    
+        widthAttachment1,
+        widthAttachment2,
+        widthAttachment3,
+        widthAttachment4,
     
         downSampleAttachment,
         recAttachment,
@@ -197,8 +214,14 @@ private:
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
-        linkedAttachment,
-        safeAttachment,
+        linkedAttachment1,
+        linkedAttachment2,
+        linkedAttachment3,
+        linkedAttachment4,
+        safeAttachment1,
+        safeAttachment2,
+        safeAttachment3,
+        safeAttachment4,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,
@@ -209,8 +232,8 @@ private:
         windowRightButtonAttachment;
 
     // ComboBox attachment
-    juce::ComboBox distortionMode;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
+    juce::ComboBox distortionMode1;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

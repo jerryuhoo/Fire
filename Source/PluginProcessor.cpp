@@ -125,19 +125,19 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
     //previousGainInput = Decibels::decibelsToGain(previousGainInput);
 
-    previousGainOutput = (float)*treeState.getRawParameterValue("output1");
-    previousGainOutput = juce::Decibels::decibelsToGain(previousGainOutput);
-    previousDrive = *treeState.getRawParameterValue("drive1");
-    previousCutoff = (float)*treeState.getRawParameterValue("cutoff");
-    previousColor = (float)*treeState.getRawParameterValue("color");
-    previousMix = (float)*treeState.getRawParameterValue("mix1");
-    newDrive = 0;
+    previousOutput1 = (float)*treeState.getRawParameterValue(OUTPUT_ID1);
+    previousOutput1 = juce::Decibels::decibelsToGain(previousOutput1);
+    previousDrive1 = *treeState.getRawParameterValue(DRIVE_ID1);
+    previousCutoff = (float)*treeState.getRawParameterValue(CUTOFF_ID);
+    previousColor = (float)*treeState.getRawParameterValue(COLOR_ID);
+    previousMix1 = (float)*treeState.getRawParameterValue(MIX_ID1);
+    newDrive1 = 0;
 
-    driveSmoother.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
-    driveSmoother.setCurrentAndTargetValue(previousDrive);
+    driveSmoother1.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
+    driveSmoother1.setCurrentAndTargetValue(previousDrive1);
 
-    outputSmoother.reset(sampleRate, 0.05);
-    outputSmoother.setCurrentAndTargetValue(previousGainOutput);
+    outputSmoother1.reset(sampleRate, 0.05);
+    outputSmoother1.setCurrentAndTargetValue(previousOutput1);
 
     cutoffSmoother.reset(sampleRate, 0.001);
     cutoffSmoother.setCurrentAndTargetValue(previousCutoff);
@@ -151,8 +151,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     colorSmoother.reset(sampleRate, 0.001);
     colorSmoother.setCurrentAndTargetValue(previousColor);
 
-    mixSmoother.reset(sampleRate, 0.05);
-    mixSmoother.setCurrentAndTargetValue(previousMix);
+    mixSmoother1.reset(sampleRate, 0.05);
+    mixSmoother1.setCurrentAndTargetValue(previousMix1);
 
     centralSmoother.reset(sampleRate, 0.1);
     centralSmoother.setCurrentAndTargetValue(0);
@@ -312,20 +312,20 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     inputMeterSource.measureBlock(buffer);
 
     // get parameters from sliders
-    int mode = *treeState.getRawParameterValue("mode");
+    int mode = *treeState.getRawParameterValue(MODE_ID1);
 
     //float currentGainInput = *treeState.getRawParameterValue("inputGain");
     //currentGainInput = Decibels::decibelsToGain(currentGainInput);
 
-    float drive = *treeState.getRawParameterValue("drive1");
+    float drive = *treeState.getRawParameterValue(DRIVE_ID1);
 
-    float color = *treeState.getRawParameterValue("color");
+    float color = *treeState.getRawParameterValue(COLOR_ID);
 
-    float currentGainOutput = *treeState.getRawParameterValue("output1");
+    float currentGainOutput = *treeState.getRawParameterValue(OUTPUT_ID1);
     currentGainOutput = juce::Decibels::decibelsToGain(currentGainOutput);
 
-    float mix = *treeState.getRawParameterValue("mix1");
-    float bias = *treeState.getRawParameterValue("bias");
+    float mix = *treeState.getRawParameterValue(MIX_ID1);
+    float bias = *treeState.getRawParameterValue(BIAS_ID);
 
     // set distortion processor parameters
     distortionProcessor.controls.mode = mode;
@@ -360,7 +360,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
     sampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
 
-    distortionProcessor.controls.protection = *treeState.getRawParameterValue("safe");
+    distortionProcessor.controls.protection = *treeState.getRawParameterValue(SAFE_ID1);
 
     if (distortionProcessor.controls.protection == true)
     {
@@ -369,12 +369,12 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
         }
     }
-    newDrive = drive;
+    newDrive1 = drive;
 
     // set zipper noise smoother target
-    driveSmoother.setTargetValue(drive);
-    outputSmoother.setTargetValue(currentGainOutput);
-    mixSmoother.setTargetValue(mix);
+    driveSmoother1.setTargetValue(drive);
+    outputSmoother1.setTargetValue(currentGainOutput);
+    mixSmoother1.setTargetValue(mix);
     colorSmoother.setTargetValue(color);
     biasSmoother.setTargetValue(bias * juce::roundToInt(sampleMaxValue * 100) / 100.f);
 
@@ -400,9 +400,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // multiband process
-    int freqValue1 = *treeState.getRawParameterValue("freq1");
-    int freqValue2 = *treeState.getRawParameterValue("freq2");
-    int freqValue3 = *treeState.getRawParameterValue("freq3");
+    int freqValue1 = *treeState.getRawParameterValue(FREQ_ID1);
+    int freqValue2 = *treeState.getRawParameterValue(FREQ_ID2);
+    int freqValue3 = *treeState.getRawParameterValue(FREQ_ID3);
 
     auto numSamples  = buffer.getNumSamples();
     mBuffer1.makeCopyOf(buffer);
@@ -411,15 +411,15 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     mBuffer4.makeCopyOf(buffer);
     
     // test
-    multibandState1 = *treeState.getRawParameterValue("multibandState1");
-    multibandState2 = *treeState.getRawParameterValue("multibandState2");
-    multibandState3 = *treeState.getRawParameterValue("multibandState3");
-    multibandState4 = *treeState.getRawParameterValue("multibandState4");
+    multibandState1 = *treeState.getRawParameterValue(BAND_STATE_ID1);
+    multibandState2 = *treeState.getRawParameterValue(BAND_STATE_ID2);
+    multibandState3 = *treeState.getRawParameterValue(BAND_STATE_ID3);
+    multibandState4 = *treeState.getRawParameterValue(BAND_STATE_ID4);
     
-    multibandFocus1 = *treeState.getRawParameterValue("multibandFocus1");
-    multibandFocus2 = *treeState.getRawParameterValue("multibandFocus2");
-    multibandFocus3 = *treeState.getRawParameterValue("multibandFocus3");
-    multibandFocus4 = *treeState.getRawParameterValue("multibandFocus4");
+    multibandFocus1 = *treeState.getRawParameterValue(BAND_FOCUS_ID1);
+    multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
+    multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
+    multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
     
     
     
@@ -487,7 +487,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
     
     // pre-filter
-    bool preButton = *treeState.getRawParameterValue("pre");
+    bool preButton = *treeState.getRawParameterValue(PRE_ID);
     if (preButton)
     {
         juce::dsp::AudioBlock<float> block(buffer);
@@ -522,7 +522,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     juce::dsp::AudioBlock<float> blockOutput;
     // oversampling
 
-    if (*treeState.getRawParameterValue("hq"))
+    if (*treeState.getRawParameterValue(HQ_ID))
     {
         blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
         blockOutput = oversamplingHQ->processSamplesUp(blockInput);
@@ -564,17 +564,17 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
                 distortionProcessor.controls.bias = 0;
             }
 
-            inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
+            inputTemp.add(channelData[sample] * driveSmoother1.getNextValue());
             // distortion
             if (mode < 9)
             {
                 if (multibandFocus1) // 2020/12/6
                 {
-                    distortionProcessor.controls.drive = driveSmoother.getNextValue();
+                    distortionProcessor.controls.drive = driveSmoother1.getNextValue();
                 }
                 else
                 {
-                    distortionProcessor.controls.drive = driveSmoother.getNextValue(); // just for testing
+                    distortionProcessor.controls.drive = driveSmoother1.getNextValue(); // just for testing
                 }
                 
                 
@@ -612,7 +612,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // oversampling
-    if (*treeState.getRawParameterValue("hq")) // oversampling
+    if (*treeState.getRawParameterValue(HQ_ID)) // oversampling
     {
         oversamplingHQ->processSamplesDown(blockInput);
     }
@@ -661,7 +661,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             }
 
             // output control
-            channelData[sample] *= outputSmoother.getNextValue();
+            channelData[sample] *= outputSmoother1.getNextValue();
         }
     }
 
@@ -671,7 +671,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         auto *channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            int rateDivide = *treeState.getRawParameterValue("downSample");
+            int rateDivide = *treeState.getRawParameterValue(DOWNSAMPLE_ID);
             //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
             if (rateDivide > 1)
             {
@@ -737,7 +737,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
     
     //post-filter
-    bool postButton = *treeState.getRawParameterValue("post");
+    bool postButton = *treeState.getRawParameterValue(POST_ID);
     if (postButton)
     {
         juce::dsp::AudioBlock<float> block(buffer);
@@ -755,7 +755,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            float smoothMixValue = mixSmoother.getNextValue();
+            float smoothMixValue = mixSmoother1.getNextValue();
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
             //channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
             channelData[sample] = (1.f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
@@ -876,7 +876,7 @@ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 // Rectification selection
 void FireAudioProcessor::updateRectification()
 {
-    float rec = *treeState.getRawParameterValue("rec");
+    float rec = *treeState.getRawParameterValue(REC_ID);
     recSmoother.setTargetValue(rec);
     distortionProcessor.controls.rectification = recSmoother.getNextValue();
 }
@@ -884,12 +884,12 @@ void FireAudioProcessor::updateRectification()
 // Filter selection
 void FireAudioProcessor::updateFilter()
 {
-    float cutoff = *treeState.getRawParameterValue("cutoff");
-    float res = *treeState.getRawParameterValue("res");
-    bool lowButton = *treeState.getRawParameterValue("low");
-    bool bandButton = *treeState.getRawParameterValue("band");
-    bool highButton = *treeState.getRawParameterValue("high");
-    float color = *treeState.getRawParameterValue("color");
+    float cutoff = *treeState.getRawParameterValue(CUTOFF_ID);
+    float res = *treeState.getRawParameterValue(RES_ID);
+    bool lowButton = *treeState.getRawParameterValue(LOW_ID);
+    bool bandButton = *treeState.getRawParameterValue(BAND_ID);
+    bool highButton = *treeState.getRawParameterValue(HIGH_ID);
+    float color = *treeState.getRawParameterValue(COLOR_ID);
     float centreFreqSausage;
 
     colorSmoother.setTargetValue(color);
@@ -935,7 +935,7 @@ bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
 
 float FireAudioProcessor::getNewDrive()
 {
-    return newDrive;
+    return newDrive1;
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayL()
@@ -973,65 +973,86 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameters;
 
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("mode", "Mode", 0, 9, 1));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("hq", "Hq", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("linked", "Linked", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("safe", "Safe", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(HQ_ID, HQ_NAME, false));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID1, MODE_NAME1, 0, 9, 1));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID2, MODE_NAME2, 0, 9, 1));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID3, MODE_NAME3, 0, 9, 1));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID4, MODE_NAME4, 0, 9, 1));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID1, LINKED_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID2, LINKED_NAME2, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID3, LINKED_NAME3, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID4, LINKED_NAME4, true));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID1, SAFE_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID2, SAFE_NAME2, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID3, SAFE_NAME3, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID4, SAFE_NAME4, true));
 
-    //parameters.push_back(std::make_unique<AudioParameterFloat>("inputGain", "InputGain", NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive1", "Drive1", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive2", "Drive2", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive3", "Drive3", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("drive4", "Drive4", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID1, DRIVE_NAME1, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID2, DRIVE_NAME2, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID3, DRIVE_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID4, DRIVE_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic1", "Dynamic1", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic2", "Dynamic2", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic3", "Dynamic3", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("dynamic4", "Dynamic4", juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID1, DYNAMIC_NAME1, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID2, DYNAMIC_NAME2, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID3, DYNAMIC_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID4, DYNAMIC_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output1", "Output1", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output2", "Output2", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output3", "Output3", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("output4", "Output4", juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID1, WIDTH_NAME1, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID2, WIDTH_NAME2, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID3, WIDTH_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID4, WIDTH_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix1", "Mix1", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix2", "Mix2", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix3", "Mix3", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("mix4", "Mix4", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID1, OUTPUT_NAME1, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID2, OUTPUT_NAME2, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID3, OUTPUT_NAME3, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID4, OUTPUT_NAME4, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("color", "Color", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("bias", "Bias", juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("downSample", "DownSample", juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("rec", "Rec", juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID1, MIX_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID2, MIX_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID3, MIX_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID4, MIX_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COLOR_ID, COLOR_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID, BIAS_NAME, juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DOWNSAMPLE_ID, DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID, REC_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.f);
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("cutoff", "Cutoff", cutoffRange, 20.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>("res", "Res", juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(CUTOFF_ID, CUTOFF_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(RES_ID, RES_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
 
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("off", "Off", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("pre", "Pre", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("post", "Post", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("low", "Low", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("band", "Band", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("high", "High", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowLeft", "WindowLeft", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("windowRight", "WindowRight", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(OFF_ID, OFF_NAME, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(PRE_ID, PRE_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(POST_ID, POST_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LOW_ID, LOW_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ID, BAND_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGH_ID, HIGH_NAME, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_LEFT_ID, WINDOW_LEFT_NAME, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_RIGHT_ID, WINDOW_RIGHT_NAME, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("lineNum", "LineNum", 0, 3, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq1", "Freq1", 0, 22100, 500));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq2", "Freq2", 0, 22100, 2000));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>("freq3", "Freq3", 0, 22100, 9000));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(LINENUM_ID, LINENUM_NAME, 0, 3, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID1, FREQ_NAME1, 0, 22100, 500));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID2, FREQ_NAME2, 0, 22100, 2000));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID3, FREQ_NAME3, 0, 22100, 9000));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState1", "MultibandState1", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState2", "MultibandState2", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState3", "MultibandState3", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandState4", "MultibandState4", true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID1, BAND_STATE_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID2, BAND_STATE_NAME2, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID3, BAND_STATE_NAME3, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID4, BAND_STATE_NAME4, true));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus1", "MultibandFocus1", true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus2", "MultibandFocus2", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus3", "MultibandFocus3", false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>("multibandFocus4", "MultibandFocus4", false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID1, BAND_SOLO_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, true));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID1, BAND_FOCUS_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID2, BAND_FOCUS_NAME2, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID3, BAND_FOCUS_NAME3, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID4, BAND_FOCUS_NAME4, false));
     
     return {parameters.begin(), parameters.end()};
 }

@@ -12,7 +12,7 @@
 
 #include <JuceHeader.h>
 #include "../DSP/Distortion.h"
-#include "../LookAndFeel.h"
+#include "../GUI/LookAndFeel.h"
 
 //==============================================================================
 /*

@@ -1,8 +1,8 @@
 /*
   ==============================================================================
 
-    FreqTextLabel.h
-    Created: 2 Dec 2020 7:53:08pm
+    WidthGraph.h
+    Created: 14 Dec 2020 3:40:40pm
     Author:  羽翼深蓝Wings
 
   ==============================================================================
@@ -11,25 +11,19 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "VerticalLine.h"
-#include "../GUI/LookAndFeel.h"
 
 //==============================================================================
 /*
 */
-class FreqTextLabel  : public juce::Component
+class WidthGraph  : public juce::Component
 {
 public:
-    FreqTextLabel(VerticalLine &v);
-    ~FreqTextLabel() override;
+    WidthGraph();
+    ~WidthGraph() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setFreq(int freq);
-    
+
 private:
-    VerticalLine &verticalLine;
-    int mFrequency;
-    bool mState;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqTextLabel)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
 };

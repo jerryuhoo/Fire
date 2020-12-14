@@ -2,11 +2,16 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.786" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.787" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
+      <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
+        <FILE id="rznrv4" name="InterfaceDefines.h" compile="0" resource="0"
+              file="Source/GUI/InterfaceDefines.h"/>
+        <FILE id="NKA4fO" name="LookAndFeel.h" compile="0" resource="0" file="Source/GUI/LookAndFeel.h"/>
+      </GROUP>
       <GROUP id="{43790AD2-FCF5-17E2-2CA5-275101E55D0C}" name="Multiband">
         <FILE id="dJCE91" name="CloseButton.cpp" compile="1" resource="0" file="Source/Multiband/CloseButton.cpp"/>
         <FILE id="IXiios" name="CloseButton.h" compile="0" resource="0" file="Source/Multiband/CloseButton.h"/>
@@ -37,6 +42,8 @@
         <FILE id="jojgh1" name="Oscilloscope.cpp" compile="1" resource="0"
               file="Source/Graph Components/Oscilloscope.cpp"/>
         <FILE id="Mqbfgf" name="Oscilloscope.h" compile="0" resource="0" file="Source/Graph Components/Oscilloscope.h"/>
+        <FILE id="raHNPE" name="WidthGraph.cpp" compile="1" resource="0" file="Source/Graph Components/WidthGraph.cpp"/>
+        <FILE id="ormPmn" name="WidthGraph.h" compile="0" resource="0" file="Source/Graph Components/WidthGraph.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
         <FILE id="fGPNaV" name="Delay.h" compile="0" resource="0" file="Source/DSP/Delay.h"/>
@@ -47,7 +54,6 @@
       </GROUP>
       <FILE id="LOpR42" name="Preset.cpp" compile="1" resource="0" file="Source/Preset.cpp"/>
       <FILE id="lhFpz1" name="Preset.h" compile="0" resource="0" file="Source/Preset.h"/>
-      <FILE id="QaLa2z" name="LookAndFeel.h" compile="0" resource="0" file="Source/LookAndFeel.h"/>
       <FILE id="txl2qK" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>
       <FILE id="h5OW4B" name="PluginProcessor.h" compile="0" resource="0"

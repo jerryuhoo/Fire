@@ -9,18 +9,7 @@
 */
 #pragma once
 
-#define COLOUR0 juce::Colour(244, 244, 210)
-#define COLOUR1 juce::Colour(244, 208, 63)
-#define COLOUR2 juce::Colour(243, 156, 18)
-#define COLOUR3 juce::Colour(230, 126, 34)
-#define COLOUR4 juce::Colour(211, 84, 0)
-#define COLOUR5 juce::Colour(192, 57, 43)
-#define COLOUR6 juce::Colour(45, 40, 40)
-#define COLOUR7 juce::Colour(15, 10, 10)
-
-#define KNOB_FONT "Futura"
-#define KNOB_FONT_SIZE 18.0f
-#define KNOB_FONT_COLOUR COLOUR1
+#include "InterfaceDefines.h"
 
 class OtherLookAndFeel : public juce::LookAndFeel_V4
 {

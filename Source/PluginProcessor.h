@@ -15,6 +15,7 @@
 #include "Preset.h"
 #include "DSP/Delay.h"
 #include "Multiband/FFTProcessor.h"
+#include "GUI/InterfaceDefines.h"
 
 //#define COLOUR1 Colour(244, 208, 63)
 //#define COLOUR6 Colour(45, 40, 40)
@@ -156,20 +157,20 @@ private:
 
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
-    float previousGainOutput;
-    float previousDrive;
+    float previousOutput1;
+    float previousDrive1;
     float previousColor;
     float previousCutoff;
-    float previousMix;
-    float newDrive;
+    float previousMix1;
+    float newDrive1;
 
-    juce::SmoothedValue<float> driveSmoother;
-    juce::SmoothedValue<float> outputSmoother;
+    juce::SmoothedValue<float> driveSmoother1;
+    juce::SmoothedValue<float> outputSmoother1;
     juce::SmoothedValue<float> colorSmoother;
     juce::SmoothedValue<float> cutoffSmoother;
     juce::SmoothedValue<float> recSmoother;
     juce::SmoothedValue<float> biasSmoother;
-    juce::SmoothedValue<float> mixSmoother;
+    juce::SmoothedValue<float> mixSmoother1;
     juce::SmoothedValue<float> centralSmoother;
     juce::SmoothedValue<float> normalSmoother;
 

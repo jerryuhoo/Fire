@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.787" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.788" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
@@ -51,6 +51,10 @@
         <FILE id="IKaGfi" name="Distortion.cpp" compile="1" resource="0" file="Source/DSP/Distortion.cpp"/>
         <FILE id="ZZw8w0" name="Distortion.h" compile="0" resource="0" file="Source/DSP/Distortion.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>
+        <FILE id="K65kzc" name="WidthProcessor.cpp" compile="1" resource="0"
+              file="Source/DSP/WidthProcessor.cpp"/>
+        <FILE id="e7b4uu" name="WidthProcessor.h" compile="0" resource="0"
+              file="Source/DSP/WidthProcessor.h"/>
       </GROUP>
       <FILE id="LOpR42" name="Preset.cpp" compile="1" resource="0" file="Source/Preset.cpp"/>
       <FILE id="lhFpz1" name="Preset.h" compile="0" resource="0" file="Source/Preset.h"/>

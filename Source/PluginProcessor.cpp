@@ -172,9 +172,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
 
-    // width buffer init
-    midSideBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock); // channel = 2? 0 = mid 1 = side?
-    midSideBuffer.clear();
     
     // oversampling init
     oversampling->reset();
@@ -430,6 +427,36 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         auto context1 = juce::dsp::ProcessContextReplacing<float> (multibandBlock1);
         lowpass1.setCutoffFrequency(freqValue1);
         lowpass1.process (context1);
+        
+        // dsp process
+        // width
+        /**
+        M = (L+R)/sqrt(2);   // obtain mid-signal from left and right
+        S = (L-R)/sqrt(2);   // obtain side-signal from left and right
+
+        // amplify mid and side signal seperately:
+        M *= 2*(1-width);
+        S *= 2*width;
+
+        L = (M+S)/sqrt(2);   // obtain left signal from mid and side
+        R = (M-S)/sqrt(2);   // obtain right signal from mid and side
+         
+         ======
+
+        mSignal = 0.5 * (left + right);
+        sSignal = left - right;
+
+        float pan; // [-1; +1]
+        left  = 0.5 * (1.0 + pan) * mSignal + sSignal;
+        right = 0.5 * (1.0 - pan) * mSignal - sSignal;
+        */
+        
+        auto* channeldataL = mBuffer1.getWritePointer(0);
+        auto* channeldataR = mBuffer1.getWritePointer(1);
+        float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
+        float pan = 0.f;
+
+        widthProcessor.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
     }
     
     if (multibandState2)
@@ -681,60 +708,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
-    // width
-    /**
-    M = (L+R)/sqrt(2);   // obtain mid-signal from left and right
-    S = (L-R)/sqrt(2);   // obtain side-signal from left and right
-
-    // amplify mid and side signal seperately:
-    M *= 2*(1-width);
-    S *= 2*width;
-
-    L = (M+S)/sqrt(2);   // obtain left signal from mid and side
-    R = (M-S)/sqrt(2);   // obtain right signal from mid and side
-     
-     ======
-
-    mSignal = 0.5 * (left + right);
-    sSignal = left - right;
-
-    float pan; // [-1; +1]
-    left  = 0.5 * (1.0 + pan) * mSignal + sSignal;
-    right = 0.5 * (1.0 - pan) * mSignal - sSignal;
-    */
     
-    auto* channeldataL = buffer.getWritePointer(0);
-    auto* channeldataR = buffer.getWritePointer(1);
-    auto* midBuffer = midSideBuffer.getWritePointer(0);
-    auto* sideBuffer = midSideBuffer.getWritePointer(1);
-    float width = 0.5f;
-    float pan = 0.f;
-    
-//    for (int i = 0; i < buffer.getNumSamples(); i++)
-//    {
-//
-//        midBuffer[i] = (channeldataL[i] + channeldataR[i]) * 0.5f;
-//        sideBuffer[i] = (channeldataL[i] - channeldataR[i]);
-//        midBuffer[i] *= 2 * (1 - width);
-//        sideBuffer[i] *= 2 * width;
-//        channeldataL[i] = (midBuffer[i] + sideBuffer[i]) / sqrt(2);
-//        channeldataR[i] = (midBuffer[i] - sideBuffer[i]) / sqrt(2);
-//
-//    }
-
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
-    {
-        float tmp = 1 / fmax(1 + width, 2);
-        float coef_M = 1 * tmp;
-        float coef_S = width * tmp;
-
-        float mid = (channeldataL[i] + channeldataR[i])*coef_M;
-        float sides = (channeldataR[i] - channeldataL[i])*coef_S;
-
-        channeldataL[i] = mid - sides;
-        channeldataR[i] = mid + sides;
-
-    }
     
     //post-filter
     bool postButton = *treeState.getRawParameterValue(POST_ID);
@@ -1000,10 +974,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID3, DYNAMIC_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID4, DYNAMIC_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID1, WIDTH_NAME1, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID2, WIDTH_NAME2, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID3, WIDTH_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID4, WIDTH_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 50.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID1, WIDTH_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID2, WIDTH_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID3, WIDTH_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID4, WIDTH_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
     
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID1, OUTPUT_NAME1, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID2, OUTPUT_NAME2, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));

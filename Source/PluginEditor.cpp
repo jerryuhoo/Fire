@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.787"
+#define VERSION "[Early Beta] 0.788"
 
 
 //==============================================================================
@@ -37,6 +37,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(multiband);
     
     spectrum.setInterceptsMouseClicks(false, false);
+    spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
     
     // presets
     addAndMakeVisible(stateComponent);
@@ -680,7 +681,13 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     outputMeter.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
     linkedButton1.setLookAndFeel(nullptr);
+    linkedButton2.setLookAndFeel(nullptr);
+    linkedButton3.setLookAndFeel(nullptr);
+    linkedButton4.setLookAndFeel(nullptr);
     safeButton1.setLookAndFeel(nullptr);
+    safeButton2.setLookAndFeel(nullptr);
+    safeButton3.setLookAndFeel(nullptr);
+    safeButton4.setLookAndFeel(nullptr);
     filterOffButton.setLookAndFeel(nullptr);
     filterPreButton.setLookAndFeel(nullptr);
     filterPostButton.setLookAndFeel(nullptr);

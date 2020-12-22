@@ -12,8 +12,9 @@
 
 #include <JuceHeader.h>
 #include "DSP/Distortion.h"
-#include "Preset.h"
 #include "DSP/Delay.h"
+#include "DSP/WidthProcessor.h"
+#include "Preset.h"
 #include "Multiband/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
 
@@ -174,8 +175,10 @@ private:
     juce::SmoothedValue<float> centralSmoother;
     juce::SmoothedValue<float> normalSmoother;
 
+    // DSP Processors
     Distortion distortionProcessor;
-
+    WidthProcessor widthProcessor;
+    
     // oversampling
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
@@ -221,8 +224,7 @@ private:
     bool multibandFocus4 = false;
     
     
-    // mid-side width
-    juce::AudioBuffer<float> midSideBuffer;
+    
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

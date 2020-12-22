@@ -127,10 +127,27 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     previousOutput1 = (float)*treeState.getRawParameterValue(OUTPUT_ID1);
     previousOutput1 = juce::Decibels::decibelsToGain(previousOutput1);
+    previousOutput2 = (float)*treeState.getRawParameterValue(OUTPUT_ID2);
+    previousOutput2 = juce::Decibels::decibelsToGain(previousOutput2);
+    previousOutput3 = (float)*treeState.getRawParameterValue(OUTPUT_ID3);
+    previousOutput3 = juce::Decibels::decibelsToGain(previousOutput3);
+    previousOutput4 = (float)*treeState.getRawParameterValue(OUTPUT_ID4);
+    previousOutput4 = juce::Decibels::decibelsToGain(previousOutput4);
+    
     previousDrive1 = *treeState.getRawParameterValue(DRIVE_ID1);
+    previousDrive2 = *treeState.getRawParameterValue(DRIVE_ID2);
+    previousDrive3 = *treeState.getRawParameterValue(DRIVE_ID3);
+    previousDrive4 = *treeState.getRawParameterValue(DRIVE_ID4);
+    
+    previousMix1 = (float)*treeState.getRawParameterValue(MIX_ID1);
+    previousMix2 = (float)*treeState.getRawParameterValue(MIX_ID2);
+    previousMix3 = (float)*treeState.getRawParameterValue(MIX_ID3);
+    previousMix4 = (float)*treeState.getRawParameterValue(MIX_ID4);
+    previousMix = (float)*treeState.getRawParameterValue(MIX_ID);
+    
     previousCutoff = (float)*treeState.getRawParameterValue(CUTOFF_ID);
     previousColor = (float)*treeState.getRawParameterValue(COLOR_ID);
-    previousMix1 = (float)*treeState.getRawParameterValue(MIX_ID1);
+    
     newDrive1 = 0;
 
     driveSmoother1.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
@@ -142,17 +159,37 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     cutoffSmoother.reset(sampleRate, 0.001);
     cutoffSmoother.setCurrentAndTargetValue(previousCutoff);
 
-    recSmoother.reset(sampleRate, 0.05);
-    recSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue("rec"));
+    recSmoother1.reset(sampleRate, 0.05);
+    recSmoother1.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID1));
+    recSmoother2.reset(sampleRate, 0.05);
+    recSmoother2.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID2));
+    recSmoother3.reset(sampleRate, 0.05);
+    recSmoother3.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID3));
+    recSmoother4.reset(sampleRate, 0.05);
+    recSmoother4.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID4));
 
-    biasSmoother.reset(sampleRate, 0.001);
-    biasSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue("bias"));
-
-    colorSmoother.reset(sampleRate, 0.001);
-    colorSmoother.setCurrentAndTargetValue(previousColor);
-
+    biasSmoother1.reset(sampleRate, 0.001);
+    biasSmoother1.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID1));
+    biasSmoother2.reset(sampleRate, 0.001);
+    biasSmoother2.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID2));
+    biasSmoother3.reset(sampleRate, 0.001);
+    biasSmoother3.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID3));
+    biasSmoother4.reset(sampleRate, 0.001);
+    biasSmoother4.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID4));
+    
     mixSmoother1.reset(sampleRate, 0.05);
     mixSmoother1.setCurrentAndTargetValue(previousMix1);
+    mixSmoother2.reset(sampleRate, 0.05);
+    mixSmoother2.setCurrentAndTargetValue(previousMix2);
+    mixSmoother3.reset(sampleRate, 0.05);
+    mixSmoother3.setCurrentAndTargetValue(previousMix3);
+    mixSmoother4.reset(sampleRate, 0.05);
+    mixSmoother4.setCurrentAndTargetValue(previousMix4);
+    mixSmootherGlobal.reset(sampleRate, 0.05);
+    mixSmootherGlobal.setCurrentAndTargetValue(previousMix);
+    
+    colorSmoother.reset(sampleRate, 0.001);
+    colorSmoother.setCurrentAndTargetValue(previousColor);
 
     centralSmoother.reset(sampleRate, 0.1);
     centralSmoother.setCurrentAndTargetValue(0);
@@ -160,8 +197,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     normalSmoother.reset(sampleRate, 0.5);
     normalSmoother.setCurrentAndTargetValue(1);
 
-    // clear visualiser
-    //visualiser.clear();
+    // historyArray init
     for (int i = 0; i < samplesPerBlock; i++)
     {
         historyArrayL.add(0);
@@ -172,7 +208,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
 
-    
     // oversampling init
     oversampling->reset();
     oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
@@ -180,7 +215,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     oversamplingHQ->initProcessing(static_cast<size_t>(samplesPerBlock));
     mDelay.reset(0);
     // dsp init
-    // dsp::ProcessSpec spec;
 
     //int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
 
@@ -226,7 +260,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
     inputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
     outputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
-    
     
     // multiband filters
     mBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
@@ -308,93 +341,18 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     // ff input meter
     inputMeterSource.measureBlock(buffer);
 
-    // get parameters from sliders
-    int mode = *treeState.getRawParameterValue(MODE_ID1);
-
-    //float currentGainInput = *treeState.getRawParameterValue("inputGain");
-    //currentGainInput = Decibels::decibelsToGain(currentGainInput);
-
-    float drive = *treeState.getRawParameterValue(DRIVE_ID1);
-
-    float color = *treeState.getRawParameterValue(COLOR_ID);
-
-    float currentGainOutput = *treeState.getRawParameterValue(OUTPUT_ID1);
-    currentGainOutput = juce::Decibels::decibelsToGain(currentGainOutput);
-
-    float mix = *treeState.getRawParameterValue(MIX_ID1);
-    float bias = *treeState.getRawParameterValue(BIAS_ID);
-
-    // set distortion processor parameters
-    distortionProcessor.controls.mode = mode;
-
-    // input volume fix
-    //    if (currentGainInput == previousGainInput)
-    //    {
-    //        buffer.applyGain(currentGainInput);
-    //    }
-    //    else
-    //    {
-    //        buffer.applyGainRamp(0, buffer.getNumSamples(), previousGainInput, currentGainInput);
-    //        previousGainInput = currentGainInput;
-    //    }
-
-    // sausage
-    //    if (mode == 6)
-    //    {
-    //        drive = (drive - 1) * 6.5 / 31.f;
-    //        drive = powf(2, drive);
-    //    }
-    drive = drive * 6.5 / 100.f;
-    drive = powf(2, drive);
-
-    // color eq filter
-    juce::dsp::AudioBlock<float> block(buffer);
-    filterColor.process(juce::dsp::ProcessContextReplacing<float>(block));
-    updateFilter();
-
-    // protection
-    float sampleMaxValue = 0;
-
-    sampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
-
-    distortionProcessor.controls.protection = *treeState.getRawParameterValue(SAFE_ID1);
-
-    if (distortionProcessor.controls.protection == true)
+    
+    // pre-filter
+    bool preButton = *treeState.getRawParameterValue(PRE_ID);
+    if (preButton)
     {
-        if (sampleMaxValue * drive > 2.f)
-        {
-            drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
-        }
+        juce::dsp::AudioBlock<float> block(buffer);
+        filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
+        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
+        updateFilter();
     }
-    newDrive1 = drive;
-
-    // set zipper noise smoother target
-    driveSmoother1.setTargetValue(drive);
-    outputSmoother1.setTargetValue(currentGainOutput);
-    mixSmoother1.setTargetValue(mix);
-    colorSmoother.setTargetValue(color);
-    biasSmoother.setTargetValue(bias * juce::roundToInt(sampleMaxValue * 100) / 100.f);
-
-    // set distortion processor smooth parameters
-    distortionProcessor.controls.color = colorSmoother.getNextValue();
-    distortionProcessor.controls.bias = biasSmoother.getNextValue();
-    // DBG(distortionProcessor.controls.bias);
-
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    // bias
-    if (sampleMaxValue == 0)
-    {
-        distortionProcessor.controls.bias = 0;
-    }
+   
 
     // multiband process
     int freqValue1 = *treeState.getRawParameterValue(FREQ_ID1);
@@ -407,7 +365,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     mBuffer3.makeCopyOf(buffer);
     mBuffer4.makeCopyOf(buffer);
     
-    // test
     multibandState1 = *treeState.getRawParameterValue(BAND_STATE_ID1);
     multibandState2 = *treeState.getRawParameterValue(BAND_STATE_ID2);
     multibandState3 = *treeState.getRawParameterValue(BAND_STATE_ID3);
@@ -418,15 +375,32 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
     multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
     
-    
-    
+    int lineNum = *treeState.getRawParameterValue(LINENUM_ID);
+//    DBG(lineNum);
+//    if (multibandState1) {
+//        DBG("state1");
+//    }
+//    if (multibandState2) {
+//        DBG("state2");
+//    }
+//    if (multibandState3) {
+//        DBG("state3");
+//    }
+//    if (multibandState4) {
+//        DBG("state4");
+//    }
     
     if (multibandState1)
     {
         auto multibandBlock1 = juce::dsp::AudioBlock<float> (mBuffer1);
         auto context1 = juce::dsp::ProcessContextReplacing<float> (multibandBlock1);
-        lowpass1.setCutoffFrequency(freqValue1);
-        lowpass1.process (context1);
+        
+        if (lineNum > 0)
+        {
+            lowpass1.setCutoffFrequency(freqValue1);
+            lowpass1.process (context1);
+        }
+        
         
         // dsp process
         // width
@@ -454,12 +428,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         auto* channeldataL = mBuffer1.getWritePointer(0);
         auto* channeldataR = mBuffer1.getWritePointer(1);
         float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
-        float pan = 0.f;
+//        float pan = 0.f;
 
+        setParams(MODE_ID1, DRIVE_ID1, SAFE_ID1, OUTPUT_ID1, MIX_ID1, BIAS_ID1, mBuffer1, distortionProcessor1, driveSmoother1, outputSmoother1, mixSmoother1, biasSmoother1);
+        processDistortion(MODE_ID1, REC_ID1, mBuffer1, totalNumInputChannels, driveSmoother1, recSmoother1, distortionProcessor1);
+        normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1);
+        
         widthProcessor.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
     }
     
-    if (multibandState2)
+    if (multibandState2 && lineNum >= 1)
     {
         auto multibandBlock2 = juce::dsp::AudioBlock<float> (mBuffer2);
         auto context2 = juce::dsp::ProcessContextReplacing<float> (multibandBlock2);
@@ -468,9 +446,20 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         lowpass2.setCutoffFrequency(freqValue2);
         lowpass2.process (context2);
+        
+        setParams(MODE_ID2, DRIVE_ID2, SAFE_ID2, OUTPUT_ID2, MIX_ID2, BIAS_ID2, mBuffer2, distortionProcessor2, driveSmoother2, outputSmoother2, mixSmoother2, biasSmoother2);
+        processDistortion(MODE_ID2, REC_ID2, mBuffer2, totalNumInputChannels, driveSmoother2, recSmoother2, distortionProcessor2);
+        normalize(MODE_ID2, mBuffer2, totalNumInputChannels, recSmoother2);
+        
+        // width
+        auto* channeldataL = mBuffer2.getWritePointer(0);
+        auto* channeldataR = mBuffer2.getWritePointer(1);
+        float width2 = *treeState.getRawParameterValue(WIDTH_ID2);
+
+        widthProcessor.process(channeldataL, channeldataR, width2, mBuffer2.getNumSamples());
     }
     
-    if (multibandState3)
+    if (multibandState3 && lineNum >= 2)
     {
         auto multibandBlock3 = juce::dsp::AudioBlock<float> (mBuffer3);
         auto context3 = juce::dsp::ProcessContextReplacing<float> (multibandBlock3);
@@ -479,14 +468,38 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         lowpass3.setCutoffFrequency(freqValue3);
         lowpass3.process (context3);
+        
+        setParams(MODE_ID3, DRIVE_ID3, SAFE_ID3, OUTPUT_ID3, MIX_ID3, BIAS_ID3, mBuffer3, distortionProcessor3, driveSmoother3, outputSmoother3, mixSmoother3, biasSmoother3);
+        processDistortion(MODE_ID3, REC_ID3, mBuffer3, totalNumInputChannels, driveSmoother3, recSmoother3, distortionProcessor3);
+        normalize(MODE_ID3, mBuffer3, totalNumInputChannels, recSmoother3);
+        
+        
+        // width
+        auto* channeldataL = mBuffer3.getWritePointer(0);
+        auto* channeldataR = mBuffer3.getWritePointer(1);
+        float width3 = *treeState.getRawParameterValue(WIDTH_ID3);
+
+        widthProcessor.process(channeldataL, channeldataR, width3, mBuffer3.getNumSamples());
     }
     
-    if (multibandState4)
+    if (multibandState4 && lineNum == 3)
     {
         auto multibandBlock4 = juce::dsp::AudioBlock<float> (mBuffer4);
         auto context4 = juce::dsp::ProcessContextReplacing<float> (multibandBlock4);
         highpass3.setCutoffFrequency(freqValue3);
         highpass3.process (context4);
+        
+        setParams(MODE_ID4, DRIVE_ID4, SAFE_ID4, OUTPUT_ID4, MIX_ID4, BIAS_ID4, mBuffer4, distortionProcessor4, driveSmoother4, outputSmoother4, mixSmoother4, biasSmoother4);
+        processDistortion(MODE_ID4, REC_ID4, mBuffer4, totalNumInputChannels, driveSmoother4, recSmoother4, distortionProcessor4);
+        normalize(MODE_ID4, mBuffer4, totalNumInputChannels, recSmoother4);
+        
+        
+        // width
+        auto* channeldataL = mBuffer4.getWritePointer(0);
+        auto* channeldataR = mBuffer4.getWritePointer(1);
+        float width4 = *treeState.getRawParameterValue(WIDTH_ID4);
+
+        widthProcessor.process(channeldataL, channeldataR, width4, mBuffer4.getNumSamples());
     }
     
     
@@ -497,200 +510,25 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         buffer.addFrom(0, 0, mBuffer1, 0, 0, numSamples);
         buffer.addFrom(1, 0, mBuffer1, 1, 0, numSamples);
     }
-    if (multibandState2)
+    if (multibandState2 && lineNum >= 1)
     {
         buffer.addFrom(0, 0, mBuffer2, 0, 0, numSamples);
         buffer.addFrom(1, 0, mBuffer2, 1, 0, numSamples);
     }
-    if (multibandState3)
+    if (multibandState3 && lineNum >= 2)
     {
         buffer.addFrom(0, 0, mBuffer3, 0, 0, numSamples);
         buffer.addFrom(1, 0, mBuffer3, 1, 0, numSamples);
     }
-    if (multibandState4)
+    if (multibandState4 && lineNum == 3)
     {
         buffer.addFrom(0, 0, mBuffer4, 0, 0, numSamples);
         buffer.addFrom(1, 0, mBuffer4, 1, 0, numSamples);
     }
     
-    // pre-filter
-    bool preButton = *treeState.getRawParameterValue(PRE_ID);
-    if (preButton)
-    {
-        juce::dsp::AudioBlock<float> block(buffer);
-        filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
-        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
-        updateFilter();
-    }
+   
 
-    // TODO: ------put this in a new function--------
-
-    // oversampling
-    /*
-    double newSampleRate = getSampleRate();
-    int newBufferSize = buffer.getNumSamples();
-    if (*treeState.getRawParameterValue("hq"))
-    {
-        oversampleFactor = oversamplingHQ->getOversamplingFactor();
-        newSampleRate *= oversampleFactor;
-        newBufferSize *= oversampleFactor;
-        oversamplingHQ->getLatencyInSamples();
-    }
-    else
-    {
-        oversampleFactor = oversampling->getOversamplingFactor();
-        newSampleRate *= oversampleFactor;
-        newBufferSize *= oversampleFactor;
-        oversampling->getLatencyInSamples();
-    }
-    */
-    // TODO: ------put this in a new function--------
-    juce::dsp::AudioBlock<float> blockInput(buffer);
-    juce::dsp::AudioBlock<float> blockOutput;
-    // oversampling
-
-    if (*treeState.getRawParameterValue(HQ_ID))
-    {
-        blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
-        blockOutput = oversamplingHQ->processSamplesUp(blockInput);
-
-        // the wet in high quality mode will have a latency of 3~4 samples.
-        // so I must add the same latency to drybuffer.
-        // But I don't know why the drybuffer is still 1 sample slower than the wet one.
-        // So I added 1.  really weird :(
-        int latency = juce::roundToInt(oversamplingHQ->getLatencyInSamples()) + 1;
-
-        mDelay.setLatency(latency);
-        mDelay.setState(true);
-
-        // report latency to the host
-        //setLatencySamples(latency);
-    }
-    else
-    {
-        //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
-        blockOutput = blockInput.getSubBlock(0, buffer.getNumSamples());
-        mDelay.setState(false);
-        // latency = 0
-        //setLatencySamples(0);
-    }
-
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-
-        // float* data = buffer.getWritePointer(channel);
-        // auto *channelData = buffer.getWritePointer(channel);
-        auto *channelData = blockOutput.getChannelPointer(channel);
-        inputTemp.clear();
-
-        for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
-        {
-            // smooth end and start of bias
-            if (channelData[sample] == 0 && channelData[sample + 1] == 0 && sample < blockOutput.getNumSamples() - 1)
-            {
-                distortionProcessor.controls.bias = 0;
-            }
-
-            inputTemp.add(channelData[sample] * driveSmoother1.getNextValue());
-            // distortion
-            if (mode < 9)
-            {
-                if (multibandFocus1) // 2020/12/6
-                {
-                    distortionProcessor.controls.drive = driveSmoother1.getNextValue();
-                }
-                else
-                {
-                    distortionProcessor.controls.drive = driveSmoother1.getNextValue(); // just for testing
-                }
-                
-                
-                // distortionProcessor.controls.output = outputSmoother.getNextValue();
-                channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
-            }
-
-            // rectification
-            updateRectification();
-            channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
-        }
-        if (mode == 9)
-        {
-            // left channel diode
-            if (channel == 0)
-            {
-                VdiodeL = diodeClipper(inputTemp, getSampleRate(), VdiodeL, VinL, rootL, R1L);
-            }
-            // right channel diode
-            else if (channel == 1)
-            {
-                VdiodeR = diodeClipper(inputTemp, getSampleRate(), VdiodeR, VinR, rootR, R1R);
-            }
-
-            for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
-            {
-                channelData[sample] = inputTemp[sample];
-                //channelData[sample] *= outputSmoother.getNextValue();
-                // rectification
-                updateRectification();
-                channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
-            }
-            inputTemp.clear();
-        }
-    }
-
-    // oversampling
-    if (*treeState.getRawParameterValue(HQ_ID)) // oversampling
-    {
-        oversamplingHQ->processSamplesDown(blockInput);
-    }
-    //else
-    //{
-    //    oversampling->processSamplesDown(blockInput);
-    //}
-
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-
-        auto *channelData = buffer.getWritePointer(channel);
-
-        juce::Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());
-        float min = range.getStart();
-        float max = range.getEnd();
-        float magnitude = range.getLength() / 2.f;
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            // centralization
-            if (mode == 9 || recSmoother.getNextValue() > 0)
-            {
-                centralSmoother.setTargetValue((max + min) / 2.f);
-                channelData[sample] = channelData[sample] - centralSmoother.getNextValue();
-            }
-
-            // normalization
-            if (mode == 9)
-            {
-                normalSmoother.setTargetValue(magnitude);
-                if (normalSmoother.getNextValue() != 0 && channelData[sample] != 0)
-                {
-                    channelData[sample] = channelData[sample] / normalSmoother.getNextValue();
-                }
-
-                // final protection
-                if (channelData[sample] > 1)
-                {
-                    channelData[sample] = 1;
-                }
-                else if (channelData[sample] < -1)
-                {
-                    channelData[sample] = -1;
-                }
-            }
-
-            // output control
-            channelData[sample] *= outputSmoother1.getNextValue();
-        }
-    }
+    
 
     // downsample
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -708,6 +546,13 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
+    // color eq filter(need to be put into multiband???)
+    float color = *treeState.getRawParameterValue(COLOR_ID);
+    colorSmoother.setTargetValue(color);
+    distortionProcessor1.controls.color = colorSmoother.getNextValue();
+    juce::dsp::AudioBlock<float> block(buffer);
+    filterColor.process(juce::dsp::ProcessContextReplacing<float>(block));
+    updateFilter();
     
     
     //post-filter
@@ -720,6 +565,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         updateFilter();
     }
 
+    
+    
+    float mix = *treeState.getRawParameterValue(MIX_ID);
+    mixSmootherGlobal.setTargetValue(mix);
     // mix control
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -729,7 +578,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            float smoothMixValue = mixSmoother1.getNextValue();
+            float smoothMixValue = mixSmootherGlobal.getNextValue();
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
             //channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
             channelData[sample] = (1.f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
@@ -848,9 +697,9 @@ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 }
 
 // Rectification selection
-void FireAudioProcessor::updateRectification()
+void FireAudioProcessor::updateRectification(juce::String recID, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
 {
-    float rec = *treeState.getRawParameterValue(REC_ID);
+    float rec = *treeState.getRawParameterValue(recID);
     recSmoother.setTargetValue(rec);
     distortionProcessor.controls.rectification = recSmoother.getNextValue();
 }
@@ -943,6 +792,240 @@ void FireAudioProcessor::processFFT()
     spectrum_processor.nextFFTBlockReady = false;
 }
 
+void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String mixID, juce::String biasID, juce::AudioBuffer<float>& buffer, Distortion& distortionProcessor, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& outputSmoother, juce::SmoothedValue<float>& mixSmoother, juce::SmoothedValue<float>& biasSmoother)
+{
+    // get parameters from sliders
+    int mode = *treeState.getRawParameterValue(modeID);
+    float drive = *treeState.getRawParameterValue(driveID);
+    float currentGainOutput = *treeState.getRawParameterValue(outputID);
+    currentGainOutput = juce::Decibels::decibelsToGain(currentGainOutput);
+    float mix = *treeState.getRawParameterValue(mixID);
+    float bias = *treeState.getRawParameterValue(biasID);
+    // set distortion processor parameters
+    distortionProcessor.controls.mode = mode;
+
+    
+    // protection
+    drive = drive * 6.5 / 100.f;
+    drive = powf(2, drive);
+
+    float sampleMaxValue = 0;
+
+    sampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
+
+    distortionProcessor.controls.protection = *treeState.getRawParameterValue(safeID);
+
+    if (distortionProcessor.controls.protection == true)
+    {
+        if (sampleMaxValue * drive > 2.f)
+        {
+            drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
+        }
+    }
+    
+    newDrive1 = drive;//TODO: replace it!
+    
+    // set zipper noise smoother target
+    driveSmoother.setTargetValue(drive);
+    outputSmoother.setTargetValue(currentGainOutput);
+    mixSmoother.setTargetValue(mix);
+    
+    biasSmoother.setTargetValue(bias * juce::roundToInt(sampleMaxValue * 100) / 100.f);
+
+    // set distortion processor smooth parameters
+    
+    distortionProcessor.controls.bias = biasSmoother.getNextValue();
+    // DBG(distortionProcessor.controls.bias);
+
+    // bias
+    if (sampleMaxValue == 0)
+    {
+        distortionProcessor.controls.bias = 0;
+    }
+
+}
+
+void FireAudioProcessor::processDistortion(juce::String modeID, juce::String recID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
+{
+    int mode = *treeState.getRawParameterValue(modeID);
+
+    // TODO: ------put this in a new function--------
+
+    // oversampling
+    /*
+    double newSampleRate = getSampleRate();
+    int newBufferSize = buffer.getNumSamples();
+    if (*treeState.getRawParameterValue("hq"))
+    {
+        oversampleFactor = oversamplingHQ->getOversamplingFactor();
+        newSampleRate *= oversampleFactor;
+        newBufferSize *= oversampleFactor;
+        oversamplingHQ->getLatencyInSamples();
+    }
+    else
+    {
+        oversampleFactor = oversampling->getOversamplingFactor();
+        newSampleRate *= oversampleFactor;
+        newBufferSize *= oversampleFactor;
+        oversampling->getLatencyInSamples();
+    }
+    */
+    // TODO: ------put this in a new function--------
+    juce::dsp::AudioBlock<float> blockInput(buffer);
+    juce::dsp::AudioBlock<float> blockOutput;
+    // oversampling
+
+    if (*treeState.getRawParameterValue(HQ_ID))
+    {
+        blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
+        blockOutput = oversamplingHQ->processSamplesUp(blockInput);
+
+        // the wet in high quality mode will have a latency of 3~4 samples.
+        // so I must add the same latency to drybuffer.
+        // But I don't know why the drybuffer is still 1 sample slower than the wet one.
+        // So I added 1.  really weird :(
+        int latency = juce::roundToInt(oversamplingHQ->getLatencyInSamples()) + 1;
+
+        mDelay.setLatency(latency);
+        mDelay.setState(true);
+
+        // report latency to the host
+        //setLatencySamples(latency);
+    }
+    else
+    {
+        //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
+        blockOutput = blockInput.getSubBlock(0, buffer.getNumSamples());
+        mDelay.setState(false);
+        // latency = 0
+        //setLatencySamples(0);
+    }
+
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+
+        // float* data = buffer.getWritePointer(channel);
+        // auto *channelData = buffer.getWritePointer(channel);
+        auto *channelData = blockOutput.getChannelPointer(channel);
+        inputTemp.clear();
+        
+        
+        for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
+        {
+            // smooth end and start of bias
+            if (channelData[sample] == 0 && channelData[sample + 1] == 0 && sample < blockOutput.getNumSamples() - 1)
+            {
+                distortionProcessor.controls.bias = 0;
+            }
+
+            inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
+            // distortion
+            if (mode < 9)
+            {
+                if (multibandFocus1) // 2020/12/6
+                {
+                    distortionProcessor.controls.drive = driveSmoother.getNextValue();
+                }
+                else
+                {
+                    distortionProcessor.controls.drive = driveSmoother.getNextValue(); // just for testing
+                }
+                
+                
+                // distortionProcessor.controls.output = outputSmoother.getNextValue();
+                channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
+            }
+
+            // rectification
+            updateRectification(recID, recSmoother, distortionProcessor);
+            channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
+        }
+        if (mode == 9)
+        {
+            // left channel diode
+            if (channel == 0)
+            {
+                VdiodeL = diodeClipper(inputTemp, getSampleRate(), VdiodeL, VinL, rootL, R1L);
+            }
+            // right channel diode
+            else if (channel == 1)
+            {
+                VdiodeR = diodeClipper(inputTemp, getSampleRate(), VdiodeR, VinR, rootR, R1R);
+            }
+
+            for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
+            {
+                channelData[sample] = inputTemp[sample];
+                //channelData[sample] *= outputSmoother.getNextValue();
+                // rectification
+                updateRectification(recID, recSmoother, distortionProcessor);
+                channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
+            }
+            inputTemp.clear();
+        }
+    }
+
+    // oversampling
+    if (*treeState.getRawParameterValue(HQ_ID)) // oversampling
+    {
+        oversamplingHQ->processSamplesDown(blockInput);
+    }
+    //else
+    //{
+    //    oversampling->processSamplesDown(blockInput);
+    //}
+}
+
+
+void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother)
+{
+    int mode = *treeState.getRawParameterValue(modeID);
+    
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+
+        auto *channelData = buffer.getWritePointer(channel);
+
+        juce::Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());
+        float min = range.getStart();
+        float max = range.getEnd();
+        float magnitude = range.getLength() / 2.f;
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            // centralization
+            if (mode == 9 || recSmoother.getNextValue() > 0)
+            {
+                centralSmoother.setTargetValue((max + min) / 2.f);
+                channelData[sample] = channelData[sample] - centralSmoother.getNextValue();
+            }
+
+            // normalization
+            if (mode == 9)
+            {
+                normalSmoother.setTargetValue(magnitude);
+                if (normalSmoother.getNextValue() != 0 && channelData[sample] != 0)
+                {
+                    channelData[sample] = channelData[sample] / normalSmoother.getNextValue();
+                }
+
+                // final protection
+                if (channelData[sample] > 1)
+                {
+                    channelData[sample] = 1;
+                }
+                else if (channelData[sample] < -1)
+                {
+                    channelData[sample] = -1;
+                }
+            }
+
+            // output control
+            channelData[sample] *= outputSmoother1.getNextValue();
+        }
+    }
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameters;
@@ -988,11 +1071,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID2, MIX_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID3, MIX_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID4, MIX_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID, MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID1, BIAS_NAME1, juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID2, BIAS_NAME2, juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID3, BIAS_NAME3, juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID4, BIAS_NAME4, juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID1, REC_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID2, REC_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID3, REC_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID4, REC_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COLOR_ID, COLOR_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID, BIAS_NAME, juce::NormalisableRange<float>(-0.5f, 0.5f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DOWNSAMPLE_ID, DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID, REC_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    
     
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.f);

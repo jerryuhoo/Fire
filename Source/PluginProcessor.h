@@ -93,7 +93,7 @@ public:
     void setStateInformation(const void *data, int sizeInBytes) override;
 
     // Rectification
-    void updateRectification();
+    void updateRectification(juce::String recID, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor);
 
     // filter
     void updateFilter();
@@ -159,24 +159,58 @@ private:
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
     float previousOutput1;
+    float previousOutput2;
+    float previousOutput3;
+    float previousOutput4;
     float previousDrive1;
+    float previousDrive2;
+    float previousDrive3;
+    float previousDrive4;
+    float previousMix1;
+    float previousMix2;
+    float previousMix3;
+    float previousMix4;
+    float previousMix;
     float previousColor;
     float previousCutoff;
-    float previousMix1;
+    
     float newDrive1;
+    float newDrive2;
+    float newDrive3;
+    float newDrive4;
 
     juce::SmoothedValue<float> driveSmoother1;
+    juce::SmoothedValue<float> driveSmoother2;
+    juce::SmoothedValue<float> driveSmoother3;
+    juce::SmoothedValue<float> driveSmoother4;
     juce::SmoothedValue<float> outputSmoother1;
+    juce::SmoothedValue<float> outputSmoother2;
+    juce::SmoothedValue<float> outputSmoother3;
+    juce::SmoothedValue<float> outputSmoother4;
+    juce::SmoothedValue<float> recSmoother1;
+    juce::SmoothedValue<float> recSmoother2;
+    juce::SmoothedValue<float> recSmoother3;
+    juce::SmoothedValue<float> recSmoother4;
+    juce::SmoothedValue<float> biasSmoother1;
+    juce::SmoothedValue<float> biasSmoother2;
+    juce::SmoothedValue<float> biasSmoother3;
+    juce::SmoothedValue<float> biasSmoother4;
+    juce::SmoothedValue<float> mixSmoother1;
+    juce::SmoothedValue<float> mixSmoother2;
+    juce::SmoothedValue<float> mixSmoother3;
+    juce::SmoothedValue<float> mixSmoother4;
+    juce::SmoothedValue<float> mixSmootherGlobal;
     juce::SmoothedValue<float> colorSmoother;
     juce::SmoothedValue<float> cutoffSmoother;
-    juce::SmoothedValue<float> recSmoother;
-    juce::SmoothedValue<float> biasSmoother;
-    juce::SmoothedValue<float> mixSmoother1;
+    
     juce::SmoothedValue<float> centralSmoother;
     juce::SmoothedValue<float> normalSmoother;
 
     // DSP Processors
-    Distortion distortionProcessor;
+    Distortion distortionProcessor1;
+    Distortion distortionProcessor2;
+    Distortion distortionProcessor3;
+    Distortion distortionProcessor4;
     WidthProcessor widthProcessor;
     
     // oversampling
@@ -213,10 +247,10 @@ private:
                                           lowpass3, highpass3;
     
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
-    bool multibandState1 = false;
-    bool multibandState2 = false;
-    bool multibandState3 = false;
-    bool multibandState4 = false;
+    bool multibandState1 = true;
+    bool multibandState2 = true;
+    bool multibandState3 = true;
+    bool multibandState4 = true;
     
     bool multibandFocus1 = true;
     bool multibandFocus2 = false;
@@ -224,7 +258,8 @@ private:
     bool multibandFocus4 = false;
     
     
-    
-    
+    void processDistortion(juce::String modeID, juce::String recID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor);
+    void setParams(juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String mixID, juce::String biasID, juce::AudioBuffer<float>& buffer, Distortion& distortionProcessor, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& outputSmoother, juce::SmoothedValue<float>& mixSmoother, juce::SmoothedValue<float>& biasSmoother);
+    void normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother);
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

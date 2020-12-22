@@ -60,10 +60,12 @@ private:
     juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
     juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
     juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
+    juce::Slider lineNumSlider;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiStateAttachment1, multiStateAttachment2, multiStateAttachment3, multiStateAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineNumSliderAttachment;
     
     bool multibandFocus[4];
     bool multibandState[4];
@@ -103,12 +105,21 @@ private:
         dynamicKnob4,
         widthKnob4,
     
-        recKnob,
+        mixKnob,
+        recKnob1,
+        recKnob2,
+        recKnob3,
+        recKnob4,
+      
+        biasKnob1,
+        biasKnob2,
+        biasKnob3,
+        biasKnob4,
+    
         downSampleKnob,
         cutoffKnob,
         resKnob,
-        colorKnob,
-        biasKnob;
+        colorKnob;
     
     int knobSize = KNOBSIZE;
     float tempDriveValue = 1;
@@ -193,7 +204,8 @@ private:
         mixAttachment2,
         mixAttachment3,
         mixAttachment4,
-
+        mixAttachment,
+    
         dynamicAttachment1,
         dynamicAttachment2,
         dynamicAttachment3,
@@ -204,12 +216,21 @@ private:
         widthAttachment3,
         widthAttachment4,
     
+        recAttachment1,
+        recAttachment2,
+        recAttachment3,
+        recAttachment4,
+        
+        biasAttachment1,
+        biasAttachment2,
+        biasAttachment3,
+        biasAttachment4,
+    
         downSampleAttachment,
-        recAttachment,
+        
         cutoffAttachment,
         resAttachment,
-        colorAttachment,
-        biasAttachment;
+        colorAttachment;
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -233,8 +254,14 @@ private:
 
     // ComboBox attachment
     juce::ComboBox distortionMode1;
+    juce::ComboBox distortionMode2;
+    juce::ComboBox distortionMode3;
+    juce::ComboBox distortionMode4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
-
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
+    
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;

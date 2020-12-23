@@ -14,6 +14,7 @@
 
 #include <JuceHeader.h>
 #include "GUI/LookAndFeel.h"
+#include "Multiband/Multiband.h"
 
 namespace state
 {
@@ -101,7 +102,7 @@ public juce::Button::Listener,
 public juce::ComboBox::Listener
 {
 public:
-    StateComponent(StateAB &sab, StatePresets &sp);
+    StateComponent(StateAB &sab, StatePresets &sp, Multiband &m);
 
     void paint(juce::Graphics &) override;
     void resized() override;
@@ -111,7 +112,8 @@ public:
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
-
+    Multiband &multiband;
+    
     OtherLookAndFeel otherLookAndFeel;
     
     juce::TextButton toggleABButton;
@@ -137,6 +139,8 @@ private:
     void popPresetMenu();
     void setPreviousPreset();
     void setNextPreset();
+    
+    void resetMultiband();
     
     juce::String presetName;
     

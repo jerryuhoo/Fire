@@ -385,15 +385,16 @@ void StatePresets::initPreset()
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
             // if not in xml set current
             p->setValueNotifyingHost(p->getDefaultValue());
-    //set preset combobox to 0
+    // set preset combobox to 0
 }
 
 //==============================================================================
 
 //==============================================================================
-StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
+StateComponent::StateComponent(StateAB &sab, StatePresets &sp, Multiband &m)
 : procStateAB{sab},
 procStatePresets{sp},
+multiband(m),
 toggleABButton{"A-B"},
 copyABButton{"Copy"},
 previousButton{"<"},
@@ -652,7 +653,10 @@ void StateComponent::popPresetMenu()
     int result = presetMenu.show();
     if (result == 1)
     {
+        // set all parameters to default
         procStatePresets.initPreset();
+        // set GUI verticle lines to default
+        resetMultiband();
         presetBox.setSelectedId(0);
     }
     if (result == 2)
@@ -669,5 +673,12 @@ void StateComponent::popPresetMenu()
         gitHubWebsite.launchInDefaultBrowser();
     }
 }
+
+void StateComponent::resetMultiband()
+{
+    multiband.reset();
+}
+
+
 
 } // namespace state

@@ -10,12 +10,12 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.789"
+#define VERSION "[Early Beta] 0.791"
 
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
-    : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets}
+    : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets, multiband}
 {
     // timer
     juce::Timer::startTimerHz(30.0f);

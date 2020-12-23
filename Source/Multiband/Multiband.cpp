@@ -393,3 +393,22 @@ void Multiband::getFreqArray(int (&input)[3])
         input[i] = frequency[i];
     }
 }
+
+void Multiband::reset()
+{
+    for (int i = 0; i < 4; i++)
+    {
+        enableButton[i]->setVisible(false);
+        soloButton[i]->setVisible(false);
+    }
+    for (int i = 0; i < 3; i++)
+    {
+        verticalLines[i]->setState(false);
+        closeButtons[i]->setVisible(false);
+        multibandFocus[i + 1] = false;
+        sortedIndex[i] = 0;
+        frequency[i] = 0;
+    }
+    lineNum = 0;
+    
+}

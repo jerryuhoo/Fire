@@ -89,6 +89,7 @@ void VerticalLine::setState(bool state)
     if (state == false)
     {
         setVisible(false);
+        xPercent = 0;
     }
     else
     {

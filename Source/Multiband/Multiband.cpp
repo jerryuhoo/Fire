@@ -281,6 +281,16 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
             }
             if (canCreate)
             {
+                int newLineIndex = 0; // the index of new created line(count from left to right in the window)
+                int focusIndex = 0;
+                for (int i = 0; i <= lineNum; i++)
+                {
+                    if(multibandFocus[i] == true)
+                    {
+                        focusIndex = i;
+                        break;
+                    }
+                }
                 for (int i = 0; i < 3; i++)
                 {
                     // create lines and close buttons and then set state
@@ -290,7 +300,20 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
                         verticalLines[i]->setXPercent(xPercent);
                         closeButtons[i]->setVisible(true);
                         freqTextLabel[i]->setVisible(true);
+                        
+                        if (newLineIndex < focusIndex || (newLineIndex == focusIndex && e.x < enableButton[focusIndex]->getX()))
+                        {
+                            multibandFocus[focusIndex] = false;
+                            multibandFocus[focusIndex + 1] = true;
+                        }
+                        
                         break;
+                    }
+                    else
+                    { // get the index to reset focus position
+                        if (e.x > verticalLines[i]->getX()) {
+                            newLineIndex++;
+                        }
                     }
                 }
             }
@@ -298,31 +321,43 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.f) // focus on one band
     {
-        int num = 4;
-        for (int i = 0; i < num; i++)
+        int num = lineNum;
+        for (int i = 0; i < 4; i++)
         {
             multibandFocus[i] = false;
         }
         
-        if (e.x >= 0 && e.x < verticalLines[sortedIndex[0]]->getX())
+        if (lineNum == 0)
         {
             multibandFocus[0] = true;
+            return;
         }
-        
-        for (int i = 1; i < num - 1; i++)
+        else
         {
-            if (e.x >= verticalLines[sortedIndex[i - 1]]->getX() && e.x < verticalLines[sortedIndex[i]]->getX())
+            if (e.x >= 0 && e.x < verticalLines[sortedIndex[0]]->getX())
             {
-                multibandFocus[i] = true;
+                multibandFocus[0] = true;
+                return;
+            }
+            
+            for (int i = 1; i < num; i++)
+            {
+                if (e.x >= verticalLines[sortedIndex[i - 1]]->getX() && e.x < verticalLines[sortedIndex[i]]->getX())
+                {
+                    multibandFocus[i] = true;
+                    return;
+                }
+            }
+            
+            if (e.x >= verticalLines[sortedIndex[num - 1]]->getX() && e.x <= getWidth())
+            {
+                multibandFocus[num] = true;
+                return;
             }
         }
+
         
-        if (e.x >= verticalLines[sortedIndex[num - 2]]->getX() && e.x <= getWidth())
-        {
-            multibandFocus[num - 1] = true;
-        }
-        
-//        for (int i = 0; i < num; i++) {
+//        for (int i = 0; i < 4; i++) {
 //            if (multibandFocus[i]) {
 //                DBG(i);
 //            }

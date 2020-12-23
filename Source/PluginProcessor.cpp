@@ -432,7 +432,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         setParams(MODE_ID1, DRIVE_ID1, SAFE_ID1, OUTPUT_ID1, MIX_ID1, BIAS_ID1, mBuffer1, distortionProcessor1, driveSmoother1, outputSmoother1, mixSmoother1, biasSmoother1);
         processDistortion(MODE_ID1, REC_ID1, mBuffer1, totalNumInputChannels, driveSmoother1, recSmoother1, distortionProcessor1);
-        normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1);
+        normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
         
         widthProcessor.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
     }
@@ -449,7 +449,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         setParams(MODE_ID2, DRIVE_ID2, SAFE_ID2, OUTPUT_ID2, MIX_ID2, BIAS_ID2, mBuffer2, distortionProcessor2, driveSmoother2, outputSmoother2, mixSmoother2, biasSmoother2);
         processDistortion(MODE_ID2, REC_ID2, mBuffer2, totalNumInputChannels, driveSmoother2, recSmoother2, distortionProcessor2);
-        normalize(MODE_ID2, mBuffer2, totalNumInputChannels, recSmoother2);
+        normalize(MODE_ID2, mBuffer2, totalNumInputChannels, recSmoother2, outputSmoother2);
         
         // width
         auto* channeldataL = mBuffer2.getWritePointer(0);
@@ -471,7 +471,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         setParams(MODE_ID3, DRIVE_ID3, SAFE_ID3, OUTPUT_ID3, MIX_ID3, BIAS_ID3, mBuffer3, distortionProcessor3, driveSmoother3, outputSmoother3, mixSmoother3, biasSmoother3);
         processDistortion(MODE_ID3, REC_ID3, mBuffer3, totalNumInputChannels, driveSmoother3, recSmoother3, distortionProcessor3);
-        normalize(MODE_ID3, mBuffer3, totalNumInputChannels, recSmoother3);
+        normalize(MODE_ID3, mBuffer3, totalNumInputChannels, recSmoother3, outputSmoother3);
         
         
         // width
@@ -491,7 +491,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         setParams(MODE_ID4, DRIVE_ID4, SAFE_ID4, OUTPUT_ID4, MIX_ID4, BIAS_ID4, mBuffer4, distortionProcessor4, driveSmoother4, outputSmoother4, mixSmoother4, biasSmoother4);
         processDistortion(MODE_ID4, REC_ID4, mBuffer4, totalNumInputChannels, driveSmoother4, recSmoother4, distortionProcessor4);
-        normalize(MODE_ID4, mBuffer4, totalNumInputChannels, recSmoother4);
+        normalize(MODE_ID4, mBuffer4, totalNumInputChannels, recSmoother4, outputSmoother4);
         
         
         // width
@@ -922,17 +922,10 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
             // distortion
             if (mode < 9)
             {
-                if (multibandFocus1) // 2020/12/6
-                {
-                    distortionProcessor.controls.drive = driveSmoother.getNextValue();
-                }
-                else
-                {
-                    distortionProcessor.controls.drive = driveSmoother.getNextValue(); // just for testing
-                }
                 
-                
-                // distortionProcessor.controls.output = outputSmoother.getNextValue();
+                distortionProcessor.controls.drive = driveSmoother.getNextValue();
+
+//                distortionProcessor.controls.output = outputSmoother.getNextValue();
                 channelData[sample] = distortionProcessor.distortionProcess(channelData[sample]);
             }
 
@@ -977,7 +970,7 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
 }
 
 
-void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother)
+void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother)
 {
     int mode = *treeState.getRawParameterValue(modeID);
     
@@ -1021,7 +1014,7 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
             }
 
             // output control
-            channelData[sample] *= outputSmoother1.getNextValue();
+            channelData[sample] *= outputSmoother.getNextValue();
         }
     }
 }

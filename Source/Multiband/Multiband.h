@@ -46,9 +46,9 @@ private:
     void mouseUp(const juce::MouseEvent &e) override;
     int lineNum = 0;
     int lastLineNum = 0;
-    int checkLineState();
-    void changeFocus(int index);
-    void updateLines(float margin, float size, float width);
+    int getChangedIndex();
+    void changeFocus(int changedIndex, bool isAdd);
+    void updateLines(float margin, float size, float width, bool isAdd, int changedIndex);
     
     int sortedIndex[3] = {-1, -1, -1};
     int frequency[3] = {0, 0, 0};

@@ -105,12 +105,21 @@ void Multiband::paint (juce::Graphics& g)
         float size = verticalLines[0]->getHeight() / 10.f;
         float width = verticalLines[0]->getWidth() / 2.f;
         
+        // freqLabel
+        for (int i = 0; i < 3; i++)
+        {
+            if (verticalLines[i]->getState())
+            {
+                freqTextLabel[i]->setVisible(verticalLines[i]->isMoving() || verticalLines[i]->isMouseOver());
+            }
+        }
+        
+        
         //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
-        int changedIndex = checkLineState();
+        int changedIndex = getChangedIndex();
         if (changedIndex != -1)
         {
-            changeFocus(changedIndex);
-            updateLines(margin, size, width);
+            updateLines(margin, size, width, false, changedIndex);
         }
         
 
@@ -172,19 +181,19 @@ void Multiband::resized()
     
 }
 
-int Multiband::checkLineState()
+int Multiband::getChangedIndex()
 {
     // return changed line sorted index
     int idx = -1;
     for (int i = 0; i < 3; i++)
     {
-        if (sortedIndex[i] == -1)
+//        if (sortedIndex[i] == -1)
+//        {
+//            break;
+//        }
+        if (lastLineState[i] != verticalLines[i]->getState() || verticalLines[i]->isMoving())
         {
-            break;
-        }
-        if (lastLineState[i] != verticalLines[sortedIndex[i]]->getState() || verticalLines[sortedIndex[i]]->isMoving())
-        {
-            lastLineState[i] = verticalLines[sortedIndex[i]]->getState();
+            lastLineState[i] = verticalLines[i]->getState();
             idx = i;
             break;
         }
@@ -192,18 +201,48 @@ int Multiband::checkLineState()
     return idx;
 }
 
-void Multiband::changeFocus(int index)
+void Multiband::changeFocus(int changedIndex, bool isAdd)
 {
-    // change focus index when line is deleted
-    if (!verticalLines[sortedIndex[index]]->getState() && multibandFocus[index + 1])
+    // get current focus index
+    int focusIndex = 0;
+    for (int i = 0; i < 4; i++)
     {
-        multibandFocus[index + 1] = false;
-        multibandFocus[index] = true;
+        if (multibandFocus[i])
+        {
+            focusIndex = i;
+            break;
+        }
     }
+    
+    // get changed index -> position index
+    int newLinePosIndex = 0; // (count from left to right in the window)
+    newLinePosIndex = verticalLines[changedIndex]->getIndex();
+    
+    if (isAdd)
+    {
+        // change focus index when line is added
+        if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < enableButton[focusIndex]->getX()))
+        {
+            multibandFocus[focusIndex] = false;
+            multibandFocus[focusIndex + 1] = true;
+        }
+    }
+    else // if (!isAdd)
+    {
+        // change focus index when line is deleted
+        if (newLinePosIndex < focusIndex)
+        {
+            multibandFocus[focusIndex] = false;
+            multibandFocus[focusIndex - 1] = true;
+        }
+    }
+    
 }
 
-void Multiband::updateLines(float margin, float size, float width)
+void Multiband::updateLines(float margin, float size, float width, bool isAdd, int changedIndex)
 {
+    
+
     // create
     int count = 0;
     
@@ -219,7 +258,7 @@ void Multiband::updateLines(float margin, float size, float width)
             freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, getHeight() / 5 + margin, size * 4, size);
             int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
             freqTextLabel[i]->setFreq(freq);
-            freqTextLabel[i]->setVisible(verticalLines[i]->isMoving() || verticalLines[i]->isMouseOver());
+//            freqTextLabel[i]->setVisible(verticalLines[i]->isMoving() || verticalLines[i]->isMouseOver());
             frequency[i] = freq;
             sortedIndex[count] = i;
             count++;
@@ -238,36 +277,10 @@ void Multiband::updateLines(float margin, float size, float width)
             }
         }
     }
+
     
     // reset all disabled parameters (maybe HIGH CPU!!!)
-    
-    
-    
-    // set soloButtons visibility
-    for (int i = 0; i < 4; i++)
-    {
-        if (i <= count && count != 0)
-        {
-            soloButton[i]->setVisible(true);
-            enableButton[i]->setVisible(true);
-        }
-        else
-        {
-            soloButton[i]->setVisible(false);
-            enableButton[i]->setVisible(false);
-        }
-    }
-    
-    // setBounds of soloButtons and enableButtons
-    if (count >= 1)
-    {
-        enableButton[0]->setBounds(verticalLines[sortedIndex[0]]->getX() / 2, margin, size, size);
-        for (int i = 1; i < count; i++)
-        {
-            enableButton[i]->setBounds((verticalLines[sortedIndex[i]]->getX() + verticalLines[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
-        }
-        enableButton[count]->setBounds((verticalLines[sortedIndex[count - 1]]->getX() + getWidth()) / 2, margin, size, size);
-    }
+
     
     // should set self index first, then set left and right index
     for (int i = 0; i < count; i++)
@@ -297,6 +310,51 @@ void Multiband::updateLines(float margin, float size, float width)
         
     }
     
+    
+    bool isMoving = false;
+    for (int i = 0; i < lineNum; i++)
+    {
+        if (verticalLines[sortedIndex[i]]->isMoving())
+        {
+            isMoving = true;
+            break;
+        }
+    }
+    
+    if (!isMoving)
+    {
+        // change focus position
+        changeFocus(changedIndex, isAdd);
+    }
+    
+    
+    
+    // set soloButtons visibility
+    for (int i = 0; i < 4; i++)
+    {
+        if (i <= count && count != 0)
+        {
+            soloButton[i]->setVisible(true);
+            enableButton[i]->setVisible(true);
+        }
+        else
+        {
+            soloButton[i]->setVisible(false);
+            enableButton[i]->setVisible(false);
+        }
+    }
+    
+    // setBounds of soloButtons and enableButtons
+    if (count >= 1)
+    {
+        enableButton[0]->setBounds(verticalLines[sortedIndex[0]]->getX() / 2, margin, size, size);
+        for (int i = 1; i < count; i++)
+        {
+            enableButton[i]->setBounds((verticalLines[sortedIndex[i]]->getX() + verticalLines[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
+        }
+        enableButton[count]->setBounds((verticalLines[sortedIndex[count - 1]]->getX() + getWidth()) / 2, margin, size, size);
+    }
+    
 }
 
 void Multiband::mouseUp(const juce::MouseEvent &e)
@@ -321,7 +379,7 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
             }
             if (canCreate)
             {
-                int newLineIndex = 0; // the index of new created line(count from left to right in the window)
+                int newLineIndex = 0; // the index of new created line(self index)
                 int focusIndex = 0;
                 for (int i = 0; i <= lineNum; i++)
                 {
@@ -341,28 +399,42 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
                         closeButtons[i]->setVisible(true);
                         freqTextLabel[i]->setVisible(true);
                         
-                        if (newLineIndex < focusIndex || (newLineIndex == focusIndex && e.x < enableButton[focusIndex]->getX()))
-                        {
-                            multibandFocus[focusIndex] = false;
-                            multibandFocus[focusIndex + 1] = true;
-                        }
+                        newLineIndex = i;
                         
                         break;
                     }
-                    else
-                    { // get the index to reset focus position
-                        if (e.x > verticalLines[i]->getX()) {
-                            newLineIndex++;
-                        }
-                    }
+                    
                 }
+                
+//                int newLinePosIndex = 0; // (count from left to right in the window)
+//                for (int i = 0; i < 3; i++)
+//                {
+//                    // find newLinePosIndex
+//                    if (verticalLines[i]->getIndex() == newLineIndex)
+//                    {
+//                        newLinePosIndex = i;
+//                        break;
+//                    }
+//                }
+                
+                float margin = getHeight() / 20.f;
+                float size = verticalLines[0]->getHeight() / 10.f;
+                float width = verticalLines[0]->getWidth() / 2.f;
+//                updateLines(margin, size, width, true, newLinePosIndex);
+                int changedIndex = getChangedIndex();
+                if (changedIndex != -1)
+                {
+                    updateLines(margin, size, width, true, changedIndex);
+                }
+//                // reset focus position
+//                if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && e.x < enableButton[focusIndex]->getX()))
+//                {
+//                    multibandFocus[focusIndex] = false;
+//                    multibandFocus[focusIndex + 1] = true;
+//                }
+                
             }
         }
-        float margin = getHeight() / 20.f;
-        float size = verticalLines[0]->getHeight() / 10.f;
-        float width = verticalLines[0]->getWidth() / 2.f;
-        updateLines(margin, size, width);
-        
         
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.f) // focus on one band

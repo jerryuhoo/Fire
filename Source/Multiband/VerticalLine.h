@@ -26,6 +26,7 @@ public:
     void resized() override;
     
     bool isMoving();
+    void setMoving(bool move);
     bool getState();
     void setState(bool state);
     void setXPercent(float x);
@@ -44,7 +45,7 @@ private:
     void mouseUp(const juce::MouseEvent &e) override;
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
-    void mouseDrag(const juce::MouseEvent &e) override;
+    void mouseDown(const juce::MouseEvent &e) override;
     
     bool move = false;
     bool state = false;

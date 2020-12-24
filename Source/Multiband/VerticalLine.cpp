@@ -61,7 +61,7 @@ void VerticalLine::mouseExit(const juce::MouseEvent &e)
     isEntered = false;
 }
 
-void VerticalLine::mouseDrag(const juce::MouseEvent &e)
+void VerticalLine::mouseDown(const juce::MouseEvent &e)
 {
     if (e.mods.isLeftButtonDown())
     {
@@ -76,6 +76,11 @@ void VerticalLine::mouseDrag(const juce::MouseEvent &e)
 bool VerticalLine::isMoving()
 {
     return move;
+}
+
+void VerticalLine::setMoving(bool move)
+{
+    this->move = move;
 }
 
 bool VerticalLine::getState()

@@ -44,11 +44,16 @@ private:
     
     // multi-band
     void mouseUp(const juce::MouseEvent &e) override;
+    void mouseDown(const juce::MouseEvent &e) override;
     int lineNum = 0;
     int lastLineNum = 0;
     int getChangedIndex();
     void changeFocus(int changedIndex, bool isAdd);
     void updateLines(float margin, float size, float width, bool isAdd, int changedIndex);
+    
+    void dragLines(float margin, float size, float width, float limitLeft);
+    void setLineRelatedBounds(float margin, float size, float width);
+    void setSoloRelatedBounds(float margin, float size, float width);
     
     int sortedIndex[3] = {-1, -1, -1};
     int frequency[3] = {0, 0, 0};

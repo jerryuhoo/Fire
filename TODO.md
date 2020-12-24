@@ -14,7 +14,7 @@
 12. menu multiband
 13. width graph
 14. dynamic sliders
-15. [bug]multiband focus problem
+15. [bug]multiband enable button mask problem
 16. link button for every band
 17. mix button for every band
 18. distortion graph for every band

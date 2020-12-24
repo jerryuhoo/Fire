@@ -46,9 +46,11 @@ private:
     void mouseUp(const juce::MouseEvent &e) override;
     int lineNum = 0;
     int lastLineNum = 0;
+    int checkLineState();
+    void changeFocus(int index);
     void updateLines(float margin, float size, float width);
     
-    int sortedIndex[3] = {0, 0, 0};
+    int sortedIndex[3] = {-1, -1, -1};
     int frequency[3] = {0, 0, 0};
     
     std::unique_ptr<VerticalLine> verticalLines[3];
@@ -58,6 +60,6 @@ private:
     std::unique_ptr<EnableButton> enableButton[4];
     
     bool multibandFocus[4] = {true, false, false, false};
-    
+    bool lastLineState[3] = {false, false, false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)
 };

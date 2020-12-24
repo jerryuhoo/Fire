@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.791"
+#define VERSION "[Early Beta] 0.792"
 
 
 //==============================================================================

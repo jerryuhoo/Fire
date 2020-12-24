@@ -106,7 +106,13 @@ void Multiband::paint (juce::Graphics& g)
         float width = verticalLines[0]->getWidth() / 2.f;
         
         //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
-        updateLines(margin, size, width);
+        int changedIndex = checkLineState();
+        if (changedIndex != -1)
+        {
+            changeFocus(changedIndex);
+            updateLines(margin, size, width);
+        }
+        
 
         // set black and focus masks
         int margin2 = getWidth() / 250; // 1/100 * 4 / 10
@@ -166,6 +172,36 @@ void Multiband::resized()
     
 }
 
+int Multiband::checkLineState()
+{
+    // return changed line sorted index
+    int idx = -1;
+    for (int i = 0; i < 3; i++)
+    {
+        if (sortedIndex[i] == -1)
+        {
+            break;
+        }
+        if (lastLineState[i] != verticalLines[sortedIndex[i]]->getState() || verticalLines[sortedIndex[i]]->isMoving())
+        {
+            lastLineState[i] = verticalLines[sortedIndex[i]]->getState();
+            idx = i;
+            break;
+        }
+    }
+    return idx;
+}
+
+void Multiband::changeFocus(int index)
+{
+    // change focus index when line is deleted
+    if (!verticalLines[sortedIndex[index]]->getState() && multibandFocus[index + 1])
+    {
+        multibandFocus[index + 1] = false;
+        multibandFocus[index] = true;
+    }
+}
+
 void Multiband::updateLines(float margin, float size, float width)
 {
     // create
@@ -202,6 +238,10 @@ void Multiband::updateLines(float margin, float size, float width)
             }
         }
     }
+    
+    // reset all disabled parameters (maybe HIGH CPU!!!)
+    
+    
     
     // set soloButtons visibility
     for (int i = 0; i < 4; i++)
@@ -318,6 +358,12 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
                 }
             }
         }
+        float margin = getHeight() / 20.f;
+        float size = verticalLines[0]->getHeight() / 10.f;
+        float width = verticalLines[0]->getWidth() / 2.f;
+        updateLines(margin, size, width);
+        
+        
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.f) // focus on one band
     {

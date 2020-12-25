@@ -180,6 +180,10 @@ private:
 
     void updateToggleState();
     
+    void setMenu(juce::ComboBox* combobox);
+    void setNormalSlider(juce::Slider* slider);
+    void setListenerSlider(juce::Slider* slider);
+    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID);
 
     // override listener functions
     // linked

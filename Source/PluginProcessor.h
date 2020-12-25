@@ -21,35 +21,7 @@
 //#define COLOUR1 Colour(244, 208, 63)
 //#define COLOUR6 Colour(45, 40, 40)
 //==============================================================================
-/**
-*/
 
-// temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
-// probably use fifo
-//class Visualiser : public juce::AudioVisualiserComponent
-//{
-//public:
-//    Visualiser() : AudioVisualiserComponent(2)
-//    {
-//        setBufferSize(128);
-//        setSamplesPerBlock(16);
-//        setColours(COLOUR6, COLOUR1);
-//        setBoundsInset(juce::BorderSize<int>(2, 2, 2, 2));
-//    }
-//
-//    void paintChannel(juce::Graphics &g, juce::Rectangle<float> area,
-//                      const juce::Range<float> *levels, int numLevels, int nextSample) override
-//    {
-//        juce::Path p;
-//        getChannelAsPath(p, levels, numLevels, nextSample);
-//        juce::ColourGradient grad(COLOUR1, area.getX() + area.getWidth() / 2, area.getY() + area.getHeight() / 2,
-//                                  COLOUR6, area.getX(), area.getY() + area.getHeight() / 2, true);
-//        g.setGradientFill(grad);
-//        g.fillPath(p, juce::AffineTransform::fromTargetPoints(0.0f, -1.0f, area.getX(), area.getY(),
-//                                                              0.0f, 1.0f, area.getX(), area.getBottom(),
-//                                                              (float)numLevels, -1.0f, area.getRight(), area.getY()));
-//    }
-//};
 
 class FireAudioProcessor : public juce::AudioProcessor
 {

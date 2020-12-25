@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.794"
+#define VERSION "[Early Beta] 0.795"
 
 
 //==============================================================================
@@ -135,25 +135,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputLabel.setJustificationType(juce::Justification::centred);
     
     // mix knob
-    addAndMakeVisible(mixKnob1);
-    mixKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(mixKnob2);
-    mixKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(mixKnob3);
-    mixKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(mixKnob4);
-    mixKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-
-    addAndMakeVisible(mixKnob);
-    mixKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    mixKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    setListenerSlider(&mixKnob1);
+    setListenerSlider(&mixKnob2);
+    setListenerSlider(&mixKnob3);
+    setListenerSlider(&mixKnob4);
+    setListenerSlider(&mixKnob);
     
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", juce::dontSendNotification);
@@ -163,21 +149,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     mixLabel.setJustificationType(juce::Justification::centred);
     
     // dynamic knob
-    addAndMakeVisible(dynamicKnob1);
-    dynamicKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    dynamicKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(dynamicKnob2);
-    dynamicKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    dynamicKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(dynamicKnob3);
-    dynamicKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    dynamicKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(dynamicKnob4);
-    dynamicKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    dynamicKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    setListenerSlider(&dynamicKnob1);
+    setListenerSlider(&dynamicKnob2);
+    setListenerSlider(&dynamicKnob3);
+    setListenerSlider(&dynamicKnob4);
 
     addAndMakeVisible(dynamicLabel);
     dynamicLabel.setText("Dynamic", juce::dontSendNotification);
@@ -187,21 +162,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     dynamicLabel.setJustificationType(juce::Justification::centred);
     
     // width knob
-    addAndMakeVisible(widthKnob1);
-    widthKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    widthKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(widthKnob2);
-    widthKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    widthKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(widthKnob3);
-    widthKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    widthKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(widthKnob4);
-    widthKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    widthKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    setListenerSlider(&widthKnob1);
+    setListenerSlider(&widthKnob2);
+    setListenerSlider(&widthKnob3);
+    setListenerSlider(&widthKnob4);
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
@@ -223,21 +187,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     colorLabel.setJustificationType(juce::Justification::centred);
 
     // bias knob
-    addAndMakeVisible(biasKnob1);
-    biasKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    biasKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(biasKnob2);
-    biasKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    biasKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(biasKnob3);
-    biasKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    biasKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(biasKnob4);
-    biasKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    biasKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    setListenerSlider(&biasKnob1);
+    setListenerSlider(&biasKnob2);
+    setListenerSlider(&biasKnob3);
+    setListenerSlider(&biasKnob4);
     
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
@@ -258,24 +211,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
-    
-
     // rec knob
-    addAndMakeVisible(recKnob1);
-    recKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    recKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(recKnob2);
-    recKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    recKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(recKnob3);
-    recKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    recKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    
-    addAndMakeVisible(recKnob4);
-    recKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    recKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    setListenerSlider(&recKnob1);
+    setListenerSlider(&recKnob2);
+    setListenerSlider(&recKnob3);
+    setListenerSlider(&recKnob4);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
@@ -283,8 +223,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     recLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
     recLabel.attachToComponent(&recKnob1, false);
     recLabel.setJustificationType(juce::Justification::centred);
-
-    
 
     // cutoff knob
     addAndMakeVisible(cutoffKnob);
@@ -655,36 +593,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     lineNumSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINENUM_ID, lineNumSlider);
     
     
-    // Distortion mode select
-    addAndMakeVisible(distortionMode1);
-
-    distortionMode1.addItem("None", 1);
-    distortionMode1.addSeparator();
-
-    distortionMode1.addSectionHeading("Soft Clipping");
-    distortionMode1.addItem("Arctan Soft Clipping", 2);
-    distortionMode1.addItem("Exp Soft Clipping", 3);
-    distortionMode1.addItem("Tanh Soft Clipping", 4);
-    distortionMode1.addItem("Cubic Soft Clipping", 5);
-    distortionMode1.addSeparator();
-
-    distortionMode1.addSectionHeading("Hard Clipping");
-    distortionMode1.addItem("Hard Clipping", 6);
-    distortionMode1.addItem("Sausage Fattener", 7);
-    distortionMode1.addSeparator();
-
-    distortionMode1.addSectionHeading("Foldback");
-    distortionMode1.addItem("Sin Foldback", 8);
-    distortionMode1.addItem("Linear Foldback", 9);
-    distortionMode1.addSeparator();
-
-    distortionMode1.addSectionHeading("Asymmetrical Clipping");
-    distortionMode1.addItem("Diode Clipping 1", 10);
-    distortionMode1.addSeparator();
-
-    distortionMode1.setJustificationType(juce::Justification::centred);
-    distortionMode1.addListener(this);
-
+    setMenu(&distortionMode1);
+    setMenu(&distortionMode2);
+    setMenu(&distortionMode3);
+    setMenu(&distortionMode4);
 
     // use global lookandfeel
     getLookAndFeel().setColour(juce::ComboBox::textColourId, COLOUR1);
@@ -866,6 +778,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             biasKnob2.setVisible(false);
             biasKnob3.setVisible(false);
             biasKnob4.setVisible(false);
+
+            distortionMode1.setVisible(true);
+            distortionMode2.setVisible(false);
+            distortionMode3.setVisible(false);
+            distortionMode4.setVisible(false);
         }
         else if (multibandFocus[1])
         {
@@ -913,6 +830,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             biasKnob2.setVisible(true);
             biasKnob3.setVisible(false);
             biasKnob4.setVisible(false);
+
+            distortionMode1.setVisible(false);
+            distortionMode2.setVisible(true);
+            distortionMode3.setVisible(false);
+            distortionMode4.setVisible(false);
         }
         else if (multibandFocus[2])
         {
@@ -960,6 +882,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             biasKnob2.setVisible(false);
             biasKnob3.setVisible(true);
             biasKnob4.setVisible(false);
+
+            distortionMode1.setVisible(false);
+            distortionMode2.setVisible(false);
+            distortionMode3.setVisible(true);
+            distortionMode4.setVisible(false);
         }
         else if (multibandFocus[3])
         {
@@ -1007,6 +934,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             biasKnob2.setVisible(false);
             biasKnob3.setVisible(false);
             biasKnob4.setVisible(true);
+
+            distortionMode1.setVisible(false);
+            distortionMode2.setVisible(false);
+            distortionMode3.setVisible(false);
+            distortionMode4.setVisible(true);
         }
         
         driveLabel.setVisible(true);
@@ -1256,6 +1188,9 @@ void FireAudioProcessorEditor::resized()
 
     // distortion menu
     distortionMode1.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
+    distortionMode2.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
+    distortionMode3.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
+    distortionMode4.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
 
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;
@@ -1333,7 +1268,8 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
     if (combobox == &distortionMode1)
     {
         // set drive knob
-        if (*processor.treeState.getRawParameterValue(MODE_ID1) == 0)
+        disableSlider(&processor, driveKnob1, MODE_ID1);
+        /*if (*processor.treeState.getRawParameterValue(MODE_ID1) == 0)
         {
             tempDriveValue = driveKnob1.getValue();
             driveKnob1.setValue(1);
@@ -1346,10 +1282,11 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
                 driveKnob1.setValue(tempDriveValue);
             }
             driveKnob1.setEnabled(true);
-        }
+        }*/
 
         // set bias knob
-        int mode = *processor.treeState.getRawParameterValue(MODE_ID1);
+        disableSlider(&processor, biasKnob1, MODE_ID1);
+        /*int mode = *processor.treeState.getRawParameterValue(MODE_ID1);
         if (mode == 9 || mode == 0)
         {
             tempBiasValue = biasKnob1.getValue();
@@ -1363,6 +1300,87 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
                 biasKnob1.setValue(tempBiasValue);
             }
             biasKnob1.setEnabled(true);
-        }
+        }*/
     }
+    else if (combobox == &distortionMode2)
+    {
+        disableSlider(&processor, driveKnob2, MODE_ID2);
+        disableSlider(&processor, biasKnob2, MODE_ID2);
+    }
+    else if (combobox == &distortionMode3)
+    {
+        disableSlider(&processor, driveKnob3, MODE_ID3);
+        disableSlider(&processor, biasKnob3, MODE_ID3);
+    }
+    else if (combobox == &distortionMode4)
+    {
+        disableSlider(&processor, driveKnob4, MODE_ID4);
+        disableSlider(&processor, biasKnob4, MODE_ID4);
+    }
+}
+
+void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID)
+{
+    
+    auto val = processor->treeState.getRawParameterValue(paramID);
+    int selection = val->load();
+    if (selection == 0)
+    {
+        tempDriveValue = slider.getValue();
+        slider.setValue(1);
+        slider.setEnabled(false);
+    }
+    else
+    {
+        if (slider.getValue() == 1)
+        {
+            slider.setValue(tempDriveValue);
+        }
+        slider.setEnabled(true);
+    }
+}
+
+void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
+{
+    // Distortion mode select
+    addAndMakeVisible(combobox);
+
+    combobox->addItem("None", 1);
+    combobox->addSeparator();
+
+    combobox->addSectionHeading("Soft Clipping");
+    combobox->addItem("Arctan Soft Clipping", 2);
+    combobox->addItem("Exp Soft Clipping", 3);
+    combobox->addItem("Tanh Soft Clipping", 4);
+    combobox->addItem("Cubic Soft Clipping", 5);
+    combobox->addSeparator();
+
+    combobox->addSectionHeading("Hard Clipping");
+    combobox->addItem("Hard Clipping", 6);
+    combobox->addItem("Sausage Fattener", 7);
+    combobox->addSeparator();
+
+    combobox->addSectionHeading("Foldback");
+    combobox->addItem("Sin Foldback", 8);
+    combobox->addItem("Linear Foldback", 9);
+    combobox->addSeparator();
+
+    combobox->addSectionHeading("Asymmetrical Clipping");
+    combobox->addItem("Diode Clipping 1", 10);
+    combobox->addSeparator();
+
+    combobox->setJustificationType(juce::Justification::centred);
+    combobox->addListener(this);
+}
+
+void FireAudioProcessorEditor::setNormalSlider(juce::Slider* slider)
+{
+
+}
+
+void FireAudioProcessorEditor::setListenerSlider(juce::Slider* slider)
+{
+    addAndMakeVisible(slider);
+    slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }

@@ -52,7 +52,7 @@ private:
     void updateLines(float margin, float size, float width, bool isAdd, int changedIndex);
     
     void dragLines(float margin, float size, float width, float limitLeft);
-    void setLineRelatedBounds(float margin, float size, float width);
+    void setLineRelatedBounds(float margin, float size, float width, int i);
     void setSoloRelatedBounds(float margin, float size, float width);
     
     int sortedIndex[3] = {-1, -1, -1};

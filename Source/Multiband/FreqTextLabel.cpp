@@ -62,3 +62,8 @@ void FreqTextLabel::setFreq(int freq)
 {
     mFrequency = freq;
 }
+
+int FreqTextLabel::getFreq()
+{
+    return mFrequency;
+}

@@ -74,11 +74,10 @@ void Multiband::paint (juce::Graphics& g)
         float yPos = mousePos.getY();
         
         float limitLeft = 0.1f;
-        float limitRight = 0.9f;
-        
-        
+
         if (yPos >= startY && yPos <= startY + getHeight() / 5 && lineNum < 3)
         {
+            float limitRight = 1.f - limitLeft;
             bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
@@ -237,7 +236,6 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
 
 void Multiband::updateLines(float margin, float size, float width, bool isAdd, int changedIndex)
 {
-//    setLineRelatedBounds(margin, size, width);
     int count = 0;
     
     for (int i = 0; i < 3; i++)
@@ -246,14 +244,7 @@ void Multiband::updateLines(float margin, float size, float width, bool isAdd, i
         {
             verticalLines[i]->setVisible(true);
             
-            verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
-            closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, margin, size, size);
-
-            freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, getHeight() / 5 + margin, size * 4, size);
-            int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
-            freqTextLabel[i]->setFreq(freq);
-//            freqTextLabel[i]->setVisible(verticalLines[i]->isMoving() || verticalLines[i]->isMouseOver());
-            frequency[i] = freq;
+            setLineRelatedBounds(margin, size, width, i);
             sortedIndex[count] = i;
             count++;
         }
@@ -280,6 +271,7 @@ void Multiband::updateLines(float margin, float size, float width, bool isAdd, i
     for (int i = 0; i < lineNum; i++)
     {
         verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
+        frequency[i] = freqTextLabel[sortedIndex[i]]->getFreq();
     }
     
     // set left right index
@@ -382,8 +374,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             }
             if (canCreate)
             {
-                int newLineIndex = 0; // the index of new created line(self index)
-                int focusIndex = 0;
+                /*int focusIndex = 0;
                 for (int i = 0; i <= lineNum; i++)
                 {
                     if(multibandFocus[i] == true)
@@ -391,7 +382,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         focusIndex = i;
                         break;
                     }
-                }
+                }*/
                 for (int i = 0; i < 3; i++)
                 {
                     // create lines and close buttons and then set state
@@ -402,30 +393,14 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         verticalLines[i]->setMoving(true);
                         closeButtons[i]->setVisible(true);
                         freqTextLabel[i]->setVisible(true);
-                        
-                        newLineIndex = i;
-                        
                         break;
                     }
-                    
                 }
-                
-                
-//                int newLinePosIndex = 0; // (count from left to right in the window)
-//                for (int i = 0; i < 3; i++)
-//                {
-//                    // find newLinePosIndex
-//                    if (verticalLines[i]->getIndex() == newLineIndex)
-//                    {
-//                        newLinePosIndex = i;
-//                        break;
-//                    }
-//                }
                 
                 float margin = getHeight() / 20.f;
                 float size = verticalLines[0]->getHeight() / 10.f;
                 float width = verticalLines[0]->getWidth() / 2.f;
-//                updateLines(margin, size, width, true, newLinePosIndex);
+
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
@@ -549,23 +524,25 @@ void Multiband::dragLines(float margin, float size, float width, float limitLeft
     
     if (isMoving)
     {
-        setLineRelatedBounds(margin, size, width);
+        for (int i = 0; i < 3; i++)
+        {
+            setLineRelatedBounds(margin, size, width, i);
+        }
         setSoloRelatedBounds(margin, size, width);
     }
 }
 
-void Multiband::setLineRelatedBounds(float margin, float size, float width)
+void Multiband::setLineRelatedBounds(float margin, float size, float width, int i)
 {
-    for (int i = 0; i < 3; i++)
-    {
-        verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
-        closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, margin, size, size);
+    
+    verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
+    closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, margin, size, size);
 
-        freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, getHeight() / 5 + margin, size * 4, size);
-        int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
-        freqTextLabel[i]->setFreq(freq);
-        frequency[i] = freq;
-    }
+    freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, getHeight() / 5 + margin, size * 4, size);
+    int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
+    freqTextLabel[i]->setFreq(freq);
+//        frequency[sortedIndex[i]] = freq;
+    
 }
 
 void Multiband::setSoloRelatedBounds(float margin, float size, float width)

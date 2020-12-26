@@ -26,7 +26,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void setFreq(int freq);
-    
+    int getFreq();
+
 private:
     VerticalLine &verticalLine;
     int mFrequency;

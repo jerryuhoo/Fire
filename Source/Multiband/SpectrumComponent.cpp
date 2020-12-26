@@ -58,7 +58,6 @@ void SpectrumComponent::resized()
 void SpectrumComponent::paintSpectrum(juce::Graphics & g)
 {
 
-    float yPercent;
     auto width = getLocalBounds().getWidth();
     auto height = getLocalBounds().getHeight();
     
@@ -67,7 +66,7 @@ void SpectrumComponent::paintSpectrum(juce::Graphics & g)
     
     for (int i = 0; i < number_of_bins; i++)
     {
-        yPercent = spectrum_data[i]> 0 ? float(0.5 + (juce::Decibels::gainToDecibels(spectrum_data[i]) / 150)) : -0.01;
+        float yPercent = spectrum_data[i]> 0 ? float(0.5 + (juce::Decibels::gainToDecibels(spectrum_data[i]) / 150)) : -0.01;
         p.lineTo(transformToLog((float)i / number_of_bins) * width,
                          juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f));
 //            p.lineTo(transformToLog((float)i / scopeSize) * width,

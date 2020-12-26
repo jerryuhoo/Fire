@@ -128,35 +128,35 @@ void Multiband::paint (juce::Graphics& g)
         
         if (lineNum > 0 && enableButton[0]->getState() == false)
         {
-            g.setColour(juce::Colours::black.withAlpha(0.8f));
+            g.setColour(COLOUR_MASK_BLACK);
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
         if (lineNum > 0 && multibandFocus[0])
         {
-            g.setColour(juce::Colours::red.withAlpha(0.1f));
+            g.setColour(COLOUR_MASK_RED);
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
         for (int i = 1; i < lineNum; i++)
         {
             if (lineNum > 1 && enableButton[i]->getState() == false)
             {
-                g.setColour(juce::Colours::black.withAlpha(0.8f));
+                g.setColour(COLOUR_MASK_BLACK);
                 g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
             }
             if (lineNum > 1 && multibandFocus[i])
             {
-                g.setColour(juce::Colours::red.withAlpha(0.1f));
+                g.setColour(COLOUR_MASK_RED);
                 g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
             }
         }
         if (lineNum > 0 && enableButton[lineNum]->getState() == false)
         {
-            g.setColour(juce::Colours::black.withAlpha(0.8f));
+            g.setColour(COLOUR_MASK_BLACK);
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         if (lineNum > 0 && multibandFocus[lineNum])
         {
-            g.setColour(juce::Colours::red.withAlpha(0.1f));
+            g.setColour(COLOUR_MASK_RED);
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         
@@ -171,7 +171,10 @@ void Multiband::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-    
+    float margin = getHeight() / 20.f;
+    float size = verticalLines[0]->getHeight() / 10.f;
+    float width = verticalLines[0]->getWidth() / 2.f;
+    updateLines(margin, size, width, false, -1);
 }
 
 int Multiband::getChangedIndex()
@@ -312,11 +315,11 @@ void Multiband::updateLines(float margin, float size, float width, bool isAdd, i
 //        }
 //    }
 //
-//    if (!isMoving)
-//    {
+    if (changedIndex != -1) // if not resizing
+    {
         // change focus position
         changeFocus(changedIndex, isAdd);
-//    }
+    }
     
     
     

@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.795"
+#define VERSION "[Early Beta] 0.796"
 
 
 //==============================================================================
@@ -1242,8 +1242,7 @@ void FireAudioProcessorEditor::timerCallback()
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 {
-    //    float thresh = 20.f;
-    //    float changeThresh = 3.f;
+    // TODO: put this into one function!!!(linkValue)
     if (linkedButton1.getToggleState() == true)
     {
         if (slider == &driveKnob1)
@@ -1260,82 +1259,107 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
                 driveKnob1.setValue(100);
         }
     }
+    if (linkedButton2.getToggleState() == true)
+    {
+        if (slider == &driveKnob2)
+        {
+            outputKnob2.setValue(-driveKnob2.getValue() * 0.1);
+        }
+        else if (slider == &outputKnob2 && driveKnob2.isEnabled())
+        {
+            if (outputKnob2.getValue() <= 0 && outputKnob2.getValue() >= -10)
+                driveKnob2.setValue(-outputKnob2.getValue() * 10);
+            else if (outputKnob2.getValue() > 0)
+                driveKnob2.setValue(0);
+            else if (outputKnob2.getValue() < -10)
+                driveKnob2.setValue(100);
+        }
+    }
+    if (linkedButton3.getToggleState() == true)
+    {
+        if (slider == &driveKnob3)
+        {
+            outputKnob3.setValue(-driveKnob3.getValue() * 0.1);
+        }
+        else if (slider == &outputKnob3 && driveKnob3.isEnabled())
+        {
+            if (outputKnob3.getValue() <= 0 && outputKnob3.getValue() >= -10)
+                driveKnob3.setValue(-outputKnob3.getValue() * 10);
+            else if (outputKnob3.getValue() > 0)
+                driveKnob3.setValue(0);
+            else if (outputKnob3.getValue() < -10)
+                driveKnob3.setValue(100);
+        }
+    }
+    if (linkedButton4.getToggleState() == true)
+    {
+        if (slider == &driveKnob4)
+        {
+            outputKnob4.setValue(-driveKnob4.getValue() * 0.1);
+        }
+        else if (slider == &outputKnob4 && driveKnob4.isEnabled())
+        {
+            if (outputKnob4.getValue() <= 0 && outputKnob4.getValue() >= -10)
+                driveKnob4.setValue(-outputKnob4.getValue() * 10);
+            else if (outputKnob4.getValue() > 0)
+                driveKnob4.setValue(0);
+            else if (outputKnob4.getValue() < -10)
+                driveKnob4.setValue(100);
+        }
+    }
+}
+
+void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &ySlider)
+{
+    // x changes, then y will change
+    
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
 {
-    // TODO: !put this in a function
     if (combobox == &distortionMode1)
     {
-        // set drive knob
-        disableSlider(&processor, driveKnob1, MODE_ID1);
-        /*if (*processor.treeState.getRawParameterValue(MODE_ID1) == 0)
-        {
-            tempDriveValue = driveKnob1.getValue();
-            driveKnob1.setValue(1);
-            driveKnob1.setEnabled(false);
-        }
-        else
-        {
-            if (driveKnob1.getValue() == 1)
-            {
-                driveKnob1.setValue(tempDriveValue);
-            }
-            driveKnob1.setEnabled(true);
-        }*/
-
-        // set bias knob
-        disableSlider(&processor, biasKnob1, MODE_ID1);
-        /*int mode = *processor.treeState.getRawParameterValue(MODE_ID1);
-        if (mode == 9 || mode == 0)
-        {
-            tempBiasValue = biasKnob1.getValue();
-            biasKnob1.setValue(0);
-            biasKnob1.setEnabled(false);
-        }
-        else
-        {
-            if (biasKnob1.getValue() == 0)
-            {
-                biasKnob1.setValue(tempBiasValue);
-            }
-            biasKnob1.setEnabled(true);
-        }*/
+        disableSlider(&processor, driveKnob1, MODE_ID1, tempDriveValue[0]);
+        disableSlider(&processor, biasKnob1, MODE_ID1, tempBiasValue[0]);
     }
     else if (combobox == &distortionMode2)
     {
-        disableSlider(&processor, driveKnob2, MODE_ID2);
-        disableSlider(&processor, biasKnob2, MODE_ID2);
+        disableSlider(&processor, driveKnob2, MODE_ID2, tempDriveValue[1]);
+        disableSlider(&processor, biasKnob2, MODE_ID2, tempBiasValue[1]);
     }
     else if (combobox == &distortionMode3)
     {
-        disableSlider(&processor, driveKnob3, MODE_ID3);
-        disableSlider(&processor, biasKnob3, MODE_ID3);
+        disableSlider(&processor, driveKnob3, MODE_ID3, tempDriveValue[2]);
+        disableSlider(&processor, biasKnob3, MODE_ID3, tempBiasValue[2]);
     }
     else if (combobox == &distortionMode4)
     {
-        disableSlider(&processor, driveKnob4, MODE_ID4);
-        disableSlider(&processor, biasKnob4, MODE_ID4);
+        disableSlider(&processor, driveKnob4, MODE_ID4, tempDriveValue[3]);
+        disableSlider(&processor, biasKnob4, MODE_ID4, tempBiasValue[3]);
     }
 }
 
-void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID)
+void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID, float &tempValue)
 {
-    
     auto val = processor->treeState.getRawParameterValue(paramID);
     int selection = val->load();
     if (selection == 0)
     {
-        tempDriveValue = slider.getValue();
-        slider.setValue(1);
+        tempValue = slider.getValue();
+        if (&slider == &driveKnob1 || &slider == &driveKnob2 || &slider == &driveKnob3 || &slider == &driveKnob4)
+        {
+            slider.setValue(1);
+        }
+        else if (&slider == &biasKnob1 || &slider == &biasKnob2 || &slider == &biasKnob3 || &slider == &biasKnob4)
+        {
+            slider.setValue(0);
+        }
+        
         slider.setEnabled(false);
     }
     else
     {
-        if (slider.getValue() == 1)
-        {
-            slider.setValue(tempDriveValue);
-        }
+        slider.setValue(tempValue);
         slider.setEnabled(true);
     }
 }

@@ -122,8 +122,8 @@ private:
         colorKnob;
     
     int knobSize = KNOBSIZE;
-    float tempDriveValue = 1;
-    float tempBiasValue = 0;
+    float tempDriveValue[4] = {1, 1, 1, 1};
+    float tempBiasValue[4] = {0, 0, 0, 0};
 
     // Labels
     juce::Label
@@ -183,8 +183,8 @@ private:
     void setMenu(juce::ComboBox* combobox);
     void setNormalSlider(juce::Slider* slider);
     void setListenerSlider(juce::Slider* slider);
-    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID);
-
+    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID, float &tempValue);
+    void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;

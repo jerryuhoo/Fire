@@ -214,7 +214,8 @@
 #define COLOUR5             juce::Colour(192, 57, 43)
 #define COLOUR6             juce::Colour(45, 40, 40)
 #define COLOUR7             juce::Colour(15, 10, 10)
-
+#define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
+#define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.8f)
 // Define Font
 #define KNOB_FONT           "Futura"
 #define KNOB_FONT_SIZE      18.0f

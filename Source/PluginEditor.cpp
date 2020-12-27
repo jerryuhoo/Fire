@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.797"
+#define VERSION "[Early Beta] 0.798"
 
 
 //==============================================================================
@@ -35,6 +35,25 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // Spectrum
     addAndMakeVisible(spectrum);
     addAndMakeVisible(multiband);
+    
+    
+    multiband.setLineNum(*processor.treeState.getRawParameterValue(LINENUM_ID));
+    int freq1 = *processor.treeState.getRawParameterValue(FREQ_ID1);
+    int freq2 = *processor.treeState.getRawParameterValue(FREQ_ID2);
+    int freq3 = *processor.treeState.getRawParameterValue(FREQ_ID3);
+    multiband.setFrequency(freq1, freq2, freq3);
+    
+    bool state1 = *processor.treeState.getRawParameterValue(LINE_STATE_ID1);
+    bool state2 = *processor.treeState.getRawParameterValue(LINE_STATE_ID2);
+    bool state3 = *processor.treeState.getRawParameterValue(LINE_STATE_ID3);
+    multiband.setLineState(state1, state2, state3);
+    
+    
+    float pos1 = *processor.treeState.getRawParameterValue(LINEPOS_ID1);
+    float pos2 = *processor.treeState.getRawParameterValue(LINEPOS_ID2);
+    float pos3 = *processor.treeState.getRawParameterValue(LINEPOS_ID3);
+    multiband.setLinePos(pos1, pos2, pos3);
+    multiband.updateLines(false, -1);
     
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
@@ -556,25 +575,28 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowRightButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WINDOW_RIGHT_ID, windowRightButton);
 
     
-    multiband.getFocusArray(multibandFocus);
-    multiFocusSlider1.setValue(multibandFocus[0]);
-    multiFocusSlider2.setValue(multibandFocus[1]);
-    multiFocusSlider3.setValue(multibandFocus[2]);
-    multiFocusSlider4.setValue(multibandFocus[3]);
+//    multiband.getFocusArray(multibandFocus);
+//    multiFocusSlider1.setValue(multibandFocus[0]);
+//    multiFocusSlider2.setValue(multibandFocus[1]);
+//    multiFocusSlider3.setValue(multibandFocus[2]);
+//    multiFocusSlider4.setValue(multibandFocus[3]);
+//
+//    multiband.getStateArray(multibandState);
+//    multiStateSlider1.setValue(multibandState[0]);
+//    multiStateSlider2.setValue(multibandState[1]);
+//    multiStateSlider3.setValue(multibandState[2]);
+//    multiStateSlider4.setValue(multibandState[3]);
+//
+//    multiband.getFreqArray(multibandFreq);
+//    multiFreqSlider1.setValue(multibandFreq[0]);
+//    multiFreqSlider2.setValue(multibandFreq[1]);
+//    multiFreqSlider3.setValue(multibandFreq[2]);
     
-    multiband.getStateArray(multibandState);
-    multiStateSlider1.setValue(multibandState[0]);
-    multiStateSlider2.setValue(multibandState[1]);
-    multiStateSlider3.setValue(multibandState[2]);
-    multiStateSlider4.setValue(multibandState[3]);
     
-    multiband.getFreqArray(multibandFreq);
-    multiFreqSlider1.setValue(multibandFreq[0]);
-    multiFreqSlider2.setValue(multibandFreq[1]);
-    multiFreqSlider3.setValue(multibandFreq[2]);
     
-    int lineNum = multiband.getLineNum();
-    lineNumSlider.setValue(lineNum);
+    
+//    int lineNum = multiband.getLineNum();
+//    lineNumSlider.setValue(lineNum);
     
     multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID1, multiFocusSlider1);
     multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID2, multiFocusSlider2);
@@ -592,7 +614,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     lineNumSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINENUM_ID, lineNumSlider);
     
+    lineStateButtonAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID1, lineStateButton1);
+    lineStateButtonAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID2, lineStateButton2);
+    lineStateButtonAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID3, lineStateButton3);
     
+    linePosSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID1, linePosSlider1);
+    linePosSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID2, linePosSlider2);
+    linePosSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID3, linePosSlider3);
+
     setMenu(&distortionMode1);
     setMenu(&distortionMode2);
     setMenu(&distortionMode3);
@@ -729,8 +758,18 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         multiFreqSlider2.setValue(multibandFreq[1]);
         multiFreqSlider3.setValue(multibandFreq[2]);
         
+        multiband.getLinePos(linePos);
+        linePosSlider1.setValue(linePos[0]);
+        linePosSlider2.setValue(linePos[1]);
+        linePosSlider3.setValue(linePos[2]);
+        
         int lineNum = multiband.getLineNum();
         lineNumSlider.setValue(lineNum);
+        
+        multiband.getLineState(lineState);
+        lineStateButton1.setToggleState(lineState[0], juce::NotificationType::dontSendNotification);
+        lineStateButton2.setToggleState(lineState[1], juce::NotificationType::dontSendNotification);
+        lineStateButton3.setToggleState(lineState[2], juce::NotificationType::dontSendNotification);
         
         if (multibandFocus[0])
         {
@@ -1047,7 +1086,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         
     }
-
+    
     // draw shadow 1
     //juce::ColourGradient shadowGrad1(juce::Colour(0, 0, 0).withAlpha(0.5f), 0, 50,
     //                                 juce::Colour(0, 0, 0).withAlpha(0.f), 0, 55, false);

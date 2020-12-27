@@ -35,9 +35,24 @@ public:
     void getFocusArray(bool (&input)[4]);
     void getStateArray(bool (&input)[4]);
     void getFreqArray(int (&input)[3]);
+    void setFrequency(int freq1, int freq2, int freq3);
+    void setFocus(bool focus1, bool focus2, bool focus3, bool focus4);
+    void setLineState(bool state1, bool state2, bool state3);
+    void getLineState(bool (&input)[3]);
     void reset();
+    void setLineNum(int lineNum);
+    void setLinePos(float pos1, float pos2, float pos3);
+    void getLinePos(float (&input)[3]);
+    void updateLines(bool isAdd, int changedIndex);
     
 private:
+    
+    float margin;
+    float size;
+    float width;
+    float limitLeft;
+    float limitRight;
+    
     
 //    // Spectrum
 //    SpectrumComponent spectrum;
@@ -49,11 +64,11 @@ private:
     int lastLineNum = 0;
     int getChangedIndex();
     void changeFocus(int changedIndex, bool isAdd);
-    void updateLines(float margin, float size, float width, bool isAdd, int changedIndex);
     
-    void dragLines(float margin, float size, float width, float limitLeft);
-    void setLineRelatedBounds(float margin, float size, float width, int i);
-    void setSoloRelatedBounds(float margin, float size, float width);
+    
+    void dragLines();
+    void setLineRelatedBounds(int i);
+    void setSoloRelatedBounds();
     
     int sortedIndex[3] = {-1, -1, -1};
     int frequency[3] = {0, 0, 0};
@@ -65,6 +80,7 @@ private:
     std::unique_ptr<EnableButton> enableButton[4];
     
     bool multibandFocus[4] = {true, false, false, false};
+    bool lineState[3] = {false, false, false};
     bool lastLineState[3] = {false, false, false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)
 };

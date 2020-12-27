@@ -143,6 +143,13 @@
 #define FREQ_ID3            "freq3"
 #define FREQ_NAME3          "Freq3"
 
+#define LINEPOS_ID1         "linePos1"
+#define LINEPOS_NAME1       "LinePos1"
+#define LINEPOS_ID2         "linePos2"
+#define LINEPOS_NAME2       "LinePos2"
+#define LINEPOS_ID3         "linePos3"
+#define LINEPOS_NAME3       "LinePos3"
+
 #define BAND_STATE_ID1      "multibandState1"
 #define BAND_STATE_NAME1    "MultibandState1"
 #define BAND_STATE_ID2      "multibandState2"
@@ -170,6 +177,12 @@
 #define BAND_FOCUS_ID4      "multibandFocus4"
 #define BAND_FOCUS_NAME4    "MultibandFocus4"
 
+#define LINE_STATE_ID1      "lineState1"
+#define LINE_STATE_NAME1    "LineState1"
+#define LINE_STATE_ID2      "lineState2"
+#define LINE_STATE_NAME2    "LineState2"
+#define LINE_STATE_ID3      "lineState3"
+#define LINE_STATE_NAME3    "LineState3"
 
 
 // Define Position

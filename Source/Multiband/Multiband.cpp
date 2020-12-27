@@ -18,6 +18,9 @@ Multiband::Multiband()
     // initialise any special settings that your component needs.
 //    addAndMakeVisible(spectrum);
     
+    limitLeft = 0.1f;
+    limitRight = 1.f - limitLeft;
+    
     soloButton[0] = std::make_unique<SoloButton>();
     addAndMakeVisible(*soloButton[0]);
     
@@ -29,7 +32,6 @@ Multiband::Multiband()
     {
         verticalLines[i] = std::make_unique<VerticalLine>();
         addAndMakeVisible(*verticalLines[i]);
-        verticalLines[i]->setState(false); // make it invisible, this should bu put after addAndMakeVisible
         
         closeButtons[i] = std::make_unique<CloseButton>(*verticalLines[i]);
         addAndMakeVisible(*closeButtons[i]);
@@ -45,6 +47,10 @@ Multiband::Multiband()
         addAndMakeVisible(*enableButton[i + 1]);
     }
     
+    margin = getHeight() / 20.f;
+//    size = verticalLines[0]->getHeight() / 10.f;
+//    width = verticalLines[0]->getWidth() / 2.f;
+//    updateLines(false, -1);
 //    spectrum.setInterceptsMouseClicks(false, false);
 
 }
@@ -73,11 +79,10 @@ void Multiband::paint (juce::Graphics& g)
         float xPos = mousePos.getX();
         float yPos = mousePos.getY();
         
-        float limitLeft = 0.1f;
 
         if (yPos >= startY && yPos <= startY + getHeight() / 5 && lineNum < 3)
         {
-            float limitRight = 1.f - limitLeft;
+            
             bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
@@ -97,12 +102,7 @@ void Multiband::paint (juce::Graphics& g)
         
         g.drawLine(0, startY + getHeight() / 5, getWidth(), startY + getHeight() / 5, 1);
 
-        
-        // create
-        float margin = getHeight() / 20.f;
-        float size = verticalLines[0]->getHeight() / 10.f;
-        float width = verticalLines[0]->getWidth() / 2.f;
-        
+ 
         // freqLabel
         for (int i = 0; i < 3; i++)
         {
@@ -117,7 +117,7 @@ void Multiband::paint (juce::Graphics& g)
         int changedIndex = getChangedIndex();
         if (changedIndex != -1)
         {
-            updateLines(margin, size, width, false, changedIndex);
+            updateLines(false, changedIndex);
         }
         
 
@@ -160,7 +160,7 @@ void Multiband::paint (juce::Graphics& g)
         }
         
         
-        dragLines(margin, size, width, limitLeft);
+        dragLines();
  
     }
     
@@ -170,10 +170,21 @@ void Multiband::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-    float margin = getHeight() / 20.f;
-    float size = verticalLines[0]->getHeight() / 10.f;
-    float width = verticalLines[0]->getWidth() / 2.f;
-    updateLines(margin, size, width, false, -1);
+    margin = getHeight() / 20.f;
+    size = verticalLines[0]->getHeight() / 10.f;
+    width = verticalLines[0]->getWidth() / 2.f;
+    
+    // temp method to fix
+    if (size == 0)
+    {
+        size = 15.f;
+    }
+    if (width == 0)
+    {
+        width = 5.f;
+    }
+    
+    updateLines(false, -1);
 }
 
 int Multiband::getChangedIndex()
@@ -234,8 +245,9 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
     
 }
 
-void Multiband::updateLines(float margin, float size, float width, bool isAdd, int changedIndex)
+void Multiband::updateLines(bool isAdd, int changedIndex)
 {
+
     int count = 0;
     
     for (int i = 0; i < 3; i++)
@@ -244,7 +256,7 @@ void Multiband::updateLines(float margin, float size, float width, bool isAdd, i
         {
             verticalLines[i]->setVisible(true);
             
-            setLineRelatedBounds(margin, size, width, i);
+            setLineRelatedBounds(i);
             sortedIndex[count] = i;
             count++;
         }
@@ -330,7 +342,7 @@ void Multiband::updateLines(float margin, float size, float width, bool isAdd, i
         }
     }
     
-    setSoloRelatedBounds(margin, size, width);
+    setSoloRelatedBounds();
 //    // setBounds of soloButtons and enableButtons [duplicated]
 //    if (lineNum >= 1)
 //    {
@@ -361,8 +373,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
         {
             bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-            float limitLeft = 0.1f;
-            float limitRight = 0.9f;
             for (int i = 0; i < 3; i++)
             {
                 // can't create near existed lines
@@ -397,14 +407,12 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                     }
                 }
                 
-                float margin = getHeight() / 20.f;
-                float size = verticalLines[0]->getHeight() / 10.f;
-                float width = verticalLines[0]->getWidth() / 2.f;
+                
 
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
-                    updateLines(margin, size, width, true, changedIndex);
+                    updateLines(true, changedIndex);
                 }
 
                 
@@ -508,7 +516,7 @@ void Multiband::reset()
 }
 
 
-void Multiband::dragLines(float margin, float size, float width, float limitLeft)
+void Multiband::dragLines()
 {
     bool isMoving = false;
     // drag
@@ -526,13 +534,13 @@ void Multiband::dragLines(float margin, float size, float width, float limitLeft
     {
         for (int i = 0; i < 3; i++)
         {
-            setLineRelatedBounds(margin, size, width, i);
+            setLineRelatedBounds(i);
         }
-        setSoloRelatedBounds(margin, size, width);
+        setSoloRelatedBounds();
     }
 }
 
-void Multiband::setLineRelatedBounds(float margin, float size, float width, int i)
+void Multiband::setLineRelatedBounds(int i)
 {
     
     verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
@@ -545,7 +553,7 @@ void Multiband::setLineRelatedBounds(float margin, float size, float width, int 
     
 }
 
-void Multiband::setSoloRelatedBounds(float margin, float size, float width)
+void Multiband::setSoloRelatedBounds()
 {
     // setBounds of soloButtons and enableButtons
     if (lineNum >= 1)
@@ -556,5 +564,70 @@ void Multiband::setSoloRelatedBounds(float margin, float size, float width)
             enableButton[i]->setBounds((verticalLines[sortedIndex[i]]->getX() + verticalLines[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
         }
         enableButton[lineNum]->setBounds((verticalLines[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2, margin, size, size);
+    }
+}
+
+void Multiband::setLineNum(int lineNum)
+{
+    this->lineNum = lineNum;
+}
+
+void Multiband::setFocus(bool focus1, bool focus2, bool focus3, bool focus4)
+{
+    multibandFocus[0] = focus1;
+    multibandFocus[1] = focus2;
+    multibandFocus[2] = focus3;
+    multibandFocus[3] = focus4;
+}
+
+void Multiband::setLineState(bool state1, bool state2, bool state3)
+{
+    lineState[0] = state1;
+    lineState[1] = state2;
+    lineState[2] = state3;
+    verticalLines[0]->setState(state1);
+    verticalLines[1]->setState(state2);
+    verticalLines[2]->setState(state3);
+}
+
+void Multiband::setLinePos(float pos1, float pos2, float pos3)
+{
+    verticalLines[0]->setXPercent(pos1);
+    verticalLines[1]->setXPercent(pos2);
+    verticalLines[2]->setXPercent(pos3);
+}
+
+void Multiband::getLinePos(float (&input)[3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        input[i] = verticalLines[i]->getXPercent();
+    }
+}
+
+
+void Multiband::setFrequency(int freq1, int freq2, int freq3)
+{
+    frequency[0] = freq1;
+    frequency[1] = freq2;
+    frequency[2] = freq3;
+    freqTextLabel[0]->setFreq(freq1);
+    freqTextLabel[1]->setFreq(freq2);
+    freqTextLabel[2]->setFreq(freq3);
+}
+
+void Multiband::getLineState(bool (&input)[3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+//        input[i] = lineState[i];
+        if (sortedIndex[i] < 0)
+        {
+            input[i] = false;
+        }
+        else
+        {
+            input[i] = verticalLines[sortedIndex[i]]->getState();
+        }
     }
 }

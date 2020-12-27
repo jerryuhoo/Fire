@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.798"
+#define VERSION "[Early Beta] 0.799"
 
 
 //==============================================================================
@@ -36,30 +36,16 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(spectrum);
     addAndMakeVisible(multiband);
     
-    
-    multiband.setLineNum(*processor.treeState.getRawParameterValue(LINENUM_ID));
-    int freq1 = *processor.treeState.getRawParameterValue(FREQ_ID1);
-    int freq2 = *processor.treeState.getRawParameterValue(FREQ_ID2);
-    int freq3 = *processor.treeState.getRawParameterValue(FREQ_ID3);
-    multiband.setFrequency(freq1, freq2, freq3);
-    
-    bool state1 = *processor.treeState.getRawParameterValue(LINE_STATE_ID1);
-    bool state2 = *processor.treeState.getRawParameterValue(LINE_STATE_ID2);
-    bool state3 = *processor.treeState.getRawParameterValue(LINE_STATE_ID3);
-    multiband.setLineState(state1, state2, state3);
+    setMultiband();
     
     
-    float pos1 = *processor.treeState.getRawParameterValue(LINEPOS_ID1);
-    float pos2 = *processor.treeState.getRawParameterValue(LINEPOS_ID2);
-    float pos3 = *processor.treeState.getRawParameterValue(LINEPOS_ID3);
-    multiband.setLinePos(pos1, pos2, pos3);
-    multiband.updateLines(false, -1);
     
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
     
     // presets
     addAndMakeVisible(stateComponent);
+    lastPresetName = stateComponent.getPresetName();
 
     // ff meter
     //lnf = std::make_unique<foleys::LevelMeterLookAndFeel>();
@@ -614,9 +600,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     lineNumSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINENUM_ID, lineNumSlider);
     
-    lineStateButtonAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID1, lineStateButton1);
-    lineStateButtonAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID2, lineStateButton2);
-    lineStateButtonAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID3, lineStateButton3);
+    lineStateSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID1, lineStateSlider1);
+    lineStateSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID2, lineStateSlider2);
+    lineStateSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID3, lineStateSlider3);
     
     linePosSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID1, linePosSlider1);
     linePosSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID2, linePosSlider2);
@@ -733,6 +719,14 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     
     distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
     
+    // DBG(lastPresetName);
+    if (stateComponent.getPresetName() != lastPresetName)
+    {
+        setMultiband();
+        lastPresetName = stateComponent.getPresetName();
+    }
+
+
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
         
 //        spectrum.setVisible(false);
@@ -767,9 +761,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         lineNumSlider.setValue(lineNum);
         
         multiband.getLineState(lineState);
-        lineStateButton1.setToggleState(lineState[0], juce::NotificationType::dontSendNotification);
-        lineStateButton2.setToggleState(lineState[1], juce::NotificationType::dontSendNotification);
-        lineStateButton3.setToggleState(lineState[2], juce::NotificationType::dontSendNotification);
+        lineStateSlider1.setValue(lineState[0]);
+        lineStateSlider2.setValue(lineState[1]);
+        lineStateSlider3.setValue(lineState[2]);
         
         if (multibandFocus[0])
         {
@@ -1446,4 +1440,25 @@ void FireAudioProcessorEditor::setListenerSlider(juce::Slider* slider)
     addAndMakeVisible(slider);
     slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+}
+
+void FireAudioProcessorEditor::setMultiband()
+{
+    multiband.setLineNum(*processor.treeState.getRawParameterValue(LINENUM_ID));
+    int freq1 = *processor.treeState.getRawParameterValue(FREQ_ID1);
+    int freq2 = *processor.treeState.getRawParameterValue(FREQ_ID2);
+    int freq3 = *processor.treeState.getRawParameterValue(FREQ_ID3);
+    multiband.setFrequency(freq1, freq2, freq3);
+
+    bool state1 = *processor.treeState.getRawParameterValue(LINE_STATE_ID1);
+    bool state2 = *processor.treeState.getRawParameterValue(LINE_STATE_ID2);
+    bool state3 = *processor.treeState.getRawParameterValue(LINE_STATE_ID3);
+    multiband.setLineState(state1, state2, state3);
+
+
+    float pos1 = *processor.treeState.getRawParameterValue(LINEPOS_ID1);
+    float pos2 = *processor.treeState.getRawParameterValue(LINEPOS_ID2);
+    float pos3 = *processor.treeState.getRawParameterValue(LINEPOS_ID3);
+    multiband.setLinePos(pos1, pos2, pos3);
+    multiband.updateLines(false, -1);
 }

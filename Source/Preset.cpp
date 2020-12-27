@@ -288,6 +288,7 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
         {
             juce::XmlElement loadThisChild{*child}; // (0 indexed method)
             loadStateFromXml(loadThisChild, pluginProcessor);
+            statePresetName = child->getAttributeValue(0); //presetName index is 0
         }
         else
         {
@@ -517,6 +518,7 @@ void StateComponent::setPreviousPreset()
         procStatePresets.loadPreset(presetID);
     }
     presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+    
 }
 
 void StateComponent::setNextPreset()
@@ -529,6 +531,7 @@ void StateComponent::setNextPreset()
         procStatePresets.loadPreset(presetID);
     }
     presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+    
 }
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
@@ -638,7 +641,7 @@ void StateComponent::creatFolderIfNotExist(juce::File userFile)
 
 juce::String StateComponent::getPresetName()
 {
-    return presetName;
+    return procStatePresets.getPresetName();
 }
 
 void StateComponent::popPresetMenu()
@@ -679,6 +682,15 @@ void StateComponent::resetMultiband()
     multiband.reset();
 }
 
+//juce::TextButton& StateComponent::getNextButton()
+//{
+//    return nextButton;
+//}
+//
+//juce::TextButton& StateComponent::getPreviousButton()
+//{
+//    return previousButton;
+//}
 
 
 } // namespace state

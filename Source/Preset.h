@@ -108,12 +108,15 @@ public:
     void resized() override;
     
     juce::String getPresetName();
-    
+    /*juce::TextButton& getNextButton();
+    juce::TextButton& getPreviousButton();*/
+
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
     Multiband &multiband;
-    
+    //FireAudioProcessorEditor& editor;
+
     OtherLookAndFeel otherLookAndFeel;
     
     juce::TextButton toggleABButton;
@@ -141,8 +144,8 @@ private:
     void setNextPreset();
     
     void resetMultiband();
-    
-    juce::String presetName;
+
+    //juce::String presetName;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent);
 };

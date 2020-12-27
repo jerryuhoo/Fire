@@ -1096,9 +1096,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_RIGHT_ID, WINDOW_RIGHT_NAME, false));
     
     parameters.push_back(std::make_unique<juce::AudioParameterInt>(LINENUM_ID, LINENUM_NAME, 0, 3, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID1, FREQ_NAME1, 0, 22100, 500));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID2, FREQ_NAME2, 0, 22100, 2000));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID3, FREQ_NAME3, 0, 22100, 9000));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID1, LINE_STATE_NAME1, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID2, LINE_STATE_NAME2, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID3, LINE_STATE_NAME3, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID1, FREQ_NAME1, 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID2, FREQ_NAME2, 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID3, FREQ_NAME3, 0, 22100, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID1, LINEPOS_NAME1, 0.0f, 1.0f, 0.2f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID2, LINEPOS_NAME2, 0.0f, 1.0f, 0.3f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID3, LINEPOS_NAME3, 0.0f, 1.0f, 0.4f));
     
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID1, BAND_STATE_NAME1, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID2, BAND_STATE_NAME2, true));

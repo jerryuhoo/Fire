@@ -36,13 +36,17 @@ public:
     void paint(juce::Graphics &g) override;
     void resized() override;
     void timerCallback() override;
+    void setMultiband();
+   
 
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
-    
+    juce::String lastPresetName;
+
+
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
     
@@ -61,7 +65,7 @@ private:
     juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
     juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
     juce::Slider lineNumSlider;
-    juce::TextButton lineStateButton1, lineStateButton2, lineStateButton3;
+    juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
     juce::Slider linePosSlider1, linePosSlider2, linePosSlider3;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
@@ -69,7 +73,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineNumSliderAttachment;
     
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> lineStateButtonAttachment1, lineStateButtonAttachment2, lineStateButtonAttachment3;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linePosSliderAttachment1, linePosSliderAttachment2, linePosSliderAttachment3;
     
     bool multibandFocus[4];
@@ -186,6 +190,7 @@ private:
 
     void updateToggleState();
     
+
     void setMenu(juce::ComboBox* combobox);
     void setNormalSlider(juce::Slider* slider);
     void setListenerSlider(juce::Slider* slider);

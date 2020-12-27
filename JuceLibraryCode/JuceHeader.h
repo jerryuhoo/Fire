@@ -48,7 +48,7 @@ namespace ProjectInfo
 {
     const char* const  projectName    = "Fire";
     const char* const  companyName    = "";
-    const char* const  versionString  = "0.797";
-    const int          versionNumber  = 0x31d00;
+    const char* const  versionString  = "0.799";
+    const int          versionNumber  = 0x31f00;
 }
 #endif

@@ -196,6 +196,18 @@ private:
     void setListenerSlider(juce::Slider* slider);
     void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID, float &tempValue);
     void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
+    void setDistortionGraph(juce::String modeId, juce::String driveId,
+        juce::String recId, juce::String mixId, juce::String biasId);
+
+
+
+
+
+
+
+
+
+
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;

@@ -184,6 +184,16 @@
 #define LINE_STATE_ID3      "lineState3"
 #define LINE_STATE_NAME3    "LineState3"
 
+// Define Font
+#define KNOB_FONT           "Futura"
+#define KNOB_FONT_SIZE      18.0f
+#define KNOB_FONT_COLOUR    COLOUR1
+
+// Define Components size
+#define TEXTBOX_WIDTH       60
+#define TEXTBOX_HEIGHT      30
+#define KNOBSIZE            100
+#define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
 
 // Define Position
 #define PART1               getHeight() / 10
@@ -209,14 +219,20 @@
 #define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10 * 3
 
-#define DRIVE_X             getWidth() / 2 - newKnobSize
-#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2
+#define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
+#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2
+#define REC_X               startX * 6 - SCALED_KNOBSIZE / 2
+#define COLOR_X             startX * 7 - SCALED_KNOBSIZE / 2
+#define BIAS_X              startX * 6 - SCALED_KNOBSIZE / 2
+#define WIDTH_X             startX * 6.5 - SCALED_KNOBSIZE / 2
+#define OUTPUT_X            startX * 7 - SCALED_KNOBSIZE / 2
+#define DYNAMIC_X           startX * 6.5 - SCALED_KNOBSIZE / 2
+#define CUTOFF_X            startX * 3 - SCALED_KNOBSIZE / 2
+#define RES_X               startX * 4 - SCALED_KNOBSIZE / 2
+#define MIX_X               startX * 7 - SCALED_KNOBSIZE / 2
+#define DOWNSAMPLE_X        startX * 6 - SCALED_KNOBSIZE / 2
 
 
-// Define Components size
-#define TEXTBOX_WIDTH       60
-#define TEXTBOX_HEIGHT      30
-#define KNOBSIZE            100
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)
@@ -229,7 +245,4 @@
 #define COLOUR7             juce::Colour(15, 10, 10)
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.8f)
-// Define Font
-#define KNOB_FONT           "Futura"
-#define KNOB_FONT_SIZE      18.0f
-#define KNOB_FONT_COLOUR    COLOUR1
+

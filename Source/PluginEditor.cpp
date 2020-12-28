@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.799"
+#define VERSION "[Early Beta] 0.799_2"
 
 
 //==============================================================================
@@ -693,7 +693,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 
     bool left = *processor.treeState.getRawParameterValue(WINDOW_LEFT_ID);
     bool right = *processor.treeState.getRawParameterValue(WINDOW_RIGHT_ID);
-
+    /*
     // paint distortion function
     int mode = *processor.treeState.getRawParameterValue(MODE_ID1);
     float drive = *processor.treeState.getRawParameterValue(DRIVE_ID1);//TODO: replace it!
@@ -709,7 +709,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     distortionProcessor.controls.color = color;
     distortionProcessor.controls.rectification = rec;
     distortionProcessor.controls.bias = bias;
-
+    */
     auto frame = getLocalBounds();
     frame.setBounds(0, part1, getWidth(), part2);
     
@@ -717,7 +717,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
     
-    distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
+    //distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
     
     // DBG(lastPresetName);
     if (stateComponent.getPresetName() != lastPresetName)
@@ -726,6 +726,35 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         lastPresetName = stateComponent.getPresetName();
     }
 
+    multiband.getFocusArray(multibandFocus);
+    multiFocusSlider1.setValue(multibandFocus[0]);
+    multiFocusSlider2.setValue(multibandFocus[1]);
+    multiFocusSlider3.setValue(multibandFocus[2]);
+    multiFocusSlider4.setValue(multibandFocus[3]);
+
+    multiband.getStateArray(multibandState);
+    multiStateSlider1.setValue(multibandState[0]);
+    multiStateSlider2.setValue(multibandState[1]);
+    multiStateSlider3.setValue(multibandState[2]);
+    multiStateSlider4.setValue(multibandState[3]);
+
+    multiband.getFreqArray(multibandFreq);
+    multiFreqSlider1.setValue(multibandFreq[0]);
+    multiFreqSlider2.setValue(multibandFreq[1]);
+    multiFreqSlider3.setValue(multibandFreq[2]);
+
+    multiband.getLinePos(linePos);
+    linePosSlider1.setValue(linePos[0]);
+    linePosSlider2.setValue(linePos[1]);
+    linePosSlider3.setValue(linePos[2]);
+
+    int lineNum = multiband.getLineNum();
+    lineNumSlider.setValue(lineNum);
+
+    multiband.getLineState(lineState);
+    lineStateSlider1.setValue(lineState[0]);
+    lineStateSlider2.setValue(lineState[1]);
+    lineStateSlider3.setValue(lineState[2]);
 
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
         
@@ -735,35 +764,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        distortionGraph.setVisible(true);
 //        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 //        oscilloscope.setVisible(true);
-        multiband.getFocusArray(multibandFocus);
-        multiFocusSlider1.setValue(multibandFocus[0]);
-        multiFocusSlider2.setValue(multibandFocus[1]);
-        multiFocusSlider3.setValue(multibandFocus[2]);
-        multiFocusSlider4.setValue(multibandFocus[3]);
         
-        multiband.getStateArray(multibandState);
-        multiStateSlider1.setValue(multibandState[0]);
-        multiStateSlider2.setValue(multibandState[1]);
-        multiStateSlider3.setValue(multibandState[2]);
-        multiStateSlider4.setValue(multibandState[3]);
-        
-        multiband.getFreqArray(multibandFreq);
-        multiFreqSlider1.setValue(multibandFreq[0]);
-        multiFreqSlider2.setValue(multibandFreq[1]);
-        multiFreqSlider3.setValue(multibandFreq[2]);
-        
-        multiband.getLinePos(linePos);
-        linePosSlider1.setValue(linePos[0]);
-        linePosSlider2.setValue(linePos[1]);
-        linePosSlider3.setValue(linePos[2]);
-        
-        int lineNum = multiband.getLineNum();
-        lineNumSlider.setValue(lineNum);
-        
-        multiband.getLineState(lineState);
-        lineStateSlider1.setValue(lineState[0]);
-        lineStateSlider2.setValue(lineState[1]);
-        lineStateSlider3.setValue(lineState[2]);
         
         if (multibandFocus[0])
         {
@@ -923,6 +924,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         }
         else if (multibandFocus[3])
         {
+            setDistortionGraph(MODE_ID4, DRIVE_ID4,
+                REC_ID4, MIX_ID4, BIAS_ID4);
             driveKnob1.setVisible(false);
             driveKnob2.setVisible(false);
             driveKnob3.setVisible(false);
@@ -1099,7 +1102,26 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     //g.fillRect(cutoffKnob.getX(), cutoffKnob.getY(), cutoffKnob.getWidth(), cutoffKnob.getHeight());
     
     
-    
+    if (multibandFocus[0])
+    {
+        setDistortionGraph(MODE_ID1, DRIVE_ID1,
+            REC_ID1, MIX_ID1, BIAS_ID1);
+    }
+    else if (multibandFocus[1])
+    {
+        setDistortionGraph(MODE_ID2, DRIVE_ID2,
+            REC_ID2, MIX_ID2, BIAS_ID2);
+    }
+    else if (multibandFocus[2])
+    {
+        setDistortionGraph(MODE_ID3, DRIVE_ID3,
+            REC_ID3, MIX_ID3, BIAS_ID3);
+    }
+    else if (multibandFocus[3])
+    {
+        setDistortionGraph(MODE_ID4, DRIVE_ID4,
+            REC_ID4, MIX_ID4, BIAS_ID4);
+    }
     
     
 }
@@ -1113,11 +1135,11 @@ void FireAudioProcessorEditor::resized()
     int knobNum = 8;
     float scale = juce::jmin(getHeight() / 500.f, getWidth() / 1000.f);
     float scaleMax = juce::jmax(getHeight() / 500.f, getWidth() / 1000.f);
-    int newKnobSize = static_cast<int>(knobSize * scale);
+    int scaledKnobSize = SCALED_KNOBSIZE;
     int startX = getWidth() / knobNum;
     int secondShadowY = getHeight() / 10 * 4;
-    int firstPartY = secondShadowY + (getHeight() - secondShadowY) * 2 / 5 - newKnobSize / 2;
-    int secondPartY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5 - newKnobSize / 2;
+    int firstPartY = secondShadowY + (getHeight() - secondShadowY) * 2 / 5 - scaledKnobSize / 2;
+    int secondPartY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5 - scaledKnobSize / 2;
 
     
     // save presets
@@ -1129,79 +1151,79 @@ void FireAudioProcessorEditor::resized()
     stateComponent.setBounds(r);
 
     // first line
-    // inputKnob.setBounds(startX * 1 - newKnobSize / 2, firstLineY, newKnobSize, newKnobSize);
+    // inputKnob.setBounds(startX * 1 - scaledKnobSize / 2, firstLineY, scaledKnobSize, scaledKnobSize);
     float driveX = DRIVE_X;
     float driveY = DRIVE_Y;
-    float driveSize = newKnobSize * 2;
+    float driveSize = scaledKnobSize * 2;
     driveKnob1.setBounds(driveX, driveY, driveSize, driveSize);
     driveKnob2.setBounds(driveX, driveY, driveSize, driveSize);
     driveKnob3.setBounds(driveX, driveY, driveSize, driveSize);
     driveKnob4.setBounds(driveX, driveY, driveSize, driveSize);
     
-    //colorKnob.setBounds(startX * 1 + newKnobSize * 1.2, secondLineY, newKnobSize, newKnobSize);
-    downSampleKnob.setBounds(startX * 3 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    //colorKnob.setBounds(startX * 1 + scaledKnobSize * 1.2, secondLineY, scaledKnobSize, scaledKnobSize);
+    downSampleKnob.setBounds(DOWNSAMPLE_X, firstPartY, scaledKnobSize, scaledKnobSize);
     
-    recKnob1.setBounds(startX * 5.5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    recKnob2.setBounds(startX * 5.5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    recKnob3.setBounds(startX * 5.5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    recKnob4.setBounds(startX * 5.5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    recKnob1.setBounds(REC_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    recKnob2.setBounds(REC_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    recKnob3.setBounds(REC_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    recKnob4.setBounds(REC_X, firstPartY, scaledKnobSize, scaledKnobSize);
     
-    colorKnob.setBounds(startX * 5 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    colorKnob.setBounds(COLOR_X, firstPartY, scaledKnobSize, scaledKnobSize);
     
-    biasKnob1.setBounds(startX * 5.5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    biasKnob2.setBounds(startX * 5.5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    biasKnob3.setBounds(startX * 5.5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    biasKnob4.setBounds(startX * 5.5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    biasKnob1.setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    biasKnob2.setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    biasKnob3.setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    biasKnob4.setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
     
-    widthKnob1.setBounds(startX * 6 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    widthKnob2.setBounds(startX * 6 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    widthKnob3.setBounds(startX * 6 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    widthKnob4.setBounds(startX * 6 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    widthKnob1.setBounds(WIDTH_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    widthKnob2.setBounds(WIDTH_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    widthKnob3.setBounds(WIDTH_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    widthKnob4.setBounds(WIDTH_X, firstPartY, scaledKnobSize, scaledKnobSize);
     
     
-    outputKnob1.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    outputKnob2.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    outputKnob3.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
-    outputKnob4.setBounds(startX * 7 - newKnobSize / 2, firstPartY, newKnobSize, newKnobSize);
+    outputKnob1.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    outputKnob2.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    outputKnob3.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    outputKnob4.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
 
     // second line
-    dynamicKnob1.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    dynamicKnob2.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    dynamicKnob3.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    dynamicKnob4.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    dynamicKnob1.setBounds(DYNAMIC_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    dynamicKnob2.setBounds(DYNAMIC_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    dynamicKnob3.setBounds(DYNAMIC_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    dynamicKnob4.setBounds(DYNAMIC_X, secondPartY, scaledKnobSize, scaledKnobSize);
     
     
-    cutoffKnob.setBounds(startX * 5 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    resKnob.setBounds(startX * 6 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    cutoffKnob.setBounds(CUTOFF_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    resKnob.setBounds(RES_X, firstPartY, scaledKnobSize, scaledKnobSize);
     
-    mixKnob1.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    mixKnob2.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    mixKnob3.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    mixKnob4.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
-    mixKnob.setBounds(startX * 7 - newKnobSize / 2, secondPartY, newKnobSize, newKnobSize);
+    mixKnob1.setBounds(MIX_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    mixKnob2.setBounds(MIX_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    mixKnob3.setBounds(MIX_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    mixKnob4.setBounds(MIX_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    mixKnob.setBounds(MIX_X, secondPartY, scaledKnobSize, scaledKnobSize);
     
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
-    linkedButton1.setBounds(DRIVE_X + newKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
-    linkedButton2.setBounds(DRIVE_X + newKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
-    linkedButton3.setBounds(DRIVE_X + newKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
-    linkedButton4.setBounds(DRIVE_X + newKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - newKnobSize / 2 - 25, newKnobSize / 2, 0.05 * getHeight());
+    linkedButton1.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
     
     float windowHeight = getHeight() / 20;
     windowLeftButton.setBounds(0, secondShadowY, getWidth() / 2, windowHeight);
     windowRightButton.setBounds(getWidth() / 2, secondShadowY, getWidth() / 2, windowHeight);
     
     // second line
-    safeButton1.setBounds(DRIVE_X + newKnobSize * 2, secondPartY, newKnobSize / 2, 0.05 * getHeight());
-    safeButton2.setBounds(DRIVE_X + newKnobSize * 2, secondPartY, newKnobSize / 2, 0.05 * getHeight());
-    safeButton3.setBounds(DRIVE_X + newKnobSize * 2, secondPartY, newKnobSize / 2, 0.05 * getHeight());
-    safeButton4.setBounds(DRIVE_X + newKnobSize * 2, secondPartY, newKnobSize / 2, 0.05 * getHeight());
-    filterOffButton.setBounds(startX * 3 - newKnobSize / 4, secondPartY, newKnobSize / 2, 0.05 * getHeight());
-    filterPreButton.setBounds(startX * 3 - newKnobSize / 4, secondPartY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterPostButton.setBounds(startX * 3 - newKnobSize / 4, secondPartY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterLowButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY, newKnobSize / 2, 0.05 * getHeight());
-    filterBandButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY + 0.055 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
-    filterHighButton.setBounds(startX * 4 - newKnobSize / 4, secondPartY + 0.11 * getHeight(), newKnobSize / 2, 0.05 * getHeight());
+    safeButton1.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    filterOffButton.setBounds(startX * 3 - scaledKnobSize / 4, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    filterPreButton.setBounds(startX * 3 - scaledKnobSize / 4, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterPostButton.setBounds(startX * 3 - scaledKnobSize / 4, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterLowButton.setBounds(startX * 4 - scaledKnobSize / 4, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    filterBandButton.setBounds(startX * 4 - scaledKnobSize / 4, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterHighButton.setBounds(startX * 4 - scaledKnobSize / 4, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
 
     // visualiser
     oscilloscope.setBounds(OSC_X, OSC_Y, OSC_WIDTH, OSC_HEIGHT);
@@ -1390,7 +1412,7 @@ void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce
         
         slider.setEnabled(false);
     }
-    else
+    else if (selection != 0 && !slider.isEnabled())
     {
         slider.setValue(tempValue);
         slider.setEnabled(true);
@@ -1440,6 +1462,29 @@ void FireAudioProcessorEditor::setListenerSlider(juce::Slider* slider)
     addAndMakeVisible(slider);
     slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+}
+
+void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, 
+    juce::String recId, juce::String mixId, juce::String biasId)
+{
+
+    // paint distortion function
+    int mode = *processor.treeState.getRawParameterValue(modeId);
+    float drive = *processor.treeState.getRawParameterValue(driveId);//TODO: replace it!
+//    float drive = processor.getNewDrive();
+    float color = *processor.treeState.getRawParameterValue(COLOR_ID);
+    float rec = *processor.treeState.getRawParameterValue(recId);
+    float mix = *processor.treeState.getRawParameterValue(mixId);
+    float bias = *processor.treeState.getRawParameterValue(biasId);
+    float rateDivide = *processor.treeState.getRawParameterValue(DOWNSAMPLE_ID);
+
+    distortionProcessor.controls.mode = mode;
+    distortionProcessor.controls.drive = drive;
+    distortionProcessor.controls.color = color;
+    distortionProcessor.controls.rectification = rec;
+    distortionProcessor.controls.bias = bias;
+
+    distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 }
 
 void FireAudioProcessorEditor::setMultiband()

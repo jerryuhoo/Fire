@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.799_2"
+#define VERSION "[Early Beta] 0.800"
 
 
 //==============================================================================
@@ -83,25 +83,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setLookAndFeel(&otherLookAndFeel);
 
     // drive knob 1
-    addAndMakeVisible(driveKnob1);
-    driveKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    driveKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    driveKnob1.addListener(this);
     
-    addAndMakeVisible(driveKnob2);
-    driveKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    driveKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    driveKnob2.addListener(this);
-    
-    addAndMakeVisible(driveKnob3);
-    driveKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    driveKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    driveKnob3.addListener(this);
-    
-    addAndMakeVisible(driveKnob4);
-    driveKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    driveKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    driveKnob4.addListener(this);
+    setListenerSlider(driveKnob1);
+    setListenerSlider(driveKnob2);
+    setListenerSlider(driveKnob3);
+    setListenerSlider(driveKnob4);
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", juce::dontSendNotification);
@@ -112,25 +98,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     
     // output knob
-    addAndMakeVisible(outputKnob1);
-    outputKnob1.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputKnob1.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    outputKnob1.addListener(this);
-
-    addAndMakeVisible(outputKnob2);
-    outputKnob2.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputKnob2.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    outputKnob2.addListener(this);
-    
-    addAndMakeVisible(outputKnob3);
-    outputKnob3.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputKnob3.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    outputKnob3.addListener(this);
-    
-    addAndMakeVisible(outputKnob4);
-    outputKnob4.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    outputKnob4.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    outputKnob4.addListener(this);
+    setListenerSlider(outputKnob1);
+    setListenerSlider(outputKnob2);
+    setListenerSlider(outputKnob3);
+    setListenerSlider(outputKnob4);
+    setNormalSlider(outputKnob);
     
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", juce::dontSendNotification);
@@ -140,11 +112,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputLabel.setJustificationType(juce::Justification::centred);
     
     // mix knob
-    setListenerSlider(&mixKnob1);
-    setListenerSlider(&mixKnob2);
-    setListenerSlider(&mixKnob3);
-    setListenerSlider(&mixKnob4);
-    setListenerSlider(&mixKnob);
+    setNormalSlider(mixKnob1);
+    setNormalSlider(mixKnob2);
+    setNormalSlider(mixKnob3);
+    setNormalSlider(mixKnob4);
+    setNormalSlider(mixKnob);
     
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", juce::dontSendNotification);
@@ -154,10 +126,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     mixLabel.setJustificationType(juce::Justification::centred);
     
     // dynamic knob
-    setListenerSlider(&dynamicKnob1);
-    setListenerSlider(&dynamicKnob2);
-    setListenerSlider(&dynamicKnob3);
-    setListenerSlider(&dynamicKnob4);
+    setNormalSlider(dynamicKnob1);
+    setNormalSlider(dynamicKnob2);
+    setNormalSlider(dynamicKnob3);
+    setNormalSlider(dynamicKnob4);
 
     addAndMakeVisible(dynamicLabel);
     dynamicLabel.setText("Dynamic", juce::dontSendNotification);
@@ -167,10 +139,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     dynamicLabel.setJustificationType(juce::Justification::centred);
     
     // width knob
-    setListenerSlider(&widthKnob1);
-    setListenerSlider(&widthKnob2);
-    setListenerSlider(&widthKnob3);
-    setListenerSlider(&widthKnob4);
+    setNormalSlider(widthKnob1);
+    setNormalSlider(widthKnob2);
+    setNormalSlider(widthKnob3);
+    setNormalSlider(widthKnob4);
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
@@ -192,10 +164,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     colorLabel.setJustificationType(juce::Justification::centred);
 
     // bias knob
-    setListenerSlider(&biasKnob1);
-    setListenerSlider(&biasKnob2);
-    setListenerSlider(&biasKnob3);
-    setListenerSlider(&biasKnob4);
+    setNormalSlider(biasKnob1);
+    setNormalSlider(biasKnob2);
+    setNormalSlider(biasKnob3);
+    setNormalSlider(biasKnob4);
     
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
@@ -217,10 +189,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
     // rec knob
-    setListenerSlider(&recKnob1);
-    setListenerSlider(&recKnob2);
-    setListenerSlider(&recKnob3);
-    setListenerSlider(&recKnob4);
+    setNormalSlider(recKnob1);
+    setNormalSlider(recKnob2);
+    setNormalSlider(recKnob3);
+    setNormalSlider(recKnob4);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
@@ -266,202 +238,58 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     hqButton.setButtonText("HQ");
 
     // Linked Button
-    addAndMakeVisible(linkedButton1);
-    linkedButton1.setClickingTogglesState(true);
-    bool linkedButtonState1 = *processor.treeState.getRawParameterValue("linked1");
-    linkedButton1.setToggleState(linkedButtonState1, juce::dontSendNotification);
-    linkedButton1.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    linkedButton1.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    linkedButton1.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    linkedButton1.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    linkedButton1.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    linkedButton1.setButtonText("LINK");
-    linkedButton1.setLookAndFeel(&roundedButtonLnf);
-
-    addAndMakeVisible(linkedButton2);
-    linkedButton2.setClickingTogglesState(true);
-    bool linkedButtonState2 = *processor.treeState.getRawParameterValue("linked2");
-    linkedButton2.setToggleState(linkedButtonState2, juce::dontSendNotification);
-    linkedButton2.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    linkedButton2.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    linkedButton2.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    linkedButton2.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    linkedButton2.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    linkedButton2.setButtonText("LINK");
-    linkedButton2.setLookAndFeel(&roundedButtonLnf);
-    
-    addAndMakeVisible(linkedButton3);
-    linkedButton3.setClickingTogglesState(true);
-    bool linkedButtonState3 = *processor.treeState.getRawParameterValue("linked3");
-    linkedButton3.setToggleState(linkedButtonState3, juce::dontSendNotification);
-    linkedButton3.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    linkedButton3.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    linkedButton3.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    linkedButton3.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    linkedButton3.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    linkedButton3.setButtonText("LINK");
-    linkedButton3.setLookAndFeel(&roundedButtonLnf);
-    
-    addAndMakeVisible(linkedButton4);
-    linkedButton4.setClickingTogglesState(true);
-    bool linkedButtonState4 = *processor.treeState.getRawParameterValue("linked4");
-    linkedButton4.setToggleState(linkedButtonState4, juce::dontSendNotification);
-    linkedButton4.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    linkedButton4.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    linkedButton4.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    linkedButton4.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    linkedButton4.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    linkedButton4.setButtonText("LINK");
-    linkedButton4.setLookAndFeel(&roundedButtonLnf);
+    setRoundButton(linkedButton1, LINKED_ID1, "LINK");
+    setRoundButton(linkedButton2, LINKED_ID2, "LINK");
+    setRoundButton(linkedButton3, LINKED_ID3, "LINK");
+    setRoundButton(linkedButton4, LINKED_ID4, "LINK");
     
     // safe overload Button
-    addAndMakeVisible(safeButton1);
-    safeButton1.setClickingTogglesState(true);
-    bool safeButtonState1 = *processor.treeState.getRawParameterValue("safe1");
-    safeButton1.setToggleState(safeButtonState1, juce::dontSendNotification);
-    safeButton1.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    safeButton1.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    safeButton1.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    safeButton1.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    safeButton1.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    safeButton1.setButtonText("SAFE");
-    safeButton1.setLookAndFeel(&roundedButtonLnf);
-
-    addAndMakeVisible(safeButton2);
-    safeButton2.setClickingTogglesState(true);
-    bool safeButtonState2 = *processor.treeState.getRawParameterValue("safe2");
-    safeButton2.setToggleState(safeButtonState2, juce::dontSendNotification);
-    safeButton2.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    safeButton2.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    safeButton2.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    safeButton2.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    safeButton2.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    safeButton2.setButtonText("SAFE");
-    safeButton2.setLookAndFeel(&roundedButtonLnf);
-    
-    addAndMakeVisible(safeButton3);
-    safeButton3.setClickingTogglesState(true);
-    bool safeButtonState3 = *processor.treeState.getRawParameterValue("safe3");
-    safeButton3.setToggleState(safeButtonState3, juce::dontSendNotification);
-    safeButton3.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    safeButton3.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    safeButton3.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    safeButton3.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    safeButton3.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    safeButton3.setButtonText("SAFE");
-    safeButton3.setLookAndFeel(&roundedButtonLnf);
-    
-    addAndMakeVisible(safeButton4);
-    safeButton4.setClickingTogglesState(true);
-    bool safeButtonState4 = *processor.treeState.getRawParameterValue("safe4");
-    safeButton4.setToggleState(safeButtonState4, juce::dontSendNotification);
-    safeButton4.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    safeButton4.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    safeButton4.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    safeButton4.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    safeButton4.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    safeButton4.setButtonText("SAFE");
-    safeButton4.setLookAndFeel(&roundedButtonLnf);
-    
+    setRoundButton(safeButton1, SAFE_ID1, "SAFE");
+    setRoundButton(safeButton2, SAFE_ID2, "SAFE");
+    setRoundButton(safeButton3, SAFE_ID3, "SAFE");
+    setRoundButton(safeButton4, SAFE_ID4, "SAFE");
+  
     // Filter State Buttons
-    addAndMakeVisible(filterOffButton);
-    filterOffButton.setClickingTogglesState(true);
+    setRoundButton(filterOffButton, OFF_ID, "OFF");
+    setRoundButton(filterPreButton, PRE_ID, "PRE");
+    setRoundButton(filterPostButton, POST_ID, "POST");
+    
     filterOffButton.setRadioGroupId(filterStateButtons);
-    bool filterOffButtonState = *processor.treeState.getRawParameterValue("off");
-    filterOffButton.setToggleState(filterOffButtonState, juce::dontSendNotification);
     filterOffButton.onClick = [this] { updateToggleState(); };
-    filterOffButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    filterOffButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    filterOffButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    filterOffButton.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterOffButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    filterOffButton.setButtonText("OFF");
-    filterOffButton.setLookAndFeel(&roundedButtonLnf);
 
-    addAndMakeVisible(filterOffLabel);
-    filterOffLabel.setText("Filter", juce::dontSendNotification);
-    filterOffLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    filterOffLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    filterOffLabel.attachToComponent(&filterOffButton, false);
-    filterOffLabel.setJustificationType(juce::Justification::centred);
-
-    addAndMakeVisible(filterPreButton);
-    filterPreButton.setClickingTogglesState(true);
     filterPreButton.setRadioGroupId(filterStateButtons);
-    bool filterPreButtonState = *processor.treeState.getRawParameterValue("pre");
-    filterPreButton.setToggleState(filterPreButtonState, juce::dontSendNotification);
     filterPreButton.onClick = [this] { updateToggleState(); };
-    filterPreButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    filterPreButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    filterPreButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    filterPreButton.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterPreButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    filterPreButton.setButtonText("PRE");
-    filterPreButton.setLookAndFeel(&roundedButtonLnf);
 
-    addAndMakeVisible(filterPostButton);
-    filterPostButton.setClickingTogglesState(true);
     filterPostButton.setRadioGroupId(filterStateButtons);
-    bool filterPostButtonState = *processor.treeState.getRawParameterValue("post");
-    filterPostButton.setToggleState(filterPostButtonState, juce::dontSendNotification);
     filterPostButton.onClick = [this] { updateToggleState(); };
-    filterPostButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    filterPostButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    filterPostButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    filterPostButton.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterPostButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    filterPostButton.setButtonText("POST");
-    filterPostButton.setLookAndFeel(&roundedButtonLnf);
+    
+    addAndMakeVisible(filterStateLabel);
+    filterStateLabel.setText("Filter", juce::dontSendNotification);
+    filterStateLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    filterStateLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    filterStateLabel.attachToComponent(&filterOffButton, false);
+    filterStateLabel.setJustificationType(juce::Justification::centred);
 
     // Filter Type Toggle Buttons
-    addAndMakeVisible(filterLowButton);
-    filterLowButton.setClickingTogglesState(true);
+    setRoundButton(filterLowButton, LOW_ID, "LP");
+    setRoundButton(filterBandButton, BAND_ID, "BP");
+    setRoundButton(filterHighButton, HIGH_ID, "HP");
+    
     filterLowButton.setRadioGroupId(filterModeButtons);
-    bool filterLowButtonState = *processor.treeState.getRawParameterValue("low");
-    filterLowButton.setToggleState(filterLowButtonState, juce::dontSendNotification);
     filterLowButton.onClick = [this] { updateToggleState(); };
-    filterLowButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    filterLowButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    filterLowButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    filterLowButton.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterLowButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    filterLowButton.setButtonText("LP");
-    filterLowButton.setLookAndFeel(&roundedButtonLnf);
-
-    addAndMakeVisible(filterLowLabel);
-    filterLowLabel.setText("Type", juce::dontSendNotification);
-    filterLowLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    filterLowLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    filterLowLabel.attachToComponent(&filterLowButton, false);
-    filterLowLabel.setJustificationType(juce::Justification::centred);
-
-    addAndMakeVisible(filterBandButton);
-    filterBandButton.setClickingTogglesState(true);
+  
     filterBandButton.setRadioGroupId(filterModeButtons);
-    bool filterBandButtonState = *processor.treeState.getRawParameterValue("band");
-    filterBandButton.setToggleState(filterBandButtonState, juce::dontSendNotification);
     filterBandButton.onClick = [this] { updateToggleState(); };
-    filterBandButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    filterBandButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    filterBandButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    filterBandButton.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterBandButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    filterBandButton.setButtonText("BP");
-    filterBandButton.setLookAndFeel(&roundedButtonLnf);
 
-    addAndMakeVisible(filterHighButton);
-    filterHighButton.setClickingTogglesState(true);
     filterHighButton.setRadioGroupId(filterModeButtons);
-    bool filterHighButtonState = *processor.treeState.getRawParameterValue("high");
-    filterHighButton.setToggleState(filterHighButtonState, juce::dontSendNotification);
     filterHighButton.onClick = [this] { updateToggleState(); };
-    filterHighButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    filterHighButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    filterHighButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    filterHighButton.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterHighButton.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    filterHighButton.setButtonText("HP");
-    filterHighButton.setLookAndFeel(&roundedButtonLnf);
+  
+    addAndMakeVisible(filterTypeLabel);
+    filterTypeLabel.setText("Type", juce::dontSendNotification);
+    filterTypeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    filterTypeLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    filterTypeLabel.attachToComponent(&filterLowButton, false);
+    filterTypeLabel.setJustificationType(juce::Justification::centred);
     
     // Window Left Button
     addAndMakeVisible(windowLeftButton);
@@ -508,6 +336,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, OUTPUT_ID2, outputKnob2);
     outputAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, OUTPUT_ID3, outputKnob3);
     outputAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, OUTPUT_ID4, outputKnob4);
+    outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, OUTPUT_ID, outputKnob);
     
     mixAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, MIX_ID1, mixKnob1);
     mixAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, MIX_ID2, mixKnob2);
@@ -559,30 +388,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     windowLeftButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WINDOW_LEFT_ID, windowLeftButton);
     windowRightButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WINDOW_RIGHT_ID, windowRightButton);
-
-    
-//    multiband.getFocusArray(multibandFocus);
-//    multiFocusSlider1.setValue(multibandFocus[0]);
-//    multiFocusSlider2.setValue(multibandFocus[1]);
-//    multiFocusSlider3.setValue(multibandFocus[2]);
-//    multiFocusSlider4.setValue(multibandFocus[3]);
-//
-//    multiband.getStateArray(multibandState);
-//    multiStateSlider1.setValue(multibandState[0]);
-//    multiStateSlider2.setValue(multibandState[1]);
-//    multiStateSlider3.setValue(multibandState[2]);
-//    multiStateSlider4.setValue(multibandState[3]);
-//
-//    multiband.getFreqArray(multibandFreq);
-//    multiFreqSlider1.setValue(multibandFreq[0]);
-//    multiFreqSlider2.setValue(multibandFreq[1]);
-//    multiFreqSlider3.setValue(multibandFreq[2]);
-    
-    
-    
-    
-//    int lineNum = multiband.getLineNum();
-//    lineNumSlider.setValue(lineNum);
     
     multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID1, multiFocusSlider1);
     multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID2, multiFocusSlider2);
@@ -997,6 +802,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         colorKnob.setVisible(false);
         cutoffKnob.setVisible(false);
         mixKnob.setVisible(false);
+        outputKnob.setVisible(false);
         
         
     }
@@ -1015,6 +821,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         colorKnob.setVisible(true);
         cutoffKnob.setVisible(true);
         mixKnob.setVisible(true);
+        outputKnob.setVisible(true);
         
         // set invisible
         driveKnob1.setVisible(false);
@@ -1069,19 +876,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         widthLabel.setVisible(false);
         recLabel.setVisible(false);
         biasLabel.setVisible(false);
-//        oscilloscope.setVisible(false);
-//        distortionGraph.setVisible(false);
-        // Spectrum
-//        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
-//        spectrum.setVisible(true);
-//        multiband.setVisible(true);
-        
-        
+        outputLabel.setVisible(true);
 
-        
-        
-        
-        
+//        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());   
     }
     
     // draw shadow 1
@@ -1168,7 +965,7 @@ void FireAudioProcessorEditor::resized()
     recKnob3.setBounds(REC_X, firstPartY, scaledKnobSize, scaledKnobSize);
     recKnob4.setBounds(REC_X, firstPartY, scaledKnobSize, scaledKnobSize);
     
-    colorKnob.setBounds(COLOR_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    colorKnob.setBounds(COLOR_X, secondPartY, scaledKnobSize, scaledKnobSize);
     
     biasKnob1.setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
     biasKnob2.setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
@@ -1185,6 +982,7 @@ void FireAudioProcessorEditor::resized()
     outputKnob2.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
     outputKnob3.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
     outputKnob4.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
+    outputKnob.setBounds(OUTPUT_X, firstPartY, scaledKnobSize, scaledKnobSize);
 
     // second line
     dynamicKnob1.setBounds(DYNAMIC_X, secondPartY, scaledKnobSize, scaledKnobSize);
@@ -1218,17 +1016,17 @@ void FireAudioProcessorEditor::resized()
     safeButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     safeButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     safeButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    filterOffButton.setBounds(startX * 3 - scaledKnobSize / 4, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    filterPreButton.setBounds(startX * 3 - scaledKnobSize / 4, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-    filterPostButton.setBounds(startX * 3 - scaledKnobSize / 4, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-    filterLowButton.setBounds(startX * 4 - scaledKnobSize / 4, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    filterBandButton.setBounds(startX * 4 - scaledKnobSize / 4, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-    filterHighButton.setBounds(startX * 4 - scaledKnobSize / 4, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterOffButton.setBounds(FILTER_STATE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    filterPreButton.setBounds(FILTER_STATE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterPostButton.setBounds(FILTER_STATE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterLowButton.setBounds(FILTER_TYPE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    filterBandButton.setBounds(FILTER_TYPE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterHighButton.setBounds(FILTER_TYPE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
 
     // visualiser
     oscilloscope.setBounds(OSC_X, OSC_Y, OSC_WIDTH, OSC_HEIGHT);
     distortionGraph.setBounds(D_GRAPH_X, D_GRAPH_Y, D_GRAPH_WIDTH, D_GRAPH_HEIGHT);
-    widthGraph.setBounds(WIDTH_GRAPH_X, WIDTH_GRAPH_Y, WIDTH_GRAPH_WIDTH, WIDTH_GRAPH_HEIGHT);
+    //widthGraph.setBounds(WIDTH_GRAPH_X, WIDTH_GRAPH_Y, WIDTH_GRAPH_WIDTH, WIDTH_GRAPH_HEIGHT);
     
     // spectrum
     spectrum.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
@@ -1394,9 +1192,9 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
     }
 }
 
-void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID, float &tempValue)
+void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue)
 {
-    auto val = processor->treeState.getRawParameterValue(paramID);
+    auto val = processor->treeState.getRawParameterValue(paramId);
     int selection = val->load();
     if (selection == 0)
     {
@@ -1452,16 +1250,34 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
     combobox->addListener(this);
 }
 
-void FireAudioProcessorEditor::setNormalSlider(juce::Slider* slider)
-{
-
-}
-
-void FireAudioProcessorEditor::setListenerSlider(juce::Slider* slider)
+void FireAudioProcessorEditor::setListenerSlider(juce::Slider& slider)
 {
     addAndMakeVisible(slider);
-    slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    slider.addListener(this);
+}
+
+void FireAudioProcessorEditor::setNormalSlider(juce::Slider& slider)
+{
+    addAndMakeVisible(slider);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+}
+
+void FireAudioProcessorEditor::setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName)
+{
+    addAndMakeVisible(button);
+    button.setClickingTogglesState(true);
+    bool state = *processor.treeState.getRawParameterValue(paramId);
+    button.setToggleState(state, juce::dontSendNotification);
+    button.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    button.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
+    button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    button.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
+    button.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
+    button.setButtonText(buttonName);
+    button.setLookAndFeel(&roundedButtonLnf);
 }
 
 void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, 

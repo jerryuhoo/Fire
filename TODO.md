@@ -14,6 +14,6 @@
 12. [bug]multiband enable button mask problem
 13. mix button for every band
 14. newDrive?
-15. GUI redesign
-16. [feature]mouse drag vertically to change the output volume, like Ozone or saturn2
-17. [bug]Ableton can't drag vertical lines on parameter pannel.
+15. [feature]mouse drag vertically to change the output volume, like Ozone or saturn2
+16. [bug]Ableton can't drag vertical lines on parameter pannel.
+17. [bug]Doesn't save focus and disable. change preset focus should reset.

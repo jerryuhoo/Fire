@@ -92,30 +92,30 @@ private:
     // Sliders
     juce::Slider
         driveKnob1,
-        outputKnob1,
-        mixKnob1,
-        dynamicKnob1,
-        widthKnob1,
-    
         driveKnob2,
-        outputKnob2,
-        mixKnob2,
-        dynamicKnob2,
-        widthKnob2,
-    
         driveKnob3,
-        outputKnob3,
-        mixKnob3,
-        dynamicKnob3,
-        widthKnob3,
-    
         driveKnob4,
+    
+        outputKnob1,
+        outputKnob2,
+        outputKnob3,
         outputKnob4,
+    
+        mixKnob1,
+        mixKnob2,
+        mixKnob3,
         mixKnob4,
-        dynamicKnob4,
+        
+        widthKnob1,
+        widthKnob2,
+        widthKnob3,
         widthKnob4,
     
-        mixKnob,
+        dynamicKnob1,
+        dynamicKnob2,
+        dynamicKnob3,
+        dynamicKnob4,
+        
         recKnob1,
         recKnob2,
         recKnob3,
@@ -129,7 +129,9 @@ private:
         downSampleKnob,
         cutoffKnob,
         resKnob,
-        colorKnob;
+        colorKnob,
+        mixKnob,
+        outputKnob;
     
     int knobSize = KNOBSIZE;
     float tempDriveValue[4] = {1, 1, 1, 1};
@@ -152,8 +154,8 @@ private:
         recOffLabel,
         recHalfLabel,
         recFullLabel,
-        filterOffLabel,
-        filterLowLabel,
+        filterStateLabel,
+        filterTypeLabel,
         colorLabel,
         biasLabel;
 
@@ -192,9 +194,10 @@ private:
     
 
     void setMenu(juce::ComboBox* combobox);
-    void setNormalSlider(juce::Slider* slider);
-    void setListenerSlider(juce::Slider* slider);
-    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramID, float &tempValue);
+    void setListenerSlider(juce::Slider& slider);
+    void setNormalSlider(juce::Slider& slider);
+    void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
     void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
     void setDistortionGraph(juce::String modeId, juce::String driveId,
         juce::String recId, juce::String mixId, juce::String biasId);
@@ -226,6 +229,7 @@ private:
         outputAttachment2,
         outputAttachment3,
         outputAttachment4,
+        outputAttachment,
     
         mixAttachment1,
         mixAttachment2,

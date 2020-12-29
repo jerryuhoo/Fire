@@ -76,6 +76,8 @@
 #define OUTPUT_NAME3        "Output3"
 #define OUTPUT_ID4          "output4"
 #define OUTPUT_NAME4        "Output4"
+#define OUTPUT_ID           "output"
+#define OUTPUT_NAME         "Output"
 
 #define MIX_ID1             "mix1"
 #define MIX_NAME1           "Mix1"
@@ -222,16 +224,17 @@
 #define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
 #define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2
 #define REC_X               startX * 6 - SCALED_KNOBSIZE / 2
-#define COLOR_X             startX * 7 - SCALED_KNOBSIZE / 2
 #define BIAS_X              startX * 6 - SCALED_KNOBSIZE / 2
 #define WIDTH_X             startX * 6.5 - SCALED_KNOBSIZE / 2
 #define OUTPUT_X            startX * 7 - SCALED_KNOBSIZE / 2
 #define DYNAMIC_X           startX * 6.5 - SCALED_KNOBSIZE / 2
-#define CUTOFF_X            startX * 3 - SCALED_KNOBSIZE / 2
-#define RES_X               startX * 4 - SCALED_KNOBSIZE / 2
-#define MIX_X               startX * 7 - SCALED_KNOBSIZE / 2
+#define CUTOFF_X            startX * 4 - SCALED_KNOBSIZE / 2
+#define RES_X               startX * 5 - SCALED_KNOBSIZE / 2
 #define DOWNSAMPLE_X        startX * 6 - SCALED_KNOBSIZE / 2
-
+#define COLOR_X             startX * 6 - SCALED_KNOBSIZE / 2
+#define FILTER_STATE_X      startX * 4 - SCALED_KNOBSIZE / 4
+#define FILTER_TYPE_X       startX * 5 - SCALED_KNOBSIZE / 4
+#define MIX_X               startX * 7 - SCALED_KNOBSIZE / 2
 
 
 // Define Color

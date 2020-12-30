@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.800"
+#define VERSION "[Early Beta] 0.80.1"
 
 
 //==============================================================================
@@ -1316,10 +1316,11 @@ void FireAudioProcessorEditor::setMultiband()
     bool state3 = *processor.treeState.getRawParameterValue(LINE_STATE_ID3);
     multiband.setLineState(state1, state2, state3);
 
-
     float pos1 = *processor.treeState.getRawParameterValue(LINEPOS_ID1);
     float pos2 = *processor.treeState.getRawParameterValue(LINEPOS_ID2);
     float pos3 = *processor.treeState.getRawParameterValue(LINEPOS_ID3);
     multiband.setLinePos(pos1, pos2, pos3);
     multiband.updateLines(false, -1);
+    multiband.setCloseButtonState();
+
 }

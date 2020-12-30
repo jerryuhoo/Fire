@@ -387,6 +387,7 @@ void StatePresets::initPreset()
             // if not in xml set current
             p->setValueNotifyingHost(p->getDefaultValue());
     // set preset combobox to 0
+    statePresetName = "";
 }
 
 //==============================================================================

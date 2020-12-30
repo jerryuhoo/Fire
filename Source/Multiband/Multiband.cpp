@@ -643,3 +643,12 @@ void Multiband::setCloseButtonState()
         }
     }
 }
+
+void Multiband::setFocus()
+{
+    multibandFocus[0] = true;
+    for (int i = 1; i < 4; i++)
+    {
+        multibandFocus[i] = false;
+    }
+}

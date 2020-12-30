@@ -10,7 +10,6 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#define VERSION "[Early Beta] 0.80.1"
 
 
 //==============================================================================
@@ -1322,5 +1321,6 @@ void FireAudioProcessorEditor::setMultiband()
     multiband.setLinePos(pos1, pos2, pos3);
     multiband.updateLines(false, -1);
     multiband.setCloseButtonState();
+    multiband.setFocus();
 
 }

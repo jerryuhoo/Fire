@@ -45,6 +45,7 @@ public:
     void getLinePos(float (&input)[3]);
     void updateLines(bool isAdd, int changedIndex);
     void setCloseButtonState();
+    void setFocus();
 
 private:
     
@@ -70,7 +71,7 @@ private:
     void dragLines();
     void setLineRelatedBounds(int i);
     void setSoloRelatedBounds();
-    
+
     int sortedIndex[3] = {-1, -1, -1};
     int frequency[3] = {0, 0, 0};
     

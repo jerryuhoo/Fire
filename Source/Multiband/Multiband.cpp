@@ -631,3 +631,15 @@ void Multiband::getLineState(bool (&input)[3])
         }
     }
 }
+
+void Multiband::setCloseButtonState()
+{
+    for (int i = 0; i < 3; i++)
+    {
+        // create lines and close buttons and then set state
+        if (verticalLines[i]->getState())
+        {
+            closeButtons[i]->setVisible(true);
+        }
+    }
+}

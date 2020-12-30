@@ -44,7 +44,8 @@ public:
     void setLinePos(float pos1, float pos2, float pos3);
     void getLinePos(float (&input)[3]);
     void updateLines(bool isAdd, int changedIndex);
-    
+    void setCloseButtonState();
+
 private:
     
     float margin;

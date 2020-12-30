@@ -653,7 +653,8 @@ void StateComponent::popPresetMenu()
     presetMenu.addItem(2, "Open Preset Folder", true);
     presetMenu.addItem(3, "Rescan Preset Folder", true);
     presetMenu.addItem(4, "Give a Star on GitHub!", true);
-    
+    presetMenu.addItem(5, "Check for New Version", true);
+
     int result = presetMenu.show();
     if (result == 1)
     {
@@ -663,18 +664,44 @@ void StateComponent::popPresetMenu()
         resetMultiband();
         presetBox.setSelectedId(0);
     }
-    if (result == 2)
+    else if (result == 2)
     {
         openPresetFolder();
     }
-    if (result == 3)
+    else if (result == 3)
     {
         rescanPresetFolder();
     }
-    if (result == 4)
+    else if (result == 4)
     {
         juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire");
         gitHubWebsite.launchInDefaultBrowser();
+    }
+    else if (result == 5)
+    {
+        std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
+        juce::String version = versionInfo->versionString;
+        if (versionInfo == nullptr)
+        {
+            DBG("No release found or other error occurred!");
+        }
+        else if(version != VERSION)
+        {
+            bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                "New Version", "New version " + version + " available, do you want to download it?", nullptr, nullptr);
+            if (choice)
+            {
+                juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
+                gitHubWebsite.launchInDefaultBrowser();
+            }
+            DBG(versionInfo->versionString);
+        }
+        else
+        {
+            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::InfoIcon,
+                "New Version", "You are up to date!", nullptr);
+        }
+        
     }
 }
 

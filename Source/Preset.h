@@ -15,6 +15,7 @@
 #include <JuceHeader.h>
 #include "GUI/LookAndFeel.h"
 #include "Multiband/Multiband.h"
+#include "Utility/VersionInfo.h"
 
 namespace state
 {

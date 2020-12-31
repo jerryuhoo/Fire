@@ -77,7 +77,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize(1000, 500);
+    setSize(INIT_WIDTH, INIT_HEIGHT);
 
     setLookAndFeel(&otherLookAndFeel);
 
@@ -436,7 +436,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID4, distortionMode4);
 
     // resize limit
-    setResizeLimits(1000, 500, 2000, 1000); // set resize limits
+    setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     //getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
 
     updateToggleState();
@@ -929,8 +929,8 @@ void FireAudioProcessorEditor::resized()
 
     // knobs
     int knobNum = 8;
-    float scale = juce::jmin(getHeight() / 500.f, getWidth() / 1000.f);
-    float scaleMax = juce::jmax(getHeight() / 500.f, getWidth() / 1000.f);
+    float scale = juce::jmin(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
+    float scaleMax = juce::jmax(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
     int scaledKnobSize = SCALED_KNOBSIZE;
     int startX = getWidth() / knobNum;
     int secondShadowY = getHeight() / 10 * 4;
@@ -940,7 +940,7 @@ void FireAudioProcessorEditor::resized()
     
     // save presets
     juce::Rectangle<int> r(getLocalBounds());
-    r = r.removeFromTop(50 * getHeight() / 500);
+    r = r.removeFromTop(50 * getHeight() / INIT_HEIGHT);
     r.removeFromLeft(100 * scaleMax);
     r.removeFromRight(50 * scaleMax);
 

@@ -214,27 +214,30 @@ public:
                            const juce::String &shortcutKeyText,
                            const juce::Drawable *icon, const juce::Colour *const textColourToUse) override
     {
+        g.setColour(COLOUR6); // backgroundColourId
+        g.fillAll();
+        
         if (isSeparator)
         {
             auto r = area.reduced(5, 0);
             r.removeFromTop(juce::roundToInt(((float)r.getHeight() * 0.5f) - 0.5f));
 
-            g.setColour(findColour(juce::PopupMenu::textColourId).withAlpha(0.3f));
+            g.setColour(COLOUR1.withAlpha(0.3f)); //findColour(juce::PopupMenu::textColourId)
             g.fillRect(r.removeFromTop(1));
         }
         else
         {
-            auto textColour = (textColourToUse == nullptr ? findColour(juce::PopupMenu::textColourId)
-                                                          : *textColourToUse);
+            auto textColour = (textColourToUse == nullptr ? COLOUR1
+                                                          : *textColourToUse); //findColour(juce::PopupMenu::textColourId)
 
             auto r = area.reduced(1);
 
             if (isHighlighted && isActive)
             {
-                g.setColour(findColour(juce::PopupMenu::highlightedBackgroundColourId));
+                g.setColour(COLOUR5); //findColour(juce::PopupMenu::highlightedBackgroundColourId)
                 g.fillRect(r);
 
-                g.setColour(findColour(juce::PopupMenu::highlightedTextColourId));
+                g.setColour(COLOUR1); //findColour(juce::PopupMenu::highlightedTextColourId)
             }
             else
             {

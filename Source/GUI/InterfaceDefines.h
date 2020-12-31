@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION "[Early Beta] 0.80.2"
+#define VERSION "[Early Beta] 0.80.3"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"
@@ -200,6 +200,9 @@
 #define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
 
 // Define Position
+#define INIT_WIDTH          1000.0f
+#define INIT_HEIGHT         500.0f
+
 #define PART1               getHeight() / 10
 #define PART2               PART1 * 3
 

@@ -424,6 +424,8 @@ menuButton{"Menu"}
     presetBox.setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
     presetBox.setColour(juce::ComboBox::backgroundColourId, COLOUR4);
     presetBox.setTextWhenNothingSelected("- Init -");
+    
+    
     refreshPresetBox();
     ifPresetActiveShowInBox();
     presetBox.addListener(this);
@@ -462,6 +464,8 @@ menuButton{"Menu"}
     menuButton.getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR7);
     menuButton.getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
     menuButton.getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR7);
+    presetMenu.setLookAndFeel(&otherLookAndFeel);
+    
     menuButton.getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
     menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
     menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
@@ -655,7 +659,13 @@ void StateComponent::popPresetMenu()
     presetMenu.addItem(4, "Give a Star on GitHub!", true);
     presetMenu.addItem(5, "Check for New Version", true);
 
-    int result = presetMenu.show();
+    float heightScale = getHeight() / 50.0f;
+    float widthScale = getWidth() / 1000.0f;
+    float scale = juce::jmin(heightScale, heightScale);
+    otherLookAndFeel.scale = scale;
+    
+    int result = presetMenu.show(0, 250 * widthScale,
+                                 10, 30 * heightScale);
     if (result == 1)
     {
         // set all parameters to default
@@ -680,13 +690,16 @@ void StateComponent::popPresetMenu()
     else if (result == 5)
     {
         std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-        juce::String version = versionInfo->versionString;
+        
         if (versionInfo == nullptr)
         {
-            DBG("No release found or other error occurred!");
+            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::WarningIcon,
+                "Error", "No release found or disconnected from the network!", nullptr);
+//            DBG("No release found or other error occurred!");
         }
-        else if(version != VERSION)
+        else if(versionInfo->versionString != VERSION)
         {
+            juce::String version = versionInfo->versionString;
             bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
                 "New Version", "New version " + version + " available, do you want to download it?", nullptr, nullptr);
             if (choice)
@@ -694,7 +707,7 @@ void StateComponent::popPresetMenu()
                 juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
                 gitHubWebsite.launchInDefaultBrowser();
             }
-            DBG(versionInfo->versionString);
+//            DBG(version);
         }
         else
         {

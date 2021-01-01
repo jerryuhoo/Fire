@@ -73,7 +73,7 @@ public:
     bool isSlient(juce::AudioBuffer<float> buffer);
 
     // new drive after protection
-    float getNewDrive();
+    float getNewDrive(juce::String driveId);
 
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();

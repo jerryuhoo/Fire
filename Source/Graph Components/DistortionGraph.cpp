@@ -16,11 +16,11 @@ DistortionGraph::DistortionGraph()
 {
     // to ensure these parameters are assigned values, otherwise may assert errors.
     mode = -1;
-    drive = -1.f;
-    color = -1.f;
-    mix = -1.f;
-    bias = -1.f;
-    rateDivide = -1.f;
+    drive = -1.0f;
+    color = -1.0f;
+    mix = -1.0f;
+    bias = -1.0f;
+    rateDivide = -1.0f;
 }
 
 DistortionGraph::~DistortionGraph()
@@ -31,7 +31,7 @@ void DistortionGraph::paint (juce::Graphics& g)
 {
     // paint distortion function
     
-    float functionValue = 0;
+    float functionValue = 0.0f;
     float mixValue;
 
     distortionProcessor.controls.mode = mode;
@@ -49,8 +49,8 @@ void DistortionGraph::paint (juce::Graphics& g)
     {
         const int numPix = frameRight.getWidth(); // you might experiment here, if you want less steps to speed up
 
-        float driveScale = 1;
-        float maxValue = 2.0f * driveScale * mix + 2.0f * (1 - mix);
+        float driveScale = 1.0f;
+        float maxValue = 2.0f * driveScale * mix + 2.0f * (1.0f - mix);
         float value = -maxValue; // minimum (leftmost)  value for your graph
         float valInc = (maxValue - value) / numPix;
         float xPos = frameRight.getX();
@@ -61,10 +61,14 @@ void DistortionGraph::paint (juce::Graphics& g)
         bool edgePointL = false;
         bool edgePointR = false;
 
-        for (int i = 1; i < numPix; ++i)
+        // step = 0.5f, maybe high cpu but more accurate graph
+        float step = 0.5f;
+        
+        for (float i = 1; i < numPix; i += step)
         {
-            value += valInc;
-            xPos += posInc;
+            
+            value += valInc * step;
+            xPos += posInc * step;
 
             // symmetrical distortion
             if (mode < 9)
@@ -72,16 +76,17 @@ void DistortionGraph::paint (juce::Graphics& g)
                 functionValue = distortionProcessor.distortionProcess(value);
             }
 
-            if (rateDivide > 1)
+            if (rateDivide > 1.0f)
             {
-                functionValue = ceilf(functionValue * (64.f / rateDivide)) / (64.f / rateDivide);
+//                functionValue = ceilf(functionValue * (64.0f / rateDivide)) / (64.0f / rateDivide);
+                functionValue = ceilf(functionValue * (256.0f / rateDivide)) / (256.0f / rateDivide);
             }
 
             // retification
             functionValue = distortionProcessor.rectificationProcess(functionValue);
 
             // mix
-            functionValue = (1.f - mix) * value + mix * functionValue;
+            functionValue = (1.0f - mix) * value + mix * functionValue;
             mixValue = (2.0f / 3.0f) * functionValue;
             float yPos = frameRight.getCentreY() - frameRight.getHeight() * mixValue / 2.0f;
 
@@ -131,9 +136,9 @@ void DistortionGraph::paint (juce::Graphics& g)
         int colour_b = 63;
 
         juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
-                                  juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
+                                  juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
         g.setGradientFill(grad);
-        g.strokePath(p, juce::PathStrokeType(2.0));
+        g.strokePath(p, juce::PathStrokeType(2.0f));
     }
     
 

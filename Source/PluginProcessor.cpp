@@ -149,6 +149,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousColor = (float)*treeState.getRawParameterValue(COLOR_ID);
     
     newDrive1 = 0;
+    newDrive2 = 0;
+    newDrive3 = 0;
+    newDrive4 = 0;
 
     driveSmoother1.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother1.setCurrentAndTargetValue(previousDrive1);
@@ -757,9 +760,18 @@ bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
         return false;
 }
 
-float FireAudioProcessor::getNewDrive()
+float FireAudioProcessor::getNewDrive(juce::String driveId)
 {
-    return newDrive1;
+    if (driveId == DRIVE_ID1)
+        return newDrive1;
+    if (driveId == DRIVE_ID2)
+        return newDrive2;
+    if (driveId == DRIVE_ID3)
+        return newDrive3;
+    if (driveId == DRIVE_ID4)
+        return newDrive4;
+    jassertfalse;
+    return -1.0f;
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayL()
@@ -823,8 +835,16 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
             drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
         }
     }
-    
-    newDrive1 = drive;//TODO: replace it!
+    if (driveID == DRIVE_ID1)
+        newDrive1 = drive;
+    else if (driveID == DRIVE_ID2)
+        newDrive2 = drive;
+    else if (driveID == DRIVE_ID3)
+        newDrive3 = drive;
+    else if (driveID == DRIVE_ID4)
+        newDrive4 = drive;
+    else
+        jassertfalse;
     
     // set zipper noise smoother target
     driveSmoother.setTargetValue(drive);

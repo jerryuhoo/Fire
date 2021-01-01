@@ -34,15 +34,19 @@ void Oscilloscope::paint (juce::Graphics& g)
     g.setColour(COLOUR6);
     g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 25);
     
-    float drive = processor.getNewDrive();
-    int colour_r = 244;
-    int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
-    int colour_b = 63;
+//    float drive = processor.getNewDrive(1);
+//    DBG(drive);
+//    int colour_r = 244;
+//    int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
+//    int colour_b = 63;
     
-    juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), getWidth() / 2, getHeight() / 2,
-                              juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.f), 0, getHeight() / 2, true);
+//    juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), getWidth() / 2, getHeight() / 2,
+//                              juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.f), 0, getHeight() / 2, true);
+//    g.setGradientFill(grad);
+    
+    juce::ColourGradient grad(COLOUR1, getWidth() / 2, getHeight() / 2,
+                              COLOUR1.withAlpha(0.f), 0, getHeight() / 2, true);
     g.setGradientFill(grad);
-    
     
     
     historyL = processor.getHistoryArrayL();

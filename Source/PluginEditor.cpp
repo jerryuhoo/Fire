@@ -524,10 +524,14 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     //distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
     
     // DBG(lastPresetName);
-    if (stateComponent.getPresetName() != lastPresetName)
+    if (stateComponent.getPresetName() != lastPresetName) // preset change
     {
-        setMultiband();
-        lastPresetName = stateComponent.getPresetName();
+        initState();
+    }
+    if (stateComponent.getInitState()) // click init
+    {
+        initState();
+        stateComponent.setInitState(false);
     }
 
     multiband.getFocusArray(multibandFocus);
@@ -1169,6 +1173,23 @@ void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &yS
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
 {
+    changeSliderState(combobox);
+}
+
+void FireAudioProcessorEditor::initState()
+{
+    // init
+    setMultiband();
+    lastPresetName = stateComponent.getPresetName();
+    updateToggleState();
+    changeSliderState(&distortionMode1);
+    changeSliderState(&distortionMode2);
+    changeSliderState(&distortionMode3);
+    changeSliderState(&distortionMode4);
+}
+
+void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)
+{
     if (combobox == &distortionMode1)
     {
         disableSlider(&processor, driveKnob1, MODE_ID1, tempDriveValue[0]);
@@ -1322,5 +1343,4 @@ void FireAudioProcessorEditor::setMultiband()
     multiband.updateLines(false, -1);
     multiband.setCloseButtonState();
     multiband.setFocus();
-
 }

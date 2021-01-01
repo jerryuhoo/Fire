@@ -111,7 +111,10 @@ public:
     juce::String getPresetName();
     /*juce::TextButton& getNextButton();
     juce::TextButton& getPreviousButton();*/
-
+    
+    void setInitState(bool state);
+    bool getInitState();
+    
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
@@ -129,6 +132,8 @@ private:
     //TextButton deletePresetButton;
     juce::TextButton menuButton;
     juce::PopupMenu presetMenu;
+    
+    bool isInit = false;
     
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;

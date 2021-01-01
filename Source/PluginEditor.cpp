@@ -1285,8 +1285,8 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 
     // paint distortion function
     int mode = *processor.treeState.getRawParameterValue(modeId);
-    float drive = *processor.treeState.getRawParameterValue(driveId);//TODO: replace it!
-//    float drive = processor.getNewDrive();
+//    float drive = *processor.treeState.getRawParameterValue(driveId);//TODO: replace it!
+    float drive = processor.getNewDrive(driveId);
     float color = *processor.treeState.getRawParameterValue(COLOR_ID);
     float rec = *processor.treeState.getRawParameterValue(recId);
     float mix = *processor.treeState.getRawParameterValue(mixId);

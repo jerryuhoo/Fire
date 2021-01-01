@@ -666,13 +666,14 @@ void StateComponent::popPresetMenu()
     
     int result = presetMenu.show(0, 250 * widthScale,
                                  10, 30 * heightScale);
-    if (result == 1)
+    if (result == 1)  // init
     {
         // set all parameters to default
         procStatePresets.initPreset();
         // set GUI verticle lines to default
         resetMultiband();
         presetBox.setSelectedId(0);
+        isInit = true;
     }
     else if (result == 2)
     {
@@ -721,6 +722,16 @@ void StateComponent::popPresetMenu()
 void StateComponent::resetMultiband()
 {
     multiband.reset();
+}
+
+void StateComponent::setInitState(bool state)
+{
+    isInit = state;
+}
+
+bool StateComponent::getInitState()
+{
+    return isInit;
 }
 
 //juce::TextButton& StateComponent::getNextButton()

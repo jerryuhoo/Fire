@@ -1219,15 +1219,16 @@ void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce
     if (selection == 0)
     {
         tempValue = slider.getValue();
-        if (&slider == &driveKnob1 || &slider == &driveKnob2 || &slider == &driveKnob3 || &slider == &driveKnob4)
-        {
-            slider.setValue(1);
-        }
-        else if (&slider == &biasKnob1 || &slider == &biasKnob2 || &slider == &biasKnob3 || &slider == &biasKnob4)
-        {
-            slider.setValue(0);
-        }
+//        if (&slider == &driveKnob1 || &slider == &driveKnob2 || &slider == &driveKnob3 || &slider == &driveKnob4)
+//        {
+//            slider.setValue(1);
+//        }
+//        else if (&slider == &biasKnob1 || &slider == &biasKnob2 || &slider == &biasKnob3 || &slider == &biasKnob4)
+//        {
+//            slider.setValue(0);
+//        }
         
+        slider.setValue(0);
         slider.setEnabled(false);
     }
     else if (selection != 0 && !slider.isEnabled())

@@ -404,28 +404,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
 
         // dsp process
-        // width
-        /**
-        M = (L+R)/sqrt(2);   // obtain mid-signal from left and right
-        S = (L-R)/sqrt(2);   // obtain side-signal from left and right
-
-        // amplify mid and side signal seperately:
-        M *= 2*(1-width);
-        S *= 2*width;
-
-        L = (M+S)/sqrt(2);   // obtain left signal from mid and side
-        R = (M-S)/sqrt(2);   // obtain right signal from mid and side
-         
-         ======
-
-        mSignal = 0.5 * (left + right);
-        sSignal = left - right;
-
-        float pan; // [-1; +1]
-        left  = 0.5 * (1.0 + pan) * mSignal + sSignal;
-        right = 0.5 * (1.0 - pan) * mSignal - sSignal;
-        */
-        
         auto* channeldataL = mBuffer1.getWritePointer(0);
         auto* channeldataR = mBuffer1.getWritePointer(1);
         float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
@@ -436,6 +414,24 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
         
         widthProcessor.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
+        
+        
+        // mix process
+        mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1);
+//        float mix = *treeState.getRawParameterValue(MIX_ID1);
+//        mixSmoother1.setTargetValue(mix);
+//        // mix control
+//        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+//        {
+//            auto *channelData = mBuffer1.getWritePointer(channel);
+//            auto *cleanSignal = dryBuffer.getWritePointer(channel);
+//
+//            for (int sample = 0; sample < mBuffer1.getNumSamples(); ++sample)
+//            {
+//                float smoothMixValue = mixSmoother1.getNextValue();
+//                channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, mBuffer1.getNumSamples()) + smoothMixValue * channelData[sample];
+//            }
+//        }
     }
     
     if (multibandState2 && lineNum >= 1)
@@ -461,6 +457,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         float width2 = *treeState.getRawParameterValue(WIDTH_ID2);
 
         widthProcessor.process(channeldataL, channeldataR, width2, mBuffer2.getNumSamples());
+        
+        // mix process
+        mixProcessor(MIX_ID2, mixSmoother2, totalNumInputChannels, mBuffer2);
     }
     
     if (multibandState3 && lineNum >= 2)
@@ -485,6 +484,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         float width3 = *treeState.getRawParameterValue(WIDTH_ID3);
 
         widthProcessor.process(channeldataL, channeldataR, width3, mBuffer3.getNumSamples());
+        
+        // mix process
+        mixProcessor(MIX_ID3, mixSmoother3, totalNumInputChannels, mBuffer3);
     }
     
     if (multibandState4 && lineNum == 3)
@@ -504,6 +506,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         float width4 = *treeState.getRawParameterValue(WIDTH_ID4);
 
         widthProcessor.process(channeldataL, channeldataR, width4, mBuffer4.getNumSamples());
+        
+        // mix process
+        mixProcessor(MIX_ID4, mixSmoother4, totalNumInputChannels, mBuffer4);
     }
     
     
@@ -585,7 +590,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             float smoothMixValue = mixSmootherGlobal.getNextValue();
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
             //channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
-            channelData[sample] = (1.f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
+            channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
             // mDelay is delayed clean signal
             if (sample % 10 == 0)
             {
@@ -791,7 +796,7 @@ float * FireAudioProcessor::getFFTData()
 
 int FireAudioProcessor::getFFTSize()
 {
-    return spectrum_processor.fftSize/2 ;
+    return spectrum_processor.fftSize / 2 ;
 }
 
 bool FireAudioProcessor::isFFTBlockReady()
@@ -819,7 +824,7 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 
     
     // protection
-    drive = drive * 6.5 / 100.f;
+    drive = drive * 6.5f / 100.0f;
     drive = powf(2, drive);
 
     float sampleMaxValue = 0;
@@ -830,9 +835,9 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 
     if (distortionProcessor.controls.protection == true)
     {
-        if (sampleMaxValue * drive > 2.f)
+        if (sampleMaxValue * drive > 2.0f)
         {
-            drive = 2.f / sampleMaxValue + 0.1 * std::log2f(drive);
+            drive = 2.0f / sampleMaxValue + 0.1 * std::log2f(drive);
         }
     }
     if (driveID == DRIVE_ID1)
@@ -1003,14 +1008,14 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
         juce::Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());
         float min = range.getStart();
         float max = range.getEnd();
-        float magnitude = range.getLength() / 2.f;
+        float magnitude = range.getLength() / 2.0f;
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             // centralization
             if (mode == 9 || recSmoother.getNextValue() > 0)
             {
-                centralSmoother.setTargetValue((max + min) / 2.f);
+                centralSmoother.setTargetValue((max + min) / 2.0f);
                 channelData[sample] = channelData[sample] - centralSmoother.getNextValue();
             }
 
@@ -1036,6 +1041,24 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
 
             // output control
             channelData[sample] *= outputSmoother.getNextValue();
+        }
+    }
+}
+
+void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer)
+{
+    float mix = *treeState.getRawParameterValue(mixId);
+    mixSmoother.setTargetValue(mix);
+    // mix control
+    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    {
+        auto *channelData = buffer.getWritePointer(channel);
+        auto *cleanSignal = dryBuffer.getWritePointer(channel);
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            float smoothMixValue = mixSmoother.getNextValue();
+            channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
         }
     }
 }
@@ -1103,7 +1126,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     
     
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
-    cutoffRange.setSkewForCentre(1000.f);
+    cutoffRange.setSkewForCentre(1000.0f);
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(CUTOFF_ID, CUTOFF_NAME, cutoffRange, 20.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(RES_ID, RES_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
 

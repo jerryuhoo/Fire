@@ -19,7 +19,7 @@ Multiband::Multiband()
 //    addAndMakeVisible(spectrum);
     
     limitLeft = 0.1f;
-    limitRight = 1.f - limitLeft;
+    limitRight = 1.0f - limitLeft;
     
     soloButton[0] = std::make_unique<SoloButton>();
     addAndMakeVisible(*soloButton[0]);
@@ -47,7 +47,7 @@ Multiband::Multiband()
         addAndMakeVisible(*enableButton[i + 1]);
     }
     
-    margin = getHeight() / 20.f;
+    margin = getHeight() / 20.0f;
 //    size = verticalLines[0]->getHeight() / 10.f;
 //    width = verticalLines[0]->getWidth() / 2.f;
 //    updateLines(false, -1);
@@ -170,18 +170,18 @@ void Multiband::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-    margin = getHeight() / 20.f;
-    size = verticalLines[0]->getHeight() / 10.f;
-    width = verticalLines[0]->getWidth() / 2.f;
+    margin = getHeight() / 20.0f;
+    size = verticalLines[0]->getHeight() / 10.0f;
+    width = verticalLines[0]->getWidth() / 2.0f;
     
     // temp method to fix
     if (size == 0)
     {
-        size = 15.f;
+        size = 15.0f;
     }
     if (width == 0)
     {
-        width = 5.f;
+        width = 5.0f;
     }
     
     updateLines(false, -1);
@@ -366,7 +366,7 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
 {
-    if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.f) // create new lines
+    if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         
         if (lineNum < 3)
@@ -420,7 +420,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
         }
         
     }
-    else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.f) // focus on one band
+    else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
         int num = lineNum;
         for (int i = 0; i < 4; i++)
@@ -546,7 +546,8 @@ void Multiband::setLineRelatedBounds(int i)
     verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
     closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, margin, size, size);
 
-    freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, getHeight() / 5 + margin, size * 4, size);
+    freqTextLabel[i]->setBounds(verticalLines[i]->getX() + width + margin, getHeight() / 5 + margin, width * 15, size);
+    freqTextLabel[i]->setScale(juce::jmin(width / 5.0f, size / 15.0f));
     int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
     freqTextLabel[i]->setFreq(freq);
 //        frequency[sortedIndex[i]] = freq;

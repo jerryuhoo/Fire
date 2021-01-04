@@ -41,7 +41,7 @@ void FreqTextLabel::paint (juce::Graphics& g)
         g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
         
     //    g.drawRoundedRectangle(<#Rectangle<float> rectangle#>, <#float cornerSize#>, <#float lineThickness#>)
-        g.setFont (14.0f);
+        g.setFont (14.0f * mScale);
         g.drawText (static_cast<juce::String>(mFrequency) + " Hz", getLocalBounds(),
                     juce::Justification::centred, true);   // draw some placeholder text
 //    }
@@ -66,4 +66,9 @@ void FreqTextLabel::setFreq(int freq)
 int FreqTextLabel::getFreq()
 {
     return mFrequency;
+}
+
+void FreqTextLabel::setScale(float scale)
+{
+    mScale = scale;
 }

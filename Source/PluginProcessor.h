@@ -134,6 +134,7 @@ private:
     float previousOutput2;
     float previousOutput3;
     float previousOutput4;
+    float previousOutput;
     float previousDrive1;
     float previousDrive2;
     float previousDrive3;
@@ -159,6 +160,7 @@ private:
     juce::SmoothedValue<float> outputSmoother2;
     juce::SmoothedValue<float> outputSmoother3;
     juce::SmoothedValue<float> outputSmoother4;
+    juce::SmoothedValue<float> outputSmootherGlobal;
     juce::SmoothedValue<float> recSmoother1;
     juce::SmoothedValue<float> recSmoother2;
     juce::SmoothedValue<float> recSmoother3;
@@ -187,7 +189,8 @@ private:
     
     // oversampling
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ; // HQ use 4x
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4]; // HQ use 4x
+
     int oversampleFactor = 1;
 
     // oversampling delay, set to dry buffer

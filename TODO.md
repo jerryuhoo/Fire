@@ -8,12 +8,10 @@
 6. maybe improve code quality about the vertical lines part (for example use Vector)
 7. [feature] add mid-side / width / pan knobs
 8. [feature] add solo/mute button between vertical lines
-9. [bug] HQ mode multiband high cpu and artifacts
-10. width graph
-11. dynamic sliders
-12. [bug multiband enable button mask problem
-13. [feature] add drive button reduction on drive knob when safe mode is on
-14. [feature] mouse drag vertically to change the output volume, like Ozone or saturn2
-15. [bug] Ableton can't drag vertical lines on parameter pannel.
-16. [bug] Doesn't save focus and disable.
-17. [bug] diode mode add lines at 10000hz will cause noise(HQ mode also)
+9. width graph
+10. dynamic sliders
+11. [bug] multiband enable button mask problem
+12. [feature] add drive button reduction on drive knob when safe mode is on
+13. [feature] mouse drag vertically to change the output volume, like Ozone or saturn2
+14. [bug] Ableton can't drag vertical lines on parameter pannel.
+15. [bug] Doesn't save focus and disable.

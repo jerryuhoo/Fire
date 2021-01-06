@@ -45,7 +45,11 @@ FireAudioProcessor::FireAudioProcessor()
 {
     // factor = 2 means 2^2 = 4, 4x oversampling
     oversampling.reset(new juce::dsp::Oversampling<float>(getTotalNumInputChannels(), 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
-    oversamplingHQ.reset(new juce::dsp::Oversampling<float>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
+    for (size_t i = 0; i < 4; i++)
+    {
+        oversamplingHQ[i].reset(new juce::dsp::Oversampling<float>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
+    }
+    
 }
 
 FireAudioProcessor::~FireAudioProcessor()
@@ -133,7 +137,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousOutput3 = juce::Decibels::decibelsToGain(previousOutput3);
     previousOutput4 = (float)*treeState.getRawParameterValue(OUTPUT_ID4);
     previousOutput4 = juce::Decibels::decibelsToGain(previousOutput4);
-    
+    previousOutput = juce::Decibels::decibelsToGain((float)*treeState.getRawParameterValue(OUTPUT_ID));
+
     previousDrive1 = *treeState.getRawParameterValue(DRIVE_ID1);
     previousDrive2 = *treeState.getRawParameterValue(DRIVE_ID2);
     previousDrive3 = *treeState.getRawParameterValue(DRIVE_ID3);
@@ -155,9 +160,24 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     driveSmoother1.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother1.setCurrentAndTargetValue(previousDrive1);
+    driveSmoother2.reset(sampleRate, 0.05);
+    driveSmoother2.setCurrentAndTargetValue(previousDrive2);
+    driveSmoother3.reset(sampleRate, 0.05);
+    driveSmoother3.setCurrentAndTargetValue(previousDrive3);
+    driveSmoother4.reset(sampleRate, 0.05);
+    driveSmoother4.setCurrentAndTargetValue(previousDrive4);
 
     outputSmoother1.reset(sampleRate, 0.05);
     outputSmoother1.setCurrentAndTargetValue(previousOutput1);
+    outputSmoother2.reset(sampleRate, 0.05);
+    outputSmoother2.setCurrentAndTargetValue(previousOutput2);
+    outputSmoother3.reset(sampleRate, 0.05);
+    outputSmoother3.setCurrentAndTargetValue(previousOutput3);
+    outputSmoother4.reset(sampleRate, 0.05);
+    outputSmoother4.setCurrentAndTargetValue(previousOutput4);
+    outputSmootherGlobal.reset(sampleRate, 0.05);
+    outputSmootherGlobal.setCurrentAndTargetValue(previousOutput);
+
 
     cutoffSmoother.reset(sampleRate, 0.001);
     cutoffSmoother.setCurrentAndTargetValue(previousCutoff);
@@ -214,8 +234,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // oversampling init
     oversampling->reset();
     oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
-    oversamplingHQ->reset();
-    oversamplingHQ->initProcessing(static_cast<size_t>(samplesPerBlock));
+
+    for (size_t i = 0; i < 4; i++)
+    {
+        oversamplingHQ[i]->reset();
+        oversamplingHQ[i]->initProcessing(static_cast<size_t>(samplesPerBlock));
+    }
     mDelay.reset(0);
     // dsp init
 
@@ -578,6 +602,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     
     float mix = *treeState.getRawParameterValue(MIX_ID);
     mixSmootherGlobal.setTargetValue(mix);
+
+    float output = juce::Decibels::decibelsToGain((float)*treeState.getRawParameterValue(OUTPUT_ID));
+    outputSmootherGlobal.setTargetValue(output);
+
     // mix control
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -588,9 +616,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             float smoothMixValue = mixSmootherGlobal.getNextValue();
+            float smoothOutputValue = outputSmootherGlobal.getNextValue();
+
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
-            //channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample];
-            channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
+            channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample] * smoothOutputValue;
+            // channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
             // mDelay is delayed clean signal
             if (sample % 10 == 0)
             {
@@ -871,9 +901,16 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 
 }
 
-void FireAudioProcessor::processDistortion(juce::String modeID, juce::String recID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
+void FireAudioProcessor::processDistortion(juce::String modeId, juce::String recId, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
 {
-    int mode = *treeState.getRawParameterValue(modeID);
+    int mode = *treeState.getRawParameterValue(modeId);
+
+    int num;
+    if (modeId == MODE_ID1) num = 0;
+    else if (modeId == MODE_ID2) num = 1;
+    else if (modeId == MODE_ID3) num = 2;
+    else if (modeId == MODE_ID4) num = 3;
+    else num = -1;
 
     // TODO: ------put this in a new function--------
 
@@ -895,6 +932,9 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
         newBufferSize *= oversampleFactor;
         oversampling->getLatencyInSamples();
     }
+
+
+
     */
     // TODO: ------put this in a new function--------
     juce::dsp::AudioBlock<float> blockInput(buffer);
@@ -904,13 +944,13 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
     if (*treeState.getRawParameterValue(HQ_ID))
     {
         blockInput = blockInput.getSubBlock(0, buffer.getNumSamples());
-        blockOutput = oversamplingHQ->processSamplesUp(blockInput);
+        blockOutput = oversamplingHQ[num]->processSamplesUp(blockInput);
 
         // the wet in high quality mode will have a latency of 3~4 samples.
         // so I must add the same latency to drybuffer.
         // But I don't know why the drybuffer is still 1 sample slower than the wet one.
         // So I added 1.  really weird :(
-        int latency = juce::roundToInt(oversamplingHQ->getLatencyInSamples()) + 1;
+        int latency = juce::roundToInt(oversamplingHQ[num]->getLatencyInSamples()) + 1;
 
         mDelay.setLatency(latency);
         mDelay.setState(true);
@@ -956,7 +996,7 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
             }
 
             // rectification
-            updateRectification(recID, recSmoother, distortionProcessor);
+            updateRectification(recId, recSmoother, distortionProcessor);
             channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
         }
         if (mode == 9)
@@ -977,7 +1017,7 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
                 channelData[sample] = inputTemp[sample];
                 //channelData[sample] *= outputSmoother.getNextValue();
                 // rectification
-                updateRectification(recID, recSmoother, distortionProcessor);
+                updateRectification(recId, recSmoother, distortionProcessor);
                 channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
             }
             inputTemp.clear();
@@ -987,7 +1027,8 @@ void FireAudioProcessor::processDistortion(juce::String modeID, juce::String rec
     // oversampling
     if (*treeState.getRawParameterValue(HQ_ID)) // oversampling
     {
-        oversamplingHQ->processSamplesDown(blockInput);
+        oversamplingHQ[num]->processSamplesDown(blockInput);
+        
     }
     //else
     //{

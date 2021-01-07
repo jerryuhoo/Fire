@@ -1231,7 +1231,7 @@ void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce
         slider.setValue(0);
         slider.setEnabled(false);
     }
-    else if (selection != 0 && !slider.isEnabled())
+    else if (!slider.isEnabled())
     {
         slider.setValue(tempValue);
         slider.setEnabled(true);

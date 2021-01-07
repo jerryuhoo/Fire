@@ -4,7 +4,7 @@
 
 ## 1. Introduce
 
- This is a multi-band distortion plugin. Fire supports DAWs such as Ableton Live, Fl Studio...
+ This is a multi-band distortion plugin. 『Fire』 supports DAWs such as Ableton Live, Fl Studio...
 
 Hope you like it!
 
@@ -16,7 +16,7 @@ currently not avaliable
 
 ### Build by JUCE
 
-Open .jucer file by Projucer then select your IDE to build Fire. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the <a href="https://www.juce.com" rel="nofollow">latest JUCE release</a>.</li>
+Open .jucer file by Projucer then select your IDE to build 『Fire』. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the <a href="https://www.juce.com" rel="nofollow">latest JUCE release</a>.</li>
 
 Note: You should choose Release mode rather than Debug mode(or disable Debug mode) in .fire Exporters page. Build with debug mode will cause high CPU usage.
 

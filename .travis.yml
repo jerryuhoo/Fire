@@ -42,3 +42,22 @@ script:
   - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then xcodebuild -project Fire.xcodeproj/ -configuration Release | xcpretty -s -f `xcpretty-travis-formatter`; fi
   - if [[ $TRAVIS_OS_NAME == 'windows' ]]; then msbuild.exe -v:normal Fire.sln; fi
   - echo "SUCCESS"
+
+before_deploy:
+  - sudo apt-get -y install zip
+  - cd $TRAVIS_BUILD_DIR/Builds/$BUILD_FOLDER/
+  # - if [[ $TRAVIS_OS_NAME == 'osx' ]]; then cd; fi
+  - if [[ $TRAVIS_OS_NAME == 'windows' ]]; then cd x64/Debug/VST3/; fi
+  
+  - if [[ $TRAVIS_OS_NAME == 'windows' ]]; then zip -r ../../../../../Fire-win.zip Fire.vst3 -r
+  - cd ../../../../../
+  - ls
+
+deploy:
+  provider: releases
+  api_key: ${GITHUB_TOKEN}
+  file:
+  - Fire-win.zip
+  skip_cleanup: true
+  on:
+    tags: true

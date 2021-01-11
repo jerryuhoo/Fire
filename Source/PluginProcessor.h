@@ -65,7 +65,7 @@ public:
     void setStateInformation(const void *data, int sizeInBytes) override;
 
     // Rectification
-    void updateRectification(juce::String recID, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor);
+    void updateRectification(float rec, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor);
 
     // filter
     void updateFilter();

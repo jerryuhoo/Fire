@@ -736,9 +736,8 @@ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 }
 
 // Rectification selection
-void FireAudioProcessor::updateRectification(juce::String recID, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
+void FireAudioProcessor::updateRectification(float rec, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
 {
-    float rec = *treeState.getRawParameterValue(recID);
     recSmoother.setTargetValue(rec);
     distortionProcessor.controls.rectification = recSmoother.getNextValue();
 }
@@ -904,6 +903,7 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 void FireAudioProcessor::processDistortion(juce::String modeId, juce::String recId, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
 {
     int mode = *treeState.getRawParameterValue(modeId);
+    float rec = *treeState.getRawParameterValue(recId);
 
     int num;
     if (modeId == MODE_ID1) num = 0;
@@ -996,7 +996,7 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
             }
 
             // rectification
-            updateRectification(recId, recSmoother, distortionProcessor);
+            updateRectification(rec, recSmoother, distortionProcessor);
             channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
         }
         if (mode == 9)
@@ -1017,7 +1017,7 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
                 channelData[sample] = inputTemp[sample];
                 //channelData[sample] *= outputSmoother.getNextValue();
                 // rectification
-                updateRectification(recId, recSmoother, distortionProcessor);
+                updateRectification(rec, recSmoother, distortionProcessor);
                 channelData[sample] = distortionProcessor.rectificationProcess(channelData[sample]);
             }
             inputTemp.clear();

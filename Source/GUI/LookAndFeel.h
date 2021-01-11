@@ -206,6 +206,17 @@ public:
         juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
     }
+    
+    void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override
+    {
+        g.fillAll(COLOUR6); // findColour (PopupMenu::backgroundColourId)
+        juce::ignoreUnused(width, height);
+
+       #if ! JUCE_MAC
+        g.setColour(COLOUR1.withAlpha(0.6f)); //juce::LookAndFeel::findColour(juce::PopupMenu::textColourId)
+        g.drawRect(0, 0, width, height);
+       #endif
+    }
 
     void drawPopupMenuItem(juce::Graphics &g, const juce::Rectangle<int> &area,
                            const bool isSeparator, const bool isActive,
@@ -214,8 +225,8 @@ public:
                            const juce::String &shortcutKeyText,
                            const juce::Drawable *icon, const juce::Colour *const textColourToUse) override
     {
-        g.setColour(COLOUR6); // backgroundColourId
-        g.fillAll();
+        //g.setColour(COLOUR6); // backgroundColourId : black
+        //g.fillAll();
         
         if (isSeparator)
         {
@@ -234,7 +245,7 @@ public:
 
             if (isHighlighted && isActive)
             {
-                g.setColour(COLOUR5); //findColour(juce::PopupMenu::highlightedBackgroundColourId)
+                g.setColour(COLOUR5); //findColour(juce::PopupMenu::highlightedBackgroundColourId) : red
                 g.fillRect(r);
 
                 g.setColour(COLOUR1); //findColour(juce::PopupMenu::highlightedTextColourId)
@@ -266,7 +277,12 @@ public:
             {
                 //auto tick = getTickShape (1.0f);
                 //g.fillPath (tick, tick.getTransformToScaleToFit (iconArea.reduced (iconArea.getWidth() / 5, 0).toFloat(), true));
-                g.fillEllipse(iconArea.getX() + scale * 12, iconArea.getY() + scale * 17, iconArea.getWidth() - scale * 24, iconArea.getWidth() - scale * 24);
+                
+                float r = scale * 10;
+                float xPos = iconArea.getX() + iconArea.getWidth() / 2 - r / 2;
+                float yPos = iconArea.getY() + iconArea.getHeight() / 2 - r / 2;
+                
+                g.fillEllipse(xPos, yPos, r, r);
             }
 
             if (hasSubMenu)

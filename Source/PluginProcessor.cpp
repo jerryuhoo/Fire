@@ -564,12 +564,12 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     
 
     // downsample
+    int rateDivide = *treeState.getRawParameterValue(DOWNSAMPLE_ID);
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto *channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            int rateDivide = *treeState.getRawParameterValue(DOWNSAMPLE_ID);
+        {   
             //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
             if (rateDivide > 1)
             {

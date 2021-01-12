@@ -42,7 +42,7 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ## 5. Update Notes
 
-2020-7-15 (version 0.8)
+2020-12-29 (version 0.8)
 
 1. multiband distortion
 2. spectrum graph

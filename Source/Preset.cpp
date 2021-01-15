@@ -519,11 +519,10 @@ void StateComponent::setPreviousPreset()
     if (presetIndex > 0)
     {
         juce::String presetID = (juce::String)presetIndex;
-        procStatePresets.setCurrentPresetId(presetIndex);
-        procStatePresets.loadPreset(presetID);
+        //procStatePresets.setCurrentPresetId(presetIndex);
+        //procStatePresets.loadPreset(presetID);
+        presetBox.setSelectedId(presetIndex);
     }
-    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
-    
 }
 
 void StateComponent::setNextPreset()
@@ -532,19 +531,25 @@ void StateComponent::setNextPreset()
     if (presetIndex <= procStatePresets.getNumPresets())
     {
         juce::String presetID = (juce::String)presetIndex;
-        procStatePresets.setCurrentPresetId(presetIndex);
-        procStatePresets.loadPreset(presetID);
+        //procStatePresets.setCurrentPresetId(presetIndex);
+        //procStatePresets.loadPreset(presetID);
+        presetBox.setSelectedId(presetIndex);
     }
-    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
-    
 }
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
 {
-    const juce::String presetID{"preset" + (juce::String)changedComboBox->getSelectedId()};
-    procStatePresets.setCurrentPresetId(changedComboBox->getSelectedId());
-    //DBG(procStatePresets.getCurrentPresetId());
-    procStatePresets.loadPreset(presetID);
+    int selectedId = changedComboBox->getSelectedId();
+
+    // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
+    // next, previous, change combobox will change the selectedId, but currentId will change only after this.
+    // and then, it will load the preset.
+    if (procStatePresets.getCurrentPresetId() != selectedId)
+    {
+        const juce::String presetID{ "preset" + (juce::String)selectedId };
+        procStatePresets.setCurrentPresetId(selectedId);
+        procStatePresets.loadPreset(presetID);
+    }
 }
 
 void StateComponent::refreshPresetBox()

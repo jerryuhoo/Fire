@@ -98,7 +98,7 @@
         <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
         <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
         <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
-        <MODULEPATH id="ff_meters" path="juceUserModules"/>
+        <MODULEPATH id="ff_meters" path="JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
     <VS2019 targetFolder="Builds/VisualStudio2019">
@@ -131,22 +131,22 @@
         <CONFIGURATION isDebug="0" name="Release"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_opengl"/>
-        <MODULEPATH id="juce_gui_extra"/>
-        <MODULEPATH id="juce_gui_basics"/>
-        <MODULEPATH id="juce_graphics"/>
-        <MODULEPATH id="juce_events"/>
-        <MODULEPATH id="juce_dsp"/>
-        <MODULEPATH id="juce_data_structures"/>
-        <MODULEPATH id="juce_cryptography"/>
-        <MODULEPATH id="juce_core"/>
-        <MODULEPATH id="juce_audio_utils"/>
-        <MODULEPATH id="juce_audio_processors"/>
-        <MODULEPATH id="juce_audio_plugin_client"/>
-        <MODULEPATH id="juce_audio_formats"/>
-        <MODULEPATH id="juce_audio_devices"/>
-        <MODULEPATH id="juce_audio_basics"/>
-        <MODULEPATH id="ff_meters" path="juceUserModules"/>
+        <MODULEPATH id="juce_opengl" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_gui_extra" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_gui_basics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_graphics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_events" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_dsp" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_data_structures" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_cryptography" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_core" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_utils" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_processors" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_formats" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_devices" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="juce_audio_basics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
+        <MODULEPATH id="ff_meters" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
       </MODULEPATHS>
     </VS2017>
   </EXPORTFORMATS>

@@ -134,7 +134,7 @@ private:
     juce::PopupMenu presetMenu;
     
     bool isInit = false;
-    
+
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;
 

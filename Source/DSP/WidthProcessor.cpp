@@ -12,13 +12,11 @@
 #include "WidthProcessor.h"
 
 WidthProcessor::WidthProcessor()
-{
-    
+{  
 }
 
 WidthProcessor::~WidthProcessor()
-{
-    
+{  
 }
 
 void WidthProcessor::process(float* channeldataL, float* channeldataR, float width, int numSamples)
@@ -35,7 +33,6 @@ void WidthProcessor::process(float* channeldataL, float* channeldataR, float wid
     L = (M+S)/sqrt(2);   // obtain left signal from mid and side
     R = (M-S)/sqrt(2);   // obtain right signal from mid and side
     
-
     mSignal = 0.5 * (left + right);
     sSignal = left - right;
 
@@ -54,7 +51,6 @@ void WidthProcessor::process(float* channeldataL, float* channeldataR, float wid
 
         channeldataL[i] = mid - sides;
         channeldataR[i] = mid + sides;
-
     }
 }
 

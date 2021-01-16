@@ -25,7 +25,6 @@
 
 class FireAudioProcessor : public juce::AudioProcessor
 {
-
 public:
     //==============================================================================
     FireAudioProcessor();
@@ -104,6 +103,7 @@ public:
     int getFFTSize();//TMP!!!!!!!!!!!
     bool isFFTBlockReady();
     void processFFT();
+
 private:
     //==============================================================================
     
@@ -235,8 +235,7 @@ private:
     bool multibandFocus2 = false;
     bool multibandFocus3 = false;
     bool multibandFocus4 = false;
-    
-    
+
     void processDistortion(juce::String modeID, juce::String recID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor);
     
     void setParams(juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String mixID, juce::String biasID, juce::AudioBuffer<float>& buffer, Distortion& distortionProcessor, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& outputSmoother, juce::SmoothedValue<float>& mixSmoother, juce::SmoothedValue<float>& biasSmoother);

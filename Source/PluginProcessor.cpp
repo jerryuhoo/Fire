@@ -49,7 +49,6 @@ FireAudioProcessor::FireAudioProcessor()
     {
         oversamplingHQ[i].reset(new juce::dsp::Oversampling<float>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
     }
-    
 }
 
 FireAudioProcessor::~FireAudioProcessor()
@@ -389,22 +388,19 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     // ff input meter
     inputMeterSource.measureBlock(buffer);
 
-    
+    juce::dsp::AudioBlock<float> block(buffer);
     // pre-filter
-    bool preButton = *treeState.getRawParameterValue(PRE_ID);
+    bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
     if (preButton)
     {
-        juce::dsp::AudioBlock<float> block(buffer);
         filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
-        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
         updateFilter();
     }
 
-
     // multiband process
-    int freqValue1 = *treeState.getRawParameterValue(FREQ_ID1);
-    int freqValue2 = *treeState.getRawParameterValue(FREQ_ID2);
-    int freqValue3 = *treeState.getRawParameterValue(FREQ_ID3);
+    int freqValue1 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID1));
+    int freqValue2 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID2));
+    int freqValue3 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID3));
 
     auto numSamples  = buffer.getNumSamples();
     mBuffer1.makeCopyOf(buffer);
@@ -422,7 +418,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
     multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
     
-    int lineNum = *treeState.getRawParameterValue(LINENUM_ID);
+    int lineNum = static_cast<int>(*treeState.getRawParameterValue(LINENUM_ID));
 //    DBG(lineNum);
 //    if (multibandState1) {
 //        DBG("state1");
@@ -468,8 +464,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         compressorProcessor1.process(context1);
 
         // mix process
-        mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1);
-        
+        mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1); 
     }
     
     if (multibandState2 && lineNum >= 1)
@@ -570,8 +565,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         mixProcessor(MIX_ID4, mixSmoother4, totalNumInputChannels, mBuffer4);
     }
     
-    
-    
     buffer.clear();
     if (multibandState1)
     {
@@ -593,13 +586,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         buffer.addFrom(0, 0, mBuffer4, 0, 0, numSamples);
         buffer.addFrom(1, 0, mBuffer4, 1, 0, numSamples);
     }
-    
-   
-
-    
 
     // downsample
-    int rateDivide = *treeState.getRawParameterValue(DOWNSAMPLE_ID);
+    int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
         auto *channelData = buffer.getWritePointer(channel);
@@ -618,23 +607,18 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     float color = *treeState.getRawParameterValue(COLOR_ID);
     colorSmoother.setTargetValue(color);
     distortionProcessor1.controls.color = colorSmoother.getNextValue();
-    juce::dsp::AudioBlock<float> block(buffer);
+
     filterColor.process(juce::dsp::ProcessContextReplacing<float>(block));
     updateFilter();
-    
-    
+
     //post-filter
     bool postButton = *treeState.getRawParameterValue(POST_ID);
     if (postButton)
     {
-        juce::dsp::AudioBlock<float> block(buffer);
         filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
-        //filterIIR.process(dsp::ProcessContextReplacing<float>(blockOutput));
         updateFilter();
     }
 
-    
-    
     float mix = *treeState.getRawParameterValue(MIX_ID);
     mixSmootherGlobal.setTargetValue(mix);
 
@@ -679,7 +663,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
-    
     // Spectrum
     if (buffer.getNumChannels() > 0)
     {
@@ -689,9 +672,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
 //            spectrum_processor.pushNextSampleIntoFifo (std::sin(0.14*i));
     }
-    
-    
-    
+
     dryBuffer.clear();
 
     // ff output meter
@@ -741,7 +722,6 @@ void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
 
-    
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
     if (xmlState.get() != nullptr && xmlState->hasTagName("state"))
     {
@@ -877,16 +857,15 @@ void FireAudioProcessor::processFFT()
 void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String mixID, juce::String biasID, juce::AudioBuffer<float>& buffer, Distortion& distortionProcessor, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& outputSmoother, juce::SmoothedValue<float>& mixSmoother, juce::SmoothedValue<float>& biasSmoother)
 {
     // get parameters from sliders
-    int mode = *treeState.getRawParameterValue(modeID);
-    float drive = *treeState.getRawParameterValue(driveID);
-    float currentGainOutput = *treeState.getRawParameterValue(outputID);
+    int mode = static_cast<int>(*treeState.getRawParameterValue(modeID));
+    float drive = static_cast<float>(*treeState.getRawParameterValue(driveID));
+    float currentGainOutput = static_cast<float>(*treeState.getRawParameterValue(outputID));
     currentGainOutput = juce::Decibels::decibelsToGain(currentGainOutput);
-    float mix = *treeState.getRawParameterValue(mixID);
-    float bias = *treeState.getRawParameterValue(biasID);
+    float mix = static_cast<float>(*treeState.getRawParameterValue(mixID));
+    float bias = static_cast<float>(*treeState.getRawParameterValue(biasID));
     // set distortion processor parameters
     distortionProcessor.controls.mode = mode;
 
-    
     // protection
     drive = drive * 6.5f / 100.0f;
     drive = powf(2, drive);
@@ -937,8 +916,8 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 
 void FireAudioProcessor::processDistortion(juce::String modeId, juce::String recId, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
 {
-    int mode = *treeState.getRawParameterValue(modeId);
-    float rec = *treeState.getRawParameterValue(recId);
+    int mode = static_cast<int>(*treeState.getRawParameterValue(modeId));
+    float rec = static_cast<float>(*treeState.getRawParameterValue(recId));
 
     int num;
     if (modeId == MODE_ID1) num = 0;
@@ -967,8 +946,6 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
         newBufferSize *= oversampleFactor;
         oversampling->getLatencyInSamples();
     }
-
-
 
     */
     // TODO: ------put this in a new function--------
@@ -1004,12 +981,10 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
 
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-
         // float* data = buffer.getWritePointer(channel);
         // auto *channelData = buffer.getWritePointer(channel);
         auto *channelData = blockOutput.getChannelPointer(channel);
         inputTemp.clear();
-        
         
         for (int sample = 0; sample < blockOutput.getNumSamples(); ++sample)
         {
@@ -1066,7 +1041,6 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
     if (*treeState.getRawParameterValue(HQ_ID)) // oversampling
     {
         oversamplingHQ[num]->processSamplesDown(blockInput);
-        
     }
     //else
     //{
@@ -1077,11 +1051,10 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
 
 void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother)
 {
-    int mode = *treeState.getRawParameterValue(modeID);
+    int mode = static_cast<int>(*treeState.getRawParameterValue(modeID));
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-
         auto *channelData = buffer.getWritePointer(channel);
 
         juce::Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());

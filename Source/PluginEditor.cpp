@@ -583,7 +583,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     lineStateSlider3.setValue(lineState[2]);
 
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
-        
 //        spectrum.setVisible(false);
 //        multiband.setVisible(false);
 //
@@ -642,9 +641,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         colorKnob.setVisible(false);
         cutoffKnob.setVisible(false);
         mixKnob.setVisible(false);
-        outputKnob.setVisible(false);
-        
-        
+        outputKnob.setVisible(false); 
     }
     else if (right) // if you select the left window, you can use muti-band distortion
     {
@@ -765,8 +762,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         setDistortionGraph(MODE_ID4, DRIVE_ID4,
             REC_ID4, MIX_ID4, BIAS_ID4);
     }
-    
-    
 }
 
 void FireAudioProcessorEditor::resized()
@@ -898,8 +893,6 @@ void FireAudioProcessorEditor::resized()
 
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;
-    
-    
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -925,11 +918,9 @@ void FireAudioProcessorEditor::updateToggleState()
 
 void FireAudioProcessorEditor::timerCallback()
 {
-    
     // spectrum
     if (processor.isFFTBlockReady())
     {
-        
         multiband.repaint();
         oscilloscope.repaint();
         distortionGraph.repaint();
@@ -937,8 +928,6 @@ void FireAudioProcessorEditor::timerCallback()
         spectrum.prepareToPaintSpectrum(processor.getFFTSize() , processor.getFFTData());
         spectrum.repaint();
     }
-    
-    
 //    repaint();
 }
 
@@ -1016,7 +1005,6 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &ySlider)
 {
     // x changes, then y will change
-    
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
@@ -1191,16 +1179,15 @@ void FireAudioProcessorEditor::setRoundButton(juce::TextButton& button, juce::St
 void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, 
     juce::String recId, juce::String mixId, juce::String biasId)
 {
-
     // paint distortion function
-    int mode = *processor.treeState.getRawParameterValue(modeId);
+    int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
 //    float drive = *processor.treeState.getRawParameterValue(driveId);//TODO: replace it!
     float drive = processor.getNewDrive(driveId);
-    float color = *processor.treeState.getRawParameterValue(COLOR_ID);
-    float rec = *processor.treeState.getRawParameterValue(recId);
-    float mix = *processor.treeState.getRawParameterValue(mixId);
-    float bias = *processor.treeState.getRawParameterValue(biasId);
-    float rateDivide = *processor.treeState.getRawParameterValue(DOWNSAMPLE_ID);
+    float color = static_cast<float>(*processor.treeState.getRawParameterValue(COLOR_ID));
+    float rec = static_cast<float>(*processor.treeState.getRawParameterValue(recId));
+    float mix = static_cast<float>(*processor.treeState.getRawParameterValue(mixId));
+    float bias = static_cast<float>(*processor.treeState.getRawParameterValue(biasId));
+    float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
 
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
@@ -1213,20 +1200,20 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 
 void FireAudioProcessorEditor::setMultiband()
 {
-    multiband.setLineNum(*processor.treeState.getRawParameterValue(LINENUM_ID));
-    int freq1 = *processor.treeState.getRawParameterValue(FREQ_ID1);
-    int freq2 = *processor.treeState.getRawParameterValue(FREQ_ID2);
-    int freq3 = *processor.treeState.getRawParameterValue(FREQ_ID3);
+    multiband.setLineNum(static_cast<int>(*processor.treeState.getRawParameterValue(LINENUM_ID)));
+    int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
+    int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
+    int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
     multiband.setFrequency(freq1, freq2, freq3);
 
-    bool state1 = *processor.treeState.getRawParameterValue(LINE_STATE_ID1);
-    bool state2 = *processor.treeState.getRawParameterValue(LINE_STATE_ID2);
-    bool state3 = *processor.treeState.getRawParameterValue(LINE_STATE_ID3);
+    bool state1 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID1));
+    bool state2 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID2));
+    bool state3 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID3));
     multiband.setLineState(state1, state2, state3);
 
-    float pos1 = *processor.treeState.getRawParameterValue(LINEPOS_ID1);
-    float pos2 = *processor.treeState.getRawParameterValue(LINEPOS_ID2);
-    float pos3 = *processor.treeState.getRawParameterValue(LINEPOS_ID3);
+    float pos1 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID1));
+    float pos2 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID2));
+    float pos3 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID3));
     multiband.setLinePos(pos1, pos2, pos3);
     multiband.updateLines(false, -1);
     multiband.setCloseButtonState();

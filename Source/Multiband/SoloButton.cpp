@@ -16,7 +16,6 @@ SoloButton::SoloButton()
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
-
 }
 
 SoloButton::~SoloButton()
@@ -35,7 +34,6 @@ void SoloButton::paint (juce::Graphics& g)
         {
             g.setColour(COLOUR1.withAlpha(0.8f));
         }
-        
     }
     else
     {
@@ -48,6 +46,7 @@ void SoloButton::paint (juce::Graphics& g)
             g.setColour(COLOUR1);
         }
     }
+
     g.fillEllipse(0, 0, getWidth(), getHeight());
     g.setColour(COLOUR7);
     g.drawText("S", 0, 0, getWidth(), getHeight(), juce::Justification::centred);
@@ -57,7 +56,6 @@ void SoloButton::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-
 }
 
 void SoloButton::mouseUp(const juce::MouseEvent &e)

@@ -60,7 +60,7 @@ bool VersionInfo::isNewerVersionThanCurrent()
     auto currentTokens = juce::StringArray::fromTokens (ProjectInfo::versionString, ".", {});
     auto thisTokens    = juce::StringArray::fromTokens (versionString, ".", {});
 
-    jassert (thisTokens.size() == 3 && thisTokens.size() == 3);
+    jassert (thisTokens.size() == 3);
 
     if (currentTokens[0].getIntValue() == thisTokens[0].getIntValue())
     {

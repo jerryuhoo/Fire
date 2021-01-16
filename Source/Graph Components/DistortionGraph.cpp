@@ -66,7 +66,6 @@ void DistortionGraph::paint (juce::Graphics& g)
         
         for (float i = 1; i < numPix; i += step)
         {
-            
             value += valInc * step;
             xPos += posInc * step;
 
@@ -140,9 +139,6 @@ void DistortionGraph::paint (juce::Graphics& g)
         g.setGradientFill(grad);
         g.strokePath(p, juce::PathStrokeType(2.0f));
     }
-    
-
-
 }
 
 void DistortionGraph::resized()

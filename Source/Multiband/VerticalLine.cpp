@@ -29,22 +29,18 @@ void VerticalLine::paint (juce::Graphics& g)
     
     g.fillRect(getWidth() / 10.f * 4.f, 0.f, getWidth() / 10.f * 2.f, static_cast<float> (getHeight()));
 
-    
     if (isEntered)
     {
         g.setColour(COLOUR1.withAlpha(0.2f));
         g.fillAll();
     }
-
 }
 
 void VerticalLine::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-    
 }
-
 
 void VerticalLine::mouseUp(const juce::MouseEvent &e)
 {
@@ -151,7 +147,6 @@ void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::un
     leftLimit = (index + 1) * margin;
     rightLimit = 1 - (lineNum - index) * margin;
 
-    
     if (newXPercent < leftLimit) newXPercent = leftLimit;
     if (newXPercent > rightLimit) newXPercent = rightLimit;
 
@@ -166,5 +161,4 @@ void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::un
         verticalLines[sortedIndex[rightIndex]]->moveToX(lineNum, newXPercent + margin, margin, verticalLines, sortedIndex);
     }
     xPercent = newXPercent;
-
 }

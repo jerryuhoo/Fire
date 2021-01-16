@@ -13,7 +13,8 @@
 class SpectrumProcessor {
 public:
 
-	SpectrumProcessor(): forwardFFT(fftOrder), window(fftSize, juce::dsp::WindowingFunction<float>::hamming){
+	SpectrumProcessor(): forwardFFT(fftOrder), window(fftSize, juce::dsp::WindowingFunction<float>::hamming)
+	{
         window.fillWindowingTables(fftSize, juce::dsp::WindowingFunction<float>::blackman);
 	}
 
@@ -23,19 +24,12 @@ public:
 		fftSize = 1 << fftOrder, // 2^ ??
 	};
 
-
-
-	float fftData[2 * fftSize];
+	float fftData[2 * fftSize] = {0};
 	bool nextFFTBlockReady = false;
-
-
-
 	float fifo[fftSize];
     juce::dsp::FFT forwardFFT;
     juce::dsp::WindowingFunction<float> window;
 	int fifoIndex = 0;
-	
-
 
 	void pushNextSampleIntoFifo(float sample) noexcept {
 		if (fifoIndex == fftSize)
@@ -51,7 +45,6 @@ public:
 		}
 
 		fifo[fifoIndex++] = sample;
-        
 	}
 
 	void doProcessing()

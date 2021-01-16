@@ -16,7 +16,6 @@ EnableButton::EnableButton()
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
-
 }
 
 EnableButton::~EnableButton()
@@ -37,7 +36,6 @@ void EnableButton::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-
 }
 
 void EnableButton::mouseUp(const juce::MouseEvent &e)
@@ -79,7 +77,6 @@ juce::Colour EnableButton::getColour()
         {
             return COLOUR1.withAlpha(0.8f);
         }
-        
     }
     else
     {

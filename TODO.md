@@ -7,10 +7,9 @@
 5. 【feature】 add mid-side / width / pan knobs
 6. 【feature】 add solo/mute button between vertical lines
 7. width graph
-8. dynamic sliders
-9. 【bug】 multiband enable button mask problem
-10. 【feature】 add drive button reduction on drive knob when safe mode is on
-11. 【feature】 mouse drag vertically to change the output volume, like Ozone or saturn2
-12. 【bug】 Ableton can't drag vertical lines on parameter pannel.
-13. 【bug】 Doesn't save focus and disable.
-14. save resized size.
+8. 【bug】 multiband enable button mask problem
+9. 【feature】 add drive button reduction on drive knob when safe mode is on
+10. 【feature】 mouse drag vertically to change the output volume, like Ozone or saturn2
+11. 【bug】 Ableton can't drag vertical lines on parameter pannel.
+12. 【bug】 Doesn't save focus and disable.
+13. save resized size.

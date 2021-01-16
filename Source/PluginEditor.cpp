@@ -591,115 +591,35 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 //        oscilloscope.setVisible(true);
         
-        
+        int bandNum = 0;
         if (multibandFocus[0])
         {
-            int bandNum = 1;
-            setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
-            setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
-            setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, bandNum);
-            setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
-            setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, bandNum);
-            setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, bandNum);
-            setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, bandNum);
-            setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
-
-            linkedButton1.setVisible(true);
-            linkedButton2.setVisible(false);
-            linkedButton3.setVisible(false);
-            linkedButton4.setVisible(false);
-            
-            safeButton1.setVisible(true);
-            safeButton2.setVisible(false);
-            safeButton3.setVisible(false);
-            safeButton4.setVisible(false);
-
-            distortionMode1.setVisible(true);
-            distortionMode2.setVisible(false);
-            distortionMode3.setVisible(false);
-            distortionMode4.setVisible(false);
+            bandNum = 1;
         }
         else if (multibandFocus[1])
         {
-            int bandNum = 2;
-            setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
-            setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
-            setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, bandNum);
-            setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
-            setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, bandNum);
-            setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, bandNum);
-            setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, bandNum);
-            setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
-            
-            linkedButton1.setVisible(false);
-            linkedButton2.setVisible(true);
-            linkedButton3.setVisible(false);
-            linkedButton4.setVisible(false);
-            
-            safeButton1.setVisible(false);
-            safeButton2.setVisible(true);
-            safeButton3.setVisible(false);
-            safeButton4.setVisible(false);
-            
-            distortionMode1.setVisible(false);
-            distortionMode2.setVisible(true);
-            distortionMode3.setVisible(false);
-            distortionMode4.setVisible(false);
+            bandNum = 2;
         }
         else if (multibandFocus[2])
         {
-            int bandNum = 3;
-            setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
-            setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
-            setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, bandNum);
-            setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
-            setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, bandNum);
-            setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, bandNum);
-            setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, bandNum);
-            setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
-            
-            linkedButton1.setVisible(false);
-            linkedButton2.setVisible(false);
-            linkedButton3.setVisible(true);
-            linkedButton4.setVisible(false);
-            
-            safeButton1.setVisible(false);
-            safeButton2.setVisible(false);
-            safeButton3.setVisible(true);
-            safeButton4.setVisible(false);
-           
-            distortionMode1.setVisible(false);
-            distortionMode2.setVisible(false);
-            distortionMode3.setVisible(true);
-            distortionMode4.setVisible(false);
+            bandNum = 3;
         }
         else if (multibandFocus[3])
         {
-            int bandNum = 4;
-            setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
-            setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
-            setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, bandNum);
-            setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
-            setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, bandNum);
-            setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, bandNum);
-            setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, bandNum);
-            setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
-            
-            linkedButton1.setVisible(false);
-            linkedButton2.setVisible(false);
-            linkedButton3.setVisible(false);
-            linkedButton4.setVisible(true);
-            
-            safeButton1.setVisible(false);
-            safeButton2.setVisible(false);
-            safeButton3.setVisible(false);
-            safeButton4.setVisible(true);
-            
-            distortionMode1.setVisible(false);
-            distortionMode2.setVisible(false);
-            distortionMode3.setVisible(false);
-            distortionMode4.setVisible(true);
+            bandNum = 4;
         }
+
+        setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
+        setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
+        setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, bandNum);
+        setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
+        setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, bandNum);
+        setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, bandNum);
+        setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, bandNum);
+        setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
+        setFourKnobsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, bandNum);
+        setFourKnobsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, bandNum);
+        setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
         
         driveLabel.setVisible(true);
         outputLabel.setVisible(true);
@@ -1221,35 +1141,35 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
     slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
-void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Slider& slider1, juce::Slider& slider2, juce::Slider& slider3, juce::Slider& slider4, int bandNum)
+void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
 {
     if (bandNum == 1)
     {
-        slider1.setVisible(true);
-        slider2.setVisible(false);
-        slider3.setVisible(false);
-        slider4.setVisible(false);
+        component1.setVisible(true);
+        component2.setVisible(false);
+        component3.setVisible(false);
+        component4.setVisible(false);
     }
     else if (bandNum == 2)
     {
-        slider1.setVisible(false);
-        slider2.setVisible(true);
-        slider3.setVisible(false);
-        slider4.setVisible(false);
+        component1.setVisible(false);
+        component2.setVisible(true);
+        component3.setVisible(false);
+        component4.setVisible(false);
     }
     else if (bandNum == 3)
     {
-        slider1.setVisible(false);
-        slider2.setVisible(false);
-        slider3.setVisible(true);
-        slider4.setVisible(false);
+        component1.setVisible(false);
+        component2.setVisible(false);
+        component3.setVisible(true);
+        component4.setVisible(false);
     }
     else if (bandNum == 4)
     {
-        slider1.setVisible(false);
-        slider2.setVisible(false);
-        slider3.setVisible(false);
-        slider4.setVisible(true);
+        component1.setVisible(false);
+        component2.setVisible(false);
+        component3.setVisible(false);
+        component4.setVisible(true);
     }
 }
 

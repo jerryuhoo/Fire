@@ -211,7 +211,7 @@ private:
         juce::String recId, juce::String mixId, juce::String biasId);
 
     void initState();
-    void setFourKnobsVisibility(juce::Slider& slider1, juce::Slider& slider2, juce::Slider& slider3, juce::Slider& slider4, int bandNum);
+    void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
 
 

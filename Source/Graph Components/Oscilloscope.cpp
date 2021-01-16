@@ -17,7 +17,6 @@ Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
-
 }
 
 Oscilloscope::~Oscilloscope()
@@ -26,7 +25,6 @@ Oscilloscope::~Oscilloscope()
 
 void Oscilloscope::paint (juce::Graphics& g)
 {
-
     //g.setColour (juce::Colours::green);
 
     //g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
@@ -58,8 +56,7 @@ void Oscilloscope::paint (juce::Graphics& g)
     float amp = getHeight() / 4;
     
     //TODO: this may cause high CPU usage! maybe use i += 2?
-    for (int i = 0; i < getWidth(); i++) {
-        
+    for (int i = 0; i < getWidth(); i++) { 
         int scaledIndex = static_cast<int>(i * (float)historyL.size() / (float)getWidth());
 
         float valL = historyL[scaledIndex];
@@ -82,12 +79,10 @@ void Oscilloscope::paint (juce::Graphics& g)
 
     g.strokePath(pathL, juce::PathStrokeType(2.0));
     g.strokePath(pathR, juce::PathStrokeType(2.0));
-    
 }
 
 void Oscilloscope::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-
 }

@@ -52,7 +52,6 @@ Multiband::Multiband()
 //    width = verticalLines[0]->getWidth() / 2.f;
 //    updateLines(false, -1);
 //    spectrum.setInterceptsMouseClicks(false, false);
-
 }
 
 Multiband::~Multiband()
@@ -81,8 +80,7 @@ void Multiband::paint (juce::Graphics& g)
         
 
         if (yPos >= startY && yPos <= startY + getHeight() / 5 && lineNum < 3)
-        {
-            
+        {   
             bool canCreate = true;
             float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             for (int i = 0; i < 3; i++)
@@ -92,7 +90,6 @@ void Multiband::paint (juce::Graphics& g)
                     canCreate = false;
                     break;
                 }
-                
             }
             if (canCreate)
             {
@@ -159,11 +156,9 @@ void Multiband::paint (juce::Graphics& g)
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         
-        
         dragLines();
  
     }
-    
 }
 
 void Multiband::resized()
@@ -242,12 +237,10 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
             multibandFocus[focusIndex - 1] = true;
         }
     }
-    
 }
 
 void Multiband::updateLines(bool isAdd, int changedIndex)
 {
-
     int count = 0;
     
     for (int i = 0; i < 3; i++)
@@ -278,7 +271,6 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
     
     // reset all disabled parameters (maybe HIGH CPU!!!)
 
-    
     // should set self index first, then set left and right index
     for (int i = 0; i < lineNum; i++)
     {
@@ -305,9 +297,7 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
         {
             verticalLines[sortedIndex[i]]->setRight(verticalLines[sortedIndex[i + 1]]->getIndex());
         }
-        
     }
-    
     
 //    bool isMoving = false;
 //    for (int i = 0; i < lineNum; i++)
@@ -324,8 +314,6 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
         // change focus position
         changeFocus(changedIndex, isAdd);
     }
-    
-    
     
     // set soloButtons visibility
     for (int i = 0; i < 4; i++)
@@ -353,7 +341,6 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
 //        }
 //        enableButton[lineNum]->setBounds((verticalLines[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2, margin, size, size);
 //    }
-    
 }
 
 void Multiband::mouseUp(const juce::MouseEvent &e)
@@ -514,7 +501,6 @@ void Multiband::reset()
     lineNum = 0;
     
 }
-
 
 void Multiband::dragLines()
 {

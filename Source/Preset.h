@@ -67,7 +67,7 @@ public:
 
     void setPresetAndFolderNames(juce::ComboBox &menu);
     int getNumPresets() const;
-    juce::String getNextAvailablePresetID(const juce::XmlElement &presetXml);
+    juce::String getNextAvailablePresetID();
     int getCurrentPresetId() const;
     void setCurrentPresetId(int currentPresetID);
     void setPresetName(juce::String name);
@@ -81,7 +81,7 @@ public:
     
 private:
     juce::AudioProcessor &pluginProcessor;
-    juce::XmlElement presetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
+    juce::XmlElement mPresetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
     juce::XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
     juce::File presetFile;                 // on-disk representation
     juce::String statePresetName{""};

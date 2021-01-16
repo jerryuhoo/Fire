@@ -281,11 +281,11 @@ public:
                 //auto tick = getTickShape (1.0f);
                 //g.fillPath (tick, tick.getTransformToScaleToFit (iconArea.reduced (iconArea.getWidth() / 5, 0).toFloat(), true));
                 
-                float r = scale * 10;
-                float xPos = iconArea.getX() + iconArea.getWidth() / 2 - r / 2;
-                float yPos = iconArea.getY() + iconArea.getHeight() / 2 - r / 2;
+                float radis = scale * 10;
+                float xPos = iconArea.getX() + iconArea.getWidth() / 2 - radis / 2;
+                float yPos = iconArea.getY() + iconArea.getHeight() / 2 - radis / 2;
                 
-                g.fillEllipse(xPos, yPos, r, r);
+                g.fillEllipse(xPos, yPos, radis, radis);
             }
 
             if (hasSubMenu)

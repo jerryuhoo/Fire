@@ -169,14 +169,14 @@ presetFile{juce::File::getSpecialLocation(juce::File::userApplicationDataDirecto
     .getChildFile(presetFileLocation)}
 {
     scanAllPresets();
-    //parseFileToXmlElement(presetFile, presetXml);
+    //parseFileToXmlElement(presetFile, mPresetXml);
 }
 
 StatePresets::~StatePresets()
 {
 }
 
-juce::String StatePresets::getNextAvailablePresetID(const juce::XmlElement &presetXml)
+juce::String StatePresets::getNextAvailablePresetID()
 {
     int newPresetIDNumber = getNumPresets();
     return "preset" + static_cast<juce::String>(newPresetIDNumber); // format: preset##
@@ -201,7 +201,7 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
         else if (file.getFile().hasFileExtension(".fire"))
         {
             numPresets++;
-            juce::String newPresetID = getNextAvailablePresetID(presetXml);                    // presetID format: "preset##"
+            juce::String newPresetID = getNextAvailablePresetID();                    // presetID format: "preset##"
             std::unique_ptr<juce::XmlElement> currentState{new juce::XmlElement{newPresetID}}; // must be pointer as parent takes ownership
             parseFileToXmlElement(file.getFile(), *currentState);
             currentState->setTagName(newPresetID);
@@ -213,7 +213,7 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
                 currentState->setAttribute("presetName", newName);
             }
             
-            //presetXml.addChildElement(currentState.release()); // will be deleted by parent element
+            //mPresetXml.addChildElement(currentState.release()); // will be deleted by parent element
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
             
             // sort
@@ -231,12 +231,12 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
 void StatePresets::scanAllPresets()
 {
     numPresets = 0;
-    presetXml.deleteAllChildElements();
+    mPresetXml.deleteAllChildElements();
     //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
     
-    recursiveFileSearch(presetXml, presetFile);
+    recursiveFileSearch(mPresetXml, presetFile);
     
-    //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
+    //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
 }
 
 bool StatePresets::savePreset(juce::File savePath)
@@ -278,7 +278,6 @@ bool StatePresets::savePreset(juce::File savePath)
 
 void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID)
 {
-    
     int index = 0;
     forEachXmlChildElement(parentXml, child)
     {
@@ -300,14 +299,14 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
 
 void StatePresets::loadPreset(juce::String presetID)
 {
-    recursivePresetLoad(presetXml, presetID);
+    recursivePresetLoad(mPresetXml, presetID);
 }
 
 void StatePresets::deletePreset()
 {
-    juce::XmlElement *childToDelete{presetXml.getChildElement(mCurrentPresetID - 1)};
+    juce::XmlElement *childToDelete{mPresetXml.getChildElement(mCurrentPresetID - 1)};
     if (childToDelete)
-        presetXml.removeChildElement(childToDelete, true);
+        mPresetXml.removeChildElement(childToDelete, true);
 }
 
 void StatePresets::setPresetName(juce::String name)
@@ -356,12 +355,12 @@ void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::Comb
 void StatePresets::setPresetAndFolderNames(juce::ComboBox &menu)
 {
     int index = 0;
-    recursivePresetNameAdd(presetXml, menu, index);
+    recursivePresetNameAdd(mPresetXml, menu, index);
 }
 
 int StatePresets::getNumPresets() const
 {
-    //return presetXml.getNumChildElements();
+    //return mPresetXml.getNumChildElements();
     return numPresets;
 }
 
@@ -598,7 +597,6 @@ void StateComponent::savePresetAlertWindow()
     juce::FileChooser filechooser("save preset", userFile, "*", true, false, nullptr);
     if (filechooser.browseForFileToSave(true))
     {
-        
         // this is really shit code, but I don't have any other way to solve this shit problem!!!
         juce::File inputName = filechooser.getResult();
         bool isSaved = procStatePresets.savePreset(inputName);
@@ -656,7 +654,6 @@ juce::String StateComponent::getPresetName()
 
 void StateComponent::popPresetMenu()
 {
-    
     presetMenu.clear();
     presetMenu.addItem(1, "Init", true);
     presetMenu.addItem(2, "Open Preset Folder", true);
@@ -720,7 +717,6 @@ void StateComponent::popPresetMenu()
             juce::NativeMessageBox::showMessageBox(juce::AlertWindow::InfoIcon,
                 "New Version", "You are up to date!", nullptr);
         }
-        
     }
 }
 

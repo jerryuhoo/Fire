@@ -52,12 +52,10 @@ void SpectrumComponent::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
-
 }
 
 void SpectrumComponent::paintSpectrum(juce::Graphics & g)
 {
-
     auto width = getLocalBounds().getWidth();
     auto height = getLocalBounds().getHeight();
     
@@ -71,8 +69,8 @@ void SpectrumComponent::paintSpectrum(juce::Graphics & g)
                          juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f));
 //            p.lineTo(transformToLog((float)i / scopeSize) * width,
 //                             height - height * scopeData[i]);
-        
     }
+
     p.lineTo(width, height);
     p.lineTo(0, height);
     
@@ -87,7 +85,6 @@ void SpectrumComponent::paintSpectrum(juce::Graphics & g)
     g.setGradientFill(grad);
     
     g.fillPath(p);
-
 }
 
 void SpectrumComponent::prepareToPaintSpectrum(int numBins, float * data)

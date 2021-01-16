@@ -111,11 +111,16 @@ private:
         widthKnob3,
         widthKnob4,
     
-        dynamicKnob1,
-        dynamicKnob2,
-        dynamicKnob3,
-        dynamicKnob4,
+        compRatioKnob1,
+        compRatioKnob2,
+        compRatioKnob3,
+        compRatioKnob4,
         
+        compThreshKnob1,
+        compThreshKnob2,
+        compThreshKnob3,
+        compThreshKnob4,
+    
         recKnob1,
         recKnob2,
         recKnob3,
@@ -141,7 +146,8 @@ private:
     juce::Label
         hqLabel,
         driveLabel,
-        dynamicLabel,
+        CompRatioLabel,
+        CompThreshLabel,
         widthLabel,
         downSampleLabel,
         outputLabel,
@@ -194,8 +200,9 @@ private:
     
 
     void setMenu(juce::ComboBox* combobox);
-    void setListenerSlider(juce::Slider& slider);
-    void setNormalSlider(juce::Slider& slider);
+    void setListenerKnob(juce::Slider& slider);
+    void setRotarySlider(juce::Slider& slider);
+    void setLinearSlider(juce::Slider& slider);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void changeSliderState(juce::ComboBox *combobox);
     void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
@@ -204,7 +211,7 @@ private:
         juce::String recId, juce::String mixId, juce::String biasId);
 
     void initState();
-
+    void setFourKnobsVisibility(juce::Slider& slider1, juce::Slider& slider2, juce::Slider& slider3, juce::Slider& slider4, int bandNum);
 
 
 
@@ -237,10 +244,15 @@ private:
         mixAttachment4,
         mixAttachment,
     
-        dynamicAttachment1,
-        dynamicAttachment2,
-        dynamicAttachment3,
-        dynamicAttachment4,
+        compRatioAttachment1,
+        compRatioAttachment2,
+        compRatioAttachment3,
+        compRatioAttachment4,
+    
+        compThreshAttachment1,
+        compThreshAttachment2,
+        compThreshAttachment3,
+        compThreshAttachment4,
     
         widthAttachment1,
         widthAttachment2,

@@ -43,7 +43,7 @@ public:
 			if (!nextFFTBlockReady)
 			{
                 juce::zeromem(fftData, sizeof(fftData));
-				memcpy(fftData, fifo, sizeof(fifo));
+                memmove(fftData, fifo, sizeof(fifo)); // memmove is safer, but memcpy is faster
 				nextFFTBlockReady = true;
 			}
 

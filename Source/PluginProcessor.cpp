@@ -316,6 +316,27 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     highpass1.prepare(spec);
     highpass2.prepare(spec);
     highpass3.prepare(spec);
+    
+    // compressor
+    compressorProcessor1.reset();
+    compressorProcessor1.prepare(spec);
+    compressorProcessor1.setAttack(250.0f);
+    compressorProcessor1.setRelease(1000.0f);
+    
+    compressorProcessor2.reset();
+    compressorProcessor2.prepare(spec);
+    compressorProcessor2.setAttack(250.0f);
+    compressorProcessor2.setRelease(1000.0f);
+    
+    compressorProcessor3.reset();
+    compressorProcessor3.prepare(spec);
+    compressorProcessor3.setAttack(250.0f);
+    compressorProcessor3.setRelease(1000.0f);
+    
+    compressorProcessor4.reset();
+    compressorProcessor4.prepare(spec);
+    compressorProcessor4.setAttack(250.0f);
+    compressorProcessor4.setRelease(1000.0f);
 }
 
 void FireAudioProcessor::releaseResources()
@@ -439,23 +460,14 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         widthProcessor.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
         
+        // compressor process
+        float ratio1 = *treeState.getRawParameterValue(COMP_RATIO_ID1);
+        float thresh1 = *treeState.getRawParameterValue(COMP_THRESH_ID1);
+        compressorProcessor(ratio1, thresh1, compressorProcessor1, context1);
         
         // mix process
         mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1);
-//        float mix = *treeState.getRawParameterValue(MIX_ID1);
-//        mixSmoother1.setTargetValue(mix);
-//        // mix control
-//        for (int channel = 0; channel < totalNumInputChannels; ++channel)
-//        {
-//            auto *channelData = mBuffer1.getWritePointer(channel);
-//            auto *cleanSignal = dryBuffer.getWritePointer(channel);
-//
-//            for (int sample = 0; sample < mBuffer1.getNumSamples(); ++sample)
-//            {
-//                float smoothMixValue = mixSmoother1.getNextValue();
-//                channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, mBuffer1.getNumSamples()) + smoothMixValue * channelData[sample];
-//            }
-//        }
+        
     }
     
     if (multibandState2 && lineNum >= 1)
@@ -481,6 +493,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         float width2 = *treeState.getRawParameterValue(WIDTH_ID2);
 
         widthProcessor.process(channeldataL, channeldataR, width2, mBuffer2.getNumSamples());
+        
+        // compressor process
+        float ratio2 = *treeState.getRawParameterValue(COMP_RATIO_ID2);
+        float thresh2 = *treeState.getRawParameterValue(COMP_THRESH_ID2);
+        compressorProcessor(ratio2, thresh2, compressorProcessor2, context2);
         
         // mix process
         mixProcessor(MIX_ID2, mixSmoother2, totalNumInputChannels, mBuffer2);
@@ -509,6 +526,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         widthProcessor.process(channeldataL, channeldataR, width3, mBuffer3.getNumSamples());
         
+        // compressor process
+        float ratio3 = *treeState.getRawParameterValue(COMP_RATIO_ID3);
+        float thresh3 = *treeState.getRawParameterValue(COMP_THRESH_ID3);
+        compressorProcessor(ratio3, thresh3, compressorProcessor3, context3);
+        
         // mix process
         mixProcessor(MIX_ID3, mixSmoother3, totalNumInputChannels, mBuffer3);
     }
@@ -530,6 +552,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         float width4 = *treeState.getRawParameterValue(WIDTH_ID4);
 
         widthProcessor.process(channeldataL, channeldataR, width4, mBuffer4.getNumSamples());
+        
+        // compressor process
+        float ratio4 = *treeState.getRawParameterValue(COMP_RATIO_ID4);
+        float thresh4 = *treeState.getRawParameterValue(COMP_THRESH_ID4);
+        compressorProcessor(ratio4, thresh4, compressorProcessor4, context4);
         
         // mix process
         mixProcessor(MIX_ID4, mixSmoother4, totalNumInputChannels, mBuffer4);
@@ -984,7 +1011,10 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
                 distortionProcessor.controls.bias = 0;
             }
 
-            inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
+            if (mode == 9)
+            {
+                inputTemp.add(channelData[sample] * driveSmoother.getNextValue());
+            }
             // distortion
             if (mode < 9)
             {
@@ -1086,6 +1116,13 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
     }
 }
 
+void FireAudioProcessor::compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context)
+{
+    compressorProcessor.setThreshold(thresh);
+    compressorProcessor.setRatio(ratio);
+    compressorProcessor.process(context);
+}
+
 void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer)
 {
     float mix = *treeState.getRawParameterValue(mixId);
@@ -1130,10 +1167,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID3, DRIVE_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID4, DRIVE_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID1, DYNAMIC_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID2, DYNAMIC_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID3, DYNAMIC_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DYNAMIC_ID4, DYNAMIC_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID1, COMP_RATIO_NAME1, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID2, COMP_RATIO_NAME2, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID3, COMP_RATIO_NAME3, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID4, COMP_RATIO_NAME4, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID1, COMP_THRESH_NAME1, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID2, COMP_THRESH_NAME2, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID3, COMP_THRESH_NAME3, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID4, COMP_THRESH_NAME4, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
     
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID1, WIDTH_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID2, WIDTH_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));

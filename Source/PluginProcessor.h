@@ -186,6 +186,10 @@ private:
     Distortion distortionProcessor3;
     Distortion distortionProcessor4;
     WidthProcessor widthProcessor;
+    juce::dsp::Compressor<float> compressorProcessor1;
+    juce::dsp::Compressor<float> compressorProcessor2;
+    juce::dsp::Compressor<float> compressorProcessor3;
+    juce::dsp::Compressor<float> compressorProcessor4;
     
     // oversampling
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
@@ -238,6 +242,8 @@ private:
     void setParams(juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String mixID, juce::String biasID, juce::AudioBuffer<float>& buffer, Distortion& distortionProcessor, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& outputSmoother, juce::SmoothedValue<float>& mixSmoother, juce::SmoothedValue<float>& biasSmoother);
     
     void normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother);
+    
+    void compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context);
     
     void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer);
     

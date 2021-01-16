@@ -518,7 +518,7 @@ void StateComponent::setPreviousPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() - 1;
     if (presetIndex > 0)
     {
-        juce::String presetID = (juce::String)presetIndex;
+        //juce::String presetID = (juce::String)presetIndex;
         //procStatePresets.setCurrentPresetId(presetIndex);
         //procStatePresets.loadPreset(presetID);
         presetBox.setSelectedId(presetIndex);
@@ -530,7 +530,7 @@ void StateComponent::setNextPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() + 1;
     if (presetIndex <= procStatePresets.getNumPresets())
     {
-        juce::String presetID = (juce::String)presetIndex;
+        //juce::String presetID = (juce::String)presetIndex;
         //procStatePresets.setCurrentPresetId(presetIndex);
         //procStatePresets.loadPreset(presetID);
         presetBox.setSelectedId(presetIndex);

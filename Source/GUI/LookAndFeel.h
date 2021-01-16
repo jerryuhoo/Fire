@@ -22,6 +22,9 @@ public:
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
         setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
         setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::trackColourId, COLOUR1);
+        setColour(juce::Slider::thumbColourId, COLOUR5);
+        setColour(juce::Slider::backgroundColourId, COLOUR6);
     }
 
     // customize knobs
@@ -144,7 +147,7 @@ public:
                 if (textBoxPos == juce::Slider::TextBoxAbove)
                     layout.textBoxBounds.setY(0);
                 else if (textBoxPos == juce::Slider::TextBoxBelow)
-                    layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight - 10); // changed here!
+                    layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight); // changed here!
                 else                                                                         /* left or right -> centre vertically */
                     layout.textBoxBounds.setY((localBounds.getHeight() - textBoxHeight) / 2);
             }

@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION "[Early Beta] 0.81.0"
+#define VERSION "[Early Beta] 0.82.0"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"
@@ -52,14 +52,23 @@
 #define SAFE_ID4            "safe4"
 #define SAFE_NAME4          "Safe4"
 
-#define DYNAMIC_ID1         "dynamic1"
-#define DYNAMIC_NAME1       "Dynamic1"
-#define DYNAMIC_ID2         "dynamic2"
-#define DYNAMIC_NAME2       "Dynamic2"
-#define DYNAMIC_ID3         "dynamic3"
-#define DYNAMIC_NAME3       "Dynamic3"
-#define DYNAMIC_ID4         "dynamic4"
-#define DYNAMIC_NAME4       "Dynamic4"
+#define COMP_RATIO_ID1      "compRatio1"
+#define COMP_RATIO_NAME1    "CompRatio1"
+#define COMP_RATIO_ID2      "compRatio2"
+#define COMP_RATIO_NAME2    "CompRatio2"
+#define COMP_RATIO_ID3      "compRatio3"
+#define COMP_RATIO_NAME3    "CompRatio3"
+#define COMP_RATIO_ID4      "compRatio4"
+#define COMP_RATIO_NAME4    "CompRatio4"
+
+#define COMP_THRESH_ID1     "compThresh1"
+#define COMP_THRESH_NAME1   "CompThresh1"
+#define COMP_THRESH_ID2     "compThresh2"
+#define COMP_THRESH_NAME2   "CompThresh2"
+#define COMP_THRESH_ID3     "compThresh3"
+#define COMP_THRESH_NAME3   "CompThresh3"
+#define COMP_THRESH_ID4     "compThresh4"
+#define COMP_THRESH_NAME4   "CompThresh4"
 
 #define WIDTH_ID1           "width1"
 #define WIDTH_NAME1         "Width1"
@@ -229,10 +238,11 @@
 #define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
 #define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2
 #define REC_X               startX * 6 - SCALED_KNOBSIZE / 2
-#define BIAS_X              startX * 6 - SCALED_KNOBSIZE / 2
+#define BIAS_X              startX * 6.5 - SCALED_KNOBSIZE / 2
 #define WIDTH_X             startX * 6.5 - SCALED_KNOBSIZE / 2
 #define OUTPUT_X            startX * 7 - SCALED_KNOBSIZE / 2
-#define DYNAMIC_X           startX * 6.5 - SCALED_KNOBSIZE / 2
+#define COMP_RATIO_X        startX * 5.5 - SCALED_KNOBSIZE / 2
+#define COMP_THRESH_X       startX * 6 - SCALED_KNOBSIZE / 2
 #define CUTOFF_X            startX * 4 - SCALED_KNOBSIZE / 2
 #define RES_X               startX * 5 - SCALED_KNOBSIZE / 2
 #define DOWNSAMPLE_X        startX * 6 - SCALED_KNOBSIZE / 2

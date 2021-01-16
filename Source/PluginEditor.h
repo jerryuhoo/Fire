@@ -11,19 +11,13 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "Distortion.h"
-#include "LookAndFeel.h"
-
-//class Visualiser : public AudioVisualiserComponent
-//{
-//public:
-//    Visualiser() : AudioVisualiserComponent (2)
-//    {
-//        setBufferSize(512);
-//        setSamplesPerBlock(256);
-//        setColours(Colour (50, 0, 0), Colours::red);
-//    }
-//};
+#include "DSP/Distortion.h"
+#include "GUI/LookAndFeel.h"
+#include "Graph Components/Oscilloscope.h"
+#include "Graph Components/DistortionGraph.h"
+#include "Graph Components/WidthGraph.h"
+#include "Multiband/Multiband.h"
+#include "GUI/InterfaceDefines.h"
 
 //==============================================================================
 /**
@@ -42,41 +36,119 @@ public:
     void paint(juce::Graphics &g) override;
     void resized() override;
     void timerCallback() override;
-
-    //    Visualiser visualiser;
+    void setMultiband();
+   
 
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
+    juce::String lastPresetName;
 
+
+    // Oscilloscope
+    Oscilloscope oscilloscope {processor};
+    
+    // Distortion graph
+    DistortionGraph distortionGraph;
+    
+    // Width graph
+    WidthGraph widthGraph;
+    
+    // Multiband
+    Multiband multiband;
+    
+    // TODO: this is temporary method. Maybe should create custom attachments. juce::ParameterAttachment?
+    
+    juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
+    juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
+    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
+    juce::Slider lineNumSlider;
+    juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
+    juce::Slider linePosSlider1, linePosSlider2, linePosSlider3;
+    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiStateAttachment1, multiStateAttachment2, multiStateAttachment3, multiStateAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineNumSliderAttachment;
+    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linePosSliderAttachment1, linePosSliderAttachment2, linePosSliderAttachment3;
+    
+    bool multibandFocus[4];
+    bool multibandState[4];
+    int multibandFreq[3];
+    bool lineState[3];
+    float linePos[3];
+    // Spectrum
+    SpectrumComponent spectrum;
+    
     // ff meter
     foleys::LevelMeterLookAndFeel lnf;
     foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};
     foleys::LevelMeter outputMeter{foleys::LevelMeter::Minimal};
 
-    // sliders
+    // Sliders
     juce::Slider
-        //inputKnob,
-        driveKnob,
+        driveKnob1,
+        driveKnob2,
+        driveKnob3,
+        driveKnob4,
+    
+        outputKnob1,
+        outputKnob2,
+        outputKnob3,
+        outputKnob4,
+    
+        mixKnob1,
+        mixKnob2,
+        mixKnob3,
+        mixKnob4,
+        
+        widthKnob1,
+        widthKnob2,
+        widthKnob3,
+        widthKnob4,
+    
+        compRatioKnob1,
+        compRatioKnob2,
+        compRatioKnob3,
+        compRatioKnob4,
+        
+        compThreshKnob1,
+        compThreshKnob2,
+        compThreshKnob3,
+        compThreshKnob4,
+    
+        recKnob1,
+        recKnob2,
+        recKnob3,
+        recKnob4,
+      
+        biasKnob1,
+        biasKnob2,
+        biasKnob3,
+        biasKnob4,
+    
         downSampleKnob,
-        outputKnob,
-        recKnob,
-        mixKnob,
         cutoffKnob,
         resKnob,
         colorKnob,
-        biasKnob;
-    int knobSize = 100;
-    float tempDriveValue = 1;
-    float tempBiasValue = 0;
+        mixKnob,
+        outputKnob;
+    
+    int knobSize = KNOBSIZE;
+    float tempDriveValue[4] = {1, 1, 1, 1};
+    float tempBiasValue[4] = {0, 0, 0, 0};
 
-    // labels
+    // Labels
     juce::Label
         hqLabel,
-        //inputLabel,
         driveLabel,
+        CompRatioLabel,
+        CompThreshLabel,
+        widthLabel,
         downSampleLabel,
         outputLabel,
         recLabel,
@@ -88,25 +160,30 @@ private:
         recOffLabel,
         recHalfLabel,
         recFullLabel,
-        filterOffLabel,
-        filterLowLabel,
+        filterStateLabel,
+        filterTypeLabel,
         colorLabel,
         biasLabel;
 
-    // buttons
+    // Buttons
     juce::TextButton
         hqButton,
-        linkedButton,
-        safeButton,
+        linkedButton1,
+        linkedButton2,
+        linkedButton3,
+        linkedButton4,
+        safeButton1,
+        safeButton2,
+        safeButton3,
+        safeButton4,
         filterOffButton,
         filterPreButton,
         filterPostButton,
         filterLowButton,
         filterBandButton,
-        filterHighButton;
-
-    // about
-    //    juce::TextButton aboutButton {"about"};
+        filterHighButton,
+        windowLeftButton,
+        windowRightButton;
 
     // group toggle buttons
     enum RadioButtonIds
@@ -115,10 +192,31 @@ private:
         filterStateButtons = 1001,
         // filter mode: low, band, high
         filterModeButtons = 1002,
+        // window selection: left, right
+        windowButtons = 1003,
     };
 
     void updateToggleState();
-    //void setCutoffButtonState(TextButton* textButton, Slider* slider, Slider* slider2);
+    
+
+    void setMenu(juce::ComboBox* combobox);
+    void setListenerKnob(juce::Slider& slider);
+    void setRotarySlider(juce::Slider& slider);
+    void setLinearSlider(juce::Slider& slider);
+    void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void changeSliderState(juce::ComboBox *combobox);
+    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
+    void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
+    void setDistortionGraph(juce::String modeId, juce::String driveId,
+        juce::String recId, juce::String mixId, juce::String biasId);
+
+    void initState();
+    void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+
+
+
+
+
 
     // override listener functions
     // linked
@@ -129,38 +227,92 @@ private:
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         //inputAttachment,
-        driveAttachment,
-        downSampleAttachment,
-        recAttachment,
+        driveAttachment1,
+        driveAttachment2,
+        driveAttachment3,
+        driveAttachment4,
+    
+        outputAttachment1,
+        outputAttachment2,
+        outputAttachment3,
+        outputAttachment4,
         outputAttachment,
+    
+        mixAttachment1,
+        mixAttachment2,
+        mixAttachment3,
+        mixAttachment4,
         mixAttachment,
+    
+        compRatioAttachment1,
+        compRatioAttachment2,
+        compRatioAttachment3,
+        compRatioAttachment4,
+    
+        compThreshAttachment1,
+        compThreshAttachment2,
+        compThreshAttachment3,
+        compThreshAttachment4,
+    
+        widthAttachment1,
+        widthAttachment2,
+        widthAttachment3,
+        widthAttachment4,
+    
+        recAttachment1,
+        recAttachment2,
+        recAttachment3,
+        recAttachment4,
+        
+        biasAttachment1,
+        biasAttachment2,
+        biasAttachment3,
+        biasAttachment4,
+    
+        downSampleAttachment,
+        
         cutoffAttachment,
         resAttachment,
-        colorAttachment,
-        biasAttachment;
+        colorAttachment;
 
-    // Toggle Button attachment
+    // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment,
-        linkedAttachment,
-        safeAttachment,
+        linkedAttachment1,
+        linkedAttachment2,
+        linkedAttachment3,
+        linkedAttachment4,
+        safeAttachment1,
+        safeAttachment2,
+        safeAttachment3,
+        safeAttachment4,
         filterOffAttachment,
         filterPreAttachment,
         filterPostAttachment,
         filterLowAttachment,
         filterBandAttachment,
-        filterHighAttachment;
+        filterHighAttachment,
+        windowLeftButtonAttachment,
+        windowRightButtonAttachment;
 
     // ComboBox attachment
-    juce::ComboBox distortionMode;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment;
-
+    juce::ComboBox distortionMode1;
+    juce::ComboBox distortionMode2;
+    juce::ComboBox distortionMode3;
+    juce::ComboBox distortionMode4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
+    
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
-
+    //FlatButtonLnf flatButtonLnf;
+    
     Distortion distortionProcessor;
 
+    
     //return function value by different modes
     //float getFunctionValue(FireAudioProcessor& processor, float value);
     //int modeChoice;

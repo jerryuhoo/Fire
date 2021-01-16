@@ -82,14 +82,14 @@ float Distortion::rectificationProcess(float input)
     //    }
     if (input < 0)
     {
-        input *= (0.5 - controls.rectification) * 2;
+        input *= (0.5f - controls.rectification) * 2.0f;
     }
     return input;
 }
 
 float Distortion::arctanSoftClipping(float input)
 {
-    input = atan(input) / 2;
+    input = atan(input) / 2.0f;
     return input;
 }
 
@@ -124,7 +124,7 @@ float Distortion::cubicSoftClipping(float input)
     }
     else
     {
-        input = input - (pow(input, 3) / 3);
+        input = input - (pow(input, 3.0f) / 3.0f);
     }
     return input * 3.0f / 2.0f;
 }
@@ -164,7 +164,7 @@ float Distortion::sausageFattener(float input)
 
     // 0.9 -1.1 smooth
 
-    input = input * 1.1;
+    input = input * 1.1f;
 
     //    if (controls.protection == true)
     //    {
@@ -185,13 +185,13 @@ float Distortion::sausageFattener(float input)
     }
     else if (input > 0.9f && input < 1.1f)
     {
-        input = -2.5 * input * input + 5.5 * input - 2.025;
+        input = -2.5f * input * input + 5.5f * input - 2.025f;
     }
     else if (input < -0.9f && input > -1.1f)
     {
-        input = 2.5 * input * input + 5.5 * input + 2.025;
+        input = 2.5f * input * input + 5.5f * input + 2.025f;
     }
-    input = (1.f - controls.color) * input + controls.color * hardClipping(cleanInput);
+    input = (1.0f - controls.color) * input + controls.color * hardClipping(cleanInput);
     return input;
 }
 
@@ -213,7 +213,6 @@ float Distortion::linFoldback(float input)
 
 float Distortion::halfRectification(float input)
 {
-
     if (input < 0)
     {
         input = 0;

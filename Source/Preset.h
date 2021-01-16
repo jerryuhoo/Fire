@@ -13,7 +13,9 @@
 #define STATE_H_INCLUDED
 
 #include <JuceHeader.h>
-#include "LookAndFeel.h"
+#include "GUI/LookAndFeel.h"
+#include "Multiband/Multiband.h"
+#include "Utility/VersionInfo.h"
 
 namespace state
 {
@@ -65,7 +67,7 @@ public:
 
     void setPresetAndFolderNames(juce::ComboBox &menu);
     int getNumPresets() const;
-    juce::String getNextAvailablePresetID(const juce::XmlElement &presetXml);
+    juce::String getNextAvailablePresetID();
     int getCurrentPresetId() const;
     void setCurrentPresetId(int currentPresetID);
     void setPresetName(juce::String name);
@@ -79,7 +81,7 @@ public:
     
 private:
     juce::AudioProcessor &pluginProcessor;
-    juce::XmlElement presetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
+    juce::XmlElement mPresetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
     juce::XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
     juce::File presetFile;                 // on-disk representation
     juce::String statePresetName{""};
@@ -101,16 +103,23 @@ public juce::Button::Listener,
 public juce::ComboBox::Listener
 {
 public:
-    StateComponent(StateAB &sab, StatePresets &sp);
+    StateComponent(StateAB &sab, StatePresets &sp, Multiband &m);
 
     void paint(juce::Graphics &) override;
     void resized() override;
     
     juce::String getPresetName();
+    /*juce::TextButton& getNextButton();
+    juce::TextButton& getPreviousButton();*/
+    
+    void setInitState(bool state);
+    bool getInitState();
     
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
+    Multiband &multiband;
+    //FireAudioProcessorEditor& editor;
 
     OtherLookAndFeel otherLookAndFeel;
     
@@ -124,6 +133,8 @@ private:
     juce::TextButton menuButton;
     juce::PopupMenu presetMenu;
     
+    bool isInit = false;
+
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;
 
@@ -138,7 +149,9 @@ private:
     void setPreviousPreset();
     void setNextPreset();
     
-    juce::String presetName;
+    void resetMultiband();
+
+    //juce::String presetName;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent);
 };

@@ -83,8 +83,8 @@ static inline float diodeClipper(juce::Array<float> &input, float Fs,
 	// Resistor R1(80.0);
 
 	// accurate simulation of GZ34 valve diode.
-	float Is = 125.56; // reverse saturation current
-	float Vt = 0.036;  // thermal voltage
+	float Is = 125.56f; // reverse saturation current
+	float Vt = 0.036f;  // thermal voltage
 
 	// initial value for the voltage over the diode (n-1 memory)
 	// float Vdiode = 0.0f;

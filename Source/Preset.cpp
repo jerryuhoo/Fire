@@ -21,7 +21,8 @@ void saveStateToXml(const juce::AudioProcessor &proc, juce::XmlElement &xml)
     for (const auto &param : proc.getParameters())
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
         {
-            if (p->paramID != "hq")
+            // don't save hq, windowLeft, windowRight
+            if (p->paramID != "hq" && p->paramID != "windowLeft" && p->paramID != "windowRight")
             {
                 xml.setAttribute(p->paramID, p->getValue());
             }
@@ -168,14 +169,14 @@ presetFile{juce::File::getSpecialLocation(juce::File::userApplicationDataDirecto
     .getChildFile(presetFileLocation)}
 {
     scanAllPresets();
-    //parseFileToXmlElement(presetFile, presetXml);
+    //parseFileToXmlElement(presetFile, mPresetXml);
 }
 
 StatePresets::~StatePresets()
 {
 }
 
-juce::String StatePresets::getNextAvailablePresetID(const juce::XmlElement &presetXml)
+juce::String StatePresets::getNextAvailablePresetID()
 {
     int newPresetIDNumber = getNumPresets();
     return "preset" + static_cast<juce::String>(newPresetIDNumber); // format: preset##
@@ -200,7 +201,7 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
         else if (file.getFile().hasFileExtension(".fire"))
         {
             numPresets++;
-            juce::String newPresetID = getNextAvailablePresetID(presetXml);                    // presetID format: "preset##"
+            juce::String newPresetID = getNextAvailablePresetID();                    // presetID format: "preset##"
             std::unique_ptr<juce::XmlElement> currentState{new juce::XmlElement{newPresetID}}; // must be pointer as parent takes ownership
             parseFileToXmlElement(file.getFile(), *currentState);
             currentState->setTagName(newPresetID);
@@ -212,7 +213,7 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
                 currentState->setAttribute("presetName", newName);
             }
             
-            //presetXml.addChildElement(currentState.release()); // will be deleted by parent element
+            //mPresetXml.addChildElement(currentState.release()); // will be deleted by parent element
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
             
             // sort
@@ -230,12 +231,12 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
 void StatePresets::scanAllPresets()
 {
     numPresets = 0;
-    presetXml.deleteAllChildElements();
+    mPresetXml.deleteAllChildElements();
     //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
     
-    recursiveFileSearch(presetXml, presetFile);
+    recursiveFileSearch(mPresetXml, presetFile);
     
-    //presetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
+    //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
 }
 
 bool StatePresets::savePreset(juce::File savePath)
@@ -277,7 +278,6 @@ bool StatePresets::savePreset(juce::File savePath)
 
 void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID)
 {
-    
     int index = 0;
     forEachXmlChildElement(parentXml, child)
     {
@@ -287,6 +287,7 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
         {
             juce::XmlElement loadThisChild{*child}; // (0 indexed method)
             loadStateFromXml(loadThisChild, pluginProcessor);
+            statePresetName = child->getAttributeValue(0); //presetName index is 0
         }
         else
         {
@@ -298,14 +299,14 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
 
 void StatePresets::loadPreset(juce::String presetID)
 {
-    recursivePresetLoad(presetXml, presetID);
+    recursivePresetLoad(mPresetXml, presetID);
 }
 
 void StatePresets::deletePreset()
 {
-    juce::XmlElement *childToDelete{presetXml.getChildElement(mCurrentPresetID - 1)};
+    juce::XmlElement *childToDelete{mPresetXml.getChildElement(mCurrentPresetID - 1)};
     if (childToDelete)
-        presetXml.removeChildElement(childToDelete, true);
+        mPresetXml.removeChildElement(childToDelete, true);
 }
 
 void StatePresets::setPresetName(juce::String name)
@@ -354,12 +355,12 @@ void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::Comb
 void StatePresets::setPresetAndFolderNames(juce::ComboBox &menu)
 {
     int index = 0;
-    recursivePresetNameAdd(presetXml, menu, index);
+    recursivePresetNameAdd(mPresetXml, menu, index);
 }
 
 int StatePresets::getNumPresets() const
 {
-    //return presetXml.getNumChildElements();
+    //return mPresetXml.getNumChildElements();
     return numPresets;
 }
 
@@ -384,15 +385,17 @@ void StatePresets::initPreset()
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
             // if not in xml set current
             p->setValueNotifyingHost(p->getDefaultValue());
-    //set preset combobox to 0
+    // set preset combobox to 0
+    statePresetName = "";
 }
 
 //==============================================================================
 
 //==============================================================================
-StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
+StateComponent::StateComponent(StateAB &sab, StatePresets &sp, Multiband &m)
 : procStateAB{sab},
 procStatePresets{sp},
+multiband(m),
 toggleABButton{"A-B"},
 copyABButton{"Copy"},
 previousButton{"<"},
@@ -420,6 +423,8 @@ menuButton{"Menu"}
     presetBox.setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
     presetBox.setColour(juce::ComboBox::backgroundColourId, COLOUR4);
     presetBox.setTextWhenNothingSelected("- Init -");
+    
+    
     refreshPresetBox();
     ifPresetActiveShowInBox();
     presetBox.addListener(this);
@@ -458,6 +463,8 @@ menuButton{"Menu"}
     menuButton.getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR7);
     menuButton.getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
     menuButton.getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR7);
+    presetMenu.setLookAndFeel(&otherLookAndFeel);
+    
     menuButton.getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
     menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
     menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
@@ -510,11 +517,11 @@ void StateComponent::setPreviousPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() - 1;
     if (presetIndex > 0)
     {
-        juce::String presetID = (juce::String)presetIndex;
-        procStatePresets.setCurrentPresetId(presetIndex);
-        procStatePresets.loadPreset(presetID);
+        //juce::String presetID = (juce::String)presetIndex;
+        //procStatePresets.setCurrentPresetId(presetIndex);
+        //procStatePresets.loadPreset(presetID);
+        presetBox.setSelectedId(presetIndex);
     }
-    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
 }
 
 void StateComponent::setNextPreset()
@@ -522,19 +529,26 @@ void StateComponent::setNextPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() + 1;
     if (presetIndex <= procStatePresets.getNumPresets())
     {
-        juce::String presetID = (juce::String)presetIndex;
-        procStatePresets.setCurrentPresetId(presetIndex);
-        procStatePresets.loadPreset(presetID);
+        //juce::String presetID = (juce::String)presetIndex;
+        //procStatePresets.setCurrentPresetId(presetIndex);
+        //procStatePresets.loadPreset(presetID);
+        presetBox.setSelectedId(presetIndex);
     }
-    presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
 }
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
 {
-    const juce::String presetID{"preset" + (juce::String)changedComboBox->getSelectedId()};
-    procStatePresets.setCurrentPresetId(changedComboBox->getSelectedId());
-    //DBG(procStatePresets.getCurrentPresetId());
-    procStatePresets.loadPreset(presetID);
+    int selectedId = changedComboBox->getSelectedId();
+
+    // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
+    // next, previous, change combobox will change the selectedId, but currentId will change only after this.
+    // and then, it will load the preset.
+    if (procStatePresets.getCurrentPresetId() != selectedId)
+    {
+        const juce::String presetID{ "preset" + (juce::String)selectedId };
+        procStatePresets.setCurrentPresetId(selectedId);
+        procStatePresets.loadPreset(presetID);
+    }
 }
 
 void StateComponent::refreshPresetBox()
@@ -583,7 +597,6 @@ void StateComponent::savePresetAlertWindow()
     juce::FileChooser filechooser("save preset", userFile, "*", true, false, nullptr);
     if (filechooser.browseForFileToSave(true))
     {
-        
         // this is really shit code, but I don't have any other way to solve this shit problem!!!
         juce::File inputName = filechooser.getResult();
         bool isSaved = procStatePresets.savePreset(inputName);
@@ -636,37 +649,101 @@ void StateComponent::creatFolderIfNotExist(juce::File userFile)
 
 juce::String StateComponent::getPresetName()
 {
-    return presetName;
+    return procStatePresets.getPresetName();
 }
 
 void StateComponent::popPresetMenu()
 {
-    
     presetMenu.clear();
     presetMenu.addItem(1, "Init", true);
     presetMenu.addItem(2, "Open Preset Folder", true);
     presetMenu.addItem(3, "Rescan Preset Folder", true);
     presetMenu.addItem(4, "Give a Star on GitHub!", true);
+    presetMenu.addItem(5, "Check for New Version", true);
+
+    float heightScale = getHeight() / 50.0f;
+    float widthScale = getWidth() / 1000.0f;
+    float scale = juce::jmin(heightScale, heightScale);
+    otherLookAndFeel.scale = scale;
     
-    int result = presetMenu.show();
-    if (result == 1)
+    int result = presetMenu.show(0, 250 * widthScale,
+                                 10, 30 * heightScale);
+    if (result == 1)  // init
     {
+        // set all parameters to default
         procStatePresets.initPreset();
+        // set GUI verticle lines to default
+        resetMultiband();
         presetBox.setSelectedId(0);
+        isInit = true;
     }
-    if (result == 2)
+    else if (result == 2)
     {
         openPresetFolder();
     }
-    if (result == 3)
+    else if (result == 3)
     {
         rescanPresetFolder();
     }
-    if (result == 4)
+    else if (result == 4)
     {
         juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire");
         gitHubWebsite.launchInDefaultBrowser();
     }
+    else if (result == 5)
+    {
+        std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
+        
+        if (versionInfo == nullptr)
+        {
+            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::WarningIcon,
+                "Error", "No release found or disconnected from the network!", nullptr);
+//            DBG("No release found or other error occurred!");
+        }
+        else if(versionInfo->versionString != VERSION)
+        {
+            juce::String version = versionInfo->versionString;
+            bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                "New Version", "New version " + version + " available, do you want to download it?", nullptr, nullptr);
+            if (choice)
+            {
+                juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
+                gitHubWebsite.launchInDefaultBrowser();
+            }
+//            DBG(version);
+        }
+        else
+        {
+            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::InfoIcon,
+                "New Version", "You are up to date!", nullptr);
+        }
+    }
 }
+
+void StateComponent::resetMultiband()
+{
+    multiband.reset();
+}
+
+void StateComponent::setInitState(bool state)
+{
+    isInit = state;
+}
+
+bool StateComponent::getInitState()
+{
+    return isInit;
+}
+
+//juce::TextButton& StateComponent::getNextButton()
+//{
+//    return nextButton;
+//}
+//
+//juce::TextButton& StateComponent::getPreviousButton()
+//{
+//    return previousButton;
+//}
+
 
 } // namespace state

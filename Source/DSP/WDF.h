@@ -128,7 +128,7 @@ class Capacitor : public WDF
 {
 public:
     Capacitor(float C, float T)
-        : WDF(T / (2.0 * C)),
+        : WDF(T / (2.0f * C)),
           state(0)
     {
     }
@@ -155,7 +155,7 @@ class Inductor : public WDF
 {
 public:
     Inductor(float L, float T)
-        : WDF(2.0 * L / T),
+        : WDF(2.0f * L / T),
           state(0)
     {
     }
@@ -239,7 +239,7 @@ public:
     //----------------------------------------------------------------------
     virtual inline float reflected()
     {
-        b = -a + 2.0 * Vs;
+        b = -a + 2.0f * Vs;
         return b;
     }
     //----------------------------------------------------------------------
@@ -267,7 +267,7 @@ public:
     //----------------------------------------------------------------------
     virtual inline float reflected()
     {
-        b = a + 2.0 * R * Is;
+        b = a + 2.0f * R * Is;
         return b;
     }
     //----------------------------------------------------------------------

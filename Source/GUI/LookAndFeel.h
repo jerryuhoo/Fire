@@ -9,18 +9,7 @@
 */
 #pragma once
 
-#define COLOUR0 juce::Colour(244, 244, 210)
-#define COLOUR1 juce::Colour(244, 208, 63)
-#define COLOUR2 juce::Colour(243, 156, 18)
-#define COLOUR3 juce::Colour(230, 126, 34)
-#define COLOUR4 juce::Colour(211, 84, 0)
-#define COLOUR5 juce::Colour(192, 57, 43)
-#define COLOUR6 juce::Colour(45, 40, 40)
-#define COLOUR7 juce::Colour(15, 10, 10)
-
-#define KNOB_FONT "Futura"
-#define KNOB_FONT_SIZE 18.0f
-#define KNOB_FONT_COLOUR COLOUR1
+#include "InterfaceDefines.h"
 
 class OtherLookAndFeel : public juce::LookAndFeel_V4
 {
@@ -33,6 +22,9 @@ public:
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
         setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
         setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::trackColourId, COLOUR1);
+        setColour(juce::Slider::thumbColourId, COLOUR5);
+        setColour(juce::Slider::backgroundColourId, COLOUR6);
     }
 
     // customize knobs
@@ -155,7 +147,7 @@ public:
                 if (textBoxPos == juce::Slider::TextBoxAbove)
                     layout.textBoxBounds.setY(0);
                 else if (textBoxPos == juce::Slider::TextBoxBelow)
-                    layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight - 10); // changed here!
+                    layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight); // changed here!
                 else                                                                         /* left or right -> centre vertically */
                     layout.textBoxBounds.setY((localBounds.getHeight() - textBoxHeight) / 2);
             }
@@ -217,6 +209,17 @@ public:
         juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
     }
+    
+    void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override
+    {
+        g.fillAll(COLOUR6); // findColour (PopupMenu::backgroundColourId)
+        juce::ignoreUnused(width, height);
+
+       #if ! JUCE_MAC
+        g.setColour(COLOUR1.withAlpha(0.6f)); //juce::LookAndFeel::findColour(juce::PopupMenu::textColourId)
+        g.drawRect(0, 0, width, height);
+       #endif
+    }
 
     void drawPopupMenuItem(juce::Graphics &g, const juce::Rectangle<int> &area,
                            const bool isSeparator, const bool isActive,
@@ -225,27 +228,30 @@ public:
                            const juce::String &shortcutKeyText,
                            const juce::Drawable *icon, const juce::Colour *const textColourToUse) override
     {
+        //g.setColour(COLOUR6); // backgroundColourId : black
+        //g.fillAll();
+        
         if (isSeparator)
         {
             auto r = area.reduced(5, 0);
             r.removeFromTop(juce::roundToInt(((float)r.getHeight() * 0.5f) - 0.5f));
 
-            g.setColour(findColour(juce::PopupMenu::textColourId).withAlpha(0.3f));
+            g.setColour(COLOUR1.withAlpha(0.3f)); //findColour(juce::PopupMenu::textColourId)
             g.fillRect(r.removeFromTop(1));
         }
         else
         {
-            auto textColour = (textColourToUse == nullptr ? findColour(juce::PopupMenu::textColourId)
-                                                          : *textColourToUse);
+            auto textColour = (textColourToUse == nullptr ? COLOUR1
+                                                          : *textColourToUse); //findColour(juce::PopupMenu::textColourId)
 
             auto r = area.reduced(1);
 
             if (isHighlighted && isActive)
             {
-                g.setColour(findColour(juce::PopupMenu::highlightedBackgroundColourId));
+                g.setColour(COLOUR5); //findColour(juce::PopupMenu::highlightedBackgroundColourId) : red
                 g.fillRect(r);
 
-                g.setColour(findColour(juce::PopupMenu::highlightedTextColourId));
+                g.setColour(COLOUR1); //findColour(juce::PopupMenu::highlightedTextColourId)
             }
             else
             {
@@ -274,7 +280,12 @@ public:
             {
                 //auto tick = getTickShape (1.0f);
                 //g.fillPath (tick, tick.getTransformToScaleToFit (iconArea.reduced (iconArea.getWidth() / 5, 0).toFloat(), true));
-                g.fillEllipse(iconArea.getX() + scale * 12, iconArea.getY() + scale * 17, iconArea.getWidth() - scale * 24, iconArea.getWidth() - scale * 24);
+                
+                float radis = scale * 10;
+                float xPos = iconArea.getX() + iconArea.getWidth() / 2 - radis / 2;
+                float yPos = iconArea.getY() + iconArea.getHeight() / 2 - radis / 2;
+                
+                g.fillEllipse(xPos, yPos, radis, radis);
             }
 
             if (hasSubMenu)
@@ -565,3 +576,62 @@ public:
         return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
 };
+
+
+//class FlatButtonLnf : public juce::LookAndFeel_V4
+//{
+//public:
+//    float scale = 1.f;
+//    void drawButtonBackground(juce::Graphics &g,
+//                              juce::Button &button,
+//                              const juce::Colour &backgroundColour,
+//                              bool shouldDrawButtonAsHighlighted,
+//                              bool shouldDrawButtonAsDown) override
+//    {
+//        auto cornerSize = 0.0f;
+//        auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
+//
+//        auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
+//                              .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
+//
+//        if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
+//            baseColour = baseColour.contrasting(shouldDrawButtonAsDown ? 0.2f : 0.05f);
+//
+//        g.setColour(baseColour);
+//
+//        auto flatOnLeft = button.isConnectedOnLeft();
+//        auto flatOnRight = button.isConnectedOnRight();
+//        auto flatOnTop = button.isConnectedOnTop();
+//        auto flatOnBottom = button.isConnectedOnBottom();
+//
+//        if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
+//        {
+//            juce::Path path;
+//            path.addRoundedRectangle(bounds.getX(), bounds.getY(),
+//                                     bounds.getWidth(), bounds.getHeight(),
+//                                     cornerSize, cornerSize,
+//                                     !(flatOnLeft || flatOnTop),
+//                                     !(flatOnRight || flatOnTop),
+//                                     !(flatOnLeft || flatOnBottom),
+//                                     !(flatOnRight || flatOnBottom));
+//
+//            g.fillPath(path);
+//
+//            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
+//            g.strokePath(path, juce::PathStrokeType(1.0f));
+//        }
+//        else
+//        {
+//            g.fillRoundedRectangle(bounds, cornerSize);
+//            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
+//            g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
+//        }
+//    }
+//
+//    
+//    
+//    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
+//    {
+//        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+//    }
+//};

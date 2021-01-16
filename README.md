@@ -1,73 +1,52 @@
-# Fire (Version 0.75) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.org/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
+# Fire (Version 0.82) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
 
-![Alt text](Fire.png?raw=true "Title")
+![Alt text](Fire1.png?raw=true "Title")
 
 ## 1. Introduce
 
- This is a distortion plugin.
- This plugin has 9 different distortion modes:
-
-- Arctan Soft Clipping
-- Exp Soft Clipping
-- Tanh Soft Clipping
-- Cubic Soft Clipping
-- Hard Clipping
-- Sausage Fattener
-- Sin Fold
-- Linear Fold
-- Diode Clipping
-
-9 knobs:
-
-- Drive knob
-- Downsample knob
-- Rectification knob
-- Color knob
-- Bias knob
-- Output knob
-- Cutoff knob
-- Q (Resonance) knob
-- Mix knob
-
-6 options for the filter
-
-- Off
-- Pre
-- Post
-- Low-pass
-- Band-pass
-- High-pass
-
- And other features such as HQ, link mode, safe mode
+ This is a multi-band distortion plugin. 『Fire』 supports DAWs such as Ableton Live, Fl Studio...
 
 Hope you like it!
 
-## 2. Support the author
+## 2. How to install
 
-欢迎关注网易云音乐：羽翼深蓝Wings！（这次一定！）
+### Download from Release Page
+
+currently not avaliable
+
+### Build by JUCE
+
+Open .jucer file by Projucer then select your IDE to build 『Fire』. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the <a href="https://www.juce.com" rel="nofollow">latest JUCE release</a>.</li>
+
+Note: You should choose Release mode rather than Debug mode(or disable Debug mode) in .fire Exporters page. Build with debug mode will cause high CPU usage.
+
+## 3. Support the author
+
+欢迎关注网易云音乐：<a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings</a>（这次一定！）
 
 follow my Neteast channel: 羽翼深蓝Wings
 
-![image](neteast.png)
+<div align=center>
+    <img src="support.png" width = "50%"/>
+</div>
 
-支付宝赞助！
+## 4. References
 
-![image](alipay.png)
+1. The level meter used <a href="https://github.com/ffAudio/ff_meters">ff_meters</a> by Daniel Walz.
 
-## 3. References
+2. A great example of using XML by <a href="https://github.com/johnflynnjohnflynn/TestParameters02">johnflynnjohnflynn</a> to save presets to file example. I changed the code to save presets as mutiple files.
 
-1. The level meter used ff_meters by Daniel Walz.
+3. <a href="https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227">Diode Clipping algorithm</a> from JUCE forum
 
-    from: <https://github.com/ffAudio/ff_meters>
+4. <a href="https://github.com/adriannaziel/SpectrumAnalyser_et">Spectrum Analyser</a> by adriannaziel
 
-2. A great example of using XML to save presets to file example. I changed the code to save presets as mutiple files.
+## 5. Update Notes
 
-    from: <https://github.com/johnflynnjohnflynn/TestParameters02>
+2020-12-29 (version 0.8)
 
-3. Diode Clipping algorithm
-    from: <https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227>
-
-## 4. Update Notes
+1. multiband distortion
+2. spectrum graph
+3. more knobs
 
 2020-7-15 (version 0.7)
 

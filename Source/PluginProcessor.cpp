@@ -320,23 +320,23 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // compressor
     compressorProcessor1.reset();
     compressorProcessor1.prepare(spec);
-    compressorProcessor1.setAttack(250.0f);
-    compressorProcessor1.setRelease(1000.0f);
+    compressorProcessor1.setAttack(80.0f);
+    compressorProcessor1.setRelease(200.0f);
     
     compressorProcessor2.reset();
     compressorProcessor2.prepare(spec);
-    compressorProcessor2.setAttack(250.0f);
-    compressorProcessor2.setRelease(1000.0f);
+    compressorProcessor2.setAttack(80.0f);
+    compressorProcessor2.setRelease(200.0f);
     
     compressorProcessor3.reset();
     compressorProcessor3.prepare(spec);
-    compressorProcessor3.setAttack(250.0f);
-    compressorProcessor3.setRelease(1000.0f);
+    compressorProcessor3.setAttack(80.0f);
+    compressorProcessor3.setRelease(200.0f);
     
     compressorProcessor4.reset();
     compressorProcessor4.prepare(spec);
-    compressorProcessor4.setAttack(250.0f);
-    compressorProcessor4.setRelease(1000.0f);
+    compressorProcessor4.setAttack(80.0f);
+    compressorProcessor4.setRelease(200.0f);
 }
 
 void FireAudioProcessor::releaseResources()
@@ -463,8 +463,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         // compressor process
         float ratio1 = *treeState.getRawParameterValue(COMP_RATIO_ID1);
         float thresh1 = *treeState.getRawParameterValue(COMP_THRESH_ID1);
-        compressorProcessor(ratio1, thresh1, compressorProcessor1, context1);
-        
+        compressorProcessor1.setThreshold(thresh1);
+        compressorProcessor1.setRatio(ratio1);
+        compressorProcessor1.process(context1);
+
         // mix process
         mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1);
         
@@ -497,7 +499,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         // compressor process
         float ratio2 = *treeState.getRawParameterValue(COMP_RATIO_ID2);
         float thresh2 = *treeState.getRawParameterValue(COMP_THRESH_ID2);
-        compressorProcessor(ratio2, thresh2, compressorProcessor2, context2);
+        compressorProcessor2.setThreshold(thresh2);
+        compressorProcessor2.setRatio(ratio2);
+        compressorProcessor2.process(context2);
         
         // mix process
         mixProcessor(MIX_ID2, mixSmoother2, totalNumInputChannels, mBuffer2);
@@ -529,7 +533,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         // compressor process
         float ratio3 = *treeState.getRawParameterValue(COMP_RATIO_ID3);
         float thresh3 = *treeState.getRawParameterValue(COMP_THRESH_ID3);
-        compressorProcessor(ratio3, thresh3, compressorProcessor3, context3);
+        compressorProcessor3.setThreshold(thresh3);
+        compressorProcessor3.setRatio(ratio3);
+        compressorProcessor3.process(context3);
         
         // mix process
         mixProcessor(MIX_ID3, mixSmoother3, totalNumInputChannels, mBuffer3);
@@ -556,7 +562,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         // compressor process
         float ratio4 = *treeState.getRawParameterValue(COMP_RATIO_ID4);
         float thresh4 = *treeState.getRawParameterValue(COMP_THRESH_ID4);
-        compressorProcessor(ratio4, thresh4, compressorProcessor4, context4);
+        compressorProcessor4.setThreshold(thresh4);
+        compressorProcessor4.setRatio(ratio4);
+        compressorProcessor4.process(context4);
         
         // mix process
         mixProcessor(MIX_ID4, mixSmoother4, totalNumInputChannels, mBuffer4);
@@ -1116,12 +1124,12 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
     }
 }
 
-void FireAudioProcessor::compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context)
-{
-    compressorProcessor.setThreshold(thresh);
-    compressorProcessor.setRatio(ratio);
-    compressorProcessor.process(context);
-}
+//void FireAudioProcessor::compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context)
+//{
+//    compressorProcessor.setThreshold(thresh);
+//    compressorProcessor.setRatio(ratio);
+//    compressorProcessor.process(context);
+//}
 
 void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer)
 {

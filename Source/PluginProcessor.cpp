@@ -640,6 +640,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
             channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample] * smoothOutputValue;
             // channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
+            
             // mDelay is delayed clean signal
             if (sample % 10 == 0)
             {
@@ -680,7 +681,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     //visualiser.pushBuffer(buffer);
     
 //    historyBuffer.makeCopyOf(buffer);
-    
 }
 
 //==============================================================================
@@ -911,7 +911,6 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
     {
         distortionProcessor.controls.bias = 0;
     }
-
 }
 
 void FireAudioProcessor::processDistortion(juce::String modeId, juce::String recId, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
@@ -1001,7 +1000,6 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
             // distortion
             if (mode < 9)
             {
-                
                 distortionProcessor.controls.drive = driveSmoother.getNextValue();
 
 //                distortionProcessor.controls.output = outputSmoother.getNextValue();

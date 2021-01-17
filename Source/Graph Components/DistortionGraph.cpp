@@ -14,13 +14,6 @@
 //==============================================================================
 DistortionGraph::DistortionGraph()
 {
-    // to ensure these parameters are assigned values, otherwise may assert errors.
-    mode = -1;
-    drive = -1.0f;
-    color = -1.0f;
-    mix = -1.0f;
-    bias = -1.0f;
-    rateDivide = -1.0f;
 }
 
 DistortionGraph::~DistortionGraph()
@@ -30,9 +23,6 @@ DistortionGraph::~DistortionGraph()
 void DistortionGraph::paint (juce::Graphics& g)
 {
     // paint distortion function
-    
-    float functionValue = 0.0f;
-    float mixValue;
 
     distortionProcessor.controls.mode = mode;
     distortionProcessor.controls.drive = drive;
@@ -47,6 +37,9 @@ void DistortionGraph::paint (juce::Graphics& g)
     
     if (mode < 9)
     {
+        float functionValue = 0.0f;
+        float mixValue;
+        
         const int numPix = frameRight.getWidth(); // you might experiment here, if you want less steps to speed up
 
         float driveScale = 1.0f;
@@ -143,7 +136,6 @@ void DistortionGraph::paint (juce::Graphics& g)
 
 void DistortionGraph::resized()
 {
- 
 }
 
 void DistortionGraph::setState(int mode, float color, float rec, float mix, float bias, float drive, float rateDivide)

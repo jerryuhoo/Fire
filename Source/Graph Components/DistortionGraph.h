@@ -28,15 +28,13 @@ public:
     void setState(int mode, float color, float rec, float mix, float bias, float drive, float rateDivide);
     
 private:
-    int mode;
-    //float inputGain = *processor.treeState.getRawParameterValue("inputGain");
-    //float drive = *processor.treeState.getRawParameterValue("drive");
-    float color;
-    float rec;
-    float mix;
-    float bias;
-    float rateDivide;
-    float drive;
+    int mode = -1;
+    float color = -1.0f;
+    float rec = -1.0f;
+    float mix = -1.0f;
+    float bias = -1.0f;
+    float rateDivide = -1.0f;
+    float drive = -1.0f;
     Distortion distortionProcessor;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)

@@ -12,7 +12,6 @@
 
 class SpectrumProcessor {
 public:
-
 	SpectrumProcessor(): forwardFFT(fftOrder), window(fftSize, juce::dsp::WindowingFunction<float>::hamming)
 	{
         window.fillWindowingTables(fftSize, juce::dsp::WindowingFunction<float>::blackman);
@@ -54,5 +53,4 @@ public:
 	}
 
 private:
-
 };

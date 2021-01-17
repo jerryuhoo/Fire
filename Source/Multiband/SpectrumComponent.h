@@ -30,13 +30,11 @@ public:
 	void resized() override;
 	void paintSpectrum(juce::Graphics & g);
 
-
 private:
-	int number_of_bins;
-	float* spectrum_data;
+	int numberOfBins;
+	float* spectrumData;
 	static const int frequenciesForLines[];
 	static const int numberOfLines;    
-
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumComponent)
 };

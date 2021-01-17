@@ -130,27 +130,27 @@ private:
 
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
-    float previousOutput1;
-    float previousOutput2;
-    float previousOutput3;
-    float previousOutput4;
-    float previousOutput;
-    float previousDrive1;
-    float previousDrive2;
-    float previousDrive3;
-    float previousDrive4;
-    float previousMix1;
-    float previousMix2;
-    float previousMix3;
-    float previousMix4;
-    float previousMix;
-    float previousColor;
-    float previousCutoff;
+    float previousOutput1 = 0.0f;
+    float previousOutput2 = 0.0f;
+    float previousOutput3 = 0.0f;
+    float previousOutput4 = 0.0f;
+    float previousOutput = 0.0f;
+    float previousDrive1 = 0.0f;
+    float previousDrive2 = 0.0f;
+    float previousDrive3 = 0.0f;
+    float previousDrive4 = 0.0f;
+    float previousMix1 = 0.0f;
+    float previousMix2 = 0.0f;
+    float previousMix3 = 0.0f;
+    float previousMix4 = 0.0f;
+    float previousMix = 0.0f;
+    float previousColor = 0.0f;
+    float previousCutoff = 0.0f;
     
-    float newDrive1;
-    float newDrive2;
-    float newDrive3;
-    float newDrive4;
+    float newDrive1 = 0.0f;
+    float newDrive2 = 0.0f;
+    float newDrive3 = 0.0f;
+    float newDrive4 = 0.0f;
 
     juce::SmoothedValue<float> driveSmoother1;
     juce::SmoothedValue<float> driveSmoother2;

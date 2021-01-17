@@ -48,10 +48,9 @@ public:
     void setFocus();
 
 private:
-    
     float margin;
-    float size;
-    float width;
+    float size = 15.0f;
+    float width = 5.0f;
     float limitLeft;
     float limitRight;
     

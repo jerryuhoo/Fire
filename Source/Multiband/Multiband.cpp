@@ -78,7 +78,6 @@ void Multiband::paint (juce::Graphics& g)
         float xPos = mousePos.getX();
         float yPos = mousePos.getY();
         
-
         if (yPos >= startY && yPos <= startY + getHeight() / 5 && lineNum < 3)
         {   
             bool canCreate = true;
@@ -98,7 +97,6 @@ void Multiband::paint (juce::Graphics& g)
         }
         
         g.drawLine(0, startY + getHeight() / 5, getWidth(), startY + getHeight() / 5, 1);
-
  
         // freqLabel
         for (int i = 0; i < 3; i++)
@@ -109,14 +107,11 @@ void Multiband::paint (juce::Graphics& g)
             }
         }
         
-        
-        //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
         int changedIndex = getChangedIndex();
         if (changedIndex != -1)
         {
             updateLines(false, changedIndex);
         }
-        
 
         // set black and focus masks
         int margin2 = getWidth() / 250; // 1/100 * 4 / 10
@@ -157,7 +152,6 @@ void Multiband::paint (juce::Graphics& g)
         }
         
         dragLines();
- 
     }
 }
 
@@ -254,6 +248,7 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
             count++;
         }
     }
+    
     lineNum = count;
 
     // sort
@@ -268,7 +263,6 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
         }
     }
 
-    
     // reset all disabled parameters (maybe HIGH CPU!!!)
 
     // should set self index first, then set left and right index
@@ -308,7 +302,7 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
 //            break;
 //        }
 //    }
-//
+
     if (changedIndex != -1) // if not resizing
     {
         // change focus position
@@ -355,7 +349,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
 {
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
-        
         if (lineNum < 3)
         {
             bool canCreate = true;
@@ -393,23 +386,19 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         break;
                     }
                 }
-                
-                
 
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
                     updateLines(true, changedIndex);
                 }
-
-                
             }
         }
-        
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
         int num = lineNum;
+        
         for (int i = 0; i < 4; i++)
         {
             multibandFocus[i] = false;
@@ -443,13 +432,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 return;
             }
         }
-
-        
-//        for (int i = 0; i < 4; i++) {
-//            if (multibandFocus[i]) {
-//                DBG(i);
-//            }
-//        }
     }
 }
 
@@ -499,12 +481,12 @@ void Multiband::reset()
         frequency[i] = 0;
     }
     lineNum = 0;
-    
 }
 
 void Multiband::dragLines()
 {
     bool isMoving = false;
+    
     // drag
     for (int i = 0; i < 3; i++)
     {
@@ -528,7 +510,6 @@ void Multiband::dragLines()
 
 void Multiband::setLineRelatedBounds(int i)
 {
-    
     verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
     closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, margin, size, size);
 
@@ -536,8 +517,6 @@ void Multiband::setLineRelatedBounds(int i)
     freqTextLabel[i]->setScale(juce::jmin(width / 5.0f, size / 15.0f));
     int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
     freqTextLabel[i]->setFreq(freq);
-//        frequency[sortedIndex[i]] = freq;
-    
 }
 
 void Multiband::setSoloRelatedBounds()
@@ -607,7 +586,6 @@ void Multiband::getLineState(bool (&input)[3])
 {
     for (int i = 0; i < 3; i++)
     {
-//        input[i] = lineState[i];
         if (sortedIndex[i] < 0)
         {
             input[i] = false;

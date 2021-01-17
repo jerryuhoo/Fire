@@ -226,6 +226,7 @@ private:
                                           lowpass3, highpass3;
     
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
+    juce::AudioBuffer<float> dryBuffer1, dryBuffer2, dryBuffer3, dryBuffer4;
     bool multibandState1 = true;
     bool multibandState2 = true;
     bool multibandState3 = true;
@@ -244,7 +245,7 @@ private:
     
     // void compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context);
     
-    void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer);
+    void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer);
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

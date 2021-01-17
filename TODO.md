@@ -13,3 +13,4 @@
 11. 【bug】 Ableton can't drag vertical lines on parameter pannel.
 12. 【bug】 Doesn't save focus and disable.
 13. save resized size.
+14. add enable button for compressor, downsample, width, filter, etc.

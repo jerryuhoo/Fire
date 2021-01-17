@@ -542,7 +542,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     //distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
     
     // DBG(lastPresetName);
-    if (stateComponent.getPresetName() != lastPresetName) // preset change
+    if (isPresetChanged()) // preset change
     {
         initState();
     }
@@ -1016,39 +1016,39 @@ void FireAudioProcessorEditor::initState()
 {
     // init
     setMultiband();
-    lastPresetName = stateComponent.getPresetName();
     updateToggleState();
     changeSliderState(&distortionMode1);
     changeSliderState(&distortionMode2);
     changeSliderState(&distortionMode3);
     changeSliderState(&distortionMode4);
+    lastPresetName = stateComponent.getPresetName();
 }
 
 void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)
 {
     if (combobox == &distortionMode1)
     {
-        disableSlider(&processor, driveKnob1, MODE_ID1, tempDriveValue[0]);
-        disableSlider(&processor, biasKnob1, MODE_ID1, tempBiasValue[0]);
+        setSliderState(&processor, driveKnob1, MODE_ID1, tempDriveValue[0]);
+        setSliderState(&processor, biasKnob1, MODE_ID1, tempBiasValue[0]);
     }
     else if (combobox == &distortionMode2)
     {
-        disableSlider(&processor, driveKnob2, MODE_ID2, tempDriveValue[1]);
-        disableSlider(&processor, biasKnob2, MODE_ID2, tempBiasValue[1]);
+        setSliderState(&processor, driveKnob2, MODE_ID2, tempDriveValue[1]);
+        setSliderState(&processor, biasKnob2, MODE_ID2, tempBiasValue[1]);
     }
     else if (combobox == &distortionMode3)
     {
-        disableSlider(&processor, driveKnob3, MODE_ID3, tempDriveValue[2]);
-        disableSlider(&processor, biasKnob3, MODE_ID3, tempBiasValue[2]);
+        setSliderState(&processor, driveKnob3, MODE_ID3, tempDriveValue[2]);
+        setSliderState(&processor, biasKnob3, MODE_ID3, tempBiasValue[2]);
     }
     else if (combobox == &distortionMode4)
     {
-        disableSlider(&processor, driveKnob4, MODE_ID4, tempDriveValue[3]);
-        disableSlider(&processor, biasKnob4, MODE_ID4, tempBiasValue[3]);
+        setSliderState(&processor, driveKnob4, MODE_ID4, tempDriveValue[3]);
+        setSliderState(&processor, biasKnob4, MODE_ID4, tempBiasValue[3]);
     }
 }
 
-void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue)
+void FireAudioProcessorEditor::setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue)
 {
     auto val = processor->treeState.getRawParameterValue(paramId);
     int selection = val->load();
@@ -1067,11 +1067,20 @@ void FireAudioProcessorEditor::disableSlider(FireAudioProcessor* processor, juce
         slider.setValue(0);
         slider.setEnabled(false);
     }
+    else if (isPresetChanged())
+    {
+        slider.setEnabled(true);
+    }
     else if (!slider.isEnabled())
     {
         slider.setValue(tempValue);
         slider.setEnabled(true);
     }
+}
+
+bool FireAudioProcessorEditor::isPresetChanged()
+{
+    return stateComponent.getPresetName() != lastPresetName;
 }
 
 void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)

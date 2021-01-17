@@ -205,7 +205,7 @@ private:
     void setLinearSlider(juce::Slider& slider);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void changeSliderState(juce::ComboBox *combobox);
-    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
+    void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
     void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
     void setDistortionGraph(juce::String modeId, juce::String driveId,
         juce::String recId, juce::String mixId, juce::String biasId);
@@ -213,7 +213,7 @@ private:
     void initState();
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
-
+    bool isPresetChanged();
 
 
 

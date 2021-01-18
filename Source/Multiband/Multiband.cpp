@@ -503,6 +503,7 @@ void Multiband::dragLines()
         for (int i = 0; i < 3; i++)
         {
             setLineRelatedBounds(i);
+            frequency[i] = freqTextLabel[sortedIndex[i]]->getFreq();
         }
         setSoloRelatedBounds();
     }

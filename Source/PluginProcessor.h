@@ -78,7 +78,6 @@ public:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     // ff meter
-    // ff meter
     foleys::LevelMeterSource &getInputMeterSource()
     {
         return inputMeterSource;
@@ -87,10 +86,6 @@ public:
     {
         return outputMeterSource;
     }
-
-    // temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
-    // probably use fifo
-    //Visualiser visualiser;
 
     juce::Array<float> getHistoryArrayL();
     juce::Array<float> getHistoryArrayR();
@@ -104,6 +99,11 @@ public:
     bool isFFTBlockReady();
     void processFFT();
 
+    // save size
+    void setSavedWidth(const int width);
+    void setSavedHeight(const int height);
+    int getSavedWidth() const;
+    int getSavedHeight() const;
 private:
     //==============================================================================
     
@@ -246,6 +246,10 @@ private:
     // void compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context);
     
     void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer);
+    
+    // Save size
+    int editorWidth = INIT_WIDTH;
+    int editorHeight = INIT_HEIGHT;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

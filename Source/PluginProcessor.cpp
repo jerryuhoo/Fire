@@ -722,14 +722,17 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock &destData)
     int xmlIndex = 0;
     juce::XmlElement xmlState{"state"};
 
-    // 1. save treestate
+    // 1. save treestate (parameters)
     auto state = treeState.copyState();
     std::unique_ptr<juce::XmlElement> treeStateXml(state.createXml());
     xmlState.insertChildElement(treeStateXml.release(), xmlIndex++);
 
-    // 2. save current preset ID
-    std::unique_ptr<juce::XmlElement> currentStateXml{new juce::XmlElement{"currentPresetID"}};
-    currentStateXml->setAttribute("ID", statePresets.getCurrentPresetId());
+    // 2. save current preset ID, width and height
+    std::unique_ptr<juce::XmlElement> currentStateXml{new juce::XmlElement{"otherState"}};
+    currentStateXml->setAttribute("currentPresetID", statePresets.getCurrentPresetId());
+    currentStateXml->setAttribute("editorWidth", editorWidth);
+    currentStateXml->setAttribute("editorHeight", editorHeight);
+
     xmlState.insertChildElement(currentStateXml.release(), xmlIndex++);
 
     copyXmlToBinary(xmlState, destData);
@@ -755,8 +758,12 @@ void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
         const auto xmlCurrentState = xmlState->getChildElement(xmlIndex++);
         if (xmlCurrentState != nullptr)
         {
-            int presetID = xmlCurrentState->getIntAttribute("ID", 0);
+            // load preset
+            int presetID = xmlCurrentState->getIntAttribute("currentPresetID", 0);
             statePresets.setCurrentPresetId(presetID);
+            
+            editorWidth = xmlCurrentState->getIntAttribute("editorWidth", INIT_WIDTH);
+            editorHeight = xmlCurrentState->getIntAttribute("editorHeight", INIT_HEIGHT);
         }
     }
 }
@@ -1119,6 +1126,26 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
 //    compressorProcessor.setRatio(ratio);
 //    compressorProcessor.process(context);
 //}
+
+int FireAudioProcessor::getSavedWidth() const
+{
+    return editorWidth;
+}
+
+int FireAudioProcessor::getSavedHeight() const
+{
+    return editorHeight;
+}
+
+void FireAudioProcessor::setSavedWidth(const int width)
+{
+    editorWidth = width;
+}
+
+void FireAudioProcessor::setSavedHeight(const int height)
+{
+    editorHeight = height;
+}
 
 void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer)
 {

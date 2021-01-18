@@ -19,9 +19,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // timer
     juce::Timer::startTimerHz(30.0f);
 
-    // set resize
-    setResizable(true, true);
-
     // Visualiser
     addAndMakeVisible(oscilloscope);
     
@@ -77,7 +74,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize(INIT_WIDTH, INIT_HEIGHT);
+    //setSize(INIT_WIDTH, INIT_HEIGHT);
 
     setLookAndFeel(&otherLookAndFeel);
 
@@ -453,9 +450,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     modeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID3, distortionMode3);
     modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID4, distortionMode4);
 
+    // set resize
+    setResizable(true, true);
+    setSize(processor.getSavedWidth(), processor.getSavedHeight());
     // resize limit
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
-    //getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
+    // getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
 
     updateToggleState();
 }
@@ -769,6 +769,10 @@ void FireAudioProcessorEditor::resized()
     // This is generally where you'll want to lay out the positions of any
     // subcomponents in your editor..
 
+    // save resized size
+    processor.setSavedHeight(getHeight());
+    processor.setSavedWidth(getWidth());
+    
     // knobs
     int knobNum = 8;
     float scale = juce::jmin(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);

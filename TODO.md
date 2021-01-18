@@ -14,3 +14,5 @@
 12. 【bug】 Doesn't save focus and disable.
 13. save resized size.
 14. add enable button for compressor, downsample, width, filter, etc.
+15. 【bug】VST not load verticle lines and can't create automations but AU can wtf???
+16. 【bug】 save preset cause vertical line position error?

@@ -108,8 +108,15 @@ public:
     
     // bypass
     bool getBypassedState();
+    
+    // set preset id for vst3 init
+    void setPresetId(int presetID);
+    int getPresetId();
 private:
     //==============================================================================
+    
+    // preset id
+    int presetId = 0;
     
     // Oscilloscope
     juce::Array<float> historyArrayL;

@@ -45,7 +45,9 @@ private:
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
     juce::String lastPresetName;
-
+    
+    // init editor
+    void initEditor();
 
     // Oscilloscope
     Oscilloscope oscilloscope {processor};

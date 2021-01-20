@@ -919,23 +919,25 @@ void FireAudioProcessorEditor::updateToggleState()
     }
 }
 
-
 void FireAudioProcessorEditor::timerCallback()
 {
-    // spectrum
-    if (processor.isFFTBlockReady())
+    // bypassed
+    if (processor.getBypassedState())
     {
+        distortionGraph.repaint();
         multiband.repaint();
+    }
+    else if (processor.isFFTBlockReady())
+    {
+        // not bypassed, repaint at the same time
+        processor.processFFT();
+        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
+        spectrum.repaint();
         oscilloscope.repaint();
         distortionGraph.repaint();
-        processor.processFFT();
-        spectrum.prepareToPaintSpectrum(processor.getFFTSize() , processor.getFFTData());
-        spectrum.repaint();
+        multiband.repaint();
     }
-//    repaint();
 }
-
-
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 {

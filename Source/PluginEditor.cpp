@@ -19,6 +19,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // timer
     juce::Timer::startTimerHz(30.0f);
 
+    // This is not a perfect fix for Vst3 plugins
+    // Vst3 calls constructor before setStateInformation in processor,
+    // however, AU plugin calls constructor after setStateInformation/
+    // So I set delay of 1 ms to reset size and other stuff.
+    // call function after 1 ms
+    std::function<void()> initFunction = [this]() { initEditor(); };
+    juce::Timer::callAfterDelay(1, initFunction);
+    
     // Visualiser
     addAndMakeVisible(oscilloscope);
     
@@ -33,9 +41,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(multiband);
     
     setMultiband();
-    
-    
-    
+
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
     
@@ -449,7 +455,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     modeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID2, distortionMode2);
     modeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID3, distortionMode3);
     modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID4, distortionMode4);
-
+    
     // set resize
     setResizable(true, true);
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
@@ -484,6 +490,16 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     windowLeftButton.setLookAndFeel(nullptr);
 }
 
+void FireAudioProcessorEditor::initEditor()
+{
+    setSize(processor.getSavedWidth(), processor.getSavedHeight());
+    
+    DBG(processor.getPresetId());
+    //processor.setPresetId(processor.getPresetId());
+    //lastPresetName = stateComponent.getPresetName();
+    
+    setMultiband();
+}
 
 //==============================================================================
 void FireAudioProcessorEditor::paint(juce::Graphics &g)

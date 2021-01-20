@@ -494,7 +494,7 @@ void FireAudioProcessorEditor::initEditor()
 {
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
     
-    DBG(processor.getPresetId());
+    //DBG(processor.getPresetId());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     
@@ -957,76 +957,28 @@ void FireAudioProcessorEditor::timerCallback()
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 {
-    // TODO: put this into one function!!!(linkValue)
-    if (linkedButton1.getToggleState() == true)
-    {
-        if (slider == &driveKnob1)
-        {
-            outputKnob1.setValue(-driveKnob1.getValue() * 0.1);
-        }
-        else if (slider == &outputKnob1 && driveKnob1.isEnabled())
-        {
-            if (outputKnob1.getValue() <= 0 && outputKnob1.getValue() >= -10)
-                driveKnob1.setValue(-outputKnob1.getValue() * 10);
-            else if (outputKnob1.getValue() > 0)
-                driveKnob1.setValue(0);
-            else if (outputKnob1.getValue() < -10)
-                driveKnob1.setValue(100);
-        }
-    }
-    if (linkedButton2.getToggleState() == true)
-    {
-        if (slider == &driveKnob2)
-        {
-            outputKnob2.setValue(-driveKnob2.getValue() * 0.1);
-        }
-        else if (slider == &outputKnob2 && driveKnob2.isEnabled())
-        {
-            if (outputKnob2.getValue() <= 0 && outputKnob2.getValue() >= -10)
-                driveKnob2.setValue(-outputKnob2.getValue() * 10);
-            else if (outputKnob2.getValue() > 0)
-                driveKnob2.setValue(0);
-            else if (outputKnob2.getValue() < -10)
-                driveKnob2.setValue(100);
-        }
-    }
-    if (linkedButton3.getToggleState() == true)
-    {
-        if (slider == &driveKnob3)
-        {
-            outputKnob3.setValue(-driveKnob3.getValue() * 0.1);
-        }
-        else if (slider == &outputKnob3 && driveKnob3.isEnabled())
-        {
-            if (outputKnob3.getValue() <= 0 && outputKnob3.getValue() >= -10)
-                driveKnob3.setValue(-outputKnob3.getValue() * 10);
-            else if (outputKnob3.getValue() > 0)
-                driveKnob3.setValue(0);
-            else if (outputKnob3.getValue() < -10)
-                driveKnob3.setValue(100);
-        }
-    }
-    if (linkedButton4.getToggleState() == true)
-    {
-        if (slider == &driveKnob4)
-        {
-            outputKnob4.setValue(-driveKnob4.getValue() * 0.1);
-        }
-        else if (slider == &outputKnob4 && driveKnob4.isEnabled())
-        {
-            if (outputKnob4.getValue() <= 0 && outputKnob4.getValue() >= -10)
-                driveKnob4.setValue(-outputKnob4.getValue() * 10);
-            else if (outputKnob4.getValue() > 0)
-                driveKnob4.setValue(0);
-            else if (outputKnob4.getValue() < -10)
-                driveKnob4.setValue(100);
-        }
-    }
+    linkValue(driveKnob1, outputKnob1, linkedButton1);
+    linkValue(driveKnob2, outputKnob2, linkedButton2);
+    linkValue(driveKnob3, outputKnob3, linkedButton3);
+    linkValue(driveKnob4, outputKnob4, linkedButton4);
 }
 
-void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &ySlider)
+void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &ySlider, juce::TextButton& linkedButton)
 {
     // x changes, then y will change
+    if (linkedButton.getToggleState() == true)
+    {
+        ySlider.setValue(-xSlider.getValue() * 0.1f);
+//        else if (slider == &outputKnob1 && driveKnob1.isEnabled())
+//        {
+//            if (outputKnob1.getValue() <= 0 && outputKnob1.getValue() >= -10)
+//                driveKnob1.setValue(-outputKnob1.getValue() * 10);
+//            else if (outputKnob1.getValue() > 0)
+//                driveKnob1.setValue(0);
+//            else if (outputKnob1.getValue() < -10)
+//                driveKnob1.setValue(100);
+//        }
+    }
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)

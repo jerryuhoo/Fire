@@ -208,7 +208,7 @@ private:
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void changeSliderState(juce::ComboBox *combobox);
     void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
-    void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
+    void linkValue(juce::Slider &xSlider, juce::Slider &ySlider, juce::TextButton& linkedButton);
     void setDistortionGraph(juce::String modeId, juce::String driveId,
         juce::String recId, juce::String mixId, juce::String biasId);
 

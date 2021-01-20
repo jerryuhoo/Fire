@@ -376,8 +376,18 @@ bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) cons
 }
 #endif
 
+void FireAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer,
+                           juce::MidiBuffer& midiMessages)
+{
+    // set bypass to true
+    isBypassed = true;
+}
+
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer &midiMessages)
 {
+    // set bypass to false
+    isBypassed = false;
+    
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
@@ -1145,6 +1155,11 @@ void FireAudioProcessor::setSavedWidth(const int width)
 void FireAudioProcessor::setSavedHeight(const int height)
 {
     editorHeight = height;
+}
+
+bool FireAudioProcessor::getBypassedState()
+{
+    return isBypassed;
 }
 
 void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer)

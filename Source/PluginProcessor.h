@@ -39,7 +39,8 @@ public:
 #endif
 
     void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
-
+    void processBlockBypassed (juce::AudioBuffer<float>& buffer,
+                               juce::MidiBuffer& midiMessages) override;
     //==============================================================================
     juce::AudioProcessorEditor *createEditor() override;
     bool hasEditor() const override;
@@ -104,6 +105,9 @@ public:
     void setSavedHeight(const int height);
     int getSavedWidth() const;
     int getSavedHeight() const;
+    
+    // bypass
+    bool getBypassedState();
 private:
     //==============================================================================
     
@@ -251,5 +255,7 @@ private:
     int editorWidth = INIT_WIDTH;
     int editorHeight = INIT_HEIGHT;
     
+    // bypass state
+    bool isBypassed = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

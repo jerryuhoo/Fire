@@ -12,7 +12,7 @@
 10. 【feature】 mouse drag vertically to change the output volume, like Ozone or saturn2
 11. 【bug】 Ableton can't drag vertical lines on parameter pannel.
 12. 【bug】 Doesn't save focus and disable.
-13. save resized size.
-14. add enable button for compressor, downsample, width, filter, etc.
-15. 【bug】VST not load verticle lines and can't create automations but AU can wtf???
-16. 【bug】 save preset cause vertical line position error?
+13. add enable button for compressor, downsample, width, filter, etc.
+14. 【bug】VST not load verticle lines and can't create automations but AU can wtf???
+15. 【bug】 save preset cause vertical line position error?
+16. 【bug】 can't repaint distortion graph when it is disabled.

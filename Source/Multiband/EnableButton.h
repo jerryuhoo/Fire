@@ -29,7 +29,7 @@ public:
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
     bool getState();
-    
+    void setState(bool state);
 private:
     bool isEntered = false;
     bool mState = true;

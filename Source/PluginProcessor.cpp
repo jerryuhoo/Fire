@@ -387,7 +387,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 {
     // set bypass to false
     isBypassed = false;
-    
+
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
@@ -427,10 +427,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     mBuffer3.makeCopyOf(buffer);
     mBuffer4.makeCopyOf(buffer);
 
-    multibandState1 = *treeState.getRawParameterValue(BAND_STATE_ID1);
-    multibandState2 = *treeState.getRawParameterValue(BAND_STATE_ID2);
-    multibandState3 = *treeState.getRawParameterValue(BAND_STATE_ID3);
-    multibandState4 = *treeState.getRawParameterValue(BAND_STATE_ID4);
+    multibandState1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
+    multibandState2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
+    multibandState3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
+    multibandState4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
     
     multibandFocus1 = *treeState.getRawParameterValue(BAND_FOCUS_ID1);
     multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
@@ -1290,15 +1290,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID2, LINEPOS_NAME2, 0.0f, 1.0f, 0.3f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID3, LINEPOS_NAME3, 0.0f, 1.0f, 0.4f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID1, BAND_STATE_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID2, BAND_STATE_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID3, BAND_STATE_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID4, BAND_STATE_NAME4, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID1, BAND_ENABLE_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID2, BAND_ENABLE_NAME2, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID3, BAND_ENABLE_NAME3, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID4, BAND_ENABLE_NAME4, true));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID1, BAND_SOLO_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID1, BAND_SOLO_NAME1, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
     
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID1, BAND_FOCUS_NAME1, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID2, BAND_FOCUS_NAME2, false));

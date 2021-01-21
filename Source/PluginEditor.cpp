@@ -409,10 +409,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     multiFocusAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID3, multiFocusSlider3);
     multiFocusAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID4, multiFocusSlider4);
     
-    multiStateAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_STATE_ID1, multiStateSlider1);
-    multiStateAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_STATE_ID2, multiStateSlider2);
-    multiStateAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_STATE_ID3, multiStateSlider3);
-    multiStateAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_STATE_ID4, multiStateSlider4);
+    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID1, multiEnableSlider1);
+    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID2, multiEnableSlider2);
+    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID3, multiEnableSlider3);
+    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID4, multiEnableSlider4);
     
     multiFreqAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID1, multiFreqSlider1);
     multiFreqAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID2, multiFreqSlider2);
@@ -567,11 +567,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     multiFocusSlider3.setValue(multibandFocus[2]);
     multiFocusSlider4.setValue(multibandFocus[3]);
 
-    multiband.getStateArray(multibandState);
-    multiStateSlider1.setValue(multibandState[0]);
-    multiStateSlider2.setValue(multibandState[1]);
-    multiStateSlider3.setValue(multibandState[2]);
-    multiStateSlider4.setValue(multibandState[3]);
+    multiband.getEnableArray(multibandEnable);
+    multiEnableSlider1.setValue(multibandEnable[0]);
+    multiEnableSlider2.setValue(multibandEnable[1]);
+    multiEnableSlider3.setValue(multibandEnable[2]);
+    multiEnableSlider4.setValue(multibandEnable[3]);
 
     multiband.getFreqArray(multibandFreq);
     multiFreqSlider1.setValue(multibandFreq[0]);
@@ -1192,6 +1192,12 @@ void FireAudioProcessorEditor::setMultiband()
     bool state2 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID2));
     bool state3 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID3));
     multiband.setLineState(state1, state2, state3);
+
+    bool enableState1 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID1));
+    bool enableState2 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID2));
+    bool enableState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID3));
+    bool enableState4 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID4));
+    multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
 
     float pos1 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID1));
     float pos2 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID2));

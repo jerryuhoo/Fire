@@ -457,7 +457,7 @@ void Multiband::getFocusArray(bool (&input)[4])
     }
 }
 
-void Multiband::getStateArray(bool (&input)[4])
+void Multiband::getEnableArray(bool (&input)[4])
 {
     for (int i = 0; i < 4; i++)
     {
@@ -605,6 +605,18 @@ void Multiband::getLineState(bool (&input)[3])
             input[i] = verticalLines[sortedIndex[i]]->getState();
         }
     }
+}
+
+void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)
+{
+    enableState[0] = state1;
+    enableState[1] = state2;
+    enableState[2] = state3;
+    enableState[3] = state4;
+    enableButton[0]->setState(state1);
+    enableButton[1]->setState(state2);
+    enableButton[2]->setState(state3);
+    enableButton[3]->setState(state4);
 }
 
 void Multiband::setCloseButtonState()

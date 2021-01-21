@@ -957,27 +957,30 @@ void FireAudioProcessorEditor::timerCallback()
 
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 {
-    linkValue(driveKnob1, outputKnob1, linkedButton1);
-    linkValue(driveKnob2, outputKnob2, linkedButton2);
-    linkValue(driveKnob3, outputKnob3, linkedButton3);
-    linkValue(driveKnob4, outputKnob4, linkedButton4);
+    linkValue(*slider, driveKnob1, outputKnob1, linkedButton1);
+    linkValue(*slider, driveKnob2, outputKnob2, linkedButton2);
+    linkValue(*slider, driveKnob3, outputKnob3, linkedButton3);
+    linkValue(*slider, driveKnob4, outputKnob4, linkedButton4);
 }
 
-void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &ySlider, juce::TextButton& linkedButton)
+void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton)
 {
     // x changes, then y will change
     if (linkedButton.getToggleState() == true)
     {
-        ySlider.setValue(-xSlider.getValue() * 0.1f);
-//        else if (slider == &outputKnob1 && driveKnob1.isEnabled())
-//        {
-//            if (outputKnob1.getValue() <= 0 && outputKnob1.getValue() >= -10)
-//                driveKnob1.setValue(-outputKnob1.getValue() * 10);
-//            else if (outputKnob1.getValue() > 0)
-//                driveKnob1.setValue(0);
-//            else if (outputKnob1.getValue() < -10)
-//                driveKnob1.setValue(100);
-//        }
+        if (&xSlider == &driveSlider)
+        {
+            outputSlider.setValue(-xSlider.getValue() * 0.1f, juce :: dontSendNotification);
+        }
+        else if (&xSlider == &outputSlider && driveSlider.isEnabled())
+        {
+            if (outputSlider.getValue() <= 0 && outputSlider.getValue() >= -10)
+                driveSlider.setValue(-outputKnob1.getValue() * 10, juce :: dontSendNotification);
+            else if (outputSlider.getValue() > 0)
+                driveSlider.setValue(0, juce :: dontSendNotification);
+            else if (outputSlider.getValue() < -10)
+                driveSlider.setValue(100, juce :: dontSendNotification);
+        }
     }
 }
 

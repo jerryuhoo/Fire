@@ -32,9 +32,10 @@ void SpectrumComponent::paint (juce::Graphics& g)
        You should replace everything in this method with your own
        drawing code..
     */
-
+ 
     // paint lines and numbers
     g.setColour(COLOUR1.withAlpha(0.2f));
+    g.drawLine(0, getHeight() / 5, getWidth(), getHeight() / 5, 1);
     for (int i = 0; i < numberOfLines; ++i)
     {
         const double proportion = frequenciesForLines[i] / (44100 / 2.0);

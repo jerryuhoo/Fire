@@ -95,8 +95,6 @@ void Multiband::paint (juce::Graphics& g)
                 g.drawLine(xPos, startY, xPos, endY, 2);
             }
         }
-        
-        g.drawLine(0, startY + getHeight() / 5, getWidth(), startY + getHeight() / 5, 1);
  
         // freqLabel
         for (int i = 0; i < 3; i++)

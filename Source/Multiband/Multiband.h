@@ -40,7 +40,7 @@ public:
     void setLineState(bool state1, bool state2, bool state3);
     void getLineState(bool (&input)[3]);
     void reset();
-    void setLineNum(int lineNum);
+    //void setLineNum(int lineNum);
     void setLinePos(float pos1, float pos2, float pos3);
     void getLinePos(float (&input)[3]);
     void updateLines(bool isAdd, int changedIndex);

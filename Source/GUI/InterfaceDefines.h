@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION "[Early Beta] 0.83.0"
+#define VERSION "[Early Beta] 0.83.1"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"
@@ -143,8 +143,6 @@
 #define HIGH_ID             "high"
 #define HIGH_NAME           "High"
 
-#define LINENUM_ID          "lineNum"
-#define LINENUM_NAME        "LineNum"
 #define FREQ_ID1            "freq1"
 #define FREQ_NAME1          "Freq1"
 #define FREQ_ID2            "freq2"

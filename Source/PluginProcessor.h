@@ -112,11 +112,18 @@ public:
     // set preset id for vst3 init
     void setPresetId(int presetID);
     int getPresetId();
+    
+    // get number of activated lines
+    // int getLineNum();
+    void setLineNum(int lineNum);
 private:
     //==============================================================================
     
     // preset id
     int presetId = 0;
+    
+    // line number
+    int lineNum = 0;
     
     // Oscilloscope
     juce::Array<float> historyArrayL;

@@ -1270,8 +1270,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LOW_ID, LOW_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ID, BAND_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGH_ID, HIGH_NAME, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_LEFT_ID, WINDOW_LEFT_NAME, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_RIGHT_ID, WINDOW_RIGHT_NAME, false));
     
     parameters.push_back(std::make_unique<juce::AudioParameterInt>(LINENUM_ID, LINENUM_NAME, 0, 3, 0));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID1, LINE_STATE_NAME1, false));

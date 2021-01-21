@@ -311,8 +311,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowLeftButton.setClickingTogglesState(true);
     windowLeftButton.setRadioGroupId(windowButtons);
     windowLeftButton.setButtonText("Band Effect");
-    bool windowLeftButtonState = *processor.treeState.getRawParameterValue("windowLeft");
-    windowLeftButton.setToggleState(windowLeftButtonState, juce::dontSendNotification);
+    windowLeftButton.setToggleState(true, juce::NotificationType::dontSendNotification);
     windowLeftButton.setColour(juce::TextButton::buttonColourId, COLOUR6.withAlpha(0.5f));
     windowLeftButton.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
     windowLeftButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.f));
@@ -326,8 +325,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowRightButton.setClickingTogglesState(true);
     windowRightButton.setRadioGroupId(windowButtons);
     windowRightButton.setButtonText("Global Effect");
-    bool windowRightButtonState = *processor.treeState.getRawParameterValue("windowRight");
-    windowRightButton.setToggleState(windowRightButtonState, juce::dontSendNotification);
+    windowRightButton.setToggleState(false, juce::NotificationType::dontSendNotification);
     windowRightButton.setColour(juce::TextButton::buttonColourId, COLOUR6.withAlpha(0.5f));
     windowRightButton.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
     windowRightButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.f));
@@ -405,9 +403,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterLowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LOW_ID, filterLowButton);
     filterBandAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ID, filterBandButton);
     filterHighAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HIGH_ID, filterHighButton);
-    
-    windowLeftButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WINDOW_LEFT_ID, windowLeftButton);
-    windowRightButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WINDOW_RIGHT_ID, windowRightButton);
     
     multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID1, multiFocusSlider1);
     multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID2, multiFocusSlider2);
@@ -529,8 +524,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t)BinaryData::firewingslogo_pngSize);
     g.drawImage(logoWings, getWidth() - part1, 0, part1, part1, 0, 0, logoWings.getWidth(), logoWings.getHeight());
 
-    bool left = *processor.treeState.getRawParameterValue(WINDOW_LEFT_ID);
-    bool right = *processor.treeState.getRawParameterValue(WINDOW_RIGHT_ID);
+    bool left = windowLeftButton.getToggleState();
+    bool right = windowRightButton.getToggleState();
     /*
     // paint distortion function
     int mode = *processor.treeState.getRawParameterValue(MODE_ID1);

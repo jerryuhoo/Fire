@@ -294,9 +294,7 @@ private:
         filterPostAttachment,
         filterLowAttachment,
         filterBandAttachment,
-        filterHighAttachment,
-        windowLeftButtonAttachment,
-        windowRightButtonAttachment;
+        filterHighAttachment;
 
     // ComboBox attachment
     juce::ComboBox distortionMode1;

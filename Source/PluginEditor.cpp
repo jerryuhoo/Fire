@@ -418,8 +418,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     multiFreqAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID2, multiFreqSlider2);
     multiFreqAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID3, multiFreqSlider3);
     
-    lineNumSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINENUM_ID, lineNumSlider);
-    
     lineStateSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID1, lineStateSlider1);
     lineStateSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID2, lineStateSlider2);
     lineStateSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID3, lineStateSlider3);
@@ -579,14 +577,17 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     multiFreqSlider1.setValue(multibandFreq[0]);
     multiFreqSlider2.setValue(multibandFreq[1]);
     multiFreqSlider3.setValue(multibandFreq[2]);
+//    DBG("editor===");
+//    DBG(multibandFreq[0]);
+//    DBG(multibandFreq[1]);
+//    DBG(multibandFreq[2]);
 
     multiband.getLinePos(linePos);
     linePosSlider1.setValue(linePos[0]);
     linePosSlider2.setValue(linePos[1]);
     linePosSlider3.setValue(linePos[2]);
 
-    int lineNum = multiband.getLineNum();
-    lineNumSlider.setValue(lineNum);
+    processor.setLineNum(multiband.getLineNum());
 
     multiband.getLineState(lineState);
     lineStateSlider1.setValue(lineState[0]);
@@ -1181,7 +1182,7 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 
 void FireAudioProcessorEditor::setMultiband()
 {
-    multiband.setLineNum(static_cast<int>(*processor.treeState.getRawParameterValue(LINENUM_ID)));
+    //multiband.setLineNum(processor.getLineNum());
     int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
     int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
     int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));

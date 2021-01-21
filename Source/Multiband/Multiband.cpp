@@ -270,6 +270,17 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
         frequency[i] = freqTextLabel[sortedIndex[i]]->getFreq();
     }
     
+    // reset other frequency to 0
+    for (int i = lineNum; i < 3; i++)
+    {
+        frequency[i] = 0;
+    }
+//    DBG("multiband=====");
+//    DBG(lineNum);
+//    DBG(frequency[0]);
+//    DBG(frequency[1]);
+//    DBG(frequency[2]);
+    
     // set left right index
     for (int i = 0; i < lineNum; i++)
     {
@@ -456,7 +467,7 @@ void Multiband::getStateArray(bool (&input)[4])
 
 void Multiband::getFreqArray(int (&input)[3])
 {
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < lineNum; i++)
     {
         input[i] = frequency[i];
     }
@@ -532,10 +543,10 @@ void Multiband::setSoloRelatedBounds()
     }
 }
 
-void Multiband::setLineNum(int lineNum)
-{
-    this->lineNum = lineNum;
-}
+//void Multiband::setLineNum(int lineNum)
+//{
+//    this->lineNum = lineNum;
+//}
 
 void Multiband::setFocus(bool focus1, bool focus2, bool focus3, bool focus4)
 {

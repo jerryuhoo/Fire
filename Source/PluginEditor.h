@@ -66,21 +66,18 @@ private:
     juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
     juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
     juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
-    juce::Slider lineNumSlider;
     juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
     juce::Slider linePosSlider1, linePosSlider2, linePosSlider3;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiStateAttachment1, multiStateAttachment2, multiStateAttachment3, multiStateAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineNumSliderAttachment;
-    
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linePosSliderAttachment1, linePosSliderAttachment2, linePosSliderAttachment3;
     
     bool multibandFocus[4];
     bool multibandState[4];
-    int multibandFreq[3];
+    int multibandFreq[3] = {0};
     bool lineState[3];
     float linePos[3];
     

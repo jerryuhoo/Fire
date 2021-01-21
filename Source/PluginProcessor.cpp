@@ -123,7 +123,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-
+    
     // fix the artifacts (also called zipper noise)
     //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
     //previousGainInput = Decibels::decibelsToGain(previousGainInput);
@@ -437,7 +437,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
     multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
     
-    int lineNum = static_cast<int>(*treeState.getRawParameterValue(LINENUM_ID));
 //    DBG(lineNum);
 //    if (multibandState1) {
 //        DBG("state1");
@@ -1192,6 +1191,16 @@ void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<fl
     }
 }
 
+//int FireAudioProcessor::getLineNum()
+//{
+//    return lineNum;
+//}
+
+void FireAudioProcessor::setLineNum(int lineNum)
+{
+    this->lineNum = lineNum;
+}
+
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameters;
@@ -1271,7 +1280,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ID, BAND_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGH_ID, HIGH_NAME, true));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(LINENUM_ID, LINENUM_NAME, 0, 3, 0));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID1, LINE_STATE_NAME1, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID2, LINE_STATE_NAME2, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID3, LINE_STATE_NAME3, false));

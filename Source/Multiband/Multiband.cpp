@@ -105,10 +105,11 @@ void Multiband::paint (juce::Graphics& g)
             }
         }
         
-        int changedIndex = getChangedIndex();
-        if (changedIndex != -1)
+        if (isDeleted)
         {
-            updateLines(false, changedIndex);
+            int changedIndex = getChangedIndex();
+            isDeleted = false;
+            updateLines("delete", changedIndex);
         }
 
         // set black and focus masks
@@ -181,7 +182,7 @@ void Multiband::resized()
         width = 5.0f;
     }
     
-    updateLines(false, -1);
+    updateLines("resize", -1);
 }
 
 int Multiband::getChangedIndex()
@@ -204,7 +205,7 @@ int Multiband::getChangedIndex()
     return idx;
 }
 
-void Multiband::changeFocus(int changedIndex, bool isAdd)
+void Multiband::changeFocus(int changedIndex, juce::String option)
 {
     // get current focus index
     int focusIndex = 0;
@@ -221,7 +222,7 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
     int newLinePosIndex = 0; // (count from left to right in the window)
     newLinePosIndex = verticalLines[changedIndex]->getIndex();
     
-    if (isAdd)
+    if (option == "add")
     {
         // change focus index when line is added
         if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < enableButton[focusIndex]->getX()))
@@ -230,7 +231,7 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
             multibandFocus[focusIndex + 1] = true;
         }
     }
-    else // if (!isAdd)
+    else if (option == "delete")
     {
         // change focus index when line is deleted
         if (newLinePosIndex < focusIndex)
@@ -241,13 +242,13 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
     }
 }
 
-void Multiband::changeEnable(int changedIndex, bool isAdd)
+void Multiband::changeEnable(int changedIndex, juce::String option)
 {
     // get changed index -> position index
     int newLinePosIndex = 0; // (count from left to right in the window)
     newLinePosIndex = verticalLines[changedIndex]->getIndex();
     
-    if (isAdd)
+    if (option == "add")
     {
         // change enable index when line is added
         for (int i = lineNum - 1; i >= 0; --i)
@@ -266,7 +267,7 @@ void Multiband::changeEnable(int changedIndex, bool isAdd)
             }
         }
     }
-    else
+    else if (option == "delete")
     {
         // change enable index when line is deleted
         for (int i = 1; i <= lineNum + 1; ++i) // line is already deleted so +1
@@ -297,7 +298,7 @@ void Multiband::changeEnable(int changedIndex, bool isAdd)
     }
 }
 
-void Multiband::updateLines(bool isAdd, int changedIndex)
+void Multiband::updateLines(juce::String option, int changedIndex)
 {
     int count = 0;
     
@@ -380,8 +381,8 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
     if (changedIndex != -1) // if not resizing
     {
         // change focus position
-        changeFocus(changedIndex, isAdd);
-        changeEnable(changedIndex, isAdd);
+        changeFocus(changedIndex, option);
+        changeEnable(changedIndex, option);
     }
     
     // set soloButtons visibility
@@ -465,7 +466,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
-                    updateLines(true, changedIndex);
+                    updateLines("add", changedIndex);
                 }
             }
         }
@@ -712,4 +713,9 @@ void Multiband::setFocus()
     {
         multibandFocus[i] = false;
     }
+}
+
+void Multiband::lineDeleted()
+{
+    isDeleted = true;
 }

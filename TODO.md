@@ -4,10 +4,8 @@
 
 1. multiband enable button mask problem
 2. Ableton can't drag vertical lines on parameter pannel.
-3. saving preset causes vertical line position error?
-choose a and disable state0
-4. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
-5. can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
+3. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
+4. can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
 
 - Feature
 

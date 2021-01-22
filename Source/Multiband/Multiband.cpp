@@ -134,6 +134,7 @@ void Multiband::paint (juce::Graphics& g)
             g.setColour(COLOUR_MASK_RED);
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
+        
         for (int i = 1; i < lineNum; i++)
         {
             if (lineNum > 1 && enableButton[i]->getState() == false)
@@ -240,6 +241,62 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
     }
 }
 
+void Multiband::changeEnable(int changedIndex, bool isAdd)
+{
+    // get changed index -> position index
+    int newLinePosIndex = 0; // (count from left to right in the window)
+    newLinePosIndex = verticalLines[changedIndex]->getIndex();
+    
+    if (isAdd)
+    {
+        // change enable index when line is added
+        for (int i = lineNum - 1; i >= 0; --i)
+        {
+            // new line is added on the left side of disabled button
+            if ((!enableButton[i]->getState() && i > newLinePosIndex) ||
+                (!enableButton[i]->getState() && getMouseXYRelative().getX() < enableButton[i]->getX()))
+            {
+                enableState[i] = true;
+                enableButton[i]->setState(true);
+//                if (i < lineNum)
+//                {
+                    enableState[i + 1] = false;
+                    enableButton[i + 1]->setState(false);
+//                }
+            }
+        }
+    }
+    else
+    {
+        // change enable index when line is deleted
+        for (int i = 1; i <= lineNum + 1; ++i) // line is already deleted so +1
+        {
+            // if not add or deleted: for example: change preset
+            if (i > 3)
+            {
+                break;
+            }
+            
+            // new line is added on the left side of disabled button
+            if (!enableButton[i]->getState() && i > newLinePosIndex)
+            {
+                enableState[i] = true;
+                enableButton[i]->setState(true);
+                
+                enableState[i - 1] = false;
+                enableButton[i - 1]->setState(false);
+            }
+        }
+        
+        // special case: delete first line and only line number is 1 (after deleting it is 0), then delete enable[0] state
+        if (newLinePosIndex == 0 && lineNum == 0)
+        {
+            enableState[0] = true;
+            enableButton[0]->setState(true);
+        }
+    }
+}
+
 void Multiband::updateLines(bool isAdd, int changedIndex)
 {
     int count = 0;
@@ -324,6 +381,7 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
     {
         // change focus position
         changeFocus(changedIndex, isAdd);
+        changeEnable(changedIndex, isAdd);
     }
     
     // set soloButtons visibility
@@ -639,6 +697,10 @@ void Multiband::setCloseButtonState()
         if (verticalLines[i]->getState())
         {
             closeButtons[i]->setVisible(true);
+        }
+        else
+        {
+            closeButtons[i]->setVisible(false);
         }
     }
 }

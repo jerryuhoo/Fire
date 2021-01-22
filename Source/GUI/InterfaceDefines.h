@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION "[Early Beta] 0.83.2"
+#define VERSION "[Early Beta] 0.83.3"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"

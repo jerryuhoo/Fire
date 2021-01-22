@@ -1,18 +1,27 @@
 # TODO
 
-1. adjust the position of ff meters
-2. auto-update check when open
-3. 【feature】 add graph for filters
-4. maybe improve code quality about the vertical lines part (for example use Vector)
-5. 【feature】 add mid-side / width / pan knobs
-6. 【feature】 add solo/mute button between vertical lines
+- Bug
+
+1. multiband enable button mask problem
+2. Ableton can't drag vertical lines on parameter pannel.
+3. saving preset causes vertical line position error?
+choose a and disable state0
+4. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
+5. can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
+
+- Feature
+
+1. add enable button for compressor, downsample, width, filter, etc.
+2. add own volume meter, remove ff meters
+3. auto-update check when open
+4. add graph for filters
+5. add mid-side / width / pan knobs
+6. add solo/mute button between vertical lines
 7. width graph
-8. 【bug】 multiband enable button mask problem
-9. 【feature】 add drive button reduction on drive knob when safe mode is on
-10. 【feature】 mouse drag vertically to change the output volume, like Ozone or saturn2
-11. 【bug】 Ableton can't drag vertical lines on parameter pannel.
-12. 【bug】 Doesn't save focus and disable.
-13. add enable button for compressor, downsample, width, filter, etc.
-14. 【bug】 saving preset causes vertical line position error?
-15. 【bug】 can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
-16. 【bug】 can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
+8. add drive button reduction on drive knob when safe mode is on
+9. mouse drag vertically to change the output volume, like Ozone or saturn2
+
+- Improvement
+
+1. improve code quality about the vertical lines part
+2. reduce paint CPU usage

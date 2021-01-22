@@ -115,6 +115,15 @@ void Multiband::paint (juce::Graphics& g)
         int margin2 = getWidth() / 250; // 1/100 * 4 / 10
         int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
         
+        // delete line and reset deleted disabled band state
+        for (int i = 0; i < 4; ++i)
+        {
+            if (!enableButton[i]->getState() && i > lineNum)
+            {
+                enableButton[i]->setState(true);
+            }
+        }
+        
         if (lineNum > 0 && enableButton[0]->getState() == false)
         {
             g.setColour(COLOUR_MASK_BLACK);
@@ -261,7 +270,11 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
         }
     }
 
-    // reset all disabled parameters (maybe HIGH CPU!!!)
+    // clear sort index when vertical line state is false
+    for(int i = lineNum; i < 3; i++)
+    {
+        sortedIndex[i] = -1;
+    }
 
     // should set self index first, then set left and right index
     for (int i = 0; i < lineNum; i++)
@@ -275,11 +288,6 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
     {
         frequency[i] = 0;
     }
-//    DBG("multiband=====");
-//    DBG(lineNum);
-//    DBG(frequency[0]);
-//    DBG(frequency[1]);
-//    DBG(frequency[2]);
     
     // set left right index
     for (int i = 0; i < lineNum; i++)
@@ -470,6 +478,10 @@ void Multiband::getFreqArray(int (&input)[3])
     for (int i = 0; i < lineNum; i++)
     {
         input[i] = frequency[i];
+    }
+    for (int i = lineNum; i < 3; i++)
+    {
+        input[i] = 0;
     }
 }
 

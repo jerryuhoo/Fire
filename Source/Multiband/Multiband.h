@@ -22,6 +22,7 @@
 //==============================================================================
 /*
 */
+static bool isDeleted = false;
 class Multiband  : public juce::Component
 {
 public:
@@ -46,9 +47,10 @@ public:
     //void setLineNum(int lineNum);
     void setLinePos(float pos1, float pos2, float pos3);
     void getLinePos(float (&input)[3]);
-    void updateLines(bool isAdd, int changedIndex);
+    void updateLines(juce::String option, int changedIndex);
     void setCloseButtonState();
     void setFocus();
+    static void lineDeleted();
 private:
     float margin;
     float size = 15.0f;
@@ -65,8 +67,8 @@ private:
     int lineNum = 0;
     int lastLineNum = 0;
     int getChangedIndex();
-    void changeFocus(int changedIndex, bool isAdd);
-    void changeEnable(int changedIndex, bool isAdd);
+    void changeFocus(int changedIndex, juce::String option);
+    void changeEnable(int changedIndex, juce::String option);
     
     void dragLines();
     void setLineRelatedBounds(int i);

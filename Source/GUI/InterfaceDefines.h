@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION "[Early Beta] 0.83.3"
+#define VERSION "[Early Beta] 0.83.4"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"
@@ -157,14 +157,14 @@
 #define LINEPOS_ID3         "linePos3"
 #define LINEPOS_NAME3       "LinePos3"
 
-#define BAND_ENABLE_ID1     "multibandState1"
-#define BAND_ENABLE_NAME1   "MultibandState1"
-#define BAND_ENABLE_ID2     "multibandState2"
-#define BAND_ENABLE_NAME2   "MultibandState2"
-#define BAND_ENABLE_ID3     "multibandState3"
-#define BAND_ENABLE_NAME3   "MultibandState3"
-#define BAND_ENABLE_ID4     "multibandState4"
-#define BAND_ENABLE_NAME4   "MultibandState4"
+#define BAND_ENABLE_ID1     "multibandEnable1"
+#define BAND_ENABLE_NAME1   "MultibandEnable1"
+#define BAND_ENABLE_ID2     "multibandEnable2"
+#define BAND_ENABLE_NAME2   "MultibandEnable2"
+#define BAND_ENABLE_ID3     "multibandEnable3"
+#define BAND_ENABLE_NAME3   "MultibandEnable3"
+#define BAND_ENABLE_ID4     "multibandEnable4"
+#define BAND_ENABLE_NAME4   "MultibandEnable4"
 
 #define BAND_SOLO_ID1       "multibandSolo1"
 #define BAND_SOLO_NAME1     "MultibandSolo1"

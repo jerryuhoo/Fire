@@ -49,14 +49,12 @@ public:
     void updateLines(bool isAdd, int changedIndex);
     void setCloseButtonState();
     void setFocus();
-
 private:
     float margin;
     float size = 15.0f;
     float width = 5.0f;
     float limitLeft;
     float limitRight;
-    
     
 //    // Spectrum
 //    SpectrumComponent spectrum;
@@ -68,7 +66,7 @@ private:
     int lastLineNum = 0;
     int getChangedIndex();
     void changeFocus(int changedIndex, bool isAdd);
-    
+    void changeEnable(int changedIndex, bool isAdd);
     
     void dragLines();
     void setLineRelatedBounds(int i);

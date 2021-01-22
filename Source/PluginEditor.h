@@ -77,7 +77,7 @@ private:
     
     bool multibandFocus[4];
     bool multibandEnable[4];
-    int multibandFreq[3] = {0};
+    int multibandFreq[3] = { 0, 0, 0 };
     bool lineState[3];
     float linePos[3];
     

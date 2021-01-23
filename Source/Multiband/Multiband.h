@@ -22,7 +22,7 @@
 //==============================================================================
 /*
 */
-static bool isDeleted = false;
+
 class Multiband  : public juce::Component
 {
 public:
@@ -51,13 +51,23 @@ public:
     void setCloseButtonState();
     void setFocus();
     static void lineDeleted();
+    bool getAddState();
+    void setAddState(bool state);
+    bool getMovingState();
+    void setMovingState(bool state);
+    bool getDeleteState();
+    void setDeleteState(bool state);
+    int getChangedIndex();
 private:
+    inline static bool isDeleted = false;
     float margin;
     float size = 15.0f;
     float width = 5.0f;
     float limitLeft;
     float limitRight;
-    
+    bool isAdded = false;
+    bool isMoving = false;
+    // bool isEnableChanged = false;
 //    // Spectrum
 //    SpectrumComponent spectrum;
     
@@ -66,7 +76,7 @@ private:
     void mouseDown(const juce::MouseEvent &e) override;
     int lineNum = 0;
     int lastLineNum = 0;
-    int getChangedIndex();
+    
     void changeFocus(int changedIndex, juce::String option);
     void changeEnable(int changedIndex, juce::String option);
     

@@ -105,12 +105,12 @@ void Multiband::paint (juce::Graphics& g)
             }
         }
         
-        if (isDeleted)
-        {
-            int changedIndex = getChangedIndex();
-            isDeleted = false;
-            updateLines("delete", changedIndex);
-        }
+//        if (isDeleted)
+//        {
+//            int changedIndex = getChangedIndex();
+//            isDeleted = false;
+//            updateLines("delete", changedIndex);
+//        }
 
         // set black and focus masks
         int margin2 = getWidth() / 250; // 1/100 * 4 / 10
@@ -272,13 +272,13 @@ void Multiband::changeEnable(int changedIndex, juce::String option)
         // change enable index when line is deleted
         for (int i = 1; i <= lineNum + 1; ++i) // line is already deleted so +1
         {
-            // if not add or deleted: for example: change preset
+            // for safety
             if (i > 3)
             {
                 break;
             }
             
-            // new line is added on the left side of disabled button
+            // new line is deleted on the left side of disabled button
             if (!enableButton[i]->getState() && i > newLinePosIndex)
             {
                 enableState[i] = true;
@@ -467,6 +467,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 if (changedIndex != -1)
                 {
                     updateLines("add", changedIndex);
+                    isAdded = true;
                 }
             }
         }
@@ -559,14 +560,13 @@ void Multiband::reset()
         multibandFocus[i + 1] = false;
         sortedIndex[i] = 0;
         frequency[i] = 0;
+        lastLineState[i] = verticalLines[i]->getState();
     }
     lineNum = 0;
 }
 
 void Multiband::dragLines()
 {
-    bool isMoving = false;
-    
     // drag
     for (int i = 0; i < 3; i++)
     {
@@ -635,6 +635,9 @@ void Multiband::setLineState(bool state1, bool state2, bool state3)
     verticalLines[0]->setState(state1);
     verticalLines[1]->setState(state2);
     verticalLines[2]->setState(state3);
+    lastLineState[0] = state1;
+    lastLineState[1] = state2;
+    lastLineState[2] = state3;
 }
 
 void Multiband::setLinePos(float pos1, float pos2, float pos3)
@@ -718,4 +721,34 @@ void Multiband::setFocus()
 void Multiband::lineDeleted()
 {
     isDeleted = true;
+}
+
+bool Multiband::getAddState()
+{
+    return isAdded;
+}
+
+void Multiband::setAddState(bool state)
+{
+    isAdded = state;
+}
+
+bool Multiband::getMovingState()
+{
+    return isMoving;
+}
+
+void Multiband::setMovingState(bool state)
+{
+    isMoving = state;
+}
+
+bool Multiband::getDeleteState()
+{
+    return isDeleted;
+}
+
+void Multiband::setDeleteState(bool state)
+{
+    isDeleted = state;
 }

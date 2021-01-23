@@ -561,38 +561,56 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         stateComponent.setInitState(false);
     }
 
+    // set value only when line is deleted, added, moving
+    if (multiband.getDeleteState() || multiband.getAddState() || multiband.getMovingState())
+    {
+        if (multiband.getDeleteState())
+        {
+            multiband.updateLines("delete", multiband.getChangedIndex());
+            multiband.setDeleteState(false);
+        }
+        else if (multiband.getAddState())
+        {
+            multiband.updateLines("add", multiband.getChangedIndex());
+            multiband.setAddState(false);
+        }
+        else if (multiband.getMovingState())
+        {
+            multiband.updateLines("moving", multiband.getChangedIndex());
+            multiband.setMovingState(false);
+        }
+
+        multiband.getFreqArray(multibandFreq);
+        multiFreqSlider1.setValue(multibandFreq[0]);
+        multiFreqSlider2.setValue(multibandFreq[1]);
+        multiFreqSlider3.setValue(multibandFreq[2]);
+
+        multiband.getLinePos(linePos);
+        linePosSlider1.setValue(linePos[0]);
+        linePosSlider2.setValue(linePos[1]);
+        linePosSlider3.setValue(linePos[2]);
+
+        multiband.getLineState(lineState);
+        lineStateSlider1.setValue(lineState[0]);
+        lineStateSlider2.setValue(lineState[1]);
+        lineStateSlider3.setValue(lineState[2]);
+        
+        processor.setLineNum(multiband.getLineNum());
+    }
+    
     multiband.getFocusArray(multibandFocus);
     multiFocusSlider1.setValue(multibandFocus[0]);
     multiFocusSlider2.setValue(multibandFocus[1]);
     multiFocusSlider3.setValue(multibandFocus[2]);
     multiFocusSlider4.setValue(multibandFocus[3]);
-
+    
+    // TODO: put this inside
     multiband.getEnableArray(multibandEnable);
     multiEnableSlider1.setValue(multibandEnable[0]);
     multiEnableSlider2.setValue(multibandEnable[1]);
     multiEnableSlider3.setValue(multibandEnable[2]);
     multiEnableSlider4.setValue(multibandEnable[3]);
-
-    multiband.getFreqArray(multibandFreq);
-    multiFreqSlider1.setValue(multibandFreq[0]);
-    multiFreqSlider2.setValue(multibandFreq[1]);
-    multiFreqSlider3.setValue(multibandFreq[2]);
-//    DBG("editor===");
-//    DBG(multibandFreq[0]);
-//    DBG(multibandFreq[1]);
-//    DBG(multibandFreq[2]);
-
-    multiband.getLinePos(linePos);
-    linePosSlider1.setValue(linePos[0]);
-    linePosSlider2.setValue(linePos[1]);
-    linePosSlider3.setValue(linePos[2]);
-
-    processor.setLineNum(multiband.getLineNum());
-
-    multiband.getLineState(lineState);
-    lineStateSlider1.setValue(lineState[0]);
-    lineStateSlider2.setValue(lineState[1]);
-    lineStateSlider3.setValue(lineState[2]);
+    
 
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 //        spectrum.setVisible(false);

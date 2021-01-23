@@ -58,6 +58,7 @@ public:
     bool getDeleteState();
     void setDeleteState(bool state);
     int getChangedIndex();
+    void dragLines(float xPercent);
 private:
     inline static bool isDeleted = false;
     float margin;
@@ -80,7 +81,6 @@ private:
     void changeFocus(int changedIndex, juce::String option);
     void changeEnable(int changedIndex, juce::String option);
     
-    void dragLines();
     void setLineRelatedBounds(int i);
     void setSoloRelatedBounds();
 

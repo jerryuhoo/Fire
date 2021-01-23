@@ -45,7 +45,9 @@ private:
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
     juce::String lastPresetName;
-
+    
+    // init editor
+    void initEditor();
 
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
@@ -62,25 +64,23 @@ private:
     // TODO: this is temporary method. Maybe should create custom attachments. juce::ParameterAttachment?
     
     juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
-    juce::Slider multiStateSlider1, multiStateSlider2, multiStateSlider3, multiStateSlider4;
+    juce::Slider multiEnableSlider1, multiEnableSlider2, multiEnableSlider3, multiEnableSlider4;
     juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
-    juce::Slider lineNumSlider;
     juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
     juce::Slider linePosSlider1, linePosSlider2, linePosSlider3;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiStateAttachment1, multiStateAttachment2, multiStateAttachment3, multiStateAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineNumSliderAttachment;
-    
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linePosSliderAttachment1, linePosSliderAttachment2, linePosSliderAttachment3;
     
     bool multibandFocus[4];
-    bool multibandState[4];
-    int multibandFreq[3];
+    bool multibandEnable[4];
+    int multibandFreq[3] = { 0, 0, 0 };
     bool lineState[3];
     float linePos[3];
+    
     // Spectrum
     SpectrumComponent spectrum;
     
@@ -205,15 +205,15 @@ private:
     void setLinearSlider(juce::Slider& slider);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void changeSliderState(juce::ComboBox *combobox);
-    void disableSlider(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
-    void linkValue(juce::Slider &xSlider, juce::Slider &ySlider);
+    void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
+    void linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton);
     void setDistortionGraph(juce::String modeId, juce::String driveId,
         juce::String recId, juce::String mixId, juce::String biasId);
 
     void initState();
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
-
+    bool isPresetChanged();
 
 
 
@@ -291,9 +291,7 @@ private:
         filterPostAttachment,
         filterLowAttachment,
         filterBandAttachment,
-        filterHighAttachment,
-        windowLeftButtonAttachment,
-        windowRightButtonAttachment;
+        filterHighAttachment;
 
     // ComboBox attachment
     juce::ComboBox distortionMode1;

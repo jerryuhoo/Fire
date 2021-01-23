@@ -65,6 +65,11 @@ bool EnableButton::getState()
     return mState;
 }
 
+void EnableButton::setState(bool state)
+{
+    mState = state;
+}
+
 juce::Colour EnableButton::getColour()
 {
     if (isEntered)

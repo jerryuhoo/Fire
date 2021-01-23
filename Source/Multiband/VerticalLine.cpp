@@ -10,6 +10,7 @@
 
 #include <JuceHeader.h>
 #include "VerticalLine.h"
+#include "Multiband.h"
 
 //==============================================================================
 VerticalLine::VerticalLine()
@@ -91,6 +92,7 @@ void VerticalLine::setState(bool state)
     {
         setVisible(false);
         xPercent = 0;
+        Multiband::lineDeleted();
     }
     else
     {

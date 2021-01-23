@@ -78,7 +78,6 @@ void Multiband::paint (juce::Graphics& g)
         float xPos = mousePos.getX();
         float yPos = mousePos.getY();
         
-
         if (yPos >= startY && yPos <= startY + getHeight() / 5 && lineNum < 3)
         {   
             bool canCreate = true;
@@ -96,9 +95,6 @@ void Multiband::paint (juce::Graphics& g)
                 g.drawLine(xPos, startY, xPos, endY, 2);
             }
         }
-        
-        g.drawLine(0, startY + getHeight() / 5, getWidth(), startY + getHeight() / 5, 1);
-
  
         // freqLabel
         for (int i = 0; i < 3; i++)
@@ -109,18 +105,25 @@ void Multiband::paint (juce::Graphics& g)
             }
         }
         
-        
-        //TODO: this may cause high CPU usage! because this is used only when the mouse clicks (add and delete)
-        int changedIndex = getChangedIndex();
-        if (changedIndex != -1)
-        {
-            updateLines(false, changedIndex);
-        }
-        
+//        if (isDeleted)
+//        {
+//            int changedIndex = getChangedIndex();
+//            isDeleted = false;
+//            updateLines("delete", changedIndex);
+//        }
 
         // set black and focus masks
         int margin2 = getWidth() / 250; // 1/100 * 4 / 10
         int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
+        
+        // delete line and reset deleted disabled band state
+        for (int i = 0; i < 4; ++i)
+        {
+            if (!enableButton[i]->getState() && i > lineNum)
+            {
+                enableButton[i]->setState(true);
+            }
+        }
         
         if (lineNum > 0 && enableButton[0]->getState() == false)
         {
@@ -132,6 +135,7 @@ void Multiband::paint (juce::Graphics& g)
             g.setColour(COLOUR_MASK_RED);
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
+        
         for (int i = 1; i < lineNum; i++)
         {
             if (lineNum > 1 && enableButton[i]->getState() == false)
@@ -156,8 +160,8 @@ void Multiband::paint (juce::Graphics& g)
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         
-        dragLines();
- 
+        float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+        dragLines(targetXPercent);
     }
 }
 
@@ -179,7 +183,7 @@ void Multiband::resized()
         width = 5.0f;
     }
     
-    updateLines(false, -1);
+    updateLines("resize", -1);
 }
 
 int Multiband::getChangedIndex()
@@ -202,7 +206,7 @@ int Multiband::getChangedIndex()
     return idx;
 }
 
-void Multiband::changeFocus(int changedIndex, bool isAdd)
+void Multiband::changeFocus(int changedIndex, juce::String option)
 {
     // get current focus index
     int focusIndex = 0;
@@ -219,7 +223,7 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
     int newLinePosIndex = 0; // (count from left to right in the window)
     newLinePosIndex = verticalLines[changedIndex]->getIndex();
     
-    if (isAdd)
+    if (option == "add")
     {
         // change focus index when line is added
         if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < enableButton[focusIndex]->getX()))
@@ -228,7 +232,7 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
             multibandFocus[focusIndex + 1] = true;
         }
     }
-    else // if (!isAdd)
+    else if (option == "delete")
     {
         // change focus index when line is deleted
         if (newLinePosIndex < focusIndex)
@@ -239,7 +243,63 @@ void Multiband::changeFocus(int changedIndex, bool isAdd)
     }
 }
 
-void Multiband::updateLines(bool isAdd, int changedIndex)
+void Multiband::changeEnable(int changedIndex, juce::String option)
+{
+    // get changed index -> position index
+    int newLinePosIndex = 0; // (count from left to right in the window)
+    newLinePosIndex = verticalLines[changedIndex]->getIndex();
+    
+    if (option == "add")
+    {
+        // change enable index when line is added
+        for (int i = lineNum - 1; i >= 0; --i)
+        {
+            // new line is added on the left side of disabled button
+            if ((!enableButton[i]->getState() && i > newLinePosIndex) ||
+                (!enableButton[i]->getState() && getMouseXYRelative().getX() < enableButton[i]->getX()))
+            {
+                enableState[i] = true;
+                enableButton[i]->setState(true);
+//                if (i < lineNum)
+//                {
+                    enableState[i + 1] = false;
+                    enableButton[i + 1]->setState(false);
+//                }
+            }
+        }
+    }
+    else if (option == "delete")
+    {
+        // change enable index when line is deleted
+        for (int i = 1; i <= lineNum + 1; ++i) // line is already deleted so +1
+        {
+            // for safety
+            if (i > 3)
+            {
+                break;
+            }
+            
+            // new line is deleted on the left side of disabled button
+            if (!enableButton[i]->getState() && i > newLinePosIndex)
+            {
+                enableState[i] = true;
+                enableButton[i]->setState(true);
+                
+                enableState[i - 1] = false;
+                enableButton[i - 1]->setState(false);
+            }
+        }
+        
+        // special case: delete first line and only line number is 1 (after deleting it is 0), then delete enable[0] state
+        if (newLinePosIndex == 0 && lineNum == 0)
+        {
+            enableState[0] = true;
+            enableButton[0]->setState(true);
+        }
+    }
+}
+
+void Multiband::updateLines(juce::String option, int changedIndex)
 {
     int count = 0;
     
@@ -254,6 +314,7 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
             count++;
         }
     }
+    
     lineNum = count;
 
     // sort
@@ -268,14 +329,23 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
         }
     }
 
-    
-    // reset all disabled parameters (maybe HIGH CPU!!!)
+    // clear sort index when vertical line state is false
+    for(int i = lineNum; i < 3; i++)
+    {
+        sortedIndex[i] = -1;
+    }
 
     // should set self index first, then set left and right index
     for (int i = 0; i < lineNum; i++)
     {
         verticalLines[sortedIndex[i]]->setIndex(i); // this index is the No. you count the line from left to right
         frequency[i] = freqTextLabel[sortedIndex[i]]->getFreq();
+    }
+    
+    // reset other frequency to 0
+    for (int i = lineNum; i < 3; i++)
+    {
+        frequency[i] = 0;
     }
     
     // set left right index
@@ -308,11 +378,12 @@ void Multiband::updateLines(bool isAdd, int changedIndex)
 //            break;
 //        }
 //    }
-//
+
     if (changedIndex != -1) // if not resizing
     {
         // change focus position
-        changeFocus(changedIndex, isAdd);
+        changeFocus(changedIndex, option);
+        changeEnable(changedIndex, option);
     }
     
     // set soloButtons visibility
@@ -355,7 +426,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
 {
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
-        
         if (lineNum < 3)
         {
             bool canCreate = true;
@@ -393,23 +463,20 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         break;
                     }
                 }
-                
-                
 
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
-                    updateLines(true, changedIndex);
+                    updateLines("add", changedIndex);
+                    isAdded = true;
                 }
-
-                
             }
         }
-        
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
         int num = lineNum;
+        
         for (int i = 0; i < 4; i++)
         {
             multibandFocus[i] = false;
@@ -443,13 +510,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 return;
             }
         }
-
-        
-//        for (int i = 0; i < 4; i++) {
-//            if (multibandFocus[i]) {
-//                DBG(i);
-//            }
-//        }
     }
 }
 
@@ -466,7 +526,7 @@ void Multiband::getFocusArray(bool (&input)[4])
     }
 }
 
-void Multiband::getStateArray(bool (&input)[4])
+void Multiband::getEnableArray(bool (&input)[4])
 {
     for (int i = 0; i < 4; i++)
     {
@@ -476,9 +536,13 @@ void Multiband::getStateArray(bool (&input)[4])
 
 void Multiband::getFreqArray(int (&input)[3])
 {
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < lineNum; i++)
     {
         input[i] = frequency[i];
+    }
+    for (int i = lineNum; i < 3; i++)
+    {
+        input[i] = 0;
     }
 }
 
@@ -497,20 +561,18 @@ void Multiband::reset()
         multibandFocus[i + 1] = false;
         sortedIndex[i] = 0;
         frequency[i] = 0;
+        lastLineState[i] = verticalLines[i]->getState();
     }
     lineNum = 0;
-    
 }
 
-void Multiband::dragLines()
+void Multiband::dragLines(float xPercent)
 {
-    bool isMoving = false;
     // drag
     for (int i = 0; i < 3; i++)
     {
         if (verticalLines[i]->isMoving())
         {
-            float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             verticalLines[i]->moveToX(lineNum, xPercent, limitLeft, verticalLines, sortedIndex);
             isMoving = true;
         }
@@ -521,6 +583,7 @@ void Multiband::dragLines()
         for (int i = 0; i < 3; i++)
         {
             setLineRelatedBounds(i);
+            frequency[i] = freqTextLabel[sortedIndex[i]]->getFreq();
         }
         setSoloRelatedBounds();
     }
@@ -528,7 +591,6 @@ void Multiband::dragLines()
 
 void Multiband::setLineRelatedBounds(int i)
 {
-    
     verticalLines[i]->setBounds(verticalLines[i]->getXPercent() * getWidth() - getWidth() / 200, 0, getWidth() / 100, getHeight());
     closeButtons[i]->setBounds(verticalLines[i]->getX() + width + margin, margin, size, size);
 
@@ -536,8 +598,6 @@ void Multiband::setLineRelatedBounds(int i)
     freqTextLabel[i]->setScale(juce::jmin(width / 5.0f, size / 15.0f));
     int freq = static_cast<int>(SpectrumComponent::transformFromLog(verticalLines[i]->getXPercent()) * (44100 / 2.0));
     freqTextLabel[i]->setFreq(freq);
-//        frequency[sortedIndex[i]] = freq;
-    
 }
 
 void Multiband::setSoloRelatedBounds()
@@ -554,10 +614,10 @@ void Multiband::setSoloRelatedBounds()
     }
 }
 
-void Multiband::setLineNum(int lineNum)
-{
-    this->lineNum = lineNum;
-}
+//void Multiband::setLineNum(int lineNum)
+//{
+//    this->lineNum = lineNum;
+//}
 
 void Multiband::setFocus(bool focus1, bool focus2, bool focus3, bool focus4)
 {
@@ -575,6 +635,9 @@ void Multiband::setLineState(bool state1, bool state2, bool state3)
     verticalLines[0]->setState(state1);
     verticalLines[1]->setState(state2);
     verticalLines[2]->setState(state3);
+    lastLineState[0] = state1;
+    lastLineState[1] = state2;
+    lastLineState[2] = state3;
 }
 
 void Multiband::setLinePos(float pos1, float pos2, float pos3)
@@ -607,7 +670,6 @@ void Multiband::getLineState(bool (&input)[3])
 {
     for (int i = 0; i < 3; i++)
     {
-//        input[i] = lineState[i];
         if (sortedIndex[i] < 0)
         {
             input[i] = false;
@@ -619,6 +681,18 @@ void Multiband::getLineState(bool (&input)[3])
     }
 }
 
+void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)
+{
+    enableState[0] = state1;
+    enableState[1] = state2;
+    enableState[2] = state3;
+    enableState[3] = state4;
+    enableButton[0]->setState(state1);
+    enableButton[1]->setState(state2);
+    enableButton[2]->setState(state3);
+    enableButton[3]->setState(state4);
+}
+
 void Multiband::setCloseButtonState()
 {
     for (int i = 0; i < 3; i++)
@@ -627,6 +701,10 @@ void Multiband::setCloseButtonState()
         if (verticalLines[i]->getState())
         {
             closeButtons[i]->setVisible(true);
+        }
+        else
+        {
+            closeButtons[i]->setVisible(false);
         }
     }
 }
@@ -638,4 +716,39 @@ void Multiband::setFocus()
     {
         multibandFocus[i] = false;
     }
+}
+
+void Multiband::lineDeleted()
+{
+    isDeleted = true;
+}
+
+bool Multiband::getAddState()
+{
+    return isAdded;
+}
+
+void Multiband::setAddState(bool state)
+{
+    isAdded = state;
+}
+
+bool Multiband::getMovingState()
+{
+    return isMoving;
+}
+
+void Multiband::setMovingState(bool state)
+{
+    isMoving = state;
+}
+
+bool Multiband::getDeleteState()
+{
+    return isDeleted;
+}
+
+void Multiband::setDeleteState(bool state)
+{
+    isDeleted = state;
 }

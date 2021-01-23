@@ -123,7 +123,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-
+    
     // fix the artifacts (also called zipper noise)
     //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
     //previousGainInput = Decibels::decibelsToGain(previousGainInput);
@@ -296,6 +296,15 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mBuffer2.clear();
     mBuffer3.clear();
     mBuffer4.clear();
+
+    dryBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    dryBuffer2.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    dryBuffer3.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    dryBuffer4.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    dryBuffer1.clear();
+    dryBuffer2.clear();
+    dryBuffer3.clear();
+    dryBuffer4.clear();
     
     lowpass1.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
     lowpass2.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
@@ -367,8 +376,18 @@ bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) cons
 }
 #endif
 
+void FireAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer,
+                           juce::MidiBuffer& midiMessages)
+{
+    // set bypass to true
+    isBypassed = true;
+}
+
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer &midiMessages)
 {
+    // set bypass to false
+    isBypassed = false;
+
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
@@ -407,18 +426,17 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     mBuffer2.makeCopyOf(buffer);
     mBuffer3.makeCopyOf(buffer);
     mBuffer4.makeCopyOf(buffer);
-    
-    multibandState1 = *treeState.getRawParameterValue(BAND_STATE_ID1);
-    multibandState2 = *treeState.getRawParameterValue(BAND_STATE_ID2);
-    multibandState3 = *treeState.getRawParameterValue(BAND_STATE_ID3);
-    multibandState4 = *treeState.getRawParameterValue(BAND_STATE_ID4);
+
+    multibandState1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
+    multibandState2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
+    multibandState3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
+    multibandState4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
     
     multibandFocus1 = *treeState.getRawParameterValue(BAND_FOCUS_ID1);
     multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
     multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
     multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
     
-    int lineNum = static_cast<int>(*treeState.getRawParameterValue(LINENUM_ID));
 //    DBG(lineNum);
 //    if (multibandState1) {
 //        DBG("state1");
@@ -444,6 +462,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass1.process (context1);
         }
 
+        dryBuffer1.makeCopyOf(mBuffer1);
+
         // dsp process
         auto* channeldataL = mBuffer1.getWritePointer(0);
         auto* channeldataR = mBuffer1.getWritePointer(1);
@@ -464,7 +484,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         compressorProcessor1.process(context1);
 
         // mix process
-        mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1); 
+        mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1, dryBuffer1);
     }
     
     if (multibandState2 && lineNum >= 1)
@@ -480,6 +500,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass2.process(context2);
         }
 
+        dryBuffer2.makeCopyOf(mBuffer2);
+        
         setParams(MODE_ID2, DRIVE_ID2, SAFE_ID2, OUTPUT_ID2, MIX_ID2, BIAS_ID2, mBuffer2, distortionProcessor2, driveSmoother2, outputSmoother2, mixSmoother2, biasSmoother2);
         processDistortion(MODE_ID2, REC_ID2, mBuffer2, totalNumInputChannels, driveSmoother2, recSmoother2, distortionProcessor2);
         normalize(MODE_ID2, mBuffer2, totalNumInputChannels, recSmoother2, outputSmoother2);
@@ -499,7 +521,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         compressorProcessor2.process(context2);
         
         // mix process
-        mixProcessor(MIX_ID2, mixSmoother2, totalNumInputChannels, mBuffer2);
+        mixProcessor(MIX_ID2, mixSmoother2, totalNumInputChannels, mBuffer2, dryBuffer2);
     }
     
     if (multibandState3 && lineNum >= 2)
@@ -514,6 +536,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass3.setCutoffFrequency(freqValue3);
             lowpass3.process(context3);
         }
+
+        dryBuffer3.makeCopyOf(mBuffer3);
+
         setParams(MODE_ID3, DRIVE_ID3, SAFE_ID3, OUTPUT_ID3, MIX_ID3, BIAS_ID3, mBuffer3, distortionProcessor3, driveSmoother3, outputSmoother3, mixSmoother3, biasSmoother3);
         processDistortion(MODE_ID3, REC_ID3, mBuffer3, totalNumInputChannels, driveSmoother3, recSmoother3, distortionProcessor3);
         normalize(MODE_ID3, mBuffer3, totalNumInputChannels, recSmoother3, outputSmoother3);
@@ -533,7 +558,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         compressorProcessor3.process(context3);
         
         // mix process
-        mixProcessor(MIX_ID3, mixSmoother3, totalNumInputChannels, mBuffer3);
+        mixProcessor(MIX_ID3, mixSmoother3, totalNumInputChannels, mBuffer3, dryBuffer3);
     }
     
     if (multibandState4 && lineNum == 3)
@@ -543,6 +568,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         highpass3.setCutoffFrequency(freqValue3);
         highpass3.process (context4);
         
+        dryBuffer4.makeCopyOf(mBuffer4);
+
         setParams(MODE_ID4, DRIVE_ID4, SAFE_ID4, OUTPUT_ID4, MIX_ID4, BIAS_ID4, mBuffer4, distortionProcessor4, driveSmoother4, outputSmoother4, mixSmoother4, biasSmoother4);
         processDistortion(MODE_ID4, REC_ID4, mBuffer4, totalNumInputChannels, driveSmoother4, recSmoother4, distortionProcessor4);
         normalize(MODE_ID4, mBuffer4, totalNumInputChannels, recSmoother4, outputSmoother4);
@@ -562,7 +589,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         compressorProcessor4.process(context4);
         
         // mix process
-        mixProcessor(MIX_ID4, mixSmoother4, totalNumInputChannels, mBuffer4);
+        mixProcessor(MIX_ID4, mixSmoother4, totalNumInputChannels, mBuffer4, dryBuffer4);
     }
     
     buffer.clear();
@@ -640,6 +667,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
             channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample] * smoothOutputValue;
             // channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
+            
             // mDelay is delayed clean signal
             if (sample % 10 == 0)
             {
@@ -680,7 +708,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     //visualiser.pushBuffer(buffer);
     
 //    historyBuffer.makeCopyOf(buffer);
-    
 }
 
 //==============================================================================
@@ -704,14 +731,17 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock &destData)
     int xmlIndex = 0;
     juce::XmlElement xmlState{"state"};
 
-    // 1. save treestate
+    // 1. save treestate (parameters)
     auto state = treeState.copyState();
     std::unique_ptr<juce::XmlElement> treeStateXml(state.createXml());
     xmlState.insertChildElement(treeStateXml.release(), xmlIndex++);
 
-    // 2. save current preset ID
-    std::unique_ptr<juce::XmlElement> currentStateXml{new juce::XmlElement{"currentPresetID"}};
-    currentStateXml->setAttribute("ID", statePresets.getCurrentPresetId());
+    // 2. save current preset ID, width and height
+    std::unique_ptr<juce::XmlElement> currentStateXml{new juce::XmlElement{"otherState"}};
+    currentStateXml->setAttribute("currentPresetID", statePresets.getCurrentPresetId());
+    currentStateXml->setAttribute("editorWidth", editorWidth);
+    currentStateXml->setAttribute("editorHeight", editorHeight);
+
     xmlState.insertChildElement(currentStateXml.release(), xmlIndex++);
 
     copyXmlToBinary(xmlState, destData);
@@ -737,10 +767,26 @@ void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
         const auto xmlCurrentState = xmlState->getChildElement(xmlIndex++);
         if (xmlCurrentState != nullptr)
         {
-            int presetID = xmlCurrentState->getIntAttribute("ID", 0);
-            statePresets.setCurrentPresetId(presetID);
+            // load preset
+            presetId = xmlCurrentState->getIntAttribute("currentPresetID", 0);
+            //setPresetId(presetId);
+            
+            editorWidth = xmlCurrentState->getIntAttribute("editorWidth", INIT_WIDTH);
+            editorHeight = xmlCurrentState->getIntAttribute("editorHeight", INIT_HEIGHT);
         }
     }
+}
+
+void FireAudioProcessor::setPresetId(int presetId)
+{
+    //statePresets.setCurrentPresetId(presetId);
+    //statePresets.loadPreset("preset" + (juce::String)presetId);
+    //DBG(statePresets.getPresetName());
+}
+
+int FireAudioProcessor::getPresetId()
+{
+    return presetId;
 }
 
 //==============================================================================
@@ -911,7 +957,6 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
     {
         distortionProcessor.controls.bias = 0;
     }
-
 }
 
 void FireAudioProcessor::processDistortion(juce::String modeId, juce::String recId, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& driveSmoother, juce::SmoothedValue<float>& recSmoother, Distortion& distortionProcessor)
@@ -1001,7 +1046,6 @@ void FireAudioProcessor::processDistortion(juce::String modeId, juce::String rec
             // distortion
             if (mode < 9)
             {
-                
                 distortionProcessor.controls.drive = driveSmoother.getNextValue();
 
 //                distortionProcessor.controls.output = outputSmoother.getNextValue();
@@ -1104,7 +1148,32 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
 //    compressorProcessor.process(context);
 //}
 
-void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer)
+int FireAudioProcessor::getSavedWidth() const
+{
+    return editorWidth;
+}
+
+int FireAudioProcessor::getSavedHeight() const
+{
+    return editorHeight;
+}
+
+void FireAudioProcessor::setSavedWidth(const int width)
+{
+    editorWidth = width;
+}
+
+void FireAudioProcessor::setSavedHeight(const int height)
+{
+    editorHeight = height;
+}
+
+bool FireAudioProcessor::getBypassedState()
+{
+    return isBypassed;
+}
+
+void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer)
 {
     float mix = *treeState.getRawParameterValue(mixId);
     mixSmoother.setTargetValue(mix);
@@ -1120,6 +1189,16 @@ void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<fl
             channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
         }
     }
+}
+
+//int FireAudioProcessor::getLineNum()
+//{
+//    return lineNum;
+//}
+
+void FireAudioProcessor::setLineNum(int lineNum)
+{
+    this->lineNum = lineNum;
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
@@ -1200,10 +1279,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LOW_ID, LOW_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ID, BAND_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGH_ID, HIGH_NAME, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_LEFT_ID, WINDOW_LEFT_NAME, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WINDOW_RIGHT_ID, WINDOW_RIGHT_NAME, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(LINENUM_ID, LINENUM_NAME, 0, 3, 0));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID1, LINE_STATE_NAME1, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID2, LINE_STATE_NAME2, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID3, LINE_STATE_NAME3, false));
@@ -1214,15 +1290,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID2, LINEPOS_NAME2, 0.0f, 1.0f, 0.3f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID3, LINEPOS_NAME3, 0.0f, 1.0f, 0.4f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID1, BAND_STATE_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID2, BAND_STATE_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID3, BAND_STATE_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_STATE_ID4, BAND_STATE_NAME4, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID1, BAND_ENABLE_NAME1, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID2, BAND_ENABLE_NAME2, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID3, BAND_ENABLE_NAME3, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID4, BAND_ENABLE_NAME4, true));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID1, BAND_SOLO_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, true));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID1, BAND_SOLO_NAME1, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
     
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID1, BAND_FOCUS_NAME1, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID2, BAND_FOCUS_NAME2, false));

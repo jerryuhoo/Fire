@@ -39,7 +39,8 @@ public:
 #endif
 
     void processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &) override;
-
+    void processBlockBypassed (juce::AudioBuffer<float>& buffer,
+                               juce::MidiBuffer& midiMessages) override;
     //==============================================================================
     juce::AudioProcessorEditor *createEditor() override;
     bool hasEditor() const override;
@@ -78,7 +79,6 @@ public:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     // ff meter
-    // ff meter
     foleys::LevelMeterSource &getInputMeterSource()
     {
         return inputMeterSource;
@@ -87,10 +87,6 @@ public:
     {
         return outputMeterSource;
     }
-
-    // temporary use this method. This is not ideal. You should put your visualiser in Editor not in Processor
-    // probably use fifo
-    //Visualiser visualiser;
 
     juce::Array<float> getHistoryArrayL();
     juce::Array<float> getHistoryArrayR();
@@ -104,8 +100,30 @@ public:
     bool isFFTBlockReady();
     void processFFT();
 
+    // save size
+    void setSavedWidth(const int width);
+    void setSavedHeight(const int height);
+    int getSavedWidth() const;
+    int getSavedHeight() const;
+    
+    // bypass
+    bool getBypassedState();
+    
+    // set preset id for vst3 init
+    void setPresetId(int presetID);
+    int getPresetId();
+    
+    // get number of activated lines
+    // int getLineNum();
+    void setLineNum(int lineNum);
 private:
     //==============================================================================
+    
+    // preset id
+    int presetId = 0;
+    
+    // line number
+    int lineNum = 0;
     
     // Oscilloscope
     juce::Array<float> historyArrayL;
@@ -130,27 +148,27 @@ private:
 
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
-    float previousOutput1;
-    float previousOutput2;
-    float previousOutput3;
-    float previousOutput4;
-    float previousOutput;
-    float previousDrive1;
-    float previousDrive2;
-    float previousDrive3;
-    float previousDrive4;
-    float previousMix1;
-    float previousMix2;
-    float previousMix3;
-    float previousMix4;
-    float previousMix;
-    float previousColor;
-    float previousCutoff;
+    float previousOutput1 = 0.0f;
+    float previousOutput2 = 0.0f;
+    float previousOutput3 = 0.0f;
+    float previousOutput4 = 0.0f;
+    float previousOutput = 0.0f;
+    float previousDrive1 = 0.0f;
+    float previousDrive2 = 0.0f;
+    float previousDrive3 = 0.0f;
+    float previousDrive4 = 0.0f;
+    float previousMix1 = 0.0f;
+    float previousMix2 = 0.0f;
+    float previousMix3 = 0.0f;
+    float previousMix4 = 0.0f;
+    float previousMix = 0.0f;
+    float previousColor = 0.0f;
+    float previousCutoff = 0.0f;
     
-    float newDrive1;
-    float newDrive2;
-    float newDrive3;
-    float newDrive4;
+    float newDrive1 = 0.0f;
+    float newDrive2 = 0.0f;
+    float newDrive3 = 0.0f;
+    float newDrive4 = 0.0f;
 
     juce::SmoothedValue<float> driveSmoother1;
     juce::SmoothedValue<float> driveSmoother2;
@@ -226,6 +244,7 @@ private:
                                           lowpass3, highpass3;
     
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
+    juce::AudioBuffer<float> dryBuffer1, dryBuffer2, dryBuffer3, dryBuffer4;
     bool multibandState1 = true;
     bool multibandState2 = true;
     bool multibandState3 = true;
@@ -244,7 +263,13 @@ private:
     
     // void compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context);
     
-    void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer);
+    void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer);
     
+    // Save size
+    int editorWidth = INIT_WIDTH;
+    int editorHeight = INIT_HEIGHT;
+    
+    // bypass state
+    bool isBypassed = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

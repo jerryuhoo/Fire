@@ -306,6 +306,7 @@ private:
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
+    DriveLookAndFeel driveLookAndFeel;
     //FlatButtonLnf flatButtonLnf;
     
     Distortion distortionProcessor;

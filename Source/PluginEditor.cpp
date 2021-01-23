@@ -85,7 +85,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setLookAndFeel(&otherLookAndFeel);
 
     // drive knob 1
-    
+    driveKnob1.setLookAndFeel(&driveLookAndFeel);
+    driveKnob2.setLookAndFeel(&driveLookAndFeel);
+    driveKnob3.setLookAndFeel(&driveLookAndFeel);
+    driveKnob4.setLookAndFeel(&driveLookAndFeel);
     setListenerKnob(driveKnob1);
     setListenerKnob(driveKnob2);
     setListenerKnob(driveKnob3);
@@ -465,6 +468,10 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     inputMeter.setLookAndFeel(nullptr);
     outputMeter.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
+    driveKnob1.setLookAndFeel(nullptr);
+    driveKnob2.setLookAndFeel(nullptr);
+    driveKnob3.setLookAndFeel(nullptr);
+    driveKnob4.setLookAndFeel(nullptr);
     linkedButton1.setLookAndFeel(nullptr);
     linkedButton2.setLookAndFeel(nullptr);
     linkedButton3.setLookAndFeel(nullptr);
@@ -966,6 +973,10 @@ void FireAudioProcessorEditor::timerCallback()
         oscilloscope.repaint();
         distortionGraph.repaint();
         multiband.repaint();
+        driveKnob1.repaint();
+        driveKnob2.repaint();
+        driveKnob3.repaint();
+        driveKnob4.repaint();
     }
 }
 

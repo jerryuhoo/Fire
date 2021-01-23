@@ -160,7 +160,8 @@ void Multiband::paint (juce::Graphics& g)
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         
-        dragLines();
+        float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+        dragLines(targetXPercent);
     }
 }
 
@@ -565,14 +566,13 @@ void Multiband::reset()
     lineNum = 0;
 }
 
-void Multiband::dragLines()
+void Multiband::dragLines(float xPercent)
 {
     // drag
     for (int i = 0; i < 3; i++)
     {
         if (verticalLines[i]->isMoving())
         {
-            float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             verticalLines[i]->moveToX(lineNum, xPercent, limitLeft, verticalLines, sortedIndex);
             isMoving = true;
         }

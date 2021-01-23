@@ -511,7 +511,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR5);
     g.setFont(juce::Font("Times New Roman", 18.0f, juce::Font::bold));
     juce::String version = (juce::String)VERSION;
-    juce::Rectangle<int> area(getWidth() - 150, getHeight() - 25, 150, 50);
+    juce::Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, juce::Justification::topLeft, 1);
 
     // set logo "Fire"
@@ -975,6 +975,20 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
     linkValue(*slider, driveKnob2, outputKnob2, linkedButton2);
     linkValue(*slider, driveKnob3, outputKnob3, linkedButton3);
     linkValue(*slider, driveKnob4, outputKnob4, linkedButton4);
+    
+    // TODO: can't do vertical line position automation
+//    if (slider == &linePosSlider1)
+//    {
+//        multiband.dragLines(linePosSlider1.getValue());
+//    }
+//    if (slider == &linePosSlider2)
+//    {
+//        multiband.dragLines(linePosSlider2.getValue());
+//    }
+//    if (slider == &linePosSlider3)
+//    {
+//        multiband.dragLines(linePosSlider3.getValue());
+//    }
 }
 
 void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton)

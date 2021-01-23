@@ -17,8 +17,7 @@
 5. add mid-side / width / pan knobs
 6. add solo button between vertical lines
 7. width graph
-8. add drive button reduction on drive knob when safe mode is on
-9. mouse drag vertically to change the output volume, like Ozone or saturn2
+8. mouse drag vertically to change the output volume, like Ozone or saturn2
 
 - Improvement
 

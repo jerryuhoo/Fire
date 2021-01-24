@@ -889,20 +889,20 @@ void FireAudioProcessorEditor::resized()
     
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
-    linkedButton1.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton1.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton2.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton3.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton4.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
     
     float windowHeight = getHeight() / 20;
     windowLeftButton.setBounds(0, secondShadowY, getWidth() / 2, windowHeight);
     windowRightButton.setBounds(getWidth() / 2, secondShadowY, getWidth() / 2, windowHeight);
     
     // second line
-    safeButton1.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    safeButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    safeButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    safeButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton1.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton2.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton3.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton4.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     filterOffButton.setBounds(FILTER_STATE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     filterPreButton.setBounds(FILTER_STATE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     filterPostButton.setBounds(FILTER_STATE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());

@@ -920,14 +920,14 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 
     sampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
     
-    if (sampleMaxValue == 0)
-    {
-        DriveLookAndFeel::isActivate = false;
-    }
-    else
-    {
-        DriveLookAndFeel::isActivate = true;
-    }
+//    if (sampleMaxValue <= 0.001f)
+//    {
+//        DriveLookAndFeel::isActivate = false;
+//    }
+//    else
+//    {
+//        DriveLookAndFeel::isActivate = true;
+//    }
     
     distortionProcessor.controls.protection = *treeState.getRawParameterValue(safeID);
 
@@ -964,7 +964,7 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
     
     if(multibandFocus1 && driveID == DRIVE_ID1)
     {
-        if (drive == 0 || sampleMaxValue == 0)
+        if (drive == 0 || sampleMaxValue <= 0.001f)
         {
             DriveLookAndFeel::reductionPrecent = 1;
         }
@@ -972,10 +972,11 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
         {
             DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
         }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
     }
     else if(multibandFocus2 && driveID == DRIVE_ID2)
     {
-        if (drive == 0 || sampleMaxValue == 0)
+        if (drive == 0 || sampleMaxValue <= 0.001f)
         {
             DriveLookAndFeel::reductionPrecent = 1;
         }
@@ -983,10 +984,11 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
         {
             DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
         }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
     }
     else if(multibandFocus3 && driveID == DRIVE_ID3)
     {
-        if (drive == 0 || sampleMaxValue == 0)
+        if (drive == 0 || sampleMaxValue <= 0.001f)
         {
             DriveLookAndFeel::reductionPrecent = 1;
         }
@@ -994,10 +996,11 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
         {
             DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
         }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
     }
     else if(multibandFocus4 && driveID == DRIVE_ID4)
     {
-        if (drive == 0 || sampleMaxValue == 0)
+        if (drive == 0 || sampleMaxValue <= 0.001f)
         {
             DriveLookAndFeel::reductionPrecent = 1;
         }
@@ -1005,6 +1008,7 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
         {
             DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
         }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
     }
     
     // set zipper noise smoother target

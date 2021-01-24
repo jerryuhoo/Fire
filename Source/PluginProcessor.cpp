@@ -926,6 +926,7 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
     if (distortionProcessor.controls.protection == true && sampleMaxValue * powerDrive > 2.0f)
     {
         newDrive = 2.0f / sampleMaxValue + 0.1 * std::log2f(powerDrive);
+        //newDrive = 2.0f / sampleMaxValue + 0.1 * drive;
     }
     else
     {
@@ -951,17 +952,54 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
     else
         jassertfalse;
 
-    if (drive == 0)
+    
+    if(multibandFocus1 && driveID == DRIVE_ID1)
     {
-        DriveLookAndFeel::reductionPrecent = 1;
+        if (drive == 0 || sampleMaxValue == 0)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
     }
-    else
+    else if(multibandFocus2 && driveID == DRIVE_ID2)
     {
-        DriveLookAndFeel::reductionPrecent = log2(newDrive) / drive;
+        if (drive == 0 || sampleMaxValue == 0)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
     }
-
+    else if(multibandFocus3 && driveID == DRIVE_ID3)
+    {
+        if (drive == 0 || sampleMaxValue == 0)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
+    }
+    else if(multibandFocus4 && driveID == DRIVE_ID4)
+    {
+        if (drive == 0 || sampleMaxValue == 0)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
+    }
+    
     // set zipper noise smoother target
-    driveSmoother.setTargetValue(drive);
+    driveSmoother.setTargetValue(newDrive);
     outputSmoother.setTargetValue(currentGainOutput);
     mixSmoother.setTargetValue(mix);
     

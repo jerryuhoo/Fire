@@ -479,7 +479,20 @@ public:
 class DriveLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // resize scale
+    float scale = 1.f;
     inline static float reductionPrecent = 1.0f;
+    
+    DriveLookAndFeel()
+    {
+        setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
+        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::trackColourId, COLOUR1);
+        setColour(juce::Slider::thumbColourId, COLOUR5);
+        setColour(juce::Slider::backgroundColourId, COLOUR6);
+    }
+
     // customize knobs
     void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
                           const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
@@ -572,6 +585,29 @@ public:
         g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
+    }
+    
+    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+
+    // combobox customize font
+    juce::Font getComboBoxFont(juce::ComboBox & /*box*/) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+
+    juce::Font getPopupMenuFont() override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+
+    // label customize font
+    juce::Font getLabelFont(juce::Label &label) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        ;
     }
 };
 

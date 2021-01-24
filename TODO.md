@@ -19,6 +19,8 @@
 7. width graph
 8. mouse drag vertically to change the output volume, like Ozone or saturn2
 9. smooth spectrogram
+10. put all knobs into a menu like serum fx
+11. add lfo control
 
 - Improvement
 

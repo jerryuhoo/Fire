@@ -39,7 +39,7 @@ public:
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         // auto lineW = jmin(8.0f, radius * 0.2f);
-        auto lineW = radius * 0.6f;
+        auto lineW = radius * 0.1f;
         auto arcRadius = radius - lineW * 0.5f;
 
         juce::Path backgroundArc;
@@ -96,6 +96,7 @@ public:
         g.setColour(COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         juce::Path dialTick;
         dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
+        //dialTick.addEllipse(0, -radiusInner, radiusInner * 0.3f, radiusInner * 0.3);
         g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
@@ -485,7 +486,7 @@ public:
     // resize scale
     float scale = 1.0f;
     inline static float reductionPrecent = 1.0f;
-    inline static bool isActivate = false;
+    inline static float sampleMaxValue = 0.0f;
     DriveLookAndFeel()
     {
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
@@ -549,7 +550,7 @@ public:
                                    2 * M_PI,
                                    true);
             
-            if (isActivate)
+            if (sampleMaxValue > 0.001f)
             {
                 if (changePos < circlePath.getLength())
                 {
@@ -618,18 +619,38 @@ public:
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
 
         juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
+        
+        if (sampleMaxValue > 0.001f && slider.isEnabled())
+        {
+            if (rotaryStartAngle == toAngle)
+            {
+                reductAngle = rotaryStartAngle + 0.1f;
+            }
+            juce::Path valueArc;
+            valueArc.addCentredArc(bounds.getCentreX(),
+                                   bounds.getCentreY(),
+                                   arcRadius,
+                                   arcRadius,
+                                   0.0f,
+                                   rotaryStartAngle,
+                                   reductAngle,
+                                   true);
+            juce::ColourGradient grad(juce::Colours::red, valueArc.getPointAlongPath(valueArc.getLength()).x, valueArc.getPointAlongPath(valueArc.getLength()).y,
+                                      COLOUR1, rx + diameterInner * sampleMaxValue * 10, ry + diameterInner * sampleMaxValue * 10, true);
+            g.setGradientFill(grad);
+            g.fillEllipse(dialArea);
+        }
+        else
+        {
+            juce::Path dialTick;
+            dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
+            g.setColour(COLOUR6.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+            g.fillEllipse(dialArea);
+            // draw tick
+            g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
+            g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
+        }
 
-        g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
-//        juce::ColourGradient grad(COLOUR3, centerX, centerY,
-//                                  juce::Colours::red, centerX + radiusInner, centerY + radiusInner, true);
-//        g.setGradientFill(grad);
-        g.fillEllipse(dialArea);
-
-        // draw tick
-        g.setColour(COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
-        juce::Path dialTick;
-        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
-        g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
     }

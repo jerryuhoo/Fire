@@ -311,7 +311,6 @@ private:
     
     Distortion distortionProcessor;
 
-    
     //return function value by different modes
     //float getFunctionValue(FireAudioProcessor& processor, float value);
     //int modeChoice;

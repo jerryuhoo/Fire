@@ -518,7 +518,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR5);
     g.setFont(juce::Font("Times New Roman", 18.0f, juce::Font::bold));
     juce::String version = (juce::String)VERSION;
-    juce::Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
+    juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, juce::Justification::topLeft, 1);
 
     // set logo "Fire"

@@ -478,11 +478,14 @@ public:
 
 class DriveLookAndFeel : public juce::LookAndFeel_V4
 {
+private:
+    float x1, y1, x2, y2;
+    float changePos = 0; // use this to change drive knob gradient
 public:
     // resize scale
-    float scale = 1.f;
+    float scale = 1.0f;
     inline static float reductionPrecent = 1.0f;
-    
+    inline static bool isActivate = false;
     DriveLookAndFeel()
     {
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
@@ -506,7 +509,7 @@ public:
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         // auto lineW = jmin(8.0f, radius * 0.2f);
-        auto lineW = radius * 0.6f;
+        auto lineW = radius * 0.1f;
         auto arcRadius = radius - lineW * 0.5f;
 
         juce::Path backgroundArc;
@@ -536,8 +539,45 @@ public:
                                    rotaryStartAngle,
                                    reductAngle,
                                    true);
-
-            g.setColour(fill);
+            juce::Path circlePath;
+            circlePath.addCentredArc(bounds.getCentreX(),
+                                   bounds.getCentreY(),
+                                   arcRadius,
+                                   arcRadius,
+                                   0.0f,
+                                   0,
+                                   2 * M_PI,
+                                   true);
+            
+            if (isActivate)
+            {
+                if (changePos < circlePath.getLength())
+                {
+                    changePos += 10;
+                }
+                else
+                {
+                    changePos = 0;
+                }
+                juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
+                x1 = p1.x;
+                y1 = p1.y;
+                x2 = p1.x + 100 * scale;
+                y2 = p1.y + 100 * scale;
+            }
+            else
+            {
+                juce::Point<float> p1 = valueArc.getPointAlongPath(valueArc.getLength());
+                x1 = p1.x;
+                y1 = p1.y;
+                x2 = p1.x + 100 * scale;
+                y2 = p1.y + 100 * scale;
+            }
+            
+            juce::ColourGradient grad(juce::Colours::red, x1, y1,
+                                      COLOUR1, x2, y2, true);
+            g.setGradientFill(grad);
+            
             g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
             
             if (reductionPrecent != 1)
@@ -552,7 +592,11 @@ public:
                                              reductAngle - 0.02f,
                                              toAngle,
                                              true);
-                g.setColour(COLOUR1.withAlpha(0.8f));
+                
+                juce::ColourGradient grad(juce::Colours::red.withAlpha(0.5f), x1, y1,
+                                          COLOUR1.withAlpha(0.5f), x2, y2, true);
+                g.setGradientFill(grad);
+                
                 g.strokePath(valueArcReduce, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
             }
         }
@@ -576,6 +620,9 @@ public:
         juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
 
         g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
+//        juce::ColourGradient grad(COLOUR3, centerX, centerY,
+//                                  juce::Colours::red, centerX + radiusInner, centerY + radiusInner, true);
+//        g.setGradientFill(grad);
         g.fillEllipse(dialArea);
 
         // draw tick

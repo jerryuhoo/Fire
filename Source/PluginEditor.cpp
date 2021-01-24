@@ -932,8 +932,10 @@ void FireAudioProcessorEditor::resized()
     distortionMode3.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
     distortionMode4.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
 
+    // set look and feel scale
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;
+    driveLookAndFeel.scale = scale;
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -1116,7 +1118,7 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
 
     combobox->addSectionHeading("Hard Clipping");
     combobox->addItem("Hard Clipping", 6);
-    combobox->addItem("Sausage Fattener", 7);
+    combobox->addItem("Sausage", 7);
     combobox->addSeparator();
 
     combobox->addSectionHeading("Foldback");
@@ -1125,7 +1127,7 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
     combobox->addSeparator();
 
     combobox->addSectionHeading("Asymmetrical Clipping");
-    combobox->addItem("Diode Clipping 1", 10);
+    combobox->addItem("Diode Clipping 1 (beta)", 10);
     combobox->addSeparator();
 
     combobox->setJustificationType(juce::Justification::centred);

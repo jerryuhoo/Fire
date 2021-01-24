@@ -528,6 +528,10 @@ public:
 
         float reductAngle = toAngle - (1.0f - reductionPrecent) * 2 * M_PI;
         
+        if (reductAngle < rotaryStartAngle)
+        {
+            reductAngle = rotaryStartAngle;
+        }
         
         if (slider.isEnabled())
         {
@@ -636,18 +640,27 @@ public:
                                    reductAngle,
                                    true);
             juce::ColourGradient grad(juce::Colours::red, valueArc.getPointAlongPath(valueArc.getLength()).x, valueArc.getPointAlongPath(valueArc.getLength()).y,
-                                      COLOUR1, rx + diameterInner * sampleMaxValue * 10, ry + diameterInner * sampleMaxValue * 10, true);
+                                      COLOUR1, rx + diameterInner * sampleMaxValue, ry + diameterInner * sampleMaxValue, true);
             g.setGradientFill(grad);
             g.fillEllipse(dialArea);
         }
         else
         {
+            // draw big circle
             juce::Path dialTick;
             dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
-            g.setColour(COLOUR6.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+            juce::ColourGradient grad(juce::Colours::black, centerX, centerY,
+                                      juce::Colours::white.withBrightness(slider.isEnabled() ? 0.5f : 0.2f), radiusInner, radiusInner, true);
+            g.setGradientFill(grad);
             g.fillEllipse(dialArea);
+            
+            // draw small circle
+            juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
+            g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+            g.fillEllipse(smallDialArea);
+            
             // draw tick
-            g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
+            g.setColour(juce::Colours::lightgrey.withBrightness(slider.isEnabled() ? 0.5f : 0.2f));
             g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         }
 

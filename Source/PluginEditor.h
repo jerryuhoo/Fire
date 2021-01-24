@@ -306,11 +306,11 @@ private:
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
+    DriveLookAndFeel driveLookAndFeel;
     //FlatButtonLnf flatButtonLnf;
     
     Distortion distortionProcessor;
 
-    
     //return function value by different modes
     //float getFunctionValue(FireAudioProcessor& processor, float value);
     //int modeChoice;

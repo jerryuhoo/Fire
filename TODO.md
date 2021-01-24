@@ -5,7 +5,7 @@
 1. can't do vertical line position automation
 2. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
 3. can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
-4. spectrum flash
+4. spectrogram flash
 5. not change but save
 
 - Feature
@@ -17,8 +17,10 @@
 5. add mid-side / width / pan knobs
 6. add solo button between vertical lines
 7. width graph
-8. add drive button reduction on drive knob when safe mode is on
-9. mouse drag vertically to change the output volume, like Ozone or saturn2
+8. mouse drag vertically to change the output volume, like Ozone or saturn2
+9. smooth spectrogram
+10. put all knobs into a menu like serum fx
+11. add lfo control
 
 - Improvement
 

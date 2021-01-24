@@ -85,7 +85,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setLookAndFeel(&otherLookAndFeel);
 
     // drive knob 1
-    
+    driveKnob1.setLookAndFeel(&driveLookAndFeel);
+    driveKnob2.setLookAndFeel(&driveLookAndFeel);
+    driveKnob3.setLookAndFeel(&driveLookAndFeel);
+    driveKnob4.setLookAndFeel(&driveLookAndFeel);
     setListenerKnob(driveKnob1);
     setListenerKnob(driveKnob2);
     setListenerKnob(driveKnob3);
@@ -465,6 +468,10 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     inputMeter.setLookAndFeel(nullptr);
     outputMeter.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
+    driveKnob1.setLookAndFeel(nullptr);
+    driveKnob2.setLookAndFeel(nullptr);
+    driveKnob3.setLookAndFeel(nullptr);
+    driveKnob4.setLookAndFeel(nullptr);
     linkedButton1.setLookAndFeel(nullptr);
     linkedButton2.setLookAndFeel(nullptr);
     linkedButton3.setLookAndFeel(nullptr);
@@ -511,7 +518,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR5);
     g.setFont(juce::Font("Times New Roman", 18.0f, juce::Font::bold));
     juce::String version = (juce::String)VERSION;
-    juce::Rectangle<int> area(getWidth() - 100, getHeight() - 25, 100, 50);
+    juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, juce::Justification::topLeft, 1);
 
     // set logo "Fire"
@@ -611,7 +618,25 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     multiEnableSlider3.setValue(multibandEnable[2]);
     multiEnableSlider4.setValue(multibandEnable[3]);
     
-
+    int bandNum = 0;
+    if (multibandFocus[0])
+    {
+        bandNum = 1;
+    }
+    else if (multibandFocus[1])
+    {
+        bandNum = 2;
+    }
+    else if (multibandFocus[2])
+    {
+        bandNum = 3;
+    }
+    else if (multibandFocus[3])
+    {
+        bandNum = 4;
+    }
+    setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
+    
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 //        spectrum.setVisible(false);
 //        multiband.setVisible(false);
@@ -619,24 +644,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        distortionGraph.setVisible(true);
 //        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 //        oscilloscope.setVisible(true);
-        
-        int bandNum = 0;
-        if (multibandFocus[0])
-        {
-            bandNum = 1;
-        }
-        else if (multibandFocus[1])
-        {
-            bandNum = 2;
-        }
-        else if (multibandFocus[2])
-        {
-            bandNum = 3;
-        }
-        else if (multibandFocus[3])
-        {
-            bandNum = 4;
-        }
 
         setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
         setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
@@ -648,7 +655,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
         setFourKnobsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, bandNum);
         setFourKnobsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, bandNum);
-        setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
         
         driveLabel.setVisible(true);
         outputLabel.setVisible(true);
@@ -882,20 +888,20 @@ void FireAudioProcessorEditor::resized()
     
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
-    linkedButton1.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton1.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton2.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton3.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton4.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     
     float windowHeight = getHeight() / 20;
     windowLeftButton.setBounds(0, secondShadowY, getWidth() / 2, windowHeight);
     windowRightButton.setBounds(getWidth() / 2, secondShadowY, getWidth() / 2, windowHeight);
     
     // second line
-    safeButton1.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    safeButton2.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    safeButton3.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    safeButton4.setBounds(DRIVE_X + scaledKnobSize * 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton1.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton2.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton3.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    safeButton4.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     filterOffButton.setBounds(FILTER_STATE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     filterPreButton.setBounds(FILTER_STATE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     filterPostButton.setBounds(FILTER_STATE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
@@ -925,8 +931,10 @@ void FireAudioProcessorEditor::resized()
     distortionMode3.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
     distortionMode4.setBounds(0, secondShadowY + windowHeight, getWidth() / 5, getHeight() / 12);
 
+    // set look and feel scale
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;
+    driveLookAndFeel.scale = scale;
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -966,6 +974,10 @@ void FireAudioProcessorEditor::timerCallback()
         oscilloscope.repaint();
         distortionGraph.repaint();
         multiband.repaint();
+        driveKnob1.repaint();
+        driveKnob2.repaint();
+        driveKnob3.repaint();
+        driveKnob4.repaint();
     }
 }
 
@@ -1105,7 +1117,7 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
 
     combobox->addSectionHeading("Hard Clipping");
     combobox->addItem("Hard Clipping", 6);
-    combobox->addItem("Sausage Fattener", 7);
+    combobox->addItem("Sausage", 7);
     combobox->addSeparator();
 
     combobox->addSectionHeading("Foldback");
@@ -1114,7 +1126,7 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
     combobox->addSeparator();
 
     combobox->addSectionHeading("Asymmetrical Clipping");
-    combobox->addItem("Diode Clipping 1", 10);
+    combobox->addItem("Diode Clipping 1 (beta)", 10);
     combobox->addSeparator();
 
     combobox->setJustificationType(juce::Justification::centred);

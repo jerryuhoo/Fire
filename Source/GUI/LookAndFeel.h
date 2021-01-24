@@ -10,7 +10,6 @@
 #pragma once
 
 #include "InterfaceDefines.h"
-
 class OtherLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
@@ -40,7 +39,7 @@ public:
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         // auto lineW = jmin(8.0f, radius * 0.2f);
-        auto lineW = radius * 0.6f;
+        auto lineW = radius * 0.1f;
         auto arcRadius = radius - lineW * 0.5f;
 
         juce::Path backgroundArc;
@@ -97,6 +96,7 @@ public:
         g.setColour(COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         juce::Path dialTick;
         dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
+        //dialTick.addEllipse(0, -radiusInner, radiusInner * 0.3f, radiusInner * 0.3);
         g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
@@ -477,49 +477,220 @@ public:
     }
 };
 
-//class OtherLookAndFeelRed : public LookAndFeel_V4
-//{
-//public:
-//
-//    Colour mainColour = Colour(255, 0, 0);
-//    Colour secondColour = Colours::darkred;
-//    Colour backgroundColour = Colour(77, 4, 4);
-//
-//
-//    OtherLookAndFeelRed()
-//    {
-//        setColour(Slider::textBoxTextColourId, mainColour);
-//        setColour(Slider::textBoxBackgroundColourId, backgroundColour);
-//        setColour(Slider::textBoxOutlineColourId, backgroundColour); // old is secondColour
-//        setColour(Slider::thumbColourId, Colours::red);
-//        setColour(Slider::rotarySliderFillColourId, mainColour);
-//        setColour(Slider::rotarySliderOutlineColourId, secondColour);
-//    }
-//
-//    void drawTickBox(Graphics& g, Component& component,
-//        float x, float y, float w, float h,
-//        const bool ticked,
-//        const bool isEnabled,
-//        const bool shouldDrawButtonAsHighlighted,
-//        const bool shouldDrawButtonAsDown) override
-//    {
-//        ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
-//
-//        Rectangle<float> tickBounds(x, y, w, h);
-//
-//        g.setColour(component.findColour(ToggleButton::tickDisabledColourId));
-//        g.drawRect(tickBounds, 1.0f);
-//
-//        if (ticked)
-//        {
-//            g.setColour(component.findColour(ToggleButton::tickColourId));
-//            // auto tick = getTickShape(0.75f);
-//            // g.fillPath(tick, tick.getTransformToScaleToFit(tickBounds.reduced(4, 5).toFloat(), false));
-//            Rectangle<float> tickInnerBounds(x + 1, y + 1, w - 2, h - 2);
-//            g.fillRect(tickInnerBounds);
-//        }
-//    }
-//};
+class DriveLookAndFeel : public juce::LookAndFeel_V4
+{
+private:
+    float x1, y1, x2, y2;
+    float changePos = 0; // use this to change drive knob gradient
+public:
+    // resize scale
+    float scale = 1.0f;
+    inline static float reductionPrecent = 1.0f;
+    inline static float sampleMaxValue = 0.0f;
+    DriveLookAndFeel()
+    {
+        setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
+        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::trackColourId, COLOUR1);
+        setColour(juce::Slider::thumbColourId, COLOUR5);
+        setColour(juce::Slider::backgroundColourId, COLOUR6);
+    }
+
+    // customize knobs
+    void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
+                          const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
+    {
+        // draw outline
+        auto outline = COLOUR6;
+        auto fill = COLOUR1;
+
+        auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10);
+
+        auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+        auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+        // auto lineW = jmin(8.0f, radius * 0.2f);
+        auto lineW = radius * 0.1f;
+        auto arcRadius = radius - lineW * 0.5f;
+
+        juce::Path backgroundArc;
+        backgroundArc.addCentredArc(bounds.getCentreX(),
+                                    bounds.getCentreY(),
+                                    arcRadius,
+                                    arcRadius,
+                                    0.0f,
+                                    rotaryStartAngle,
+                                    rotaryEndAngle,
+                                    true);
+
+        g.setColour(outline);
+        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+
+        float reductAngle = toAngle - (1.0f - reductionPrecent) * 2 * M_PI;
+        
+        if (reductAngle < rotaryStartAngle)
+        {
+            reductAngle = rotaryStartAngle;
+        }
+        
+        if (slider.isEnabled())
+        {
+            juce::Path valueArc;
+            valueArc.addCentredArc(bounds.getCentreX(),
+                                   bounds.getCentreY(),
+                                   arcRadius,
+                                   arcRadius,
+                                   0.0f,
+                                   rotaryStartAngle,
+                                   reductAngle,
+                                   true);
+            juce::Path circlePath;
+            circlePath.addCentredArc(bounds.getCentreX(),
+                                   bounds.getCentreY(),
+                                   arcRadius,
+                                   arcRadius,
+                                   0.0f,
+                                   0,
+                                   2 * M_PI,
+                                   true);
+            
+            if (sampleMaxValue > 0.001f)
+            {
+                if (changePos < circlePath.getLength())
+                {
+                    changePos += 10;
+                }
+                else
+                {
+                    changePos = 0;
+                }
+                juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
+                x1 = p1.x;
+                y1 = p1.y;
+                x2 = p1.x + 100 * scale;
+                y2 = p1.y + 100 * scale;
+            }
+            else
+            {
+                juce::Point<float> p1 = valueArc.getPointAlongPath(valueArc.getLength());
+                x1 = p1.x;
+                y1 = p1.y;
+                x2 = p1.x + 100 * scale;
+                y2 = p1.y + 100 * scale;
+            }
+            
+            juce::ColourGradient grad(juce::Colours::red, x1, y1,
+                                      COLOUR1, x2, y2, true);
+            g.setGradientFill(grad);
+            
+            g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+            
+            if (reductionPrecent != 1)
+            {
+                // draw reducted path
+                juce::Path valueArcReduce;
+                valueArcReduce.addCentredArc(bounds.getCentreX(),
+                                             bounds.getCentreY(),
+                                             arcRadius,
+                                             arcRadius,
+                                             0.0f,
+                                             reductAngle - 0.02f,
+                                             toAngle,
+                                             true);
+                
+                juce::ColourGradient grad(juce::Colours::red.withAlpha(0.5f), x1, y1,
+                                          COLOUR1.withAlpha(0.5f), x2, y2, true);
+                g.setGradientFill(grad);
+                
+                g.strokePath(valueArcReduce, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+            }
+        }
+
+        //auto thumbWidth = lineW * 1.0f;
+        //Point<float> thumbPoint(bounds.getCentreX() + arcRadius * std::cos(toAngle - MathConstants<float>::halfPi),
+        //    bounds.getCentreY() + arcRadius * std::sin(toAngle - MathConstants<float>::halfPi));
+
+        //g.setColour(COLOUR5);
+        //g.fillEllipse(Rectangle<float>(thumbWidth, thumbWidth).withCentre(thumbPoint));
+
+        // draw inner circle
+        float diameterInner = juce::jmin(width, height) * 0.4f;
+        float radiusInner = diameterInner / 2;
+        float centerX = x + width / 2;
+        float centerY = y + height / 2;
+        float rx = centerX - radiusInner;
+        float ry = centerY - radiusInner;
+        float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
+
+        juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
+        
+        if (sampleMaxValue > 0.001f && slider.isEnabled())
+        {
+            if (rotaryStartAngle == toAngle)
+            {
+                reductAngle = rotaryStartAngle + 0.1f;
+            }
+            juce::Path valueArc;
+            valueArc.addCentredArc(bounds.getCentreX(),
+                                   bounds.getCentreY(),
+                                   arcRadius,
+                                   arcRadius,
+                                   0.0f,
+                                   rotaryStartAngle,
+                                   reductAngle,
+                                   true);
+            juce::ColourGradient grad(juce::Colours::red, valueArc.getPointAlongPath(valueArc.getLength()).x, valueArc.getPointAlongPath(valueArc.getLength()).y,
+                                      COLOUR1, rx + diameterInner * sampleMaxValue, ry + diameterInner * sampleMaxValue, true);
+            g.setGradientFill(grad);
+            g.fillEllipse(dialArea);
+        }
+        else
+        {
+            // draw big circle
+            juce::Path dialTick;
+            dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
+            juce::ColourGradient grad(juce::Colours::black, centerX, centerY,
+                                      juce::Colours::white.withBrightness(slider.isEnabled() ? 0.5f : 0.2f), radiusInner, radiusInner, true);
+            g.setGradientFill(grad);
+            g.fillEllipse(dialArea);
+            
+            // draw small circle
+            juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
+            g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+            g.fillEllipse(smallDialArea);
+            
+            // draw tick
+            g.setColour(juce::Colours::lightgrey.withBrightness(slider.isEnabled() ? 0.5f : 0.2f));
+            g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
+        }
+
+        //g.setColour(COLOUR5);
+        //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
+    }
+    
+    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+
+    // combobox customize font
+    juce::Font getComboBoxFont(juce::ComboBox & /*box*/) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+
+    juce::Font getPopupMenuFont() override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+
+    // label customize font
+    juce::Font getLabelFont(juce::Label &label) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+        ;
+    }
+};
 
 class RoundedButtonLnf : public juce::LookAndFeel_V4
 {

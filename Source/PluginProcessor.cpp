@@ -914,34 +914,105 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
 
     // protection
     drive = drive * 6.5f / 100.0f;
-    drive = powf(2, drive);
+    float powerDrive = powf(2, drive);
 
     float sampleMaxValue = 0;
 
     sampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
-
+    
+//    if (sampleMaxValue <= 0.001f)
+//    {
+//        DriveLookAndFeel::isActivate = false;
+//    }
+//    else
+//    {
+//        DriveLookAndFeel::isActivate = true;
+//    }
+    
     distortionProcessor.controls.protection = *treeState.getRawParameterValue(safeID);
 
-    if (distortionProcessor.controls.protection == true)
+    float newDrive = 0.0f;
+    if (distortionProcessor.controls.protection == true && sampleMaxValue * powerDrive > 2.0f)
     {
-        if (sampleMaxValue * drive > 2.0f)
-        {
-            drive = 2.0f / sampleMaxValue + 0.1 * std::log2f(drive);
-        }
+        newDrive = 2.0f / sampleMaxValue + 0.1 * std::log2f(powerDrive);
+        //newDrive = 2.0f / sampleMaxValue + 0.1 * drive;
     }
+    else
+    {
+        newDrive = powerDrive;
+    }
+    
     if (driveID == DRIVE_ID1)
-        newDrive1 = drive;
+    {
+        newDrive1 = newDrive;
+    }
     else if (driveID == DRIVE_ID2)
-        newDrive2 = drive;
+    {
+        newDrive2 = newDrive;
+    }
     else if (driveID == DRIVE_ID3)
-        newDrive3 = drive;
+    {
+        newDrive3 = newDrive;
+    }
     else if (driveID == DRIVE_ID4)
-        newDrive4 = drive;
+    {
+        newDrive4 = newDrive;
+    }
     else
         jassertfalse;
+
+    
+    if(multibandFocus1 && driveID == DRIVE_ID1)
+    {
+        if (drive == 0 || sampleMaxValue <= 0.001f)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
+    }
+    else if(multibandFocus2 && driveID == DRIVE_ID2)
+    {
+        if (drive == 0 || sampleMaxValue <= 0.001f)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
+    }
+    else if(multibandFocus3 && driveID == DRIVE_ID3)
+    {
+        if (drive == 0 || sampleMaxValue <= 0.001f)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
+    }
+    else if(multibandFocus4 && driveID == DRIVE_ID4)
+    {
+        if (drive == 0 || sampleMaxValue <= 0.001f)
+        {
+            DriveLookAndFeel::reductionPrecent = 1;
+        }
+        else
+        {
+            DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        }
+        DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
+    }
     
     // set zipper noise smoother target
-    driveSmoother.setTargetValue(drive);
+    driveSmoother.setTargetValue(newDrive);
     outputSmoother.setTargetValue(currentGainOutput);
     mixSmoother.setTargetValue(mix);
     

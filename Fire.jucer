@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.9.0" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.9.1" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">

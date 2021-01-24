@@ -618,7 +618,25 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     multiEnableSlider3.setValue(multibandEnable[2]);
     multiEnableSlider4.setValue(multibandEnable[3]);
     
-
+    int bandNum = 0;
+    if (multibandFocus[0])
+    {
+        bandNum = 1;
+    }
+    else if (multibandFocus[1])
+    {
+        bandNum = 2;
+    }
+    else if (multibandFocus[2])
+    {
+        bandNum = 3;
+    }
+    else if (multibandFocus[3])
+    {
+        bandNum = 4;
+    }
+    setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
+    
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 //        spectrum.setVisible(false);
 //        multiband.setVisible(false);
@@ -626,24 +644,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        distortionGraph.setVisible(true);
 //        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 //        oscilloscope.setVisible(true);
-        
-        int bandNum = 0;
-        if (multibandFocus[0])
-        {
-            bandNum = 1;
-        }
-        else if (multibandFocus[1])
-        {
-            bandNum = 2;
-        }
-        else if (multibandFocus[2])
-        {
-            bandNum = 3;
-        }
-        else if (multibandFocus[3])
-        {
-            bandNum = 4;
-        }
 
         setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
         setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, bandNum);
@@ -655,7 +655,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, bandNum);
         setFourKnobsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, bandNum);
         setFourKnobsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, bandNum);
-        setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
         
         driveLabel.setVisible(true);
         outputLabel.setVisible(true);
@@ -889,10 +888,10 @@ void FireAudioProcessorEditor::resized()
     
     // first line
     hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
-    linkedButton1.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton2.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton3.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
-    linkedButton4.setBounds(DRIVE_X - scaledKnobSize / 2, secondShadowY + (getHeight() - secondShadowY) / 2 - scaledKnobSize / 2 - 25, scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton1.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton2.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton3.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    linkedButton4.setBounds(DRIVE_X - scaledKnobSize / 2, secondPartY - 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     
     float windowHeight = getHeight() / 20;
     windowLeftButton.setBounds(0, secondShadowY, getWidth() / 2, windowHeight);

@@ -40,6 +40,10 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ## 5. Update Notes
 
+2020-1-24 (version 0.9.1)
+
+Drive knob reduction and GUI improvement
+
 2020-1-23 (version 0.9.0)
 
 First Beta release.

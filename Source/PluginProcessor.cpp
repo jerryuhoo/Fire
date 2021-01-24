@@ -919,7 +919,16 @@ void FireAudioProcessor::setParams(juce::String modeID, juce::String driveID, ju
     float sampleMaxValue = 0;
 
     sampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
-
+    
+    if (sampleMaxValue == 0)
+    {
+        DriveLookAndFeel::isActivate = false;
+    }
+    else
+    {
+        DriveLookAndFeel::isActivate = true;
+    }
+    
     distortionProcessor.controls.protection = *treeState.getRawParameterValue(safeID);
 
     float newDrive = 0.0f;

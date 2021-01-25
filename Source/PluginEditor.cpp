@@ -510,6 +510,13 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     // background
     g.fillAll(COLOUR7);
 
+    // draw rectangles
+//    juce::Rectangle<int> rectBounds(getWidth() / 3 + 50, part2 + 100, getWidth() / 3 - 100, getWidth() / 3 - 100);
+//    juce::Point<int> offsetPoint(0, 0);
+//    auto shadow = juce::DropShadow(juce::Colours::white, 10, offsetPoint);
+//    shadow.drawForRectangle(g, rectBounds);
+
+    
     // vertical bounds
 //    juce::ColourGradient grad2(COLOUR6, getWidth() / 3, part2 + getHeight() / 10,
 //                              COLOUR7, getWidth() / 3 - 5, part2 + getHeight() / 10, false);

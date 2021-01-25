@@ -53,7 +53,7 @@ public:
                                     true);
 
         g.setColour(outline);
-        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
         if (slider.isEnabled())
         {
@@ -68,7 +68,7 @@ public:
                                    true);
 
             g.setColour(fill);
-            g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+            g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
         //auto thumbWidth = lineW * 1.0f;
@@ -514,6 +514,24 @@ public:
         setColour(juce::Slider::backgroundColourId, COLOUR6);
     }
 
+    void drawInnerShadow(juce::Graphics &g, juce::Path target) {
+        // resets the Clip Region when the function returns
+        juce::Graphics::ScopedSaveState saveState(g);
+
+        // invert the path's fill shape and enlarge it,
+        // so it casts a shadow
+        juce::Path shadowPath(target);
+        shadowPath.addRectangle(target.getBounds().expanded(10));
+        shadowPath.setUsingNonZeroWinding(false);
+
+        // reduce clip region to avoid the shadow
+        // being drawn outside of the shape to cast the shadow on
+        g.reduceClipRegion(target);
+
+        juce::DropShadow ds(COLOUR7, 3, {0, 1});
+        ds.drawForPath(g, shadowPath);
+    }
+    
     // customize knobs
     void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
                           const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
@@ -527,7 +545,7 @@ public:
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         // auto lineW = jmin(8.0f, radius * 0.2f);
-        auto lineW = radius * 0.1f;
+        auto lineW = radius * 0.2f;
         auto arcRadius = radius - lineW * 0.5f;
 
         juce::Path backgroundArc;
@@ -541,8 +559,29 @@ public:
                                     true);
 
         g.setColour(outline);
-        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
-
+        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        
+        // draw shadow
+        juce::Path backgroundShadowArc;
+        backgroundShadowArc.addCentredArc(bounds.getCentreX(),
+                                    bounds.getCentreY(),
+                                    arcRadius + lineW / 2.0f,
+                                    arcRadius + lineW / 2.0f,
+                                    0.0f,
+                                    0,
+                                    2 * M_PI,
+                                    true);
+        //backgroundShadowArc.lineTo(<#Point<float> end#>)
+//        backgroundShadowArc.addCentredArc(bounds.getCentreX(),
+//                                    bounds.getCentreY(),
+//                                    arcRadius - lineW / 2.0f,
+//                                    arcRadius - lineW / 2.0f,
+//                                    0.0f,
+//                                    0,
+//                                    2 * M_PI,
+//                                    true);
+        drawInnerShadow(g, backgroundShadowArc);
+        
         float reductAngle = toAngle - (1.0f - reductionPrecent) * 2 * M_PI;
         
         // safe reduce paint
@@ -606,7 +645,7 @@ public:
                                       COLOUR1, x2, y2, true);
             g.setGradientFill(grad);
             
-            g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+            g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             
             if (reductionPrecent != 1)
             {
@@ -625,7 +664,7 @@ public:
                                           COLOUR1.withAlpha(0.5f), x2, y2, true);
                 g.setGradientFill(grad);
                 
-                g.strokePath(valueArcReduce, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::butt));
+                g.strokePath(valueArcReduce, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             }
         }
 

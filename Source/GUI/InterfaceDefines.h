@@ -230,8 +230,8 @@
 #define SPEC_HEIGHT         getHeight() / 10 * 3
 
 #define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
-#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2
-#define REC_X               startX * 6 - SCALED_KNOBSIZE / 2
+#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2 - 20
+#define REC_X               startX * 5.5 - SCALED_KNOBSIZE / 2
 #define BIAS_X              startX * 6.5 - SCALED_KNOBSIZE / 2
 #define WIDTH_X             startX * 6.5 - SCALED_KNOBSIZE / 2
 #define OUTPUT_X            startX * 7 - SCALED_KNOBSIZE / 2
@@ -253,8 +253,9 @@
 #define COLOUR3             juce::Colour(230, 126, 34)
 #define COLOUR4             juce::Colour(211, 84, 0)
 #define COLOUR5             juce::Colour(192, 57, 43)
-#define COLOUR6             juce::Colour(45, 40, 40)
-#define COLOUR7             juce::Colour(15, 10, 10)
+#define COLOUR6             juce::Colour(40, 40, 40)
+#define COLOUR7             juce::Colour(15, 15, 15)
+#define COLOUR8             juce::Colour(10, 10, 10)
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.8f)
 

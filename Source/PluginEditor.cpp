@@ -295,7 +295,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     filterLowButton.setRadioGroupId(filterModeButtons);
     filterLowButton.onClick = [this] { updateToggleState(); };
-  
+    
     filterBandButton.setRadioGroupId(filterModeButtons);
     filterBandButton.onClick = [this] { updateToggleState(); };
 
@@ -510,6 +510,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     // background
     g.fillAll(COLOUR7);
 
+    // vertical bounds
+//    juce::ColourGradient grad2(COLOUR6, getWidth() / 3, part2 + getHeight() / 10,
+//                              COLOUR7, getWidth() / 3 - 5, part2 + getHeight() / 10, false);
+//    g.setGradientFill(grad2);
+//    g.fillRect(getWidth() / 3 - 5, part2 + getHeight() / 10.0, 5, getHeight() - part2);
+    
     // title
     g.setColour(COLOUR5);
     g.fillRect(0, 0, getWidth(), part1);
@@ -935,6 +941,9 @@ void FireAudioProcessorEditor::resized()
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;
     driveLookAndFeel.scale = scale;
+    lowPassButtonLnf.scale = scale;
+    bandPassButtonLnf.scale = scale;
+    highPassButtonLnf.scale = scale;
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -1198,8 +1207,16 @@ void FireAudioProcessorEditor::setRoundButton(juce::TextButton& button, juce::St
     button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     button.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
     button.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    button.setButtonText(buttonName);
-    button.setLookAndFeel(&roundedButtonLnf);
+    
+    if (&button == &filterLowButton) button.setLookAndFeel(&lowPassButtonLnf);
+    else if (&button == &filterBandButton) button.setLookAndFeel(&bandPassButtonLnf);
+    else if (&button == &filterHighButton) button.setLookAndFeel(&highPassButtonLnf);
+    else
+    {
+        button.setButtonText(buttonName);
+        button.setLookAndFeel(&roundedButtonLnf);
+    }
+
 }
 
 void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, 

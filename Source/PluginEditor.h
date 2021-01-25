@@ -307,6 +307,9 @@ private:
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
     DriveLookAndFeel driveLookAndFeel;
+    LowPassButtonLnf lowPassButtonLnf;
+    BandPassButtonLnf bandPassButtonLnf;
+    HighPassButtonLnf highPassButtonLnf;
     //FlatButtonLnf flatButtonLnf;
     
     Distortion distortionProcessor;

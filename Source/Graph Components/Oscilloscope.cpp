@@ -29,8 +29,10 @@ void Oscilloscope::paint (juce::Graphics& g)
 
     //g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
     
+    int cornerSize = 10;
     g.setColour(COLOUR6);
-    g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 25);
+    juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
+    g.fillRoundedRectangle(rectFloat, cornerSize);
     
 //    float drive = processor.getNewDrive(1);
 //    DBG(drive);
@@ -79,6 +81,11 @@ void Oscilloscope::paint (juce::Graphics& g)
 
     g.strokePath(pathL, juce::PathStrokeType(2.0));
     g.strokePath(pathR, juce::PathStrokeType(2.0));
+    
+    // shadow
+    juce::Path pathShadow;
+    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
+    drawInnerShadow(g, pathShadow);
 }
 
 void Oscilloscope::resized()

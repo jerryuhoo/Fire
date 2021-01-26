@@ -83,7 +83,7 @@ private:
     juce::AudioProcessor &pluginProcessor;
     juce::XmlElement mPresetXml{"WINGSFIRE"}; // in-plugin representation mutiple presets in one xml
     juce::XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
-    juce::File presetFile;                 // on-disk representation
+    juce::File presetFile; // on-disk representation
     juce::String statePresetName{""};
     int mCurrentPresetID{0};
     int numPresets = 0;

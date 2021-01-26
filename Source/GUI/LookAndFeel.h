@@ -10,17 +10,42 @@
 #pragma once
 
 #include "InterfaceDefines.h"
+
+inline void drawInnerShadow(juce::Graphics &g, juce::Path target) {
+    // resets the Clip Region when the function returns
+    juce::Graphics::ScopedSaveState saveState(g);
+
+    // invert the path's fill shape and enlarge it,
+    // so it casts a shadow
+    juce::Path shadowPath(target);
+    shadowPath.addRectangle(target.getBounds().expanded(10));
+    shadowPath.setUsingNonZeroWinding(false);
+
+    // reduce clip region to avoid the shadow
+    // being drawn outside of the shape to cast the shadow on
+    g.reduceClipRegion(target);
+
+    juce::DropShadow ds(COLOUR7, 5, {0, 1});
+    ds.drawForPath(g, shadowPath);
+}
+
 class OtherLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     // resize scale
-    float scale = 1.f;
+    float scale = 1.0f;
 
     OtherLookAndFeel()
     {
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
-        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
-        setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentWhite);
+        setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
+        setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
+        setColour(juce::Label::textColourId, COLOUR1);
+        setColour(juce::Label::textWhenEditingColourId, COLOUR1);
+        setColour(juce::Label::outlineColourId, juce::Colours::transparentWhite);
+        setColour(juce::Label::backgroundWhenEditingColourId, COLOUR6);
+        setColour(juce::Label::outlineWhenEditingColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::trackColourId, COLOUR1);
         setColour(juce::Slider::thumbColourId, COLOUR5);
         setColour(juce::Slider::backgroundColourId, COLOUR6);
@@ -123,7 +148,6 @@ public:
     juce::Slider::SliderLayout getSliderLayout(juce::Slider &slider) override
     {
         // 1. compute the actually visible textBox size from the slider textBox size and some additional constraints
-
         int minXSpace = 0;
         int minYSpace = 0;
 
@@ -142,7 +166,6 @@ public:
         juce::Slider::SliderLayout layout;
 
         // 2. set the textBox bounds
-
         if (textBoxPos != juce::Slider::NoTextBox)
         {
             if (slider.isBar())
@@ -171,7 +194,6 @@ public:
         }
 
         // 3. set the slider bounds
-
         layout.sliderBounds = localBounds;
 
         if (slider.isBar())
@@ -200,6 +222,22 @@ public:
         return layout;
     }
 
+    void fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& textEditor) override
+    {
+        if (dynamic_cast<juce::AlertWindow*> (textEditor.getParentComponent()) != nullptr)
+        {
+            g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+            g.setColour (textEditor.findColour (juce::TextEditor::outlineColourId));
+            g.drawHorizontalLine (height - 1, 0.0f, static_cast<float> (width));
+        }
+        else
+        {
+            g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+        }
+    }
+    
     // draw rounded tickbox (toggle button)
     void drawTickBox(juce::Graphics &g, juce::Component &component,
                      float x, float y, float w, float h,
@@ -225,6 +263,38 @@ public:
         }
         juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
+    }
+    
+    // rounded menu box
+    void drawComboBox (juce::Graphics& g, int width, int height, bool,
+                       int, int, int, int, juce::ComboBox& box) override
+    {
+        auto cornerSize = 10;
+        juce::Rectangle<int> boxBounds (0, 0, width, height);
+
+        g.setColour (box.findColour (juce::ComboBox::backgroundColourId));
+        g.fillRoundedRectangle (boxBounds.toFloat(), cornerSize);
+
+        g.setColour (box.findColour (juce::ComboBox::outlineColourId));
+        g.drawRoundedRectangle (boxBounds.toFloat().reduced (0.5f, 0.5f), cornerSize, 1.0f);
+        
+        // draw shadow
+        if (box.getY() > 100) // top preset box don't need shadow
+        {
+            juce::Path pathShadow;
+            pathShadow.addRoundedRectangle(boxBounds.toFloat().reduced (0.5f, 0.5f), cornerSize);
+            g.setColour (box.findColour (juce::ComboBox::arrowColourId).withAlpha ((box.isEnabled() ? 0.9f : 0.2f)));
+            drawInnerShadow(g, pathShadow);
+        }
+        
+        juce::Rectangle<int> arrowZone (width - 30, 0, 20, height);
+        juce::Path path;
+        path.startNewSubPath ((float) arrowZone.getX() + 3.0f, (float) arrowZone.getCentreY() - 2.0f);
+        path.lineTo ((float) arrowZone.getCentreX(), (float) arrowZone.getCentreY() + 3.0f);
+        path.lineTo ((float) arrowZone.getRight() - 3.0f, (float) arrowZone.getCentreY() - 2.0f);
+
+        g.setColour (box.findColour (juce::ComboBox::arrowColourId).withAlpha ((box.isEnabled() ? 0.9f : 0.2f)));
+        g.strokePath (path, juce::PathStrokeType (2.0f));
     }
     
     void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override
@@ -504,34 +574,23 @@ public:
     float scale = 1.0f;
     inline static float reductionPrecent = 1.0f;
     inline static float sampleMaxValue = 0.0f;
+    
     DriveLookAndFeel()
     {
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
-        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR1.withAlpha(0.0f));
-        setColour(juce::Slider::textBoxOutlineColourId, COLOUR1.withAlpha(0.0f));
+        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentWhite);
+        setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
+        setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
+        setColour(juce::Label::textColourId, COLOUR1);
+        setColour(juce::Label::textWhenEditingColourId, COLOUR1);
+        setColour(juce::Label::outlineColourId, juce::Colours::transparentWhite);
+        setColour(juce::Label::backgroundWhenEditingColourId, COLOUR6);
+        setColour(juce::Label::outlineWhenEditingColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::trackColourId, COLOUR1);
         setColour(juce::Slider::thumbColourId, COLOUR5);
         setColour(juce::Slider::backgroundColourId, COLOUR6);
     }
 
-    void drawInnerShadow(juce::Graphics &g, juce::Path target) {
-        // resets the Clip Region when the function returns
-        juce::Graphics::ScopedSaveState saveState(g);
-
-        // invert the path's fill shape and enlarge it,
-        // so it casts a shadow
-        juce::Path shadowPath(target);
-        shadowPath.addRectangle(target.getBounds().expanded(10));
-        shadowPath.setUsingNonZeroWinding(false);
-
-        // reduce clip region to avoid the shadow
-        // being drawn outside of the shape to cast the shadow on
-        g.reduceClipRegion(target);
-
-        juce::DropShadow ds(COLOUR7, 3, {0, 1});
-        ds.drawForPath(g, shadowPath);
-    }
-    
     // customize knobs
     void drawRotarySlider(juce::Graphics &g, int x, int y, int width, int height, float sliderPos,
                           const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider &slider) override
@@ -572,14 +631,14 @@ public:
                                     2 * M_PI,
                                     true);
         //backgroundShadowArc.lineTo(<#Point<float> end#>)
-//        backgroundShadowArc.addCentredArc(bounds.getCentreX(),
-//                                    bounds.getCentreY(),
-//                                    arcRadius - lineW / 2.0f,
-//                                    arcRadius - lineW / 2.0f,
-//                                    0.0f,
-//                                    0,
-//                                    2 * M_PI,
-//                                    true);
+        backgroundShadowArc.addCentredArc(bounds.getCentreX(),
+                                    bounds.getCentreY(),
+                                    arcRadius - lineW / 2.0f,
+                                    arcRadius - lineW / 2.0f,
+                                    0.0f,
+                                    0,
+                                    2 * M_PI,
+                                    true);
         drawInnerShadow(g, backgroundShadowArc);
         
         float reductAngle = toAngle - (1.0f - reductionPrecent) * 2 * M_PI;
@@ -729,6 +788,103 @@ public:
 
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
+    }
+    
+    // resize slider and textbox size
+    juce::Slider::SliderLayout getSliderLayout(juce::Slider &slider) override
+    {
+        // 1. compute the actually visible textBox size from the slider textBox size and some additional constraints
+
+        int minXSpace = 0;
+        int minYSpace = 0;
+
+        auto textBoxPos = slider.getTextBoxPosition();
+
+        if (textBoxPos == juce::Slider::TextBoxLeft || textBoxPos == juce::Slider::TextBoxRight)
+            minXSpace = 30;
+        else
+            minYSpace = 15;
+
+        auto localBounds = slider.getLocalBounds();
+
+        auto textBoxWidth = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
+        auto textBoxHeight = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
+
+        juce::Slider::SliderLayout layout;
+
+        // 2. set the textBox bounds
+
+        if (textBoxPos != juce::Slider::NoTextBox)
+        {
+            if (slider.isBar())
+            {
+                layout.textBoxBounds = localBounds;
+            }
+            else
+            {
+                layout.textBoxBounds.setWidth(textBoxWidth);
+                layout.textBoxBounds.setHeight(textBoxHeight);
+
+                if (textBoxPos == juce::Slider::TextBoxLeft)
+                    layout.textBoxBounds.setX(0);
+                else if (textBoxPos == juce::Slider::TextBoxRight)
+                    layout.textBoxBounds.setX(localBounds.getWidth() - textBoxWidth);
+                else /* above or below -> centre horizontally */
+                    layout.textBoxBounds.setX((localBounds.getWidth() - textBoxWidth) / 2);
+
+                if (textBoxPos == juce::Slider::TextBoxAbove)
+                    layout.textBoxBounds.setY(0);
+                else if (textBoxPos == juce::Slider::TextBoxBelow)
+                    layout.textBoxBounds.setY(localBounds.getHeight() - textBoxHeight); // changed here!
+                else                                                                         /* left or right -> centre vertically */
+                    layout.textBoxBounds.setY((localBounds.getHeight() - textBoxHeight) / 2);
+            }
+        }
+
+        // 3. set the slider bounds
+
+        layout.sliderBounds = localBounds;
+
+        if (slider.isBar())
+        {
+            layout.sliderBounds.reduce(1, 1); // bar border
+        }
+        else
+        {
+            if (textBoxPos == juce::Slider::TextBoxLeft)
+                layout.sliderBounds.removeFromLeft(textBoxWidth);
+            else if (textBoxPos == juce::Slider::TextBoxRight)
+                layout.sliderBounds.removeFromRight(textBoxWidth);
+            else if (textBoxPos == juce::Slider::TextBoxAbove)
+                layout.sliderBounds.removeFromTop(textBoxHeight);
+            else if (textBoxPos == juce::Slider::TextBoxBelow)
+                layout.sliderBounds.removeFromBottom(textBoxHeight);
+
+            const int thumbIndent = getSliderThumbRadius(slider);
+
+            if (slider.isHorizontal())
+                layout.sliderBounds.reduce(thumbIndent, 0);
+            else if (slider.isVertical())
+                layout.sliderBounds.reduce(0, thumbIndent);
+        }
+
+        return layout;
+    }
+    
+    void fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& textEditor) override
+    {
+        if (dynamic_cast<juce::AlertWindow*> (textEditor.getParentComponent()) != nullptr)
+        {
+            g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+            g.setColour (textEditor.findColour (juce::TextEditor::outlineColourId));
+            g.drawHorizontalLine (height - 1, 0.0f, static_cast<float> (width));
+        }
+        else
+        {
+            g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+        }
     }
     
     juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
@@ -1065,6 +1221,7 @@ public:
         return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
 };
+
 
 //class FlatButtonLnf : public juce::LookAndFeel_V4
 //{

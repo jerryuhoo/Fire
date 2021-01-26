@@ -215,15 +215,16 @@ private:
 
     bool isPresetChanged();
 
-
-
-
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox *combobox) override;
-
+    // hide and show labels
+//    void sliderDragStarted (juce::Slider*) override;
+//    void sliderDragEnded (juce::Slider*) override;
+    
+    
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         //inputAttachment,

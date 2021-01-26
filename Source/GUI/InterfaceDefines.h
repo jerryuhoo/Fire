@@ -233,7 +233,7 @@
 #define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2 - 20
 #define REC_X               startX * 5.5 - SCALED_KNOBSIZE / 2
 #define BIAS_X              startX * 6.5 - SCALED_KNOBSIZE / 2
-#define WIDTH_X             startX * 6.5 - SCALED_KNOBSIZE / 2
+#define WIDTH_X             startX * 6.25 - SCALED_KNOBSIZE / 2
 #define OUTPUT_X            startX * 7 - SCALED_KNOBSIZE / 2
 #define COMP_RATIO_X        startX * 5.5 - SCALED_KNOBSIZE / 2
 #define COMP_THRESH_X       startX * 6 - SCALED_KNOBSIZE / 2

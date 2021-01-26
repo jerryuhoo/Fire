@@ -21,8 +21,8 @@ void saveStateToXml(const juce::AudioProcessor &proc, juce::XmlElement &xml)
     for (const auto &param : proc.getParameters())
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
         {
-            // don't save hq, windowLeft, windowRight
-            if (p->paramID != "hq" && p->paramID != "windowLeft" && p->paramID != "windowRight")
+            // don't save hq
+            if (p->paramID != "hq")
             {
                 xml.setAttribute(p->paramID, p->getValue());
             }

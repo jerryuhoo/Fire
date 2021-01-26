@@ -209,14 +209,14 @@
 #define PART1               getHeight() / 10
 #define PART2               PART1 * 3
 
-#define OSC_X               getWidth() / 20
+#define OSC_X               getWidth() / 10
 #define OSC_Y               PART1 + PART2 + getHeight() / 5
-#define OSC_WIDTH           getWidth() / 4
+#define OSC_WIDTH           getWidth() / 5
 #define OSC_HEIGHT          (getHeight() - PART1 - PART2) / 4
 
-#define D_GRAPH_X           getWidth() / 20
+#define D_GRAPH_X           getWidth() / 10
 #define D_GRAPH_Y           PART1 + PART2 + getHeight() / 10 + (getHeight() - PART1 - PART2) / 2
-#define D_GRAPH_WIDTH       getWidth() / 8
+#define D_GRAPH_WIDTH       getWidth() / 5
 #define D_GRAPH_HEIGHT      (getHeight() - PART1 - PART2) / 4
 
 #define WIDTH_GRAPH_X       getWidth() / 20 + getWidth() / 8

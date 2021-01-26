@@ -115,6 +115,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputLabel.attachToComponent(&outputKnob1, false);
     outputLabel.setJustificationType(juce::Justification::centred);
     
+    outputKnob.setTextValueSuffix("db");
+    outputKnob1.setTextValueSuffix("db");
+    outputKnob2.setTextValueSuffix("db");
+    outputKnob3.setTextValueSuffix("db");
+    outputKnob4.setTextValueSuffix("db");
+    
     // mix knob
     setRotarySlider(mixKnob1);
     setRotarySlider(mixKnob2);
@@ -148,6 +154,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setLinearSlider(compThreshKnob3);
     setLinearSlider(compThreshKnob4);
 
+    compThreshKnob1.setTextValueSuffix("db");
+    compThreshKnob2.setTextValueSuffix("db");
+    compThreshKnob3.setTextValueSuffix("db");
+    compThreshKnob4.setTextValueSuffix("db");
+    
     addAndMakeVisible(CompThreshLabel);
     CompThreshLabel.setText("Threshold", juce::dontSendNotification);
     CompThreshLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
@@ -171,7 +182,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // color knob
     addAndMakeVisible(colorKnob);
     colorKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    colorKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    colorKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 
     addAndMakeVisible(colorLabel);
     colorLabel.setText("Color", juce::dontSendNotification);
@@ -196,7 +207,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // downsample knob
     addAndMakeVisible(downSampleKnob);
     downSampleKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    downSampleKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    downSampleKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 
     addAndMakeVisible(downSampleLabel);
     downSampleLabel.setText("Downsample", juce::dontSendNotification);
@@ -221,7 +232,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // cutoff knob
     addAndMakeVisible(cutoffKnob);
     cutoffKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    cutoffKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    cutoffKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 
     addAndMakeVisible(cutoffLabel);
     cutoffLabel.setText("Cutoff", juce::dontSendNotification);
@@ -233,7 +244,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // res knob
     addAndMakeVisible(resKnob);
     resKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    resKnob.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    resKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 
     addAndMakeVisible(resLabel);
     resLabel.setText("Q", juce::dontSendNotification); // Resonance

@@ -38,7 +38,7 @@ public:
     OtherLookAndFeel()
     {
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
-        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentWhite);
+        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR6);
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
         setColour(juce::Label::textColourId, COLOUR1);
@@ -224,17 +224,60 @@ public:
 
     void fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& textEditor) override
     {
+        float cornerSize = 10.0f;
         if (dynamic_cast<juce::AlertWindow*> (textEditor.getParentComponent()) != nullptr)
         {
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
-            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), cornerSize);
             g.setColour (textEditor.findColour (juce::TextEditor::outlineColourId));
             g.drawHorizontalLine (height - 1, 0.0f, static_cast<float> (width));
         }
         else
         {
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
-            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), cornerSize);
+        }
+        juce::Path pathShadow;
+        pathShadow.addRoundedRectangle(textEditor.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+        g.setColour (juce::Colours::black.withAlpha ((textEditor.isEnabled() ? 0.9f : 0.2f)));
+        drawInnerShadow(g, pathShadow);
+    }
+    
+    void drawLabel (juce::Graphics& g, juce::Label& label) override
+    {
+        float cornerSize = 10.0f;
+        g.setColour(label.findColour (juce::Label::backgroundColourId));
+        g.fillRoundedRectangle(label.getLocalBounds().toFloat(), cornerSize);
+        
+        if (! label.isBeingEdited())
+        {
+            auto alpha = label.isEnabled() ? 1.0f : 0.5f;
+            const juce::Font font (getLabelFont (label));
+
+            g.setColour (label.findColour (juce::Label::textColourId).withMultipliedAlpha (alpha));
+            g.setFont (font);
+
+            auto textArea = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
+
+            g.drawFittedText (label.getText(), textArea, label.getJustificationType(),
+                              juce::jmax (1, (int) ((float) textArea.getHeight() / font.getHeight())),
+                              label.getMinimumHorizontalScale());
+
+            g.setColour (label.findColour (juce::Label::outlineColourId).withMultipliedAlpha (alpha));
+        }
+        else if (label.isEnabled())
+        {
+            g.setColour (label.findColour (juce::Label::outlineColourId));
+        }
+
+        g.drawRoundedRectangle (label.getLocalBounds().toFloat(), cornerSize, 1);
+        
+        if (label.isEditable())
+        {
+            juce::Path pathShadow;
+            pathShadow.addRoundedRectangle(label.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+            g.setColour (juce::Colours::black.withAlpha ((label.isEnabled() ? 0.9f : 0.2f)));
+            drawInnerShadow(g, pathShadow);
         }
     }
     
@@ -578,7 +621,7 @@ public:
     DriveLookAndFeel()
     {
         setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
-        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentWhite);
+        setColour(juce::Slider::textBoxBackgroundColourId, COLOUR6);
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
         setColour(juce::Label::textColourId, COLOUR1);
@@ -873,17 +916,60 @@ public:
     
     void fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& textEditor) override
     {
+        float cornerSize = 10.0f;
         if (dynamic_cast<juce::AlertWindow*> (textEditor.getParentComponent()) != nullptr)
         {
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
-            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), cornerSize);
             g.setColour (textEditor.findColour (juce::TextEditor::outlineColourId));
             g.drawHorizontalLine (height - 1, 0.0f, static_cast<float> (width));
         }
         else
         {
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
-            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), 10);
+            g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), cornerSize);
+        }
+        juce::Path pathShadow;
+        pathShadow.addRoundedRectangle(textEditor.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+        g.setColour (juce::Colours::black.withAlpha ((textEditor.isEnabled() ? 0.9f : 0.2f)));
+        drawInnerShadow(g, pathShadow);
+    }
+    
+    void drawLabel (juce::Graphics& g, juce::Label& label) override
+    {
+        float cornerSize = 10.0f;
+        g.setColour(label.findColour (juce::Label::backgroundColourId));
+        g.fillRoundedRectangle(label.getLocalBounds().toFloat(), cornerSize);
+        
+        if (! label.isBeingEdited())
+        {
+            auto alpha = label.isEnabled() ? 1.0f : 0.5f;
+            const juce::Font font (getLabelFont (label));
+
+            g.setColour (label.findColour (juce::Label::textColourId).withMultipliedAlpha (alpha));
+            g.setFont (font);
+
+            auto textArea = getLabelBorderSize (label).subtractedFrom (label.getLocalBounds());
+
+            g.drawFittedText (label.getText(), textArea, label.getJustificationType(),
+                              juce::jmax (1, (int) ((float) textArea.getHeight() / font.getHeight())),
+                              label.getMinimumHorizontalScale());
+
+            g.setColour (label.findColour (juce::Label::outlineColourId).withMultipliedAlpha (alpha));
+        }
+        else if (label.isEnabled())
+        {
+            g.setColour (label.findColour (juce::Label::outlineColourId));
+        }
+
+        g.drawRoundedRectangle (label.getLocalBounds().toFloat(), cornerSize, 1);
+        
+        if (label.isEditable())
+        {
+            juce::Path pathShadow;
+            pathShadow.addRoundedRectangle(label.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+            g.setColour (juce::Colours::black.withAlpha ((label.isEnabled() ? 0.9f : 0.2f)));
+            drawInnerShadow(g, pathShadow);
         }
     }
     
@@ -921,7 +1007,7 @@ public:
                               bool shouldDrawButtonAsHighlighted,
                               bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 15.0f * scale;
+        auto cornerSize = 10.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
@@ -977,7 +1063,7 @@ public:
                               bool shouldDrawButtonAsHighlighted,
                               bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 15.0f * scale;
+        auto cornerSize = 10.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
@@ -1069,7 +1155,7 @@ public:
                               bool shouldDrawButtonAsHighlighted,
                               bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 15.0f * scale;
+        auto cornerSize = 10.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
@@ -1160,7 +1246,7 @@ public:
                               bool shouldDrawButtonAsHighlighted,
                               bool shouldDrawButtonAsDown) override
     {
-        auto cornerSize = 15.0f * scale;
+        auto cornerSize = 10.0f * scale;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
 
         auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)

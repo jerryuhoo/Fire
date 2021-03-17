@@ -231,20 +231,33 @@
 
 #define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
 #define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2 - 20
-#define REC_X               startX * 5.5 - SCALED_KNOBSIZE / 2
-#define BIAS_X              startX * 6.5 - SCALED_KNOBSIZE / 2
-#define WIDTH_X             startX * 6.25 - SCALED_KNOBSIZE / 2
-#define OUTPUT_X            startX * 7 - SCALED_KNOBSIZE / 2
-#define COMP_RATIO_X        startX * 5.5 - SCALED_KNOBSIZE / 2
-#define COMP_THRESH_X       startX * 6 - SCALED_KNOBSIZE / 2
-#define CUTOFF_X            startX * 4 - SCALED_KNOBSIZE / 2
-#define RES_X               startX * 5 - SCALED_KNOBSIZE / 2
-#define DOWNSAMPLE_X        startX * 6 - SCALED_KNOBSIZE / 2
-#define COLOR_X             startX * 6 - SCALED_KNOBSIZE / 2
-#define FILTER_STATE_X      startX * 4 - SCALED_KNOBSIZE / 4
-#define FILTER_TYPE_X       startX * 5 - SCALED_KNOBSIZE / 4
-#define MIX_X               startX * 7 - SCALED_KNOBSIZE / 2
+#define REC_X               startX * 7 - SCALED_KNOBSIZE / 2
+#define BIAS_X              startX * 8 - SCALED_KNOBSIZE / 2
+#define WIDTH_X             startX * 8 - SCALED_KNOBSIZE / 2
+#define OUTPUT_X            startX * 9 - SCALED_KNOBSIZE / 2
+#define COMP_RATIO_X        startX * 7 - SCALED_KNOBSIZE / 2
+#define COMP_THRESH_X       startX * 8 - SCALED_KNOBSIZE / 2
+#define CUTOFF_X            startX * 4.5 - SCALED_KNOBSIZE / 2
+#define RES_X               startX * 6 - SCALED_KNOBSIZE / 2
+#define DOWNSAMPLE_X        startX * 7.5 - SCALED_KNOBSIZE / 2
+#define COLOR_X             startX * 7.5 - SCALED_KNOBSIZE / 2
+#define FILTER_STATE_X      startX * 4.5 - SCALED_KNOBSIZE / 4
+#define FILTER_TYPE_X       startX * 6 - SCALED_KNOBSIZE / 4
+#define MIX_X               startX * 9 - SCALED_KNOBSIZE / 2
 
+// Switches
+#define SWITCH_WIDTH        getWidth() / 10
+#define SWITCH_HEIGHT       getHeight() / 20
+#define SWITCH_X            startX * 7
+
+#define SWITCH_SHAPE_Y      PART1 + PART2 + getHeight() / 20 + 1 * getHeight() / 15
+#define SWITCH_WIDTH_Y      PART1 + PART2 + getHeight() / 20 + 2 * getHeight() / 15
+#define SWITCH_COMP_Y       PART1 + PART2 + getHeight() / 20 + 3 * getHeight() / 15
+
+// Buttons
+#define BUTTON_WIDTH        scaledKnobSize / 2
+#define BUTTON_HEIGHT       0.05 * getHeight()
+#define BUTTON_X            startX * 4
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)

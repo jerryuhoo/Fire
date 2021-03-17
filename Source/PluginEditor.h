@@ -105,38 +105,38 @@ private:
         mixKnob2,
         mixKnob3,
         mixKnob4,
-        
-        widthKnob1,
-        widthKnob2,
-        widthKnob3,
-        widthKnob4,
-    
-        compRatioKnob1,
-        compRatioKnob2,
-        compRatioKnob3,
-        compRatioKnob4,
-        
-        compThreshKnob1,
-        compThreshKnob2,
-        compThreshKnob3,
-        compThreshKnob4,
-    
-        recKnob1,
-        recKnob2,
-        recKnob3,
-        recKnob4,
-      
-        biasKnob1,
-        biasKnob2,
-        biasKnob3,
-        biasKnob4,
-    
+
         downSampleKnob,
         cutoffKnob,
         resKnob,
         colorKnob,
         mixKnob,
         outputKnob;
+    
+    juce::Slider* recKnob1;
+    juce::Slider* recKnob2;
+    juce::Slider* recKnob3;
+    juce::Slider* recKnob4;
+    
+    juce::Slider* biasKnob1;
+    juce::Slider* biasKnob2;
+    juce::Slider* biasKnob3;
+    juce::Slider* biasKnob4;
+
+    juce::Slider* compRatioKnob1;
+    juce::Slider* compRatioKnob2;
+    juce::Slider* compRatioKnob3;
+    juce::Slider* compRatioKnob4;
+    
+    juce::Slider* compThreshKnob1;
+    juce::Slider* compThreshKnob2;
+    juce::Slider* compThreshKnob3;
+    juce::Slider* compThreshKnob4;
+    
+    juce::Slider* widthKnob1;
+    juce::Slider* widthKnob2;
+    juce::Slider* widthKnob3;
+    juce::Slider* widthKnob4;
     
     int knobSize = KNOBSIZE;
     float tempDriveValue[4] = {1, 1, 1, 1};
@@ -185,6 +185,14 @@ private:
         windowLeftButton,
         windowRightButton;
 
+    // switches
+    juce::TextButton shapeSwitch, widthSwitch, compressorSwitch;
+    
+    // vectors for sliders
+    juce::OwnedArray<juce::Component, juce::CriticalSection> shapeVector;
+    juce::OwnedArray<juce::Component, juce::CriticalSection> widthVector;
+    juce::OwnedArray<juce::Component, juce::CriticalSection> compressorVector;
+    
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -194,6 +202,8 @@ private:
         filterModeButtons = 1002,
         // window selection: left, right
         windowButtons = 1003,
+        // switches
+        switchButtons = 1004,
     };
 
     void updateToggleState();
@@ -223,7 +233,7 @@ private:
     // hide and show labels
 //    void sliderDragStarted (juce::Slider*) override;
 //    void sliderDragEnded (juce::Slider*) override;
-    
+    void setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSection> &array);
     
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>

@@ -24,12 +24,12 @@ EnableButton::~EnableButton()
 
 void EnableButton::paint (juce::Graphics& g)
 {
-    g.setColour(getColour());
+    g.setColour(getColour().darker());
     g.fillEllipse(0, 0, getWidth(), getHeight());
-    g.setColour(COLOUR7);
-    g.fillEllipse(1, 1, getWidth() - 2, getHeight() - 2);
+//    g.setColour(COLOUR7);
+//    g.fillEllipse(1, 1, getWidth() - 2, getHeight() - 2);
     g.setColour(getColour());
-    g.fillEllipse(getWidth() / 4.f, getHeight() / 4.f, getWidth() / 2.f, getHeight() / 2.f);
+    g.fillEllipse(getWidth() / 5.0f, getHeight() / 5.0f, getWidth() / 5.0f * 3, getHeight() / 5.0f * 3);
 }
 
 void EnableButton::resized()

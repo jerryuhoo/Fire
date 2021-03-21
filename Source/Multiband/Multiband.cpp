@@ -125,38 +125,49 @@ void Multiband::paint (juce::Graphics& g)
             }
         }
         
+        if (lineNum > 0 && multibandFocus[0])
+        {
+//            g.setColour(COLOUR_MASK_RED);
+            juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
+                                      COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
+            g.setGradientFill(grad);
+            g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
+        }
+        
         if (lineNum > 0 && enableButton[0]->getState() == false)
         {
             g.setColour(COLOUR_MASK_BLACK);
             g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
         }
-        if (lineNum > 0 && multibandFocus[0])
-        {
-            g.setColour(COLOUR_MASK_RED);
-            g.fillRect(0, 0, verticalLines[sortedIndex[0]]->getX() + margin2, getHeight());
-        }
         
         for (int i = 1; i < lineNum; i++)
         {
+            if (lineNum > 1 && multibandFocus[i])
+            {
+//                g.setColour(COLOUR_MASK_RED);
+                juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
+                                          COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
+                g.setGradientFill(grad);
+                g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
+            }
             if (lineNum > 1 && enableButton[i]->getState() == false)
             {
                 g.setColour(COLOUR_MASK_BLACK);
                 g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
             }
-            if (lineNum > 1 && multibandFocus[i])
-            {
-                g.setColour(COLOUR_MASK_RED);
-                g.fillRect(verticalLines[sortedIndex[i - 1]]->getX() + margin1, 0, verticalLines[sortedIndex[i]]->getX() - verticalLines[sortedIndex[i - 1]]->getX(), getHeight());
-            }
+        }
+
+        if (lineNum > 0 && multibandFocus[lineNum])
+        {
+//            g.setColour(COLOUR_MASK_RED);
+            juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
+                                      COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
+            g.setGradientFill(grad);
+            g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         if (lineNum > 0 && enableButton[lineNum]->getState() == false)
         {
             g.setColour(COLOUR_MASK_BLACK);
-            g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
-        }
-        if (lineNum > 0 && multibandFocus[lineNum])
-        {
-            g.setColour(COLOUR_MASK_RED);
             g.fillRect(verticalLines[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - verticalLines[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
         }
         

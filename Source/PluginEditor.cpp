@@ -730,6 +730,10 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     }
     setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
     
+    // mix and output knob group panel
+    g.setColour(COLOUR_GROUP);
+    g.fillRoundedRectangle(getWidth() / 10 * 9 - KNOBSIZE / 2, PART1 + PART2 + getHeight() / 12, KNOBSIZE, getHeight() - PART1 - PART2 - getHeight() / 10, 10);
+    
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 //        spectrum.setVisible(false);
 //        multiband.setVisible(false);
@@ -738,6 +742,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
 //        oscilloscope.setVisible(true);
 
+        
         bool isWidthSwitchOn = widthSwitch.getToggleState();
         bool isShapeSwitchOn = shapeSwitch.getToggleState();
         bool isCompressorSwitchOn = compressorSwitch.getToggleState();
@@ -756,6 +761,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             setInvisible(widthVector);
             CompRatioLabel.setVisible(true);
             CompThreshLabel.setVisible(true);
+            recLabel.setVisible(false);
+            biasLabel.setVisible(false);
+            widthLabel.setVisible(false);
         }
         if (isShapeSwitchOn)
         {
@@ -763,14 +771,21 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             setFourKnobsVisibility(*biasKnob1, *biasKnob2, *biasKnob3, *biasKnob4, bandNum);
             setInvisible(compressorVector);
             setInvisible(widthVector);
+            CompRatioLabel.setVisible(false);
+            CompThreshLabel.setVisible(false);
             recLabel.setVisible(true);
             biasLabel.setVisible(true);
+            widthLabel.setVisible(false);
         }
         if (isWidthSwitchOn)
         {
             setFourKnobsVisibility(*widthKnob1, *widthKnob2, *widthKnob3, *widthKnob4, bandNum);
             setInvisible(shapeVector);
             setInvisible(compressorVector);
+            CompRatioLabel.setVisible(false);
+            CompThreshLabel.setVisible(false);
+            recLabel.setVisible(false);
+            biasLabel.setVisible(false);
             widthLabel.setVisible(true);
         }
         
@@ -1062,10 +1077,10 @@ void FireAudioProcessorEditor::resized()
 //    outputMeter.setBounds(getWidth() / 2 + 2, ffHeightStart, ffWidth, ffHeight + 2);
 
     // distortion menu
-    distortionMode1.setBounds(getWidth() / 10, secondShadowY + windowHeight + 10, getWidth() / 8, getHeight() / 12);
-    distortionMode2.setBounds(getWidth() / 10, secondShadowY + windowHeight + 10, getWidth() / 8, getHeight() / 12);
-    distortionMode3.setBounds(getWidth() / 10, secondShadowY + windowHeight + 10, getWidth() / 8, getHeight() / 12);
-    distortionMode4.setBounds(getWidth() / 10, secondShadowY + windowHeight + 10, getWidth() / 8, getHeight() / 12);
+    distortionMode1.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
+    distortionMode2.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
+    distortionMode3.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
+    distortionMode4.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;

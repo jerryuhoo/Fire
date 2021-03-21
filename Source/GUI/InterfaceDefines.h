@@ -209,14 +209,14 @@
 #define PART1               getHeight() / 10
 #define PART2               PART1 * 3
 
-#define OSC_X               getWidth() / 10
+#define OSC_X               getWidth() / 10 - OSC_WIDTH / 2
 #define OSC_Y               PART1 + PART2 + getHeight() / 5
-#define OSC_WIDTH           getWidth() / 5
+#define OSC_WIDTH           getWidth() / 8
 #define OSC_HEIGHT          (getHeight() - PART1 - PART2) / 4
 
-#define D_GRAPH_X           getWidth() / 10
+#define D_GRAPH_X           getWidth() / 10 - D_GRAPH_WIDTH / 2
 #define D_GRAPH_Y           PART1 + PART2 + getHeight() / 10 + (getHeight() - PART1 - PART2) / 2
-#define D_GRAPH_WIDTH       getWidth() / 5
+#define D_GRAPH_WIDTH       getWidth() / 8
 #define D_GRAPH_HEIGHT      (getHeight() - PART1 - PART2) / 4
 
 #define WIDTH_GRAPH_X       getWidth() / 20 + getWidth() / 8
@@ -229,7 +229,7 @@
 #define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10 * 3
 
-#define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
+#define DRIVE_X             getWidth() / 10 * 3 - SCALED_KNOBSIZE
 #define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2 - 20
 #define REC_X               startX * 7 - SCALED_KNOBSIZE / 2
 #define BIAS_X              startX * 8 - SCALED_KNOBSIZE / 2
@@ -248,7 +248,7 @@
 // Switches
 #define SWITCH_WIDTH        getWidth() / 10
 #define SWITCH_HEIGHT       getHeight() / 20
-#define SWITCH_X            startX * 7
+#define SWITCH_X            getWidth() / 10 * 5 - SWITCH_WIDTH / 2
 
 #define SWITCH_SHAPE_Y      PART1 + PART2 + getHeight() / 20 + 1 * getHeight() / 15
 #define SWITCH_WIDTH_Y      PART1 + PART2 + getHeight() / 20 + 2 * getHeight() / 15
@@ -257,7 +257,7 @@
 // Buttons
 #define BUTTON_WIDTH        scaledKnobSize / 2
 #define BUTTON_HEIGHT       0.05 * getHeight()
-#define BUTTON_X            startX * 4
+#define BUTTON_X            getWidth() / 10 * 4 - BUTTON_WIDTH / 2
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)
@@ -270,5 +270,5 @@
 #define COLOUR7             juce::Colour(15, 15, 15)
 #define COLOUR8             juce::Colour(10, 10, 10)
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
-#define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.8f)
-
+#define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
+#define COLOUR_GROUP        juce::Colour(50, 50, 50)

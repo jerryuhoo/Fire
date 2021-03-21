@@ -1118,6 +1118,7 @@ public:
         // fill above part
         if (button.isEnabled()) g.setColour(COLOUR1.withAlpha(0.5f));
         else g.setColour(COLOUR1.withAlpha(0.5f).darker(0.5f));
+        roundedPath.closeSubPath();
         g.fillPath(roundedPath);
         
         // fill below part
@@ -1209,6 +1210,7 @@ public:
         // fill above part
         if (button.isEnabled()) g.setColour(COLOUR1.withAlpha(0.5f));
         else g.setColour(COLOUR1.withAlpha(0.5f).darker(0.5f));
+        roundedPath.closeSubPath();
         g.fillPath(roundedPath);
         
         // fill below part

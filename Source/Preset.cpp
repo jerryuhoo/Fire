@@ -279,7 +279,24 @@ bool StatePresets::savePreset(juce::File savePath)
 void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID)
 {
     int index = 0;
-    forEachXmlChildElement(parentXml, child)
+//    forEachXmlChildElement(parentXml, child)
+//    {
+//        //DBG(child->getTagName());
+//        //DBG(presetID);
+//        if (child->hasAttribute("presetName") && child->getTagName() == presetID)
+//        {
+//            juce::XmlElement loadThisChild{*child}; // (0 indexed method)
+//            loadStateFromXml(loadThisChild, pluginProcessor);
+//            statePresetName = child->getAttributeValue(0); //presetName index is 0
+//        }
+//        else
+//        {
+//            recursivePresetLoad(*child, presetID);
+//        }
+//        index++;
+//    }
+    
+    for (auto* child : parentXml.getChildIterator())
     {
         //DBG(child->getTagName());
         //DBG(presetID);
@@ -321,7 +338,38 @@ juce::StringRef StatePresets::getPresetName()
 
 void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::ComboBox &menu, int &index)
 {
-    forEachXmlChildElement(parentXml, child) // should avoid macro?
+    
+//    forEachXmlChildElement(parentXml, child) // should avoid macro?
+//    {
+//        if (child->hasAttribute("presetName"))
+//        {
+//            // is preset
+//            index++;
+//            juce::String n = child->getStringAttribute("presetName");
+//            if (n == "")
+//                n = "(Unnamed preset)";
+//            menu.addItem(n, index);
+//            // save new preset and rescan, this will return new preset index
+//            if (statePresetName == n)
+//            {
+//                mCurrentPresetID = index;
+//            }
+//        }
+//        else
+//        {
+//            // is folder
+//            if (index != 0)
+//            {
+//                menu.addSeparator();
+//            }
+//            juce::String n = child->getTagName();
+//            menu.addSectionHeading(n);
+//
+//            recursivePresetNameAdd(*child, menu, index);
+//        }
+//    }
+    
+    for (auto* child : parentXml.getChildIterator())
     {
         if (child->hasAttribute("presetName"))
         {
@@ -346,7 +394,7 @@ void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::Comb
             }
             juce::String n = child->getTagName();
             menu.addSectionHeading(n);
-            
+
             recursivePresetNameAdd(*child, menu, index);
         }
     }

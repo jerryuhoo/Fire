@@ -49,6 +49,7 @@ public:
         setColour(juce::Slider::trackColourId, COLOUR1);
         setColour(juce::Slider::thumbColourId, COLOUR5);
         setColour(juce::Slider::backgroundColourId, COLOUR6);
+        setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
     }
 
     // customize knobs
@@ -342,13 +343,19 @@ public:
     
     void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override
     {
-        g.fillAll(COLOUR6); // findColour (PopupMenu::backgroundColourId)
+        
+        // g.fillAll(COLOUR6); // findColour (PopupMenu::backgroundColourId)
+        g.setColour(COLOUR6);
+#if JUCE_MAC
+        g.fillRoundedRectangle(0, 0, width, height, 10);
+#endif
         juce::ignoreUnused(width, height);
-
-       #if ! JUCE_MAC
+       
+#if ! JUCE_MAC
+        g.fillAll(COLOUR6);
         g.setColour(COLOUR1.withAlpha(0.6f)); //juce::LookAndFeel::findColour(juce::PopupMenu::textColourId)
         g.drawRect(0, 0, width, height);
-       #endif
+#endif
     }
 
     void drawPopupMenuItem(juce::Graphics &g, const juce::Rectangle<int> &area,
@@ -374,13 +381,13 @@ public:
             auto textColour = (textColourToUse == nullptr ? COLOUR1
                                                           : *textColourToUse); //findColour(juce::PopupMenu::textColourId)
 
-            auto r = area.reduced(1);
+            auto r = area.reduced(1); //auto r = area.reduced(1);
 
             if (isHighlighted && isActive)
             {
                 g.setColour(COLOUR5); //findColour(juce::PopupMenu::highlightedBackgroundColourId) : red
-                g.fillRect(r);
-
+                // g.fillRect(r);
+                g.fillRoundedRectangle(r.toFloat(), 10.0f);
                 g.setColour(COLOUR1); //findColour(juce::PopupMenu::highlightedTextColourId)
             }
             else

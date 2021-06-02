@@ -10,12 +10,18 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-
+#include "Graph Components/VUMeter.h"
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets, multiband}
 {
+    // init meter
+    VUMeter vuMeter(&p);
+    vuMeter.setBounds(30, 30, 100, 100);
+    vuMeter.setParameterId(1);
+    addAndMakeVisible(vuMeter);
+    
     // init vec
     
     shapeVector.add(recKnob1 = new juce::Slider());
@@ -517,7 +523,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
     getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
     getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, COLOUR1);
-    getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, COLOUR6);
+    getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
 
     modeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID1, distortionMode1);
     modeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID2, distortionMode2);
@@ -1170,7 +1176,7 @@ void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &dr
         else if (&xSlider == &outputSlider && driveSlider.isEnabled())
         {
             if (outputSlider.getValue() <= 0 && outputSlider.getValue() >= -10)
-                driveSlider.setValue(-outputKnob1.getValue() * 10, juce :: dontSendNotification);
+                driveSlider.setValue(-outputSlider.getValue() * 10, juce :: dontSendNotification);
             else if (outputSlider.getValue() > 0)
                 driveSlider.setValue(0, juce :: dontSendNotification);
             else if (outputSlider.getValue() < -10)

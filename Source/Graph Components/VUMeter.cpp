@@ -11,13 +11,14 @@
 #include <JuceHeader.h>
 #include "VUMeter.h"
 #include "../GUI/InterfaceDefines.h"
+#include "../Utility/AudioHelpers.h"
 
 //==============================================================================
 VUMeter::VUMeter(FireAudioProcessor* inProcessor)
-:   mParameterId(-1),
+:   mProcessor(inProcessor),
+    mParameterId(-1),
     mCh0Level(0),
-    mCh1Level(0),
-    mProcessor(inProcessor)
+    mCh1Level(0)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
@@ -62,19 +63,53 @@ void VUMeter::resized()
 void VUMeter::setParameterId(int inParameterId)
 {
     mParameterId = inParameterId;
-    startTimerHz(30);
+    startTimerHz(15); //30
 }
 
 void VUMeter::timerCallback()
 {
     float updatedCh0Level = 0.0f;
     float updatedCh1Level = 0.0f;
-//    switch (mParameterId) {
-//        case <#constant#>:
-//            <#statements#>
-//            break;
-//            
-//        default:
-//            break;
-//    }
+    switch (mParameterId) {
+        case 1:
+        {
+            updatedCh0Level = 0.75f;
+            updatedCh1Level = 0.75f;
+        }
+            break;
+            
+        case 2:
+        {
+            updatedCh0Level = 0.35f;
+            updatedCh1Level = 0.35f;
+        }
+            break;
+    }
+    
+    if (updatedCh0Level > mCh0Level)
+    {
+        mCh0Level = updatedCh0Level;
+    }
+    else
+    {
+        mCh0Level = 0.2 * (mCh0Level - updatedCh0Level) + updatedCh0Level; // 0.2 is smoothing coefficient
+    }
+    
+    if (updatedCh1Level > mCh1Level)
+    {
+        mCh1Level = updatedCh1Level;
+    }
+    else
+    {
+        mCh1Level = 0.2 * (mCh1Level - updatedCh1Level) + updatedCh1Level; // 0.2 is smoothing coefficient
+    }
+    
+    mCh0Level = helper_denormalize(mCh0Level);
+    mCh1Level = helper_denormalize(mCh1Level);
+    
+    // repaint if not equal to 0
+    if (mCh0Level && mCh1Level)
+    {
+        repaint();
+    }
 }

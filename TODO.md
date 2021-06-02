@@ -8,6 +8,7 @@
 4. spectrogram flash
 5. just open plugin and doesn't change anything, when you close Ableton, it will pop up whether save or not option
 6. open menu and close host will cause LookAndFeel error
+7. drive knob GUI flashes when playing dynamic range audios such as guitar loops.
 
 - Feature
 

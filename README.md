@@ -22,7 +22,7 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 ## 3. Support the author
 
-欢迎关注网易云音乐：<a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings</a>（这次一定！）
+欢迎关注网易云音乐：<a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings</a>
 
 follow my Neteast channel: 羽翼深蓝Wings
 

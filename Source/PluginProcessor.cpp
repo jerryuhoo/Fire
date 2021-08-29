@@ -226,9 +226,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         historyArrayR.add(0);
     }
     
-    // dry buffer init
+    // dry wet buffer init
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
+    
+    wetBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    wetBuffer.clear();
 
     // oversampling init
     oversampling->reset();
@@ -403,7 +406,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
     // save clean signal
     dryBuffer.makeCopyOf(buffer);
-
+    
     // ff input meter
     inputMeterSource.measureBlock(buffer);
 
@@ -692,14 +695,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // Spectrum
-    if (buffer.getNumChannels() > 0)
-    {
-        auto* channelData = buffer.getReadPointer(0);
-
-        for (auto i = 0; i < buffer.getNumSamples(); ++i)
-            spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
-//            spectrum_processor.pushNextSampleIntoFifo (std::sin(0.14*i));
-    }
+    wetBuffer.makeCopyOf(buffer);
+    pushDataToFFT();
 
     dryBuffer.clear();
 
@@ -894,9 +891,21 @@ bool FireAudioProcessor::isFFTBlockReady()
     return spectrum_processor.nextFFTBlockReady;
 }
 
-void FireAudioProcessor::processFFT()
+void FireAudioProcessor::pushDataToFFT()
 {
-    spectrum_processor.doProcessing();
+    
+    if (wetBuffer.getNumChannels() > 0)
+    {
+        auto* channelData = wetBuffer.getReadPointer(0);
+
+        for (auto i = 0; i < wetBuffer.getNumSamples(); ++i)
+            spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
+    }
+}
+
+void FireAudioProcessor::processFFT(float * tempFFTData)
+{
+    spectrum_processor.doProcessing(tempFFTData);
     spectrum_processor.nextFFTBlockReady = false;
 }
 

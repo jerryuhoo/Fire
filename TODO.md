@@ -5,10 +5,8 @@
 1. can't do vertical line position automation
 2. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
 3. can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
-4. spectrogram flash
-5. just open plugin and doesn't change anything, when you close Ableton, it will pop up whether save or not option
-6. open menu and close host will cause LookAndFeel error
-7. drive knob GUI flashes when playing dynamic range audios such as guitar loops.
+4. open menu and close host will cause LookAndFeel error
+5. can't set drive value when switching A/B mode
 
 - Feature
 
@@ -23,6 +21,7 @@
 9. smooth spectrogram
 10. put all knobs into a menu like serum fx
 11. add lfo control
+12. change A/B color when switching
 
 - Improvement
 

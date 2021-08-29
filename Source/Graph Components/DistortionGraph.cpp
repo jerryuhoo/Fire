@@ -32,7 +32,7 @@ void DistortionGraph::paint (juce::Graphics& g)
 
     auto frameRight = getLocalBounds();
     
-    int cornerSize = 10;
+    float cornerSize = 10 * scale;
     g.setColour(COLOUR6);
     juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
     g.fillRoundedRectangle(rectFloat, cornerSize);
@@ -69,11 +69,16 @@ void DistortionGraph::paint (juce::Graphics& g)
             {
                 functionValue = distortionProcessor.distortionProcess(value);
             }
-
+            
+            // downsample
             if (rateDivide > 1.0f)
             {
 //                functionValue = ceilf(functionValue * (64.0f / rateDivide)) / (64.0f / rateDivide);
-                functionValue = ceilf(functionValue * (256.0f / rateDivide)) / (256.0f / rateDivide);
+                //functionValue = ceilf(functionValue * (256.0f / rateDivide)) / (2563.0f / rateDivide);
+                
+                functionValue = distortionProcessor.distortionProcess(ceilf(value / (rateDivide/256.0f) ) * (rateDivide/256.0f));
+                
+                //y = f(ceilf(x / r * 256.0f));
             }
 
             // retification
@@ -154,4 +159,9 @@ void DistortionGraph::setState(int mode, float color, float rec, float mix, floa
     this->bias = bias;
     this->drive = drive;
     this->rateDivide = rateDivide;
+}
+
+void DistortionGraph::setScale(float scale)
+{
+    this->scale = scale;
 }

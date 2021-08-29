@@ -48,7 +48,7 @@ private:
     
     // init editor
     void initEditor();
-
+    
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
     

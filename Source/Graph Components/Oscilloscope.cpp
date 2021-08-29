@@ -13,10 +13,14 @@
 
 
 //==============================================================================
-Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p)
+Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p), vuMeter(&p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
+    
+    vuMeter.setBounds(30, 30, 100, 100);
+    vuMeter.setParameterId(1);
+    addAndMakeVisible(vuMeter);
 }
 
 Oscilloscope::~Oscilloscope()
@@ -29,7 +33,7 @@ void Oscilloscope::paint (juce::Graphics& g)
 
     //g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
     
-    int cornerSize = 10;
+    float cornerSize = 10 * scale;
     g.setColour(COLOUR6);
     juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
     g.fillRoundedRectangle(rectFloat, cornerSize);
@@ -92,4 +96,9 @@ void Oscilloscope::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
+}
+
+void Oscilloscope::setScale(float scale)
+{
+    this->scale = scale;
 }

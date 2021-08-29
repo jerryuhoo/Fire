@@ -16,11 +16,7 @@
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p), stateComponent{p.stateAB, p.statePresets, multiband}
 {
-    // init meter
-    VUMeter vuMeter(&p);
-    vuMeter.setBounds(30, 30, 100, 100);
-    vuMeter.setParameterId(1);
-    addAndMakeVisible(vuMeter);
+    
     
     // init vec
     
@@ -535,7 +531,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
     // resize limit
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
-    // getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
+    getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
 
     updateToggleState();
 }
@@ -737,8 +733,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
     
     // mix and output knob group panel
-    g.setColour(COLOUR_GROUP);
-    g.fillRoundedRectangle(getWidth() / 10 * 9 - KNOBSIZE / 2, PART1 + PART2 + getHeight() / 12, KNOBSIZE, getHeight() - PART1 - PART2 - getHeight() / 10, 10);
+//    g.setColour(COLOUR_GROUP);
+//    g.fillRoundedRectangle(getWidth() / 10 * 9 - KNOBSIZE / 2, PART1 + PART2 + getHeight() / 12, KNOBSIZE, getHeight() - PART1 - PART2 - getHeight() / 10, 10);
     
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 //        spectrum.setVisible(false);
@@ -964,6 +960,9 @@ void FireAudioProcessorEditor::resized()
     processor.setSavedHeight(getHeight());
     processor.setSavedWidth(getWidth());
     
+    // VUMeters
+    //vuMeter.setBounds(30, 30, 100, 100);
+
     // knobs
     int knobNum = 10;
     float scale = juce::jmin(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
@@ -1095,6 +1094,8 @@ void FireAudioProcessorEditor::resized()
     lowPassButtonLnf.scale = scale;
     bandPassButtonLnf.scale = scale;
     highPassButtonLnf.scale = scale;
+    oscilloscope.setScale(scale);
+    distortionGraph.setScale(scale);
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -1128,8 +1129,16 @@ void FireAudioProcessorEditor::timerCallback()
     else if (processor.isFFTBlockReady())
     {
         // not bypassed, repaint at the same time
-        processor.processFFT();
-        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
+        //(1<<11)
+        // create a temp ddtData because sometimes pushNextSampleIntoFifo will replace the original
+        // fftData after doingProcess and before painting.
+        float tempFFTData[2 * 2048] = {0};
+        memmove(tempFFTData, processor.getFFTData(), sizeof(tempFFTData));
+        // doing process, fifo data to fft data
+        processor.processFFT(tempFFTData);
+        // prepare to paint the spectrum
+        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), tempFFTData);
+
         spectrum.repaint();
         oscilloscope.repaint();
         distortionGraph.repaint();
@@ -1138,7 +1147,7 @@ void FireAudioProcessorEditor::timerCallback()
         driveKnob2.repaint();
         driveKnob3.repaint();
         driveKnob4.repaint();
-        repaint();
+//        repaint();
     }
 }
 

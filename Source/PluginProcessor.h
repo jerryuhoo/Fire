@@ -95,11 +95,13 @@ public:
     state::StateAB stateAB;
     state::StatePresets statePresets;
     
+    // FFT
     float * getFFTData();
     int getFFTSize();//TMP!!!!!!!!!!!
     bool isFFTBlockReady();
-    void processFFT();
-
+    void pushDataToFFT();
+    void processFFT(float * tempFFTData);
+    
     // save size
     void setSavedWidth(const int width);
     void setSavedHeight(const int height);
@@ -139,6 +141,9 @@ private:
 
     // dry audio buffer
     juce::AudioBuffer<float> dryBuffer;
+    // wet audio buffer
+    juce::AudioBuffer<float> wetBuffer;
+    
     // dsp::AudioBlock<float> blockOutput;
     juce::dsp::ProcessSpec spec;
 

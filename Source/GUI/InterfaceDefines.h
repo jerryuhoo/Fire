@@ -229,7 +229,7 @@
 #define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10 * 3
 
-#define DRIVE_X             getWidth() / 10 * 3 - SCALED_KNOBSIZE
+#define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
 #define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2 - 20
 #define REC_X               startX * 7 - SCALED_KNOBSIZE / 2
 #define BIAS_X              startX * 8 - SCALED_KNOBSIZE / 2
@@ -248,7 +248,7 @@
 // Switches
 #define SWITCH_WIDTH        getWidth() / 10
 #define SWITCH_HEIGHT       getHeight() / 20
-#define SWITCH_X            getWidth() / 10 * 5 - SWITCH_WIDTH / 2
+#define SWITCH_X            startX * 7 - SCALED_KNOBSIZE / 2
 
 #define SWITCH_SHAPE_Y      PART1 + PART2 + getHeight() / 20 + 1 * getHeight() / 15
 #define SWITCH_WIDTH_Y      PART1 + PART2 + getHeight() / 20 + 2 * getHeight() / 15

@@ -31,6 +31,7 @@ VUMeter::~VUMeter()
 
 void VUMeter::paint (juce::Graphics& g)
 {
+    
     g.setColour(COLOUR6);
     const int meterWidth = getWidth() / 3;
     
@@ -52,6 +53,7 @@ void VUMeter::paint (juce::Graphics& g)
     }
     
     g.setColour(COLOUR5);
+    
     g.fillRect(0, ch0fill, meterWidth, getHeight());
     g.fillRect(meterWidth * 2, ch1fill, meterWidth, getHeight());
 }
@@ -70,7 +72,8 @@ void VUMeter::timerCallback()
 {
     float updatedCh0Level = 0.0f;
     float updatedCh1Level = 0.0f;
-    switch (mParameterId) {
+    switch (mParameterId)
+    {
         case 1:
         {
             updatedCh0Level = 0.75f;

@@ -225,7 +225,7 @@ public:
 
     void fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& textEditor) override
     {
-        float cornerSize = 10.0f;
+        float cornerSize = 10.0f * scale;
         if (dynamic_cast<juce::AlertWindow*> (textEditor.getParentComponent()) != nullptr)
         {
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
@@ -238,15 +238,15 @@ public:
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
             g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), cornerSize);
         }
-        juce::Path pathShadow;
-        pathShadow.addRoundedRectangle(textEditor.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
-        g.setColour (juce::Colours::black.withAlpha ((textEditor.isEnabled() ? 0.9f : 0.2f)));
-        drawInnerShadow(g, pathShadow);
+//        juce::Path pathShadow;
+//        pathShadow.addRoundedRectangle(textEditor.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+//        g.setColour (juce::Colours::black.withAlpha ((textEditor.isEnabled() ? 0.9f : 0.2f)));
+//        drawInnerShadow(g, pathShadow);
     }
     
     void drawLabel (juce::Graphics& g, juce::Label& label) override
     {
-        float cornerSize = 10.0f;
+        float cornerSize = 10.0f * scale;
         g.setColour(label.findColour (juce::Label::backgroundColourId));
         g.fillRoundedRectangle(label.getLocalBounds().toFloat(), cornerSize);
         
@@ -273,13 +273,13 @@ public:
 
         g.drawRoundedRectangle (label.getLocalBounds().toFloat(), cornerSize, 1);
         
-        if (label.isEditable())
-        {
-            juce::Path pathShadow;
-            pathShadow.addRoundedRectangle(label.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
-            g.setColour (juce::Colours::black.withAlpha ((label.isEnabled() ? 0.9f : 0.2f)));
-            drawInnerShadow(g, pathShadow);
-        }
+//        if (label.isEditable())
+//        {
+//            juce::Path pathShadow;
+//            pathShadow.addRoundedRectangle(label.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+//            g.setColour (juce::Colours::black.withAlpha ((label.isEnabled() ? 0.9f : 0.2f)));
+//            drawInnerShadow(g, pathShadow);
+//        }
     }
     
     // draw rounded tickbox (toggle button)
@@ -313,7 +313,7 @@ public:
     void drawComboBox (juce::Graphics& g, int width, int height, bool,
                        int, int, int, int, juce::ComboBox& box) override
     {
-        auto cornerSize = 10;
+        auto cornerSize = 10.0f * scale;
         juce::Rectangle<int> boxBounds (0, 0, width, height);
 
         g.setColour (box.findColour (juce::ComboBox::backgroundColourId));
@@ -690,7 +690,7 @@ public:
                                     2 * M_PI,
                                     true);
         drawInnerShadow(g, backgroundShadowArc);
-        
+        //DBG(reductionPrecent);
         float reductAngle = toAngle - (1.0f - reductionPrecent) * 2 * M_PI;
         
         // safe reduce paint
@@ -724,7 +724,7 @@ public:
                                    true);
             
             // make the color loop move
-            if (sampleMaxValue > 0.001f)
+            if (sampleMaxValue > 0.00001f)
             {
                 if (changePos < circlePath.getLength())
                 {
@@ -734,20 +734,26 @@ public:
                 {
                     changePos = 0;
                 }
-                juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
-                x1 = p1.x;
-                y1 = p1.y;
-                x2 = p1.x + 100 * scale;
-                y2 = p1.y + 100 * scale;
+//                juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
+//                x1 = p1.x;
+//                y1 = p1.y;
+//                x2 = p1.x + 100 * scale;
+//                y2 = p1.y + 100 * scale;
             }
             else // normal paint static color
             {
-                juce::Point<float> p1 = valueArc.getPointAlongPath(valueArc.getLength());
-                x1 = p1.x;
-                y1 = p1.y;
-                x2 = p1.x + 100 * scale;
-                y2 = p1.y + 100 * scale;
+//                juce::Point<float> p1 = valueArc.getPointAlongPath(valueArc.getLength());
+//                x1 = p1.x;
+//                y1 = p1.y;
+//                x2 = p1.x + 100 * scale;
+//                y2 = p1.y + 100 * scale;
             }
+            // 2021.6.3
+            juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
+            x1 = p1.x;
+            y1 = p1.y;
+            x2 = p1.x + 100 * scale;
+            y2 = p1.y + 100 * scale;
             
             // draw real drive path
             juce::ColourGradient grad(juce::Colours::red, x1, y1,
@@ -795,43 +801,48 @@ public:
 
         juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
         
+        // draw big circle
+        juce::Path dialTick;
+        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
+        juce::ColourGradient grad(juce::Colours::black, centerX, centerY,
+                                  juce::Colours::white.withBrightness(slider.isEnabled() ? 0.5f : 0.2f), radiusInner, radiusInner, true);
+        g.setGradientFill(grad);
+        g.fillEllipse(dialArea);
+        
+        // draw small circle
+        juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
+        g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+        g.fillEllipse(smallDialArea);
+        
         // draw colorful inner circle
-        if (sampleMaxValue > 0.001f && slider.isEnabled())
+        if (sampleMaxValue > 0.00001f && slider.isEnabled())
         {
-            if (rotaryStartAngle == toAngle)
-            {
-                reductAngle = rotaryStartAngle + 0.1f;
-            }
-            juce::Path valueArc;
-            valueArc.addCentredArc(bounds.getCentreX(),
-                                   bounds.getCentreY(),
-                                   arcRadius,
-                                   arcRadius,
-                                   0.0f,
-                                   rotaryStartAngle,
-                                   reductAngle,
-                                   true);
-            juce::ColourGradient grad(juce::Colours::red, valueArc.getPointAlongPath(valueArc.getLength()).x, valueArc.getPointAlongPath(valueArc.getLength()).y,
-                                      COLOUR1, rx + diameterInner * sampleMaxValue, ry + diameterInner * sampleMaxValue, true);
-            g.setGradientFill(grad);
-            g.fillEllipse(dialArea);
+//            if (rotaryStartAngle == toAngle)
+//            {
+//                reductAngle = rotaryStartAngle + 0.1f;
+//            }
+//            juce::Path valueArc;
+//            valueArc.addCentredArc(bounds.getCentreX(),
+//                                   bounds.getCentreY(),
+//                                   arcRadius,
+//                                   arcRadius,
+//                                   0.0f,
+//                                   rotaryStartAngle,
+//                                   reductAngle,
+//                                   true);
+//            juce::ColourGradient grad(juce::Colours::red, valueArc.getPointAlongPath(valueArc.getLength()).x, valueArc.getPointAlongPath(valueArc.getLength()).y,
+//                                      COLOUR1, rx + diameterInner * sampleMaxValue, ry + diameterInner * sampleMaxValue, true);
+//            g.setGradientFill(grad);
+//            g.fillEllipse(dialArea);
+            
+            
+            // draw colorful tick
+            g.setColour(juce::Colours::orange.withBrightness(slider.isEnabled() ? 1.0f : 0.2f));
+            g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         }
         else // draw grey 2 layers circle
         {
-            // draw big circle
-            juce::Path dialTick;
-            dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
-            juce::ColourGradient grad(juce::Colours::black, centerX, centerY,
-                                      juce::Colours::white.withBrightness(slider.isEnabled() ? 0.5f : 0.2f), radiusInner, radiusInner, true);
-            g.setGradientFill(grad);
-            g.fillEllipse(dialArea);
-            
-            // draw small circle
-            juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
-            g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
-            g.fillEllipse(smallDialArea);
-            
-            // draw tick
+            // draw grey tick
             g.setColour(juce::Colours::lightgrey.withBrightness(slider.isEnabled() ? 0.5f : 0.2f));
             g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         }
@@ -923,7 +934,7 @@ public:
     
     void fillTextEditorBackground (juce::Graphics& g, int width, int height, juce::TextEditor& textEditor) override
     {
-        float cornerSize = 10.0f;
+        float cornerSize = 10.0f * scale;
         if (dynamic_cast<juce::AlertWindow*> (textEditor.getParentComponent()) != nullptr)
         {
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
@@ -936,15 +947,15 @@ public:
             g.setColour (textEditor.findColour (juce::TextEditor::backgroundColourId));
             g.fillRoundedRectangle(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height), cornerSize);
         }
-        juce::Path pathShadow;
-        pathShadow.addRoundedRectangle(textEditor.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
-        g.setColour (juce::Colours::black.withAlpha ((textEditor.isEnabled() ? 0.9f : 0.2f)));
-        drawInnerShadow(g, pathShadow);
+//        juce::Path pathShadow;
+//        pathShadow.addRoundedRectangle(textEditor.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+//        g.setColour (juce::Colours::black.withAlpha ((textEditor.isEnabled() ? 0.9f : 0.2f)));
+//        drawInnerShadow(g, pathShadow);
     }
     
     void drawLabel (juce::Graphics& g, juce::Label& label) override
     {
-        float cornerSize = 10.0f;
+        float cornerSize = 10.0f * scale;
         g.setColour(label.findColour (juce::Label::backgroundColourId));
         g.fillRoundedRectangle(label.getLocalBounds().toFloat(), cornerSize);
         
@@ -971,13 +982,13 @@ public:
 
         g.drawRoundedRectangle (label.getLocalBounds().toFloat(), cornerSize, 1);
         
-        if (label.isEditable())
-        {
-            juce::Path pathShadow;
-            pathShadow.addRoundedRectangle(label.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
-            g.setColour (juce::Colours::black.withAlpha ((label.isEnabled() ? 0.9f : 0.2f)));
-            drawInnerShadow(g, pathShadow);
-        }
+//        if (label.isEditable())
+//        {
+//            juce::Path pathShadow;
+//            pathShadow.addRoundedRectangle(label.getLocalBounds().toFloat().reduced (0.5f, 0.5f), cornerSize);
+//            g.setColour (juce::Colours::black.withAlpha ((label.isEnabled() ? 0.9f : 0.2f)));
+//            drawInnerShadow(g, pathShadow);
+//        }
     }
     
     juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override

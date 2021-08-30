@@ -1,8 +1,8 @@
 /*
   ==============================================================================
 
-    Oscilloscope.h
-    Created: 25 Oct 2020 7:26:35pm
+    VUPanel.h
+    Created: 29 Aug 2021 6:21:02pm
     Author:  羽翼深蓝Wings
 
   ==============================================================================
@@ -12,27 +12,22 @@
 
 #include <JuceHeader.h>
 #include "../PluginProcessor.h"
-
+#include "VUMeter.h"
 //==============================================================================
 /*
 */
-class Oscilloscope : public juce::Component//, private juce::Timer
+class VUPanel  : public juce::Component
 {
 public:
-    Oscilloscope(FireAudioProcessor &);
-    ~Oscilloscope() override;
+    VUPanel(FireAudioProcessor &);
+    ~VUPanel() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setScale(float scale);
-    
+
 private:
     FireAudioProcessor &processor;
-    
-    juce::Array<float> historyL;
-    juce::Array<float> historyR;
-    juce::Image historyImage;
-   
-    float scale = 1.0f;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Oscilloscope)
+    VUMeter vuMeterIn;
+    VUMeter vuMeterOut;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUPanel)
 };

@@ -13,14 +13,10 @@
 
 
 //==============================================================================
-Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p), vuMeter(&p)
+Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
-    
-    vuMeter.setBounds(30, 30, 100, 100);
-    vuMeter.setParameterId(1);
-    addAndMakeVisible(vuMeter);
 }
 
 Oscilloscope::~Oscilloscope()

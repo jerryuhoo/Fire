@@ -14,7 +14,6 @@
 
 #include "AppConfig.h"
 
-#include <ff_meters/ff_meters.h>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -48,7 +47,7 @@ namespace ProjectInfo
 {
     const char* const  projectName    = "Fire";
     const char* const  companyName    = "";
-    const char* const  versionString  = "0.9.2 b8";
+    const char* const  versionString  = "0.9.2 b9";
     const int          versionNumber  = 0x902;
 }
 #endif

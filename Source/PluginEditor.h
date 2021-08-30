@@ -16,6 +16,7 @@
 #include "Graph Components/Oscilloscope.h"
 #include "Graph Components/DistortionGraph.h"
 #include "Graph Components/WidthGraph.h"
+#include "Graph Components/VUPanel.h"
 #include "Multiband/Multiband.h"
 #include "GUI/InterfaceDefines.h"
 
@@ -52,6 +53,9 @@ private:
     // Oscilloscope
     Oscilloscope oscilloscope {processor};
     
+    // VU Meters
+    VUPanel vuPanel {processor};
+    
     // Distortion graph
     DistortionGraph distortionGraph;
     
@@ -83,11 +87,7 @@ private:
     
     // Spectrum
     SpectrumComponent spectrum;
-    
-    // ff meter
-    foleys::LevelMeterLookAndFeel lnf;
-    foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};
-    foleys::LevelMeter outputMeter{foleys::LevelMeter::Minimal};
+
 
     // Sliders
     juce::Slider

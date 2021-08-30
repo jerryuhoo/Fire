@@ -12,7 +12,7 @@
 #include "VUMeter.h"
 #include "../GUI/InterfaceDefines.h"
 #include "../Utility/AudioHelpers.h"
-
+#include "../GUI/InterfaceDefines.h"
 //==============================================================================
 VUMeter::VUMeter(FireAudioProcessor* inProcessor)
 :   mProcessor(inProcessor),
@@ -74,17 +74,17 @@ void VUMeter::timerCallback()
     float updatedCh1Level = 0.0f;
     switch (mParameterId)
     {
-        case 1:
+        case 1: // input
         {
-            updatedCh0Level = 0.75f;
-            updatedCh1Level = 0.75f;
+            updatedCh0Level = mProcessor->getInputMeterLevel(0);
+            updatedCh1Level = mProcessor->getInputMeterLevel(1);
         }
             break;
             
-        case 2:
+        case 2: // output
         {
-            updatedCh0Level = 0.35f;
-            updatedCh1Level = 0.35f;
+            updatedCh0Level = mProcessor->getOutputMeterLevel(0);
+            updatedCh1Level = mProcessor->getOutputMeterLevel(1);
         }
             break;
     }
@@ -95,7 +95,7 @@ void VUMeter::timerCallback()
     }
     else
     {
-        mCh0Level = 0.2 * (mCh0Level - updatedCh0Level) + updatedCh0Level; // 0.2 is smoothing coefficient
+        mCh0Level = SMOOTH_COEFF * (mCh0Level - updatedCh0Level) + updatedCh0Level;
     }
     
     if (updatedCh1Level > mCh1Level)
@@ -104,7 +104,7 @@ void VUMeter::timerCallback()
     }
     else
     {
-        mCh1Level = 0.2 * (mCh1Level - updatedCh1Level) + updatedCh1Level; // 0.2 is smoothing coefficient
+        mCh1Level = SMOOTH_COEFF * (mCh1Level - updatedCh1Level) + updatedCh1Level;
     }
     
     mCh0Level = helper_denormalize(mCh0Level);

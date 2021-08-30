@@ -57,6 +57,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // Visualiser
     addAndMakeVisible(oscilloscope);
     
+    // VU Meters
+    addAndMakeVisible(vuPanel);
+    
     // Distortion graph
     addAndMakeVisible(distortionGraph);
     
@@ -76,34 +79,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(stateComponent);
     lastPresetName = stateComponent.getPresetName();
 
-    // ff meter
-    //lnf = std::make_unique<foleys::LevelMeterLookAndFeel>();
-    // adjust the colours to how you like them, e.g.
-    lnf.setColour(foleys::LevelMeter::lmTextColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmTextClipColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmTextDeactiveColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmTicksColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmOutlineColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmBackgroundColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmBackgroundClipColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmMeterForegroundColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmMeterOutlineColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmMeterBackgroundColour, COLOUR0.withAlpha(0.f));
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxNormalColour, COLOUR3);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxWarnColour, COLOUR5);
-    lnf.setColour(foleys::LevelMeter::lmMeterMaxOverColour, COLOUR5);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientLowColour, COLOUR1);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientMidColour, COLOUR1);
-    lnf.setColour(foleys::LevelMeter::lmMeterGradientMaxColour, COLOUR5);
-    lnf.setColour(foleys::LevelMeter::lmMeterReductionColour, COLOUR3);
-
-    inputMeter.setLookAndFeel(&lnf);
-    inputMeter.setMeterSource(&processor.getInputMeterSource());
-    addAndMakeVisible(inputMeter);
-
-    outputMeter.setLookAndFeel(&lnf);
-    outputMeter.setMeterSource(&processor.getOutputMeterSource());
-    addAndMakeVisible(outputMeter);
+    
 
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
@@ -539,8 +515,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
     stopTimer();
-    inputMeter.setLookAndFeel(nullptr);
-    outputMeter.setLookAndFeel(nullptr);
+    
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
     driveKnob1.setLookAndFeel(nullptr);
     driveKnob2.setLookAndFeel(nullptr);
@@ -1069,6 +1044,9 @@ void FireAudioProcessorEditor::resized()
     oscilloscope.setBounds(OSC_X, OSC_Y, OSC_WIDTH, OSC_HEIGHT);
     distortionGraph.setBounds(D_GRAPH_X, D_GRAPH_Y, D_GRAPH_WIDTH, D_GRAPH_HEIGHT);
     //widthGraph.setBounds(WIDTH_GRAPH_X, WIDTH_GRAPH_Y, WIDTH_GRAPH_WIDTH, WIDTH_GRAPH_HEIGHT);
+    
+    // VU meters
+    vuPanel.setBounds(METER_X, METER_Y, METER_WIDTH, METER_HEIGHT);
     
     // spectrum
     spectrum.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);

@@ -125,9 +125,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // initialisation that you need..
     
     // fix the artifacts (also called zipper noise)
-    //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
-    //previousGainInput = Decibels::decibelsToGain(previousGainInput);
-
     previousOutput1 = (float)*treeState.getRawParameterValue(OUTPUT_ID1);
     previousOutput1 = juce::Decibels::decibelsToGain(previousOutput1);
     previousOutput2 = (float)*treeState.getRawParameterValue(OUTPUT_ID2);
@@ -243,6 +240,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         oversamplingHQ[i]->initProcessing(static_cast<size_t>(samplesPerBlock));
     }
     mDelay.reset(0);
+    
     // dsp init
 
     //int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
@@ -284,11 +282,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     root = Serie(&Vin, &Serie(&R1, &C1));
     // mode 9 diode================
     */
-
-    // ff meter
-    // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
-    inputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
-    outputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
     
     // multiband filters
     mBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
@@ -406,10 +399,14 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
     // save clean signal
     dryBuffer.makeCopyOf(buffer);
-    
-    // ff input meter
-    inputMeterSource.measureBlock(buffer);
 
+    // VU input meter
+//    float absInputLeftValue = fabs(buffer.getMagnitude(0, 0, buffer.getNumSamples()));
+    float absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+    float absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    mInputLeftSmoothed = SMOOTH_COEFF * (mInputLeftSmoothed - absInputLeftValue) + absInputLeftValue;
+    mInputRightSmoothed = SMOOTH_COEFF * (mInputRightSmoothed - absInputRightValue) + absInputRightValue;
+    
     juce::dsp::AudioBlock<float> block(buffer);
     // pre-filter
     bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
@@ -694,14 +691,20 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
+    // VU output meter
+    float absOutputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+    float absOutputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    mOutputLeftSmoothed = SMOOTH_COEFF * (mOutputLeftSmoothed - absOutputLeftValue) + absOutputLeftValue;
+    mOutputRightSmoothed = SMOOTH_COEFF * (mOutputRightSmoothed - absOutputRightValue) + absOutputRightValue;
+    
+    
     // Spectrum
     wetBuffer.makeCopyOf(buffer);
     pushDataToFFT();
 
     dryBuffer.clear();
 
-    // ff output meter
-    outputMeterSource.measureBlock(buffer);
+
     //visualiser.pushBuffer(buffer);
     
 //    historyBuffer.makeCopyOf(buffer);
@@ -1280,6 +1283,21 @@ void FireAudioProcessor::setLineNum(int lineNum)
 {
     this->lineNum = lineNum;
 }
+
+
+// VU meters
+float FireAudioProcessor::getInputMeterLevel(int channel)
+{
+    if (channel == 0) return dBToNormalizedGain(mInputLeftSmoothed);
+    else return dBToNormalizedGain(mInputRightSmoothed);
+}
+
+float FireAudioProcessor::getOutputMeterLevel(int channel)
+{
+    if (channel == 0) return dBToNormalizedGain(mOutputLeftSmoothed);
+    else return dBToNormalizedGain(mOutputRightSmoothed);
+}
+
 
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {

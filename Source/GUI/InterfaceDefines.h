@@ -206,58 +206,70 @@
 #define INIT_WIDTH          1000.0f
 #define INIT_HEIGHT         500.0f
 
-#define PART1               getHeight() / 10
-#define PART2               PART1 * 3
+#define PART1               getHeight() / 10.0f
+#define PART2               PART1 * 3.0f
 
-#define OSC_X               getWidth() / 10 - OSC_WIDTH / 2
-#define OSC_Y               PART1 + PART2 + getHeight() / 5
-#define OSC_WIDTH           getWidth() / 8
-#define OSC_HEIGHT          (getHeight() - PART1 - PART2) / 4
+#define OSC_X               getWidth() / 10.0f - OSC_WIDTH / 2.0f
+#define OSC_Y               PART1 + PART2 + getHeight() / 5.0f
+#define OSC_WIDTH           getWidth() / 8.0f
+#define OSC_HEIGHT          (getHeight() - PART1 - PART2) / 4.0f
 
-#define D_GRAPH_X           getWidth() / 10 - D_GRAPH_WIDTH / 2
-#define D_GRAPH_Y           PART1 + PART2 + getHeight() / 10 + (getHeight() - PART1 - PART2) / 2
-#define D_GRAPH_WIDTH       getWidth() / 8
-#define D_GRAPH_HEIGHT      (getHeight() - PART1 - PART2) / 4
+#define METER_X             getWidth() / 10.0f * 2.0f
+#define METER_Y             PART1 + PART2 + getHeight() / 5.0f
+#define METER_WIDTH         getWidth() / 8.0f
+#define METER_HEIGHT        (getHeight() - PART1 - PART2) / 4.0f
 
-#define WIDTH_GRAPH_X       getWidth() / 20 + getWidth() / 8
-#define WIDTH_GRAPH_Y       PART1 + PART2 + getHeight() / 10 + (getHeight() - PART1 - PART2) / 2
-#define WIDTH_GRAPH_WIDTH   getWidth() / 8
-#define WIDTH_GRAPH_HEIGHT  (getHeight() - PART1 - PART2) / 4
+#define D_GRAPH_X           getWidth() / 10.0f - D_GRAPH_WIDTH / 2.0f
+#define D_GRAPH_Y           PART1 + PART2 + getHeight() / 10.0f + (getHeight() - PART1 - PART2) / 2.0f
+#define D_GRAPH_WIDTH       getWidth() / 8.0f
+#define D_GRAPH_HEIGHT      (getHeight() - PART1 - PART2) / 4.0f
 
-#define SPEC_X              0
-#define SPEC_Y              getHeight() / 10
+#define WIDTH_GRAPH_X       getWidth() / 20.0f + getWidth() / 8.0f
+#define WIDTH_GRAPH_Y       PART1 + PART2 + getHeight() / 10.0f + (getHeight() - PART1 - PART2) / 2.0f
+#define WIDTH_GRAPH_WIDTH   getWidth() / 8.0f
+#define WIDTH_GRAPH_HEIGHT  (getHeight() - PART1 - PART2) / 4.0f
+
+#define SPEC_X              0.0f
+#define SPEC_Y              getHeight() / 10.0f
 #define SPEC_WIDTH          getWidth()
-#define SPEC_HEIGHT         getHeight() / 10 * 3
+#define SPEC_HEIGHT         getHeight() / 10.0f * 3.0f
 
-#define DRIVE_X             getWidth() / 2 - SCALED_KNOBSIZE
-#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2 - SCALED_KNOBSIZE / 2 - 20
-#define REC_X               startX * 7 - SCALED_KNOBSIZE / 2
-#define BIAS_X              startX * 8 - SCALED_KNOBSIZE / 2
-#define WIDTH_X             startX * 8 - SCALED_KNOBSIZE / 2
-#define OUTPUT_X            startX * 9 - SCALED_KNOBSIZE / 2
-#define COMP_RATIO_X        startX * 7 - SCALED_KNOBSIZE / 2
-#define COMP_THRESH_X       startX * 8 - SCALED_KNOBSIZE / 2
-#define CUTOFF_X            startX * 4.5 - SCALED_KNOBSIZE / 2
-#define RES_X               startX * 6 - SCALED_KNOBSIZE / 2
-#define DOWNSAMPLE_X        startX * 7.5 - SCALED_KNOBSIZE / 2
-#define COLOR_X             startX * 7.5 - SCALED_KNOBSIZE / 2
-#define FILTER_STATE_X      startX * 4.5 - SCALED_KNOBSIZE / 4
-#define FILTER_TYPE_X       startX * 6 - SCALED_KNOBSIZE / 4
-#define MIX_X               startX * 9 - SCALED_KNOBSIZE / 2
+#define DRIVE_X             getWidth() / 2.0f - SCALED_KNOBSIZE
+#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2.0f - SCALED_KNOBSIZE / 2.0f - 20.0f
+#define REC_X               startX * 7.0f - SCALED_KNOBSIZE / 2.0f
+#define BIAS_X              startX * 8.0f - SCALED_KNOBSIZE / 2.0f
+#define WIDTH_X             startX * 8.0f - SCALED_KNOBSIZE / 2.0f
+#define OUTPUT_X            startX * 9.0f - SCALED_KNOBSIZE / 2.0f
+#define COMP_RATIO_X        startX * 7.0f - SCALED_KNOBSIZE / 2.0f
+#define COMP_THRESH_X       startX * 8.0f - SCALED_KNOBSIZE / 2.0f
+#define CUTOFF_X            startX * 4.5f - SCALED_KNOBSIZE / 2.0f
+#define RES_X               startX * 6.0f - SCALED_KNOBSIZE / 2.0f
+#define DOWNSAMPLE_X        startX * 7.5f - SCALED_KNOBSIZE / 2.0f
+#define COLOR_X             startX * 7.5f - SCALED_KNOBSIZE / 2.0f
+#define FILTER_STATE_X      startX * 4.5f - SCALED_KNOBSIZE / 4.0f
+#define FILTER_TYPE_X       startX * 6.0f - SCALED_KNOBSIZE / 4.0f
+#define MIX_X               startX * 9.0f - SCALED_KNOBSIZE / 2.0f
+
+#define VU_METER_WIDTH         getWidth() / 10.0f
+#define VU_METER_HEIGHT        getHeight() / 10.0f * 9.0f
+#define VU_METER_Y             getHeight() / 10.0f
+#define VU_METER_X_1           getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
+#define VU_METER_X_2           getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
+
 
 // Switches
-#define SWITCH_WIDTH        getWidth() / 10
-#define SWITCH_HEIGHT       getHeight() / 20
-#define SWITCH_X            startX * 7 - SCALED_KNOBSIZE / 2
+#define SWITCH_WIDTH        getWidth() / 10.0f
+#define SWITCH_HEIGHT       getHeight() / 20.0f
+#define SWITCH_X            startX * 7.0f - SCALED_KNOBSIZE / 2.0f
 
-#define SWITCH_SHAPE_Y      PART1 + PART2 + getHeight() / 20 + 1 * getHeight() / 15
-#define SWITCH_WIDTH_Y      PART1 + PART2 + getHeight() / 20 + 2 * getHeight() / 15
-#define SWITCH_COMP_Y       PART1 + PART2 + getHeight() / 20 + 3 * getHeight() / 15
+#define SWITCH_SHAPE_Y      PART1 + PART2 + getHeight() / 20.0f + 1.0f * getHeight() / 15.0f
+#define SWITCH_WIDTH_Y      PART1 + PART2 + getHeight() / 20.0f + 2.0f * getHeight() / 15.0f
+#define SWITCH_COMP_Y       PART1 + PART2 + getHeight() / 20.0f + 3.0f * getHeight() / 15.0f
 
 // Buttons
-#define BUTTON_WIDTH        scaledKnobSize / 2
-#define BUTTON_HEIGHT       0.05 * getHeight()
-#define BUTTON_X            getWidth() / 10 * 4 - BUTTON_WIDTH / 2
+#define BUTTON_WIDTH        scaledKnobSize / 2.0f
+#define BUTTON_HEIGHT       0.05f * getHeight()
+#define BUTTON_X            getWidth() / 10.0f * 4.0f - BUTTON_WIDTH / 2.0f
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)
@@ -272,3 +284,6 @@
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
 #define COLOUR_GROUP        juce::Colour(50, 50, 50)
+
+// VU meters
+#define SMOOTH_COEFF        0.2

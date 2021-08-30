@@ -11,17 +11,17 @@
 - Feature
 
 1. add enable button for compressor, downsample, width, filter, etc.
-2. add own volume meter, remove ff meters
-3. auto-update check when open
-4. add graph for filters
-5. add mid-side / width / pan knobs
-6. add solo button between vertical lines
-7. width graph
-8. mouse drag vertically to change the output volume, like Ozone or saturn2
-9. smooth spectrogram
-10. put all knobs into a menu like serum fx
-11. add lfo control
-12. change A/B color when switching
+2. auto-update check when open
+3. add graph for filters
+4. add mid-side / width / pan knobs
+5. add solo button between vertical lines
+6. width graph
+7. mouse drag vertically to change the output volume, like Ozone or saturn2
+8. smooth spectrogram
+9. put all knobs into a menu like serum fx
+10. add lfo control
+11. change A/B color when switching
+12. add max input/output value for meters (currently RMS)
 
 - Improvement
 

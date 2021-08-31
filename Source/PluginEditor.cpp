@@ -54,17 +54,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     std::function<void()> initFunction = [this]() { initEditor(); };
     juce::Timer::callAfterDelay(1, initFunction);
     
-    // Visualiser
-    addAndMakeVisible(oscilloscope);
-    
-    // VU Meters
-    addAndMakeVisible(vuPanel);
-    
-    // Distortion graph
-    addAndMakeVisible(distortionGraph);
-    
-    // Width graph
-    addAndMakeVisible(widthGraph);
+    // Graph
+    addAndMakeVisible(graphPanel);
     
     // Spectrum
     addAndMakeVisible(spectrum);
@@ -625,8 +616,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
     
-    //distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
-    
     // DBG(lastPresetName);
     if (isPresetChanged()) // preset change
     {
@@ -714,12 +703,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 //        spectrum.setVisible(false);
 //        multiband.setVisible(false);
-//
-//        distortionGraph.setVisible(true);
-//        distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
-//        oscilloscope.setVisible(true);
 
-        
         bool isWidthSwitchOn = widthSwitch.getToggleState();
         bool isShapeSwitchOn = shapeSwitch.getToggleState();
         bool isCompressorSwitchOn = compressorSwitch.getToggleState();
@@ -1040,13 +1024,8 @@ void FireAudioProcessorEditor::resized()
     filterBandButton.setBounds(FILTER_TYPE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     filterHighButton.setBounds(FILTER_TYPE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
 
-    // visualiser
-    oscilloscope.setBounds(OSC_X, OSC_Y, OSC_WIDTH, OSC_HEIGHT);
-    distortionGraph.setBounds(D_GRAPH_X, D_GRAPH_Y, D_GRAPH_WIDTH, D_GRAPH_HEIGHT);
-    //widthGraph.setBounds(WIDTH_GRAPH_X, WIDTH_GRAPH_Y, WIDTH_GRAPH_WIDTH, WIDTH_GRAPH_HEIGHT);
-    
-    // VU meters
-    vuPanel.setBounds(METER_X, METER_Y, METER_WIDTH, METER_HEIGHT);
+    // Graph Panel
+    graphPanel.setBounds(OSC_X, OSC_Y, OSC_WIDTH * 2, OSC_HEIGHT * 2);
     
     // spectrum
     spectrum.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
@@ -1072,8 +1051,8 @@ void FireAudioProcessorEditor::resized()
     lowPassButtonLnf.scale = scale;
     bandPassButtonLnf.scale = scale;
     highPassButtonLnf.scale = scale;
-    oscilloscope.setScale(scale);
-    distortionGraph.setScale(scale);
+//    oscilloscope.setScale(scale);
+//    distortionGraph.setScale(scale);
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -1101,7 +1080,7 @@ void FireAudioProcessorEditor::timerCallback()
     // bypassed
     if (processor.getBypassedState())
     {
-        distortionGraph.repaint();
+        graphPanel.repaint();
         multiband.repaint();
     }
     else if (processor.isFFTBlockReady())
@@ -1117,9 +1096,8 @@ void FireAudioProcessorEditor::timerCallback()
         // prepare to paint the spectrum
         spectrum.prepareToPaintSpectrum(processor.getFFTSize(), tempFFTData);
 
+        graphPanel.repaint();
         spectrum.repaint();
-        oscilloscope.repaint();
-        distortionGraph.repaint();
         multiband.repaint();
         driveKnob1.repaint();
         driveKnob2.repaint();
@@ -1377,7 +1355,7 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
     distortionProcessor.controls.rectification = rec;
     distortionProcessor.controls.bias = bias;
 
-    distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
+    graphPanel.setDistortionState(mode, color, rec, mix, bias, drive, rateDivide);
 }
 
 void FireAudioProcessorEditor::setMultiband()

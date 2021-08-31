@@ -32,10 +32,15 @@ void DistortionGraph::paint (juce::Graphics& g)
 
     auto frameRight = getLocalBounds();
     
-    float cornerSize = 10 * scale;
-    g.setColour(COLOUR6);
-    juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
-    g.fillRoundedRectangle(rectFloat, cornerSize);
+    // draw outline
+    g.setColour (COLOUR6);
+    g.drawRect (getLocalBounds(), 1);
+    
+    // fill rounded rectangle
+//    float cornerSize = 10 * scale;
+//    g.setColour(COLOUR6);
+//    juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
+//    g.fillRoundedRectangle(rectFloat, cornerSize);
     
     if (mode < 9)
     {
@@ -141,9 +146,9 @@ void DistortionGraph::paint (juce::Graphics& g)
     }
     
     // shadow
-    juce::Path pathShadow;
-    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
-    drawInnerShadow(g, pathShadow);
+//    juce::Path pathShadow;
+//    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
+//    drawInnerShadow(g, pathShadow);
 }
 
 void DistortionGraph::resized()

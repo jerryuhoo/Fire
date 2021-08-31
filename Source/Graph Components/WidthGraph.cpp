@@ -25,8 +25,9 @@ WidthGraph::~WidthGraph()
 
 void WidthGraph::paint (juce::Graphics& g)
 {
-    g.setColour(COLOUR6);
-    g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 25);
+    // draw outline
+    g.setColour (COLOUR6);
+    g.drawRect (getLocalBounds(), 1);
 }
 
 void WidthGraph::resized()

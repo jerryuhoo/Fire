@@ -17,6 +17,7 @@
 #include "Graph Components/DistortionGraph.h"
 #include "Graph Components/WidthGraph.h"
 #include "Graph Components/VUPanel.h"
+#include "Graph Components/GraphPanel.h"
 #include "Multiband/Multiband.h"
 #include "GUI/InterfaceDefines.h"
 
@@ -50,17 +51,8 @@ private:
     // init editor
     void initEditor();
     
-    // Oscilloscope
-    Oscilloscope oscilloscope {processor};
-    
-    // VU Meters
-    VUPanel vuPanel {processor};
-    
-    // Distortion graph
-    DistortionGraph distortionGraph;
-    
-    // Width graph
-    WidthGraph widthGraph;
+    // Graph panel
+    GraphPanel graphPanel {processor};
     
     // Multiband
     Multiband multiband;

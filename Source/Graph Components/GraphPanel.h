@@ -44,7 +44,7 @@ private:
     DistortionGraph distortionGraph;
     
     // Width Graph
-    WidthGraph widthGraph;
+    WidthGraph widthGraph {processor};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GraphPanel)
 };

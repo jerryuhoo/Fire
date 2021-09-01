@@ -11,6 +11,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "../PluginProcessor.h"
 
 //==============================================================================
 /*
@@ -18,12 +19,15 @@
 class WidthGraph  : public juce::Component
 {
 public:
-    WidthGraph();
+    WidthGraph(FireAudioProcessor &);
     ~WidthGraph() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
+    FireAudioProcessor &processor;
+    juce::Array<float> historyL;
+    juce::Array<float> historyR;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
 };

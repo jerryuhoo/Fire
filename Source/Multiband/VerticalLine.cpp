@@ -30,10 +30,15 @@ void VerticalLine::paint (juce::Graphics& g)
     
     g.fillRect(getWidth() / 10.f * 4.f, 0.f, getWidth() / 10.f * 2.f, static_cast<float> (getHeight()));
 
-    if (isEntered)
-    {
+    if (isMouseOverOrDragging()) {
         g.setColour(COLOUR1.withAlpha(0.2f));
         g.fillAll();
+    }
+    
+    if (isEntered)
+    {
+        //g.setColour(COLOUR1.withAlpha(0.2f));
+        //g.fillAll();
     }
 }
 
@@ -115,7 +120,7 @@ void VerticalLine::setIndex(int index)
     this->index = index;
 }
 
-float VerticalLine::getIndex()
+int VerticalLine::getIndex()
 {
     return index;
 }
@@ -125,7 +130,7 @@ void VerticalLine::setLeft(int leftIndex)
     this->leftIndex = leftIndex;
 }
 
-float VerticalLine::getLeft()
+int VerticalLine::getLeft()
 {
     return leftIndex;
 }
@@ -135,7 +140,7 @@ void VerticalLine::setRight(int rightIndex)
     this->rightIndex = rightIndex;
 }
 
-float VerticalLine::getRight()
+int VerticalLine::getRight()
 {
     return rightIndex;
 }

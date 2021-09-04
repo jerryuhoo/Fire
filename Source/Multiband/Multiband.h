@@ -12,12 +12,10 @@
 
 #include <JuceHeader.h>
 #include "SpectrumComponent.h"
-#include "VerticalLine.h"
-#include "CloseButton.h"
-#include "FreqTextLabel.h"
 #include "SoloButton.h"
 #include "EnableButton.h"
 #include <vector>
+#include "FreqDividerGroup.h"
 
 //==============================================================================
 /*
@@ -87,9 +85,7 @@ private:
     int sortedIndex[3] = { -1, -1, -1 };
     int frequency[3] = { 0, 0, 0 };
     
-    std::unique_ptr<VerticalLine> verticalLines[3];
-    std::unique_ptr<CloseButton> closeButtons[3];
-    std::unique_ptr<FreqTextLabel> freqTextLabel[3];
+    std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];
     std::unique_ptr<EnableButton> enableButton[4];
     

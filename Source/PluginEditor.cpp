@@ -351,7 +351,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     shapeSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     shapeSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
     shapeSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    shapeSwitch.setLookAndFeel(&roundedButtonLnf);
+    shapeSwitch.setLookAndFeel(&flatButtonLnf);
     
     addAndMakeVisible(widthSwitch);
     widthSwitch.setClickingTogglesState(true);
@@ -363,7 +363,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     widthSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     widthSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
     widthSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    widthSwitch.setLookAndFeel(&roundedButtonLnf);
+    widthSwitch.setLookAndFeel(&flatButtonLnf);
     
     addAndMakeVisible(compressorSwitch);
     compressorSwitch.setClickingTogglesState(true);
@@ -375,7 +375,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     compressorSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     compressorSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
     compressorSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    compressorSwitch.setLookAndFeel(&roundedButtonLnf);
+    compressorSwitch.setLookAndFeel(&flatButtonLnf);
     
     // Attachment
     //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);

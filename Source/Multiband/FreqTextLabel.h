@@ -17,7 +17,7 @@
 //==============================================================================
 /*
 */
-class FreqTextLabel  : public juce::Component
+class FreqTextLabel  : public juce::Label
 {
 public:
     FreqTextLabel(VerticalLine &v);

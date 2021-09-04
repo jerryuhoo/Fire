@@ -143,6 +143,18 @@ public:
         // draw tick
         g.setColour(COLOUR3.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
         g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
+        
+        // when mouse is over or dragging, change the label name to the slider value
+//        auto isMouseOver = slider.isMouseOverOrDragging () && slider.isEnabled ();
+//
+//        if (!isMouseOver)
+//        {
+//            slider.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
+//        }
+//        else
+//        {
+//            slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+//        }
     }
 
     // resize slider and textbox size
@@ -631,7 +643,7 @@ public:
         setColour(juce::Slider::textBoxBackgroundColourId, COLOUR6);
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
-        setColour(juce::Label::textColourId, COLOUR1);
+        setColour(juce::Label::textColourId, COLOUR_FONT);
         setColour(juce::Label::textWhenEditingColourId, COLOUR1);
         setColour(juce::Label::outlineColourId, juce::Colours::transparentWhite);
         setColour(juce::Label::backgroundWhenEditingColourId, COLOUR6);
@@ -1329,60 +1341,60 @@ public:
 };
 
 
-//class FlatButtonLnf : public juce::LookAndFeel_V4
-//{
-//public:
-//    float scale = 1.f;
-//    void drawButtonBackground(juce::Graphics &g,
-//                              juce::Button &button,
-//                              const juce::Colour &backgroundColour,
-//                              bool shouldDrawButtonAsHighlighted,
-//                              bool shouldDrawButtonAsDown) override
-//    {
-//        auto cornerSize = 0.0f;
-//        auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
-//
-//        auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
-//                              .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
-//
-//        if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
-//            baseColour = baseColour.contrasting(shouldDrawButtonAsDown ? 0.2f : 0.05f);
-//
-//        g.setColour(baseColour);
-//
-//        auto flatOnLeft = button.isConnectedOnLeft();
-//        auto flatOnRight = button.isConnectedOnRight();
-//        auto flatOnTop = button.isConnectedOnTop();
-//        auto flatOnBottom = button.isConnectedOnBottom();
-//
-//        if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
-//        {
-//            juce::Path path;
-//            path.addRoundedRectangle(bounds.getX(), bounds.getY(),
-//                                     bounds.getWidth(), bounds.getHeight(),
-//                                     cornerSize, cornerSize,
-//                                     !(flatOnLeft || flatOnTop),
-//                                     !(flatOnRight || flatOnTop),
-//                                     !(flatOnLeft || flatOnBottom),
-//                                     !(flatOnRight || flatOnBottom));
-//
-//            g.fillPath(path);
-//
-//            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
-//            g.strokePath(path, juce::PathStrokeType(1.0f));
-//        }
-//        else
-//        {
-//            g.fillRoundedRectangle(bounds, cornerSize);
-//            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
-//            g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
-//        }
-//    }
-//
-//    
-//    
-//    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
-//    {
-//        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
-//    }
-//};
+class FlatButtonLnf : public juce::LookAndFeel_V4
+{
+public:
+    float scale = 1.f;
+    void drawButtonBackground(juce::Graphics &g,
+                              juce::Button &button,
+                              const juce::Colour &backgroundColour,
+                              bool shouldDrawButtonAsHighlighted,
+                              bool shouldDrawButtonAsDown) override
+    {
+        auto cornerSize = 0.0f;
+        auto bounds = button.getLocalBounds().toFloat().reduced(0.5f, 0.5f);
+
+        auto baseColour = backgroundColour.withMultipliedSaturation(button.hasKeyboardFocus(true) ? 1.3f : 1.0f)
+                              .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f);
+
+        if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted)
+            baseColour = baseColour.contrasting(shouldDrawButtonAsDown ? 0.2f : 0.05f);
+
+        g.setColour(baseColour);
+
+        auto flatOnLeft = button.isConnectedOnLeft();
+        auto flatOnRight = button.isConnectedOnRight();
+        auto flatOnTop = button.isConnectedOnTop();
+        auto flatOnBottom = button.isConnectedOnBottom();
+
+        if (flatOnLeft || flatOnRight || flatOnTop || flatOnBottom)
+        {
+            juce::Path path;
+            path.addRoundedRectangle(bounds.getX(), bounds.getY(),
+                                     bounds.getWidth(), bounds.getHeight(),
+                                     cornerSize, cornerSize,
+                                     !(flatOnLeft || flatOnTop),
+                                     !(flatOnRight || flatOnTop),
+                                     !(flatOnLeft || flatOnBottom),
+                                     !(flatOnRight || flatOnBottom));
+
+            g.fillPath(path);
+
+            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
+            g.strokePath(path, juce::PathStrokeType(1.0f));
+        }
+        else
+        {
+            g.fillRoundedRectangle(bounds, cornerSize);
+            g.setColour(button.findColour(juce::ComboBox::outlineColourId));
+            g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
+        }
+    }
+
+    
+    
+    juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
+    {
+        return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+};

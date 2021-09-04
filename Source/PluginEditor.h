@@ -313,7 +313,7 @@ private:
     LowPassButtonLnf lowPassButtonLnf;
     BandPassButtonLnf bandPassButtonLnf;
     HighPassButtonLnf highPassButtonLnf;
-    //FlatButtonLnf flatButtonLnf;
+    FlatButtonLnf flatButtonLnf;
     
     Distortion distortionProcessor;
 

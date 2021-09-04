@@ -382,7 +382,12 @@ void FireAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer,
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer &midiMessages)
 {
     // set bypass to false
-    isBypassed = false;
+
+    if (isBypassed)
+    {
+//        buffer.clear();
+        isBypassed = false;
+    }
 
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();

@@ -281,6 +281,7 @@
 #define COLOUR6             juce::Colour(40, 40, 40)
 #define COLOUR7             juce::Colour(15, 15, 15)
 #define COLOUR8             juce::Colour(10, 10, 10)
+#define COLOUR_FONT         juce::Colour(100, 100, 100)
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
 #define COLOUR_GROUP        juce::Colour(50, 50, 50)

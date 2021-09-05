@@ -121,6 +121,10 @@ private:
     Multiband &multiband;
     //FireAudioProcessorEditor& editor;
 
+    std::unique_ptr<juce::FileChooser> fileChooser;
+    std::unique_ptr<VersionInfo> versionInfo;
+    juce::String version;
+    
     OtherLookAndFeel otherLookAndFeel;
     
     juce::TextButton toggleABButton;

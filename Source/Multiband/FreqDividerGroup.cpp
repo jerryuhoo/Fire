@@ -40,16 +40,20 @@ void FreqDividerGroup::paint (juce::Graphics& g)
     
     if (verticalLine.getState())
     {
-        if (verticalLine.isMoving() || verticalLine.isMouseOver() || freqTextLabel.isMouseOver())
+        if (verticalLine.isMoving() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
             freqTextLabel.setVisible(true);
-            freqTextLabel.setFreq(mFrequency);
         }
         else
         {
             freqTextLabel.setVisible(false);
         }
         closeButton.setVisible(true);
+    }
+    else
+    {
+        // reset frequency if it is deleted
+        setFrequency(0);
     }
 }
 
@@ -62,12 +66,22 @@ void FreqDividerGroup::resized()
 
 int FreqDividerGroup::getFrequency()
 {
-    return  mFrequency;
+    return  freqTextLabel.getFreq();
 }
 
 void FreqDividerGroup::setFrequency(int frequency)
 {
-    mFrequency = frequency;
+    freqTextLabel.setFreq(frequency);
+}
+
+bool FreqDividerGroup::getChangeState()
+{
+    return freqTextLabel.getChangeState();
+}
+
+void FreqDividerGroup::setChangeState(bool state)
+{
+    freqTextLabel.setChangeState(state);
 }
 
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[])
@@ -93,4 +107,5 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
         freqDividerGroup[sortedIndex[verticalLine.getRight()]]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup, sortedIndex);
     }
     verticalLine.setXPercent(newXPercent);
+    setFrequency(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
 }

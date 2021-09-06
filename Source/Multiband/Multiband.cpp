@@ -43,7 +43,7 @@ Multiband::Multiband()
 //    margin = getHeight() / 20.0f;
 //    size = freqDividerGroup[0]->verticalLine.getHeight() / 10.f;
 //    width = freqDividerGroup[0]->verticalLine.getWidth() / 2.f;
-//    updateLines(false, -1);
+//    updateLines("do nothing", -1);
 //    spectrum.setInterceptsMouseClicks(false, false);
 
 }
@@ -300,8 +300,7 @@ void Multiband::updateLines(juce::String option, int changedIndex)
         if (freqDividerGroup[i]->verticalLine.getState())
         {
             freqDividerGroup[i]->verticalLine.setVisible(true);
-            
-            setLineRelatedBounds(i);
+            setLineRelatedBoundsByX(i);
             sortedIndex[count] = i;
             count++;
         }
@@ -331,14 +330,14 @@ void Multiband::updateLines(juce::String option, int changedIndex)
     for (int i = 0; i < lineNum; i++)
     {
         freqDividerGroup[sortedIndex[i]]->verticalLine.setIndex(i); // this index is the No. you count the line from left to right
-        frequency[i] = freqDividerGroup[sortedIndex[i]]->getFrequency();
+        //[delete] frequency[i] = freqDividerGroup[sortedIndex[i]]->getFrequency();
     }
     
-    // reset other frequency to 0
-    for (int i = lineNum; i < 3; i++)
-    {
-        frequency[i] = 0;
-    }
+    //[delete]reset other frequency to 0
+//    for (int i = lineNum; i < 3; i++)
+//    {
+//        frequency[i] = 0;
+//    }
     
     // set left right index
     for (int i = 0; i < lineNum; i++)
@@ -531,7 +530,7 @@ void Multiband::getFreqArray(int (&input)[3])
 {
     for (int i = 0; i < lineNum; i++)
     {
-        input[i] = frequency[i];
+        input[i] = freqDividerGroup[sortedIndex[i]]->getFrequency();
     }
     for (int i = lineNum; i < 3; i++)
     {
@@ -553,12 +552,13 @@ void Multiband::reset()
 //        closeButtons[i]->setVisible(false);
         multibandFocus[i + 1] = false;
         sortedIndex[i] = 0;
-        frequency[i] = 0;
+        //[delete] frequency[i] = 0;
         lastLineState[i] = freqDividerGroup[i]->verticalLine.getState();
     }
     lineNum = 0;
 }
 
+// 3 ways to change frequency: 1. change freqLabel; 2. drag; 3.change Ableton slider
 void Multiband::dragLines(float xPercent)
 {
     // drag
@@ -570,22 +570,79 @@ void Multiband::dragLines(float xPercent)
             isMoving = true;
         }
     }
-    
-    if (isMoving)
+
+    if (isMoving) // drag
     {
         for (int i = 0; i < lineNum; i++)
         {
             if (freqDividerGroup[sortedIndex[i]]->verticalLine.getState())
             {
-                setLineRelatedBounds(sortedIndex[i]);
-                frequency[sortedIndex[i]] = freqDividerGroup[sortedIndex[i]]->getFrequency();
+                /// see line 303 repeated?
+                //setLineRelatedBoundsByX(sortedIndex[i]);
+                //[delete]frequency[sortedIndex[i]] = freqDividerGroup[sortedIndex[i]]->getFrequency();
             }
         }
+        setSoloRelatedBounds();
+       
+    }
+    else // change freq text
+    {
+//        for (int i = 0; i < lineNum; i++)
+//        {
+//            if (freqDividerGroup[sortedIndex[i]]->verticalLine.getState())
+//            {
+//                setLineRelatedBoundsByFreq(sortedIndex[i]);
+//                frequency[sortedIndex[i]] = freqDividerGroup[sortedIndex[i]]->getFrequency();
+//
+//            }
+//        }
+//        setSoloRelatedBounds();
+        
+        for (int i = 0; i < lineNum; i++)
+        {
+            if (freqDividerGroup[sortedIndex[i]]->getChangeState())
+            {
+                dragLinesByFreq(freqDividerGroup[sortedIndex[i]]->getFrequency(), sortedIndex[i]);
+                freqDividerGroup[sortedIndex[i]]->setChangeState(false);
+            }
+        }
+    }
+}
+
+// In Ableton, move the slider in the control bar, the lines should move.
+void Multiband::dragLinesByFreq(int freq, int index)
+{
+    if (!isMoving && freqDividerGroup[index]->verticalLine.getState())
+    {
+        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq / (44100 / 2.0)));
+        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
+        
+        // keep distance limit between lines
+        for (int i = 0; i < lineNum; i++)
+        {
+            if (freqDividerGroup[sortedIndex[i]]->verticalLine.getState())
+            {
+                // get the correct xPercent if the line cannot move.
+                xPercent = freqDividerGroup[sortedIndex[i]]->verticalLine.getXPercent();
+
+                freqDividerGroup[sortedIndex[i]]->verticalLine.setXPercent(xPercent);
+                freqDividerGroup[sortedIndex[i]]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
+                // get the correct freq if the line cannot move.
+                freq = freqDividerGroup[sortedIndex[i]]->getFrequency();
+            }
+        }
+        
+//        if (freqDividerGroup[index]->verticalLine.getState())
+//        {
+//            freqDividerGroup[index]->setFrequency(freq);
+//            frequency[index] = freq;
+//        }
+
         setSoloRelatedBounds();
     }
 }
 
-void Multiband::setLineRelatedBounds(int i)
+void Multiband::setLineRelatedBoundsByX(int i)
 {
     freqDividerGroup[i]->setBounds(freqDividerGroup[i]->verticalLine.getXPercent() * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
     //closeButtons[i]->setBounds(freqDividerGroup[i]->verticalLine.getX() + width + margin, margin, size, size);
@@ -595,6 +652,13 @@ void Multiband::setLineRelatedBounds(int i)
     int freq = static_cast<int>(SpectrumComponent::transformFromLog(freqDividerGroup[i]->verticalLine.getXPercent()) * (44100 / 2.0));
     freqDividerGroup[i]->setFrequency(freq);
 }
+
+//void Multiband::setLineRelatedBoundsByFreq(int i)
+//{
+//    int freq = freqDividerGroup[i]->getFrequency();
+//    float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq / (44100 / 2.0)));
+//    freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
+//}
 
 void Multiband::setSoloRelatedBounds()
 {
@@ -625,15 +689,30 @@ void Multiband::setFocus(bool focus1, bool focus2, bool focus3, bool focus4)
 
 void Multiband::setLineState(bool state1, bool state2, bool state3)
 {
-    lineState[0] = state1;
-    lineState[1] = state2;
-    lineState[2] = state3;
+//    lineState[0] = state1;
+//    lineState[1] = state2;
+//    lineState[2] = state3;
     freqDividerGroup[0]->verticalLine.setState(state1);
     freqDividerGroup[1]->verticalLine.setState(state2);
     freqDividerGroup[2]->verticalLine.setState(state3);
     lastLineState[0] = state1;
     lastLineState[1] = state2;
     lastLineState[2] = state3;
+}
+
+void Multiband::getLineState(bool (&input)[3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        if (sortedIndex[i] < 0)
+        {
+            input[i] = false;
+        }
+        else
+        {
+            input[i] = freqDividerGroup[sortedIndex[i]]->verticalLine.getState();
+        }
+    }
 }
 
 void Multiband::setLinePos(float pos1, float pos2, float pos3)
@@ -651,31 +730,18 @@ void Multiband::getLinePos(float (&input)[3])
     }
 }
 
-
 void Multiband::setFrequency(int freq1, int freq2, int freq3)
 {
-    frequency[0] = freq1;
-    frequency[1] = freq2;
-    frequency[2] = freq3;
+    //[delete]
+//    frequency[0] = freq1;
+//    frequency[1] = freq2;
+//    frequency[2] = freq3;
     freqDividerGroup[0]->setFrequency(freq1);
     freqDividerGroup[1]->setFrequency(freq2);
     freqDividerGroup[2]->setFrequency(freq3);
 }
 
-void Multiband::getLineState(bool (&input)[3])
-{
-    for (int i = 0; i < 3; i++)
-    {
-        if (sortedIndex[i] < 0)
-        {
-            input[i] = false;
-        }
-        else
-        {
-            input[i] = freqDividerGroup[sortedIndex[i]]->verticalLine.getState();
-        }
-    }
-}
+
 
 void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)
 {
@@ -747,4 +813,9 @@ bool Multiband::getDeleteState()
 void Multiband::setDeleteState(bool state)
 {
     isDeleted = state;
+}
+
+int Multiband::getSortedIndex(int index)
+{
+    return sortedIndex[index];
 }

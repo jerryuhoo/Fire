@@ -14,6 +14,7 @@
 #include "FreqTextLabel.h"
 #include "CloseButton.h"
 #include "VerticalLine.h"
+#include "SpectrumComponent.h"
 //==============================================================================
 /*
 */
@@ -31,12 +32,13 @@ public:
     void setFrequency(int frequency);
     
     void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[]);
-    
+    bool getChangeState();
+    void setChangeState(bool state);
 private:
     float margin = 7.5f;
     float size = 15.0f;
     float width = 5.0f;
-    int mFrequency = -1;
+
     CloseButton closeButton;
     FreqTextLabel freqTextLabel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)

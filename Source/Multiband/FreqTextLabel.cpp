@@ -18,7 +18,8 @@ FreqTextLabel::FreqTextLabel(VerticalLine &v) : verticalLine(v)
     // initialise any special settings that your component needs.
     mFrequency = -1;
     mState = false;
-    setEditable(true);
+    addAndMakeVisible(freqLabel);
+    freqLabel.setEditable(true);
 }
 
 FreqTextLabel::~FreqTextLabel()
@@ -32,13 +33,32 @@ void FreqTextLabel::paint (juce::Graphics& g)
     g.fillAll();
     g.setColour (COLOUR1);
     g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
-    g.setFont (14.0f * mScale);
-    g.drawText (static_cast<juce::String>(mFrequency) + " Hz", getLocalBounds(),
-                juce::Justification::centred, true);   // draw some placeholder text
+    //    g.drawText (static_cast<juce::String>(mFrequency) + " Hz", getLocalBounds(),
+    //                juce::Justification::centred, true);   // draw some placeholder text
+    
+    freqLabel.setBounds(0, 0, getWidth(), getHeight());
+    freqLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    freqLabel.setJustificationType (juce::Justification::centred);
+    freqLabel.setFont (juce::Font (14.0f * mScale, juce::Font::plain));
+    juce::String freqText;
+    freqText = static_cast<juce::String>(mFrequency) + " Hz";
+    if (!freqLabel.isBeingEdited())
+    {
+        freqLabel.setText(freqText, juce::dontSendNotification);
+    }
+    
+    freqLabel.onTextChange = [this]
+    {
+        mFrequency = freqLabel.getText().getIntValue();
+        changeState = true;
+    };
+
+    //freqLabel.setTextToShowWhenEmpty ("1", COLOUR1);
 }
 
 void FreqTextLabel::resized()
 {
+    
 }
 
 void FreqTextLabel::setFreq(int freq)
@@ -54,4 +74,19 @@ int FreqTextLabel::getFreq()
 void FreqTextLabel::setScale(float scale)
 {
     mScale = scale;
+}
+
+bool FreqTextLabel::isMouseOverCustom()
+{
+    return isMouseOver() || freqLabel.isMouseOverOrDragging() || freqLabel.isBeingEdited();
+}
+
+bool FreqTextLabel::getChangeState()
+{
+    return changeState;
+}
+
+void FreqTextLabel::setChangeState(bool state)
+{
+    changeState = state;
 }

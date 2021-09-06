@@ -95,6 +95,7 @@ void VerticalLine::setState(bool state)
     this->state = state;
     if (state == false)
     {
+        // reset
         setVisible(false);
         xPercent = 0;
         Multiband::lineDeleted();

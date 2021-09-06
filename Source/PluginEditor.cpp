@@ -62,7 +62,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(multiband);
     
     setMultiband();
-
+    multiFreqSlider1.addListener(this);
+    multiFreqSlider2.addListener(this);
+    multiFreqSlider3.addListener(this);
+    
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
     
@@ -465,10 +468,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     lineStateSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID1, lineStateSlider1);
     lineStateSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID2, lineStateSlider2);
     lineStateSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID3, lineStateSlider3);
-    
-    linePosSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID1, linePosSlider1);
-    linePosSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID2, linePosSlider2);
-    linePosSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINEPOS_ID3, linePosSlider3);
 
     setMenu(&distortionMode1);
     setMenu(&distortionMode2);
@@ -645,16 +644,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             multiband.updateLines("moving", multiband.getChangedIndex());
             multiband.setMovingState(false);
         }
+        updateFreqArray();
+        
 
-        multiband.getFreqArray(multibandFreq);
-        multiFreqSlider1.setValue(multibandFreq[0]);
-        multiFreqSlider2.setValue(multibandFreq[1]);
-        multiFreqSlider3.setValue(multibandFreq[2]);
-
-        multiband.getLinePos(linePos);
-        linePosSlider1.setValue(linePos[0]);
-        linePosSlider2.setValue(linePos[1]);
-        linePosSlider3.setValue(linePos[2]);
 
         multiband.getLineState(lineState);
         lineStateSlider1.setValue(lineState[0]);
@@ -918,9 +910,6 @@ void FireAudioProcessorEditor::resized()
     // save resized size
     processor.setSavedHeight(getHeight());
     processor.setSavedWidth(getWidth());
-    
-    // VUMeters
-    //vuMeter.setBounds(30, 30, 100, 100);
 
     // knobs
     int knobNum = 10;
@@ -1030,13 +1019,6 @@ void FireAudioProcessorEditor::resized()
     // spectrum
     spectrum.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
     multiband.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
-    
-    // ff meter
-//    int ffWidth = 20;
-//    int ffHeightStart = getHeight() / 10;
-//    int ffHeight = getHeight() / 10 * 3;
-//    inputMeter.setBounds(getWidth() / 2 - ffWidth - 2, ffHeightStart, ffWidth, ffHeight + 2);
-//    outputMeter.setBounds(getWidth() / 2 + 2, ffHeightStart, ffWidth, ffHeight + 2);
 
     // distortion menu
     distortionMode1.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
@@ -1051,8 +1033,6 @@ void FireAudioProcessorEditor::resized()
     lowPassButtonLnf.scale = scale;
     bandPassButtonLnf.scale = scale;
     highPassButtonLnf.scale = scale;
-//    oscilloscope.setScale(scale);
-//    distortionGraph.setScale(scale);
 }
 
 void FireAudioProcessorEditor::updateToggleState()
@@ -1073,6 +1053,14 @@ void FireAudioProcessorEditor::updateToggleState()
         cutoffKnob.setEnabled(true);
         resKnob.setEnabled(true);
     }
+}
+
+void FireAudioProcessorEditor::updateFreqArray()
+{
+    multiband.getFreqArray(multibandFreq);
+    multiFreqSlider1.setValue(multibandFreq[0]);
+    multiFreqSlider2.setValue(multibandFreq[1]);
+    multiFreqSlider3.setValue(multibandFreq[2]);
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -1113,20 +1101,37 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
     linkValue(*slider, driveKnob2, outputKnob2, linkedButton2);
     linkValue(*slider, driveKnob3, outputKnob3, linkedButton3);
     linkValue(*slider, driveKnob4, outputKnob4, linkedButton4);
-    
-    // TODO: can't do vertical line position automation
-//    if (slider == &linePosSlider1)
-//    {
-//        multiband.dragLines(linePosSlider1.getValue());
-//    }
-//    if (slider == &linePosSlider2)
-//    {
-//        multiband.dragLines(linePosSlider2.getValue());
-//    }
-//    if (slider == &linePosSlider3)
-//    {
-//        multiband.dragLines(linePosSlider3.getValue());
-//    }
+
+    if (slider == &multiFreqSlider1 && lineState[0])
+    {
+        if (!multiband.getMovingState())
+        {
+            multiband.dragLinesByFreq(multiFreqSlider1.getValue(), multiband.getSortedIndex(0));
+            multiband.getFreqArray(multibandFreq);
+            multiFreqSlider2.setValue(multibandFreq[1]);
+            multiFreqSlider3.setValue(multibandFreq[2]);
+        }
+    }
+    if (slider == &multiFreqSlider2 && lineState[1])
+    {
+        if (!multiband.getMovingState())
+        {
+            multiband.dragLinesByFreq(multiFreqSlider2.getValue(), multiband.getSortedIndex(1));
+            multiband.getFreqArray(multibandFreq);
+            multiFreqSlider1.setValue(multibandFreq[0]);
+            multiFreqSlider3.setValue(multibandFreq[2]);
+        }
+    }
+    if (slider == &multiFreqSlider3 && lineState[2])
+    {
+        if (!multiband.getMovingState())
+        {
+            multiband.dragLinesByFreq(multiFreqSlider3.getValue(), multiband.getSortedIndex(2));
+            multiband.getFreqArray(multibandFreq);
+            multiFreqSlider1.setValue(multibandFreq[0]);
+            multiFreqSlider2.setValue(multibandFreq[1]);
+        }
+    }
 }
 
 void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton)
@@ -1371,9 +1376,9 @@ void FireAudioProcessorEditor::setMultiband()
     bool lineState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID3));
     multiband.setLineState(lineState1, lineState2, lineState3);
 
-    float pos1 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID1));
-    float pos2 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID2));
-    float pos3 = static_cast<float>(*processor.treeState.getRawParameterValue(LINEPOS_ID3));
+    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1 / (44100 / 2.0)));
+    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2 / (44100 / 2.0)));
+    float pos3 = static_cast<float>(SpectrumComponent::transformToLog(freq3 / (44100 / 2.0)));
     multiband.setLinePos(pos1, pos2, pos3);
     
     bool enableState1 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID1));

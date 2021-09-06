@@ -150,13 +150,6 @@
 #define FREQ_ID3            "freq3"
 #define FREQ_NAME3          "Freq3"
 
-#define LINEPOS_ID1         "linePos1"
-#define LINEPOS_NAME1       "LinePos1"
-#define LINEPOS_ID2         "linePos2"
-#define LINEPOS_NAME2       "LinePos2"
-#define LINEPOS_ID3         "linePos3"
-#define LINEPOS_NAME3       "LinePos3"
-
 #define BAND_ENABLE_ID1     "multibandEnable1"
 #define BAND_ENABLE_NAME1   "MultibandEnable1"
 #define BAND_ENABLE_ID2     "multibandEnable2"

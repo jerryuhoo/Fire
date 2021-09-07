@@ -628,7 +628,7 @@ void Multiband::dragLinesByFreq(int freq, int index)
                 freqDividerGroup[sortedIndex[i]]->verticalLine.setXPercent(xPercent);
                 freqDividerGroup[sortedIndex[i]]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
                 // get the correct freq if the line cannot move.
-                freq = freqDividerGroup[sortedIndex[i]]->getFrequency();
+                //freq = freqDividerGroup[sortedIndex[i]]->getFrequency();
             }
         }
         

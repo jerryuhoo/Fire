@@ -2,6 +2,8 @@
 
 ![Alt text](Fire1.png?raw=true "Title")
 
+![Alt text](Fire2.png?raw=true "Title")
+
 ## 1. Introduce
 
  This is a multi-band distortion plugin. 『Fire』 supports DAWs such as Ableton Live, Fl Studio...
@@ -40,11 +42,19 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ## 5. Update Notes
 
+2020-9-7 (version 0.9.2)
+
+1. GUI improvement.
+2. Added shape, width, and compressor groups.
+3. Spectrogram display bug fixed.
+4. Added VU meter and width graph.
+5. Added frequency label, and frequency automation bug fixed.
+
 2020-1-24 (version 0.9.1)
 
-Drive knob reduction and GUI improvement
+1. Drive knob reduction and GUI improvement
 Fixed a bug that in global mode menu won't change when selecting different bands.
 
 2020-1-23 (version 0.9.0)
 
-First Beta release.
+1. First Beta release.

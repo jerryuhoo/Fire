@@ -39,6 +39,6 @@ private:
     float mScale = 1.0f;
     bool changeState = false;
     juce::Label freqLabel;
-    
+    FlatButtonLnf flatButtonLnf;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqTextLabel)
 };

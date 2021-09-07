@@ -36,7 +36,7 @@ void FreqDividerGroup::paint (juce::Graphics& g)
     verticalLine.setBounds(0, 0, getWidth() / 100.0f, getHeight());
     closeButton.setBounds(width + margin, margin, size, size);
     //freqTextLabel.setBounds(width + margin - width * 7, getHeight() / 5 + margin, width * 15, size);
-    freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size);
+    freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size * 2);
     
     if (verticalLine.getState())
     {

@@ -20,10 +20,12 @@ FreqTextLabel::FreqTextLabel(VerticalLine &v) : verticalLine(v)
     mState = false;
     addAndMakeVisible(freqLabel);
     freqLabel.setEditable(true);
+    setLookAndFeel(&flatButtonLnf);
 }
 
 FreqTextLabel::~FreqTextLabel()
 {
+    setLookAndFeel(nullptr);
 }
 
 void FreqTextLabel::paint (juce::Graphics& g)
@@ -38,6 +40,10 @@ void FreqTextLabel::paint (juce::Graphics& g)
     
     freqLabel.setBounds(0, 0, getWidth(), getHeight());
     freqLabel.setColour (juce::Label::textColourId, juce::Colours::white);
+    freqLabel.setColour(juce::Label::outlineColourId, COLOUR1);
+    freqLabel.setColour(juce::Label::outlineWhenEditingColourId, COLOUR1);
+    freqLabel.setColour(juce::Label::backgroundWhenEditingColourId, COLOUR7);
+
     freqLabel.setJustificationType (juce::Justification::centred);
     freqLabel.setFont (juce::Font (14.0f * mScale, juce::Font::plain));
     juce::String freqText;

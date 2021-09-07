@@ -54,6 +54,7 @@ void FreqDividerGroup::paint (juce::Graphics& g)
     {
         // reset frequency if it is deleted
         setFrequency(0);
+        closeButton.setVisible(false);
     }
 }
 

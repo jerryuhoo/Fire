@@ -250,11 +250,11 @@ void Multiband::changeEnable(int changedIndex, juce::String option)
             if ((!enableButton[i]->getState() && i > newLinePosIndex) ||
                 (!enableButton[i]->getState() && getMouseXYRelative().getX() < enableButton[i]->getX()))
             {
-                enableState[i] = true;
+                //enableState[i] = true;
                 enableButton[i]->setState(true);
 //                if (i < lineNum)
 //                {
-                    enableState[i + 1] = false;
+                    //enableState[i + 1] = false;
                     enableButton[i + 1]->setState(false);
 //                }
             }
@@ -274,10 +274,10 @@ void Multiband::changeEnable(int changedIndex, juce::String option)
             // new line is deleted on the left side of disabled button
             if (!enableButton[i]->getState() && i > newLinePosIndex)
             {
-                enableState[i] = true;
+                //enableState[i] = true;
                 enableButton[i]->setState(true);
                 
-                enableState[i - 1] = false;
+                //enableState[i - 1] = false;
                 enableButton[i - 1]->setState(false);
             }
         }
@@ -285,7 +285,7 @@ void Multiband::changeEnable(int changedIndex, juce::String option)
         // special case: delete first line and only line number is 1 (after deleting it is 0), then delete enable[0] state
         if (newLinePosIndex == 0 && lineNum == 0)
         {
-            enableState[0] = true;
+            //enableState[0] = true;
             enableButton[0]->setState(true);
         }
     }
@@ -745,10 +745,10 @@ void Multiband::setFrequency(int freq1, int freq2, int freq3)
 
 void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)
 {
-    enableState[0] = state1;
-    enableState[1] = state2;
-    enableState[2] = state3;
-    enableState[3] = state4;
+//    enableState[0] = state1;
+//    enableState[1] = state2;
+//    enableState[2] = state3;
+//    enableState[3] = state4;
     enableButton[0]->setState(state1);
     enableButton[1]->setState(state2);
     enableButton[2]->setState(state3);

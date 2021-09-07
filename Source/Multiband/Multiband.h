@@ -95,6 +95,6 @@ private:
     bool multibandFocus[4] = { true, false, false, false };
     //bool lineState[3] = { false, false, false };
     bool lastLineState[3] = { false, false, false };
-    bool enableState[4] = { true, true, true, true };
+    //bool enableState[4] = { true, true, true, true };
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)
 };

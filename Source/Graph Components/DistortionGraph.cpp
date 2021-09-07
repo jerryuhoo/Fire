@@ -32,8 +32,15 @@ void DistortionGraph::paint (juce::Graphics& g)
 
     auto frameRight = getLocalBounds();
     
-    g.setColour(COLOUR6);
-    g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 25);
+    // draw outline
+    g.setColour (COLOUR6);
+    g.drawRect (getLocalBounds(), 1);
+    
+    // fill rounded rectangle
+//    float cornerSize = 10 * scale;
+//    g.setColour(COLOUR6);
+//    juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
+//    g.fillRoundedRectangle(rectFloat, cornerSize);
     
     if (mode < 9)
     {
@@ -67,11 +74,16 @@ void DistortionGraph::paint (juce::Graphics& g)
             {
                 functionValue = distortionProcessor.distortionProcess(value);
             }
-
+            
+            // downsample
             if (rateDivide > 1.0f)
             {
 //                functionValue = ceilf(functionValue * (64.0f / rateDivide)) / (64.0f / rateDivide);
-                functionValue = ceilf(functionValue * (256.0f / rateDivide)) / (256.0f / rateDivide);
+                //functionValue = ceilf(functionValue * (256.0f / rateDivide)) / (2563.0f / rateDivide);
+                
+                functionValue = distortionProcessor.distortionProcess(ceilf(value / (rateDivide/256.0f) ) * (rateDivide/256.0f));
+                
+                //y = f(ceilf(x / r * 256.0f));
             }
 
             // retification
@@ -132,6 +144,11 @@ void DistortionGraph::paint (juce::Graphics& g)
         g.setGradientFill(grad);
         g.strokePath(p, juce::PathStrokeType(2.0f));
     }
+    
+    // shadow
+//    juce::Path pathShadow;
+//    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
+//    drawInnerShadow(g, pathShadow);
 }
 
 void DistortionGraph::resized()
@@ -147,4 +164,9 @@ void DistortionGraph::setState(int mode, float color, float rec, float mix, floa
     this->bias = bias;
     this->drive = drive;
     this->rateDivide = rateDivide;
+}
+
+void DistortionGraph::setScale(float scale)
+{
+    this->scale = scale;
 }

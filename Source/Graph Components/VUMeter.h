@@ -1,8 +1,8 @@
 /*
   ==============================================================================
 
-    WidthGraph.h
-    Created: 14 Dec 2020 3:40:40pm
+    VUMeter.h
+    Created: 25 Jan 2021 2:55:04pm
     Author:  羽翼深蓝Wings
 
   ==============================================================================
@@ -16,18 +16,20 @@
 //==============================================================================
 /*
 */
-class WidthGraph  : public juce::Component
+class VUMeter  : public juce::Component, juce::Timer
 {
 public:
-    WidthGraph(FireAudioProcessor &);
-    ~WidthGraph() override;
+    VUMeter(FireAudioProcessor* inProcessor);
+    ~VUMeter() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-
+    void setParameterId(int inParameterId);
+    void timerCallback() override;
 private:
-    FireAudioProcessor &processor;
-    juce::Array<float> historyL;
-    juce::Array<float> historyR;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
+    FireAudioProcessor* mProcessor;
+    int mParameterId;
+    float mCh0Level;
+    float mCh1Level;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUMeter)
 };

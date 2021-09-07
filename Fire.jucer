@@ -2,12 +2,13 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.9.1" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.9.2" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
       <GROUP id="{0204F696-B0DF-CD89-2550-E45618BFEF7E}" name="Utility">
+        <FILE id="A4Ogfw" name="AudioHelpers.h" compile="0" resource="0" file="Source/Utility/AudioHelpers.h"/>
         <FILE id="iNAOxz" name="VersionInfo.cpp" compile="1" resource="0" file="Source/Utility/VersionInfo.cpp"/>
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
@@ -23,6 +24,10 @@
               file="Source/Multiband/EnableButton.cpp"/>
         <FILE id="oP0mFa" name="EnableButton.h" compile="0" resource="0" file="Source/Multiband/EnableButton.h"/>
         <FILE id="atUkXY" name="FFTProcessor.h" compile="0" resource="0" file="Source/Multiband/FFTProcessor.h"/>
+        <FILE id="DWlQF9" name="FreqDividerGroup.cpp" compile="1" resource="0"
+              file="Source/Multiband/FreqDividerGroup.cpp"/>
+        <FILE id="qFiabq" name="FreqDividerGroup.h" compile="0" resource="0"
+              file="Source/Multiband/FreqDividerGroup.h"/>
         <FILE id="nMHiiJ" name="FreqTextLabel.cpp" compile="1" resource="0"
               file="Source/Multiband/FreqTextLabel.cpp"/>
         <FILE id="XdJ5us" name="FreqTextLabel.h" compile="0" resource="0" file="Source/Multiband/FreqTextLabel.h"/>
@@ -43,9 +48,15 @@
               file="Source/Graph Components/DistortionGraph.cpp"/>
         <FILE id="PowGLk" name="DistortionGraph.h" compile="0" resource="0"
               file="Source/Graph Components/DistortionGraph.h"/>
+        <FILE id="rXIfb4" name="GraphPanel.cpp" compile="1" resource="0" file="Source/Graph Components/GraphPanel.cpp"/>
+        <FILE id="GPSKfa" name="GraphPanel.h" compile="0" resource="0" file="Source/Graph Components/GraphPanel.h"/>
         <FILE id="jojgh1" name="Oscilloscope.cpp" compile="1" resource="0"
               file="Source/Graph Components/Oscilloscope.cpp"/>
         <FILE id="Mqbfgf" name="Oscilloscope.h" compile="0" resource="0" file="Source/Graph Components/Oscilloscope.h"/>
+        <FILE id="BYLiMH" name="VUMeter.cpp" compile="1" resource="0" file="Source/Graph Components/VUMeter.cpp"/>
+        <FILE id="eHrX3A" name="VUMeter.h" compile="0" resource="0" file="Source/Graph Components/VUMeter.h"/>
+        <FILE id="DIcUW2" name="VUPanel.cpp" compile="1" resource="0" file="Source/Graph Components/VUPanel.cpp"/>
+        <FILE id="JGK75A" name="VUPanel.h" compile="0" resource="0" file="Source/Graph Components/VUPanel.h"/>
         <FILE id="raHNPE" name="WidthGraph.cpp" compile="1" resource="0" file="Source/Graph Components/WidthGraph.cpp"/>
         <FILE id="ormPmn" name="WidthGraph.h" compile="0" resource="0" file="Source/Graph Components/WidthGraph.h"/>
       </GROUP>
@@ -98,7 +109,6 @@
         <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
         <MODULEPATH id="juce_opengl" path="JUCE/modules"/>
         <MODULEPATH id="juce_dsp" path="JUCE/modules"/>
-        <MODULEPATH id="ff_meters" path="juceUserModules"/>
       </MODULEPATHS>
     </XCODE_MAC>
     <VS2019 targetFolder="Builds/VisualStudio2019">
@@ -122,7 +132,6 @@
         <MODULEPATH id="juce_audio_formats" path="JUCE\modules"/>
         <MODULEPATH id="juce_audio_devices" path="JUCE\modules"/>
         <MODULEPATH id="juce_audio_basics" path="JUCE\modules"/>
-        <MODULEPATH id="ff_meters" path="juceUserModules"/>
       </MODULEPATHS>
     </VS2019>
     <VS2017 targetFolder="Builds/VisualStudio2017">
@@ -146,12 +155,10 @@
         <MODULEPATH id="juce_audio_formats" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
         <MODULEPATH id="juce_audio_devices" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
         <MODULEPATH id="juce_audio_basics" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
-        <MODULEPATH id="ff_meters" path="C:\Users\33277\Documents\GitHub\JUCE\modules"/>
       </MODULEPATHS>
     </VS2017>
   </EXPORTFORMATS>
   <MODULES>
-    <MODULE id="ff_meters" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>

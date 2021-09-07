@@ -25,13 +25,17 @@ Oscilloscope::~Oscilloscope()
 
 void Oscilloscope::paint (juce::Graphics& g)
 {
-    //g.setColour (juce::Colours::green);
-
-    //g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
+    // draw outline
+    g.setColour (COLOUR6);
+    g.drawRect (getLocalBounds(), 1);
     
-    g.setColour(COLOUR6);
-    g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 25);
+    // fill rounded rectangle
+//    float cornerSize = 10 * scale;
+//    g.setColour(COLOUR6);
+//    juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
+//    g.fillRoundedRectangle(rectFloat, cornerSize);
     
+    // change color according to the drive
 //    float drive = processor.getNewDrive(1);
 //    DBG(drive);
 //    int colour_r = 244;
@@ -79,10 +83,20 @@ void Oscilloscope::paint (juce::Graphics& g)
 
     g.strokePath(pathL, juce::PathStrokeType(2.0));
     g.strokePath(pathR, juce::PathStrokeType(2.0));
+    
+    // shadow
+//    juce::Path pathShadow;
+//    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
+//    drawInnerShadow(g, pathShadow);
 }
 
 void Oscilloscope::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
+}
+
+void Oscilloscope::setScale(float scale)
+{
+    this->scale = scale;
 }

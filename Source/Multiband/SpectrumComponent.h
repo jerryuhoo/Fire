@@ -32,7 +32,8 @@ public:
 
 private:
 	int numberOfBins;
-	float* spectrumData;
+    float spectrumData[1024] = {0};
+    
 	static const int frequenciesForLines[];
 	static const int numberOfLines;    
 

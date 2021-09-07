@@ -125,9 +125,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // initialisation that you need..
     
     // fix the artifacts (also called zipper noise)
-    //previousGainInput = (float)*treeState.getRawParameterValue("inputGain");
-    //previousGainInput = Decibels::decibelsToGain(previousGainInput);
-
     previousOutput1 = (float)*treeState.getRawParameterValue(OUTPUT_ID1);
     previousOutput1 = juce::Decibels::decibelsToGain(previousOutput1);
     previousOutput2 = (float)*treeState.getRawParameterValue(OUTPUT_ID2);
@@ -226,9 +223,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         historyArrayR.add(0);
     }
     
-    // dry buffer init
+    // dry wet buffer init
     dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     dryBuffer.clear();
+    
+    wetBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    wetBuffer.clear();
 
     // oversampling init
     oversampling->reset();
@@ -240,6 +240,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         oversamplingHQ[i]->initProcessing(static_cast<size_t>(samplesPerBlock));
     }
     mDelay.reset(0);
+    
     // dsp init
 
     //int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
@@ -281,11 +282,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     root = Serie(&Vin, &Serie(&R1, &C1));
     // mode 9 diode================
     */
-
-    // ff meter
-    // this prepares the meterSource to measure all output blocks and average over 100ms to allow smooth movements
-    inputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
-    outputMeterSource.resize(getTotalNumOutputChannels(), sampleRate * 0.1 / samplesPerBlock);
     
     // multiband filters
     mBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
@@ -386,7 +382,12 @@ void FireAudioProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer,
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::MidiBuffer &midiMessages)
 {
     // set bypass to false
-    isBypassed = false;
+
+    if (isBypassed)
+    {
+//        buffer.clear();
+        isBypassed = false;
+    }
 
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();
@@ -404,9 +405,13 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     // save clean signal
     dryBuffer.makeCopyOf(buffer);
 
-    // ff input meter
-    inputMeterSource.measureBlock(buffer);
-
+    // VU input meter
+//    float absInputLeftValue = fabs(buffer.getMagnitude(0, 0, buffer.getNumSamples()));
+    float absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+    float absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    mInputLeftSmoothed = SMOOTH_COEFF * (mInputLeftSmoothed - absInputLeftValue) + absInputLeftValue;
+    mInputRightSmoothed = SMOOTH_COEFF * (mInputRightSmoothed - absInputRightValue) + absInputRightValue;
+    
     juce::dsp::AudioBlock<float> block(buffer);
     // pre-filter
     bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
@@ -691,20 +696,20 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
+    // VU output meter
+    float absOutputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+    float absOutputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    mOutputLeftSmoothed = SMOOTH_COEFF * (mOutputLeftSmoothed - absOutputLeftValue) + absOutputLeftValue;
+    mOutputRightSmoothed = SMOOTH_COEFF * (mOutputRightSmoothed - absOutputRightValue) + absOutputRightValue;
+    
+    
     // Spectrum
-    if (buffer.getNumChannels() > 0)
-    {
-        auto* channelData = buffer.getReadPointer(0);
-
-        for (auto i = 0; i < buffer.getNumSamples(); ++i)
-            spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
-//            spectrum_processor.pushNextSampleIntoFifo (std::sin(0.14*i));
-    }
+    wetBuffer.makeCopyOf(buffer);
+    pushDataToFFT();
 
     dryBuffer.clear();
 
-    // ff output meter
-    outputMeterSource.measureBlock(buffer);
+
     //visualiser.pushBuffer(buffer);
     
 //    historyBuffer.makeCopyOf(buffer);
@@ -894,9 +899,21 @@ bool FireAudioProcessor::isFFTBlockReady()
     return spectrum_processor.nextFFTBlockReady;
 }
 
-void FireAudioProcessor::processFFT()
+void FireAudioProcessor::pushDataToFFT()
 {
-    spectrum_processor.doProcessing();
+    
+    if (wetBuffer.getNumChannels() > 0)
+    {
+        auto* channelData = wetBuffer.getReadPointer(0);
+
+        for (auto i = 0; i < wetBuffer.getNumSamples(); ++i)
+            spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
+    }
+}
+
+void FireAudioProcessor::processFFT(float * tempFFTData)
+{
+    spectrum_processor.doProcessing(tempFFTData);
     spectrum_processor.nextFFTBlockReady = false;
 }
 
@@ -1272,6 +1289,21 @@ void FireAudioProcessor::setLineNum(int lineNum)
     this->lineNum = lineNum;
 }
 
+
+// VU meters
+float FireAudioProcessor::getInputMeterLevel(int channel)
+{
+    if (channel == 0) return dBToNormalizedGain(mInputLeftSmoothed);
+    else return dBToNormalizedGain(mInputRightSmoothed);
+}
+
+float FireAudioProcessor::getOutputMeterLevel(int channel)
+{
+    if (channel == 0) return dBToNormalizedGain(mOutputLeftSmoothed);
+    else return dBToNormalizedGain(mOutputRightSmoothed);
+}
+
+
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameters;
@@ -1354,12 +1386,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID1, LINE_STATE_NAME1, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID2, LINE_STATE_NAME2, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID3, LINE_STATE_NAME3, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID1, FREQ_NAME1, 0, 22100, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID2, FREQ_NAME2, 0, 22100, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID3, FREQ_NAME3, 0, 22100, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID1, LINEPOS_NAME1, 0.0f, 1.0f, 0.2f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID2, LINEPOS_NAME2, 0.0f, 1.0f, 0.3f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LINEPOS_ID3, LINEPOS_NAME3, 0.0f, 1.0f, 0.4f));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID1, FREQ_NAME1, 21, 11040, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID2, FREQ_NAME2, 21, 11040, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(FREQ_ID3, FREQ_NAME3, 21, 11040, 0));
     
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID1, BAND_ENABLE_NAME1, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID2, BAND_ENABLE_NAME2, true));

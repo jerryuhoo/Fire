@@ -16,6 +16,8 @@
 #include "Graph Components/Oscilloscope.h"
 #include "Graph Components/DistortionGraph.h"
 #include "Graph Components/WidthGraph.h"
+#include "Graph Components/VUPanel.h"
+#include "Graph Components/GraphPanel.h"
 #include "Multiband/Multiband.h"
 #include "GUI/InterfaceDefines.h"
 
@@ -48,15 +50,9 @@ private:
     
     // init editor
     void initEditor();
-
-    // Oscilloscope
-    Oscilloscope oscilloscope {processor};
     
-    // Distortion graph
-    DistortionGraph distortionGraph;
-    
-    // Width graph
-    WidthGraph widthGraph;
+    // Graph panel
+    GraphPanel graphPanel {processor};
     
     // Multiband
     Multiband multiband;
@@ -65,15 +61,13 @@ private:
     
     juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
     juce::Slider multiEnableSlider1, multiEnableSlider2, multiEnableSlider3, multiEnableSlider4;
-    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3, multiFreqSlider4;
+    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3;
     juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
-    juce::Slider linePosSlider1, linePosSlider2, linePosSlider3;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> linePosSliderAttachment1, linePosSliderAttachment2, linePosSliderAttachment3;
     
     bool multibandFocus[4];
     bool multibandEnable[4];
@@ -83,11 +77,7 @@ private:
     
     // Spectrum
     SpectrumComponent spectrum;
-    
-    // ff meter
-    foleys::LevelMeterLookAndFeel lnf;
-    foleys::LevelMeter inputMeter{foleys::LevelMeter::Minimal};
-    foleys::LevelMeter outputMeter{foleys::LevelMeter::Minimal};
+
 
     // Sliders
     juce::Slider
@@ -105,38 +95,38 @@ private:
         mixKnob2,
         mixKnob3,
         mixKnob4,
-        
-        widthKnob1,
-        widthKnob2,
-        widthKnob3,
-        widthKnob4,
-    
-        compRatioKnob1,
-        compRatioKnob2,
-        compRatioKnob3,
-        compRatioKnob4,
-        
-        compThreshKnob1,
-        compThreshKnob2,
-        compThreshKnob3,
-        compThreshKnob4,
-    
-        recKnob1,
-        recKnob2,
-        recKnob3,
-        recKnob4,
-      
-        biasKnob1,
-        biasKnob2,
-        biasKnob3,
-        biasKnob4,
-    
+
         downSampleKnob,
         cutoffKnob,
         resKnob,
         colorKnob,
         mixKnob,
         outputKnob;
+    
+    juce::Slider* recKnob1;
+    juce::Slider* recKnob2;
+    juce::Slider* recKnob3;
+    juce::Slider* recKnob4;
+    
+    juce::Slider* biasKnob1;
+    juce::Slider* biasKnob2;
+    juce::Slider* biasKnob3;
+    juce::Slider* biasKnob4;
+
+    juce::Slider* compRatioKnob1;
+    juce::Slider* compRatioKnob2;
+    juce::Slider* compRatioKnob3;
+    juce::Slider* compRatioKnob4;
+    
+    juce::Slider* compThreshKnob1;
+    juce::Slider* compThreshKnob2;
+    juce::Slider* compThreshKnob3;
+    juce::Slider* compThreshKnob4;
+    
+    juce::Slider* widthKnob1;
+    juce::Slider* widthKnob2;
+    juce::Slider* widthKnob3;
+    juce::Slider* widthKnob4;
     
     int knobSize = KNOBSIZE;
     float tempDriveValue[4] = {1, 1, 1, 1};
@@ -185,6 +175,14 @@ private:
         windowLeftButton,
         windowRightButton;
 
+    // switches
+    juce::TextButton shapeSwitch, widthSwitch, compressorSwitch;
+    
+    // vectors for sliders
+    juce::OwnedArray<juce::Component, juce::CriticalSection> shapeVector;
+    juce::OwnedArray<juce::Component, juce::CriticalSection> widthVector;
+    juce::OwnedArray<juce::Component, juce::CriticalSection> compressorVector;
+    
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -194,6 +192,8 @@ private:
         filterModeButtons = 1002,
         // window selection: left, right
         windowButtons = 1003,
+        // switches
+        switchButtons = 1004,
     };
 
     void updateToggleState();
@@ -205,6 +205,7 @@ private:
     void setLinearSlider(juce::Slider& slider);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void changeSliderState(juce::ComboBox *combobox);
+    void updateFreqArray();
     void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);
     void linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton);
     void setDistortionGraph(juce::String modeId, juce::String driveId,
@@ -215,18 +216,18 @@ private:
 
     bool isPresetChanged();
 
-
-
-
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox *combobox) override;
-
+    // hide and show labels
+//    void sliderDragStarted (juce::Slider*) override;
+//    void sliderDragEnded (juce::Slider*) override;
+    void setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSection> &array);
+    
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
-        //inputAttachment,
         driveAttachment1,
         driveAttachment2,
         driveAttachment3,
@@ -307,7 +308,10 @@ private:
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
     DriveLookAndFeel driveLookAndFeel;
-    //FlatButtonLnf flatButtonLnf;
+    LowPassButtonLnf lowPassButtonLnf;
+    BandPassButtonLnf bandPassButtonLnf;
+    HighPassButtonLnf highPassButtonLnf;
+    FlatButtonLnf flatButtonLnf;
     
     Distortion distortionProcessor;
 

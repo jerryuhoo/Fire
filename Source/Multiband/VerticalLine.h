@@ -32,11 +32,11 @@ public:
     void setXPercent(float x);
     float getXPercent();
     void setIndex(int index);
-    float getIndex();
+    int getIndex();
     void setLeft(int leftIndex);
-    float getLeft();
+    int getLeft();
     void setRight(int rightIndex);
-    float getRight();
+    int getRight();
     void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[], int sortedIndex[]);
     
 private:

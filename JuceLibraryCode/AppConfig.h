@@ -45,10 +45,9 @@
 
 #define JUCE_USE_DARK_SPLASH_SCREEN 1
 
-#define JUCE_PROJUCER_VERSION 0x60007
+#define JUCE_PROJUCER_VERSION 0x60100
 
 //==============================================================================
-#define JUCE_MODULE_AVAILABLE_ff_meters                     1
 #define JUCE_MODULE_AVAILABLE_juce_audio_basics             1
 #define JUCE_MODULE_AVAILABLE_juce_audio_devices            1
 #define JUCE_MODULE_AVAILABLE_juce_audio_formats            1
@@ -66,13 +65,6 @@
 #define JUCE_MODULE_AVAILABLE_juce_opengl                   1
 
 #define JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED 1
-
-//==============================================================================
-// ff_meters flags:
-
-#ifndef    FF_AUDIO_ALLOW_ALLOCATIONS_IN_MEASURE_BLOCK
- //#define FF_AUDIO_ALLOW_ALLOCATIONS_IN_MEASURE_BLOCK 1
-#endif
 
 //==============================================================================
 // juce_audio_devices flags:

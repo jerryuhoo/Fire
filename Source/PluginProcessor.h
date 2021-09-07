@@ -17,6 +17,8 @@
 #include "Preset.h"
 #include "Multiband/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
+#include "Utility/AudioHelpers.h"
+
 //#include "GUI/LookAndFeel.h"
 //#define COLOUR1 Colour(244, 208, 63)
 //#define COLOUR6 Colour(45, 40, 40)
@@ -78,16 +80,6 @@ public:
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
-    // ff meter
-    foleys::LevelMeterSource &getInputMeterSource()
-    {
-        return inputMeterSource;
-    }
-    foleys::LevelMeterSource &getOutputMeterSource()
-    {
-        return outputMeterSource;
-    }
-
     juce::Array<float> getHistoryArrayL();
     juce::Array<float> getHistoryArrayR();
     
@@ -95,11 +87,13 @@ public:
     state::StateAB stateAB;
     state::StatePresets statePresets;
     
+    // FFT
     float * getFFTData();
     int getFFTSize();//TMP!!!!!!!!!!!
     bool isFFTBlockReady();
-    void processFFT();
-
+    void pushDataToFFT();
+    void processFFT(float * tempFFTData);
+    
     // save size
     void setSavedWidth(const int width);
     void setSavedHeight(const int height);
@@ -116,6 +110,10 @@ public:
     // get number of activated lines
     // int getLineNum();
     void setLineNum(int lineNum);
+    
+    // VU meters
+    float getInputMeterLevel(int channel);
+    float getOutputMeterLevel(int channel);
 private:
     //==============================================================================
     
@@ -132,13 +130,12 @@ private:
     
     // Spectrum
     SpectrumProcessor spectrum_processor;
-    
-    // ff meter
-    foleys::LevelMeterSource inputMeterSource;
-    foleys::LevelMeterSource outputMeterSource;
 
     // dry audio buffer
     juce::AudioBuffer<float> dryBuffer;
+    // wet audio buffer
+    juce::AudioBuffer<float> wetBuffer;
+    
     // dsp::AudioBlock<float> blockOutput;
     juce::dsp::ProcessSpec spec;
 
@@ -271,5 +268,11 @@ private:
     
     // bypass state
     bool isBypassed = false;
+    
+    // VU meters
+    float mInputLeftSmoothed = 0;
+    float mInputRightSmoothed = 0;
+    float mOutputLeftSmoothed = 0;
+    float mOutputRightSmoothed = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

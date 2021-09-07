@@ -21,8 +21,8 @@ void saveStateToXml(const juce::AudioProcessor &proc, juce::XmlElement &xml)
     for (const auto &param : proc.getParameters())
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
         {
-            // don't save hq, windowLeft, windowRight
-            if (p->paramID != "hq" && p->paramID != "windowLeft" && p->paramID != "windowRight")
+            // don't save hq
+            if (p->paramID != "hq")
             {
                 xml.setAttribute(p->paramID, p->getValue());
             }
@@ -279,7 +279,24 @@ bool StatePresets::savePreset(juce::File savePath)
 void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID)
 {
     int index = 0;
-    forEachXmlChildElement(parentXml, child)
+//    forEachXmlChildElement(parentXml, child)
+//    {
+//        //DBG(child->getTagName());
+//        //DBG(presetID);
+//        if (child->hasAttribute("presetName") && child->getTagName() == presetID)
+//        {
+//            juce::XmlElement loadThisChild{*child}; // (0 indexed method)
+//            loadStateFromXml(loadThisChild, pluginProcessor);
+//            statePresetName = child->getAttributeValue(0); //presetName index is 0
+//        }
+//        else
+//        {
+//            recursivePresetLoad(*child, presetID);
+//        }
+//        index++;
+//    }
+    
+    for (auto* child : parentXml.getChildIterator())
     {
         //DBG(child->getTagName());
         //DBG(presetID);
@@ -321,7 +338,38 @@ juce::StringRef StatePresets::getPresetName()
 
 void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::ComboBox &menu, int &index)
 {
-    forEachXmlChildElement(parentXml, child) // should avoid macro?
+    
+//    forEachXmlChildElement(parentXml, child) // should avoid macro?
+//    {
+//        if (child->hasAttribute("presetName"))
+//        {
+//            // is preset
+//            index++;
+//            juce::String n = child->getStringAttribute("presetName");
+//            if (n == "")
+//                n = "(Unnamed preset)";
+//            menu.addItem(n, index);
+//            // save new preset and rescan, this will return new preset index
+//            if (statePresetName == n)
+//            {
+//                mCurrentPresetID = index;
+//            }
+//        }
+//        else
+//        {
+//            // is folder
+//            if (index != 0)
+//            {
+//                menu.addSeparator();
+//            }
+//            juce::String n = child->getTagName();
+//            menu.addSectionHeading(n);
+//
+//            recursivePresetNameAdd(*child, menu, index);
+//        }
+//    }
+    
+    for (auto* child : parentXml.getChildIterator())
     {
         if (child->hasAttribute("presetName"))
         {
@@ -346,7 +394,7 @@ void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::Comb
             }
             juce::String n = child->getTagName();
             menu.addSectionHeading(n);
-            
+
             recursivePresetNameAdd(*child, menu, index);
         }
     }
@@ -586,7 +634,8 @@ void StateComponent::deletePresetAndRefresh()
     }
     else
     {
-        juce::NativeMessageBox::showMessageBox(juce::AlertWindow::NoIcon, "Warning", "No preset!");
+//        juce::NativeMessageBox::showMessageBox(juce::AlertWindow::NoIcon, "Warning", "No preset!");
+        juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::NoIcon, "Warning", "No preset!");
     }
 }
 
@@ -594,6 +643,7 @@ void StateComponent::savePresetAlertWindow()
 {
     juce::File userFile = procStatePresets.getFile().getChildFile("User");
     creatFolderIfNotExist(userFile);
+    /*
     juce::FileChooser filechooser("save preset", userFile, "*", true, false, nullptr);
     if (filechooser.browseForFileToSave(true))
     {
@@ -606,6 +656,23 @@ void StateComponent::savePresetAlertWindow()
             presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
         }
     }
+     */
+    
+    //fileChooser = std::make_unique<juce::FileChooser> ("save preset", userFile, "*", true, false, nullptr);
+    fileChooser = std::make_unique<juce::FileChooser> ("save preset", userFile, "*");
+    auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
+
+    fileChooser->launchAsync (folderChooserFlags, [this] (const juce::FileChooser& chooser)
+    {
+        // this is really shit code, but I don't have any other way to solve this shit problem!!!
+        juce::File inputName = chooser.getResult();
+        bool isSaved = procStatePresets.savePreset(inputName);
+        if (isSaved)
+        {
+            refreshPresetBox();
+            presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+        }
+    });
 }
 
 void StateComponent::openPresetFolder()
@@ -663,61 +730,84 @@ void StateComponent::popPresetMenu()
 
     float heightScale = getHeight() / 50.0f;
     float widthScale = getWidth() / 1000.0f;
-    float scale = juce::jmin(heightScale, heightScale);
+    float scale = juce::jmin(heightScale, widthScale);
     otherLookAndFeel.scale = scale;
     
-    int result = presetMenu.show(0, 250 * widthScale,
-                                 10, 30 * heightScale);
-    if (result == 1)  // init
+//    int result = presetMenu.show(0, 250 * widthScale,
+//                                 10, 30 * heightScale);
+    
+    presetMenu.showMenuAsync(juce::PopupMenu::Options(), [this](int result)
     {
-        // set all parameters to default
-        procStatePresets.initPreset();
-        // set GUI verticle lines to default
-        resetMultiband();
-        presetBox.setSelectedId(0);
-        isInit = true;
-    }
-    else if (result == 2)
-    {
-        openPresetFolder();
-    }
-    else if (result == 3)
-    {
-        rescanPresetFolder();
-    }
-    else if (result == 4)
-    {
-        juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire");
-        gitHubWebsite.launchInDefaultBrowser();
-    }
-    else if (result == 5)
-    {
-        std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-        
-        if (versionInfo == nullptr)
+        if (result == 1)  // init
         {
-            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::WarningIcon,
-                "Error", "No release found or disconnected from the network!", nullptr);
-//            DBG("No release found or other error occurred!");
+            // set all parameters to default
+            procStatePresets.initPreset();
+            // set GUI verticle lines to default
+            resetMultiband();
+            presetBox.setSelectedId(0);
+            isInit = true;
         }
-        else if(versionInfo->versionString != VERSION)
+        else if (result == 2)
         {
-            juce::String version = versionInfo->versionString;
-            bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                "New Version", "New version " + version + " available, do you want to download it?", nullptr, nullptr);
-            if (choice)
+            openPresetFolder();
+        }
+        else if (result == 3)
+        {
+            rescanPresetFolder();
+        }
+        else if (result == 4)
+        {
+            juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire");
+            gitHubWebsite.launchInDefaultBrowser();
+        }
+        else if (result == 5)
+        {
+            versionInfo = VersionInfo::fetchLatestFromUpdateServer();
+            
+            if (versionInfo == nullptr)
             {
-                juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
-                gitHubWebsite.launchInDefaultBrowser();
+    //            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::WarningIcon,
+    //                "Error", "No release found or disconnected from the network!", nullptr);
+                juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Error", "No release found or disconnected from the network!");
+    //            DBG("No release found or other error occurred!");
             }
-//            DBG(version);
+            else if(versionInfo->versionString != VERSION)
+            {
+                
+                
+                /** old code
+                 */
+                /*
+                juce::String version = versionInfo->versionString;
+                bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                    "New Version", "New version " + version + " available, do you want to download it?", nullptr, nullptr);
+                if (choice)
+                {
+                    juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
+                    gitHubWebsite.launchInDefaultBrowser();
+                } */
+                /** old code
+                 */
+                
+                version = versionInfo->versionString;
+                const auto callback = juce::ModalCallbackFunction::create ([this](int result) {
+                    if (result == 1) // result == 1 means user clicks OK
+                    {
+                        juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
+                        gitHubWebsite.launchInDefaultBrowser();
+                    }
+                });
+                juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                    "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
+            }
+            else
+            {
+    //            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::InfoIcon,
+    //                "New Version", "You are up to date!", nullptr);
+                juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::InfoIcon, "New Version", "You are up to date!");
+            }
         }
-        else
-        {
-            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::InfoIcon,
-                "New Version", "You are up to date!", nullptr);
-        }
-    }
+    });
 }
 
 void StateComponent::resetMultiband()

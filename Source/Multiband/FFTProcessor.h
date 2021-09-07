@@ -19,7 +19,7 @@ public:
 
 	enum // moze zamiast enuma to ustawic   a moze enum ok?
 	{
-		fftOrder = 12,
+		fftOrder = 11,
 		fftSize = 1 << fftOrder, // 2^ ??
 	};
 
@@ -31,10 +31,10 @@ public:
 	int fifoIndex = 0;
 
 	void pushNextSampleIntoFifo(float sample) noexcept {
-		if (fifoIndex == fftSize)
-		{
-			if (!nextFFTBlockReady)
-			{
+        if (fifoIndex == fftSize)
+        {
+            if (!nextFFTBlockReady)
+            {
                 juce::zeromem(fftData, sizeof(fftData));
                 memmove(fftData, fifo, sizeof(fifo)); // memmove is safer, but memcpy is faster
 				nextFFTBlockReady = true;
@@ -46,10 +46,10 @@ public:
 		fifo[fifoIndex++] = sample;
 	}
 
-	void doProcessing()
+	void doProcessing(float * tempFFTData)
 	{
-		window.multiplyWithWindowingTable(fftData, fftSize);
-		forwardFFT.performFrequencyOnlyForwardTransform(fftData);
+        window.multiplyWithWindowingTable(tempFFTData, fftSize);
+        forwardFFT.performFrequencyOnlyForwardTransform(tempFFTData);
 	}
 
 private:

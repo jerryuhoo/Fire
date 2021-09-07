@@ -26,6 +26,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void setState(int mode, float color, float rec, float mix, float bias, float drive, float rateDivide);
+    void setScale(float scale);
     
 private:
     int mode = -1;
@@ -36,6 +37,7 @@ private:
     float rateDivide = -1.0f;
     float drive = -1.0f;
     Distortion distortionProcessor;
+    float scale = 1.0f;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)
 };

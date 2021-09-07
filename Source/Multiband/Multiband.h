@@ -12,12 +12,10 @@
 
 #include <JuceHeader.h>
 #include "SpectrumComponent.h"
-#include "VerticalLine.h"
-#include "CloseButton.h"
-#include "FreqTextLabel.h"
 #include "SoloButton.h"
 #include "EnableButton.h"
 #include <vector>
+#include "FreqDividerGroup.h"
 
 //==============================================================================
 /*
@@ -58,7 +56,9 @@ public:
     bool getDeleteState();
     void setDeleteState(bool state);
     int getChangedIndex();
+    int getSortedIndex(int index);
     void dragLines(float xPercent);
+    void dragLinesByFreq(int freq, int index);
 private:
     inline static bool isDeleted = false;
     float margin;
@@ -81,20 +81,19 @@ private:
     void changeFocus(int changedIndex, juce::String option);
     void changeEnable(int changedIndex, juce::String option);
     
-    void setLineRelatedBounds(int i);
+    void setLineRelatedBoundsByX(int i);
+    //void setLineRelatedBoundsByFreq(int i);
     void setSoloRelatedBounds();
 
     int sortedIndex[3] = { -1, -1, -1 };
-    int frequency[3] = { 0, 0, 0 };
+//    int frequency[3] = { 0, 0, 0 };
     
-    std::unique_ptr<VerticalLine> verticalLines[3];
-    std::unique_ptr<CloseButton> closeButtons[3];
-    std::unique_ptr<FreqTextLabel> freqTextLabel[3];
+    std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];
     std::unique_ptr<EnableButton> enableButton[4];
     
     bool multibandFocus[4] = { true, false, false, false };
-    bool lineState[3] = { false, false, false };
+    //bool lineState[3] = { false, false, false };
     bool lastLineState[3] = { false, false, false };
     bool enableState[4] = { true, true, true, true };
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)

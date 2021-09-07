@@ -29,15 +29,14 @@ void CloseButton::paint(juce::Graphics &g)
     if (isEntered)
     {
         g.setColour(COLOUR1);
-//        g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 2);
-//        g.setColour(COLOUR4);
         g.drawLine(getWidth() / 4.f, getHeight() / 4.f, getWidth() / 4.f * 3.f, getHeight() / 4.f * 3.f, 2.f);
         g.drawLine(getWidth() / 4.f, getHeight() / 4.f * 3.f, getWidth() / 4.f * 3.f, getHeight() / 4.f, 2.f);
     }
     else
     {
-//        g.setColour(COLOUR1.withAlpha(0.2f));
-//        g.fillRoundedRectangle(0, 0, getWidth(), getHeight(), 2);
+        g.setColour(COLOUR1.withBrightness(0.4f));
+        g.drawLine(getWidth() / 4.f, getHeight() / 4.f, getWidth() / 4.f * 3.f, getHeight() / 4.f * 3.f, 2.f);
+        g.drawLine(getWidth() / 4.f, getHeight() / 4.f * 3.f, getWidth() / 4.f * 3.f, getHeight() / 4.f, 2.f);
     }
 }
 
@@ -49,8 +48,8 @@ void CloseButton::resized()
 
 void CloseButton::mouseUp(const juce::MouseEvent &e)
 {
-    verticalLine.setState(false);
     setVisible(false);
+    verticalLine.setState(false);
 }
 
 void CloseButton::mouseEnter(const juce::MouseEvent &e)

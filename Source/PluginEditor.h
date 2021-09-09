@@ -11,7 +11,6 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "DSP/Distortion.h"
 #include "GUI/LookAndFeel.h"
 #include "Graph Components/Oscilloscope.h"
 #include "Graph Components/DistortionGraph.h"
@@ -312,8 +311,6 @@ private:
     BandPassButtonLnf bandPassButtonLnf;
     HighPassButtonLnf highPassButtonLnf;
     FlatButtonLnf flatButtonLnf;
-    
-    Distortion distortionProcessor;
 
     //return function value by different modes
     //float getFunctionValue(FireAudioProcessor& processor, float value);

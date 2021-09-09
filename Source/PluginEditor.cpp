@@ -591,23 +591,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
-    /*
-    // paint distortion function
-    int mode = *processor.treeState.getRawParameterValue(MODE_ID1);
-    float drive = *processor.treeState.getRawParameterValue(DRIVE_ID1);//TODO: replace it!
-//    float drive = processor.getNewDrive();
-    float color = *processor.treeState.getRawParameterValue(COLOR_ID);
-    float rec = *processor.treeState.getRawParameterValue(REC_ID1);
-    float mix = *processor.treeState.getRawParameterValue(MIX_ID1);
-    float bias = *processor.treeState.getRawParameterValue(BIAS_ID1);
-    float rateDivide = *processor.treeState.getRawParameterValue(DOWNSAMPLE_ID);
-    
-    distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.drive = drive;
-    distortionProcessor.controls.color = color;
-    distortionProcessor.controls.rectification = rec;
-    distortionProcessor.controls.bias = bias;
-    */
+
     auto frame = getLocalBounds();
     frame.setBounds(0, part1, getWidth(), part2);
     
@@ -1353,12 +1337,6 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
     float mix = static_cast<float>(*processor.treeState.getRawParameterValue(mixId));
     float bias = static_cast<float>(*processor.treeState.getRawParameterValue(biasId));
     float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
-
-    distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.drive = drive;
-    distortionProcessor.controls.color = color;
-    distortionProcessor.controls.rectification = rec;
-    distortionProcessor.controls.bias = bias;
 
     graphPanel.setDistortionState(mode, color, rec, mix, bias, drive, rateDivide);
 }

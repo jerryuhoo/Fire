@@ -59,12 +59,30 @@ void Oscilloscope::paint (juce::Graphics& g)
     
     float amp = getHeight() / 4;
     
+    // get max
+    float maxValue = 0.0f;
+    
+    for (int i = 0; i < historyL.size(); i++)
+    {
+        if (historyL[i] > maxValue || historyR[i] > maxValue)
+        {
+            maxValue = historyL[i] > historyR[i] ? historyL[i] : historyR[i];
+        }
+    }
+    
     //TODO: this may cause high CPU usage! maybe use i += 2?
     for (int i = 0; i < getWidth(); i++) { 
         int scaledIndex = static_cast<int>(i * (float)historyL.size() / (float)getWidth());
 
         float valL = historyL[scaledIndex];
         float valR = historyR[scaledIndex];
+        
+        // normalize
+        if (maxValue > 0.00001f)
+        {
+            valL = valL / maxValue * 0.6f;
+            valR = valR / maxValue * 0.6f;
+        }
         
         valL = juce::jlimit<float>(-1, 1, valL);
         valR = juce::jlimit<float>(-1, 1, valR);

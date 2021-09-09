@@ -24,12 +24,6 @@ void DistortionGraph::paint (juce::Graphics& g)
 {
     // paint distortion function
 
-    distortionProcessor.controls.mode = mode;
-    distortionProcessor.controls.drive = drive;
-    distortionProcessor.controls.color = color;
-    distortionProcessor.controls.rectification = rec;
-    distortionProcessor.controls.bias = bias;
-
     auto frameRight = getLocalBounds();
     
     // draw outline
@@ -72,22 +66,57 @@ void DistortionGraph::paint (juce::Graphics& g)
             // symmetrical distortion
             if (mode < 9)
             {
-                functionValue = distortionProcessor.distortionProcess(value);
-            }
-            
-            // downsample
-            if (rateDivide > 1.0f)
-            {
-//                functionValue = ceilf(functionValue * (64.0f / rateDivide)) / (64.0f / rateDivide);
-                //functionValue = ceilf(functionValue * (256.0f / rateDivide)) / (2563.0f / rateDivide);
+                float valueAfterDrive = value;
                 
-                functionValue = distortionProcessor.distortionProcess(ceilf(value / (rateDivide/256.0f) ) * (rateDivide/256.0f));
+                // downsample
+                if (rateDivide > 1.0f)
+                {
+                    //functionValue = distortionProcessor.distortionProcess(ceilf(value / (rateDivide/256.0f) ) * (rateDivide/256.0f));
+                    valueAfterDrive = ceilf(valueAfterDrive / (rateDivide/256.0f) ) * (rateDivide/256.0f);
+                }
                 
-                //y = f(ceilf(x / r * 256.0f));
+                //functionValue = distortionProcessor.distortionProcess(value);
+                //valueAfterDrive = value * drive + bias;
+                valueAfterDrive = valueAfterDrive * drive + bias;
+  
+                switch (mode)
+                {
+                    case 0:
+                        functionValue = waveshaping::doNothing(valueAfterDrive);
+                        break;
+                    case 1:
+                        functionValue = waveshaping::arctanSoftClipping(valueAfterDrive);
+                        break;
+                    case 2:
+                        functionValue = waveshaping::expSoftClipping(valueAfterDrive);
+                        break;
+                    case 3:
+                        functionValue = waveshaping::tanhSoftClipping(valueAfterDrive);
+                        break;
+                    case 4:
+                        functionValue = waveshaping::cubicSoftClipping(valueAfterDrive);
+                        break;
+                    case 5:
+                        functionValue = waveshaping::hardClipping(valueAfterDrive);
+                        break;
+                    case 6:
+                        functionValue = waveshaping::sausageFattener(valueAfterDrive);
+                        break;
+                    case 7:
+                        functionValue = waveshaping::sinFoldback(valueAfterDrive);
+                        break;
+                    case 8:
+                        functionValue = waveshaping::linFoldback(valueAfterDrive);
+                        break;
+                    case 9:
+                        functionValue = waveshaping::limitclip(valueAfterDrive);
+                        break;
+                }
             }
 
             // retification
-            functionValue = distortionProcessor.rectificationProcess(functionValue);
+            //functionValue = distortionProcessor.rectificationProcess(functionValue);
+            functionValue = waveshaping::rectificationProcess(functionValue, rec);
 
             // mix
             functionValue = (1.0f - mix) * value + mix * functionValue;

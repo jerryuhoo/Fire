@@ -11,8 +11,8 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "../DSP/Distortion.h"
 #include "../GUI/LookAndFeel.h"
+#include "../DSP/ClippingFunctions.h"
 
 //==============================================================================
 /*
@@ -36,7 +36,6 @@ private:
     float bias = -1.0f;
     float rateDivide = -1.0f;
     float drive = -1.0f;
-    Distortion distortionProcessor;
     float scale = 1.0f;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)

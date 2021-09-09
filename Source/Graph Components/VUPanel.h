@@ -24,10 +24,14 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-
+    bool getZoomState();
+    void setZoomState(bool zoomState);
+    void mouseDown(const juce::MouseEvent &e) override;
+    
 private:
     FireAudioProcessor &processor;
     VUMeter vuMeterIn;
     VUMeter vuMeterOut;
+    bool mZoomState = true; // true means small
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUPanel)
 };

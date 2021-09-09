@@ -25,6 +25,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void setScale(float scale);
+    bool getZoomState();
+    void setZoomState(bool zoomState);
+    void mouseDown(const juce::MouseEvent &e) override;
     
 private:
     FireAudioProcessor &processor;
@@ -34,5 +37,7 @@ private:
     juce::Image historyImage;
    
     float scale = 1.0f;
+    bool mZoomState = true;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Oscilloscope)
 };

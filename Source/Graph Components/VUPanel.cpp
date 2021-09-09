@@ -18,7 +18,6 @@ VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), vuMeterIn(&p), vuMeterOu
     // initialise any special settings that your component needs.
     
     vuMeterIn.setParameterId(1);
-    
     vuMeterOut.setParameterId(2);
     
     addAndMakeVisible(vuMeterIn);
@@ -41,4 +40,26 @@ void VUPanel::resized()
     // components that your component contains..
     vuMeterIn.setBounds(VU_METER_X_1, VU_METER_Y, VU_METER_WIDTH, VU_METER_HEIGHT);
     vuMeterOut.setBounds(VU_METER_X_2, VU_METER_Y, VU_METER_WIDTH, VU_METER_HEIGHT);
+}
+
+bool VUPanel::getZoomState()
+{
+    return mZoomState;
+}
+
+void VUPanel::setZoomState(bool zoomState)
+{
+    mZoomState = zoomState;
+}
+
+void VUPanel::mouseDown(const juce::MouseEvent &e)
+{
+    if (mZoomState)
+    {
+        mZoomState = false;
+    }
+    else
+    {
+        mZoomState = true;
+    }
 }

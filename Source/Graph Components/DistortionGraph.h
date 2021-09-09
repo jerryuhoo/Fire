@@ -27,6 +27,9 @@ public:
     void resized() override;
     void setState(int mode, float color, float rec, float mix, float bias, float drive, float rateDivide);
     void setScale(float scale);
+    bool getZoomState();
+    void setZoomState(bool zoomState);
+    void mouseDown(const juce::MouseEvent &e) override;
     
 private:
     int mode = -1;
@@ -37,6 +40,6 @@ private:
     float rateDivide = -1.0f;
     float drive = -1.0f;
     float scale = 1.0f;
-    
+    bool mZoomState = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)
 };

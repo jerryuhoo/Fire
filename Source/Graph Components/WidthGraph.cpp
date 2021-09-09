@@ -85,3 +85,26 @@ void WidthGraph::paint (juce::Graphics& g)
 void WidthGraph::resized()
 {
 }
+
+bool WidthGraph::getZoomState()
+{
+    return mZoomState;
+}
+
+void WidthGraph::setZoomState(bool zoomState)
+{
+    mZoomState = zoomState;
+}
+
+void WidthGraph::mouseDown(const juce::MouseEvent &e)
+{
+    if (mZoomState)
+    {
+        mZoomState = false;
+    }
+    else
+    {
+        mZoomState = true;
+    }
+}
+

@@ -199,3 +199,25 @@ void DistortionGraph::setScale(float scale)
 {
     this->scale = scale;
 }
+
+bool DistortionGraph::getZoomState()
+{
+    return mZoomState;
+}
+
+void DistortionGraph::setZoomState(bool zoomState)
+{
+    mZoomState = zoomState;
+}
+
+void DistortionGraph::mouseDown(const juce::MouseEvent &e)
+{
+    if (mZoomState)
+    {
+        mZoomState = false;
+    }
+    else
+    {
+        mZoomState = true;
+    }
+}

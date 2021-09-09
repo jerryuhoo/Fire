@@ -118,3 +118,25 @@ void Oscilloscope::setScale(float scale)
 {
     this->scale = scale;
 }
+
+bool Oscilloscope::getZoomState()
+{
+    return mZoomState;
+}
+
+void Oscilloscope::setZoomState(bool zoomState)
+{
+    mZoomState = zoomState;
+}
+
+void Oscilloscope::mouseDown(const juce::MouseEvent &e)
+{
+    if (mZoomState)
+    {
+        mZoomState = false;
+    }
+    else
+    {
+        mZoomState = true;
+    }
+}

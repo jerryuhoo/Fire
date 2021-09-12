@@ -41,7 +41,7 @@ public:
 
     OtherLookAndFeel()
     {
-        setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
+        setColour(juce::Slider::textBoxTextColourId, KNOB_SUBFONT_COLOUR);
         setColour(juce::Slider::textBoxBackgroundColourId, COLOUR6);
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
@@ -62,14 +62,14 @@ public:
     {
         // draw outline
         auto outline = COLOUR6;
-        auto fill = COLOUR1;
+        auto fill = COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f);
 
         auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10);
 
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         // auto lineW = jmin(8.0f, radius * 0.2f);
-        auto lineW = radius * 0.1f;
+        auto lineW = radius * 0.2f;
         auto arcRadius = radius - lineW * 0.5f;
 
         juce::Path backgroundArc;
@@ -133,19 +133,15 @@ public:
         
         // draw big circle
         juce::Path dialTick;
-        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
-        juce::ColourGradient grad(juce::Colours::black, centerX, centerY,
-                                  juce::Colours::black.withBrightness(slider.isEnabled() ? 1.0f : 0.5f), radiusInner, radiusInner, true);
-        g.setGradientFill(grad);
+        dialTick.addRectangle(0, -radiusInner * 0.95f, radiusInner * 0.15f, radiusInner * 0.3f);
+//        juce::ColourGradient grad(juce::Colours::black.withBrightness(0.4f), centerX, centerY,
+//                                  juce::Colours::black.withBrightness(slider.isEnabled() ? 1.0f : 0.5f), radiusInner, radiusInner, true);
+//        g.setGradientFill(grad);
+        g.setColour(KNOB_INNER_COLOUR);
         g.fillEllipse(dialArea);
         
-        // draw small circle
-        juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
-        g.setColour(COLOUR5.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
-        g.fillEllipse(smallDialArea);
-        
         // draw tick
-        g.setColour(COLOUR3.withBrightness(slider.isEnabled() ? 1.0f : 0.5f));
+        g.setColour(KNOB_TICK_COLOUR);
         g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         
         // when mouse is over or dragging, change the label name to the slider value
@@ -339,13 +335,13 @@ public:
         g.drawRoundedRectangle (boxBounds.toFloat().reduced (0.5f, 0.5f), cornerSize, 1.0f);
         
         // draw shadow
-        if (box.getY() > 100) // top preset box don't need shadow
-        {
-            juce::Path pathShadow;
-            pathShadow.addRoundedRectangle(boxBounds.toFloat().reduced (0.5f, 0.5f), cornerSize);
-            g.setColour (box.findColour (juce::ComboBox::arrowColourId).withAlpha ((box.isEnabled() ? 0.9f : 0.2f)));
-            drawInnerShadow(g, pathShadow);
-        }
+//        if (box.getY() > 100) // top preset box don't need shadow
+//        {
+//            juce::Path pathShadow;
+//            pathShadow.addRoundedRectangle(boxBounds.toFloat().reduced (0.5f, 0.5f), cornerSize);
+//            g.setColour (box.findColour (juce::ComboBox::arrowColourId).withAlpha ((box.isEnabled() ? 0.9f : 0.2f)));
+//            drawInnerShadow(g, pathShadow);
+//        }
         
         juce::Rectangle<int> arrowZone (width - 30, 0, 20, height);
         juce::Path path;
@@ -643,7 +639,7 @@ public:
     
     DriveLookAndFeel()
     {
-        setColour(juce::Slider::textBoxTextColourId, KNOB_FONT_COLOUR);
+        setColour(juce::Slider::textBoxTextColourId, KNOB_SUBFONT_COLOUR);
         setColour(juce::Slider::textBoxBackgroundColourId, COLOUR6);
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentWhite);
         setColour(juce::Slider::textBoxHighlightColourId, COLOUR7);
@@ -827,7 +823,8 @@ public:
         
         // draw small circle
         juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
-        g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+//        g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
+        g.setColour(KNOB_INNER_COLOUR);
         g.fillEllipse(smallDialArea);
         
         // draw colorful inner circle

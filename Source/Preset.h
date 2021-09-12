@@ -36,7 +36,7 @@ public:
 
     void toggleAB();
     void copyAB();
-
+    
 private:
     juce::AudioProcessor &pluginProcessor;
     juce::XmlElement ab{"AB"};
@@ -112,9 +112,8 @@ public:
     /*juce::TextButton& getNextButton();
     juce::TextButton& getPreviousButton();*/
     
-    void setInitState(bool state);
-    bool getInitState();
-    
+    void setChangedState(bool state);
+    bool getChangedState();
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
@@ -138,7 +137,8 @@ private:
     juce::PopupMenu presetMenu;
     
     bool isInit = false;
-
+    bool isChanged = false;
+    
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;
 

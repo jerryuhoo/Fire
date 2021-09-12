@@ -21,11 +21,7 @@ void saveStateToXml(const juce::AudioProcessor &proc, juce::XmlElement &xml)
     for (const auto &param : proc.getParameters())
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
         {
-            // don't save hq
-            if (p->paramID != "hq")
-            {
                 xml.setAttribute(p->paramID, p->getValue());
-            }
         }
 }
 
@@ -444,7 +440,7 @@ StateComponent::StateComponent(StateAB &sab, StatePresets &sp, Multiband &m)
 : procStateAB{sab},
 procStatePresets{sp},
 multiband(m),
-toggleABButton{"A-B"},
+toggleABButton{"A"},
 copyABButton{"Copy"},
 previousButton{"<"},
 nextButton{">"},
@@ -544,7 +540,15 @@ void StateComponent::resized()
 void StateComponent::buttonClicked(juce::Button *clickedButton)
 {
     if (clickedButton == &toggleABButton)
+    {
         procStateAB.toggleAB();
+        isChanged = true;
+
+        if (toggleABButton.getButtonText() == "A")
+            toggleABButton.setButtonText("B");
+        else
+            toggleABButton.setButtonText("A");
+    }
     if (clickedButton == &copyABButton)
         procStateAB.copyAB();
     if (clickedButton == &previousButton)
@@ -570,6 +574,7 @@ void StateComponent::setPreviousPreset()
         //procStatePresets.loadPreset(presetID);
         presetBox.setSelectedId(presetIndex);
     }
+    isChanged = true;
 }
 
 void StateComponent::setNextPreset()
@@ -582,6 +587,7 @@ void StateComponent::setNextPreset()
         //procStatePresets.loadPreset(presetID);
         presetBox.setSelectedId(presetIndex);
     }
+    isChanged = true;
 }
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
@@ -596,6 +602,7 @@ void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
         const juce::String presetID{ "preset" + (juce::String)selectedId };
         procStatePresets.setCurrentPresetId(selectedId);
         procStatePresets.loadPreset(presetID);
+        isChanged = true;
     }
 }
 
@@ -736,7 +743,9 @@ void StateComponent::popPresetMenu()
 //    int result = presetMenu.show(0, 250 * widthScale,
 //                                 10, 30 * heightScale);
     
-    presetMenu.showMenuAsync(juce::PopupMenu::Options(), [this](int result)
+    presetMenu.showMenuAsync(juce::PopupMenu::Options().withStandardItemHeight(30 * heightScale)
+                                                       .withMinimumWidth(250 * widthScale)
+                             , [this](int result)
     {
         if (result == 1)  // init
         {
@@ -745,7 +754,7 @@ void StateComponent::popPresetMenu()
             // set GUI verticle lines to default
             resetMultiband();
             presetBox.setSelectedId(0);
-            isInit = true;
+            isChanged = true;
         }
         else if (result == 2)
         {
@@ -815,14 +824,14 @@ void StateComponent::resetMultiband()
     multiband.reset();
 }
 
-void StateComponent::setInitState(bool state)
+void StateComponent::setChangedState(bool state)
 {
-    isInit = state;
+    isChanged = state;
 }
 
-bool StateComponent::getInitState()
+bool StateComponent::getChangedState()
 {
-    return isInit;
+    return isChanged;
 }
 
 //juce::TextButton& StateComponent::getNextButton()

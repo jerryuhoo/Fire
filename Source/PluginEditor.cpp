@@ -71,10 +71,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     // presets
     addAndMakeVisible(stateComponent);
-    lastPresetName = stateComponent.getPresetName();
-
-    
-
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     //setSize(INIT_WIDTH, INIT_HEIGHT);
@@ -133,10 +129,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     mixLabel.setJustificationType(juce::Justification::centred);
     
     // compressor ratio knob
-    setLinearSlider(*compRatioKnob1);
-    setLinearSlider(*compRatioKnob2);
-    setLinearSlider(*compRatioKnob3);
-    setLinearSlider(*compRatioKnob4);
+    setRotarySlider(*compRatioKnob1);
+    setRotarySlider(*compRatioKnob2);
+    setRotarySlider(*compRatioKnob3);
+    setRotarySlider(*compRatioKnob4);
 
     addAndMakeVisible(CompRatioLabel);
     CompRatioLabel.setText("Ratio", juce::dontSendNotification);
@@ -475,8 +471,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setMenu(&distortionMode4);
 
     // use global lookandfeel
-    getLookAndFeel().setColour(juce::ComboBox::textColourId, COLOUR1);
-    getLookAndFeel().setColour(juce::ComboBox::arrowColourId, COLOUR1);
+    getLookAndFeel().setColour(juce::ComboBox::textColourId, KNOB_SUBFONT_COLOUR);
+    getLookAndFeel().setColour(juce::ComboBox::arrowColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::ComboBox::buttonColourId, COLOUR1);
     getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR6);
     getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
@@ -599,15 +595,10 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
     
-    // DBG(lastPresetName);
-    if (isPresetChanged()) // preset change
+    if (stateComponent.getChangedState()) // click init
     {
         initState();
-    }
-    if (stateComponent.getInitState()) // click init
-    {
-        initState();
-        stateComponent.setInitState(false);
+        stateComponent.setChangedState(false);
     }
 
     // set value only when line is deleted, added, moving
@@ -680,6 +671,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        spectrum.setVisible(false);
 //        multiband.setVisible(false);
 
+//        // draw layer 2
+//        g.setColour(COLOUR1.withBrightness(0.1));
+//        g.fillRect(getWidth() / 2, part1 + part2 + getHeight() / 4, getWidth() / 2, getHeight() / 4);
+        
+        
         bool isWidthSwitchOn = widthSwitch.getToggleState();
         bool isShapeSwitchOn = shapeSwitch.getToggleState();
         bool isCompressorSwitchOn = compressorSwitch.getToggleState();
@@ -1005,10 +1001,10 @@ void FireAudioProcessorEditor::resized()
     multiband.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
 
     // distortion menu
-    distortionMode1.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
-    distortionMode2.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
-    distortionMode3.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
-    distortionMode4.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 12);
+    distortionMode1.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
+    distortionMode2.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
+    distortionMode3.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
+    distortionMode4.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;
@@ -1086,6 +1082,7 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
     linkValue(*slider, driveKnob3, outputKnob3, linkedButton3);
     linkValue(*slider, driveKnob4, outputKnob4, linkedButton4);
 
+    // ableton move sliders
     if (slider == &multiFreqSlider1 && lineState[0])
     {
         if (!multiband.getMovingState())
@@ -1125,17 +1122,17 @@ void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &dr
     {
         if (&xSlider == &driveSlider)
         {
-            outputSlider.setValue(-xSlider.getValue() * 0.1f, juce :: dontSendNotification);
+            outputSlider.setValue(-xSlider.getValue() * 0.1f); // use defalut notification type
         }
-        else if (&xSlider == &outputSlider && driveSlider.isEnabled())
-        {
-            if (outputSlider.getValue() <= 0 && outputSlider.getValue() >= -10)
-                driveSlider.setValue(-outputSlider.getValue() * 10, juce :: dontSendNotification);
-            else if (outputSlider.getValue() > 0)
-                driveSlider.setValue(0, juce :: dontSendNotification);
-            else if (outputSlider.getValue() < -10)
-                driveSlider.setValue(100, juce :: dontSendNotification);
-        }
+//        else if (&xSlider == &outputSlider && driveSlider.isEnabled())
+//        {
+//            if (outputSlider.getValue() <= 0 && outputSlider.getValue() >= -10)
+//                driveSlider.setValue(-outputSlider.getValue() * 10, juce :: dontSendNotification);
+//            else if (outputSlider.getValue() > 0)
+//                driveSlider.setValue(0, juce :: dontSendNotification);
+//            else if (outputSlider.getValue() < -10)
+//                driveSlider.setValue(100, juce :: dontSendNotification);
+//        }
     }
 }
 
@@ -1153,7 +1150,6 @@ void FireAudioProcessorEditor::initState()
     changeSliderState(&distortionMode2);
     changeSliderState(&distortionMode3);
     changeSliderState(&distortionMode4);
-    lastPresetName = stateComponent.getPresetName();
 }
 
 void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)
@@ -1199,7 +1195,7 @@ void FireAudioProcessorEditor::setSliderState(FireAudioProcessor* processor, juc
         slider.setValue(0);
         slider.setEnabled(false);
     }
-    else if (isPresetChanged())
+    else if (stateComponent.getChangedState())
     {
         slider.setEnabled(true);
     }
@@ -1208,11 +1204,6 @@ void FireAudioProcessorEditor::setSliderState(FireAudioProcessor* processor, juc
         slider.setValue(tempValue);
         slider.setEnabled(true);
     }
-}
-
-bool FireAudioProcessorEditor::isPresetChanged()
-{
-    return stateComponent.getPresetName() != lastPresetName;
 }
 
 void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)

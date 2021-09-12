@@ -45,7 +45,6 @@ private:
     // access the processor object that created it.
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
-    juce::String lastPresetName;
     
     // init editor
     void initEditor();
@@ -212,8 +211,6 @@ private:
 
     void initState();
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
-
-    bool isPresetChanged();
 
     // override listener functions
     // linked

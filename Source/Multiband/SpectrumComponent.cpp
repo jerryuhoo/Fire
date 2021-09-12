@@ -34,7 +34,8 @@ void SpectrumComponent::paint (juce::Graphics& g)
     */
     
     // paint horizontal lines and frequency numbers
-    g.setColour(COLOUR1.withAlpha(0.2f));
+//    g.setColour(COLOUR1.withAlpha(0.2f));
+    g.setColour(juce::Colours::lightgrey.withAlpha(0.2f));
     g.drawLine(0, getHeight() / 5, getWidth(), getHeight() / 5, 1);
     for (int i = 0; i < numberOfLines; ++i)
     {

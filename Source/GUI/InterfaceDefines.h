@@ -188,6 +188,9 @@
 #define KNOB_FONT           "Futura"
 #define KNOB_FONT_SIZE      18.0f
 #define KNOB_FONT_COLOUR    COLOUR1
+#define KNOB_SUBFONT_COLOUR COLOUR7.withBrightness(0.8f)
+#define KNOB_INNER_COLOUR   COLOUR7.withBrightness(slider.isEnabled() ? 0.8f : 0.5f)
+#define KNOB_TICK_COLOUR    COLOUR7
 
 // Define Components size
 #define TEXTBOX_WIDTH       60
@@ -262,7 +265,7 @@
 // Buttons
 #define BUTTON_WIDTH        scaledKnobSize / 2.0f
 #define BUTTON_HEIGHT       0.05f * getHeight()
-#define BUTTON_X            getWidth() / 10.0f * 4.0f - BUTTON_WIDTH / 2.0f
+#define BUTTON_X            getWidth() / 10.0f * 6.0f - BUTTON_WIDTH / 2.0f
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)

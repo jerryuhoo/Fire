@@ -100,10 +100,6 @@ public:
     // bypass
     bool getBypassedState();
     
-    // set preset id for vst3 init
-    void setPresetId(int presetID);
-    int getPresetId();
-    
     // get number of activated lines
     // int getLineNum();
     void setLineNum(int lineNum);

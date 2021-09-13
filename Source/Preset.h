@@ -16,6 +16,7 @@
 #include "GUI/LookAndFeel.h"
 #include "Multiband/Multiband.h"
 #include "Utility/VersionInfo.h"
+#include "GUI/InterfaceDefines.h"
 
 namespace state
 {
@@ -67,16 +68,16 @@ public:
 
     void setPresetAndFolderNames(juce::ComboBox &menu);
     int getNumPresets() const;
-    juce::String getNextAvailablePresetID();
+    juce::String getNextAvailablePresetId();
     int getCurrentPresetId() const;
-    void setCurrentPresetId(int currentPresetID);
+    void setCurrentPresetId(int currentPresetId);
     void setPresetName(juce::String name);
     juce::StringRef getPresetName();
     void scanAllPresets();
     juce::File getFile();
     void initPreset();
     void recursiveFileSearch(juce::XmlElement &parentXML, juce::File dir);
-    void recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID);
+    void recursivePresetLoad(juce::XmlElement parentXml, juce::String presetId);
     void recursivePresetNameAdd(juce::XmlElement parentXml ,juce::ComboBox &menu, int &index);
     
 private:
@@ -85,7 +86,7 @@ private:
     juce::XmlElement presetXmlSingle{"WINGSFIRE"}; // single preset for save file
     juce::File presetFile; // on-disk representation
     juce::String statePresetName{""};
-    int mCurrentPresetID{0};
+    int mCurrentPresetId{0};
     int numPresets = 0;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets);
@@ -114,6 +115,7 @@ public:
     
     void setChangedState(bool state);
     bool getChangedState();
+    
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
@@ -142,6 +144,7 @@ private:
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;
 
+    void updatePresetBox(int selectedId);
     void refreshPresetBox();
     void ifPresetActiveShowInBox();
     void deletePresetAndRefresh();

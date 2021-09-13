@@ -104,7 +104,7 @@ bool writeXmlElementToFile(const juce::XmlElement &xml, juce::File &file, juce::
         if (!hasExtension) // pop up alert window
         {
             bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::WarningIcon,
-                                                                  "\"" + presetName + ".fire\" already exists. Do you want to replace it?", "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.", nullptr, nullptr);
+                                                                  "\"" + presetName + PRESET_EXETENSION + "\" already exists. Do you want to replace it?", "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.", nullptr, nullptr);
             if (choice)
             {
                 file.replaceFileIn(file.getFullPathName());
@@ -172,10 +172,10 @@ StatePresets::~StatePresets()
 {
 }
 
-juce::String StatePresets::getNextAvailablePresetID()
+juce::String StatePresets::getNextAvailablePresetId()
 {
-    int newPresetIDNumber = getNumPresets();
-    return "preset" + static_cast<juce::String>(newPresetIDNumber); // format: preset##
+    int newPresetIdNumber = getNumPresets();
+    return "preset" + static_cast<juce::String>(newPresetIdNumber); // format: preset##
 }
 
 void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File dir)
@@ -194,13 +194,13 @@ void StatePresets::recursiveFileSearch(juce::XmlElement &parentXML, juce::File d
             parentXML.addChildElement(currentState.release()); // will be deleted by parent element
         }
         // is preset
-        else if (file.getFile().hasFileExtension(".fire"))
+        else if (file.getFile().hasFileExtension(PRESET_EXETENSION))
         {
             numPresets++;
-            juce::String newPresetID = getNextAvailablePresetID();                    // presetID format: "preset##"
-            std::unique_ptr<juce::XmlElement> currentState{new juce::XmlElement{newPresetID}}; // must be pointer as parent takes ownership
+            juce::String newPresetId = getNextAvailablePresetId();                    // presetId format: "preset##"
+            std::unique_ptr<juce::XmlElement> currentState{new juce::XmlElement{newPresetId}}; // must be pointer as parent takes ownership
             parseFileToXmlElement(file.getFile(), *currentState);
-            currentState->setTagName(newPresetID);
+            currentState->setTagName(newPresetId);
             
             // if file name differs from preset name in .fire
             juce::String newName = file.getFile().getFileNameWithoutExtension();
@@ -241,9 +241,9 @@ bool StatePresets::savePreset(juce::File savePath)
     bool hasExtension = false;
     juce::String presetName = savePath.getFileNameWithoutExtension();
     
-    if (!savePath.hasFileExtension(".fire"))
+    if (!savePath.hasFileExtension(PRESET_EXETENSION))
     {
-        userPresetFile = savePath.getFullPathName() + ".fire";
+        userPresetFile = savePath.getFullPathName() + PRESET_EXETENSION;
     }
     else
     {
@@ -272,14 +272,14 @@ bool StatePresets::savePreset(juce::File savePath)
     }
 }
 
-void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetID)
+void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetId)
 {
     int index = 0;
 //    forEachXmlChildElement(parentXml, child)
 //    {
 //        //DBG(child->getTagName());
-//        //DBG(presetID);
-//        if (child->hasAttribute("presetName") && child->getTagName() == presetID)
+//        //DBG(presetId);
+//        if (child->hasAttribute("presetName") && child->getTagName() == presetId)
 //        {
 //            juce::XmlElement loadThisChild{*child}; // (0 indexed method)
 //            loadStateFromXml(loadThisChild, pluginProcessor);
@@ -287,7 +287,7 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
 //        }
 //        else
 //        {
-//            recursivePresetLoad(*child, presetID);
+//            recursivePresetLoad(*child, presetId);
 //        }
 //        index++;
 //    }
@@ -295,8 +295,8 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
     for (auto* child : parentXml.getChildIterator())
     {
         //DBG(child->getTagName());
-        //DBG(presetID);
-        if (child->hasAttribute("presetName") && child->getTagName() == presetID)
+        //DBG(presetId);
+        if (child->hasAttribute("presetName") && child->getTagName() == presetId)
         {
             juce::XmlElement loadThisChild{*child}; // (0 indexed method)
             loadStateFromXml(loadThisChild, pluginProcessor);
@@ -304,27 +304,27 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
         }
         else
         {
-            recursivePresetLoad(*child, presetID);
+            recursivePresetLoad(*child, presetId);
         }
         index++;
     }
 }
 
-void StatePresets::loadPreset(juce::String presetID)
+void StatePresets::loadPreset(juce::String presetId)
 {
-    recursivePresetLoad(mPresetXml, presetID);
+    recursivePresetLoad(mPresetXml, presetId);
 }
 
 void StatePresets::deletePreset()
 {
-    juce::XmlElement *childToDelete{mPresetXml.getChildElement(mCurrentPresetID - 1)};
+    juce::XmlElement *childToDelete{mPresetXml.getChildElement(mCurrentPresetId - 1)};
     if (childToDelete)
         mPresetXml.removeChildElement(childToDelete, true);
 }
 
 void StatePresets::setPresetName(juce::String name)
 {
-    statePresetName = name + ".fire";
+    statePresetName = name + PRESET_EXETENSION;
 }
 
 juce::StringRef StatePresets::getPresetName()
@@ -348,7 +348,7 @@ void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::Comb
 //            // save new preset and rescan, this will return new preset index
 //            if (statePresetName == n)
 //            {
-//                mCurrentPresetID = index;
+//                mCurrentPresetId = index;
 //            }
 //        }
 //        else
@@ -378,7 +378,7 @@ void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::Comb
             // save new preset and rescan, this will return new preset index
             if (statePresetName == n)
             {
-                mCurrentPresetID = index;
+                mCurrentPresetId = index;
             }
         }
         else
@@ -410,12 +410,12 @@ int StatePresets::getNumPresets() const
 
 int StatePresets::getCurrentPresetId() const
 {
-    return mCurrentPresetID;
+    return mCurrentPresetId;
 }
 
-void StatePresets::setCurrentPresetId(int currentPresetID)
+void StatePresets::setCurrentPresetId(int currentPresetId)
 {
-    mCurrentPresetID = currentPresetID;
+    mCurrentPresetId = currentPresetId;
 }
 
 juce::File StatePresets::getFile()
@@ -459,6 +459,7 @@ menuButton{"Menu"}
     nextButton.addListener(this);
     
     addAndMakeVisible(presetBox);
+
     presetBox.setJustificationType(juce::Justification::centred);
     presetBox.setColour(juce::ComboBox::textColourId, COLOUR1);
     presetBox.setColour(juce::ComboBox::arrowColourId, COLOUR1);
@@ -468,6 +469,28 @@ menuButton{"Menu"}
     presetBox.setColour(juce::ComboBox::backgroundColourId, COLOUR4);
     presetBox.setTextWhenNothingSelected("- Init -");
     
+    // when selecting the same preset, this will revert back to the original preset (in case you changed something)
+    presetBox.onChange = [this]
+    {
+        auto menu = presetBox.getRootMenu();
+        auto id = presetBox.getSelectedId();
+                
+        juce::PopupMenu::MenuItemIterator iterator (*menu);
+
+        while (iterator.next())
+        {
+            auto item = &iterator.getItem();
+
+            if (item->itemID == id)
+            {
+                item->setAction ([this, id] { updatePresetBox(id); });
+            }
+            else
+            {
+                item->setAction (nullptr);
+            }
+        }
+    };
     
     refreshPresetBox();
     ifPresetActiveShowInBox();
@@ -569,12 +592,12 @@ void StateComponent::setPreviousPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() - 1;
     if (presetIndex > 0)
     {
-        //juce::String presetID = (juce::String)presetIndex;
+        //juce::String presetId = (juce::String)presetIndex;
         //procStatePresets.setCurrentPresetId(presetIndex);
-        //procStatePresets.loadPreset(presetID);
+        //procStatePresets.loadPreset(presetId);
         presetBox.setSelectedId(presetIndex);
     }
-    isChanged = true;
+    //isChanged = true;
 }
 
 void StateComponent::setNextPreset()
@@ -582,12 +605,12 @@ void StateComponent::setNextPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() + 1;
     if (presetIndex <= procStatePresets.getNumPresets())
     {
-        //juce::String presetID = (juce::String)presetIndex;
+        //juce::String presetId = (juce::String)presetIndex;
         //procStatePresets.setCurrentPresetId(presetIndex);
-        //procStatePresets.loadPreset(presetID);
+        //procStatePresets.loadPreset(presetId);
         presetBox.setSelectedId(presetIndex);
     }
-    isChanged = true;
+    //isChanged = true;
 }
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
@@ -597,16 +620,22 @@ void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
     // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
     // next, previous, change combobox will change the selectedId, but currentId will change only after this.
     // and then, it will load the preset.
+    
     if (procStatePresets.getCurrentPresetId() != selectedId)
     {
-        const juce::String presetID{ "preset" + (juce::String)selectedId };
-        procStatePresets.setCurrentPresetId(selectedId);
-        procStatePresets.loadPreset(presetID);
-        isChanged = true;
+        updatePresetBox(selectedId);
     }
 }
 
-void StateComponent::refreshPresetBox()
+void StateComponent::updatePresetBox(int selectedId) // when preset is changed
+{
+    const juce::String presetId{ "preset" + (juce::String)selectedId };
+    procStatePresets.setCurrentPresetId(selectedId);
+    procStatePresets.loadPreset(presetId);
+    isChanged = true;
+}
+
+void StateComponent::refreshPresetBox() // rescan, init, save, or delete
 {
     presetBox.clear();
     procStatePresets.setPresetAndFolderNames(presetBox);
@@ -614,10 +643,10 @@ void StateComponent::refreshPresetBox()
 
 void StateComponent::ifPresetActiveShowInBox()
 {
-    const int currentPresetID{procStatePresets.getCurrentPresetId()};
+    const int currentPresetId{procStatePresets.getCurrentPresetId()};
     const int numPresets{procStatePresets.getNumPresets()};
-    if (1 <= currentPresetID && currentPresetID <= numPresets)
-        presetBox.setSelectedId(currentPresetID);
+    if (1 <= currentPresetId && currentPresetId <= numPresets)
+        presetBox.setSelectedId(currentPresetId);
 }
 
 void StateComponent::deletePresetAndRefresh()
@@ -695,20 +724,20 @@ void StateComponent::openPresetFolder()
 
 void StateComponent::rescanPresetFolder()
 {
-    int presetID = procStatePresets.getCurrentPresetId();
+    int presetId = procStatePresets.getCurrentPresetId();
     int currentPresetNum;
     int previousPresetNum = procStatePresets.getNumPresets();
     procStatePresets.scanAllPresets();
     refreshPresetBox();
     currentPresetNum = procStatePresets.getNumPresets();
-    // if some presets are deleted, set presetID to 0
+    // if some presets are deleted, set presetId to 0
     if (currentPresetNum < previousPresetNum)
     {
-        procStatePresets.setCurrentPresetId(presetID - 1);
+        procStatePresets.setCurrentPresetId(presetId - 1);
     }
     else
     {
-        procStatePresets.setCurrentPresetId(presetID);
+        procStatePresets.setCurrentPresetId(presetId);
     }
     presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
 }
@@ -766,7 +795,7 @@ void StateComponent::popPresetMenu()
         }
         else if (result == 4)
         {
-            juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire");
+            juce::URL gitHubWebsite(GITHUB_LINK);
             gitHubWebsite.launchInDefaultBrowser();
         }
         else if (result == 5)
@@ -802,7 +831,7 @@ void StateComponent::popPresetMenu()
                 const auto callback = juce::ModalCallbackFunction::create ([this](int result) {
                     if (result == 1) // result == 1 means user clicks OK
                     {
-                        juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
+                        juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
                         gitHubWebsite.launchInDefaultBrowser();
                     }
                 });

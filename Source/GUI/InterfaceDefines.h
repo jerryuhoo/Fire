@@ -10,8 +10,10 @@
 
 #pragma once
 
-#define VERSION "0.9.3"
-
+#define VERSION             "0.9.3"
+#define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
+#define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
+#define PRESET_EXETENSION   ".fire"
 // paramID paramName
 #define DRIVE_ID1           "drive1"
 #define DRIVE_NAME1         "Drive1"

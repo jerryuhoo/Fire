@@ -785,24 +785,13 @@ void FireAudioProcessor::setStateInformation(const void *data, int sizeInBytes)
         {
             // load preset
             presetId = xmlCurrentState->getIntAttribute("currentPresetID", 0);
-            //setPresetId(presetId);
+            statePresets.setCurrentPresetId(presetId); // only set preset id not value
+            // so it won't override the value you changed from the preset
             
             editorWidth = xmlCurrentState->getIntAttribute("editorWidth", INIT_WIDTH);
             editorHeight = xmlCurrentState->getIntAttribute("editorHeight", INIT_HEIGHT);
         }
     }
-}
-
-void FireAudioProcessor::setPresetId(int presetId)
-{
-    //statePresets.setCurrentPresetId(presetId);
-    //statePresets.loadPreset("preset" + (juce::String)presetId);
-    //DBG(statePresets.getPresetName());
-}
-
-int FireAudioProcessor::getPresetId()
-{
-    return presetId;
 }
 
 //==============================================================================

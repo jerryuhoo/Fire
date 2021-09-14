@@ -29,6 +29,8 @@ public:
     void setMoving(bool move);
     bool getState();
     void setState(bool state);
+    bool getDeleteState();
+    void setDeleteState(bool deleteState);
     void setXPercent(float x);
     float getXPercent();
     void setIndex(int index);
@@ -48,8 +50,8 @@ private:
     void mouseDown(const juce::MouseEvent &e) override;
     
     bool move = false;
-    bool state = false;
-    
+    bool mState = false;
+    bool mDeleteState = false;
     float xPercent = 0.f;
     int leftIndex = -1; // left index
     int rightIndex = -1; // right index

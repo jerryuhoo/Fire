@@ -3,9 +3,8 @@
 - Bug
 
 1. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
-2. can't show preset name in preset box when it is loaded. The solution is when you change slider value you should set presetId to 0.
-3. open menu and close host will cause LookAndFeel error
-4 drive knob flash bug
+2. open menu and close host will cause LookAndFeel error
+3. drive knob flash bug
 
 - Feature
 

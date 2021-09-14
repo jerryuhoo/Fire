@@ -61,7 +61,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(spectrum);
     addAndMakeVisible(multiband);
     
-    setMultiband();
     multiFreqSlider1.addListener(this);
     multiFreqSlider2.addListener(this);
     multiFreqSlider3.addListener(this);
@@ -71,6 +70,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     // presets
     addAndMakeVisible(stateComponent);
+    stateComponent.getPresetBox()->addListener(this);
+    stateComponent.getToggleABButton()->addListener(this);
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     //setSize(INIT_WIDTH, INIT_HEIGHT);
@@ -595,7 +596,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
     
-    if (stateComponent.getChangedState()) // click init
+    if (stateComponent.getChangedState()) // only for clicked the same preset in preset box
     {
         initState();
         stateComponent.setChangedState(false);
@@ -1089,8 +1090,8 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
         {
             multiband.dragLinesByFreq(multiFreqSlider1.getValue(), multiband.getSortedIndex(0));
             multiband.getFreqArray(multibandFreq);
-            multiFreqSlider2.setValue(multibandFreq[1]);
-            multiFreqSlider3.setValue(multibandFreq[2]);
+            multiFreqSlider2.setValue(multibandFreq[1], juce::NotificationType::dontSendNotification);
+            multiFreqSlider3.setValue(multibandFreq[2], juce::NotificationType::dontSendNotification);
         }
     }
     if (slider == &multiFreqSlider2 && lineState[1])
@@ -1099,8 +1100,8 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
         {
             multiband.dragLinesByFreq(multiFreqSlider2.getValue(), multiband.getSortedIndex(1));
             multiband.getFreqArray(multibandFreq);
-            multiFreqSlider1.setValue(multibandFreq[0]);
-            multiFreqSlider3.setValue(multibandFreq[2]);
+            multiFreqSlider1.setValue(multibandFreq[0], juce::NotificationType::dontSendNotification);
+            multiFreqSlider3.setValue(multibandFreq[2], juce::NotificationType::dontSendNotification);
         }
     }
     if (slider == &multiFreqSlider3 && lineState[2])
@@ -1109,8 +1110,8 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
         {
             multiband.dragLinesByFreq(multiFreqSlider3.getValue(), multiband.getSortedIndex(2));
             multiband.getFreqArray(multibandFreq);
-            multiFreqSlider1.setValue(multibandFreq[0]);
-            multiFreqSlider2.setValue(multibandFreq[1]);
+            multiFreqSlider1.setValue(multibandFreq[0], juce::NotificationType::dontSendNotification);
+            multiFreqSlider2.setValue(multibandFreq[1], juce::NotificationType::dontSendNotification);
         }
     }
 }
@@ -1136,9 +1137,55 @@ void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &dr
     }
 }
 
+void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
+{
+    if (clickedButton == stateComponent.getToggleABButton())
+    {
+        stateComponent.getProcStateAB()->toggleAB();
+
+        if (clickedButton->getButtonText() == "A")
+            clickedButton->setButtonText("B");
+        else
+            clickedButton->setButtonText("A");
+        initState();
+    }
+    
+//    if (clickedButton == &copyABButton)
+//        procStateAB.copyAB();
+//    if (clickedButton == &previousButton)
+//        setPreviousPreset();
+//    if (clickedButton == &nextButton)
+//        setNextPreset();
+//    if (clickedButton == &savePresetButton)
+//        savePresetAlertWindow();
+//    //if (clickedButton == &deletePresetButton)
+//    //    deletePresetAndRefresh();
+//    if (clickedButton == &menuButton)
+//        //openPresetFolder();
+//        popPresetMenu();
+}
+
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
 {
-    changeSliderState(combobox);
+    if (combobox == &distortionMode1 || combobox == &distortionMode2
+        || combobox == &distortionMode3 || combobox == &distortionMode4)
+    {
+        changeSliderState(combobox);
+    }
+    if (combobox == stateComponent.getPresetBox())
+    {
+        int selectedId = combobox->getSelectedId();
+
+        // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
+        // next, previous, change combobox will change the selectedId, but currentId will change only after this.
+        // and then, it will load the preset.
+        
+        if (stateComponent.getProcStatePresets()->getCurrentPresetId() != selectedId)
+        {
+            stateComponent.updatePresetBox(selectedId);
+        }
+        initState(); // see line 598
+    }
 }
 
 void FireAudioProcessorEditor::initState()

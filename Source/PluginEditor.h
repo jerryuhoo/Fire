@@ -26,7 +26,8 @@
 class FireAudioProcessorEditor : public juce::AudioProcessorEditor, //2019/12/28
                                  public juce::Slider::Listener,
                                  public juce::ComboBox::Listener, //2020/08/08
-                                 public juce::Timer               //edited 2020/07/03 fps
+                                 public juce::Timer,               //edited 2020/07/03 fps
+                                 public juce::Button::Listener
 {
 public:
     //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
@@ -45,6 +46,8 @@ private:
     // access the processor object that created it.
     FireAudioProcessor &processor;
     state::StateComponent stateComponent;
+    
+    void buttonClicked(juce::Button *clickedButton) override;
     
     // init editor
     void initEditor();

@@ -48,7 +48,6 @@ public:
     void updateLines(juce::String option, int changedIndex);
     void setCloseButtonState();
     void setFocus();
-    static void lineDeleted();
     bool getAddState();
     void setAddState(bool state);
     bool getMovingState();
@@ -60,7 +59,6 @@ public:
     void dragLines(float xPercent);
     void dragLinesByFreq(int freq, int index);
 private:
-    inline static bool isDeleted = false;
     float margin;
     float size = 15.0f;
     float width = 5.0f;

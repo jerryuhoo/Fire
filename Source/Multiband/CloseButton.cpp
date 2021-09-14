@@ -49,6 +49,7 @@ void CloseButton::resized()
 void CloseButton::mouseUp(const juce::MouseEvent &e)
 {
     setVisible(false);
+    verticalLine.setDeleteState(true);
     verticalLine.setState(false);
 }
 

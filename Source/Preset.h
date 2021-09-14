@@ -115,6 +115,11 @@ public:
     
     void setChangedState(bool state);
     bool getChangedState();
+    juce::ComboBox* getPresetBox();
+    juce::Button* getToggleABButton();
+    void updatePresetBox(int selectedId);
+    StatePresets* getProcStatePresets();
+    StateAB* getProcStateAB();
     
 private:
     StateAB &procStateAB;
@@ -144,7 +149,6 @@ private:
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;
 
-    void updatePresetBox(int selectedId);
     void refreshPresetBox();
     void ifPresetActiveShowInBox();
     void deletePresetAndRefresh();

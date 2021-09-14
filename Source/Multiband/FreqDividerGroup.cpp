@@ -52,9 +52,9 @@ void FreqDividerGroup::paint (juce::Graphics& g)
     }
     else
     {
-        // reset frequency if it is deleted
-        setFrequency(0);
         closeButton.setVisible(false);
+        setFrequency(-1);
+        verticalLine.setXPercent(0);
     }
 }
 
@@ -75,14 +75,34 @@ void FreqDividerGroup::setFrequency(int frequency)
     freqTextLabel.setFreq(frequency);
 }
 
-bool FreqDividerGroup::getChangeState()
+bool FreqDividerGroup::getChangeState() // is frequency text's value changed?
 {
     return freqTextLabel.getChangeState();
 }
 
-void FreqDividerGroup::setChangeState(bool state)
+void FreqDividerGroup::setChangeState(bool changeState)
 {
-    freqTextLabel.setChangeState(state);
+    freqTextLabel.setChangeState(changeState);
+}
+
+bool FreqDividerGroup::getDeleteState() // is frequency text's value changed?
+{
+    return verticalLine.getDeleteState();
+}
+
+void FreqDividerGroup::setDeleteState(bool deleteState)
+{
+    verticalLine.setDeleteState(deleteState);
+}
+
+bool FreqDividerGroup::getState() //enable or disable?
+{
+    return verticalLine.getState();
+}
+
+void FreqDividerGroup::setState(bool state)
+{
+    verticalLine.setState(state);
 }
 
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[])
@@ -90,7 +110,6 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     float leftLimit;
     float rightLimit;
 
-//    int index = leftIndex + 1;
     leftLimit = (verticalLine.getIndex() + 1) * margin;
     rightLimit = 1 - (lineNum - verticalLine.getIndex()) * margin;
 

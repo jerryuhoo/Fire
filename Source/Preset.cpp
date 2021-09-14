@@ -483,7 +483,7 @@ menuButton{"Menu"}
 
             if (item->itemID == id)
             {
-                item->setAction ([this, id] { updatePresetBox(id); });
+                item->setAction ([this, id] { updatePresetBox(id); isChanged = true; });
             }
             else
             {
@@ -562,16 +562,16 @@ void StateComponent::resized()
 
 void StateComponent::buttonClicked(juce::Button *clickedButton)
 {
-    if (clickedButton == &toggleABButton)
-    {
-        procStateAB.toggleAB();
-        isChanged = true;
-
-        if (toggleABButton.getButtonText() == "A")
-            toggleABButton.setButtonText("B");
-        else
-            toggleABButton.setButtonText("A");
-    }
+//    if (clickedButton == &toggleABButton)
+//    {
+//        procStateAB.toggleAB();
+//        isChanged = true;
+//
+//        if (toggleABButton.getButtonText() == "A")
+//            toggleABButton.setButtonText("B");
+//        else
+//            toggleABButton.setButtonText("A");
+//    }
     if (clickedButton == &copyABButton)
         procStateAB.copyAB();
     if (clickedButton == &previousButton)
@@ -615,16 +615,16 @@ void StateComponent::setNextPreset()
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
 {
-    int selectedId = changedComboBox->getSelectedId();
-
-    // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
-    // next, previous, change combobox will change the selectedId, but currentId will change only after this.
-    // and then, it will load the preset.
-    
-    if (procStatePresets.getCurrentPresetId() != selectedId)
-    {
-        updatePresetBox(selectedId);
-    }
+//    int selectedId = changedComboBox->getSelectedId();
+//
+//    // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
+//    // next, previous, change combobox will change the selectedId, but currentId will change only after this.
+//    // and then, it will load the preset.
+//    
+//    if (procStatePresets.getCurrentPresetId() != selectedId)
+//    {
+//        updatePresetBox(selectedId);
+//    }
 }
 
 void StateComponent::updatePresetBox(int selectedId) // when preset is changed
@@ -632,7 +632,6 @@ void StateComponent::updatePresetBox(int selectedId) // when preset is changed
     const juce::String presetId{ "preset" + (juce::String)selectedId };
     procStatePresets.setCurrentPresetId(selectedId);
     procStatePresets.loadPreset(presetId);
-    isChanged = true;
 }
 
 void StateComponent::refreshPresetBox() // rescan, init, save, or delete
@@ -783,7 +782,6 @@ void StateComponent::popPresetMenu()
             // set GUI verticle lines to default
             resetMultiband();
             presetBox.setSelectedId(0);
-            isChanged = true;
         }
         else if (result == 2)
         {
@@ -863,6 +861,25 @@ bool StateComponent::getChangedState()
     return isChanged;
 }
 
+juce::ComboBox* StateComponent::getPresetBox()
+{
+    return &presetBox;
+}
+
+juce::Button* StateComponent::getToggleABButton()
+{
+    return &toggleABButton;
+}
+
+StatePresets* StateComponent::getProcStatePresets()
+{
+    return &procStatePresets;
+}
+
+StateAB* StateComponent::getProcStateAB()
+{
+    return &procStateAB;
+}
 //juce::TextButton& StateComponent::getNextButton()
 //{
 //    return nextButton;

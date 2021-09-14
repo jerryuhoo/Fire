@@ -87,23 +87,31 @@ void VerticalLine::setMoving(bool move)
 
 bool VerticalLine::getState()
 {
-    return state;
+    return mState;
 }
 
 void VerticalLine::setState(bool state)
 {
-    this->state = state;
+    mState = state;
     if (state == false)
     {
         // reset
         setVisible(false);
-        xPercent = 0;
-        Multiband::lineDeleted();
     }
     else
     {
         setVisible(true);
     }
+}
+
+bool VerticalLine::getDeleteState()
+{
+    return mDeleteState;
+}
+
+void VerticalLine::setDeleteState(bool deleteState)
+{
+    mDeleteState = deleteState;
 }
 
 void VerticalLine::setXPercent(float x)

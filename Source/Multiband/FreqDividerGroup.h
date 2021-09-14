@@ -33,7 +33,13 @@ public:
     
     void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[]);
     bool getChangeState();
-    void setChangeState(bool state);
+    void setChangeState(bool changeState);
+    
+    bool getState();
+    void setState(bool state);
+    
+    bool getDeleteState();
+    void setDeleteState(bool deleteState);
 private:
     float margin = 7.5f;
     float size = 15.0f;

@@ -933,13 +933,14 @@ float FireAudioProcessor::safeMode(float drive, juce::AudioBuffer<float>& buffer
     
     if (drive == 0 || sampleMaxValue <= 0.001f)
     {
-        DriveLookAndFeel::reductionPrecent = 1;
+        setReductionPrecent(safeID, 1);
     }
     else
     {
-        DriveLookAndFeel::reductionPrecent = std::log2f(newDrive) / drive;
+        
+        setReductionPrecent(safeID, std::log2f(newDrive) / drive);
     }
-    DriveLookAndFeel::sampleMaxValue = sampleMaxValue;
+    setSampleMaxValue(safeID, sampleMaxValue);
     
     return newDrive;
 }
@@ -1218,6 +1219,56 @@ float FireAudioProcessor::getOutputMeterLevel(int channel)
     else return dBToNormalizedGain(mOutputRightSmoothed);
 }
 
+// drive lookandfeel
+float FireAudioProcessor::getReductionPrecent(juce::String safeId)
+{
+    if (safeId == SAFE_ID1)
+        return mReductionPrecent1;
+    if (safeId == SAFE_ID2)
+        return mReductionPrecent2;
+    if (safeId == SAFE_ID3)
+        return mReductionPrecent3;
+    if (safeId == SAFE_ID4)
+        return mReductionPrecent4;
+    return 0;
+}
+
+void FireAudioProcessor::setReductionPrecent(juce::String safeId, float reductionPrecent)
+{
+    if (safeId == SAFE_ID1)
+        mReductionPrecent1 = reductionPrecent;
+    if (safeId == SAFE_ID2)
+        mReductionPrecent2 = reductionPrecent;
+    if (safeId == SAFE_ID3)
+        mReductionPrecent3 = reductionPrecent;
+    if (safeId == SAFE_ID4)
+        mReductionPrecent4 = reductionPrecent;
+}
+
+float FireAudioProcessor::getSampleMaxValue(juce::String safeId)
+{
+    if (safeId == SAFE_ID1)
+        return mSampleMaxValue1;
+    if (safeId == SAFE_ID2)
+        return mSampleMaxValue2;
+    if (safeId == SAFE_ID3)
+        return mSampleMaxValue3;
+    if (safeId == SAFE_ID4)
+        return mSampleMaxValue4;
+    return 0;
+}
+
+void FireAudioProcessor::setSampleMaxValue(juce::String safeId, float sampleMaxValue)
+{
+    if (safeId == SAFE_ID1)
+        mSampleMaxValue1 = sampleMaxValue;
+    if (safeId == SAFE_ID2)
+        mSampleMaxValue2 = sampleMaxValue;
+    if (safeId == SAFE_ID3)
+        mSampleMaxValue3 = sampleMaxValue;
+    if (safeId == SAFE_ID4)
+        mSampleMaxValue4 = sampleMaxValue;
+}
 
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {

@@ -82,10 +82,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setLookAndFeel(&otherLookAndFeel);
 
     // drive knob 1
-    driveKnob1.setLookAndFeel(&driveLookAndFeel);
-    driveKnob2.setLookAndFeel(&driveLookAndFeel);
-    driveKnob3.setLookAndFeel(&driveLookAndFeel);
-    driveKnob4.setLookAndFeel(&driveLookAndFeel);
+    driveKnob1.setLookAndFeel(&driveLookAndFeel1);
+    driveKnob2.setLookAndFeel(&driveLookAndFeel2);
+    driveKnob3.setLookAndFeel(&driveLookAndFeel3);
+    driveKnob4.setLookAndFeel(&driveLookAndFeel4);
     setListenerKnob(driveKnob1);
     setListenerKnob(driveKnob2);
     setListenerKnob(driveKnob3);
@@ -705,6 +705,16 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         widthSwitch.setVisible(true);
         compressorSwitch.setVisible(true);
         
+        // drive reduction
+        driveLookAndFeel1.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID1);
+        driveLookAndFeel1.reductionPrecent = processor.getReductionPrecent(SAFE_ID1);
+        driveLookAndFeel2.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID2);
+        driveLookAndFeel2.reductionPrecent = processor.getReductionPrecent(SAFE_ID2);
+        driveLookAndFeel3.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID3);
+        driveLookAndFeel3.reductionPrecent = processor.getReductionPrecent(SAFE_ID3);
+        driveLookAndFeel4.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID4);
+        driveLookAndFeel4.reductionPrecent = processor.getReductionPrecent(SAFE_ID4);
+        
         if (isOscSwitchOn)
         {
             setInvisible(shapeVector);
@@ -1049,7 +1059,10 @@ void FireAudioProcessorEditor::resized()
     // set look and feel scale
     otherLookAndFeel.scale = scale;
     roundedButtonLnf.scale = scale;
-    driveLookAndFeel.scale = scale;
+    driveLookAndFeel1.scale = scale;
+    driveLookAndFeel2.scale = scale;
+    driveLookAndFeel3.scale = scale;
+    driveLookAndFeel4.scale = scale;
     lowPassButtonLnf.scale = scale;
     bandPassButtonLnf.scale = scale;
     highPassButtonLnf.scale = scale;

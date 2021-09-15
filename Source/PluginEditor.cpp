@@ -72,6 +72,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(stateComponent);
     stateComponent.getPresetBox()->addListener(this);
     stateComponent.getToggleABButton()->addListener(this);
+    stateComponent.getCopyABButton()->addListener(this);
+    stateComponent.getPreviousButton()->addListener(this);
+    stateComponent.getNextButton()->addListener(this);
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     //setSize(INIT_WIDTH, INIT_HEIGHT);
@@ -1431,7 +1434,6 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 
 void FireAudioProcessorEditor::setMultiband()
 {
-    //multiband.setLineNum(processor.getLineNum());
     int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
     int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
     int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
@@ -1456,6 +1458,7 @@ void FireAudioProcessorEditor::setMultiband()
     multiband.updateLines("reset", -1);
     multiband.setCloseButtonState();
     multiband.setFocus();
+    processor.setLineNum(multiband.getLineNum());
 }
 
 void FireAudioProcessorEditor::setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSection> &array)

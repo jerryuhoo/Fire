@@ -880,6 +880,22 @@ StateAB* StateComponent::getProcStateAB()
 {
     return &procStateAB;
 }
+
+juce::TextButton* StateComponent::getCopyABButton()
+{
+    return &copyABButton;
+}
+
+juce::TextButton* StateComponent::getPreviousButton()
+{
+    return &previousButton;
+}
+
+juce::TextButton* StateComponent::getNextButton()
+{
+    return &nextButton;
+}
+
 //juce::TextButton& StateComponent::getNextButton()
 //{
 //    return nextButton;

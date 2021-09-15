@@ -466,7 +466,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
     multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
     multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
-    
+
     if (multibandState1)
     {
         auto multibandBlock1 = juce::dsp::AudioBlock<float> (mBuffer1);
@@ -991,7 +991,8 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     float biasValue = static_cast<float>(*treeState.getRawParameterValue(biasID));
     float recValue = static_cast<float>(*treeState.getRawParameterValue(recID));
     
-    float newDrive = safeMode(driveValue, bandBuffer, SAFE_ID1);
+    float newDrive = safeMode(driveValue, bandBuffer, safeID);
+
     if (driveID == DRIVE_ID1)
         newDrive1 = newDrive;
     else if (driveID == DRIVE_ID2)

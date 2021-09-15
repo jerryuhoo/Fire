@@ -634,8 +634,8 @@ private:
 public:
     // resize scale
     float scale = 1.0f;
-    inline static float reductionPrecent = 1.0f;
-    inline static float sampleMaxValue = 0.0f;
+    float reductionPrecent = 1.0f;
+    float sampleMaxValue = 0.0f;
     
     DriveLookAndFeel()
     {
@@ -702,7 +702,7 @@ public:
                                     2 * M_PI,
                                     true);
         drawInnerShadow(g, backgroundShadowArc);
-        //DBG(reductionPrecent);
+//        DBG(reductionPrecent);
         float reductAngle = toAngle - (1.0f - reductionPrecent) * 2 * M_PI;
         
         // safe reduce paint

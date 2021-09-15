@@ -310,7 +310,10 @@ private:
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
-    DriveLookAndFeel driveLookAndFeel;
+    DriveLookAndFeel driveLookAndFeel1;
+    DriveLookAndFeel driveLookAndFeel2;
+    DriveLookAndFeel driveLookAndFeel3;
+    DriveLookAndFeel driveLookAndFeel4;
     LowPassButtonLnf lowPassButtonLnf;
     BandPassButtonLnf bandPassButtonLnf;
     HighPassButtonLnf highPassButtonLnf;

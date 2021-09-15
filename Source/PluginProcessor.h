@@ -107,6 +107,12 @@ public:
     // VU meters
     float getInputMeterLevel(int channel);
     float getOutputMeterLevel(int channel);
+    
+    // drive lookandfeel
+    float getReductionPrecent(juce::String safeId);
+    void setReductionPrecent(juce::String safeId, float reductionPrecent);
+    float getSampleMaxValue(juce::String safeId);
+    void setSampleMaxValue(juce::String safeId, float sampleMaxValue);
 private:
     //==============================================================================
     
@@ -285,5 +291,15 @@ private:
     float mInputRightSmoothed = 0;
     float mOutputLeftSmoothed = 0;
     float mOutputRightSmoothed = 0;
+    
+    // Drive lookandfeel
+    float mReductionPrecent1 = 0;
+    float mReductionPrecent2 = 0;
+    float mReductionPrecent3 = 0;
+    float mReductionPrecent4 = 0;
+    float mSampleMaxValue1 = 0;
+    float mSampleMaxValue2 = 0;
+    float mSampleMaxValue3 = 0;
+    float mSampleMaxValue4 = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

@@ -3,9 +3,6 @@
 - Bug
 
 1. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
-2. open menu and close host will cause LookAndFeel error
-3. drive knob flash bug
-4. input is not the same as output when nothing is changed
 
 - Feature
 

@@ -40,6 +40,6 @@ private:
     float rateDivide = -1.0f;
     float drive = -1.0f;
     float scale = 1.0f;
-    bool mZoomState = true;
+    bool mZoomState = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)
 };

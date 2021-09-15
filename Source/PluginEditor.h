@@ -177,12 +177,13 @@ private:
         windowRightButton;
 
     // switches
-    juce::TextButton shapeSwitch, widthSwitch, compressorSwitch;
+    juce::TextButton shapeSwitch, widthSwitch, compressorSwitch, oscSwitch;
     
     // vectors for sliders
     juce::OwnedArray<juce::Component, juce::CriticalSection> shapeVector;
     juce::OwnedArray<juce::Component, juce::CriticalSection> widthVector;
     juce::OwnedArray<juce::Component, juce::CriticalSection> compressorVector;
+    juce::OwnedArray<juce::Component, juce::CriticalSection> oscVector;
     
     // group toggle buttons
     enum RadioButtonIds

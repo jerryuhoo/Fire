@@ -164,12 +164,15 @@ void DistortionGraph::paint (juce::Graphics& g)
             p.lineTo(xPos, yPos);
         }
 
-        int colour_r = 244;
-        int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
-        int colour_b = 63;
+//        int colour_r = 244;
+//        int colour_g = (208 - drive * 2 < 0) ? 0 : (208 - drive * 2);
+//        int colour_b = 63;
 
-        juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
-                                  juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
+//        juce::ColourGradient grad(juce::Colour(colour_r, colour_g, colour_b), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
+//                                  juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
+//        g.setGradientFill(grad);
+        juce::ColourGradient grad(juce::Colours::yellow.withBrightness(0.9), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2,
+                                  juce::Colours::yellow.withBrightness(0.9).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
         g.setGradientFill(grad);
         g.strokePath(p, juce::PathStrokeType(2.0f));
     }

@@ -32,6 +32,6 @@ private:
     FireAudioProcessor &processor;
     juce::Array<float> historyL;
     juce::Array<float> historyR;
-    bool mZoomState = true; // true means small
+    bool mZoomState = false; // false means small
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
 };

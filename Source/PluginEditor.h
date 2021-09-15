@@ -142,8 +142,10 @@ private:
         widthLabel,
         downSampleLabel,
         outputLabel,
+        outputLabelGlobal,
         recLabel,
         mixLabel,
+        mixLabelGlobal,
         cutoffLabel,
         resLabel,
         linkedLabel,
@@ -206,6 +208,7 @@ private:
     void setRotarySlider(juce::Slider& slider);
     void setLinearSlider(juce::Slider& slider);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void setFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void changeSliderState(juce::ComboBox *combobox);
     void updateFreqArray();
     void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue);

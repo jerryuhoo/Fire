@@ -46,8 +46,8 @@ void Oscilloscope::paint (juce::Graphics& g)
 //                              juce::Colour(colour_r, colour_g, colour_b).withAlpha(0.f), 0, getHeight() / 2, true);
 //    g.setGradientFill(grad);
     
-    juce::ColourGradient grad(COLOUR1, getWidth() / 2, getHeight() / 2,
-                              COLOUR1.withAlpha(0.f), 0, getHeight() / 2, true);
+    juce::ColourGradient grad(juce::Colours::red.withBrightness(0.9f), getWidth() / 2, getHeight() / 2,
+                              juce::Colours::red.withAlpha(0.0f), 0, getHeight() / 2, true);
     g.setGradientFill(grad);
     
     

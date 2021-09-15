@@ -52,7 +52,7 @@ void VUMeter::paint (juce::Graphics& g)
         ch1fill = 0;
     }
     
-    g.setColour(COLOUR5);
+    g.setColour(juce::Colours::yellowgreen.withBrightness(0.9));
     
     g.fillRect(0, ch0fill, meterWidth, getHeight());
     g.fillRect(meterWidth * 2, ch1fill, meterWidth, getHeight());

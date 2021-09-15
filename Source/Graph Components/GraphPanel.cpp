@@ -34,46 +34,9 @@ GraphPanel::~GraphPanel()
 
 void GraphPanel::paint (juce::Graphics& g)
 {
-    if(widthGraph.getZoomState())
-    {
-        // zoom out
-        widthGraph.setBounds(getWidth() / 2, getHeight() / 2, getWidth() / 2, getHeight() / 2);
-        oscilloscope.setVisible(true);
-        distortionGraph.setVisible(true);
-        vuPanel.setVisible(true);
-    }
-    else
-    {
-        // zoom in
-        widthGraph.setBounds(0, 0, getWidth(), getHeight());
-        oscilloscope.setVisible(false);
-        distortionGraph.setVisible(false);
-        vuPanel.setVisible(false);
-    }
-    
-    if(vuPanel.isVisible())
-    {
-        if(vuPanel.getZoomState())
-        {
-            // zoom out
-            vuPanel.setBounds(0, getHeight() / 2, getWidth() / 2, getHeight() / 2);
-            oscilloscope.setVisible(true);
-            distortionGraph.setVisible(true);
-            widthGraph.setVisible(true);
-        }
-        else
-        {
-            // zoom in
-            vuPanel.setBounds(0, 0, getWidth(), getHeight());
-            oscilloscope.setVisible(false);
-            distortionGraph.setVisible(false);
-            widthGraph.setVisible(false);
-        }
-    }
-    
     if(oscilloscope.isVisible())
     {
-        if(oscilloscope.getZoomState())
+        if(!oscilloscope.getZoomState())
         {
             // zoom out
             oscilloscope.setBounds(0, 0, getWidth() / 2, getHeight() / 2);
@@ -93,7 +56,7 @@ void GraphPanel::paint (juce::Graphics& g)
     
     if(distortionGraph.isVisible())
     {
-        if(distortionGraph.getZoomState())
+        if(!distortionGraph.getZoomState())
         {
             // zoom out
             distortionGraph.setBounds(getWidth() / 2, 0, getWidth() / 2, getHeight() / 2);
@@ -111,6 +74,45 @@ void GraphPanel::paint (juce::Graphics& g)
         }
     }
     
+    if(vuPanel.isVisible())
+    {
+        if(!vuPanel.getZoomState())
+        {
+            // zoom out
+            vuPanel.setBounds(0, getHeight() / 2, getWidth() / 2, getHeight() / 2);
+            oscilloscope.setVisible(true);
+            distortionGraph.setVisible(true);
+            widthGraph.setVisible(true);
+        }
+        else
+        {
+            // zoom in
+            vuPanel.setBounds(0, 0, getWidth(), getHeight());
+            oscilloscope.setVisible(false);
+            distortionGraph.setVisible(false);
+            widthGraph.setVisible(false);
+        }
+    }
+    
+    if(widthGraph.isVisible())
+    {
+        if(!widthGraph.getZoomState())
+        {
+            // zoom out
+            widthGraph.setBounds(getWidth() / 2, getHeight() / 2, getWidth() / 2, getHeight() / 2);
+            oscilloscope.setVisible(true);
+            distortionGraph.setVisible(true);
+            vuPanel.setVisible(true);
+        }
+        else
+        {
+            // zoom in
+            widthGraph.setBounds(0, 0, getWidth(), getHeight());
+            oscilloscope.setVisible(false);
+            distortionGraph.setVisible(false);
+            vuPanel.setVisible(false);
+        }
+    }
 }
 
 void GraphPanel::resized()
@@ -124,4 +126,24 @@ void GraphPanel::setDistortionState(int mode, float color, float rec, float mix,
                                     float bias, float drive, float rateDivide)
 {
     distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
+}
+
+Oscilloscope* GraphPanel::getOscilloscope()
+{
+    return &oscilloscope;
+}
+
+VUPanel* GraphPanel::getVuPanel()
+{
+    return &vuPanel;
+}
+
+DistortionGraph* GraphPanel::getDistortionGraph()
+{
+    return &distortionGraph;
+}
+
+WidthGraph* GraphPanel::getWidthGraph()
+{
+    return &widthGraph;
 }

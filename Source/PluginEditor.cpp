@@ -143,10 +143,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     CompRatioLabel.setJustificationType(juce::Justification::centred);
     
     // compressor ratio knob
-    setLinearSlider(*compThreshKnob1);
-    setLinearSlider(*compThreshKnob2);
-    setLinearSlider(*compThreshKnob3);
-    setLinearSlider(*compThreshKnob4);
+    setRotarySlider(*compThreshKnob1);
+    setRotarySlider(*compThreshKnob2);
+    setRotarySlider(*compThreshKnob3);
+    setRotarySlider(*compThreshKnob4);
 
     compThreshKnob1->setTextValueSuffix("db");
     compThreshKnob2->setTextValueSuffix("db");
@@ -341,41 +341,53 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowRightButton.setLookAndFeel(&otherLookAndFeel);
     
     // switches
+    addAndMakeVisible(oscSwitch);
+    oscSwitch.setClickingTogglesState(true);
+    oscSwitch.setRadioGroupId(switchButtons);
+    oscSwitch.setButtonText("");
+    oscSwitch.setToggleState(true, juce::dontSendNotification);
+    oscSwitch.setColour(juce::TextButton::buttonColourId, juce::Colours::red.withBrightness(0.5));
+    oscSwitch.setColour(juce::TextButton::buttonOnColourId, juce::Colours::red.withBrightness(0.9));
+    oscSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    oscSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
+    oscSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
+    oscSwitch.setLookAndFeel(&flatButtonLnf);
+    
     addAndMakeVisible(shapeSwitch);
     shapeSwitch.setClickingTogglesState(true);
     shapeSwitch.setRadioGroupId(switchButtons);
-    shapeSwitch.setButtonText("Shape");
-    shapeSwitch.setToggleState(true, juce::dontSendNotification);
-    shapeSwitch.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    shapeSwitch.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
+    shapeSwitch.setButtonText("");
+    shapeSwitch.setToggleState(false, juce::dontSendNotification);
+    shapeSwitch.setColour(juce::TextButton::buttonColourId, juce::Colours::yellow.withBrightness(0.5));
+    shapeSwitch.setColour(juce::TextButton::buttonOnColourId, juce::Colours::yellow.withBrightness(0.9));
     shapeSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     shapeSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
     shapeSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     shapeSwitch.setLookAndFeel(&flatButtonLnf);
-    
-    addAndMakeVisible(widthSwitch);
-    widthSwitch.setClickingTogglesState(true);
-    widthSwitch.setRadioGroupId(switchButtons);
-    widthSwitch.setButtonText("Width");
-    widthSwitch.setToggleState(false, juce::dontSendNotification);
-    widthSwitch.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    widthSwitch.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    widthSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    widthSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    widthSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    widthSwitch.setLookAndFeel(&flatButtonLnf);
-    
+
     addAndMakeVisible(compressorSwitch);
     compressorSwitch.setClickingTogglesState(true);
     compressorSwitch.setRadioGroupId(switchButtons);
-    compressorSwitch.setButtonText("Compressor");
+    compressorSwitch.setButtonText("");
     compressorSwitch.setToggleState(false, juce::dontSendNotification);
-    compressorSwitch.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    compressorSwitch.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
+    compressorSwitch.setColour(juce::TextButton::buttonColourId, juce::Colours::yellowgreen.withBrightness(0.5));
+    compressorSwitch.setColour(juce::TextButton::buttonOnColourId, juce::Colours::yellowgreen.withBrightness(0.9));
     compressorSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     compressorSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
     compressorSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     compressorSwitch.setLookAndFeel(&flatButtonLnf);
+    
+    addAndMakeVisible(widthSwitch);
+    widthSwitch.setClickingTogglesState(true);
+    widthSwitch.setRadioGroupId(switchButtons);
+    widthSwitch.setButtonText("");
+    widthSwitch.setToggleState(false, juce::dontSendNotification);
+    widthSwitch.setColour(juce::TextButton::buttonColourId, juce::Colours::skyblue.withBrightness(0.5));
+    widthSwitch.setColour(juce::TextButton::buttonOnColourId, juce::Colours::skyblue.withBrightness(0.9));
+    widthSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    widthSwitch.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
+    widthSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
+    widthSwitch.setLookAndFeel(&flatButtonLnf);
     
     // Attachment
     //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
@@ -524,6 +536,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     filterHighButton.setLookAndFeel(nullptr);
     windowRightButton.setLookAndFeel(nullptr);
     windowLeftButton.setLookAndFeel(nullptr);
+    oscSwitch.setLookAndFeel(nullptr);
     shapeSwitch.setLookAndFeel(nullptr);
     widthSwitch.setLookAndFeel(nullptr);
     compressorSwitch.setLookAndFeel(nullptr);
@@ -676,17 +689,24 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        g.setColour(COLOUR1.withBrightness(0.1));
 //        g.fillRect(getWidth() / 2, part1 + part2 + getHeight() / 4, getWidth() / 2, getHeight() / 4);
         
-        
+        bool isOscSwitchOn = oscSwitch.getToggleState();
         bool isWidthSwitchOn = widthSwitch.getToggleState();
         bool isShapeSwitchOn = shapeSwitch.getToggleState();
         bool isCompressorSwitchOn = compressorSwitch.getToggleState();
         
         setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
         
+        oscSwitch.setVisible(true);
         shapeSwitch.setVisible(true);
         widthSwitch.setVisible(true);
         compressorSwitch.setVisible(true);
         
+        if (isOscSwitchOn)
+        {
+            setInvisible(shapeVector);
+            setInvisible(compressorVector);
+            setInvisible(widthVector);
+        }
         if (isCompressorSwitchOn)
         {
             setFourKnobsVisibility(*compRatioKnob1, *compRatioKnob2, *compRatioKnob3, *compRatioKnob4, bandNum);
@@ -698,6 +718,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             recLabel.setVisible(false);
             biasLabel.setVisible(false);
             widthLabel.setVisible(false);
+            
+//            graphPanel.getVuPanel()->setZoomState(true);
+//            graphPanel.getOscilloscope()->setZoomState(false);
+//            graphPanel.getDistortionGraph()->setZoomState(false);
+//            graphPanel.getWidthGraph()->setZoomState(false);
         }
         if (isShapeSwitchOn)
         {
@@ -710,6 +735,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             recLabel.setVisible(true);
             biasLabel.setVisible(true);
             widthLabel.setVisible(false);
+            
+//            graphPanel.getVuPanel()->setZoomState(false);
+//            graphPanel.getOscilloscope()->setZoomState(false);
+//            graphPanel.getDistortionGraph()->setZoomState(true);
+//            graphPanel.getWidthGraph()->setZoomState(false);
         }
         if (isWidthSwitchOn)
         {
@@ -721,6 +751,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             recLabel.setVisible(false);
             biasLabel.setVisible(false);
             widthLabel.setVisible(true);
+            
+//            graphPanel.getVuPanel()->setZoomState(false);
+//            graphPanel.getOscilloscope()->setZoomState(false);
+//            graphPanel.getDistortionGraph()->setZoomState(false);
+//            graphPanel.getWidthGraph()->setZoomState(true);
         }
         
         setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
@@ -764,6 +799,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         shapeSwitch.setVisible(false);
         widthSwitch.setVisible(false);
         compressorSwitch.setVisible(false);
+        oscSwitch.setVisible(false);
         
         downSampleKnob.setVisible(true);
         resKnob.setVisible(true);
@@ -911,47 +947,43 @@ void FireAudioProcessorEditor::resized()
 
     stateComponent.setBounds(r);
 
-    
-    // inputKnob.setBounds(startX * 1 - scaledKnobSize / 2, firstLineY, scaledKnobSize, scaledKnobSize);
-    float driveX = DRIVE_X;
-    float driveY = DRIVE_Y;
-    float driveSize = scaledKnobSize * 2;
-    driveKnob1.setBounds(driveX, driveY, driveSize, driveSize);
-    driveKnob2.setBounds(driveX, driveY, driveSize, driveSize);
-    driveKnob3.setBounds(driveX, driveY, driveSize, driveSize);
-    driveKnob4.setBounds(driveX, driveY, driveSize, driveSize);
+    driveKnob1.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
+    driveKnob2.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
+    driveKnob3.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
+    driveKnob4.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
     
     shapeSwitch.setBounds(SWITCH_X, SWITCH_SHAPE_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
     widthSwitch.setBounds(SWITCH_X, SWITCH_WIDTH_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
     compressorSwitch.setBounds(SWITCH_X, SWITCH_COMP_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
+    oscSwitch.setBounds(SWITCH_X, SWITCH_OSC_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
     
     // shape
-    recKnob1->setBounds(REC_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    recKnob2->setBounds(REC_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    recKnob3->setBounds(REC_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    recKnob4->setBounds(REC_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    recKnob1->setBounds(REC_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    recKnob2->setBounds(REC_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    recKnob3->setBounds(REC_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    recKnob4->setBounds(REC_X, OSC_Y, scaledKnobSize, scaledKnobSize);
     
-    biasKnob1->setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    biasKnob2->setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    biasKnob3->setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    biasKnob4->setBounds(BIAS_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    biasKnob1->setBounds(BIAS_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    biasKnob2->setBounds(BIAS_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    biasKnob3->setBounds(BIAS_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    biasKnob4->setBounds(BIAS_X, OSC_Y, scaledKnobSize, scaledKnobSize);
     
     // width
-    widthKnob1->setBounds(WIDTH_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    widthKnob2->setBounds(WIDTH_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    widthKnob3->setBounds(WIDTH_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    widthKnob4->setBounds(WIDTH_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    widthKnob1->setBounds(WIDTH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    widthKnob2->setBounds(WIDTH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    widthKnob3->setBounds(WIDTH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    widthKnob4->setBounds(WIDTH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
 
     // compressor
-    compRatioKnob1->setBounds(COMP_RATIO_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    compRatioKnob2->setBounds(COMP_RATIO_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    compRatioKnob3->setBounds(COMP_RATIO_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    compRatioKnob4->setBounds(COMP_RATIO_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    compRatioKnob1->setBounds(COMP_RATIO_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    compRatioKnob2->setBounds(COMP_RATIO_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    compRatioKnob3->setBounds(COMP_RATIO_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    compRatioKnob4->setBounds(COMP_RATIO_X, OSC_Y, scaledKnobSize, scaledKnobSize);
 
-    compThreshKnob1->setBounds(COMP_THRESH_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    compThreshKnob2->setBounds(COMP_THRESH_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    compThreshKnob3->setBounds(COMP_THRESH_X, secondPartY, scaledKnobSize, scaledKnobSize);
-    compThreshKnob4->setBounds(COMP_THRESH_X, secondPartY, scaledKnobSize, scaledKnobSize);
+    compThreshKnob1->setBounds(COMP_THRESH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    compThreshKnob2->setBounds(COMP_THRESH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    compThreshKnob3->setBounds(COMP_THRESH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
+    compThreshKnob4->setBounds(COMP_THRESH_X, OSC_Y, scaledKnobSize, scaledKnobSize);
 
     //colorKnob.setBounds(startX * 1 + scaledKnobSize * 1.2, secondLineY, scaledKnobSize, scaledKnobSize);
     downSampleKnob.setBounds(DOWNSAMPLE_X, firstPartY, scaledKnobSize, scaledKnobSize);
@@ -1346,11 +1378,11 @@ void FireAudioProcessorEditor::setRoundButton(juce::TextButton& button, juce::St
     button.setClickingTogglesState(true);
     bool state = *processor.treeState.getRawParameterValue(paramId);
     button.setToggleState(state, juce::dontSendNotification);
-    button.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    button.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
+    button.setColour(juce::TextButton::buttonColourId, COLOUR6.withBrightness(0.1f));
+    button.setColour(juce::TextButton::buttonOnColourId, COLOUR4);
     button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    button.setColour(juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    button.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
+    button.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
     
     if (&button == &filterLowButton) button.setLookAndFeel(&lowPassButtonLnf);
     else if (&button == &filterBandButton) button.setLookAndFeel(&bandPassButtonLnf);

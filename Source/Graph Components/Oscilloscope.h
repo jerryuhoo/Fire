@@ -37,7 +37,7 @@ private:
     juce::Image historyImage;
    
     float scale = 1.0f;
-    bool mZoomState = true;
+    bool mZoomState = false;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Oscilloscope)
 };

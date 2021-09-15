@@ -5,6 +5,7 @@
 1. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
 2. open menu and close host will cause LookAndFeel error
 3. drive knob flash bug
+4. input is not the same as output when nothing is changed
 
 - Feature
 
@@ -19,6 +20,7 @@
 9. add lfo control
 10. change A/B color when switching
 11. add max input/output value for meters (currently RMS)
+12. add switch button for downsample / color / cutoff filter
 
 - Improvement
 

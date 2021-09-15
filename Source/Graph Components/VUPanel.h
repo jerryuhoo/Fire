@@ -32,6 +32,6 @@ private:
     FireAudioProcessor &processor;
     VUMeter vuMeterIn;
     VUMeter vuMeterOut;
-    bool mZoomState = true; // true means small
+    bool mZoomState = false; // false means small
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUPanel)
 };

@@ -30,6 +30,10 @@ public:
     void resized() override;
     void setDistortionState(int mode, float color, float rec, float mix,
                             float bias, float drive, float rateDivide);
+    Oscilloscope* getOscilloscope();
+    VUPanel* getVuPanel();
+    DistortionGraph* getDistortionGraph();
+    WidthGraph* getWidthGraph();
     
 private:
     FireAudioProcessor &processor;

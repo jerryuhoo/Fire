@@ -199,7 +199,7 @@
 #define TEXTBOX_HEIGHT      30
 #define KNOBSIZE            100
 #define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
-#define DRIVE_SIZE          SCALED_KNOBSIZE * 2
+
 
 // Define Position
 #define INIT_WIDTH          1000.0f
@@ -207,6 +207,13 @@
 
 #define PART1               getHeight() / 10.0f
 #define PART2               PART1 * 3.0f
+
+#define KNOB_PANEL_1_X      SWITCH_X + SWITCH_WIDTH
+#define KNOB_PANEL_2_X      SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH
+#define KNOB_PANEL_3_X      SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH + OSC_HEIGHT * 2 + BUTTON_WIDTH
+
+#define KNOB_PANEL_1_WIDTH  getWidth() / 4.0f
+#define KNOB_PANEL_2_WIDTH  OSC_HEIGHT * 2
 
 #define OSC_X               getWidth() / 10.0f - OSC_WIDTH / 2.0f
 #define OSC_Y               PART1 + PART2 + getHeight() / 5.0f
@@ -233,27 +240,32 @@
 #define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10.0f * 3.0f
 
-#define DRIVE_X             getWidth() / 3.0f * 2.0f - SCALED_KNOBSIZE
-#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2.0f - SCALED_KNOBSIZE / 2.0f - 20.0f
-#define REC_X               OSC_X + OSC_WIDTH * 2 + SWITCH_WIDTH
-#define BIAS_X              OSC_X + OSC_WIDTH * 2 + SWITCH_WIDTH + SCALED_KNOBSIZE
-#define WIDTH_X             OSC_X + OSC_WIDTH * 2 + SWITCH_WIDTH
-#define OUTPUT_X            startX * 9.0f - SCALED_KNOBSIZE / 2.0f
-#define COMP_RATIO_X        OSC_X + OSC_WIDTH * 2 + SWITCH_WIDTH
-#define COMP_THRESH_X       OSC_X + OSC_WIDTH * 2 + SWITCH_WIDTH + SCALED_KNOBSIZE
+#define DRIVE_X             KNOB_PANEL_2_X + OSC_HEIGHT / 4.0f
+#define DRIVE_Y             OSC_Y + OSC_HEIGHT / 2.0f
+#define DRIVE_SIZE          SCALED_KNOBSIZE * 1.2f
+
+#define REC_X               KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define BIAS_X              KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+#define WIDTH_X             KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define COMP_RATIO_X        KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define COMP_THRESH_X       KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+#define OUTPUT_X            KNOB_PANEL_3_X + SCALED_KNOBSIZE / 4.0f
+#define MIX_X               KNOB_PANEL_3_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+
 #define CUTOFF_X            startX * 4.5f - SCALED_KNOBSIZE / 2.0f
 #define RES_X               startX * 6.0f - SCALED_KNOBSIZE / 2.0f
 #define DOWNSAMPLE_X        startX * 7.5f - SCALED_KNOBSIZE / 2.0f
 #define COLOR_X             startX * 7.5f - SCALED_KNOBSIZE / 2.0f
 #define FILTER_STATE_X      startX * 4.5f - SCALED_KNOBSIZE / 4.0f
 #define FILTER_TYPE_X       startX * 6.0f - SCALED_KNOBSIZE / 4.0f
-#define MIX_X               startX * 9.0f - SCALED_KNOBSIZE / 2.0f
+#define OUTPUT_X_G          startX * 9.0f - SCALED_KNOBSIZE / 2.0f
+#define MIX_X_G             startX * 9.0f - SCALED_KNOBSIZE / 2.0f
 
-#define VU_METER_WIDTH         getWidth() / 10.0f
-#define VU_METER_HEIGHT        getHeight() / 10.0f * 9.0f
-#define VU_METER_Y             getHeight() / 10.0f
-#define VU_METER_X_1           getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
-#define VU_METER_X_2           getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
+#define VU_METER_WIDTH      getWidth() / 10.0f
+#define VU_METER_HEIGHT     getHeight() / 10.0f * 9.0f
+#define VU_METER_Y          getHeight() / 10.0f
+#define VU_METER_X_1        getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
+#define VU_METER_X_2        getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
 
 
 // Switches
@@ -267,9 +279,8 @@
 #define SWITCH_WIDTH_Y      OSC_Y + OSC_HEIGHT / 2.0f * 3.0f
 
 // Buttons
-#define BUTTON_WIDTH        scaledKnobSize / 2.0f
-#define BUTTON_HEIGHT       0.05f * getHeight()
-#define BUTTON_X            DRIVE_X + DRIVE_SIZE / 2.0f + getWidth() / 10.0f
+#define BUTTON_X            SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH + OSC_HEIGHT * 2
+#define BUTTON_WIDTH        OSC_WIDTH / 4.0f
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)

@@ -488,9 +488,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         processDistortion(mBuffer1, MODE_ID1, DRIVE_ID1, SAFE_ID1, OUTPUT_ID1, BIAS_ID1, REC_ID1, overdrive1);
         
         normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
-        
+
         widthProcessor1.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
-        
+
         // compressor process
         float ratio1 = *treeState.getRawParameterValue(COMP_RATIO_ID1);
         float thresh1 = *treeState.getRawParameterValue(COMP_THRESH_ID1);
@@ -499,7 +499,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         compressorProcessor1.process(context1);
 
         // mix process
-        //mixProcessor(MIX_ID1, mixSmoother1, totalNumInputChannels, mBuffer1, dryBuffer1);
         mixDryWet(dryBuffer1, mBuffer1, MIX_ID1, dryWetMixer1);
     }
     

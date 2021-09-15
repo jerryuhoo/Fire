@@ -707,6 +707,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             setInvisible(shapeVector);
             setInvisible(compressorVector);
             setInvisible(widthVector);
+            recLabel.setVisible(false);
+            biasLabel.setVisible(false);
+            widthLabel.setVisible(false);
+            CompRatioLabel.setVisible(false);
+            CompThreshLabel.setVisible(false);
         }
         if (isCompressorSwitchOn)
         {
@@ -777,7 +782,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 //        }
         driveLabel.setVisible(true);
         outputLabel.setVisible(true);
-
+        mixLabel.setVisible(true);
         // set other effects invisible
         downSampleKnob.setVisible(false);
         resKnob.setVisible(false);
@@ -866,6 +871,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         biasKnob4->setVisible(false);
         
         driveLabel.setVisible(false);
+        outputLabel.setVisible(false);
+        mixLabel.setVisible(false);
         CompRatioLabel.setVisible(false);
         CompThreshLabel.setVisible(false);
         widthLabel.setVisible(false);

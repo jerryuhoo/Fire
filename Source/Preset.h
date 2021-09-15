@@ -120,7 +120,9 @@ public:
     void updatePresetBox(int selectedId);
     StatePresets* getProcStatePresets();
     StateAB* getProcStateAB();
-    
+    juce::TextButton* getCopyABButton();
+    juce::TextButton* getPreviousButton();
+    juce::TextButton* getNextButton();
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;

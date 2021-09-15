@@ -817,7 +817,7 @@ public:
         juce::Path dialTick;
         dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
         juce::ColourGradient grad(juce::Colours::black, centerX, centerY,
-                                  juce::Colours::white.withBrightness(slider.isEnabled() ? 0.5f : 0.2f), radiusInner, radiusInner, true);
+                                  juce::Colours::white.withBrightness(slider.isEnabled() ? 0.9f : 0.5f), radiusInner, radiusInner, true);
         g.setGradientFill(grad);
         g.fillEllipse(dialArea);
         

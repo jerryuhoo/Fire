@@ -62,7 +62,7 @@ public:
     {
         // draw outline
         auto outline = COLOUR6;
-        auto fill = COLOUR1.withBrightness(slider.isEnabled() ? 1.0f : 0.5f);
+        auto fill = slider.findColour(juce::Slider::rotarySliderFillColourId).withBrightness(slider.isEnabled() ? 1.0f : 0.5f);
 
         auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10);
 

@@ -240,13 +240,13 @@
 #define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10.0f * 3.0f
 
-#define DRIVE_X             KNOB_PANEL_2_X + OSC_HEIGHT / 4.0f
+#define DRIVE_X             KNOB_PANEL_2_X + OSC_HEIGHT - SCALED_KNOBSIZE / 2.0f
 #define DRIVE_Y             OSC_Y + OSC_HEIGHT / 2.0f
-#define DRIVE_SIZE          SCALED_KNOBSIZE * 1.2f
+#define DRIVE_SIZE          SCALED_KNOBSIZE * 2.0f
 
 #define REC_X               KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
 #define BIAS_X              KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
-#define WIDTH_X             KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define WIDTH_X             KNOB_PANEL_1_X + OSC_WIDTH - SCALED_KNOBSIZE / 2.0f
 #define COMP_RATIO_X        KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
 #define COMP_THRESH_X       KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
 #define OUTPUT_X            KNOB_PANEL_3_X + SCALED_KNOBSIZE / 4.0f

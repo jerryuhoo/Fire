@@ -205,7 +205,7 @@ private:
 
     void setMenu(juce::ComboBox* combobox);
     void setListenerKnob(juce::Slider& slider);
-    void setRotarySlider(juce::Slider& slider);
+    void setRotarySlider(juce::Slider& slider, juce::Colour colour);
     void setLinearSlider(juce::Slider& slider);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void setFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);

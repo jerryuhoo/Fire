@@ -103,7 +103,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setListenerKnob(outputKnob2);
     setListenerKnob(outputKnob3);
     setListenerKnob(outputKnob4);
-    setRotarySlider(outputKnob);
+    outputKnob1.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    outputKnob2.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    outputKnob3.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    outputKnob4.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    setRotarySlider(outputKnob, COLOUR1);
     
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", juce::dontSendNotification);
@@ -126,11 +130,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputKnob4.setTextValueSuffix("db");
     
     // mix knob
-    setRotarySlider(mixKnob1);
-    setRotarySlider(mixKnob2);
-    setRotarySlider(mixKnob3);
-    setRotarySlider(mixKnob4);
-    setRotarySlider(mixKnob);
+    setRotarySlider(mixKnob1, COLOUR1);
+    setRotarySlider(mixKnob2, COLOUR1);
+    setRotarySlider(mixKnob3, COLOUR1);
+    setRotarySlider(mixKnob4, COLOUR1);
+    setRotarySlider(mixKnob, COLOUR1);
     
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", juce::dontSendNotification);
@@ -147,23 +151,23 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     mixLabelGlobal.setJustificationType(juce::Justification::centred);
     
     // compressor ratio knob
-    setRotarySlider(*compRatioKnob1);
-    setRotarySlider(*compRatioKnob2);
-    setRotarySlider(*compRatioKnob3);
-    setRotarySlider(*compRatioKnob4);
+    setRotarySlider(*compRatioKnob1, juce::Colours::yellowgreen);
+    setRotarySlider(*compRatioKnob2, juce::Colours::yellowgreen);
+    setRotarySlider(*compRatioKnob3, juce::Colours::yellowgreen);
+    setRotarySlider(*compRatioKnob4, juce::Colours::yellowgreen);
 
     addAndMakeVisible(CompRatioLabel);
     CompRatioLabel.setText("Ratio", juce::dontSendNotification);
     CompRatioLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    CompRatioLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    CompRatioLabel.setColour(juce::Label::textColourId, juce::Colours::yellowgreen);
     CompRatioLabel.attachToComponent(compRatioKnob1, false);
     CompRatioLabel.setJustificationType(juce::Justification::centred);
     
     // compressor ratio knob
-    setRotarySlider(*compThreshKnob1);
-    setRotarySlider(*compThreshKnob2);
-    setRotarySlider(*compThreshKnob3);
-    setRotarySlider(*compThreshKnob4);
+    setRotarySlider(*compThreshKnob1, juce::Colours::yellowgreen);
+    setRotarySlider(*compThreshKnob2, juce::Colours::yellowgreen);
+    setRotarySlider(*compThreshKnob3, juce::Colours::yellowgreen);
+    setRotarySlider(*compThreshKnob4, juce::Colours::yellowgreen);
 
     compThreshKnob1->setTextValueSuffix("db");
     compThreshKnob2->setTextValueSuffix("db");
@@ -173,20 +177,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(CompThreshLabel);
     CompThreshLabel.setText("Threshold", juce::dontSendNotification);
     CompThreshLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    CompThreshLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    CompThreshLabel.setColour(juce::Label::textColourId, juce::Colours::yellowgreen);
     CompThreshLabel.attachToComponent(compThreshKnob1, false);
     CompThreshLabel.setJustificationType(juce::Justification::centred);
     
     // width knob
-    setRotarySlider(*widthKnob1);
-    setRotarySlider(*widthKnob2);
-    setRotarySlider(*widthKnob3);
-    setRotarySlider(*widthKnob4);
+    setRotarySlider(*widthKnob1, juce::Colours::skyblue);
+    setRotarySlider(*widthKnob2, juce::Colours::skyblue);
+    setRotarySlider(*widthKnob3, juce::Colours::skyblue);
+    setRotarySlider(*widthKnob4, juce::Colours::skyblue);
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
     widthLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    widthLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    widthLabel.setColour(juce::Label::textColourId, juce::Colours::skyblue);
     widthLabel.attachToComponent(widthKnob1, false);
     widthLabel.setJustificationType(juce::Justification::centred);
     
@@ -194,7 +198,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(colorKnob);
     colorKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     colorKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-
+    colorKnob.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    
     addAndMakeVisible(colorLabel);
     colorLabel.setText("Color", juce::dontSendNotification);
     colorLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
@@ -203,10 +208,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     colorLabel.setJustificationType(juce::Justification::centred);
 
     // bias knob
-    setRotarySlider(*biasKnob1);
-    setRotarySlider(*biasKnob2);
-    setRotarySlider(*biasKnob3);
-    setRotarySlider(*biasKnob4);
+    setRotarySlider(*biasKnob1, COLOUR1);
+    setRotarySlider(*biasKnob2, COLOUR1);
+    setRotarySlider(*biasKnob3, COLOUR1);
+    setRotarySlider(*biasKnob4, COLOUR1);
     
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
@@ -219,7 +224,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(downSampleKnob);
     downSampleKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     downSampleKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-
+    downSampleKnob.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    
     addAndMakeVisible(downSampleLabel);
     downSampleLabel.setText("Downsample", juce::dontSendNotification);
     downSampleLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
@@ -228,10 +234,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
     // rec knob
-    setRotarySlider(*recKnob1);
-    setRotarySlider(*recKnob2);
-    setRotarySlider(*recKnob3);
-    setRotarySlider(*recKnob4);
+    setRotarySlider(*recKnob1, COLOUR1);
+    setRotarySlider(*recKnob2, COLOUR1);
+    setRotarySlider(*recKnob3, COLOUR1);
+    setRotarySlider(*recKnob4, COLOUR1);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
@@ -244,7 +250,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(cutoffKnob);
     cutoffKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     cutoffKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-
+    cutoffKnob.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    
     addAndMakeVisible(cutoffLabel);
     cutoffLabel.setText("Cutoff", juce::dontSendNotification);
     cutoffLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
@@ -256,7 +263,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(resKnob);
     resKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     resKnob.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-
+    resKnob.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    
     addAndMakeVisible(resLabel);
     resLabel.setText("Q", juce::dontSendNotification); // Resonance
     resLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
@@ -689,8 +697,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
 
         // draw layer 2
         g.setColour(COLOUR6);
-        g.drawRect(KNOB_PANEL_1_X, OSC_Y, KNOB_PANEL_1_WIDTH, OSC_HEIGHT * 2);
-        g.drawRect(KNOB_PANEL_2_X, OSC_Y, KNOB_PANEL_2_WIDTH, OSC_HEIGHT * 2);
+        
+        
         g.drawRect(KNOB_PANEL_3_X, OSC_Y, KNOB_PANEL_1_WIDTH, OSC_HEIGHT * 2);
         
         bool isOscSwitchOn = oscSwitch.getToggleState();
@@ -715,8 +723,26 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         driveLookAndFeel4.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID4);
         driveLookAndFeel4.reductionPrecent = processor.getReductionPrecent(SAFE_ID4);
         
+        float scale = juce::jmin(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
+        
         if (isOscSwitchOn)
         {
+            driveKnob1.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y - getHeight() / 20, DRIVE_SIZE, DRIVE_SIZE);
+            driveKnob2.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y - getHeight() / 20, DRIVE_SIZE, DRIVE_SIZE);
+            driveKnob3.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y - getHeight() / 20, DRIVE_SIZE, DRIVE_SIZE);
+            driveKnob4.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y - getHeight() / 20, DRIVE_SIZE, DRIVE_SIZE);
+        }
+        else
+        {
+            driveKnob1.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+            driveKnob2.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+            driveKnob3.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+            driveKnob4.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+        }
+        
+        if (isOscSwitchOn)
+        {
+            //g.drawRect(KNOB_PANEL_1_X, OSC_Y, KNOB_PANEL_1_WIDTH + KNOB_PANEL_2_WIDTH, OSC_HEIGHT * 2);
             setInvisible(shapeVector);
             setInvisible(compressorVector);
             setInvisible(widthVector);
@@ -728,6 +754,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         }
         if (isCompressorSwitchOn)
         {
+            g.drawRect(KNOB_PANEL_1_X, OSC_Y, KNOB_PANEL_1_WIDTH, OSC_HEIGHT * 2);
+            g.drawRect(KNOB_PANEL_2_X, OSC_Y, KNOB_PANEL_2_WIDTH, OSC_HEIGHT * 2);
             setFourKnobsVisibility(*compRatioKnob1, *compRatioKnob2, *compRatioKnob3, *compRatioKnob4, bandNum);
             setFourKnobsVisibility(*compThreshKnob1, *compThreshKnob2, *compThreshKnob3, *compThreshKnob4, bandNum);
             setInvisible(shapeVector);
@@ -745,6 +773,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         }
         if (isShapeSwitchOn)
         {
+            g.drawRect(KNOB_PANEL_1_X, OSC_Y, KNOB_PANEL_1_WIDTH, OSC_HEIGHT * 2);
+            g.drawRect(KNOB_PANEL_2_X, OSC_Y, KNOB_PANEL_2_WIDTH, OSC_HEIGHT * 2);
             setFourKnobsVisibility(*recKnob1, *recKnob2, *recKnob3, *recKnob4, bandNum);
             setFourKnobsVisibility(*biasKnob1, *biasKnob2, *biasKnob3, *biasKnob4, bandNum);
             setInvisible(compressorVector);
@@ -762,6 +792,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         }
         if (isWidthSwitchOn)
         {
+            g.drawRect(KNOB_PANEL_1_X, OSC_Y, KNOB_PANEL_1_WIDTH, OSC_HEIGHT * 2);
+            g.drawRect(KNOB_PANEL_2_X, OSC_Y, KNOB_PANEL_2_WIDTH, OSC_HEIGHT * 2);
             setFourKnobsVisibility(*widthKnob1, *widthKnob2, *widthKnob3, *widthKnob4, bandNum);
             setInvisible(shapeVector);
             setInvisible(compressorVector);
@@ -964,10 +996,20 @@ void FireAudioProcessorEditor::resized()
 
     stateComponent.setBounds(r);
 
-    driveKnob1.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
-    driveKnob2.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
-    driveKnob3.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
-    driveKnob4.setBounds(DRIVE_X, DRIVE_Y, DRIVE_SIZE, DRIVE_SIZE);
+//    if (oscSwitch.getToggleState())
+//    {
+//        driveKnob1.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y, DRIVE_SIZE, DRIVE_SIZE);
+//        driveKnob2.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y, DRIVE_SIZE, DRIVE_SIZE);
+//        driveKnob3.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y, DRIVE_SIZE, DRIVE_SIZE);
+//        driveKnob4.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y, DRIVE_SIZE, DRIVE_SIZE);
+//    }
+//    else
+//    {
+//        driveKnob1.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+//        driveKnob2.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+//        driveKnob3.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+//        driveKnob4.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
+//    }
     
     shapeSwitch.setBounds(SWITCH_X, SWITCH_SHAPE_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
     widthSwitch.setBounds(SWITCH_X, SWITCH_WIDTH_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
@@ -1346,11 +1388,12 @@ void FireAudioProcessorEditor::setListenerKnob(juce::Slider& slider)
     slider.addListener(this);
 }
 
-void FireAudioProcessorEditor::setRotarySlider(juce::Slider& slider)
+void FireAudioProcessorEditor::setRotarySlider(juce::Slider& slider, juce::Colour colour)
 {
     addAndMakeVisible(slider);
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
 }
 
 void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)

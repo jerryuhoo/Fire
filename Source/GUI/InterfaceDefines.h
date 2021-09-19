@@ -14,6 +14,7 @@
 #define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION   ".fire"
+
 // paramID paramName
 #define DRIVE_ID1           "drive1"
 #define DRIVE_NAME1         "Drive1"
@@ -126,11 +127,24 @@
 #define DOWNSAMPLE_ID       "downSample"
 #define DOWNSAMPLE_NAME     "DownSample"
 
+// filter
+#define LOWCUT_FREQ_ID      "lowcutFreq"
+#define LOWCUT_FREQ_NAME    "LowcutFreq"
+#define HIGHCUT_FREQ_ID     "highcutFreq"
+#define HIGHCUT_FREQ_NAME   "HighcutFreq"
+#define PEAK_FREQ_ID        "peakFreq"
+#define PEAK_FREQ_NAME      "PeakFreq"
 
-#define CUTOFF_ID           "cutoff"
-#define CUTOFF_NAME         "Cutoff"
-#define RES_ID              "res"
-#define RES_NAME            "Res"
+#define PEAK_GAIN_ID        "peakGain"
+#define PEAK_GAIN_NAME      "PeakGain"
+
+#define LOWCUT_Q_ID         "lowcutQ"
+#define LOWCUT_Q_NAME       "LowcutQ"
+#define PEAK_Q_ID           "peakQ"
+#define PEAK_Q_NAME         "PeakQ"
+#define HIGHCUT_Q_ID        "highcutQ"
+#define HIGHCUT_Q_NAME      "HighcutQ"
+
 
 #define OFF_ID              "off"
 #define OFF_NAME            "Off"
@@ -145,6 +159,7 @@
 #define HIGH_ID             "high"
 #define HIGH_NAME           "High"
 
+// multiband
 #define FREQ_ID1            "freq1"
 #define FREQ_NAME1          "Freq1"
 #define FREQ_ID2            "freq2"
@@ -247,8 +262,9 @@
 #define REC_X               KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
 #define BIAS_X              KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
 #define WIDTH_X             KNOB_PANEL_1_X + OSC_WIDTH - SCALED_KNOBSIZE / 2.0f
-#define COMP_RATIO_X        KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
-#define COMP_THRESH_X       KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+
+#define COMP_THRESH_X       KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define COMP_RATIO_X        KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
 #define OUTPUT_X            KNOB_PANEL_3_X + SCALED_KNOBSIZE / 4.0f
 #define MIX_X               KNOB_PANEL_3_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
 

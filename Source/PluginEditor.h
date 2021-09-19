@@ -18,6 +18,7 @@
 #include "Graph Components/VUPanel.h"
 #include "Graph Components/GraphPanel.h"
 #include "Multiband/Multiband.h"
+#include "Multiband/FilterControl.h"
 #include "GUI/InterfaceDefines.h"
 
 //==============================================================================
@@ -57,6 +58,9 @@ private:
     
     // Multiband
     Multiband multiband;
+    
+    // Filter Control
+    FilterControl filterControl;
     
     // TODO: this is temporary method. Maybe should create custom attachments. juce::ParameterAttachment?
     
@@ -98,8 +102,13 @@ private:
         mixKnob4,
 
         downSampleKnob,
-        cutoffKnob,
-        resKnob,
+        lowcutFreqKnob,
+        lowcutQKnob,
+        highcutFreqKnob,
+        highcutQKnob,
+        peakFreqKnob,
+        peakQKnob,
+        peakGainKnob,
         colorKnob,
         mixKnob,
         outputKnob;
@@ -146,8 +155,13 @@ private:
         recLabel,
         mixLabel,
         mixLabelGlobal,
-        cutoffLabel,
-        resLabel,
+        lowcutFreqLabel,
+        lowcutQLabel,
+        highcutFreqLabel,
+        highcutQLabel,
+        peakFreqLabel,
+        peakQLabel,
+        peakGainLabel,
         linkedLabel,
         safeLabel,
         recOffLabel,
@@ -179,7 +193,14 @@ private:
         windowRightButton;
 
     // switches
-    juce::TextButton shapeSwitch, widthSwitch, compressorSwitch, oscSwitch;
+    juce::TextButton
+        oscSwitch,
+        shapeSwitch,
+        widthSwitch,
+        compressorSwitch,
+        filterSwitch,
+        otherSwitch;
+        
     
     // vectors for sliders
     juce::OwnedArray<juce::Component, juce::CriticalSection> shapeVector;
@@ -196,8 +217,10 @@ private:
         filterModeButtons = 1002,
         // window selection: left, right
         windowButtons = 1003,
-        // switches
+        // switches band
         switchButtons = 1004,
+        // switches global
+        switchButtonsGlobal = 1005
     };
 
     void updateToggleState();
@@ -275,8 +298,13 @@ private:
     
         downSampleAttachment,
         
-        cutoffAttachment,
-        resAttachment,
+        lowcutFreqAttachment,
+        lowcutQAttachment,
+        highcutFreqAttachment,
+        highcutQAttachment,
+        peakFreqAttachment,
+        peakQAttachment,
+        peakGainAttachment,
         colorAttachment;
 
     // Button attachment

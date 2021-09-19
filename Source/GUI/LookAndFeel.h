@@ -850,7 +850,8 @@ public:
             
             
             // draw colorful tick
-            g.setColour(juce::Colours::orange.withBrightness(slider.isEnabled() ? 1.0f : 0.2f));
+            
+            g.setColour(juce::Colour(255, juce::jmax(255 - sampleMaxValue * 2000, 0.0f), 0));
             g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         }
         else // draw grey 2 layers circle

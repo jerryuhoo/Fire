@@ -146,7 +146,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousMix4 = (float)*treeState.getRawParameterValue(MIX_ID4);
     previousMix = (float)*treeState.getRawParameterValue(MIX_ID);
     
-    previousCutoff = (float)*treeState.getRawParameterValue(CUTOFF_ID);
+    previousLowcutFreq = (float)*treeState.getRawParameterValue(LOWCUT_FREQ_ID);
+    previousHighcutFreq = (float)*treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
+    previousPeakFreq = (float)*treeState.getRawParameterValue(PEAK_FREQ_ID);
     previousColor = (float)*treeState.getRawParameterValue(COLOR_ID);
     
     newDrive1 = 0;
@@ -175,8 +177,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     outputSmootherGlobal.setCurrentAndTargetValue(previousOutput);
 
 
-    cutoffSmoother.reset(sampleRate, 0.001);
-    cutoffSmoother.setCurrentAndTargetValue(previousCutoff);
+    lowcutFreqSmoother.reset(sampleRate, 0.001);
+    lowcutFreqSmoother.setCurrentAndTargetValue(previousLowcutFreq);
+    highcutFreqSmoother.reset(sampleRate, 0.001);
+    highcutFreqSmoother.setCurrentAndTargetValue(previousHighcutFreq);
+    peakFreqSmoother.reset(sampleRate, 0.001);
+    peakFreqSmoother.setCurrentAndTargetValue(previousPeakFreq);
 
     recSmoother1.reset(sampleRate, 0.05);
     recSmoother1.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID1));
@@ -803,8 +809,8 @@ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 // Filter selection
 void FireAudioProcessor::updateFilter()
 {
-    float cutoff = *treeState.getRawParameterValue(CUTOFF_ID);
-    float res = *treeState.getRawParameterValue(RES_ID);
+    float lowcutFreq = *treeState.getRawParameterValue(LOWCUT_FREQ_ID);
+    float lowcutQ = *treeState.getRawParameterValue(LOWCUT_Q_ID);
     bool lowButton = *treeState.getRawParameterValue(LOW_ID);
     bool bandButton = *treeState.getRawParameterValue(BAND_ID);
     bool highButton = *treeState.getRawParameterValue(HIGH_ID);
@@ -815,8 +821,8 @@ void FireAudioProcessor::updateFilter()
     color = colorSmoother.getNextValue();
 
     // smooth cutoff value
-    cutoffSmoother.setTargetValue(cutoff);
-    cutoff = cutoffSmoother.getNextValue();
+    lowcutFreqSmoother.setTargetValue(lowcutFreq);
+    lowcutFreq = lowcutFreqSmoother.getNextValue();
 
     // 20 - 800 - 8000
     if (color < 0.5)
@@ -832,15 +838,15 @@ void FireAudioProcessor::updateFilter()
 
     if (lowButton == true)
     {
-        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), cutoff, res);
+        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), lowcutFreq, lowcutQ);
     }
     else if (bandButton == true)
     {
-        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeBandPass(getSampleRate(), cutoff, res);
+        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeBandPass(getSampleRate(), lowcutFreq, lowcutQ);
     }
     else if (highButton == true)
     {
-        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), cutoff, res);
+        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), lowcutFreq, lowcutQ);
     }
 }
 
@@ -1339,8 +1345,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.0f);
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(CUTOFF_ID, CUTOFF_NAME, cutoffRange, 20.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(RES_ID, RES_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_FREQ_ID, LOWCUT_FREQ_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_Q_ID, LOWCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_FREQ_ID, HIGHCUT_FREQ_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_Q_ID, HIGHCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_FREQ_ID, PEAK_FREQ_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_Q_ID, PEAK_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_GAIN_ID, PEAK_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
 
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(OFF_ID, OFF_NAME, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(PRE_ID, PRE_NAME, false));

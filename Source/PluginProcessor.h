@@ -139,8 +139,41 @@ private:
     juce::dsp::ProcessSpec spec;
 
     // filter
-    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> filterIIR;
-    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> filterColor;
+    enum Slope
+    {
+        Slope_12,
+        Slope_24,
+        Slope_36,
+        Slope_48
+    };
+
+    struct ChainSettings
+    {
+        float peakFreq { 0 }, peakGainInDecibels{ 0 }, peakQuality {1.f};
+        float lowCutFreq { 0 }, highCutFreq { 0 };
+        
+        Slope lowCutSlope { Slope::Slope_12 }, highCutSlope { Slope::Slope_12 };
+        
+        bool lowCutBypassed { false }, peakBypassed { false }, highCutBypassed { false };
+    };
+
+    ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts);
+    
+    enum ChainPositions
+    {
+        LowCut,
+        Peak,
+        HighCut
+    };
+    
+    
+    using Filter = juce::dsp::IIR::Filter<float>;
+    using Coefficients = juce::dsp::IIR::Coefficients<float>;
+    using CutFilter = juce::dsp::ProcessorChain<Filter, Filter, Filter, Filter>;
+    using MonoChain = juce::dsp::ProcessorChain<CutFilter, Filter, CutFilter>;
+    
+    juce::dsp::ProcessorDuplicator<Filter, Coefficients> filterIIR;
+    juce::dsp::ProcessorDuplicator<Filter, Coefficients> filterColor;
 
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
@@ -159,7 +192,9 @@ private:
     float previousMix4 = 0.0f;
     float previousMix = 0.0f;
     float previousColor = 0.0f;
-    float previousCutoff = 0.0f;
+    float previousLowcutFreq = 0.0f;
+    float previousHighcutFreq = 0.0f;
+    float previousPeakFreq = 0.0f;
     
     float newDrive1 = 0.0f;
     float newDrive2 = 0.0f;
@@ -189,7 +224,9 @@ private:
     juce::SmoothedValue<float> mixSmoother4;
     juce::SmoothedValue<float> mixSmootherGlobal;
     juce::SmoothedValue<float> colorSmoother;
-    juce::SmoothedValue<float> cutoffSmoother;
+    juce::SmoothedValue<float> lowcutFreqSmoother;
+    juce::SmoothedValue<float> highcutFreqSmoother;
+    juce::SmoothedValue<float> peakFreqSmoother;
     
     juce::SmoothedValue<float> centralSmoother;
     juce::SmoothedValue<float> normalSmoother;

@@ -8,7 +8,7 @@
 
 1. add enable button for compressor, downsample, width, filter, etc.
 2. auto-update check when open
-3. add graph for filters
+3. add graph for filters <https://www.youtube.com/watch?v=i_Iq4_Kd7Rc&t=159s> and dry mix compensation
 4. add mid-side / pan knobs
 5. add solo button between vertical lines
 6. mouse drag vertically to change the output volume, like Ozone or saturn2

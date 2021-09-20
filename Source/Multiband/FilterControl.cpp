@@ -11,30 +11,95 @@
 #include <JuceHeader.h>
 #include "FilterControl.h"
 #include "../GUI/InterfaceDefines.h"
+
 //==============================================================================
-FilterControl::FilterControl()
+FilterControl::FilterControl(FireAudioProcessor &p) : processor(p)
 {
-  
+    const auto& params = processor.getParameters();
+    for( auto param : params )
+    {
+        param->addListener(this);
+    }
+
+    updateChain();
+    startTimerHz(60);
 }
 
 FilterControl::~FilterControl()
 {
+    const auto& params = processor.getParameters();
+    for( auto param : params )
+    {
+        param->removeListener(this);
+    }
 }
 
 void FilterControl::paint (juce::Graphics& g)
 {
+    g.setColour(KNOB_SUBFONT_COLOUR);
+    g.strokePath(responseCurve, juce::PathStrokeType(2.f));
+}
+
+void FilterControl::resized()
+{
+    updateResponseCurve();
+}
+
+void FilterControl::setParams(float lowCut,
+                              float highCut,
+                              float cutRes,
+                              float peak,
+                              float peakRes)
+{
+    mLowCut = lowCut;
+    mHighCut = highCut;
+    mCutRes = cutRes;
+    mPeak = peak;
+    mPeakRes = peakRes;
+}
+
+void FilterControl::updateChain()
+{
+    auto chainSettings = getChainSettings(processor.treeState);
+    
+    monoChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
+    monoChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
+    monoChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
+    
+    auto peakCoefficients = makePeakFilter(chainSettings, processor.getSampleRate());
+    updateCoefficients(monoChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
+    
+    auto lowCutCoefficients = makeLowCutFilter(chainSettings, processor.getSampleRate());
+    auto highCutCoefficients = makeHighCutFilter(chainSettings, processor.getSampleRate());
+    
+    updateCutFilter(monoChain.get<ChainPositions::LowCut>(),
+                    lowCutCoefficients,
+                    chainSettings.lowCutSlope);
+    
+    updateCutFilter(monoChain.get<ChainPositions::HighCut>(),
+                    highCutCoefficients,
+                    chainSettings.highCutSlope);
+}
+
+void FilterControl::updateResponseCurve()
+{
     int w = getWidth();
+    
+    auto& lowcut = monoChain.get<ChainPositions::LowCut>();
+    auto& peak = monoChain.get<ChainPositions::Peak>();
+    auto& highcut = monoChain.get<ChainPositions::HighCut>();
+    
+    auto sampleRate = processor.getSampleRate();
     
     std::vector<float> mags;
     mags.resize(w);
     
-    for( int i = 0; i < w; ++i )
+    for(int i = 0; i < w; ++i)
     {
         double mag = 1.0f;
         auto freq = juce::mapToLog10(double(i) / double(w), 20.0, 20000.0);
-        /*
-         
-        if(! monoChain.isBypassed<ChainPositions::Peak>() )
+
+        if( !monoChain.isBypassed<ChainPositions::Peak>() )
             mag *= peak.coefficients->getMagnitudeForFrequency(freq, sampleRate);
         
         if( !monoChain.isBypassed<ChainPositions::LowCut>() )
@@ -49,7 +114,7 @@ void FilterControl::paint (juce::Graphics& g)
                 mag *= lowcut.get<3>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
         }
         
-        if( !monoChain.isBypassed<ChainPositions::HighCut>() )
+        if(!monoChain.isBypassed<ChainPositions::HighCut>())
         {
             if( !highcut.isBypassed<0>() )
                 mag *= highcut.get<0>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
@@ -60,7 +125,7 @@ void FilterControl::paint (juce::Graphics& g)
             if( !highcut.isBypassed<3>() )
                 mag *= highcut.get<3>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
         }
-         */
+        
         mags[i] = juce::Decibels::gainToDecibels(mag);
     }
     
@@ -79,25 +144,20 @@ void FilterControl::paint (juce::Graphics& g)
     {
         responseCurve.lineTo(0 + i, map(mags[i]));
     }
+}
+
+void FilterControl::parameterValueChanged(int parameterIndex, float newValue)
+{
+    parametersChanged.set(true);
+}
+
+void FilterControl::timerCallback()
+{
+    if( parametersChanged.compareAndSetBool(false, true) )
+    {
+        updateChain();
+        updateResponseCurve();
+    }
     
-    g.setColour(KNOB_SUBFONT_COLOUR);
-    g.strokePath(responseCurve, juce::PathStrokeType(2.f));
-}
-
-void FilterControl::resized()
-{
-   
-}
-
-void FilterControl::setParams(float lowCut,
-                              float highCut,
-                              float cutRes,
-                              float peak,
-                              float peakRes)
-{
-    mLowCut = lowCut;
-    mHighCut = highCut;
-    mCutRes = cutRes;
-    mPeak = peak;
-    mPeakRes = peakRes;
+    repaint();
 }

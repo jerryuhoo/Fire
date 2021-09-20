@@ -813,7 +813,12 @@ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 }
 
 // Filter selection
-FireAudioProcessor::ChainSettings FireAudioProcessor::getChainSettings(juce::AudioProcessorValueTreeState& apvts)
+void updateCoefficients(CoefficientsPtr& old, const CoefficientsPtr& replacements)
+{
+    *old = *replacements;
+}
+
+ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
 {
     ChainSettings settings;
     
@@ -832,7 +837,7 @@ FireAudioProcessor::ChainSettings FireAudioProcessor::getChainSettings(juce::Aud
     return settings;
 }
 
-FireAudioProcessor::CoefficientsPtr FireAudioProcessor::makePeakFilter(const ChainSettings& chainSettings, double sampleRate)
+CoefficientsPtr makePeakFilter(const ChainSettings& chainSettings, double sampleRate)
 {
     return juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate,
                                                                chainSettings.peakFreq,

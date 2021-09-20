@@ -1216,7 +1216,7 @@ void FireAudioProcessorEditor::resized()
     peakGainKnob.setBounds((CUTOFF_X+RES_X)/2.0f, firstPartY, scaledKnobSize, scaledKnobSize);
     
     lowcutSlopeMode.setBounds(getWidth() / 2 - 20, secondShadowY + getHeight() / 20 + 10, OSC_WIDTH / 1.5f, getHeight() / 20);
-    highcutSlopeMode.setBounds(getWidth() / 2 + 200, secondShadowY + getHeight() / 20 + 10, OSC_WIDTH / 1.5f, getHeight() / 20);
+    highcutSlopeMode.setBounds(getWidth() / 2 - 20, secondShadowY + getHeight() / 20 + 10, OSC_WIDTH / 1.5f, getHeight() / 20);
 
     
     mixKnob1.setBounds(MIX_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);

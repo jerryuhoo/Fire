@@ -60,7 +60,7 @@ private:
     Multiband multiband;
     
     // Filter Control
-    FilterControl filterControl;
+    FilterControl filterControl {processor};
     
     // TODO: this is temporary method. Maybe should create custom attachments. juce::ParameterAttachment?
     

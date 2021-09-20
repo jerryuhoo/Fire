@@ -76,6 +76,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     stateComponent.getCopyABButton()->addListener(this);
     stateComponent.getPreviousButton()->addListener(this);
     stateComponent.getNextButton()->addListener(this);
+    
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
     //setSize(INIT_WIDTH, INIT_HEIGHT);
@@ -353,24 +354,24 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterStateLabel.setJustificationType(juce::Justification::centred);
 
     // Filter Type Toggle Buttons
-    setRoundButton(filterLowButton, LOW_ID, "LP");
-    setRoundButton(filterBandButton, BAND_ID, "BP");
-    setRoundButton(filterHighButton, HIGH_ID, "HP");
+    setRoundButton(filterLowPassButton, LOW_ID, "LP");
+    setRoundButton(filterPeakButton, BAND_ID, "BP");
+    setRoundButton(filterHighPassButton, HIGH_ID, "HP");
     
-    filterLowButton.setRadioGroupId(filterModeButtons);
-    filterLowButton.onClick = [this] { updateToggleState(); };
+    filterLowPassButton.setRadioGroupId(filterModeButtons);
+    filterLowPassButton.onClick = [this] { updateToggleState(); };
     
-    filterBandButton.setRadioGroupId(filterModeButtons);
-    filterBandButton.onClick = [this] { updateToggleState(); };
+    filterPeakButton.setRadioGroupId(filterModeButtons);
+    filterPeakButton.onClick = [this] { updateToggleState(); };
 
-    filterHighButton.setRadioGroupId(filterModeButtons);
-    filterHighButton.onClick = [this] { updateToggleState(); };
+    filterHighPassButton.setRadioGroupId(filterModeButtons);
+    filterHighPassButton.onClick = [this] { updateToggleState(); };
   
     addAndMakeVisible(filterTypeLabel);
     filterTypeLabel.setText("Type", juce::dontSendNotification);
     filterTypeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     filterTypeLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    filterTypeLabel.attachToComponent(&filterLowButton, false);
+    filterTypeLabel.attachToComponent(&filterLowPassButton, false);
     filterTypeLabel.setJustificationType(juce::Justification::centred);
     
     // Window Left Button
@@ -547,9 +548,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     filterOffAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, OFF_ID, filterOffButton);
     filterPreAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, PRE_ID, filterPreButton);
     filterPostAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, POST_ID, filterPostButton);
-    filterLowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LOW_ID, filterLowButton);
-    filterBandAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ID, filterBandButton);
-    filterHighAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HIGH_ID, filterHighButton);
+    filterLowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LOW_ID, filterLowPassButton);
+    filterBandAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ID, filterPeakButton);
+    filterHighAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HIGH_ID, filterHighPassButton);
     
     multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID1, multiFocusSlider1);
     multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID2, multiFocusSlider2);
@@ -574,6 +575,22 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setMenu(&distortionMode3);
     setMenu(&distortionMode4);
 
+    addAndMakeVisible(lowcutSlopeMode);
+    addAndMakeVisible(highcutSlopeMode);
+    
+    lowcutSlopeMode.addItem("12 db", 1);
+    lowcutSlopeMode.addItem("24 db", 2);
+    lowcutSlopeMode.addItem("36 db", 3);
+    lowcutSlopeMode.addItem("48 db", 4);
+    
+    highcutSlopeMode.addItem("12 db", 1);
+    highcutSlopeMode.addItem("24 db", 2);
+    highcutSlopeMode.addItem("36 db", 3);
+    highcutSlopeMode.addItem("48 db", 4);
+    
+    lowcutModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, LOWCUT_SLOPE_ID, lowcutSlopeMode);
+    highcutModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, HIGHCUT_SLOPE_ID, highcutSlopeMode);
+    
     // use global lookandfeel
     getLookAndFeel().setColour(juce::ComboBox::textColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::ComboBox::arrowColourId, KNOB_SUBFONT_COLOUR);
@@ -581,10 +598,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR6);
     getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
     getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR6);
-    getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
+    getLookAndFeel().setColour(juce::PopupMenu::textColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
     getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
-    getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, COLOUR1);
+    getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
 
     modeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID1, distortionMode1);
@@ -622,9 +639,9 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     filterOffButton.setLookAndFeel(nullptr);
     filterPreButton.setLookAndFeel(nullptr);
     filterPostButton.setLookAndFeel(nullptr);
-    filterLowButton.setLookAndFeel(nullptr);
-    filterBandButton.setLookAndFeel(nullptr);
-    filterHighButton.setLookAndFeel(nullptr);
+    filterLowPassButton.setLookAndFeel(nullptr);
+    filterPeakButton.setLookAndFeel(nullptr);
+    filterHighPassButton.setLookAndFeel(nullptr);
     windowRightButton.setLookAndFeel(nullptr);
     windowLeftButton.setLookAndFeel(nullptr);
     oscSwitch.setLookAndFeel(nullptr);
@@ -790,6 +807,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         peakFreqKnob.setVisible(false);
         peakQKnob.setVisible(false);
         peakGainKnob.setVisible(false);
+        lowcutSlopeMode.setVisible(false);
+        highcutSlopeMode.setVisible(false);
+        
         // drive reduction
         driveLookAndFeel1.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID1);
         driveLookAndFeel1.reductionPrecent = processor.getReductionPrecent(SAFE_ID1);
@@ -908,12 +928,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         // set other effects invisible
         downSampleKnob.setVisible(false);
         lowcutQKnob.setVisible(false);
-        filterLowButton.setVisible(false);
+        filterLowPassButton.setVisible(false);
         filterOffButton.setVisible(false);
         filterPreButton.setVisible(false);
-        filterBandButton.setVisible(false);
+        filterPeakButton.setVisible(false);
         filterPostButton.setVisible(false);
-        filterHighButton.setVisible(false);
+        filterHighPassButton.setVisible(false);
         colorKnob.setVisible(false);
         lowcutFreqKnob.setVisible(false);
         mixKnob.setVisible(false);
@@ -932,12 +952,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         otherSwitch.setVisible(true);
         filterControl.setVisible(true);
 
-        filterLowButton.setVisible(true);
+        filterLowPassButton.setVisible(true);
         filterOffButton.setVisible(true);
         filterPreButton.setVisible(true);
-        filterBandButton.setVisible(true);
+        filterPeakButton.setVisible(true);
         filterPostButton.setVisible(true);
-        filterHighButton.setVisible(true);
+        filterHighPassButton.setVisible(true);
      
         mixKnob.setVisible(true);
         outputKnob.setVisible(true);
@@ -947,17 +967,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         
         if (isFilterSwitchOn)
         {
-            if (filterLowButton.getToggleState())
-            {
-                lowcutFreqKnob.setVisible(true);
-                lowcutQKnob.setVisible(true);
-                highcutFreqKnob.setVisible(false);
-                highcutQKnob.setVisible(false);
-                peakFreqKnob.setVisible(false);
-                peakQKnob.setVisible(false);
-                peakGainKnob.setVisible(false);
-            }
-            if (filterHighButton.getToggleState())
+            if (filterLowPassButton.getToggleState())
             {
                 lowcutFreqKnob.setVisible(false);
                 lowcutQKnob.setVisible(false);
@@ -966,8 +976,22 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
                 peakFreqKnob.setVisible(false);
                 peakQKnob.setVisible(false);
                 peakGainKnob.setVisible(false);
+                lowcutSlopeMode.setVisible(false);
+                highcutSlopeMode.setVisible(true);
             }
-            if (filterBandButton.getToggleState())
+            if (filterHighPassButton.getToggleState())
+            {
+                lowcutFreqKnob.setVisible(true);
+                lowcutQKnob.setVisible(true);
+                highcutFreqKnob.setVisible(false);
+                highcutQKnob.setVisible(false);
+                peakFreqKnob.setVisible(false);
+                peakQKnob.setVisible(false);
+                peakGainKnob.setVisible(false);
+                lowcutSlopeMode.setVisible(true);
+                highcutSlopeMode.setVisible(false);
+            }
+            if (filterPeakButton.getToggleState())
             {
                 lowcutFreqKnob.setVisible(false);
                 lowcutQKnob.setVisible(false);
@@ -976,6 +1000,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
                 peakFreqKnob.setVisible(true);
                 peakQKnob.setVisible(true);
                 peakGainKnob.setVisible(true);
+                lowcutSlopeMode.setVisible(false);
+                highcutSlopeMode.setVisible(false);
             }
             downSampleKnob.setVisible(false);
             colorKnob.setVisible(false);
@@ -991,6 +1017,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             peakFreqKnob.setVisible(false);
             peakQKnob.setVisible(false);
             peakGainKnob.setVisible(false);
+            lowcutSlopeMode.setVisible(false);
+            highcutSlopeMode.setVisible(false);
         }
         
         // set invisible
@@ -1187,6 +1215,10 @@ void FireAudioProcessorEditor::resized()
     peakQKnob.setBounds(RES_X, firstPartY, scaledKnobSize, scaledKnobSize);
     peakGainKnob.setBounds((CUTOFF_X+RES_X)/2.0f, firstPartY, scaledKnobSize, scaledKnobSize);
     
+    lowcutSlopeMode.setBounds(getWidth() / 2 - 20, secondShadowY + getHeight() / 20 + 10, OSC_WIDTH / 1.5f, getHeight() / 20);
+    highcutSlopeMode.setBounds(getWidth() / 2 + 200, secondShadowY + getHeight() / 20 + 10, OSC_WIDTH / 1.5f, getHeight() / 20);
+
+    
     mixKnob1.setBounds(MIX_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
     mixKnob2.setBounds(MIX_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
     mixKnob3.setBounds(MIX_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
@@ -1218,9 +1250,9 @@ void FireAudioProcessorEditor::resized()
     filterOffButton.setBounds(FILTER_STATE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     filterPreButton.setBounds(FILTER_STATE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     filterPostButton.setBounds(FILTER_STATE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-    filterLowButton.setBounds(FILTER_TYPE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-    filterBandButton.setBounds(FILTER_TYPE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-    filterHighButton.setBounds(FILTER_TYPE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterLowPassButton.setBounds(FILTER_TYPE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
+    filterPeakButton.setBounds(FILTER_TYPE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
+    filterHighPassButton.setBounds(FILTER_TYPE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
 
     // Graph Panel
     graphPanel.setBounds(OSC_X, OSC_Y, OSC_WIDTH * 2, OSC_HEIGHT * 2);
@@ -1252,17 +1284,17 @@ void FireAudioProcessorEditor::updateToggleState()
 {
     if (*processor.treeState.getRawParameterValue(OFF_ID))
     {
-        filterLowButton.setEnabled(false);
-        filterBandButton.setEnabled(false);
-        filterHighButton.setEnabled(false);
+        filterLowPassButton.setEnabled(false);
+        filterPeakButton.setEnabled(false);
+        filterHighPassButton.setEnabled(false);
         lowcutFreqKnob.setEnabled(false);
         lowcutQKnob.setEnabled(false);
     }
     else
     {
-        filterLowButton.setEnabled(true);
-        filterBandButton.setEnabled(true);
-        filterHighButton.setEnabled(true);
+        filterLowPassButton.setEnabled(true);
+        filterPeakButton.setEnabled(true);
+        filterHighPassButton.setEnabled(true);
         lowcutFreqKnob.setEnabled(true);
         lowcutQKnob.setEnabled(true);
     }
@@ -1585,9 +1617,9 @@ void FireAudioProcessorEditor::setRoundButton(juce::TextButton& button, juce::St
     button.setColour(juce::TextButton::textColourOnId, COLOUR1);
     button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
     
-    if (&button == &filterLowButton) button.setLookAndFeel(&lowPassButtonLnf);
-    else if (&button == &filterBandButton) button.setLookAndFeel(&bandPassButtonLnf);
-    else if (&button == &filterHighButton) button.setLookAndFeel(&highPassButtonLnf);
+    if (&button == &filterLowPassButton) button.setLookAndFeel(&lowPassButtonLnf);
+    else if (&button == &filterPeakButton) button.setLookAndFeel(&bandPassButtonLnf);
+    else if (&button == &filterHighPassButton) button.setLookAndFeel(&highPassButtonLnf);
     else
     {
         button.setButtonText(buttonName);

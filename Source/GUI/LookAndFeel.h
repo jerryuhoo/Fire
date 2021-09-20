@@ -343,20 +343,23 @@ public:
 //            drawInnerShadow(g, pathShadow);
 //        }
         
+        // draw arrow
         juce::Rectangle<int> arrowZone (width - 30, 0, 20, height);
         juce::Path path;
-        path.startNewSubPath ((float) arrowZone.getX() + 3.0f, (float) arrowZone.getCentreY() - 2.0f);
+        path.startNewSubPath ((float) arrowZone.getX() + 5.0f, (float) arrowZone.getCentreY() - 2.0f);
         path.lineTo ((float) arrowZone.getCentreX(), (float) arrowZone.getCentreY() + 3.0f);
-        path.lineTo ((float) arrowZone.getRight() - 3.0f, (float) arrowZone.getCentreY() - 2.0f);
+        path.lineTo ((float) arrowZone.getRight() - 5.0f, (float) arrowZone.getCentreY() - 2.0f);
 
         g.setColour (box.findColour (juce::ComboBox::arrowColourId).withAlpha ((box.isEnabled() ? 0.9f : 0.2f)));
-        g.strokePath (path, juce::PathStrokeType (2.0f));
+//        g.strokePath (path, juce::PathStrokeType (2.0f));
+        g.fillPath(path);
     }
     
     void drawPopupMenuBackground(juce::Graphics& g, int width, int height) override
     {
         
         // g.fillAll(COLOUR6); // findColour (PopupMenu::backgroundColourId)
+//        g.setColour(findColour (juce::PopupMenu::backgroundColourId));
         g.setColour(COLOUR6);
 #if JUCE_MAC
         g.fillRoundedRectangle(0, 0, width, height, 10);
@@ -364,8 +367,8 @@ public:
         juce::ignoreUnused(width, height);
        
 #if ! JUCE_MAC
-        g.fillAll(COLOUR6);
-        g.setColour(COLOUR1.withAlpha(0.6f)); //juce::LookAndFeel::findColour(juce::PopupMenu::textColourId)
+        g.fillAll(findColour (juce::PopupMenu::backgroundColourId));
+        g.setColour(findColour(juce::PopupMenu::textColourId).withAlpha(0.6f)); //juce::LookAndFeel::findColour(juce::PopupMenu::textColourId)
         g.drawRect(0, 0, width, height);
 #endif
     }
@@ -385,12 +388,12 @@ public:
             auto r = area.reduced(5, 0);
             r.removeFromTop(juce::roundToInt(((float)r.getHeight() * 0.5f) - 0.5f));
 
-            g.setColour(COLOUR1.withAlpha(0.3f)); //findColour(juce::PopupMenu::textColourId)
+            g.setColour(findColour(juce::PopupMenu::textColourId).withAlpha(0.3f)); //findColour(juce::PopupMenu::textColourId)
             g.fillRect(r.removeFromTop(1));
         }
         else
         {
-            auto textColour = (textColourToUse == nullptr ? COLOUR1
+            auto textColour = (textColourToUse == nullptr ? findColour(juce::PopupMenu::textColourId)
                                                           : *textColourToUse); //findColour(juce::PopupMenu::textColourId)
 
             auto r = area.reduced(1); //auto r = area.reduced(1);
@@ -400,7 +403,7 @@ public:
                 g.setColour(COLOUR5); //findColour(juce::PopupMenu::highlightedBackgroundColourId) : red
                 // g.fillRect(r);
                 g.fillRoundedRectangle(r.toFloat(), 10.0f);
-                g.setColour(COLOUR1); //findColour(juce::PopupMenu::highlightedTextColourId)
+                g.setColour(findColour(juce::PopupMenu::highlightedTextColourId)); //findColour(juce::PopupMenu::highlightedTextColourId)
             }
             else
             {

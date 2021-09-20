@@ -268,12 +268,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.numChannels = getMainBusNumOutputChannels();
 
     // filter init
-    filterIIR.reset();
-    filterColor.reset();
+//    filterIIR.reset();
+//    filterColor.reset();
     updateFilter();
-    filterIIR.prepare(spec);
-    filterColor.prepare(spec);
-
+//    filterIIR.prepare(spec);
+//    filterColor.prepare(spec);
+    leftChain.prepare(spec);
+    rightChain.prepare(spec);
     // mode 8 diode================
     inputTemp.clear();
     VdiodeL = 0.0f;
@@ -448,7 +449,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
     if (preButton)
     {
-        filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
+        //filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
         updateFilter();
     }
 
@@ -656,14 +657,19 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     colorSmoother.setTargetValue(color);
     //distortionProcessor1.controls.color = colorSmoother.getNextValue();
 
-    filterColor.process(juce::dsp::ProcessContextReplacing<float>(block));
+    //filterColor.process(juce::dsp::ProcessContextReplacing<float>(block));
     updateFilter();
-
+    auto leftBlock = block.getSingleChannelBlock(0);
+    auto rightBlock = block.getSingleChannelBlock(1);
+    leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
+    rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
+    
     //post-filter
     bool postButton = *treeState.getRawParameterValue(POST_ID);
     if (postButton)
     {
-        filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
+        //filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
+//        mainChain.process(juce::dsp::ProcessContextReplacing<float>(block));
         updateFilter();
     }
 
@@ -807,47 +813,119 @@ juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter()
 }
 
 // Filter selection
+FireAudioProcessor::ChainSettings FireAudioProcessor::getChainSettings(juce::AudioProcessorValueTreeState& apvts)
+{
+    ChainSettings settings;
+    
+    settings.lowCutFreq = apvts.getRawParameterValue(LOWCUT_FREQ_ID)->load();
+    settings.highCutFreq = apvts.getRawParameterValue(HIGHCUT_FREQ_ID)->load();
+    settings.peakFreq = apvts.getRawParameterValue(PEAK_FREQ_ID)->load();
+    settings.peakGainInDecibels = apvts.getRawParameterValue(PEAK_GAIN_ID)->load();
+    settings.peakQuality = apvts.getRawParameterValue(PEAK_Q_ID)->load();
+    settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
+    settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
+    
+    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load();// > 0.5f;
+    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load();// > 0.5f;
+    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load();// > 0.5f;
+    
+    return settings;
+}
+
+FireAudioProcessor::CoefficientsPtr FireAudioProcessor::makePeakFilter(const ChainSettings& chainSettings, double sampleRate)
+{
+    return juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate,
+                                                               chainSettings.peakFreq,
+                                                               chainSettings.peakQuality,
+                                                               juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
+}
+
+void FireAudioProcessor::updatePeakFilter(const ChainSettings &chainSettings)
+{
+    auto peakCoefficients = makePeakFilter(chainSettings, getSampleRate());
+    
+    leftChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
+    rightChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
+    updateCoefficients(leftChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
+    updateCoefficients(rightChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
+}
+
+void FireAudioProcessor::updateLowCutFilters(const ChainSettings &chainSettings)
+{
+    auto cutCoefficients = makeLowCutFilter(chainSettings, getSampleRate());
+    auto& leftLowCut = leftChain.get<ChainPositions::LowCut>();
+    auto& rightLowCut = rightChain.get<ChainPositions::LowCut>();
+    
+    leftChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
+    rightChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
+    
+    updateCutFilter(rightLowCut, cutCoefficients, chainSettings.lowCutSlope);
+    updateCutFilter(leftLowCut, cutCoefficients, chainSettings.lowCutSlope);
+}
+
+void FireAudioProcessor::updateHighCutFilters(const ChainSettings &chainSettings)
+{
+    auto highCutCoefficients = makeHighCutFilter(chainSettings, getSampleRate());
+        
+    auto& leftHighCut = leftChain.get<ChainPositions::HighCut>();
+    auto& rightHighCut = rightChain.get<ChainPositions::HighCut>();
+    
+    leftChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
+    rightChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
+    
+    updateCutFilter(leftHighCut, highCutCoefficients, chainSettings.highCutSlope);
+    updateCutFilter(rightHighCut, highCutCoefficients, chainSettings.highCutSlope);
+}
+
+
 void FireAudioProcessor::updateFilter()
 {
-    float lowcutFreq = *treeState.getRawParameterValue(LOWCUT_FREQ_ID);
-    float lowcutQ = *treeState.getRawParameterValue(LOWCUT_Q_ID);
-    bool lowButton = *treeState.getRawParameterValue(LOW_ID);
-    bool bandButton = *treeState.getRawParameterValue(BAND_ID);
-    bool highButton = *treeState.getRawParameterValue(HIGH_ID);
-    float color = *treeState.getRawParameterValue(COLOR_ID);
-    float centreFreqSausage;
-
-    colorSmoother.setTargetValue(color);
-    color = colorSmoother.getNextValue();
-
-    // smooth cutoff value
-    lowcutFreqSmoother.setTargetValue(lowcutFreq);
-    lowcutFreq = lowcutFreqSmoother.getNextValue();
-
-    // 20 - 800 - 8000
-    if (color < 0.5)
-    {
-        centreFreqSausage = 20 + color * 1560;
-    }
-    else
-    {
-        centreFreqSausage = 800 + (color - 0.5) * 14400;
-    }
-
-    *filterColor.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 0.4, color + 1);
-
-    if (lowButton == true)
-    {
-        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), lowcutFreq, lowcutQ);
-    }
-    else if (bandButton == true)
-    {
-        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeBandPass(getSampleRate(), lowcutFreq, lowcutQ);
-    }
-    else if (highButton == true)
-    {
-        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), lowcutFreq, lowcutQ);
-    }
+    
+    auto chainSettings = getChainSettings(treeState);
+        
+    updateLowCutFilters(chainSettings);
+    updatePeakFilter(chainSettings);
+    updateHighCutFilters(chainSettings);
+    
+//    float lowcutFreq = *treeState.getRawParameterValue(LOWCUT_FREQ_ID);
+//    float lowcutQ = *treeState.getRawParameterValue(LOWCUT_Q_ID);
+//    bool lowButton = *treeState.getRawParameterValue(LOW_ID);
+//    bool bandButton = *treeState.getRawParameterValue(BAND_ID);
+//    bool highButton = *treeState.getRawParameterValue(HIGH_ID);
+//    float color = *treeState.getRawParameterValue(COLOR_ID);
+//    float centreFreqSausage;
+//
+//    colorSmoother.setTargetValue(color);
+//    color = colorSmoother.getNextValue();
+//
+//    // smooth cutoff value
+//    lowcutFreqSmoother.setTargetValue(lowcutFreq);
+//    lowcutFreq = lowcutFreqSmoother.getNextValue();
+//
+//    // 20 - 800 - 8000
+//    if (color < 0.5)
+//    {
+//        centreFreqSausage = 20 + color * 1560;
+//    }
+//    else
+//    {
+//        centreFreqSausage = 800 + (color - 0.5) * 14400;
+//    }
+//
+//    *filterColor.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 0.4, color + 1);
+//
+//    if (lowButton == true)
+//    {
+//        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), lowcutFreq, lowcutQ);
+//    }
+//    else if (bandButton == true)
+//    {
+//        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeBandPass(getSampleRate(), lowcutFreq, lowcutQ);
+//    }
+//    else if (highButton == true)
+//    {
+//        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), lowcutFreq, lowcutQ);
+//    }
 }
 
 bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
@@ -1348,13 +1426,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_FREQ_ID, LOWCUT_FREQ_NAME, cutoffRange, 20.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_Q_ID, LOWCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_FREQ_ID, HIGHCUT_FREQ_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_FREQ_ID, HIGHCUT_FREQ_NAME, cutoffRange, 20000.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_Q_ID, HIGHCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_FREQ_ID, PEAK_FREQ_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_FREQ_ID, PEAK_FREQ_NAME, cutoffRange, 1000.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_Q_ID, PEAK_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_GAIN_ID, PEAK_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
 
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(LOWCUT_SLOPE_ID, LOWCUT_SLOPE_NAME, 0, 3, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(HIGHCUT_SLOPE_ID, HIGHCUT_SLOPE_NAME, 0, 3, 0));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LOWCUT_BYPASSED_ID, LOWCUT_BYPASSED_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(PEAK_BYPASSED_ID, PEAK_BYPASSED_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGHCUT_BYPASSED_ID, HIGHCUT_BYPASSED_NAME, false));
+    
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(OFF_ID, OFF_NAME, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(PRE_ID, PRE_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(POST_ID, POST_NAME, false));

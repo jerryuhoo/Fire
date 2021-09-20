@@ -40,6 +40,8 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 3. <a href="https://github.com/adriannaziel/SpectrumAnalyser_et">Spectrum Analyser</a> by adriannaziel
 
+4. <a href="a href=https://github.com/matkatmusic/SimpleEQ">SimpleEQ</a> by matkatmusic
+
 ## 5. Update Notes
 
 2020-9-7 (version 0.9.2)

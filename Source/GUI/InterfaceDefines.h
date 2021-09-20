@@ -145,6 +145,16 @@
 #define HIGHCUT_Q_ID        "highcutQ"
 #define HIGHCUT_Q_NAME      "HighcutQ"
 
+#define LOWCUT_SLOPE_ID         "lowcutSlope"
+#define LOWCUT_SLOPE_NAME       "LowcutSlope"
+#define HIGHCUT_SLOPE_ID        "highcutSlope"
+#define HIGHCUT_SLOPE_NAME      "HighcutSlope"
+#define LOWCUT_BYPASSED_ID      "lowcutBypassed"
+#define LOWCUT_BYPASSED_NAME    "LowcutBypassed"
+#define PEAK_BYPASSED_ID        "peakBypassed"
+#define PEAK_BYPASSED_NAME      "PeakBypassed"
+#define HIGHCUT_BYPASSED_ID     "highcutBypassed"
+#define HIGHCUT_BYPASSED_NAME   "HighcutBypassed"
 
 #define OFF_ID              "off"
 #define OFF_NAME            "Off"

@@ -186,9 +186,9 @@ private:
         filterOffButton,
         filterPreButton,
         filterPostButton,
-        filterLowButton,
-        filterBandButton,
-        filterHighButton,
+        filterLowPassButton,
+        filterPeakButton,
+        filterHighPassButton,
         windowLeftButton,
         windowRightButton;
 
@@ -330,10 +330,15 @@ private:
     juce::ComboBox distortionMode2;
     juce::ComboBox distortionMode3;
     juce::ComboBox distortionMode4;
+    juce::ComboBox lowcutSlopeMode;
+    juce::ComboBox highcutSlopeMode;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lowcutModeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> highcutModeAttachment;
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

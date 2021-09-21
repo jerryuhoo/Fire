@@ -13,8 +13,8 @@
 #include <JuceHeader.h>
 #include "DSP/Delay.h"
 #include "DSP/WidthProcessor.h"
-#include "Preset.h"
-#include "Multiband/FFTProcessor.h"
+#include "Panels/TopPanel/Preset.h"
+#include "Panels/SpectrogramPanel/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
 #include "Utility/AudioHelpers.h"
 #include "DSP/ClippingFunctions.h"
@@ -147,7 +147,6 @@ private:
     void updatePeakFilter(const ChainSettings& chainSettings);
 
 //    juce::dsp::ProcessorDuplicator<Filter, Coefficients> filterIIR;
-//    juce::dsp::ProcessorDuplicator<Filter, Coefficients> filterColor;
 
     // fix the artifacts (also called zipper noise)
     //float previousGainInput;
@@ -165,7 +164,6 @@ private:
     float previousMix3 = 0.0f;
     float previousMix4 = 0.0f;
     float previousMix = 0.0f;
-    float previousColor = 0.0f;
     float previousLowcutFreq = 0.0f;
     float previousHighcutFreq = 0.0f;
     float previousPeakFreq = 0.0f;
@@ -197,7 +195,6 @@ private:
     juce::SmoothedValue<float> mixSmoother3;
     juce::SmoothedValue<float> mixSmoother4;
     juce::SmoothedValue<float> mixSmootherGlobal;
-    juce::SmoothedValue<float> colorSmoother;
     juce::SmoothedValue<float> lowcutFreqSmoother;
     juce::SmoothedValue<float> highcutFreqSmoother;
     juce::SmoothedValue<float> peakFreqSmoother;

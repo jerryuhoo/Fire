@@ -11,8 +11,8 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "../GUI/LookAndFeel.h"
-#include "../DSP/ClippingFunctions.h"
+#include "../../../GUI/LookAndFeel.h"
+#include "../../../DSP/ClippingFunctions.h"
 
 //==============================================================================
 /*
@@ -25,7 +25,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setState(int mode, float color, float rec, float mix, float bias, float drive, float rateDivide);
+    void setState(int mode, float rec, float mix, float bias, float drive, float rateDivide);
     void setScale(float scale);
     bool getZoomState();
     void setZoomState(bool zoomState);

@@ -11,7 +11,7 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "../PluginProcessor.h"
+#include "../../../PluginProcessor.h"
 #include "VUPanel.h"
 #include "DistortionGraph.h"
 #include "Oscilloscope.h"
@@ -28,7 +28,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setDistortionState(int mode, float color, float rec, float mix,
+    void setDistortionState(int mode, float rec, float mix,
                             float bias, float drive, float rateDivide);
     Oscilloscope* getOscilloscope();
     VUPanel* getVuPanel();

@@ -12,26 +12,25 @@
 
 #include <JuceHeader.h>
 #include "GUI/LookAndFeel.h"
-#include "Graph Components/Oscilloscope.h"
-#include "Graph Components/DistortionGraph.h"
-#include "Graph Components/WidthGraph.h"
-#include "Graph Components/VUPanel.h"
-#include "Graph Components/GraphPanel.h"
-#include "Multiband/Multiband.h"
-#include "Multiband/FilterControl.h"
+#include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
+#include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
+#include "Panels/ControlPanel/Graph Components/WidthGraph.h"
+#include "Panels/ControlPanel/Graph Components/VUPanel.h"
+#include "Panels/ControlPanel/Graph Components/GraphPanel.h"
+#include "Panels/SpectrogramPanel/Multiband.h"
+#include "Panels/SpectrogramPanel/FilterControl.h"
 #include "GUI/InterfaceDefines.h"
 
 //==============================================================================
 /**
 */
-class FireAudioProcessorEditor : public juce::AudioProcessorEditor, //2019/12/28
+class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::Slider::Listener,
-                                 public juce::ComboBox::Listener, //2020/08/08
-                                 public juce::Timer,               //edited 2020/07/03 fps
+                                 public juce::ComboBox::Listener,
+                                 public juce::Timer,
                                  public juce::Button::Listener
 {
 public:
-    //typedef AudioProcessorValueTreeState::SliderAttachment SliderAttachment;
     FireAudioProcessorEditor(FireAudioProcessor &);
     ~FireAudioProcessorEditor();
 
@@ -109,7 +108,6 @@ private:
         peakFreqKnob,
         peakQKnob,
         peakGainKnob,
-        colorKnob,
         mixKnob,
         outputKnob;
     
@@ -169,7 +167,6 @@ private:
         recFullLabel,
         filterStateLabel,
         filterTypeLabel,
-        colorLabel,
         biasLabel;
 
     // Buttons
@@ -304,8 +301,7 @@ private:
         highcutQAttachment,
         peakFreqAttachment,
         peakQAttachment,
-        peakGainAttachment,
-        colorAttachment;
+        peakGainAttachment;
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -352,8 +348,5 @@ private:
     HighPassButtonLnf highPassButtonLnf;
     FlatButtonLnf flatButtonLnf;
 
-    //return function value by different modes
-    //float getFunctionValue(FireAudioProcessor& processor, float value);
-    //int modeChoice;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

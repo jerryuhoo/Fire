@@ -10,7 +10,7 @@
 
 #include <JuceHeader.h>
 #include "WidthGraph.h"
-#include "../GUI/InterfaceDefines.h"
+#include "../../../GUI/InterfaceDefines.h"
 
 //==============================================================================
 WidthGraph::WidthGraph(FireAudioProcessor &p) : processor(p)

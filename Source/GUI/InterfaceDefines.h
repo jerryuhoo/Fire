@@ -122,8 +122,6 @@
 #define REC_ID4             "rec4"
 #define REC_NAME4           "Rec4"
 
-#define COLOR_ID            "color"
-#define COLOR_NAME          "Color"
 #define DOWNSAMPLE_ID       "downSample"
 #define DOWNSAMPLE_NAME     "DownSample"
 
@@ -260,9 +258,6 @@
 #define WIDTH_GRAPH_WIDTH   getWidth() / 8.0f
 #define WIDTH_GRAPH_HEIGHT  (getHeight() - PART1 - PART2) / 4.0f
 
-#define SPEC_X              0.0f
-#define SPEC_Y              getHeight() / 10.0f
-#define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10.0f * 3.0f
 
 #define DRIVE_X             KNOB_PANEL_2_X + OSC_HEIGHT - SCALED_KNOBSIZE / 2.0f
@@ -281,7 +276,7 @@
 #define CUTOFF_X            startX * 4.5f - SCALED_KNOBSIZE / 2.0f
 #define RES_X               startX * 6.0f - SCALED_KNOBSIZE / 2.0f
 #define DOWNSAMPLE_X        startX * 7.5f - SCALED_KNOBSIZE / 2.0f
-#define COLOR_X             startX * 7.5f - SCALED_KNOBSIZE / 2.0f
+
 #define FILTER_STATE_X      startX * 4.5f - SCALED_KNOBSIZE / 4.0f
 #define FILTER_TYPE_X       startX * 6.0f - SCALED_KNOBSIZE / 4.0f
 #define OUTPUT_X_G          startX * 9.0f - SCALED_KNOBSIZE / 2.0f

@@ -21,7 +21,7 @@
 /*
 */
 
-class Multiband  : public juce::Component
+class Multiband  : public juce::Component, juce::Timer
 {
 public:
     Multiband();
@@ -29,6 +29,8 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void timerCallback() override;
+    
     int getLineNum();
     
     void getFocusArray(bool (&input)[4]);

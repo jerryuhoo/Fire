@@ -11,16 +11,17 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "../../../PluginProcessor.h"
 #include "../../../GUI/LookAndFeel.h"
 #include "../../../DSP/ClippingFunctions.h"
 
 //==============================================================================
 /*
 */
-class DistortionGraph  : public juce::Component
+class DistortionGraph  : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
 {
 public:
-    DistortionGraph();
+    DistortionGraph(FireAudioProcessor &);
     ~DistortionGraph() override;
 
     void paint (juce::Graphics&) override;
@@ -31,7 +32,11 @@ public:
     void setZoomState(bool zoomState);
     void mouseDown(const juce::MouseEvent &e) override;
     
+    void parameterValueChanged (int parameterIndex, float newValue) override;
+    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
+    void timerCallback() override;
 private:
+    FireAudioProcessor &processor;
     int mode = -1;
     float color = -1.0f;
     float rec = -1.0f;
@@ -41,5 +46,6 @@ private:
     float drive = -1.0f;
     float scale = 1.0f;
     bool mZoomState = false;
+    juce::Atomic<bool> parametersChanged {false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)
 };

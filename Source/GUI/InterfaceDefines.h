@@ -228,9 +228,6 @@
 #define INIT_WIDTH          1000.0f
 #define INIT_HEIGHT         500.0f
 
-#define PART1               getHeight() / 10.0f
-#define PART2               PART1 * 3.0f
-
 #define KNOB_PANEL_1_X      SWITCH_X + SWITCH_WIDTH
 #define KNOB_PANEL_2_X      SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH
 #define KNOB_PANEL_3_X      SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH + OSC_HEIGHT * 2 + BUTTON_WIDTH

@@ -46,6 +46,7 @@ void FilterControl::resized()
 }
 
 void FilterControl::setParams(float lowCut,
+                              
                               float highCut,
                               float cutRes,
                               float peak,

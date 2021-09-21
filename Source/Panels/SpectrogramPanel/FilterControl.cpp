@@ -10,7 +10,7 @@
 
 #include <JuceHeader.h>
 #include "FilterControl.h"
-#include "../GUI/InterfaceDefines.h"
+#include "../../GUI/InterfaceDefines.h"
 
 //==============================================================================
 FilterControl::FilterControl(FireAudioProcessor &p) : processor(p)

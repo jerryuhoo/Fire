@@ -122,10 +122,10 @@ void GraphPanel::resized()
     
 }
 
-void GraphPanel::setDistortionState(int mode, float color, float rec, float mix,
+void GraphPanel::setDistortionState(int mode, float rec, float mix,
                                     float bias, float drive, float rateDivide)
 {
-    distortionGraph.setState(mode, color, rec, mix, bias, drive, rateDivide);
+    distortionGraph.setState(mode, rec, mix, bias, drive, rateDivide);
 }
 
 Oscilloscope* GraphPanel::getOscilloscope()

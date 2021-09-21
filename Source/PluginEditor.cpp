@@ -10,7 +10,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "Graph Components/VUMeter.h"
+#include "Panels/ControlPanel/Graph Components/VUMeter.h"
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
@@ -44,7 +44,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     compressorVector.add(compRatioKnob4 = new juce::Slider());
     
     // timer
-    juce::Timer::startTimerHz(30.0f);
+    juce::Timer::startTimerHz(60.0f);
 
     // This is not a perfect fix for Vst3 plugins
     // Vst3 calls constructor before setStateInformation in processor,
@@ -76,14 +76,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     stateComponent.getCopyABButton()->addListener(this);
     stateComponent.getPreviousButton()->addListener(this);
     stateComponent.getNextButton()->addListener(this);
-    
-    // Make sure that before the constructor has finished, you've set the
-    // editor's size to whatever you need it to be.
-    //setSize(INIT_WIDTH, INIT_HEIGHT);
 
     setLookAndFeel(&otherLookAndFeel);
 
-    // drive knob 1
+    // drive knobs
     driveKnob1.setLookAndFeel(&driveLookAndFeel1);
     driveKnob2.setLookAndFeel(&driveLookAndFeel2);
     driveKnob3.setLookAndFeel(&driveLookAndFeel3);
@@ -100,7 +96,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     driveLabel.attachToComponent(&driveKnob1, false);
     driveLabel.setJustificationType(juce::Justification::centred);
     
-    // output knob
+    // output knobs
     setListenerKnob(outputKnob1);
     setListenerKnob(outputKnob2);
     setListenerKnob(outputKnob3);
@@ -131,7 +127,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     outputKnob3.setTextValueSuffix("db");
     outputKnob4.setTextValueSuffix("db");
     
-    // mix knob
+    // mix knobs
     setRotarySlider(mixKnob1, COLOUR1);
     setRotarySlider(mixKnob2, COLOUR1);
     setRotarySlider(mixKnob3, COLOUR1);
@@ -152,7 +148,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     mixLabelGlobal.attachToComponent(&mixKnob, false);
     mixLabelGlobal.setJustificationType(juce::Justification::centred);
     
-    // compressor ratio knob
+    // compressor ratio knobs
     setRotarySlider(*compRatioKnob1, juce::Colours::yellowgreen);
     setRotarySlider(*compRatioKnob2, juce::Colours::yellowgreen);
     setRotarySlider(*compRatioKnob3, juce::Colours::yellowgreen);
@@ -165,7 +161,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     CompRatioLabel.attachToComponent(compRatioKnob1, false);
     CompRatioLabel.setJustificationType(juce::Justification::centred);
     
-    // compressor ratio knob
+    // compressor threashold knobs
     setRotarySlider(*compThreshKnob1, juce::Colours::yellowgreen);
     setRotarySlider(*compThreshKnob2, juce::Colours::yellowgreen);
     setRotarySlider(*compThreshKnob3, juce::Colours::yellowgreen);
@@ -183,7 +179,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     CompThreshLabel.attachToComponent(compThreshKnob1, false);
     CompThreshLabel.setJustificationType(juce::Justification::centred);
     
-    // width knob
+    // width knobs
     setRotarySlider(*widthKnob1, juce::Colours::skyblue);
     setRotarySlider(*widthKnob2, juce::Colours::skyblue);
     setRotarySlider(*widthKnob3, juce::Colours::skyblue);
@@ -195,18 +191,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     widthLabel.setColour(juce::Label::textColourId, juce::Colours::skyblue);
     widthLabel.attachToComponent(widthKnob1, false);
     widthLabel.setJustificationType(juce::Justification::centred);
-    
-    // color knob
-    setRotarySlider(colorKnob, juce::Colours::purple.withBrightness(0.8f));
-    
-    addAndMakeVisible(colorLabel);
-    colorLabel.setText("Color", juce::dontSendNotification);
-    colorLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    colorLabel.setColour(juce::Label::textColourId, juce::Colours::purple.withBrightness(0.8f));
-    colorLabel.attachToComponent(&colorKnob, false);
-    colorLabel.setJustificationType(juce::Justification::centred);
 
-    // bias knob
+    // bias knobs
     setRotarySlider(*biasKnob1, COLOUR1);
     setRotarySlider(*biasKnob2, COLOUR1);
     setRotarySlider(*biasKnob3, COLOUR1);
@@ -229,7 +215,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
-    // rec knob
+    // rec knobs
     setRotarySlider(*recKnob1, COLOUR1);
     setRotarySlider(*recKnob2, COLOUR1);
     setRotarySlider(*recKnob3, COLOUR1);
@@ -370,7 +356,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(filterTypeLabel);
     filterTypeLabel.setText("Type", juce::dontSendNotification);
     filterTypeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    filterTypeLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
+    filterTypeLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
     filterTypeLabel.attachToComponent(&filterLowPassButton, false);
     filterTypeLabel.setJustificationType(juce::Justification::centred);
     
@@ -476,7 +462,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     otherSwitch.setLookAndFeel(&flatButtonLnf);
     
     // Attachment
-    //inputAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "inputGain", inputKnob);
     driveAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID1, driveKnob1);
     driveAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID2, driveKnob2);
     driveAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID3, driveKnob3);
@@ -514,8 +499,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     recAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID3, *recKnob3);
     recAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID4, *recKnob4);
     
-    colorAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COLOR_ID, colorKnob);
-    
     downSampleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DOWNSAMPLE_ID, downSampleKnob);
 
     
@@ -526,7 +509,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     peakFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, PEAK_FREQ_ID, peakFreqKnob);
     peakQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, PEAK_Q_ID, peakQKnob);
     peakGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, PEAK_GAIN_ID, peakGainKnob);
-
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
     
@@ -934,7 +916,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         filterPeakButton.setVisible(false);
         filterPostButton.setVisible(false);
         filterHighPassButton.setVisible(false);
-        colorKnob.setVisible(false);
         lowcutFreqKnob.setVisible(false);
         mixKnob.setVisible(false);
         outputKnob.setVisible(false); 
@@ -1004,12 +985,10 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
                 highcutSlopeMode.setVisible(false);
             }
             downSampleKnob.setVisible(false);
-            colorKnob.setVisible(false);
         }
         if (isOtherSwitchOn)
         {
             downSampleKnob.setVisible(true);
-            colorKnob.setVisible(true);
             lowcutFreqKnob.setVisible(false);
             lowcutQKnob.setVisible(false);
             highcutFreqKnob.setVisible(false);
@@ -1080,28 +1059,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         widthLabel.setVisible(false);
         recLabel.setVisible(false);
         biasLabel.setVisible(false);
-
-//        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());   
     }
-    
-    // TODO: resize
-    // draw shadow 1
-//    juce::ColourGradient shadowGrad1(juce::Colours::black.withAlpha(0.5f), 0, 50,
-//                                     juce::Colours::black.withAlpha(0.0f), 0, 55, false);
-//    g.setGradientFill(shadowGrad1);
-//    g.fillRect(0, part1, getWidth(), 5);
-
-    // draw shadow 2
-//    juce::ColourGradient shadowGrad2(juce::Colours::black.withAlpha(0.0f), 0, part1 + part2 - 10,
-//                                     juce::Colours::black.withAlpha(0.5f), 0, part1 + part2, false);
-//
-//    g.setGradientFill(shadowGrad2);
-//    g.fillRect(0, part1 + part2 - 10, getWidth(), 10);
-
-    //g.setColour(COLOUR1);
-    //g.fillRect(outputKnob.getX(), outputKnob.getY(), outputKnob.getWidth(), outputKnob.getHeight());
-    //g.fillRect(lowcutFreqKnob.getX(), lowcutFreqKnob.getY(), lowcutFreqKnob.getWidth(), lowcutFreqKnob.getHeight());
-    
     
     if (multibandFocus[0])
     {
@@ -1145,14 +1103,40 @@ void FireAudioProcessorEditor::resized()
     int secondPartY = secondShadowY + (getHeight() - secondShadowY) * 4 / 5 - scaledKnobSize / 2;
 
     
-    // save presets
-    juce::Rectangle<int> r(getLocalBounds());
-    r = r.removeFromTop(50 * getHeight() / INIT_HEIGHT);
-    r.removeFromLeft(100 * scaleMax);
-    r.removeFromRight(50 * scaleMax);
+    // top bar
+    hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
+    juce::Rectangle<int> area(getLocalBounds());
+    juce::Rectangle<int> topBar = area.removeFromTop(50 * getHeight() / INIT_HEIGHT);
+    topBar.removeFromLeft(100 * scaleMax);
+    topBar.removeFromRight(50 * scaleMax);
+    stateComponent.setBounds(topBar);
 
-    stateComponent.setBounds(r);
-
+    // spectrum and filter
+    juce::Rectangle<int> spectrumArea = area.removeFromTop(SPEC_HEIGHT);
+    spectrum.setBounds(spectrumArea);
+    multiband.setBounds(spectrumArea);
+    filterControl.setBounds(spectrumArea);
+    
+    // left and right window buttons
+    float windowHeight = getHeight() / 20;
+    juce::Rectangle<int> leftWindowButtonArea = area.removeFromTop(windowHeight);
+    juce::Rectangle<int> rightWindowButtonArea = leftWindowButtonArea.removeFromRight(getWidth() / 2);
+    windowLeftButton.setBounds(leftWindowButtonArea);
+    windowRightButton.setBounds(rightWindowButtonArea);
+    
+    juce::Rectangle<int> controlAreaTop = area.removeFromTop(area.getHeight() / 5);
+    juce::Rectangle<int> controlAreaMid = area.removeFromTop(area.getHeight() / 4 * 3);
+    juce::Rectangle<int> controlAreaButton = area;
+    
+    // distortion menu
+    controlAreaTop.removeFromLeft(OSC_X); // x position
+    juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft(OSC_WIDTH); // width
+    distortionModeArea.removeFromTop(controlAreaTop.getHeight() / 4);
+    distortionModeArea.removeFromBottom(controlAreaTop.getHeight() / 4);
+    distortionMode1.setBounds(distortionModeArea);
+    distortionMode2.setBounds(distortionModeArea);
+    distortionMode3.setBounds(distortionModeArea);
+    distortionMode4.setBounds(distortionModeArea);
 //    if (oscSwitch.getToggleState())
 //    {
 //        driveKnob1.setBounds(getWidth() / 2 - DRIVE_SIZE / 2.0f, OSC_Y, DRIVE_SIZE, DRIVE_SIZE);
@@ -1168,24 +1152,50 @@ void FireAudioProcessorEditor::resized()
 //        driveKnob4.setBounds(DRIVE_X, DRIVE_Y, SCALED_KNOBSIZE, SCALED_KNOBSIZE);
 //    }
     
-    oscSwitch.setBounds(SWITCH_X, SWITCH_OSC_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
-    shapeSwitch.setBounds(SWITCH_X, SWITCH_SHAPE_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
-    compressorSwitch.setBounds(SWITCH_X, SWITCH_COMP_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
-    widthSwitch.setBounds(SWITCH_X, SWITCH_WIDTH_Y, SWITCH_WIDTH, SWITCH_HEIGHT);
+    juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
+    graphArea.removeFromLeft(graphArea.getWidth() / 10);
+    // Graph Panel
+    graphPanel.setBounds(graphArea);
     
-    filterSwitch.setBounds(SWITCH_X, SWITCH_OSC_Y, SWITCH_WIDTH, SWITCH_HEIGHT * 2);
-    otherSwitch.setBounds(SWITCH_X, SWITCH_COMP_Y, SWITCH_WIDTH, SWITCH_HEIGHT * 2);
+    juce::Rectangle<int> switchArea = controlAreaMid.removeFromLeft(SWITCH_WIDTH);
     
+    oscSwitch.setBounds(switchArea.removeFromTop(switchArea.getHeight() / 4));
+    shapeSwitch.setBounds(switchArea.removeFromTop(switchArea.getHeight() / 3));
+    compressorSwitch.setBounds(switchArea.removeFromTop(switchArea.getHeight() / 2));
+    widthSwitch.setBounds(switchArea);
+    
+    filterSwitch.setBounds(oscSwitch.getX(), oscSwitch.getY(), SWITCH_WIDTH, oscSwitch.getHeight() * 2);
+    otherSwitch.setBounds(compressorSwitch.getX(), compressorSwitch.getY(), SWITCH_WIDTH, oscSwitch.getHeight() * 2);
+    
+    juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
+    juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight(getWidth() / 7);
+    
+    controlLeftKnobLeftArea.removeFromTop(controlLeftKnobLeftArea.getHeight() / 4);
+    controlLeftKnobLeftArea.removeFromBottom(controlLeftKnobLeftArea.getHeight() / 5);
+
+    
+    controlLeftKnobRightArea.removeFromTop(controlLeftKnobRightArea.getHeight() / 4);
+    controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5);
+
     // shape
-    recKnob1->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
-    recKnob2->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
-    recKnob3->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
-    recKnob4->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+    recKnob1->setBounds(controlLeftKnobLeftArea);
+    recKnob2->setBounds(controlLeftKnobLeftArea);
+    recKnob3->setBounds(controlLeftKnobLeftArea);
+    recKnob4->setBounds(controlLeftKnobLeftArea);
     
-    biasKnob1->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
-    biasKnob2->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
-    biasKnob3->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
-    biasKnob4->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+    biasKnob1->setBounds(controlLeftKnobRightArea);
+    biasKnob2->setBounds(controlLeftKnobRightArea);
+    biasKnob3->setBounds(controlLeftKnobRightArea);
+    biasKnob4->setBounds(controlLeftKnobRightArea);
+//    recKnob1->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//    recKnob2->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//    recKnob3->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//    recKnob4->setBounds(REC_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//
+//    biasKnob1->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//    biasKnob2->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//    biasKnob3->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
+//    biasKnob4->setBounds(BIAS_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
     
     // width
     widthKnob1->setBounds(WIDTH_X, OSC_Y + OSC_HEIGHT / 2.0f, scaledKnobSize, scaledKnobSize);
@@ -1206,7 +1216,6 @@ void FireAudioProcessorEditor::resized()
 
     //colorKnob.setBounds(startX * 1 + scaledKnobSize * 1.2, secondLineY, scaledKnobSize, scaledKnobSize);
     downSampleKnob.setBounds(DOWNSAMPLE_X, firstPartY, scaledKnobSize, scaledKnobSize);
-    colorKnob.setBounds(COLOR_X, secondPartY, scaledKnobSize, scaledKnobSize);
     lowcutFreqKnob.setBounds(CUTOFF_X, firstPartY, scaledKnobSize, scaledKnobSize);
     lowcutQKnob.setBounds(RES_X, firstPartY, scaledKnobSize, scaledKnobSize);
     highcutFreqKnob.setBounds(CUTOFF_X, firstPartY, scaledKnobSize, scaledKnobSize);
@@ -1232,7 +1241,7 @@ void FireAudioProcessorEditor::resized()
     outputKnob.setBounds(OUTPUT_X_G, firstPartY, scaledKnobSize, scaledKnobSize);
     
     // buttons
-    hqButton.setBounds(getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
+    
     linkedButton1.setBounds(BUTTON_X, OSC_Y, BUTTON_WIDTH, OSC_HEIGHT);
     linkedButton2.setBounds(BUTTON_X, OSC_Y, BUTTON_WIDTH, OSC_HEIGHT);
     linkedButton3.setBounds(BUTTON_X, OSC_Y, BUTTON_WIDTH, OSC_HEIGHT);
@@ -1243,9 +1252,7 @@ void FireAudioProcessorEditor::resized()
     safeButton3.setBounds(BUTTON_X, OSC_Y + OSC_HEIGHT, BUTTON_WIDTH, OSC_HEIGHT);
     safeButton4.setBounds(BUTTON_X, OSC_Y + OSC_HEIGHT, BUTTON_WIDTH, OSC_HEIGHT);
     
-    float windowHeight = getHeight() / 20;
-    windowLeftButton.setBounds(0, secondShadowY, getWidth() / 2, windowHeight);
-    windowRightButton.setBounds(getWidth() / 2, secondShadowY, getWidth() / 2, windowHeight);
+    
 
     filterOffButton.setBounds(FILTER_STATE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
     filterPreButton.setBounds(FILTER_STATE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
@@ -1254,19 +1261,11 @@ void FireAudioProcessorEditor::resized()
     filterPeakButton.setBounds(FILTER_TYPE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
     filterHighPassButton.setBounds(FILTER_TYPE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
 
-    // Graph Panel
-    graphPanel.setBounds(OSC_X, OSC_Y, OSC_WIDTH * 2, OSC_HEIGHT * 2);
     
-    // spectrum
-    spectrum.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
-    multiband.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
-    filterControl.setBounds(SPEC_X, SPEC_Y, SPEC_WIDTH, SPEC_HEIGHT);
     
-    // distortion menu
-    distortionMode1.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
-    distortionMode2.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
-    distortionMode3.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
-    distortionMode4.setBounds(OSC_X, secondShadowY + windowHeight + 10, OSC_WIDTH, getHeight() / 20);
+    
+    
+    
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;
@@ -1389,15 +1388,6 @@ void FireAudioProcessorEditor::linkValue(juce::Slider &xSlider, juce::Slider &dr
         {
             outputSlider.setValue(-xSlider.getValue() * 0.1f); // use defalut notification type
         }
-//        else if (&xSlider == &outputSlider && driveSlider.isEnabled())
-//        {
-//            if (outputSlider.getValue() <= 0 && outputSlider.getValue() >= -10)
-//                driveSlider.setValue(-outputSlider.getValue() * 10, juce :: dontSendNotification);
-//            else if (outputSlider.getValue() > 0)
-//                driveSlider.setValue(0, juce :: dontSendNotification);
-//            else if (outputSlider.getValue() < -10)
-//                driveSlider.setValue(100, juce :: dontSendNotification);
-//        }
     }
 }
 
@@ -1648,13 +1638,12 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
     // paint distortion function
     int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
     float drive = processor.getNewDrive(driveId);
-    float color = static_cast<float>(*processor.treeState.getRawParameterValue(COLOR_ID));
     float rec = static_cast<float>(*processor.treeState.getRawParameterValue(recId));
     float mix = static_cast<float>(*processor.treeState.getRawParameterValue(mixId));
     float bias = static_cast<float>(*processor.treeState.getRawParameterValue(biasId));
     float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
 
-    graphPanel.setDistortionState(mode, color, rec, mix, bias, drive, rateDivide);
+    graphPanel.setDistortionState(mode, rec, mix, bias, drive, rateDivide);
 }
 
 void FireAudioProcessorEditor::setMultiband()

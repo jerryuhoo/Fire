@@ -149,7 +149,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousLowcutFreq = (float)*treeState.getRawParameterValue(LOWCUT_FREQ_ID);
     previousHighcutFreq = (float)*treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
     previousPeakFreq = (float)*treeState.getRawParameterValue(PEAK_FREQ_ID);
-    previousColor = (float)*treeState.getRawParameterValue(COLOR_ID);
     
     newDrive1 = 0;
     newDrive2 = 0;
@@ -212,9 +211,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mixSmoother4.setCurrentAndTargetValue(previousMix4);
     mixSmootherGlobal.reset(sampleRate, 0.05);
     mixSmootherGlobal.setCurrentAndTargetValue(previousMix);
-    
-    colorSmoother.reset(sampleRate, 0.001);
-    colorSmoother.setCurrentAndTargetValue(previousColor);
 
     centralSmoother.reset(sampleRate, 0.1);
     centralSmoother.setCurrentAndTargetValue(0);
@@ -268,11 +264,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.numChannels = getMainBusNumOutputChannels();
 
     // filter init
-//    filterIIR.reset();
-//    filterColor.reset();
     updateFilter();
-//    filterIIR.prepare(spec);
-//    filterColor.prepare(spec);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
     // mode 8 diode================
@@ -652,12 +644,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         }
     }
 
-    // color eq filter(need to be put into multiband???)
-    float color = *treeState.getRawParameterValue(COLOR_ID);
-    colorSmoother.setTargetValue(color);
-    //distortionProcessor1.controls.color = colorSmoother.getNextValue();
-
-    //filterColor.process(juce::dsp::ProcessContextReplacing<float>(block));
     updateFilter();
     auto leftBlock = block.getSingleChannelBlock(0);
     auto rightBlock = block.getSingleChannelBlock(1);
@@ -823,7 +809,9 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
     ChainSettings settings;
     
     settings.lowCutFreq = apvts.getRawParameterValue(LOWCUT_FREQ_ID)->load();
+    settings.lowCutQuality = apvts.getRawParameterValue(LOWCUT_Q_ID)->load();
     settings.highCutFreq = apvts.getRawParameterValue(HIGHCUT_FREQ_ID)->load();
+    settings.highCutQuality = apvts.getRawParameterValue(HIGHCUT_Q_ID)->load();
     settings.peakFreq = apvts.getRawParameterValue(PEAK_FREQ_ID)->load();
     settings.peakGainInDecibels = apvts.getRawParameterValue(PEAK_GAIN_ID)->load();
     settings.peakQuality = apvts.getRawParameterValue(PEAK_Q_ID)->load();
@@ -885,52 +873,10 @@ void FireAudioProcessor::updateHighCutFilters(const ChainSettings &chainSettings
 
 void FireAudioProcessor::updateFilter()
 {
-    
     auto chainSettings = getChainSettings(treeState);
-        
     updateLowCutFilters(chainSettings);
     updatePeakFilter(chainSettings);
     updateHighCutFilters(chainSettings);
-    
-//    float lowcutFreq = *treeState.getRawParameterValue(LOWCUT_FREQ_ID);
-//    float lowcutQ = *treeState.getRawParameterValue(LOWCUT_Q_ID);
-//    bool lowButton = *treeState.getRawParameterValue(LOW_ID);
-//    bool bandButton = *treeState.getRawParameterValue(BAND_ID);
-//    bool highButton = *treeState.getRawParameterValue(HIGH_ID);
-//    float color = *treeState.getRawParameterValue(COLOR_ID);
-//    float centreFreqSausage;
-//
-//    colorSmoother.setTargetValue(color);
-//    color = colorSmoother.getNextValue();
-//
-//    // smooth cutoff value
-//    lowcutFreqSmoother.setTargetValue(lowcutFreq);
-//    lowcutFreq = lowcutFreqSmoother.getNextValue();
-//
-//    // 20 - 800 - 8000
-//    if (color < 0.5)
-//    {
-//        centreFreqSausage = 20 + color * 1560;
-//    }
-//    else
-//    {
-//        centreFreqSausage = 800 + (color - 0.5) * 14400;
-//    }
-//
-//    *filterColor.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(getSampleRate(), centreFreqSausage, 0.4, color + 1);
-//
-//    if (lowButton == true)
-//    {
-//        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeLowPass(getSampleRate(), lowcutFreq, lowcutQ);
-//    }
-//    else if (bandButton == true)
-//    {
-//        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeBandPass(getSampleRate(), lowcutFreq, lowcutQ);
-//    }
-//    else if (highButton == true)
-//    {
-//        *filterIIR.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(getSampleRate(), lowcutFreq, lowcutQ);
-//    }
 }
 
 bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
@@ -1421,8 +1367,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID2, REC_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID3, REC_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID4, REC_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COLOR_ID, COLOR_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DOWNSAMPLE_ID, DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     
     

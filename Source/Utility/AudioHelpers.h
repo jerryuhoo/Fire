@@ -41,8 +41,8 @@ enum Slope
 
 struct ChainSettings
 {
-    float peakFreq { 0 }, peakGainInDecibels{ 0 }, peakQuality {1.f};
-    float lowCutFreq { 0 }, highCutFreq { 0 };
+    float peakFreq { 0 }, peakGainInDecibels{ 0 }, peakQuality {1.0f};
+    float lowCutFreq { 0 }, highCutFreq { 0 }, lowCutQuality {1.0f}, highCutQuality {1.0f};
     
     Slope lowCutSlope { Slope::Slope_12 }, highCutSlope { Slope::Slope_12 };
     

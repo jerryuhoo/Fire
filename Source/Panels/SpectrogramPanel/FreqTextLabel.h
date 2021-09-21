@@ -12,7 +12,7 @@
 
 #include <JuceHeader.h>
 #include "VerticalLine.h"
-#include "../GUI/LookAndFeel.h"
+#include "../../GUI/LookAndFeel.h"
 
 //==============================================================================
 /*

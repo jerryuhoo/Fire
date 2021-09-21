@@ -13,10 +13,10 @@
 #define STATE_H_INCLUDED
 
 #include <JuceHeader.h>
-#include "GUI/LookAndFeel.h"
-#include "Multiband/Multiband.h"
-#include "Utility/VersionInfo.h"
-#include "GUI/InterfaceDefines.h"
+#include "../../GUI/LookAndFeel.h"
+#include "../SpectrogramPanel/Multiband.h"
+#include "../../Utility/VersionInfo.h"
+#include "../../GUI/InterfaceDefines.h"
 
 namespace state
 {

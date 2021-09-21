@@ -187,10 +187,9 @@ void DistortionGraph::resized()
 {
 }
 
-void DistortionGraph::setState(int mode, float color, float rec, float mix, float bias, float drive, float rateDivide)
+void DistortionGraph::setState(int mode, float rec, float mix, float bias, float drive, float rateDivide)
 {
     this->mode = mode;
-    this->color = color;
     this->rec = rec;
     this->mix = mix;
     this->bias = bias;

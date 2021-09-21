@@ -17,6 +17,7 @@ Multiband::Multiband()
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
 //    addAndMakeVisible(spectrum);
+    startTimerHz(60);
     
     limitLeft = 0.1f;
     limitRight = 1.0f - limitLeft;
@@ -429,6 +430,7 @@ void Multiband::mouseUp(const juce::MouseEvent &e)
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
 {
+    repaint();
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         if (lineNum < 3)
@@ -842,4 +844,9 @@ void Multiband::setDeleteState(bool state)
 int Multiband::getSortedIndex(int index)
 {
     return sortedIndex[index];
+}
+
+void Multiband::timerCallback()
+{
+    repaint();
 }

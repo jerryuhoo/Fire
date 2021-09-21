@@ -1226,8 +1226,10 @@ public:
         else
         {
             g.fillRoundedRectangle(bounds, cornerSize);
+            //g.fillRect(bounds);
             g.setColour(button.findColour(juce::ComboBox::outlineColourId));
             g.drawRoundedRectangle(bounds, cornerSize, 1.0f);
+            //g.drawRect(bounds);
         }
         
         // draw low filter path

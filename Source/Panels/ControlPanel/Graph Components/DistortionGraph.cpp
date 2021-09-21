@@ -12,12 +12,23 @@
 #include "DistortionGraph.h"
 
 //==============================================================================
-DistortionGraph::DistortionGraph()
+DistortionGraph::DistortionGraph(FireAudioProcessor &p) : processor(p)
 {
+    const auto& params = processor.getParameters();
+    for( auto param : params )
+    {
+        param->addListener(this);
+    }
+    startTimerHz(60);
 }
 
 DistortionGraph::~DistortionGraph()
 {
+    const auto& params = processor.getParameters();
+    for( auto param : params )
+    {
+        param->removeListener(this);
+    }
 }
 
 void DistortionGraph::paint (juce::Graphics& g)
@@ -222,4 +233,19 @@ void DistortionGraph::mouseDown(const juce::MouseEvent &e)
     {
         mZoomState = true;
     }
+}
+
+void DistortionGraph::parameterValueChanged(int parameterIndex, float newValue)
+{
+    parametersChanged.set(true);
+}
+
+void DistortionGraph::timerCallback()
+{
+    if( parametersChanged.compareAndSetBool(false, true) )
+    {
+        
+    }
+    
+    repaint();
 }

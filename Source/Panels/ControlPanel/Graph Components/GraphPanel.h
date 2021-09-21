@@ -45,7 +45,7 @@ private:
     VUPanel vuPanel {processor};
     
     // Distortion Graph
-    DistortionGraph distortionGraph;
+    DistortionGraph distortionGraph {processor};
     
     // Width Graph
     WidthGraph widthGraph {processor};

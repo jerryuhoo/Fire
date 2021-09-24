@@ -12,7 +12,7 @@
 #include "Multiband.h"
 
 //==============================================================================
-Multiband::Multiband()
+Multiband::Multiband(FireAudioProcessor &p) : processor(p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
@@ -31,7 +31,7 @@ Multiband::Multiband()
     // Init Vertical Lines
     for (int i = 0; i < 3; i++)
     {
-        freqDividerGroup[i] = std::make_unique<FreqDividerGroup>();
+        freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor);
         addAndMakeVisible(*freqDividerGroup[i]);
 
         soloButton[i + 1] = std::make_unique<SoloButton>();
@@ -41,6 +41,27 @@ Multiband::Multiband()
         addAndMakeVisible(*enableButton[i + 1]);
     }
     
+    multiFreqSlider1.addListener(this);
+    multiFreqSlider2.addListener(this);
+    multiFreqSlider3.addListener(this);
+    
+    multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID1, multiFocusSlider1);
+    multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID2, multiFocusSlider2);
+    multiFocusAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID3, multiFocusSlider3);
+    multiFocusAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID4, multiFocusSlider4);
+    
+    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID1, multiEnableSlider1);
+    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID2, multiEnableSlider2);
+    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID3, multiEnableSlider3);
+    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID4, multiEnableSlider4);
+    
+    multiFreqAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID1, multiFreqSlider1);
+    multiFreqAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID2, multiFreqSlider2);
+    multiFreqAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID3, multiFreqSlider3);
+    
+    lineStateSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID1, lineStateSlider1);
+    lineStateSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID2, lineStateSlider2);
+    lineStateSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID3, lineStateSlider3);
 //    margin = getHeight() / 20.0f;
 //    size = freqDividerGroup[0]->verticalLine.getHeight() / 10.f;
 //    width = freqDividerGroup[0]->verticalLine.getWidth() / 2.f;
@@ -156,6 +177,45 @@ void Multiband::paint (juce::Graphics& g)
         float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
         dragLines(targetXPercent);
     }
+    
+    // set value only when line is deleted, added, moving
+    if (getDeleteState() || getAddState() || getMovingState())
+    {
+        if (getDeleteState())
+        {
+            updateLines("delete", getChangedIndex());
+            setDeleteState(false);
+        }
+        else if (getAddState())
+        {
+            updateLines("add", getChangedIndex());
+            setAddState(false);
+        }
+        else if (getMovingState())
+        {
+            updateLines("moving", getChangedIndex());
+            setMovingState(false);
+        }
+        updateFreqArray();
+
+        getLineState(lineState);
+        lineStateSlider1.setValue(lineState[0]);
+        lineStateSlider2.setValue(lineState[1]);
+        lineStateSlider3.setValue(lineState[2]);
+        
+        processor.setLineNum(getLineNum());
+    }
+    
+    if (freqDividerGroup[0]->verticalLine.isMouseButtonDown()) {
+        // TODO: do once, only do this when clicked close button
+        getEnableArray(multibandEnable);
+        multiEnableSlider1.setValue(multibandEnable[0]);
+        multiEnableSlider2.setValue(multibandEnable[1]);
+        multiEnableSlider3.setValue(multibandEnable[2]);
+        multiEnableSlider4.setValue(multibandEnable[3]);
+    }
+    
+    
 }
 
 void Multiband::resized()
@@ -519,6 +579,11 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             }
         }
     }
+    getFocusArray(multibandFocus);
+    multiFocusSlider1.setValue(multibandFocus[0]);
+    multiFocusSlider2.setValue(multibandFocus[1]);
+    multiFocusSlider3.setValue(multibandFocus[2]);
+    multiFocusSlider4.setValue(multibandFocus[3]);
 }
 
 int Multiband::getLineNum()
@@ -848,5 +913,71 @@ int Multiband::getSortedIndex(int index)
 
 void Multiband::timerCallback()
 {
+    if( parametersChanged.compareAndSetBool(false, true) )
+    {
+        
+    }
     repaint();
+}
+
+int Multiband::getFocusBand()
+{
+    for (int i = 0; i < 4; i++)
+    {
+        if (multibandFocus[i])
+        {
+            return i;
+        }
+    }
+    return 0;
+}
+
+void Multiband::updateFreqArray()
+{
+    getFreqArray(multibandFreq);
+    multiFreqSlider1.setValue(multibandFreq[0]);
+    multiFreqSlider2.setValue(multibandFreq[1]);
+    multiFreqSlider3.setValue(multibandFreq[2]);
+}
+
+
+void Multiband::sliderValueChanged(juce::Slider *slider)
+{
+    // ableton move sliders
+    if (slider == &multiFreqSlider1 && lineState[0])
+    {
+        if (!getMovingState())
+        {
+            dragLinesByFreq(multiFreqSlider1.getValue(), getSortedIndex(0));
+            getFreqArray(multibandFreq);
+            multiFreqSlider2.setValue(multibandFreq[1], juce::NotificationType::dontSendNotification);
+            multiFreqSlider3.setValue(multibandFreq[2], juce::NotificationType::dontSendNotification);
+        }
+    }
+    if (slider == &multiFreqSlider2 && lineState[1])
+    {
+        if (!getMovingState())
+        {
+            dragLinesByFreq(multiFreqSlider2.getValue(), getSortedIndex(1));
+            getFreqArray(multibandFreq);
+            multiFreqSlider1.setValue(multibandFreq[0], juce::NotificationType::dontSendNotification);
+            multiFreqSlider3.setValue(multibandFreq[2], juce::NotificationType::dontSendNotification);
+        }
+    }
+    if (slider == &multiFreqSlider3 && lineState[2])
+    {
+        if (!getMovingState())
+        {
+            dragLinesByFreq(multiFreqSlider3.getValue(), getSortedIndex(2));
+            getFreqArray(multibandFreq);
+            multiFreqSlider1.setValue(multibandFreq[0], juce::NotificationType::dontSendNotification);
+            multiFreqSlider2.setValue(multibandFreq[1], juce::NotificationType::dontSendNotification);
+        }
+    }
+
+}
+
+void Multiband::parameterValueChanged(int parameterIndex, float newValue)
+{
+    parametersChanged.set(true);
 }

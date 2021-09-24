@@ -2,7 +2,8 @@
 
 - Bug
 
-1. can't repaint multiband when it is disabled in DAWs like Ableton or Fl Studio
+1. Multiband freq 20-20000 Hz not precise!
+(except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
 
 - Feature
 
@@ -13,11 +14,9 @@
 5. add solo button between vertical lines
 6. mouse drag vertically to change the output volume, like Ozone or saturn2
 7. smooth spectrogram
-8. put all knobs into a menu like serum fx
-9. add lfo control
-10. change A/B color when switching
-11. add max input/output value for meters (currently RMS)
-12. add switch button for downsample / color / cutoff filter
+8. add lfo control
+9. change A/B color when switching
+10. add max input/output value for meters (currently RMS)
 
 - Improvement
 

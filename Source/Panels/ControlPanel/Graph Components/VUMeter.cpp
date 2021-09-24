@@ -12,7 +12,7 @@
 #include "VUMeter.h"
 #include "../../../GUI/InterfaceDefines.h"
 #include "../../../Utility/AudioHelpers.h"
-#include "../../../GUI/InterfaceDefines.h"
+
 //==============================================================================
 VUMeter::VUMeter(FireAudioProcessor* inProcessor)
 :   mProcessor(inProcessor),

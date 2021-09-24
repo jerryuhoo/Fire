@@ -14,7 +14,7 @@
 
 #include <JuceHeader.h>
 #include "../../GUI/LookAndFeel.h"
-#include "../SpectrogramPanel/Multiband.h"
+
 #include "../../Utility/VersionInfo.h"
 #include "../../GUI/InterfaceDefines.h"
 
@@ -37,6 +37,7 @@ public:
 
     void toggleAB();
     void copyAB();
+    void reset();
     
 private:
     juce::AudioProcessor &pluginProcessor;
@@ -104,7 +105,7 @@ public juce::Button::Listener,
 public juce::ComboBox::Listener
 {
 public:
-    StateComponent(StateAB &sab, StatePresets &sp, Multiband &m);
+    StateComponent(StateAB &sab, StatePresets &sp);
 
     void paint(juce::Graphics &) override;
     void resized() override;
@@ -126,7 +127,7 @@ public:
 private:
     StateAB &procStateAB;
     StatePresets &procStatePresets;
-    Multiband &multiband;
+    //Multiband multiband{};
     //FireAudioProcessorEditor& editor;
 
     std::unique_ptr<juce::FileChooser> fileChooser;

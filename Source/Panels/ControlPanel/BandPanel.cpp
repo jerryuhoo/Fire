@@ -304,7 +304,7 @@ void BandPanel::paint (juce::Graphics& g)
     bool isShapeSwitchOn = shapeSwitch.getToggleState();
     bool isCompressorSwitchOn = compressorSwitch.getToggleState();
     
-    setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, bandNum);
+    setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, focusBandNum);
     
     if (isOscSwitchOn)
     {
@@ -319,8 +319,8 @@ void BandPanel::paint (juce::Graphics& g)
     }
     if (isCompressorSwitchOn)
     {
-        setFourKnobsVisibility(*compRatioKnob1, *compRatioKnob2, *compRatioKnob3, *compRatioKnob4, bandNum);
-        setFourKnobsVisibility(*compThreshKnob1, *compThreshKnob2, *compThreshKnob3, *compThreshKnob4, bandNum);
+        setFourKnobsVisibility(*compRatioKnob1, *compRatioKnob2, *compRatioKnob3, *compRatioKnob4, focusBandNum);
+        setFourKnobsVisibility(*compThreshKnob1, *compThreshKnob2, *compThreshKnob3, *compThreshKnob4, focusBandNum);
         setInvisible(shapeVector);
         setInvisible(widthVector);
         CompRatioLabel.setVisible(true);
@@ -336,8 +336,8 @@ void BandPanel::paint (juce::Graphics& g)
     }
     if (isShapeSwitchOn)
     {
-        setFourKnobsVisibility(*recKnob1, *recKnob2, *recKnob3, *recKnob4, bandNum);
-        setFourKnobsVisibility(*biasKnob1, *biasKnob2, *biasKnob3, *biasKnob4, bandNum);
+        setFourKnobsVisibility(*recKnob1, *recKnob2, *recKnob3, *recKnob4, focusBandNum);
+        setFourKnobsVisibility(*biasKnob1, *biasKnob2, *biasKnob3, *biasKnob4, focusBandNum);
         setInvisible(compressorVector);
         setInvisible(widthVector);
         CompRatioLabel.setVisible(false);
@@ -353,7 +353,7 @@ void BandPanel::paint (juce::Graphics& g)
     }
     if (isWidthSwitchOn)
     {
-        setFourKnobsVisibility(*widthKnob1, *widthKnob2, *widthKnob3, *widthKnob4, bandNum);
+        setFourKnobsVisibility(*widthKnob1, *widthKnob2, *widthKnob3, *widthKnob4, focusBandNum);
         setInvisible(shapeVector);
         setInvisible(compressorVector);
         CompRatioLabel.setVisible(false);
@@ -368,11 +368,11 @@ void BandPanel::paint (juce::Graphics& g)
 //            graphPanel.getWidthGraph()->setZoomState(true);
     }
     
-    setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, bandNum);
-    setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, bandNum);
+    setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, focusBandNum);
+    setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, focusBandNum);
     
-    setFourKnobsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, bandNum);
-    setFourKnobsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, bandNum);
+    setFourKnobsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, focusBandNum);
+    setFourKnobsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, focusBandNum);
 
     g.setColour(COLOUR6);
     if (!isOscSwitchOn)
@@ -590,28 +590,28 @@ void BandPanel::setFourKnobsVisibility(juce::Component& component1, juce::Compon
     driveLabel.setVisible(true);
     mixLabel.setVisible(true);
     outputLabel.setVisible(true);
-    if (bandNum == 1)
+    if (bandNum == 0)
     {
         component1.setVisible(true);
         component2.setVisible(false);
         component3.setVisible(false);
         component4.setVisible(false);
     }
-    else if (bandNum == 2)
+    else if (bandNum == 1)
     {
         component1.setVisible(false);
         component2.setVisible(true);
         component3.setVisible(false);
         component4.setVisible(false);
     }
-    else if (bandNum == 3)
+    else if (bandNum == 2)
     {
         component1.setVisible(false);
         component2.setVisible(false);
         component3.setVisible(true);
         component4.setVisible(false);
     }
-    else if (bandNum == 4)
+    else if (bandNum == 3)
     {
         component1.setVisible(false);
         component2.setVisible(false);
@@ -620,9 +620,9 @@ void BandPanel::setFourKnobsVisibility(juce::Component& component1, juce::Compon
     }
 }
 
-void BandPanel::setBandNum(int num)
+void BandPanel::setFocusBandNum(int num)
 {
-    bandNum = num;
+    focusBandNum = num;
 }
 
 void BandPanel::setScale(float scale)

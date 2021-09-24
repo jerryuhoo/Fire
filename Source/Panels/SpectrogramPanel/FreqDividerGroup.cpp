@@ -15,7 +15,7 @@
 /** FreqDividerGroup is a component that contains FreqTextLabel, VerticalLine, and CloseButton
  */
 //==============================================================================
-FreqDividerGroup::FreqDividerGroup() : closeButton(verticalLine), freqTextLabel(verticalLine)
+FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p) : processor(p), closeButton(verticalLine), freqTextLabel(verticalLine)
 {
     margin = getHeight() / 20.0f;
     addAndMakeVisible(verticalLine);
@@ -24,7 +24,6 @@ FreqDividerGroup::FreqDividerGroup() : closeButton(verticalLine), freqTextLabel(
     // The parent component WON'T respond to mouse clicks,
     // while child components WILL respond to mouse clicks!
     setInterceptsMouseClicks(false, true);
-    
 }
 
 FreqDividerGroup::~FreqDividerGroup()
@@ -129,3 +128,7 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     verticalLine.setXPercent(newXPercent);
     setFrequency(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
 }
+
+
+
+

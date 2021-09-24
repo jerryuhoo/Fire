@@ -15,7 +15,7 @@
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     : AudioProcessorEditor(&p), processor(p),
-    stateComponent{p.stateAB, p.statePresets, multiband}, globalPanel(processor.treeState)
+    stateComponent{p.stateAB, p.statePresets}, globalPanel(processor.treeState)
 {
     // timer
     juce::Timer::startTimerHz(60.0f);
@@ -39,9 +39,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(multiband);
     addAndMakeVisible(filterControl);
     
-    multiFreqSlider1.addListener(this);
-    multiFreqSlider2.addListener(this);
-    multiFreqSlider3.addListener(this);
+    
     
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
@@ -96,23 +94,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 
-    multiFocusAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID1, multiFocusSlider1);
-    multiFocusAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID2, multiFocusSlider2);
-    multiFocusAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID3, multiFocusSlider3);
-    multiFocusAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_FOCUS_ID4, multiFocusSlider4);
     
-    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID1, multiEnableSlider1);
-    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID2, multiEnableSlider2);
-    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID3, multiEnableSlider3);
-    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BAND_ENABLE_ID4, multiEnableSlider4);
-    
-    multiFreqAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID1, multiFreqSlider1);
-    multiFreqAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID2, multiFreqSlider2);
-    multiFreqAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, FREQ_ID3, multiFreqSlider3);
-    
-    lineStateSliderAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID1, lineStateSlider1);
-    lineStateSliderAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID2, lineStateSlider2);
-    lineStateSliderAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, LINE_STATE_ID3, lineStateSlider3);
 
     setMenu(&distortionMode1);
     setMenu(&distortionMode2);
@@ -216,107 +198,50 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         stateComponent.setChangedState(false);
     }
 
-    // set value only when line is deleted, added, moving
-    if (multiband.getDeleteState() || multiband.getAddState() || multiband.getMovingState())
+    
+    
+    int focusBand = 0;
+    focusBand = multiband.getFocusBand();
+    if (focusBand == 0)
     {
-        if (multiband.getDeleteState())
-        {
-            multiband.updateLines("delete", multiband.getChangedIndex());
-            multiband.setDeleteState(false);
-        }
-        else if (multiband.getAddState())
-        {
-            multiband.updateLines("add", multiband.getChangedIndex());
-            multiband.setAddState(false);
-        }
-        else if (multiband.getMovingState())
-        {
-            multiband.updateLines("moving", multiband.getChangedIndex());
-            multiband.setMovingState(false);
-        }
-        updateFreqArray();
-
-        multiband.getLineState(lineState);
-        lineStateSlider1.setValue(lineState[0]);
-        lineStateSlider2.setValue(lineState[1]);
-        lineStateSlider3.setValue(lineState[2]);
-        
-        processor.setLineNum(multiband.getLineNum());
+        setDistortionGraph(MODE_ID1, DRIVE_ID1,
+            REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1);
+    }
+    else if (focusBand == 1)
+    {
+        setDistortionGraph(MODE_ID2, DRIVE_ID2,
+            REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2);
+    }
+    else if (focusBand == 2)
+    {
+        setDistortionGraph(MODE_ID3, DRIVE_ID3,
+            REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3);
+    }
+    else if (focusBand == 3)
+    {
+        setDistortionGraph(MODE_ID4, DRIVE_ID4,
+            REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
     }
     
-    multiband.getFocusArray(multibandFocus);
-    multiFocusSlider1.setValue(multibandFocus[0]);
-    multiFocusSlider2.setValue(multibandFocus[1]);
-    multiFocusSlider3.setValue(multibandFocus[2]);
-    multiFocusSlider4.setValue(multibandFocus[3]);
-    
-    // TODO: put this inside
-    multiband.getEnableArray(multibandEnable);
-    multiEnableSlider1.setValue(multibandEnable[0]);
-    multiEnableSlider2.setValue(multibandEnable[1]);
-    multiEnableSlider3.setValue(multibandEnable[2]);
-    multiEnableSlider4.setValue(multibandEnable[3]);
-    
-    int bandNum = 0;
-    if (multibandFocus[0])
-    {
-        bandNum = 1;
-    }
-    else if (multibandFocus[1])
-    {
-        bandNum = 2;
-    }
-    else if (multibandFocus[2])
-    {
-        bandNum = 3;
-    }
-    else if (multibandFocus[3])
-    {
-        bandNum = 4;
-    }
-    setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, bandNum);
+    setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
     
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
 
         multiband.setVisible(true);
         filterControl.setVisible(false);
-    
-        bandPanel.setBandNum(bandNum);
+        bandPanel.setFocusBandNum(focusBand);
         bandPanel.setVisible(true);
         globalPanel.setVisible(false);
-        
-        
-
     }
     else if (right)
     {
         multiband.setVisible(false);
         bandPanel.setVisible(false);
-        
         filterControl.setVisible(true);
         globalPanel.setVisible(true);
     }
     
-    if (multibandFocus[0])
-    {
-        setDistortionGraph(MODE_ID1, DRIVE_ID1,
-            REC_ID1, MIX_ID1, BIAS_ID1);
-    }
-    else if (multibandFocus[1])
-    {
-        setDistortionGraph(MODE_ID2, DRIVE_ID2,
-            REC_ID2, MIX_ID2, BIAS_ID2);
-    }
-    else if (multibandFocus[2])
-    {
-        setDistortionGraph(MODE_ID3, DRIVE_ID3,
-            REC_ID3, MIX_ID3, BIAS_ID3);
-    }
-    else if (multibandFocus[3])
-    {
-        setDistortionGraph(MODE_ID4, DRIVE_ID4,
-            REC_ID4, MIX_ID4, BIAS_ID4);
-    }
+    
 }
 
 void FireAudioProcessorEditor::resized()
@@ -408,13 +333,7 @@ void FireAudioProcessorEditor::resized()
 
 
 
-void FireAudioProcessorEditor::updateFreqArray()
-{
-    multiband.getFreqArray(multibandFreq);
-    multiFreqSlider1.setValue(multibandFreq[0]);
-    multiFreqSlider2.setValue(multibandFreq[1]);
-    multiFreqSlider3.setValue(multibandFreq[2]);
-}
+
 
 void FireAudioProcessorEditor::timerCallback()
 {
@@ -449,38 +368,6 @@ void FireAudioProcessorEditor::timerCallback()
 void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
 {
     
-
-    // ableton move sliders
-    if (slider == &multiFreqSlider1 && lineState[0])
-    {
-        if (!multiband.getMovingState())
-        {
-            multiband.dragLinesByFreq(multiFreqSlider1.getValue(), multiband.getSortedIndex(0));
-            multiband.getFreqArray(multibandFreq);
-            multiFreqSlider2.setValue(multibandFreq[1], juce::NotificationType::dontSendNotification);
-            multiFreqSlider3.setValue(multibandFreq[2], juce::NotificationType::dontSendNotification);
-        }
-    }
-    if (slider == &multiFreqSlider2 && lineState[1])
-    {
-        if (!multiband.getMovingState())
-        {
-            multiband.dragLinesByFreq(multiFreqSlider2.getValue(), multiband.getSortedIndex(1));
-            multiband.getFreqArray(multibandFreq);
-            multiFreqSlider1.setValue(multibandFreq[0], juce::NotificationType::dontSendNotification);
-            multiFreqSlider3.setValue(multibandFreq[2], juce::NotificationType::dontSendNotification);
-        }
-    }
-    if (slider == &multiFreqSlider3 && lineState[2])
-    {
-        if (!multiband.getMovingState())
-        {
-            multiband.dragLinesByFreq(multiFreqSlider3.getValue(), multiband.getSortedIndex(2));
-            multiband.getFreqArray(multibandFreq);
-            multiFreqSlider1.setValue(multibandFreq[0], juce::NotificationType::dontSendNotification);
-            multiFreqSlider2.setValue(multibandFreq[1], juce::NotificationType::dontSendNotification);
-        }
-    }
 }
 
 
@@ -599,11 +486,15 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
 
 
 void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, 
-    juce::String recId, juce::String mixId, juce::String biasId)
+    juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId)
 {
     // paint distortion function
     int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
+//    float drive = static_cast<int>(*processor.treeState.getRawParameterValue(driveId));
     float drive = processor.getNewDrive(driveId);
+    /// bypass audio will not run processblock
+    //drive = processor.safeMode(drive, processor.getHistoryArrayL(), safeId);
+    
     float rec = static_cast<float>(*processor.treeState.getRawParameterValue(recId));
     float mix = static_cast<float>(*processor.treeState.getRawParameterValue(mixId));
     float bias = static_cast<float>(*processor.treeState.getRawParameterValue(biasId));
@@ -643,28 +534,28 @@ void FireAudioProcessorEditor::setMultiband()
 
 void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
 {
-    if (bandNum == 1)
+    if (bandNum == 0)
     {
         component1.setVisible(true);
         component2.setVisible(false);
         component3.setVisible(false);
         component4.setVisible(false);
     }
-    else if (bandNum == 2)
+    else if (bandNum == 1)
     {
         component1.setVisible(false);
         component2.setVisible(true);
         component3.setVisible(false);
         component4.setVisible(false);
     }
-    else if (bandNum == 3)
+    else if (bandNum == 2)
     {
         component1.setVisible(false);
         component2.setVisible(false);
         component3.setVisible(true);
         component4.setVisible(false);
     }
-    else if (bandNum == 4)
+    else if (bandNum == 3)
     {
         component1.setVisible(false);
         component2.setVisible(false);

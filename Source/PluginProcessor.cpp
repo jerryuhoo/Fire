@@ -972,7 +972,6 @@ float FireAudioProcessor::safeMode(float drive, juce::AudioBuffer<float>& buffer
     }
     else
     {
-        
         setReductionPrecent(safeID, std::log2f(newDrive) / drive);
     }
     setSampleMaxValue(safeID, sampleMaxValue);
@@ -1028,7 +1027,6 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     float recValue = static_cast<float>(*treeState.getRawParameterValue(recID));
     
     float newDrive = safeMode(driveValue, bandBuffer, safeID);
-
     if (driveID == DRIVE_ID1)
         newDrive1 = newDrive;
     else if (driveID == DRIVE_ID2)

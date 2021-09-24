@@ -17,7 +17,7 @@
 //==============================================================================
 /*
 */
-class CloseButton : public juce::Component
+class CloseButton : public juce::ToggleButton//juce::Component
 {
 public:
     CloseButton(VerticalLine &v);

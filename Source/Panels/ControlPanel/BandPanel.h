@@ -29,7 +29,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void timerCallback() override;
-    void setBandNum(int num);
+    void setFocusBandNum(int num);
     void setScale(float scale);
     void changeSliderState(int bandNum, bool isPresetChanged);
 private:
@@ -209,7 +209,7 @@ private:
     HighPassButtonLnf highPassButtonLnf;
     FlatButtonLnf flatButtonLnf;
     
-    int bandNum;
+    int focusBandNum;
     float scale = 1.0f;
     
     float tempDriveValue[4] = {1, 1, 1, 1};

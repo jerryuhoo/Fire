@@ -15,13 +15,14 @@
 #include "CloseButton.h"
 #include "VerticalLine.h"
 #include "SpectrumComponent.h"
+#include "../../PluginProcessor.h"
 //==============================================================================
 /*
 */
-class FreqDividerGroup  : public juce::Component
+class FreqDividerGroup  : public /*juce::Component,*/ juce::Slider
 {
 public:
-    FreqDividerGroup();
+    FreqDividerGroup(FireAudioProcessor &);
     ~FreqDividerGroup() override;
 
     void paint (juce::Graphics&) override;
@@ -40,11 +41,14 @@ public:
     
     bool getDeleteState();
     void setDeleteState(bool deleteState);
+    
 private:
+    FireAudioProcessor &processor;
     float margin = 7.5f;
     float size = 15.0f;
     float width = 5.0f;
 
+    
     CloseButton closeButton;
     FreqTextLabel freqTextLabel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)

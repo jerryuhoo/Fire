@@ -113,6 +113,8 @@ public:
     void setReductionPrecent(juce::String safeId, float reductionPrecent);
     float getSampleMaxValue(juce::String safeId);
     void setSampleMaxValue(juce::String safeId, float sampleMaxValue);
+    
+    float safeMode(float drive, juce::AudioBuffer<float>& buffer, juce::String safeID);
 private:
     //==============================================================================
     
@@ -277,7 +279,7 @@ private:
 
     void processDistortion(juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor, DCFilter, GainProcessor>& overdrive);
     
-    float safeMode(float drive, juce::AudioBuffer<float>& buffer, juce::String safeID);
+    
     
     void normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother);
     

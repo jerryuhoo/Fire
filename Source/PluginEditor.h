@@ -41,7 +41,6 @@ public:
     void resized() override;
     void timerCallback() override;
     void setMultiband();
-   
 
 private:
     // This reference is provided as a quick way for your editor to
@@ -58,7 +57,7 @@ private:
     GraphPanel graphPanel {processor};
     
     // Multiband
-    Multiband multiband;
+    Multiband multiband {processor};
     
     // Filter Control
     FilterControl filterControl {processor};
@@ -69,25 +68,8 @@ private:
     // Global
     GlobalPanel globalPanel;
 
-    juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
-    juce::Slider multiEnableSlider1, multiEnableSlider2, multiEnableSlider3, multiEnableSlider4;
-    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3;
-    juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
-    
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
-    
-    bool multibandFocus[4];
-    bool multibandEnable[4];
-    int multibandFreq[3] = { 0, 0, 0 };
-    bool lineState[3];
-    float linePos[3];
-    
     // Spectrum
     SpectrumComponent spectrum;
-
 
     // Labels
     juce::Label hqLabel;
@@ -113,19 +95,14 @@ private:
         switchButtonsGlobal = 1005
     };
 
-    
-    
-
     void setMenu(juce::ComboBox* combobox);
-    
-    
+
     void setLinearSlider(juce::Slider& slider);
     
-    void updateFreqArray();
     
     
     void setDistortionGraph(juce::String modeId, juce::String driveId,
-        juce::String recId, juce::String mixId, juce::String biasId);
+        juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
 
     void initState();
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
@@ -150,13 +127,11 @@ private:
     juce::ComboBox distortionMode3;
     juce::ComboBox distortionMode4;
 
-
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
 
-    
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;

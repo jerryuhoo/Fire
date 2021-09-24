@@ -53,6 +53,11 @@ void StateAB::copyAB()
     saveStateToXml(pluginProcessor, ab);
 }
 
+void StateAB::reset()
+{
+    pluginProcessor.reset();
+}
+
 //==============================================================================
 //int createFileIfNonExistant(const File &file)
 //{
@@ -436,10 +441,9 @@ void StatePresets::initPreset()
 //==============================================================================
 
 //==============================================================================
-StateComponent::StateComponent(StateAB &sab, StatePresets &sp, Multiband &m)
+StateComponent::StateComponent(StateAB &sab, StatePresets &sp)
 : procStateAB{sab},
 procStatePresets{sp},
-multiband(m),
 toggleABButton{"A"},
 copyABButton{"Copy"},
 previousButton{"<"},
@@ -848,7 +852,8 @@ void StateComponent::popPresetMenu()
 
 void StateComponent::resetMultiband()
 {
-    multiband.reset();
+    //multiband.reset();
+    procStateAB.reset();
 }
 
 void StateComponent::setChangedState(bool state)

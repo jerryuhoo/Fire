@@ -16,7 +16,7 @@
 //==============================================================================
 /*
 */
-class EnableButton  : public juce::Component
+class EnableButton  : public juce::ToggleButton//juce::Component
 {
 public:
     EnableButton();

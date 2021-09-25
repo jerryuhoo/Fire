@@ -21,7 +21,7 @@
 /*
 */
 
-class Multiband  : public juce::Component, juce::Timer, juce::Slider::Listener, juce::AudioProcessorParameter::Listener
+class Multiband  : public juce::Component, juce::Timer, juce::Slider::Listener, juce::AudioProcessorParameter::Listener, juce::Button::Listener
 {
 public:
     Multiband(FireAudioProcessor &);
@@ -90,6 +90,7 @@ private:
     //void setLineRelatedBoundsByFreq(int i);
     void setSoloRelatedBounds();
     void sliderValueChanged(juce::Slider *slider) override;
+    void buttonClicked (juce::Button* button) override;
     void updateFreqArray();
     int sortedIndex[3] = { -1, -1, -1 };
 //    int frequency[3] = { 0, 0, 0 };
@@ -99,7 +100,6 @@ private:
     std::unique_ptr<EnableButton> enableButton[4];
     
     bool multibandFocus[4] = { true, false, false, false };
-    //bool lineState[3] = { false, false, false };
     bool lastLineState[3] = { false, false, false };
     //bool enableState[4] = { true, true, true, true };
     
@@ -109,19 +109,15 @@ private:
     juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
     juce::Slider multiEnableSlider1, multiEnableSlider2, multiEnableSlider3, multiEnableSlider4;
     juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3;
-    juce::Slider lineStateSlider1, lineStateSlider2, lineStateSlider3;
     
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lineStateSliderAttachment1, lineStateSliderAttachment2, lineStateSliderAttachment3;
-    
+
 //    bool multibandFocus[4];
     bool multibandEnable[4];
     int multibandFreq[3] = { 0, 0, 0 };
-    bool lineState[3];
     float linePos[3];
-    
     
     juce::Atomic<bool> parametersChanged {false};
     

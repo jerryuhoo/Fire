@@ -50,7 +50,6 @@ private:
     void mouseDown(const juce::MouseEvent &e) override;
     
     bool move = false;
-    bool mState = false;
     bool mDeleteState = false;
     float xPercent = 0.f;
     int leftIndex = -1; // left index

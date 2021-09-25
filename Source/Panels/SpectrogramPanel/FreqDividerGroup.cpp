@@ -15,11 +15,20 @@
 /** FreqDividerGroup is a component that contains FreqTextLabel, VerticalLine, and CloseButton
  */
 //==============================================================================
-FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p) : processor(p), closeButton(verticalLine), freqTextLabel(verticalLine)
+FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p, int index) : processor(p), closeButton(verticalLine), freqTextLabel(verticalLine)
 {
     margin = getHeight() / 20.0f;
     addAndMakeVisible(verticalLine);
     addAndMakeVisible(closeButton);
+//    closeButton.addListener(this);
+    closeButton.onClick = [this] { updateCloseButtonState (); };
+    
+    
+    if (index == 0) lineStatelId = LINE_STATE_ID1;
+    if (index == 1) lineStatelId = LINE_STATE_ID2;
+    if (index == 2) lineStatelId = LINE_STATE_ID3;
+    closeButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, lineStatelId, closeButton);
+
     addAndMakeVisible(freqTextLabel);
     // The parent component WON'T respond to mouse clicks,
     // while child components WILL respond to mouse clicks!
@@ -28,17 +37,14 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p) : processor(p), closeB
 
 FreqDividerGroup::~FreqDividerGroup()
 {
+    closeButton.removeListener(this);
 }
 
 void FreqDividerGroup::paint (juce::Graphics& g)
 {
-    verticalLine.setBounds(0, 0, getWidth() / 100.0f, getHeight());
-    closeButton.setBounds(width + margin, margin, size, size);
-    //freqTextLabel.setBounds(width + margin - width * 7, getHeight() / 5 + margin, width * 15, size);
-    freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size * 2);
-    
-    if (verticalLine.getState())
+    if (closeButton.getToggleState())
     {
+        
         if (verticalLine.isMoving() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
             freqTextLabel.setVisible(true);
@@ -47,11 +53,9 @@ void FreqDividerGroup::paint (juce::Graphics& g)
         {
             freqTextLabel.setVisible(false);
         }
-        closeButton.setVisible(true);
     }
     else
     {
-        closeButton.setVisible(false);
         setFrequency(-1);
         verticalLine.setXPercent(0);
     }
@@ -62,6 +66,10 @@ void FreqDividerGroup::resized()
     margin = getHeight() / 20.0f;
     size = getHeight() / 10.0f;
     width = verticalLine.getWidth() / 2.0f;
+    verticalLine.setBounds(0, 0, getWidth() / 100.0f, getHeight());
+    closeButton.setBounds(width + margin, margin, size, size);
+    //freqTextLabel.setBounds(width + margin - width * 7, getHeight() / 5 + margin, width * 15, size);
+    freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size * 2);
 }
 
 int FreqDividerGroup::getFrequency()
@@ -84,7 +92,7 @@ void FreqDividerGroup::setChangeState(bool changeState)
     freqTextLabel.setChangeState(changeState);
 }
 
-bool FreqDividerGroup::getDeleteState() // is frequency text's value changed?
+bool FreqDividerGroup::getDeleteState()
 {
     return verticalLine.getDeleteState();
 }
@@ -92,16 +100,6 @@ bool FreqDividerGroup::getDeleteState() // is frequency text's value changed?
 void FreqDividerGroup::setDeleteState(bool deleteState)
 {
     verticalLine.setDeleteState(deleteState);
-}
-
-bool FreqDividerGroup::getState() //enable or disable?
-{
-    return verticalLine.getState();
-}
-
-void FreqDividerGroup::setState(bool state)
-{
-    verticalLine.setState(state);
 }
 
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[])
@@ -129,6 +127,39 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     setFrequency(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
 }
 
+juce::ToggleButton& FreqDividerGroup::getCloseButton()
+{
+    return closeButton;
+}
 
+void FreqDividerGroup::setCloseButtonValue(bool value)
+{
+    closeButton.setToggleState(value, juce::NotificationType::sendNotification);
+    updateCloseButtonState();
+}
 
+void FreqDividerGroup::buttonClicked(juce::Button* button)
+{
 
+}
+
+void FreqDividerGroup::sliderValueChanged(juce::Slider *slider)
+{
+    
+}
+
+void FreqDividerGroup::updateCloseButtonState()
+{
+    if (closeButton.getToggleState())
+    {
+        setVisible(true);
+        closeButton.setVisible(true);
+    }
+    else
+    {
+        verticalLine.setDeleteState(true);
+        setVisible(false);
+        closeButton.setVisible(false);
+        freqTextLabel.setVisible(false);
+    }
+}

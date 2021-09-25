@@ -29,11 +29,9 @@ public:
 private:
     VerticalLine &verticalLine;
     bool isEntered = false;
-    
-    void mouseUp(const juce::MouseEvent &e) override;
+
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
 
-//    bool mState = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloseButton)
 };

@@ -19,10 +19,10 @@
 //==============================================================================
 /*
 */
-class FreqDividerGroup  : public /*juce::Component,*/ juce::Slider
+class FreqDividerGroup  : public juce::Component, /*juce::Slider,*/ juce::Slider::Listener, juce::Button::Listener
 {
 public:
-    FreqDividerGroup(FireAudioProcessor &);
+    FreqDividerGroup(FireAudioProcessor &, int index);
     ~FreqDividerGroup() override;
 
     void paint (juce::Graphics&) override;
@@ -36,20 +36,29 @@ public:
     bool getChangeState();
     void setChangeState(bool changeState);
     
-    bool getState();
-    void setState(bool state);
+//    bool getState();
+//    void setState(bool state);
     
     bool getDeleteState();
     void setDeleteState(bool deleteState);
     
+    juce::ToggleButton& getCloseButton();
+    void setCloseButtonValue(bool value);
+  
 private:
     FireAudioProcessor &processor;
     float margin = 7.5f;
     float size = 15.0f;
     float width = 5.0f;
-
+    juce::String lineStatelId = "";
     
+    void sliderValueChanged(juce::Slider *slider) override;
+    void buttonClicked (juce::Button* button) override;
+    void updateCloseButtonState();
     CloseButton closeButton;
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> closeButtonAttachment;
+    
     FreqTextLabel freqTextLabel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)
 };

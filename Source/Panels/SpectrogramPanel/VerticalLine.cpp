@@ -85,25 +85,6 @@ void VerticalLine::setMoving(bool move)
     this->move = move;
 }
 
-bool VerticalLine::getState()
-{
-    return mState;
-}
-
-void VerticalLine::setState(bool state)
-{
-    mState = state;
-    if (state == false)
-    {
-        // reset
-        setVisible(false);
-    }
-    else
-    {
-        setVisible(true);
-    }
-}
-
 bool VerticalLine::getDeleteState()
 {
     return mDeleteState;

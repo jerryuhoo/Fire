@@ -46,13 +46,6 @@ void CloseButton::resized()
     // components that your component contains..
 }
 
-void CloseButton::mouseUp(const juce::MouseEvent &e)
-{
-    setVisible(false);
-    verticalLine.setDeleteState(true);
-    verticalLine.setState(false);
-}
-
 void CloseButton::mouseEnter(const juce::MouseEvent &e)
 {
     isEntered = true;

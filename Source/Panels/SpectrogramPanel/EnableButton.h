@@ -25,14 +25,12 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    void mouseUp(const juce::MouseEvent &e) override;
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
     bool getState();
     void setState(bool state);
 private:
     bool isEntered = false;
-    bool mState = true;
     juce::Colour getColour();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EnableButton)
 };

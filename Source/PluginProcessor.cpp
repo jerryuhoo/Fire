@@ -461,10 +461,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandState3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
     multibandState4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
     
-    multibandFocus1 = *treeState.getRawParameterValue(BAND_FOCUS_ID1);
-    multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
-    multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
-    multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
+//    multibandFocus1 = *treeState.getRawParameterValue(BAND_FOCUS_ID1);
+//    multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
+//    multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
+//    multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
 
     if (multibandState1)
     {
@@ -1411,10 +1411,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID1, BAND_FOCUS_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID2, BAND_FOCUS_NAME2, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID3, BAND_FOCUS_NAME3, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID4, BAND_FOCUS_NAME4, false));
+//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID1, BAND_FOCUS_NAME1, true));
+//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID2, BAND_FOCUS_NAME2, false));
+//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID3, BAND_FOCUS_NAME3, false));
+//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID4, BAND_FOCUS_NAME4, false));
     
     return {parameters.begin(), parameters.end()};
 }

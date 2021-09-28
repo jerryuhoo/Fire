@@ -35,7 +35,7 @@ public:
     
     void getFocusArray(bool (&input)[4]);
     
-    void getFreqArray(int (&input)[3]);
+//    void getFreqArray(int (&input)[3]);
     void setFrequency(int freq1, int freq2, int freq3);
     void setFocus(bool focus1, bool focus2, bool focus3, bool focus4);
     void setLineState(bool state1, bool state2, bool state3);
@@ -73,15 +73,12 @@ private:
     float limitRight;
     bool isAdded = false;
     bool isMoving = false;
-    // bool isEnableChanged = false;
-//    // Spectrum
-//    SpectrumComponent spectrum;
     
     // multi-band
     void mouseUp(const juce::MouseEvent &e) override;
+    void mouseDrag(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
     int lineNum = 0;
-    int lastLineNum = 0;
     
     void changeFocus(int changedIndex, juce::String option);
     void changeEnable(int changedIndex, juce::String option);
@@ -93,7 +90,6 @@ private:
     void buttonClicked (juce::Button* button) override;
     void updateFreqArray();
     int sortedIndex[3] = { -1, -1, -1 };
-//    int frequency[3] = { 0, 0, 0 };
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];
@@ -106,18 +102,14 @@ private:
     
     // new added
     
-    juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
-    juce::Slider multiEnableSlider1, multiEnableSlider2, multiEnableSlider3, multiEnableSlider4;
-    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3;
+//    juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
+//    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3;
     
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
+//    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
+//    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
 
-//    bool multibandFocus[4];
-    bool multibandEnable[4];
     int multibandFreq[3] = { 0, 0, 0 };
-    float linePos[3];
     
     juce::Atomic<bool> parametersChanged {false};
     

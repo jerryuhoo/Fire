@@ -23,11 +23,25 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p, int index) : processor
 //    closeButton.addListener(this);
     closeButton.onClick = [this] { updateCloseButtonState (); };
     
+    verticalLine.addListener(this);
     
-    if (index == 0) lineStatelId = LINE_STATE_ID1;
-    if (index == 1) lineStatelId = LINE_STATE_ID2;
-    if (index == 2) lineStatelId = LINE_STATE_ID3;
+    if (index == 0)
+    {
+        lineStatelId = LINE_STATE_ID1;
+        sliderFreqId = FREQ_ID1;
+    }
+    if (index == 1)
+    {
+        lineStatelId = LINE_STATE_ID2;
+        sliderFreqId = FREQ_ID2;
+    }
+    if (index == 2)
+    {
+        lineStatelId = LINE_STATE_ID3;
+        sliderFreqId = FREQ_ID3;
+    }
     closeButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, lineStatelId, closeButton);
+    multiFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, sliderFreqId, verticalLine);
 
     addAndMakeVisible(freqTextLabel);
     // The parent component WON'T respond to mouse clicks,
@@ -56,7 +70,7 @@ void FreqDividerGroup::paint (juce::Graphics& g)
     }
     else
     {
-        setFrequency(-1);
+        freqTextLabel.setFreq(21);
         verticalLine.setXPercent(0);
     }
 }
@@ -72,25 +86,25 @@ void FreqDividerGroup::resized()
     freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size * 2);
 }
 
-int FreqDividerGroup::getFrequency()
-{
-    return  freqTextLabel.getFreq();
-}
+//int FreqDividerGroup::getFrequency()
+//{
+//    return  freqTextLabel.getFreq();
+//}
+//
+//void FreqDividerGroup::setFrequency(int frequency)
+//{
+//    freqTextLabel.setFreq(frequency);
+//}
 
-void FreqDividerGroup::setFrequency(int frequency)
-{
-    freqTextLabel.setFreq(frequency);
-}
-
-bool FreqDividerGroup::getChangeState() // is frequency text's value changed?
-{
-    return freqTextLabel.getChangeState();
-}
-
-void FreqDividerGroup::setChangeState(bool changeState)
-{
-    freqTextLabel.setChangeState(changeState);
-}
+//bool FreqDividerGroup::getChangeState() // is frequency text's value changed?
+//{
+//    return freqTextLabel.getChangeState();
+//}
+//
+//void FreqDividerGroup::setChangeState(bool changeState)
+//{
+//    freqTextLabel.setChangeState(changeState);
+//}
 
 bool FreqDividerGroup::getDeleteState()
 {
@@ -124,7 +138,7 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
         freqDividerGroup[sortedIndex[verticalLine.getRight()]]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup, sortedIndex);
     }
     verticalLine.setXPercent(newXPercent);
-    setFrequency(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
+    freqTextLabel.setFreq(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
 }
 
 juce::ToggleButton& FreqDividerGroup::getCloseButton()
@@ -145,7 +159,14 @@ void FreqDividerGroup::buttonClicked(juce::Button* button)
 
 void FreqDividerGroup::sliderValueChanged(juce::Slider *slider)
 {
-    
+    // ableton move sliders
+    if (slider == &verticalLine && getCloseButton().getToggleState())
+    {
+        //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
+        int freq = slider->getValue();
+        freqTextLabel.setFreq(freq);
+        this->setValue(freq);
+    }
 }
 
 void FreqDividerGroup::updateCloseButtonState()
@@ -163,3 +184,14 @@ void FreqDividerGroup::updateCloseButtonState()
         freqTextLabel.setVisible(false);
     }
 }
+
+void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent &e)
+{
+    // do nothing, override the silder function, which will reset value.
+}
+
+void FreqDividerGroup::mouseUp(const juce::MouseEvent &e) {}
+void FreqDividerGroup::mouseEnter(const juce::MouseEvent &e) {}
+void FreqDividerGroup::mouseExit(const juce::MouseEvent &e) {}
+void FreqDividerGroup::mouseDown(const juce::MouseEvent &e) {}
+void FreqDividerGroup::mouseDrag(const juce::MouseEvent &e) {}

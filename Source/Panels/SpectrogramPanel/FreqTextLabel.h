@@ -29,13 +29,13 @@ public:
     int getFreq();
     void setScale(float scale);
     bool isMouseOverCustom();
-    bool getChangeState();
-    void setChangeState(bool state);
+//    bool getChangeState();
+//    void setChangeState(bool state);
     
 private:
     VerticalLine &verticalLine;
     int mFrequency;
-    bool mState;
+//    bool mState;
     float mScale = 1.0f;
     bool changeState = false;
     juce::Label freqLabel;

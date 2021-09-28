@@ -38,18 +38,6 @@ void EnableButton::resized()
     // components that your component contains..
 }
 
-void EnableButton::mouseUp(const juce::MouseEvent &e)
-{
-    if (mState)
-    {
-        mState = false;
-    }
-    else
-    {
-        mState = true;
-    }
-}
-
 void EnableButton::mouseEnter(const juce::MouseEvent &e)
 {
     isEntered = true;
@@ -60,21 +48,11 @@ void EnableButton::mouseExit(const juce::MouseEvent &e)
     isEntered = false;
 }
 
-bool EnableButton::getState()
-{
-    return mState;
-}
-
-void EnableButton::setState(bool state)
-{
-    mState = state;
-}
-
 juce::Colour EnableButton::getColour()
 {
     if (isEntered)
     {
-        if (!mState)
+        if (!getToggleState())
         {
             return juce::Colours::grey.withAlpha(0.8f);
         }
@@ -85,7 +63,7 @@ juce::Colour EnableButton::getColour()
     }
     else
     {
-        if (!mState)
+        if (!getToggleState())
         {
             return juce::Colours::grey;
         }

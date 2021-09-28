@@ -53,6 +53,11 @@ void VerticalLine::mouseUp(const juce::MouseEvent &e)
     move = false;
 }
 
+void VerticalLine::mouseDoubleClick(const juce::MouseEvent &e)
+{
+    // do nothing, override the silder function, which will reset value.
+}
+
 void VerticalLine::mouseEnter(const juce::MouseEvent &e)
 {
     isEntered = true;

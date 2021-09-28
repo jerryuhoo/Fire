@@ -272,10 +272,10 @@ private:
     bool multibandState3 = true;
     bool multibandState4 = true;
     
-    bool multibandFocus1 = true;
-    bool multibandFocus2 = false;
-    bool multibandFocus3 = false;
-    bool multibandFocus4 = false;
+//    bool multibandFocus1 = true;
+//    bool multibandFocus2 = false;
+//    bool multibandFocus3 = false;
+//    bool multibandFocus4 = false;
 
     void processDistortion(juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor, DCFilter, GainProcessor>& overdrive);
     

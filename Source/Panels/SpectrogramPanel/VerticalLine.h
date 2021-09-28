@@ -16,7 +16,7 @@
 //==============================================================================
 /*
 */
-class VerticalLine  : public juce::Component
+class VerticalLine  : public juce::Slider
 {
 public:
     VerticalLine();
@@ -48,6 +48,7 @@ private:
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
+    void mouseDoubleClick(const juce::MouseEvent &e) override;
     
     bool move = false;
     bool mDeleteState = false;

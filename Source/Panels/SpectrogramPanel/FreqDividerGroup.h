@@ -19,7 +19,7 @@
 //==============================================================================
 /*
 */
-class FreqDividerGroup  : public juce::Component, /*juce::Slider,*/ juce::Slider::Listener, juce::Button::Listener
+class FreqDividerGroup  : /*public juce::Component*/public juce::Slider, juce::Slider::Listener, juce::Button::Listener
 {
 public:
     FreqDividerGroup(FireAudioProcessor &, int index);
@@ -29,12 +29,12 @@ public:
     void resized() override;
     VerticalLine verticalLine;
     
-    int getFrequency();
-    void setFrequency(int frequency);
+//    int getFrequency();
+//    void setFrequency(int frequency);
     
     void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[]);
-    bool getChangeState();
-    void setChangeState(bool changeState);
+//    bool getChangeState();
+//    void setChangeState(bool changeState);
     
 //    bool getState();
 //    void setState(bool state);
@@ -51,13 +51,22 @@ private:
     float size = 15.0f;
     float width = 5.0f;
     juce::String lineStatelId = "";
+    juce::String sliderFreqId = "";
     
+    void mouseUp(const juce::MouseEvent &e) override;
+    void mouseEnter(const juce::MouseEvent &e) override;
+    void mouseExit(const juce::MouseEvent &e) override;
+    void mouseDown(const juce::MouseEvent &e) override;
+    void mouseDrag(const juce::MouseEvent &e) override;
+    
+    void mouseDoubleClick(const juce::MouseEvent &e) override;
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
     void updateCloseButtonState();
     CloseButton closeButton;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> closeButtonAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)

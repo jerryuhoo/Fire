@@ -367,7 +367,7 @@ public:
         juce::ignoreUnused(width, height);
        
 #if ! JUCE_MAC
-        g.fillAll(findColour (juce::PopupMenu::backgroundColourId));
+        g.fillAll(COLOUR6);
         g.setColour(findColour(juce::PopupMenu::textColourId).withAlpha(0.6f)); //juce::LookAndFeel::findColour(juce::PopupMenu::textColourId)
         g.drawRect(0, 0, width, height);
 #endif

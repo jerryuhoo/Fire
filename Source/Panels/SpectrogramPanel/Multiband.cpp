@@ -274,13 +274,14 @@ void Multiband::changeFocus(int changedIndex, juce::String option)
         if (changedIndex == sortedIndex[i])
         {
             newLinePosIndex = i;
+            break;
         }
     }
     
     if (option == "add")
     {
         // change focus index when line is added
-        if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < enableButton[focusIndex + 1]->getX()))
+        if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < enableButton[focusIndex]->getX()))
         {
             multibandFocus[focusIndex] = false;
             multibandFocus[focusIndex + 1] = true;
@@ -288,10 +289,6 @@ void Multiband::changeFocus(int changedIndex, juce::String option)
     }
     else if (option == "delete")
     {
-        DBG(newLinePosIndex);
-        DBG(focusIndex);
-        DBG("--");
-
         // change focus index when line is deleted
         if (newLinePosIndex < focusIndex)
         {
@@ -441,12 +438,12 @@ void Multiband::updateLines(juce::String option, int changedIndex)
 //        }
 //    }
 
-    if (changedIndex != -1) // if not resizing
-    {
-        // change focus position
-        changeFocus(changedIndex, option);
-        changeEnable(changedIndex, option);
-    }
+//    if (changedIndex != -1) // if not resizing
+//    {
+//        // change focus position
+//        changeFocus(changedIndex, option);
+//        changeEnable(changedIndex, option);
+//    }
     
     
 //    setSoloRelatedBounds();
@@ -966,20 +963,20 @@ void Multiband::parameterValueChanged(int parameterIndex, float newValue)
 
 void Multiband::buttonClicked(juce::Button* button)
 {
-    for (int i = 0 ; i < 4; i++)
-    {
-        if (button == &*enableButton[i])
-        {
-            if (enableButton[i]->getToggleState())
-            {
-//                DBG("on");
-            }
-            else
-            {
-//                DBG("off");
-            }
-        }
-    }
+//    for (int i = 0 ; i < 4; i++)
+//    {
+//        if (button == &*enableButton[i])
+//        {
+//            if (enableButton[i]->getToggleState())
+//            {
+//
+//            }
+//            else
+//            {
+//
+//            }
+//        }
+//    }
     
     // delete line and reset deleted disabled band state
     for (int i = 0; i < 4; ++i)
@@ -991,14 +988,36 @@ void Multiband::buttonClicked(juce::Button* button)
     }
     
     bool isChanged = false;
-    // set soloButtons visibility
-    updateLineNumAndSortedIndex();
+    
+    // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
     for (int i = 0; i < 3; i++)
     {
-        if (button == &freqDividerGroup[i]->getCloseButton())
+        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
         {
-            if (button->getToggleState())
+            int changedIndex = i;
+            if (!button->getToggleState()) // delete line
             {
+                // change focus
+                changeFocus(changedIndex, "delete");
+                changeEnable(changedIndex, "delete");
+            }
+        }
+    }
+
+    updateLineNumAndSortedIndex();
+    
+    // set soloButtons visibility
+    for (int i = 0; i < 3; i++)
+    {
+        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
+        {
+            int changedIndex = i;
+            if (button->getToggleState()) // add a line
+            {
+                // change focus
+                changeFocus(changedIndex, "add");
+                changeEnable(changedIndex, "add");
+                
                 soloButton[sortedIndex[i] + 1]->setVisible(true);
                 enableButton[sortedIndex[i] + 1]->setVisible(true);
                 if (lineNum == 1)
@@ -1007,7 +1026,7 @@ void Multiband::buttonClicked(juce::Button* button)
                     enableButton[0]->setVisible(true);
                 }
             }
-            else
+            else // delete line
             {
                 soloButton[sortedIndex[i] + 1]->setVisible(false);
                 enableButton[sortedIndex[i] + 1]->setVisible(false);

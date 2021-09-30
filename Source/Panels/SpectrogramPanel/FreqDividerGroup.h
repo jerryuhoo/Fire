@@ -19,7 +19,7 @@
 //==============================================================================
 /*
 */
-class FreqDividerGroup  : /*public juce::Component*/public juce::Slider, juce::Slider::Listener, juce::Button::Listener
+class FreqDividerGroup  : public juce::Component, juce::Slider::Listener, juce::Button::Listener
 {
 public:
     FreqDividerGroup(FireAudioProcessor &, int index);
@@ -27,7 +27,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    VerticalLine verticalLine;
+    
     
 //    int getFrequency();
 //    void setFrequency(int frequency);
@@ -44,9 +44,10 @@ public:
     
     juce::ToggleButton& getCloseButton();
     void setCloseButtonValue(bool value);
-  
+    VerticalLine& getVerticalLine();
 private:
     FireAudioProcessor &processor;
+    VerticalLine verticalLine;
     float margin = 7.5f;
     float size = 15.0f;
     float width = 5.0f;

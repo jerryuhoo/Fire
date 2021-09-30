@@ -18,6 +18,7 @@
 FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p, int index) : processor(p), closeButton(verticalLine), freqTextLabel(verticalLine)
 {
     margin = getHeight() / 20.0f;
+
     addAndMakeVisible(verticalLine);
     addAndMakeVisible(closeButton);
 //    closeButton.addListener(this);
@@ -138,7 +139,13 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
         freqDividerGroup[sortedIndex[verticalLine.getRight()]]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup, sortedIndex);
     }
     verticalLine.setXPercent(newXPercent);
-    freqTextLabel.setFreq(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
+    verticalLine.setValue(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0));
+//    freqTextLabel.setFreq(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
+}
+
+VerticalLine& FreqDividerGroup::getVerticalLine()
+{
+    return verticalLine;
 }
 
 juce::ToggleButton& FreqDividerGroup::getCloseButton()
@@ -165,7 +172,6 @@ void FreqDividerGroup::sliderValueChanged(juce::Slider *slider)
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();
         freqTextLabel.setFreq(freq);
-        this->setValue(freq);
     }
 }
 

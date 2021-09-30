@@ -83,13 +83,14 @@ private:
     void changeFocus(int changedIndex, juce::String option);
     void changeEnable(int changedIndex, juce::String option);
     
+    void updateLineNumAndSortedIndex();
     void setLineRelatedBoundsByX(int i);
     //void setLineRelatedBoundsByFreq(int i);
     void setSoloRelatedBounds();
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
-    void updateFreqArray();
-    int sortedIndex[3] = { -1, -1, -1 };
+//    void updateFreqArray();
+    int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];

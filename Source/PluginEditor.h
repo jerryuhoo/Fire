@@ -98,9 +98,7 @@ private:
     void setMenu(juce::ComboBox* combobox);
 
     void setLinearSlider(juce::Slider& slider);
-    
-    
-    
+ 
     void setDistortionGraph(juce::String modeId, juce::String driveId,
         juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
 

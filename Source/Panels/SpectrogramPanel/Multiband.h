@@ -32,10 +32,7 @@ public:
     void timerCallback() override;
     
     int getLineNum();
-    
     void getFocusArray(bool (&input)[4]);
-    
-//    void getFreqArray(int (&input)[3]);
     void setFrequency(int freq1, int freq2, int freq3);
     void setFocus(bool focus1, bool focus2, bool focus3, bool focus4);
     void setLineState(bool state1, bool state2, bool state3);
@@ -44,7 +41,6 @@ public:
     void getEnableArray(bool(&input)[4]);
 
     void reset();
-    //void setLineNum(int lineNum);
     void setLinePos(float pos1, float pos2, float pos3);
     void getLinePos(float (&input)[3]);
     
@@ -56,7 +52,6 @@ public:
     void setMovingState(bool state);
     bool getDeleteState();
     void setDeleteState(bool state);
-    int getChangedIndex();
     int getSortedIndex(int index);
     void dragLines(float xPercent);
     void dragLinesByFreq(int freq, int index);
@@ -91,7 +86,7 @@ private:
     void setSoloRelatedBounds();
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
-//    void updateFreqArray();
+
     int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
@@ -99,21 +94,9 @@ private:
     std::unique_ptr<EnableButton> enableButton[4];
     
     bool multibandFocus[4] = { true, false, false, false };
-    bool lastLineState[3] = { false, false, false };
-    //bool enableState[4] = { true, true, true, true };
-    
-    
-    // new added
-    
-//    juce::Slider multiFocusSlider1, multiFocusSlider2, multiFocusSlider3, multiFocusSlider4;
-//    juce::Slider multiFreqSlider1, multiFreqSlider2, multiFreqSlider3;
-    
-//    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFocusAttachment1, multiFocusAttachment2, multiFocusAttachment3, multiFocusAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
-//    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment1, multiFreqAttachment2, multiFreqAttachment3;
 
-    int multibandFreq[3] = { 0, 0, 0 };
-    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
+
     juce::Atomic<bool> parametersChanged {false};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)

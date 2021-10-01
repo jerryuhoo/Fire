@@ -450,6 +450,23 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     int freqValue2 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID2));
     int freqValue3 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID3));
 
+    bool lineState1 = static_cast<int>(*treeState.getRawParameterValue(LINE_STATE_ID1));
+    bool lineState2 = static_cast<int>(*treeState.getRawParameterValue(LINE_STATE_ID2));
+    bool lineState3 = static_cast<int>(*treeState.getRawParameterValue(LINE_STATE_ID3));
+    
+    // sort
+    std::array<int, 3> freqArray = {0, 0, 0};
+    int count = 0;
+    if (lineState1) freqArray[count++] = freqValue1;
+    if (lineState2) freqArray[count++] = freqValue2;
+    if (lineState3) freqArray[count++] = freqValue3;
+
+    std::sort(freqArray.begin(), freqArray.begin() + count);
+    
+    freqValue1 = freqArray[0];
+    freqValue2 = freqArray[1];
+    freqValue3 = freqArray[2];
+    
     auto numSamples  = buffer.getNumSamples();
     mBuffer1.makeCopyOf(buffer);
     mBuffer2.makeCopyOf(buffer);
@@ -1238,7 +1255,6 @@ void FireAudioProcessor::setLineNum(int lineNum)
     this->lineNum = lineNum;
 }
 
-
 // VU meters
 float FireAudioProcessor::getInputMeterLevel(int channel)
 {
@@ -1413,11 +1429,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
-    
-//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID1, BAND_FOCUS_NAME1, true));
-//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID2, BAND_FOCUS_NAME2, false));
-//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID3, BAND_FOCUS_NAME3, false));
-//    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_FOCUS_ID4, BAND_FOCUS_NAME4, false));
     
     return {parameters.begin(), parameters.end()};
 }

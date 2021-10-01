@@ -28,16 +28,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     
-    
-//    int getFrequency();
-//    void setFrequency(int frequency);
-    
     void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[]);
-//    bool getChangeState();
-//    void setChangeState(bool changeState);
-    
-//    bool getState();
-//    void setState(bool state);
     
     bool getDeleteState();
     void setDeleteState(bool deleteState);

@@ -38,9 +38,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(spectrum);
     addAndMakeVisible(multiband);
     addAndMakeVisible(filterControl);
-    
-    
-    
+
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
     
@@ -94,8 +92,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 
-    
-
     setMenu(&distortionMode1);
     setMenu(&distortionMode2);
     setMenu(&distortionMode3);
@@ -125,8 +121,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // resize limit
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
-
-    //updateToggleState();
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
@@ -147,7 +141,6 @@ void FireAudioProcessorEditor::initEditor()
 {
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
     
-    //DBG(processor.getPresetId());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     
@@ -191,15 +184,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     // draw layer 2
     g.setColour(COLOUR6);
     g.fillRect(0, part1, getWidth(), part2);
-    
-    if (stateComponent.getChangedState()) // only for clicked the same preset in preset box
-    {
-        initState();
-        stateComponent.setChangedState(false);
-    }
 
-    
-    
     int focusBand = 0;
     focusBand = multiband.getFocusBand();
     if (focusBand == 0)
@@ -226,7 +211,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
     
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
-
         multiband.setVisible(true);
         filterControl.setVisible(false);
         bandPanel.setFocusBandNum(focusBand);
@@ -254,7 +238,6 @@ void FireAudioProcessorEditor::resized()
     processor.setSavedWidth(getWidth());
 
     // knobs
-
     float scale = juce::jmin(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
     float scaleMax = juce::jmax(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
 
@@ -283,7 +266,6 @@ void FireAudioProcessorEditor::resized()
     juce::Rectangle<int> controlAreaTop = area.removeFromTop(area.getHeight() / 5);
     juce::Rectangle<int> controlAreaMid = area.removeFromTop(area.getHeight() / 4 * 3);
 
-    
     // distortion menu
     controlAreaTop.removeFromLeft(OSC_X); // x position
     juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft(OSC_WIDTH); // width
@@ -294,22 +276,15 @@ void FireAudioProcessorEditor::resized()
     distortionMode3.setBounds(distortionModeArea);
     distortionMode4.setBounds(distortionModeArea);
 
-    
     juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
     graphArea.removeFromLeft(graphArea.getWidth() / 10);
+    
     // Graph Panel
     graphPanel.setBounds(graphArea);
     
     controlArea.removeFromLeft(getWidth() / 7 * 2);
     bandPanel.setBounds(controlArea);
     globalPanel.setBounds(controlAreaMid);
-//    oscSwitch.setBounds(switchArea.removeFromTop(switchArea.getHeight() / 4));
-//    shapeSwitch.setBounds(switchArea.removeFromTop(switchArea.getHeight() / 3));
-//    compressorSwitch.setBounds(switchArea.removeFromTop(switchArea.getHeight() / 2));
-//    widthSwitch.setBounds(switchArea);
-//    
-//    filterSwitch.setBounds(oscSwitch.getX(), oscSwitch.getY(), SWITCH_WIDTH, oscSwitch.getHeight() * 2);
-//    otherSwitch.setBounds(compressorSwitch.getX(), compressorSwitch.getY(), SWITCH_WIDTH, oscSwitch.getHeight() * 2);
     
     juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
     juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight(getWidth() / 7);
@@ -317,11 +292,9 @@ void FireAudioProcessorEditor::resized()
     controlLeftKnobLeftArea.removeFromTop(controlLeftKnobLeftArea.getHeight() / 4);
     controlLeftKnobLeftArea.removeFromBottom(controlLeftKnobLeftArea.getHeight() / 5);
 
-    
     controlLeftKnobRightArea.removeFromTop(controlLeftKnobRightArea.getHeight() / 4);
     controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5);
     
-
     // set look and feel scale
     otherLookAndFeel.scale = scale;
 //    roundedButtonLnf.scale = scale;
@@ -330,10 +303,6 @@ void FireAudioProcessorEditor::resized()
 //    bandPassButtonLnf.scale = scale;
 //    highPassButtonLnf.scale = scale;
 }
-
-
-
-
 
 void FireAudioProcessorEditor::timerCallback()
 {
@@ -370,8 +339,6 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider *slider)
     
 }
 
-
-
 void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
 {
     if (clickedButton == stateComponent.getToggleABButton())
@@ -384,20 +351,6 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
             clickedButton->setButtonText("A");
         initState();
     }
-    
-//    if (clickedButton == &copyABButton)
-//        procStateAB.copyAB();
-//    if (clickedButton == &previousButton)
-//        setPreviousPreset();
-//    if (clickedButton == &nextButton)
-//        setNextPreset();
-//    if (clickedButton == &savePresetButton)
-//        savePresetAlertWindow();
-//    //if (clickedButton == &deletePresetButton)
-//    //    deletePresetAndRefresh();
-//    if (clickedButton == &menuButton)
-//        //openPresetFolder();
-//        popPresetMenu();
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
@@ -419,7 +372,7 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
         {
             stateComponent.updatePresetBox(selectedId);
         }
-        initState(); // see line 598
+        initState();
     }
 }
 
@@ -427,14 +380,12 @@ void FireAudioProcessorEditor::initState()
 {
     // init
     setMultiband();
-    //updateToggleState(); // TEMP !!!!
+
     changeSliderState(&distortionMode1);
     changeSliderState(&distortionMode2);
     changeSliderState(&distortionMode3);
     changeSliderState(&distortionMode4);
 }
-
-
 
 void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
 {
@@ -469,21 +420,12 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
     combobox->addListener(this);
 }
 
-
-
-
 void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
 {
     addAndMakeVisible(slider);
     slider.setSliderStyle(juce::Slider::LinearVertical);
     slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
-
-
-
-
-
-
 
 void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, 
     juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId)
@@ -513,7 +455,7 @@ void FireAudioProcessorEditor::setMultiband()
     int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
     int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
     int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
-    DBG(freq1);
+
     multiband.setFrequency(freq1, freq2, freq3);
     
     float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1 / (44100 / 2.0)));
@@ -527,9 +469,7 @@ void FireAudioProcessorEditor::setMultiband()
     bool enableState4 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID4));
     multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
     
-    
     multiband.updateLines();
-//    multiband.setCloseButtonState();
     multiband.setFocus();
     processor.setLineNum(multiband.getLineNum());
 }

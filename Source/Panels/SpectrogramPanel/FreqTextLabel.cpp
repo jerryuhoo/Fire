@@ -17,7 +17,6 @@ FreqTextLabel::FreqTextLabel(VerticalLine &v) : verticalLine(v)
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
     mFrequency = -1;
-//    mState = false;
     addAndMakeVisible(freqLabel);
     freqLabel.setEditable(true);
     setLookAndFeel(&flatButtonLnf);
@@ -56,12 +55,9 @@ void FreqTextLabel::paint (juce::Graphics& g)
     freqLabel.onTextChange = [this]
     {
         mFrequency = freqLabel.getText().getIntValue();
-//        changeState = true;
         verticalLine.setValue(mFrequency);
         // trigger silderValueChanged in FreqDividerGroup?
     };
-
-    //freqLabel.setTextToShowWhenEmpty ("1", COLOUR1);
 }
 
 void FreqTextLabel::resized()
@@ -88,13 +84,3 @@ bool FreqTextLabel::isMouseOverCustom()
 {
     return isMouseOver() || freqLabel.isMouseOverOrDragging() || freqLabel.isBeingEdited();
 }
-//
-//bool FreqTextLabel::getChangeState()
-//{
-//    return changeState;
-//}
-//
-//void FreqTextLabel::setChangeState(bool state)
-//{
-//    changeState = state;
-//}

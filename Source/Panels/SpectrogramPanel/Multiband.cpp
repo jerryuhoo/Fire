@@ -100,22 +100,19 @@ void Multiband::paint (juce::Graphics& g)
     {
         if (getDeleteState())
         {
-            updateLineNumAndSortedIndex();
-            updateLineLeftRightIndex();
+            updateLines();
 //            updateLines("delete", getChangedIndex());
             setDeleteState(false);
         }
         else if (getAddState())
         {
-            updateLineNumAndSortedIndex();
-            updateLineLeftRightIndex();
+            updateLines();
 //            updateLines("add", getChangedIndex());
             setAddState(false);
         }
         else if (getMovingState())
         {
-            updateLineNumAndSortedIndex();
-            updateLineLeftRightIndex();
+            updateLines();
 //            updateLines("moving", getChangedIndex());
             setMovingState(false);
         }
@@ -236,7 +233,7 @@ void Multiband::resized()
         width = 5.0f;
     }
 
-//    updateLines("resize", -1);
+    updateLines();
     setSoloRelatedBounds();
 }
 
@@ -359,6 +356,12 @@ void Multiband::changeEnable(int changedIndex, juce::String option)
             enableButton[0]->setToggleState(true, juce::NotificationType::sendNotification);;
         }
     }
+}
+
+void Multiband::updateLines()
+{
+    updateLineNumAndSortedIndex();
+    updateLineLeftRightIndex();
 }
 
 void Multiband::updateLineNumAndSortedIndex()
@@ -495,9 +498,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
-//                    updateLines("add", changedIndex);
-                    updateLineNumAndSortedIndex();
-                    updateLineLeftRightIndex();
+                    updateLines();
                     isAdded = true;
                 }
             }
@@ -613,8 +614,8 @@ void Multiband::dragLines(float xPercent)
         }
     }
 
-//    if (isMoving) // drag
-//    {
+    if (isMoving) // drag
+    {
 //        for (int i = 0; i < lineNum; i++)
 //        {
 //            if (freqDividerGroup[sortedIndex[i]]->getCloseButton().getToggleState())
@@ -624,9 +625,9 @@ void Multiband::dragLines(float xPercent)
 //                //[delete]frequency[sortedIndex[i]] = freqDividerGroup[sortedIndex[i]]->getFrequency();
 //            }
 //        }
-//        setSoloRelatedBounds();
-//
-//    }
+        setSoloRelatedBounds();
+
+    }
 //    else // change freq text
 //    {
 //        for (int i = 0; i < lineNum; i++)
@@ -656,7 +657,7 @@ void Multiband::dragLines(float xPercent)
 void Multiband::dragLinesByFreq(int freq, int index)
 {
     if (index < 0) return;
-    if (/*!isMoving &&*/ freqDividerGroup[index]->getCloseButton().getToggleState())
+    if (!isMoving && freqDividerGroup[index]->getCloseButton().getToggleState())
     {
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq / (44100 / 2.0)));
         freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
@@ -928,6 +929,8 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
         if (slider == &freqDividerGroup[sortedIndex[i]]->getVerticalLine())
         {
             dragLinesByFreq(freqDividerGroup[sortedIndex[i]]->getVerticalLine().getValue(), sortedIndex[i]);
+//            DBG(freqDividerGroup[sortedIndex[i]]->getVerticalLine().getValue());
+//            DBG("changed");
         }
     }
 }
@@ -980,8 +983,7 @@ void Multiband::buttonClicked(juce::Button* button)
         }
     }
 
-    updateLineNumAndSortedIndex();
-    updateLineLeftRightIndex();
+    updateLines();
     
     // set soloButtons visibility
     for (int i = 0; i < 3; i++)

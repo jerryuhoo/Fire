@@ -61,6 +61,7 @@ public:
     void dragLines(float xPercent);
     void dragLinesByFreq(int freq, int index);
     int getFocusBand();
+    void updateLines();
     
     void parameterValueChanged (int parameterIndex, float newValue) override;
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }

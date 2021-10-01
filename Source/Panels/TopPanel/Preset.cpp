@@ -279,23 +279,7 @@ bool StatePresets::savePreset(juce::File savePath)
 
 void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetId)
 {
-    int index = 0;
-//    forEachXmlChildElement(parentXml, child)
-//    {
-//        //DBG(child->getTagName());
-//        //DBG(presetId);
-//        if (child->hasAttribute("presetName") && child->getTagName() == presetId)
-//        {
-//            juce::XmlElement loadThisChild{*child}; // (0 indexed method)
-//            loadStateFromXml(loadThisChild, pluginProcessor);
-//            statePresetName = child->getAttributeValue(0); //presetName index is 0
-//        }
-//        else
-//        {
-//            recursivePresetLoad(*child, presetId);
-//        }
-//        index++;
-//    }
+//    int index = 0;
     
     for (auto* child : parentXml.getChildIterator())
     {
@@ -306,12 +290,13 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
             juce::XmlElement loadThisChild{*child}; // (0 indexed method)
             loadStateFromXml(loadThisChild, pluginProcessor);
             statePresetName = child->getAttributeValue(0); //presetName index is 0
+            break;
         }
         else
         {
             recursivePresetLoad(*child, presetId);
         }
-        index++;
+//        index++;
     }
 }
 

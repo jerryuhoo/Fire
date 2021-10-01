@@ -44,6 +44,16 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ## 5. Update Notes
 
+2020-10-1 (version 0.9.3)
+
+Warning: Previous presets may not work, you have to resave your preset!
+
+1. Redesign GUI.
+2. Fixed multiple bugs of multiband control(enable buttons, focus band, vertical lines, etc.), redesigned the code structure.
+3. Added new filter control and filter graph.
+4. Fixed other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
+5. Now you can click graph to zoom in and out.
+
 2020-9-7 (version 0.9.2)
 
 1. GUI improvement.

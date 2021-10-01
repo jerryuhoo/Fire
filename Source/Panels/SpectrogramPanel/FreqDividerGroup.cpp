@@ -21,7 +21,6 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p, int index) : processor
 
     addAndMakeVisible(verticalLine);
     addAndMakeVisible(closeButton);
-//    closeButton.addListener(this);
     closeButton.onClick = [this] { updateCloseButtonState (); };
     
     verticalLine.addListener(this);
@@ -87,26 +86,6 @@ void FreqDividerGroup::resized()
     freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size * 2);
 }
 
-//int FreqDividerGroup::getFrequency()
-//{
-//    return  freqTextLabel.getFreq();
-//}
-//
-//void FreqDividerGroup::setFrequency(int frequency)
-//{
-//    freqTextLabel.setFreq(frequency);
-//}
-
-//bool FreqDividerGroup::getChangeState() // is frequency text's value changed?
-//{
-//    return freqTextLabel.getChangeState();
-//}
-//
-//void FreqDividerGroup::setChangeState(bool changeState)
-//{
-//    freqTextLabel.setChangeState(changeState);
-//}
-
 bool FreqDividerGroup::getDeleteState()
 {
     return verticalLine.getDeleteState();
@@ -140,7 +119,6 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     }
     verticalLine.setXPercent(newXPercent);
     verticalLine.setValue(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0));
-//    freqTextLabel.setFreq(static_cast<int>(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0)));
 }
 
 VerticalLine& FreqDividerGroup::getVerticalLine()

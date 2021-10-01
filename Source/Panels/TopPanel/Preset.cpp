@@ -283,8 +283,6 @@ void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String 
     
     for (auto* child : parentXml.getChildIterator())
     {
-        //DBG(child->getTagName());
-        //DBG(presetId);
         if (child->hasAttribute("presetName") && child->getTagName() == presetId)
         {
             juce::XmlElement loadThisChild{*child}; // (0 indexed method)
@@ -324,37 +322,6 @@ juce::StringRef StatePresets::getPresetName()
 
 void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::ComboBox &menu, int &index)
 {
-    
-//    forEachXmlChildElement(parentXml, child) // should avoid macro?
-//    {
-//        if (child->hasAttribute("presetName"))
-//        {
-//            // is preset
-//            index++;
-//            juce::String n = child->getStringAttribute("presetName");
-//            if (n == "")
-//                n = "(Unnamed preset)";
-//            menu.addItem(n, index);
-//            // save new preset and rescan, this will return new preset index
-//            if (statePresetName == n)
-//            {
-//                mCurrentPresetId = index;
-//            }
-//        }
-//        else
-//        {
-//            // is folder
-//            if (index != 0)
-//            {
-//                menu.addSeparator();
-//            }
-//            juce::String n = child->getTagName();
-//            menu.addSectionHeading(n);
-//
-//            recursivePresetNameAdd(*child, menu, index);
-//        }
-//    }
-    
     for (auto* child : parentXml.getChildIterator())
     {
         if (child->hasAttribute("presetName"))
@@ -553,13 +520,7 @@ void StateComponent::buttonClicked(juce::Button *clickedButton)
 {
 //    if (clickedButton == &toggleABButton)
 //    {
-//        procStateAB.toggleAB();
-//        isChanged = true;
-//
-//        if (toggleABButton.getButtonText() == "A")
-//            toggleABButton.setButtonText("B");
-//        else
-//            toggleABButton.setButtonText("A");
+//        the code is moved to Editor
 //    }
     if (clickedButton == &copyABButton)
         procStateAB.copyAB();
@@ -572,7 +533,6 @@ void StateComponent::buttonClicked(juce::Button *clickedButton)
     //if (clickedButton == &deletePresetButton)
     //    deletePresetAndRefresh();
     if (clickedButton == &menuButton)
-        //openPresetFolder();
         popPresetMenu();
 }
 
@@ -581,12 +541,8 @@ void StateComponent::setPreviousPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() - 1;
     if (presetIndex > 0)
     {
-        //juce::String presetId = (juce::String)presetIndex;
-        //procStatePresets.setCurrentPresetId(presetIndex);
-        //procStatePresets.loadPreset(presetId);
         presetBox.setSelectedId(presetIndex);
     }
-    //isChanged = true;
 }
 
 void StateComponent::setNextPreset()
@@ -594,26 +550,13 @@ void StateComponent::setNextPreset()
     int presetIndex = procStatePresets.getCurrentPresetId() + 1;
     if (presetIndex <= procStatePresets.getNumPresets())
     {
-        //juce::String presetId = (juce::String)presetIndex;
-        //procStatePresets.setCurrentPresetId(presetIndex);
-        //procStatePresets.loadPreset(presetId);
         presetBox.setSelectedId(presetIndex);
     }
-    //isChanged = true;
 }
 
 void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
 {
-//    int selectedId = changedComboBox->getSelectedId();
-//
-//    // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
-//    // next, previous, change combobox will change the selectedId, but currentId will change only after this.
-//    // and then, it will load the preset.
-//    
-//    if (procStatePresets.getCurrentPresetId() != selectedId)
-//    {
-//        updatePresetBox(selectedId);
-//    }
+    // use presetBox.onChange instead!
 }
 
 void StateComponent::updatePresetBox(int selectedId) // when preset is changed
@@ -658,7 +601,6 @@ void StateComponent::deletePresetAndRefresh()
     }
     else
     {
-//        juce::NativeMessageBox::showMessageBox(juce::AlertWindow::NoIcon, "Warning", "No preset!");
         juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::NoIcon, "Warning", "No preset!");
     }
 }
@@ -667,28 +609,12 @@ void StateComponent::savePresetAlertWindow()
 {
     juce::File userFile = procStatePresets.getFile().getChildFile("User");
     creatFolderIfNotExist(userFile);
-    /*
-    juce::FileChooser filechooser("save preset", userFile, "*", true, false, nullptr);
-    if (filechooser.browseForFileToSave(true))
-    {
-        // this is really shit code, but I don't have any other way to solve this shit problem!!!
-        juce::File inputName = filechooser.getResult();
-        bool isSaved = procStatePresets.savePreset(inputName);
-        if (isSaved)
-        {
-            refreshPresetBox();
-            presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
-        }
-    }
-     */
-    
-    //fileChooser = std::make_unique<juce::FileChooser> ("save preset", userFile, "*", true, false, nullptr);
+
     fileChooser = std::make_unique<juce::FileChooser> ("save preset", userFile, "*");
     auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
 
     fileChooser->launchAsync (folderChooserFlags, [this] (const juce::FileChooser& chooser)
     {
-        // this is really shit code, but I don't have any other way to solve this shit problem!!!
         juce::File inputName = chooser.getResult();
         bool isSaved = procStatePresets.savePreset(inputName);
         if (isSaved)
@@ -757,9 +683,6 @@ void StateComponent::popPresetMenu()
     float scale = juce::jmin(heightScale, widthScale);
     otherLookAndFeel.scale = scale;
     
-//    int result = presetMenu.show(0, 250 * widthScale,
-//                                 10, 30 * heightScale);
-    
     presetMenu.showMenuAsync(juce::PopupMenu::Options().withStandardItemHeight(30 * heightScale)
                                                        .withMinimumWidth(250 * widthScale)
                              , [this](int result)
@@ -791,29 +714,10 @@ void StateComponent::popPresetMenu()
             
             if (versionInfo == nullptr)
             {
-    //            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::WarningIcon,
-    //                "Error", "No release found or disconnected from the network!", nullptr);
                 juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Error", "No release found or disconnected from the network!");
-    //            DBG("No release found or other error occurred!");
             }
             else if(versionInfo->versionString != VERSION)
             {
-                
-                
-                /** old code
-                 */
-                /*
-                juce::String version = versionInfo->versionString;
-                bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                    "New Version", "New version " + version + " available, do you want to download it?", nullptr, nullptr);
-                if (choice)
-                {
-                    juce::URL gitHubWebsite("https://github.com/jerryuhoo/Fire/releases/tag/" + version);
-                    gitHubWebsite.launchInDefaultBrowser();
-                } */
-                /** old code
-                 */
-                
                 version = versionInfo->versionString;
                 const auto callback = juce::ModalCallbackFunction::create ([this](int result) {
                     if (result == 1) // result == 1 means user clicks OK
@@ -827,8 +731,6 @@ void StateComponent::popPresetMenu()
             }
             else
             {
-    //            juce::NativeMessageBox::showMessageBox(juce::AlertWindow::InfoIcon,
-    //                "New Version", "You are up to date!", nullptr);
                 juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::InfoIcon, "New Version", "You are up to date!");
             }
         }
@@ -837,7 +739,6 @@ void StateComponent::popPresetMenu()
 
 void StateComponent::resetMultiband()
 {
-    //multiband.reset();
     procStateAB.reset();
 }
 
@@ -885,16 +786,5 @@ juce::TextButton* StateComponent::getNextButton()
 {
     return &nextButton;
 }
-
-//juce::TextButton& StateComponent::getNextButton()
-//{
-//    return nextButton;
-//}
-//
-//juce::TextButton& StateComponent::getPreviousButton()
-//{
-//    return previousButton;
-//}
-
 
 } // namespace state

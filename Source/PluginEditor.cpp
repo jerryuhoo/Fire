@@ -526,7 +526,8 @@ void FireAudioProcessorEditor::setMultiband()
     bool enableState4 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID4));
     multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
     
-    multiband.updateLines("reset", -1);
+    
+//    multiband.updateLines("reset", -1);
     multiband.setCloseButtonState();
     multiband.setFocus();
     processor.setLineNum(multiband.getLineNum());

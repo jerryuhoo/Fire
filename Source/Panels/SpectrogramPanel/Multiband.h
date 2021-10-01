@@ -47,7 +47,7 @@ public:
     //void setLineNum(int lineNum);
     void setLinePos(float pos1, float pos2, float pos3);
     void getLinePos(float (&input)[3]);
-    void updateLines(juce::String option, int changedIndex);
+    
     void setCloseButtonState();
     void setFocus();
     bool getAddState();
@@ -83,6 +83,7 @@ private:
     void changeFocus(int changedIndex, juce::String option);
     void changeEnable(int changedIndex, juce::String option);
     
+    void updateLineLeftRightIndex();
     void updateLineNumAndSortedIndex();
     void setLineRelatedBoundsByX(int i);
     //void setLineRelatedBoundsByFreq(int i);

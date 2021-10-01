@@ -100,17 +100,23 @@ void Multiband::paint (juce::Graphics& g)
     {
         if (getDeleteState())
         {
-            updateLines("delete", getChangedIndex());
+            updateLineNumAndSortedIndex();
+            updateLineLeftRightIndex();
+//            updateLines("delete", getChangedIndex());
             setDeleteState(false);
         }
         else if (getAddState())
         {
-            updateLines("add", getChangedIndex());
+            updateLineNumAndSortedIndex();
+            updateLineLeftRightIndex();
+//            updateLines("add", getChangedIndex());
             setAddState(false);
         }
         else if (getMovingState())
         {
-            updateLines("moving", getChangedIndex());
+            updateLineNumAndSortedIndex();
+            updateLineLeftRightIndex();
+//            updateLines("moving", getChangedIndex());
             setMovingState(false);
         }
 //        updateFreqArray();
@@ -229,8 +235,9 @@ void Multiband::resized()
     {
         width = 5.0f;
     }
-    
-    updateLines("resize", -1);
+
+//    updateLines("resize", -1);
+    setSoloRelatedBounds();
 }
 
 int Multiband::getChangedIndex()
@@ -390,22 +397,13 @@ void Multiband::updateLineNumAndSortedIndex()
     }
 }
 
-void Multiband::updateLines(juce::String option, int changedIndex)
+void Multiband::updateLineLeftRightIndex()
 {
-    updateLineNumAndSortedIndex();
-
     // should set self index first, then set left and right index
     for (int i = 0; i < lineNum; i++)
     {
         freqDividerGroup[sortedIndex[i]]->getVerticalLine().setIndex(i); // this index is the No. you count the line from left to right
-        //[delete] frequency[i] = freqDividerGroup[sortedIndex[i]]->getFrequency();
     }
-    
-    //[delete]reset other frequency to 0
-//    for (int i = lineNum; i < 3; i++)
-//    {
-//        frequency[i] = 0;
-//    }
     
     // set left right index
     for (int i = 0; i < lineNum; i++)
@@ -437,28 +435,6 @@ void Multiband::updateLines(juce::String option, int changedIndex)
 //            break;
 //        }
 //    }
-
-//    if (changedIndex != -1) // if not resizing
-//    {
-//        // change focus position
-//        changeFocus(changedIndex, option);
-//        changeEnable(changedIndex, option);
-//    }
-    
-    
-//    setSoloRelatedBounds();
-//    // setBounds of soloButtons and enableButtons [duplicated]
-//    if (lineNum >= 1)
-//    {
-//        enableButton[0]->setBounds(freqDividerGroup[sortedIndex[0]]->getVerticalLine().getX() / 2, margin, size, size);
-//        for (int i = 1; i < lineNum; i++)
-//        {
-//            enableButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getVerticalLine().getX() + freqDividerGroup[sortedIndex[i - 1]]->getVerticalLine().getX()) / 2, margin, size, size);
-//        }
-//        enableButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getVerticalLine().getX() + getWidth()) / 2, margin, size, size);
-//    }
-    
-    
 }
 
 void Multiband::mouseUp(const juce::MouseEvent &e)
@@ -519,7 +495,9 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 int changedIndex = getChangedIndex();
                 if (changedIndex != -1)
                 {
-                    updateLines("add", changedIndex);
+//                    updateLines("add", changedIndex);
+                    updateLineNumAndSortedIndex();
+                    updateLineLeftRightIndex();
                     isAdded = true;
                 }
             }
@@ -917,9 +895,7 @@ void Multiband::timerCallback()
 {
     if( parametersChanged.compareAndSetBool(false, true) )
     {
-//        if (freqDividerGroup[0]->getVerticalLine().is) dragLinesByFreq(freqDividerGroup[0]->getVerticalLine().getValue(), getSortedIndex(0));
-//        if (freqDividerGroup[1]->getVerticalLine().valueChanged()) dragLinesByFreq(freqDividerGroup[1]->getVerticalLine().getValue(), getSortedIndex(1));
-//        if (freqDividerGroup[2]->getVerticalLine().valueChanged()) dragLinesByFreq(freqDividerGroup[2]->getVerticalLine().getValue(), getSortedIndex(2));
+
     }
     repaint();
 }
@@ -1005,6 +981,7 @@ void Multiband::buttonClicked(juce::Button* button)
     }
 
     updateLineNumAndSortedIndex();
+    updateLineLeftRightIndex();
     
     // set soloButtons visibility
     for (int i = 0; i < 3; i++)

@@ -1437,8 +1437,6 @@ public:
         }
     }
 
-    
-    
     juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
     {
         return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);

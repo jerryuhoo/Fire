@@ -118,7 +118,7 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
         freqDividerGroup[sortedIndex[verticalLine.getRight()]]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup, sortedIndex);
     }
     verticalLine.setXPercent(newXPercent);
-    verticalLine.setValue(SpectrumComponent::transformFromLog(newXPercent) * (44100 / 2.0));
+    verticalLine.setValue(SpectrumComponent::transformFromLog(newXPercent)); // * (44100 / 2.0)
 }
 
 VerticalLine& FreqDividerGroup::getVerticalLine()

@@ -2,7 +2,7 @@
 
 - Bug
 
-1. Multiband freq 20-20000 Hz not precise!
+1. Cutoff Q not working
 (except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
 
 - Feature

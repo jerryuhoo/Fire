@@ -43,7 +43,7 @@ Multiband::Multiband(FireAudioProcessor &p) : processor(p)
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         (freqDividerGroup[i]->getCloseButton()).addListener(this);
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
-        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue / (44100 / 2.0)));
+        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue));
         freqDividerGroup[i]->setBounds(xPercent * getWidth(), 0, getWidth(), getHeight());
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
         
@@ -523,7 +523,7 @@ void Multiband::dragLinesByFreq(int freq, int index)
     if (index < 0) return;
     if (!isMoving && freqDividerGroup[index]->getCloseButton().getToggleState())
     {
-        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq / (44100 / 2.0)));
+        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
         freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
         
         // keep distance limit between lines
@@ -558,7 +558,7 @@ void Multiband::setLineRelatedBoundsByX(int i)
     {
         freqDividerGroup[i]->setBounds(freqDividerGroup[i]->getVerticalLine().getXPercent() * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
 
-        int freq = static_cast<int>(SpectrumComponent::transformFromLog(freqDividerGroup[i]->getVerticalLine().getXPercent()) * (44100 / 2.0));
+        int freq = static_cast<int>(SpectrumComponent::transformFromLog(freqDividerGroup[i]->getVerticalLine().getXPercent()));
         freqDividerGroup[i]->getVerticalLine().setValue(freq);
     }
 }
@@ -566,7 +566,7 @@ void Multiband::setLineRelatedBoundsByX(int i)
 //void Multiband::setLineRelatedBoundsByFreq(int i)
 //{
 //    int freq = freqDividerGroup[i]->getFrequency();
-//    float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq / (44100 / 2.0)));
+//    float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
 //    freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
 //}
 

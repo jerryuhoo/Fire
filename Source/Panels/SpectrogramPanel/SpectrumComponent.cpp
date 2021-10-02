@@ -39,13 +39,17 @@ void SpectrumComponent::paint (juce::Graphics& g)
     g.drawLine(0, getHeight() / 5, getWidth(), getHeight() / 5, 1);
     for (int i = 0; i < numberOfLines; ++i)
     {
-        const double proportion = frequenciesForLines[i] / (44100 / 2.0);
-        int xPos = transformToLog(proportion) * (getWidth());
+        const double proportion = frequenciesForLines[i] / 20000.0                  ;
+        int xPos = transformToLog(proportion * 20000) * (getWidth());
         g.drawVerticalLine(xPos, getHeight() / 5, getHeight());
-        if (frequenciesForLines[i] == 10 || frequenciesForLines[i] == 100 || frequenciesForLines[i] == 20 || frequenciesForLines[i] == 200)
+        if (frequenciesForLines[i] == 10 || frequenciesForLines[i] == 100 || frequenciesForLines[i] == 200)
             g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i]), xPos - 30, 0, 60, getHeight() / 5, juce::Justification::centred, 2);
-        else if ( frequenciesForLines[i] == 1000 || frequenciesForLines[i] == 10000 || frequenciesForLines[i] == 2000 || frequenciesForLines[i] == 20000)
+        else if ( frequenciesForLines[i] == 1000 || frequenciesForLines[i] == 10000 || frequenciesForLines[i] == 2000)
             g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i] / 1000) + "k", xPos - 30, 0, 60, getHeight() / 5, juce::Justification::centred, 2);
+        else if (frequenciesForLines[i] == 20)
+            g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i]), xPos - 30, 0, 60, getHeight() / 5, juce::Justification::right, 2);
+        else if (frequenciesForLines[i] == 20000)
+            g.drawFittedText(static_cast<juce::String>(frequenciesForLines[i] / 1000) + "k", xPos - 30, 0, 60, getHeight() / 5, juce::Justification::left, 2);
     }
     
     // paint vertical db numbers
@@ -81,7 +85,7 @@ void SpectrumComponent::paintSpectrum(juce::Graphics & g)
     auto mindB = -100.0f;
     auto maxdB =    0.0f;
     
-    for (int i = 0; i < numberOfBins; i++)
+    for (int i = 1; i < numberOfBins; i++)
     {
         // sample range [0, 1] to decibel range[-∞, 0] to [0, 1]
         // 4096 is 1 << 11, which is fftSize.
@@ -97,7 +101,7 @@ void SpectrumComponent::paintSpectrum(juce::Graphics & g)
 //        if (i > numberOfBins / 4 * 3 && i % 10 != 0) continue;
         
         // connect points
-        p.lineTo(transformToLog((float)i / numberOfBins) * width,
+        p.lineTo(transformToLog((float)i / numberOfBins * 22050) * width,
                          juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f));
         
         // reference: https://docs.juce.com/master/tutorial_spectrum_analyser.html
@@ -132,17 +136,20 @@ void SpectrumComponent::prepareToPaintSpectrum(int numBins, float * data)
     memmove(spectrumData, data, sizeof(spectrumData));
 }
 
-float SpectrumComponent::transformToLog(float between0and1)
+float SpectrumComponent::transformToLog(double valueToTransform) // freq to x
 {
-	const float minimum = 1.0f;
-	const float maximum = 1000.0f;
-	return log10(minimum + ((maximum - minimum) * between0and1)) / log10(maximum);
+    // input: 20-20000
+    // output: x
+    auto value = juce::mapFromLog10(valueToTransform, 20.0, 20000.0);
+    return static_cast<float>(value);
 }
 
-float SpectrumComponent::transformFromLog(float valueToTransform)
+float SpectrumComponent::transformFromLog(double between0and1) // x to freq
 {
-    const float minimum = 1.0f;
-    const float maximum = 1000.0f;
-    return (std::pow(10, valueToTransform * log10(maximum)) - minimum) / static_cast<float>(maximum - minimum);
+    // input: 0.1-0.9 x pos
+    // output: freq
+    
+    auto value = juce::mapToLog10(between0and1, 20.0, 20000.0);
+    return static_cast<float>(value);
 }
 

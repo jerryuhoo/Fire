@@ -26,7 +26,7 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 『Fire』has a top panel, a spectrogram, four graph visualizers, band effect, and global effect.
 
-3.1. Top panel
+### 3.1. Top panel
 
 * HQ: 4x oversampling for high quality audio.
 * A/B: switch between A/B to compare.
@@ -35,11 +35,11 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 * Save: save your preset to user folder.
 * Menu: other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
 
-3.2. Spectrogram
+### 3.2. Spectrogram
 
 * You can split up frequency to four bands for multiband distortion.
 
-3.3. Graph Visualizer
+### 3.3. Graph Visualizer
 
 * There are four graph visualizers. You can click on each graph to zoom in or zoom out.
 * Top left is oscilloscope.
@@ -47,7 +47,7 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 * Buttom Left is VU meters.
 * Buttom right is Width graph.
 
-3.4. Band Effect
+### 3.4. Band Effect
 
 * You can click four switches on the right side of graphs.
 
@@ -61,7 +61,7 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 * Output and mix: for band control.
 
-3.5. Global Effect
+### 3.5. Global Effect
 
 * Filter: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
 
@@ -73,7 +73,7 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 欢迎关注网易云音乐：<a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings</a>
 
-follow my Neteast channel: 羽翼深蓝Wings
+My Neteast channel: <a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings
 
 <div align=center>
     <img src="support.png" width = "50%"/>
@@ -91,7 +91,7 @@ follow my Neteast channel: 羽翼深蓝Wings
 
 ## 6. Update Notes
 
-2020-10-1 (version 0.9.3)
+### 2020-10-2 (version 0.9.3)
 
 Warning: Previous presets may not work, you have to resave your preset!
 
@@ -101,7 +101,7 @@ Warning: Previous presets may not work, you have to resave your preset!
 4. Fixed other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
 5. Now you can click graph to zoom in and out.
 
-2020-9-7 (version 0.9.2)
+### 2020-9-7 (version 0.9.2)
 
 1. GUI improvement.
 2. Added shape, width, and compressor groups.
@@ -109,11 +109,11 @@ Warning: Previous presets may not work, you have to resave your preset!
 4. Added VU meter and width graph.
 5. Added frequency label, and frequency automation bug fixed.
 
-2020-1-24 (version 0.9.1)
+### 2020-1-24 (version 0.9.1)
 
 1. Drive knob reduction and GUI improvement
 Fixed a bug that in global mode menu won't change when selecting different bands.
 
-2020-1-23 (version 0.9.0)
+### 2020-1-23 (version 0.9.0)
 
 1. First Beta release.

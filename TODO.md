@@ -2,7 +2,7 @@
 
 - Bug
 
-1. Cutoff Q not working
+Great! Currently no bug found!
 (except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
 
 - Feature

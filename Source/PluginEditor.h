@@ -106,7 +106,7 @@ private:
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
     // override listener functions
-    // linked
+
     void sliderValueChanged(juce::Slider *slider) override;
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox *combobox) override;
@@ -132,15 +132,6 @@ private:
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
-    RoundedButtonLnf roundedButtonLnf;
-    DriveLookAndFeel driveLookAndFeel1;
-    DriveLookAndFeel driveLookAndFeel2;
-    DriveLookAndFeel driveLookAndFeel3;
-    DriveLookAndFeel driveLookAndFeel4;
-    LowPassButtonLnf lowPassButtonLnf;
-    BandPassButtonLnf bandPassButtonLnf;
-    HighPassButtonLnf highPassButtonLnf;
-    FlatButtonLnf flatButtonLnf;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

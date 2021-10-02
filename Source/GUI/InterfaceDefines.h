@@ -10,7 +10,10 @@
 
 #pragma once
 
-#define VERSION "0.9.2"
+#define VERSION             "0.9.3"
+#define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
+#define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
+#define PRESET_EXETENSION   ".fire"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"
@@ -119,16 +122,41 @@
 #define REC_ID4             "rec4"
 #define REC_NAME4           "Rec4"
 
-#define COLOR_ID            "color"
-#define COLOR_NAME          "Color"
 #define DOWNSAMPLE_ID       "downSample"
 #define DOWNSAMPLE_NAME     "DownSample"
 
+// filter
+#define LOWCUT_FREQ_ID      "lowcutFreq"
+#define LOWCUT_FREQ_NAME    "LowcutFreq"
+#define HIGHCUT_FREQ_ID     "highcutFreq"
+#define HIGHCUT_FREQ_NAME   "HighcutFreq"
+#define PEAK_FREQ_ID        "peakFreq"
+#define PEAK_FREQ_NAME      "PeakFreq"
+#define LOWCUT_GAIN_ID      "lowCutGain"
+#define LOWCUT_GAIN_NAME    "LowCutGain"
+#define HIGHCUT_GAIN_ID     "highCutGain"
+#define HIGHCUT_GAIN_NAME   "HighCutGain"
 
-#define CUTOFF_ID           "cutoff"
-#define CUTOFF_NAME         "Cutoff"
-#define RES_ID              "res"
-#define RES_NAME            "Res"
+#define PEAK_GAIN_ID        "peakGain"
+#define PEAK_GAIN_NAME      "PeakGain"
+
+#define LOWCUT_Q_ID         "lowcutQ"
+#define LOWCUT_Q_NAME       "LowcutQ"
+#define PEAK_Q_ID           "peakQ"
+#define PEAK_Q_NAME         "PeakQ"
+#define HIGHCUT_Q_ID        "highcutQ"
+#define HIGHCUT_Q_NAME      "HighcutQ"
+
+#define LOWCUT_SLOPE_ID         "lowcutSlope"
+#define LOWCUT_SLOPE_NAME       "LowcutSlope"
+#define HIGHCUT_SLOPE_ID        "highcutSlope"
+#define HIGHCUT_SLOPE_NAME      "HighcutSlope"
+#define LOWCUT_BYPASSED_ID      "lowcutBypassed"
+#define LOWCUT_BYPASSED_NAME    "LowcutBypassed"
+#define PEAK_BYPASSED_ID        "peakBypassed"
+#define PEAK_BYPASSED_NAME      "PeakBypassed"
+#define HIGHCUT_BYPASSED_ID     "highcutBypassed"
+#define HIGHCUT_BYPASSED_NAME   "HighcutBypassed"
 
 #define OFF_ID              "off"
 #define OFF_NAME            "Off"
@@ -143,6 +171,7 @@
 #define HIGH_ID             "high"
 #define HIGH_NAME           "High"
 
+// multiband
 #define FREQ_ID1            "freq1"
 #define FREQ_NAME1          "Freq1"
 #define FREQ_ID2            "freq2"
@@ -188,6 +217,9 @@
 #define KNOB_FONT           "Futura"
 #define KNOB_FONT_SIZE      18.0f
 #define KNOB_FONT_COLOUR    COLOUR1
+#define KNOB_SUBFONT_COLOUR COLOUR7.withBrightness(0.8f)
+#define KNOB_INNER_COLOUR   COLOUR7.withBrightness(slider.isEnabled() ? 0.8f : 0.5f)
+#define KNOB_TICK_COLOUR    COLOUR7
 
 // Define Components size
 #define TEXTBOX_WIDTH       60
@@ -195,12 +227,17 @@
 #define KNOBSIZE            100
 #define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
 
+
 // Define Position
 #define INIT_WIDTH          1000.0f
 #define INIT_HEIGHT         500.0f
 
-#define PART1               getHeight() / 10.0f
-#define PART2               PART1 * 3.0f
+#define KNOB_PANEL_1_X      SWITCH_X + SWITCH_WIDTH
+#define KNOB_PANEL_2_X      SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH
+#define KNOB_PANEL_3_X      SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH + OSC_HEIGHT * 2 + BUTTON_WIDTH
+
+#define KNOB_PANEL_1_WIDTH  getWidth() / 4.0f
+#define KNOB_PANEL_2_WIDTH  OSC_HEIGHT * 2
 
 #define OSC_X               getWidth() / 10.0f - OSC_WIDTH / 2.0f
 #define OSC_Y               PART1 + PART2 + getHeight() / 5.0f
@@ -222,47 +259,50 @@
 #define WIDTH_GRAPH_WIDTH   getWidth() / 8.0f
 #define WIDTH_GRAPH_HEIGHT  (getHeight() - PART1 - PART2) / 4.0f
 
-#define SPEC_X              0.0f
-#define SPEC_Y              getHeight() / 10.0f
-#define SPEC_WIDTH          getWidth()
 #define SPEC_HEIGHT         getHeight() / 10.0f * 3.0f
 
-#define DRIVE_X             getWidth() / 2.0f - SCALED_KNOBSIZE
-#define DRIVE_Y             secondShadowY + (getHeight() - secondShadowY) / 2.0f - SCALED_KNOBSIZE / 2.0f - 20.0f
-#define REC_X               startX * 7.0f - SCALED_KNOBSIZE / 2.0f
-#define BIAS_X              startX * 8.0f - SCALED_KNOBSIZE / 2.0f
-#define WIDTH_X             startX * 8.0f - SCALED_KNOBSIZE / 2.0f
-#define OUTPUT_X            startX * 9.0f - SCALED_KNOBSIZE / 2.0f
-#define COMP_RATIO_X        startX * 7.0f - SCALED_KNOBSIZE / 2.0f
-#define COMP_THRESH_X       startX * 8.0f - SCALED_KNOBSIZE / 2.0f
+#define DRIVE_X             KNOB_PANEL_2_X + OSC_HEIGHT - SCALED_KNOBSIZE / 2.0f
+#define DRIVE_Y             OSC_Y + OSC_HEIGHT / 2.0f
+#define DRIVE_SIZE          SCALED_KNOBSIZE * 2.0f
+
+#define REC_X               KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define BIAS_X              KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+#define WIDTH_X             KNOB_PANEL_1_X + OSC_WIDTH - SCALED_KNOBSIZE / 2.0f
+
+#define COMP_THRESH_X       KNOB_PANEL_1_X + SCALED_KNOBSIZE / 4.0f
+#define COMP_RATIO_X        KNOB_PANEL_1_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+#define OUTPUT_X            KNOB_PANEL_3_X + SCALED_KNOBSIZE / 4.0f
+#define MIX_X               KNOB_PANEL_3_X + SCALED_KNOBSIZE + SCALED_KNOBSIZE / 4.0f
+
 #define CUTOFF_X            startX * 4.5f - SCALED_KNOBSIZE / 2.0f
 #define RES_X               startX * 6.0f - SCALED_KNOBSIZE / 2.0f
 #define DOWNSAMPLE_X        startX * 7.5f - SCALED_KNOBSIZE / 2.0f
-#define COLOR_X             startX * 7.5f - SCALED_KNOBSIZE / 2.0f
+
 #define FILTER_STATE_X      startX * 4.5f - SCALED_KNOBSIZE / 4.0f
 #define FILTER_TYPE_X       startX * 6.0f - SCALED_KNOBSIZE / 4.0f
-#define MIX_X               startX * 9.0f - SCALED_KNOBSIZE / 2.0f
+#define OUTPUT_X_G          startX * 9.0f - SCALED_KNOBSIZE / 2.0f
+#define MIX_X_G             startX * 9.0f - SCALED_KNOBSIZE / 2.0f
 
-#define VU_METER_WIDTH         getWidth() / 10.0f
-#define VU_METER_HEIGHT        getHeight() / 10.0f * 9.0f
-#define VU_METER_Y             getHeight() / 10.0f
-#define VU_METER_X_1           getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
-#define VU_METER_X_2           getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
+#define VU_METER_WIDTH      getWidth() / 10.0f
+#define VU_METER_HEIGHT     getHeight() / 10.0f * 9.0f
+#define VU_METER_Y          getHeight() / 10.0f
+#define VU_METER_X_1        getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
+#define VU_METER_X_2        getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
 
 
 // Switches
-#define SWITCH_WIDTH        getWidth() / 10.0f
-#define SWITCH_HEIGHT       getHeight() / 20.0f
-#define SWITCH_X            startX * 7.0f - SCALED_KNOBSIZE / 2.0f
+#define SWITCH_WIDTH        OSC_WIDTH / 10.0f
+#define SWITCH_HEIGHT       OSC_HEIGHT / 2.0f
+#define SWITCH_X            OSC_X + OSC_WIDTH * 2.0f
 
-#define SWITCH_SHAPE_Y      PART1 + PART2 + getHeight() / 20.0f + 1.0f * getHeight() / 15.0f
-#define SWITCH_WIDTH_Y      PART1 + PART2 + getHeight() / 20.0f + 2.0f * getHeight() / 15.0f
-#define SWITCH_COMP_Y       PART1 + PART2 + getHeight() / 20.0f + 3.0f * getHeight() / 15.0f
+#define SWITCH_OSC_Y        OSC_Y
+#define SWITCH_SHAPE_Y      OSC_Y + OSC_HEIGHT / 2.0f
+#define SWITCH_COMP_Y       OSC_Y + OSC_HEIGHT
+#define SWITCH_WIDTH_Y      OSC_Y + OSC_HEIGHT / 2.0f * 3.0f
 
 // Buttons
-#define BUTTON_WIDTH        scaledKnobSize / 2.0f
-#define BUTTON_HEIGHT       0.05f * getHeight()
-#define BUTTON_X            getWidth() / 10.0f * 4.0f - BUTTON_WIDTH / 2.0f
+#define BUTTON_X            SWITCH_X + SWITCH_WIDTH + KNOB_PANEL_1_WIDTH + OSC_HEIGHT * 2
+#define BUTTON_WIDTH        OSC_WIDTH / 4.0f
 
 // Define Color
 #define COLOUR0             juce::Colour(244, 244, 210)

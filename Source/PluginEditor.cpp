@@ -262,12 +262,16 @@ void FireAudioProcessorEditor::resized()
     windowLeftButton.setBounds(leftWindowButtonArea);
     windowRightButton.setBounds(rightWindowButtonArea);
     
+    
+    area.removeFromLeft(getWidth() / 20);
+    area.removeFromRight(getWidth() / 20);
+    
     juce::Rectangle<int> controlArea = area;
     juce::Rectangle<int> controlAreaTop = area.removeFromTop(area.getHeight() / 5);
     juce::Rectangle<int> controlAreaMid = area.removeFromTop(area.getHeight() / 4 * 3);
 
     // distortion menu
-    controlAreaTop.removeFromLeft(OSC_X); // x position
+//    controlAreaTop.removeFromLeft(getWidth() / 20); // x position
     juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft(OSC_WIDTH); // width
     distortionModeArea.removeFromTop(controlAreaTop.getHeight() / 4);
     distortionModeArea.removeFromBottom(controlAreaTop.getHeight() / 4);
@@ -276,8 +280,10 @@ void FireAudioProcessorEditor::resized()
     distortionMode3.setBounds(distortionModeArea);
     distortionMode4.setBounds(distortionModeArea);
 
+    
+
     juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
-    graphArea.removeFromLeft(graphArea.getWidth() / 10);
+    //graphArea.removeFromLeft(graphArea.getWidth() / 10);
     
     // Graph Panel
     graphPanel.setBounds(graphArea);
@@ -299,6 +305,7 @@ void FireAudioProcessorEditor::resized()
     otherLookAndFeel.scale = scale;
 //    roundedButtonLnf.scale = scale;
     bandPanel.setScale(scale);
+    globalPanel.setScale(scale);
 //    lowPassButtonLnf.scale = scale;
 //    bandPassButtonLnf.scale = scale;
 //    highPassButtonLnf.scale = scale;

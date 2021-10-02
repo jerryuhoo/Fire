@@ -1138,8 +1138,21 @@ public:
         }
 
         // draw high pass filter
-        if (button.isEnabled()) g.setColour(COLOUR1);
-        else g.setColour(COLOUR1.darker(0.5f));
+        juce::Colour textOnColour = button.findColour(juce::TextButton::textColourOnId);
+        juce::Colour textOffColour = button.findColour(juce::TextButton::textColourOffId);
+        juce::Colour textColour;
+        
+        if (button.getToggleState())
+        {
+            textColour = textOnColour;
+        }
+        else
+        {
+            textColour = textOffColour;
+        }
+        
+        if (button.isEnabled()) g.setColour(textColour);
+        else g.setColour(textColour.darker(0.5f));
         
         juce::Path p;
         float width = bounds.getWidth();
@@ -1151,8 +1164,8 @@ public:
         g.strokePath(roundedPath, juce::PathStrokeType(1.0f));
         
         // fill above part
-        if (button.isEnabled()) g.setColour(COLOUR1.withAlpha(0.5f));
-        else g.setColour(COLOUR1.withAlpha(0.5f).darker(0.5f));
+        if (button.isEnabled()) g.setColour(textColour.withAlpha(0.5f));
+        else g.setColour(textColour.withAlpha(0.5f).darker(0.5f));
         roundedPath.closeSubPath();
         g.fillPath(roundedPath);
         
@@ -1233,8 +1246,21 @@ public:
         }
         
         // draw low filter path
-        if (button.isEnabled()) g.setColour(COLOUR1);
-        else g.setColour(COLOUR1.darker(0.5f));
+        juce::Colour textOnColour = button.findColour(juce::TextButton::textColourOnId);
+        juce::Colour textOffColour = button.findColour(juce::TextButton::textColourOffId);
+        juce::Colour textColour;
+        
+        if (button.getToggleState())
+        {
+            textColour = textOnColour;
+        }
+        else
+        {
+            textColour = textOffColour;
+        }
+        
+        if (button.isEnabled()) g.setColour(textColour);
+        else g.setColour(textColour.darker(0.5f));
         juce::Path p;
         float width = bounds.getWidth();
         float height = bounds.getHeight();
@@ -1245,8 +1271,8 @@ public:
         g.strokePath(roundedPath, juce::PathStrokeType(1.0f));
         
         // fill above part
-        if (button.isEnabled()) g.setColour(COLOUR1.withAlpha(0.5f));
-        else g.setColour(COLOUR1.withAlpha(0.5f).darker(0.5f));
+        if (button.isEnabled()) g.setColour(textColour.withAlpha(0.5f));
+        else g.setColour(textColour.withAlpha(0.5f).darker(0.5f));
         roundedPath.closeSubPath();
         g.fillPath(roundedPath);
         
@@ -1325,8 +1351,21 @@ public:
         }
         
         // draw band filter path
-        if (button.isEnabled()) g.setColour(COLOUR1);
-        else g.setColour(COLOUR1.darker(0.5f));
+        juce::Colour textOnColour = button.findColour(juce::TextButton::textColourOnId);
+        juce::Colour textOffColour = button.findColour(juce::TextButton::textColourOffId);
+        juce::Colour textColour;
+        
+        if (button.getToggleState())
+        {
+            textColour = textOnColour;
+        }
+        else
+        {
+            textColour = textOffColour;
+        }
+        
+        if (button.isEnabled()) g.setColour(textColour);
+        else g.setColour(textColour.darker(0.5f));
         juce::Path p;
         float width = bounds.getWidth();
         float height = bounds.getHeight();
@@ -1336,8 +1375,8 @@ public:
         juce::Path roundedPath = p.createPathWithRoundedCorners(20.0f);
         g.strokePath(roundedPath, juce::PathStrokeType(1.0f));
         
-        if (button.isEnabled()) g.setColour(COLOUR1.withAlpha(0.5f));
-        else g.setColour(COLOUR1.withAlpha(0.5f).darker(0.5f));
+        if (button.isEnabled()) g.setColour(textColour.withAlpha(0.5f));
+        else g.setColour(textColour.withAlpha(0.5f).darker(0.5f));
         g.fillPath(roundedPath);
     }
 

@@ -25,10 +25,7 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     outputLabelGlobal.setJustificationType(juce::Justification::centred);
     
     outputKnob.setTextValueSuffix("db");
-    
-    
-    
-    
+
     addAndMakeVisible(mixLabelGlobal);
     mixLabelGlobal.setText("Mix", juce::dontSendNotification);
     mixLabelGlobal.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
@@ -36,7 +33,6 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     mixLabelGlobal.attachToComponent(&mixKnob, false);
     mixLabelGlobal.setJustificationType(juce::Justification::centred);
     
-
     // downsample knob
     setRotarySlider(downSampleKnob, juce::Colours::purple.withBrightness(0.8f));
     
@@ -46,8 +42,6 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     downSampleLabel.setColour(juce::Label::textColourId, juce::Colours::purple.withBrightness(0.8f));
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
-
-    
 
     // lowcut knob
     setRotarySlider(lowcutFreqKnob, juce::Colours::hotpink.withBrightness(0.8f));
@@ -114,9 +108,7 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     peakGainLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
     peakGainLabel.attachToComponent(&peakGainKnob, false);
     peakGainLabel.setJustificationType(juce::Justification::centred);
-    
-    
-  
+
     // Filter State Buttons
     setRoundButton(filterOffButton, OFF_ID, "OFF");
     setRoundButton(filterPreButton, PRE_ID, "PRE");
@@ -156,10 +148,9 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     filterTypeLabel.setText("Type", juce::dontSendNotification);
     filterTypeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     filterTypeLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
-    filterTypeLabel.attachToComponent(&filterLowPassButton, false);
+    filterTypeLabel.attachToComponent(&filterHighPassButton, false);
     filterTypeLabel.setJustificationType(juce::Justification::centred);
-    
-    
+
     // global switches
     addAndMakeVisible(filterSwitch);
     filterSwitch.setClickingTogglesState(true);
@@ -191,7 +182,6 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     
     downSampleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, DOWNSAMPLE_ID, downSampleKnob);
 
-    
     lowcutFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, LOWCUT_FREQ_ID, lowcutFreqKnob);
     lowcutQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, LOWCUT_Q_ID, lowcutQKnob);
     highcutFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, HIGHCUT_FREQ_ID, highcutFreqKnob);
@@ -200,7 +190,6 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     peakQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, PEAK_Q_ID, peakQKnob);
     peakGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, PEAK_GAIN_ID, peakGainKnob);
 
-    
     filterOffAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, OFF_ID, filterOffButton);
     filterPreAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, PRE_ID, filterPreButton);
     filterPostAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, POST_ID, filterPostButton);
@@ -210,6 +199,20 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     
     addAndMakeVisible(lowcutSlopeMode);
     addAndMakeVisible(highcutSlopeMode);
+    
+    addAndMakeVisible(lowcutSlopeLabel);
+    lowcutSlopeLabel.setText("Slope", juce::dontSendNotification);
+    lowcutSlopeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    lowcutSlopeLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
+    lowcutSlopeLabel.attachToComponent(&lowcutSlopeMode, false);
+    lowcutSlopeLabel.setJustificationType(juce::Justification::centred);
+    
+    addAndMakeVisible(highcutSlopeLabel);
+    highcutSlopeLabel.setText("Slope", juce::dontSendNotification);
+    highcutSlopeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    highcutSlopeLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
+    highcutSlopeLabel.attachToComponent(&highcutSlopeMode, false);
+    highcutSlopeLabel.setJustificationType(juce::Justification::centred);
     
     lowcutSlopeMode.addItem("12 db", 1);
     lowcutSlopeMode.addItem("24 db", 2);
@@ -244,6 +247,9 @@ void GlobalPanel::paint (juce::Graphics& g)
     
     if (isFilterSwitchOn)
     {
+        filterHighPassButton.setVisible(true);
+        filterPeakButton.setVisible(true);
+        filterLowPassButton.setVisible(true);
         if (filterLowPassButton.getToggleState())
         {
             lowcutFreqKnob.setVisible(false);
@@ -284,6 +290,10 @@ void GlobalPanel::paint (juce::Graphics& g)
     }
     if (isOtherSwitchOn)
     {
+        filterHighPassButton.setVisible(false);
+        filterPeakButton.setVisible(false);
+        filterLowPassButton.setVisible(false);
+        
         downSampleKnob.setVisible(true);
         lowcutFreqKnob.setVisible(false);
         lowcutQKnob.setVisible(false);
@@ -297,8 +307,7 @@ void GlobalPanel::paint (juce::Graphics& g)
     }
     
     g.setColour(COLOUR6);
-    g.drawRect(filterArea);
-    g.drawRect(otherArea);
+    g.drawRect(GlobalEffectArea);
     g.drawRect(outputKnobArea);
 }
 
@@ -307,27 +316,34 @@ void GlobalPanel::resized()
     juce::Rectangle<int> controlArea = getLocalBounds();
     
     
-    filterArea = controlArea.removeFromLeft(getWidth() / 5 * 2);
-    otherArea = controlArea.removeFromLeft(getWidth() / 5);
+    GlobalEffectArea = controlArea.removeFromLeft(getWidth() / 5 * 3);
     outputKnobArea = controlArea;
-
-    otherArea.removeFromTop(getHeight() / 5);
-    otherArea.removeFromBottom(getHeight() / 5);
-    outputKnobArea.removeFromTop(getHeight() / 5);
-    outputKnobArea.removeFromBottom(getHeight() / 5);
     
-    juce::Rectangle<int> switchArea = filterArea.removeFromLeft(getWidth() / 50);
-    filterSwitch.setBounds(switchArea.removeFromTop(filterArea.getHeight() / 2));
-    otherSwitch.setBounds(switchArea.removeFromTop(filterArea.getHeight() / 2));
+    juce::Rectangle<int> switchArea = GlobalEffectArea.removeFromLeft(getWidth() / 50);
+    filterSwitch.setBounds(switchArea.removeFromTop(GlobalEffectArea.getHeight() / 2));
+    otherSwitch.setBounds(switchArea.removeFromTop(GlobalEffectArea.getHeight() / 2));
     
-    juce::Rectangle<int> filterKnobAreaLeft = filterArea;
-    juce::Rectangle<int> filterKnobAreaMid = filterKnobAreaLeft.removeFromRight(filterArea.getWidth() / 3 * 2);
-    juce::Rectangle<int> filterKnobAreaRight = filterKnobAreaMid.removeFromRight(filterArea.getWidth() / 3);
-    filterKnobAreaLeft = filterKnobAreaLeft.reduced(getHeight() / 15, getHeight() / 5);
-    filterKnobAreaMid = filterKnobAreaMid.reduced(getHeight() / 15, getHeight() / 5);
-    filterKnobAreaRight = filterKnobAreaRight.reduced(getHeight() / 15, getHeight() / 5);
+    juce::Rectangle<int> filterKnobArea = GlobalEffectArea;
+    juce::Rectangle<int> filterTypeArea = filterKnobArea.removeFromLeft(GlobalEffectArea.getWidth() / 4);
     
-    downSampleKnob.setBounds(otherArea);
+    juce::Rectangle<int> filterTypeAreaReduced = filterTypeArea.reduced(0,  getHeight() / 6);
+    juce::Rectangle<int> filterTypeAreaReducedRest = filterTypeAreaReduced;
+    
+    juce::Rectangle<int> filterTypeAreaTop = filterTypeAreaReducedRest.removeFromTop(filterTypeAreaReduced.getHeight() / 3).reduced(GlobalEffectArea.getWidth() / 20, getHeight() / 30);
+    juce::Rectangle<int> filterTypeAreaMid = filterTypeAreaReducedRest.removeFromTop(filterTypeAreaReduced.getHeight() / 3).reduced(GlobalEffectArea.getWidth() / 20, getHeight() / 30);
+    juce::Rectangle<int> filterTypeAreaButtom = filterTypeAreaReducedRest.removeFromTop(filterTypeAreaReduced.getHeight() / 3).reduced(GlobalEffectArea.getWidth() / 20, getHeight() / 30);
+//    juce::Rectangle<int> filterTypeAreaTop = juce::Rectangle<int>(filterTypeAreaReduced.getX(), filterTypeAreaReduced.getY(), outputKnob.getTextBoxWidth(), outputKnob.getTextBoxHeight());
+//    juce::Rectangle<int> filterTypeAreaMid = juce::Rectangle<int>(filterTypeAreaReduced.getX(), filterTypeAreaReduced.getY() + getHeight() / 4, outputKnob.getTextBoxWidth(), outputKnob.getTextBoxHeight());
+//    juce::Rectangle<int> filterTypeAreaButtom = juce::Rectangle<int>(filterTypeAreaReduced.getX(), filterTypeAreaReduced.getY() + getHeight() / 4 * 2, outputKnob.getTextBoxWidth(), outputKnob.getTextBoxHeight());
+    
+    juce::Rectangle<int> filterKnobAreaLeft = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 3);
+    juce::Rectangle<int> filterKnobAreaMid = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 2);
+    juce::Rectangle<int> filterKnobAreaRight = filterKnobArea;
+    filterKnobAreaLeft = filterKnobAreaLeft.reduced(0, getHeight() / 5);
+    filterKnobAreaMid = filterKnobAreaMid.reduced(0, getHeight() / 5);
+    filterKnobAreaRight = filterKnobAreaRight.reduced(0, getHeight() / 5);
+    
+    downSampleKnob.setBounds(GlobalEffectArea.reduced(getHeight() / 15, getHeight() / 5));
     lowcutFreqKnob.setBounds(filterKnobAreaLeft);
     lowcutQKnob.setBounds(filterKnobAreaRight);
     highcutFreqKnob.setBounds(filterKnobAreaLeft);
@@ -336,33 +352,26 @@ void GlobalPanel::resized()
     peakQKnob.setBounds(filterKnobAreaRight);
     peakGainKnob.setBounds(filterKnobAreaMid);
    
-    juce::Rectangle<int> filterModeArea = filterKnobAreaMid.removeFromBottom(getHeight() / 8);
-    
+    juce::Rectangle<int> filterModeArea = filterKnobAreaMid.removeFromTop(getHeight() / 4);
+    filterModeArea.removeFromBottom(getHeight() / 15);
     lowcutSlopeMode.setBounds(filterModeArea);
     highcutSlopeMode.setBounds(filterModeArea);
 
-    juce::Rectangle<int> filterTypeArea = filterArea;
-    filterTypeArea = filterTypeArea.removeFromBottom(getHeight() / 10);
-    juce::Rectangle<int> filterTypeAreaLeft = filterTypeArea.removeFromLeft(filterArea.getWidth() / 3).reduced(filterArea.getWidth() / 15, 0);
-    juce::Rectangle<int> filterTypeAreaMid = filterTypeArea.removeFromLeft(filterArea.getWidth() / 3).reduced(filterArea.getWidth() / 15, 0);
-    juce::Rectangle<int> filterTypeAreaRight = filterTypeArea.removeFromLeft(filterArea.getWidth() / 3).reduced(filterArea.getWidth() / 15, 0);
-    
-//    filterOffButton.setBounds(FILTER_STATE_X, secondPartY, scaledKnobSize / 2, 0.05 * getHeight());
-//    filterPreButton.setBounds(FILTER_STATE_X, secondPartY + 0.055 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-//    filterPostButton.setBounds(FILTER_STATE_X, secondPartY + 0.11 * getHeight(), scaledKnobSize / 2, 0.05 * getHeight());
-    filterHighPassButton.setBounds(filterTypeAreaLeft);
+    filterHighPassButton.setBounds(filterTypeAreaTop);
     filterPeakButton.setBounds(filterTypeAreaMid);
-    filterLowPassButton.setBounds(filterTypeAreaRight);
+    filterLowPassButton.setBounds(filterTypeAreaButtom);
     
     juce::Rectangle<int> outputKnobAreaLeft = outputKnobArea;
     juce::Rectangle<int> outputKnobAreaRight = outputKnobAreaLeft.removeFromRight(outputKnobArea.getWidth() / 2);
-    outputKnobAreaLeft = outputKnobAreaLeft;
-    outputKnobAreaRight = outputKnobAreaRight;
+    outputKnobAreaLeft = outputKnobAreaLeft.reduced(getHeight() / 15, getHeight() / 5).reduced(outputKnobArea.getWidth() / 15, 0);
+    outputKnobAreaRight = outputKnobAreaRight.reduced(getHeight() / 15, getHeight() / 5).reduced(outputKnobArea.getWidth() / 15, 0);
     
     mixKnob.setBounds(outputKnobAreaLeft);
     outputKnob.setBounds(outputKnobAreaRight);
-   
     
+    lowPassButtonLnf.scale = scale;
+    bandPassButtonLnf.scale = scale;
+    highPassButtonLnf.scale = scale;
 }
 
 void GlobalPanel::sliderValueChanged(juce::Slider *slider)
@@ -397,9 +406,9 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String paramId,
     //bool state = *apvts.getRawParameterValue(paramId);
     //button.setToggleState(state, juce::dontSendNotification);
     button.setColour(juce::TextButton::buttonColourId, COLOUR6.withBrightness(0.1f));
-    button.setColour(juce::TextButton::buttonOnColourId, COLOUR4);
+    button.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
     button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    button.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    button.setColour(juce::TextButton::textColourOnId, juce::Colours::hotpink.withBrightness(0.8f));
     button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
     
     if (&button == &filterLowPassButton) button.setLookAndFeel(&lowPassButtonLnf);
@@ -410,6 +419,11 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String paramId,
         button.setButtonText(buttonName);
         button.setLookAndFeel(&roundedButtonLnf);
     }
+}
+
+void GlobalPanel::setScale(float scale)
+{
+    this->scale = scale;
 }
 
 void GlobalPanel::updateToggleState()

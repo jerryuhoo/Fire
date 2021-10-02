@@ -30,7 +30,9 @@ public:
     void resized() override;
     void timerCallback() override;
     
+    void setScale(float scale);
 private:
+    float scale = 1.0f;
     // override listener functions
     // linked
     void sliderValueChanged(juce::Slider *slider) override;
@@ -54,8 +56,7 @@ private:
         switchButtonsGlobal = 1005
     };
     
-    juce::Rectangle<int> filterArea;
-    juce::Rectangle<int> otherArea;
+    juce::Rectangle<int> GlobalEffectArea;
     juce::Rectangle<int> outputKnobArea;
     
     // Sliders
@@ -84,7 +85,9 @@ private:
         peakQLabel,
         peakGainLabel,
         filterStateLabel,
-        filterTypeLabel;
+        filterTypeLabel,
+        lowcutSlopeLabel,
+        highcutSlopeLabel;
 
     // Buttons
     juce::TextButton

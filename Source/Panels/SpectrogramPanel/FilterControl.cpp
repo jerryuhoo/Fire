@@ -36,8 +36,10 @@ FilterControl::~FilterControl()
 
 void FilterControl::paint (juce::Graphics& g)
 {
-    g.setColour(KNOB_SUBFONT_COLOUR);
+    g.setColour(juce::Colours::hotpink.withBrightness(0.8f));
     g.strokePath(responseCurve, juce::PathStrokeType(2.f));
+    g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
+    g.fillPath(responseCurve);
 }
 
 void FilterControl::resized()
@@ -139,12 +141,19 @@ void FilterControl::updateResponseCurve()
         return juce::jmap(input, -24.0, 24.0, outputMin, outputMax);
     };
     
-    responseCurve.startNewSubPath(0, map(mags.front()));
+    juce::Point<float> startPoint(-3, getHeight() + 2);
+    juce::Point<float> endPoint(getWidth() + 3, getHeight() + 2);
     
-    for( size_t i = 1; i < mags.size(); ++i )
+    responseCurve.startNewSubPath(startPoint);
+    
+    for( size_t i = 0; i < mags.size(); ++i )
     {
         responseCurve.lineTo(0 + i, map(mags[i]));
     }
+    
+    responseCurve.lineTo(endPoint);
+    
+    responseCurve.closeSubPath();
 }
 
 void FilterControl::parameterValueChanged(int parameterIndex, float newValue)

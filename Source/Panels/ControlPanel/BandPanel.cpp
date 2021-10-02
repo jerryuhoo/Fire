@@ -494,13 +494,11 @@ void BandPanel::resized()
     safeButton4.setBounds(outputButtonAreaDown);
     
     // set look and feel scale
-//    otherLookAndFeel.scale = scale;
-//    roundedButtonLnf.scale = scale;
     driveLookAndFeel1.scale = scale;
     driveLookAndFeel2.scale = scale;
     driveLookAndFeel3.scale = scale;
     driveLookAndFeel4.scale = scale;
-
+    flatButtonLnf.scale = scale;
 }
 
 void BandPanel::sliderValueChanged(juce::Slider *slider)

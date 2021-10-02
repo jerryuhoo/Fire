@@ -228,15 +228,15 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     lowcutSlopeLabel.setText("Slope", juce::dontSendNotification);
     lowcutSlopeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     lowcutSlopeLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
-    lowcutSlopeLabel.attachToComponent(&lowcutSlopeMode, false);
-    lowcutSlopeLabel.setJustificationType(juce::Justification::centred);
+    lowcutSlopeLabel.attachToComponent(&lowcutSlopeMode, true);
+    lowcutSlopeLabel.setJustificationType(juce::Justification::left);
     
     addAndMakeVisible(highcutSlopeLabel);
     highcutSlopeLabel.setText("Slope", juce::dontSendNotification);
     highcutSlopeLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     highcutSlopeLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
-    highcutSlopeLabel.attachToComponent(&highcutSlopeMode, false);
-    highcutSlopeLabel.setJustificationType(juce::Justification::centred);
+    highcutSlopeLabel.attachToComponent(&highcutSlopeMode, true);
+    highcutSlopeLabel.setJustificationType(juce::Justification::left);
     
     lowcutSlopeMode.addItem("12 db", 1);
     lowcutSlopeMode.addItem("24 db", 2);
@@ -387,7 +387,7 @@ void GlobalPanel::resized()
     peakQKnob.setBounds(filterKnobAreaRight);
     peakGainKnob.setBounds(filterKnobAreaMid);
    
-    juce::Rectangle<int> filterModeArea = filterMenuArea.removeFromBottom(getHeight() / 6);//filterKnobAreaMid.removeFromTop(getHeight() / 4);
+    juce::Rectangle<int> filterModeArea = filterMenuArea.removeFromBottom(getHeight() / 4);//filterKnobAreaMid.removeFromTop(getHeight() / 4);
     filterModeArea.removeFromBottom(getHeight() / 15);
     lowcutSlopeMode.setBounds(filterModeArea);
     highcutSlopeMode.setBounds(filterModeArea);

@@ -31,7 +31,7 @@ public:
 	void paintSpectrum(juce::Graphics & g);
 
 private:
-	int numberOfBins;
+	int numberOfBins = 1;
     float spectrumData[1024] = {0};
     
 	static const int frequenciesForLines[];

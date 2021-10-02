@@ -1414,8 +1414,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID2, LINE_STATE_NAME2, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID3, LINE_STATE_NAME3, false));
     
-    juce::NormalisableRange<float> freq(21.0f, 11040.0f, 1.0f);
-    freq.setSkewForCentre(1000.0f);
+    juce::NormalisableRange<float> freq(40.0f, 10024.0f, 1.0f);
+    freq.setSkewForCentre(651.0f);
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(FREQ_ID1, FREQ_NAME1, freq, 21));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(FREQ_ID2, FREQ_NAME2, freq, 21));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(FREQ_ID3, FREQ_NAME3, freq, 21));

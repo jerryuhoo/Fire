@@ -465,9 +465,9 @@ void FireAudioProcessorEditor::setMultiband()
 
     multiband.setFrequency(freq1, freq2, freq3);
     
-    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1 / (44100 / 2.0)));
-    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2 / (44100 / 2.0)));
-    float pos3 = static_cast<float>(SpectrumComponent::transformToLog(freq3 / (44100 / 2.0)));
+    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1));
+    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2));
+    float pos3 = static_cast<float>(SpectrumComponent::transformToLog(freq3));
     multiband.setLinePos(pos1, pos2, pos3);
     
     bool enableState1 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID1));

@@ -43,7 +43,7 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
-    // lowcut knob
+    // lowcut freq knob
     setRotarySlider(lowcutFreqKnob, juce::Colours::hotpink.withBrightness(0.8f));
     
     addAndMakeVisible(lowcutFreqLabel);
@@ -52,7 +52,18 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     lowcutFreqLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
     lowcutFreqLabel.attachToComponent(&lowcutFreqKnob, false);
     lowcutFreqLabel.setJustificationType(juce::Justification::centred);
+    
+    // lowcut gain knob
+    setRotarySlider(lowcutGainKnob, juce::Colours::hotpink.withBrightness(0.8f));
+    
+    addAndMakeVisible(lowcutGainLabel);
+    lowcutGainLabel.setText("Gain", juce::dontSendNotification);
+    lowcutGainLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    lowcutGainLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
+    lowcutGainLabel.attachToComponent(&lowcutGainKnob, false);
+    lowcutGainLabel.setJustificationType(juce::Justification::centred);
 
+    // lowcut q knob
     setRotarySlider(lowcutQKnob, juce::Colours::hotpink.withBrightness(0.8f));
     
     addAndMakeVisible(lowcutQLabel);
@@ -62,7 +73,7 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     lowcutQLabel.attachToComponent(&lowcutQKnob, false);
     lowcutQLabel.setJustificationType(juce::Justification::centred);
     
-    // highcut knob
+    // highcut freq knob
     setRotarySlider(highcutFreqKnob, juce::Colours::hotpink.withBrightness(0.8f));
     
     addAndMakeVisible(highcutFreqLabel);
@@ -71,7 +82,18 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     highcutFreqLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
     highcutFreqLabel.attachToComponent(&highcutFreqKnob, false);
     highcutFreqLabel.setJustificationType(juce::Justification::centred);
+    
+    // highcut gain knob
+    setRotarySlider(highcutGainKnob, juce::Colours::hotpink.withBrightness(0.8f));
+    
+    addAndMakeVisible(highcutGainLabel);
+    highcutGainLabel.setText("Gain", juce::dontSendNotification);
+    highcutGainLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    highcutGainLabel.setColour(juce::Label::textColourId, juce::Colours::hotpink.withBrightness(0.8f));
+    highcutGainLabel.attachToComponent(&highcutGainKnob, false);
+    highcutGainLabel.setJustificationType(juce::Justification::centred);
 
+    // highcut q knob
     setRotarySlider(highcutQKnob, juce::Colours::hotpink.withBrightness(0.8f));
     
     addAndMakeVisible(highcutQLabel);
@@ -183,8 +205,10 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     downSampleAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, DOWNSAMPLE_ID, downSampleKnob);
 
     lowcutFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, LOWCUT_FREQ_ID, lowcutFreqKnob);
+    lowcutGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, LOWCUT_GAIN_ID, lowcutGainKnob);
     lowcutQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, LOWCUT_Q_ID, lowcutQKnob);
     highcutFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, HIGHCUT_FREQ_ID, highcutFreqKnob);
+    highcutGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, HIGHCUT_GAIN_ID, highcutGainKnob);
     highcutQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, HIGHCUT_Q_ID, highcutQKnob);
     peakFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, PEAK_FREQ_ID, peakFreqKnob);
     peakQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, PEAK_Q_ID, peakQKnob);
@@ -254,8 +278,10 @@ void GlobalPanel::paint (juce::Graphics& g)
         {
             lowcutFreqKnob.setVisible(false);
             lowcutQKnob.setVisible(false);
+            lowcutGainKnob.setVisible(false);
             highcutFreqKnob.setVisible(true);
             highcutQKnob.setVisible(true);
+            highcutGainKnob.setVisible(true);
             peakFreqKnob.setVisible(false);
             peakQKnob.setVisible(false);
             peakGainKnob.setVisible(false);
@@ -266,8 +292,10 @@ void GlobalPanel::paint (juce::Graphics& g)
         {
             lowcutFreqKnob.setVisible(true);
             lowcutQKnob.setVisible(true);
+            lowcutGainKnob.setVisible(true);
             highcutFreqKnob.setVisible(false);
             highcutQKnob.setVisible(false);
+            highcutGainKnob.setVisible(false);
             peakFreqKnob.setVisible(false);
             peakQKnob.setVisible(false);
             peakGainKnob.setVisible(false);
@@ -278,8 +306,10 @@ void GlobalPanel::paint (juce::Graphics& g)
         {
             lowcutFreqKnob.setVisible(false);
             lowcutQKnob.setVisible(false);
+            lowcutGainKnob.setVisible(false);
             highcutFreqKnob.setVisible(false);
             highcutQKnob.setVisible(false);
+            highcutGainKnob.setVisible(false);
             peakFreqKnob.setVisible(true);
             peakQKnob.setVisible(true);
             peakGainKnob.setVisible(true);
@@ -297,8 +327,10 @@ void GlobalPanel::paint (juce::Graphics& g)
         downSampleKnob.setVisible(true);
         lowcutFreqKnob.setVisible(false);
         lowcutQKnob.setVisible(false);
+        lowcutGainKnob.setVisible(false);
         highcutFreqKnob.setVisible(false);
         highcutQKnob.setVisible(false);
+        highcutGainKnob.setVisible(false);
         peakFreqKnob.setVisible(false);
         peakQKnob.setVisible(false);
         peakGainKnob.setVisible(false);
@@ -339,20 +371,23 @@ void GlobalPanel::resized()
     juce::Rectangle<int> filterKnobAreaLeft = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 3);
     juce::Rectangle<int> filterKnobAreaMid = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 2);
     juce::Rectangle<int> filterKnobAreaRight = filterKnobArea;
+    juce::Rectangle<int> filterMenuArea = filterKnobAreaMid;
     filterKnobAreaLeft = filterKnobAreaLeft.reduced(0, getHeight() / 5);
     filterKnobAreaMid = filterKnobAreaMid.reduced(0, getHeight() / 5);
     filterKnobAreaRight = filterKnobAreaRight.reduced(0, getHeight() / 5);
     
     downSampleKnob.setBounds(GlobalEffectArea.reduced(getHeight() / 15, getHeight() / 5));
     lowcutFreqKnob.setBounds(filterKnobAreaLeft);
+    lowcutGainKnob.setBounds(filterKnobAreaMid);
     lowcutQKnob.setBounds(filterKnobAreaRight);
     highcutFreqKnob.setBounds(filterKnobAreaLeft);
+    highcutGainKnob.setBounds(filterKnobAreaMid);
     highcutQKnob.setBounds(filterKnobAreaRight);
     peakFreqKnob.setBounds(filterKnobAreaLeft);
     peakQKnob.setBounds(filterKnobAreaRight);
     peakGainKnob.setBounds(filterKnobAreaMid);
    
-    juce::Rectangle<int> filterModeArea = filterKnobAreaMid.removeFromTop(getHeight() / 4);
+    juce::Rectangle<int> filterModeArea = filterMenuArea.removeFromBottom(getHeight() / 6);//filterKnobAreaMid.removeFromTop(getHeight() / 4);
     filterModeArea.removeFromBottom(getHeight() / 15);
     lowcutSlopeMode.setBounds(filterModeArea);
     highcutSlopeMode.setBounds(filterModeArea);

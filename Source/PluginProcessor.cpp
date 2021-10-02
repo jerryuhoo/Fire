@@ -827,8 +827,10 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
     
     settings.lowCutFreq = apvts.getRawParameterValue(LOWCUT_FREQ_ID)->load();
     settings.lowCutQuality = apvts.getRawParameterValue(LOWCUT_Q_ID)->load();
+    settings.lowCutGainInDecibels = apvts.getRawParameterValue(LOWCUT_GAIN_ID)->load();
     settings.highCutFreq = apvts.getRawParameterValue(HIGHCUT_FREQ_ID)->load();
     settings.highCutQuality = apvts.getRawParameterValue(HIGHCUT_Q_ID)->load();
+    settings.highCutGainInDecibels = apvts.getRawParameterValue(HIGHCUT_GAIN_ID)->load();
     settings.peakFreq = apvts.getRawParameterValue(PEAK_FREQ_ID)->load();
     settings.peakGainInDecibels = apvts.getRawParameterValue(PEAK_GAIN_ID)->load();
     settings.peakQuality = apvts.getRawParameterValue(PEAK_Q_ID)->load();
@@ -850,6 +852,22 @@ CoefficientsPtr makePeakFilter(const ChainSettings& chainSettings, double sample
                                                                juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
 }
 
+CoefficientsPtr makeLowcutQFilter(const ChainSettings& chainSettings, double sampleRate)
+{
+    return juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate,
+                                                               chainSettings.lowCutFreq,
+                                                               chainSettings.lowCutQuality,
+                                                               juce::Decibels::decibelsToGain(chainSettings.lowCutGainInDecibels));
+}
+
+CoefficientsPtr makeHighcutQFilter(const ChainSettings& chainSettings, double sampleRate)
+{
+    return juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate,
+                                                               chainSettings.highCutFreq,
+                                                               chainSettings.highCutQuality,
+                                                               juce::Decibels::decibelsToGain(chainSettings.highCutGainInDecibels));
+}
+
 void FireAudioProcessor::updatePeakFilter(const ChainSettings &chainSettings)
 {
     auto peakCoefficients = makePeakFilter(chainSettings, getSampleRate());
@@ -866,25 +884,36 @@ void FireAudioProcessor::updateLowCutFilters(const ChainSettings &chainSettings)
     auto& leftLowCut = leftChain.get<ChainPositions::LowCut>();
     auto& rightLowCut = rightChain.get<ChainPositions::LowCut>();
     
+    auto lowcutQCoefficients = makeLowcutQFilter(chainSettings, getSampleRate());
+    
     leftChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     rightChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
+    leftChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
+    rightChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
     
     updateCutFilter(rightLowCut, cutCoefficients, chainSettings.lowCutSlope);
     updateCutFilter(leftLowCut, cutCoefficients, chainSettings.lowCutSlope);
+    
+    updateCoefficients(leftChain.get<ChainPositions::LowCutQ>().coefficients, lowcutQCoefficients);
+    updateCoefficients(rightChain.get<ChainPositions::LowCutQ>().coefficients, lowcutQCoefficients);
 }
 
 void FireAudioProcessor::updateHighCutFilters(const ChainSettings &chainSettings)
 {
     auto highCutCoefficients = makeHighCutFilter(chainSettings, getSampleRate());
-        
     auto& leftHighCut = leftChain.get<ChainPositions::HighCut>();
     auto& rightHighCut = rightChain.get<ChainPositions::HighCut>();
+    
+    auto highcutQCoefficients = makeHighcutQFilter(chainSettings, getSampleRate());
     
     leftChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
     rightChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
     
     updateCutFilter(leftHighCut, highCutCoefficients, chainSettings.highCutSlope);
     updateCutFilter(rightHighCut, highCutCoefficients, chainSettings.highCutSlope);
+    
+    updateCoefficients(leftChain.get<ChainPositions::HighCutQ>().coefficients, highcutQCoefficients);
+    updateCoefficients(rightChain.get<ChainPositions::HighCutQ>().coefficients, highcutQCoefficients);
 }
 
 
@@ -1391,6 +1420,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_FREQ_ID, HIGHCUT_FREQ_NAME, cutoffRange, 20000.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_Q_ID, HIGHCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_GAIN_ID, LOWCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_GAIN_ID, HIGHCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
     
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_FREQ_ID, PEAK_FREQ_NAME, cutoffRange, 1000.0f));
     parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_Q_ID, PEAK_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));

@@ -132,6 +132,10 @@
 #define HIGHCUT_FREQ_NAME   "HighcutFreq"
 #define PEAK_FREQ_ID        "peakFreq"
 #define PEAK_FREQ_NAME      "PeakFreq"
+#define LOWCUT_GAIN_ID      "lowCutGain"
+#define LOWCUT_GAIN_NAME    "LowCutGain"
+#define HIGHCUT_GAIN_ID     "highCutGain"
+#define HIGHCUT_GAIN_NAME   "HighCutGain"
 
 #define PEAK_GAIN_ID        "peakGain"
 #define PEAK_GAIN_NAME      "PeakGain"

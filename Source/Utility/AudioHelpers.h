@@ -42,7 +42,8 @@ enum Slope
 struct ChainSettings
 {
     float peakFreq { 0 }, peakGainInDecibels{ 0 }, peakQuality {1.0f};
-    float lowCutFreq { 0 }, highCutFreq { 0 }, lowCutQuality {1.0f}, highCutQuality {1.0f};
+    float lowCutFreq { 0 }, highCutFreq { 0 }, lowCutQuality {1.0f}, highCutQuality {1.0f},
+    lowCutGainInDecibels{ 0 }, highCutGainInDecibels{ 0 };
     
     Slope lowCutSlope { Slope::Slope_12 }, highCutSlope { Slope::Slope_12 };
     
@@ -55,7 +56,9 @@ enum ChainPositions
 {
     LowCut,
     Peak,
-    HighCut
+    HighCut,
+    LowCutQ,
+    HighCutQ
 };
 
 using Filter = juce::dsp::IIR::Filter<float>;
@@ -64,9 +67,12 @@ using CoefficientsPtr = Filter::CoefficientsPtr;
 
 using CutFilter = juce::dsp::ProcessorChain<Filter, Filter, Filter, Filter>;
 
-using MonoChain = juce::dsp::ProcessorChain<CutFilter, Filter, CutFilter>;
+using MonoChain = juce::dsp::ProcessorChain<CutFilter, Filter, CutFilter, Filter, Filter>;
 
 CoefficientsPtr makePeakFilter(const ChainSettings& chainSettings, double sampleRate);
+CoefficientsPtr makeLowcutQFilter(const ChainSettings& chainSettings, double sampleRate);
+CoefficientsPtr makeHighcutQFilter(const ChainSettings& chainSettings, double sampleRate);
+
 inline auto makeLowCutFilter(const ChainSettings& chainSettings, double sampleRate )
 {
     return juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(chainSettings.lowCutFreq,

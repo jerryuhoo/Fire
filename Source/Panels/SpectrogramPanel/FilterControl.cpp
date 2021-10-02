@@ -47,19 +47,18 @@ void FilterControl::resized()
     updateResponseCurve();
 }
 
-void FilterControl::setParams(float lowCut,
-                              
-                              float highCut,
-                              float cutRes,
-                              float peak,
-                              float peakRes)
-{
-    mLowCut = lowCut;
-    mHighCut = highCut;
-    mCutRes = cutRes;
-    mPeak = peak;
-    mPeakRes = peakRes;
-}
+//void FilterControl::setParams(float lowCut,
+//                              float highCut,
+//                              float cutRes,
+//                              float peak,
+//                              float peakRes)
+//{
+//    mLowCut = lowCut;
+//    mHighCut = highCut;
+//    mCutRes = cutRes;
+//    mPeak = peak;
+//    mPeakRes = peakRes;
+//}
 
 void FilterControl::updateChain()
 {
@@ -68,12 +67,19 @@ void FilterControl::updateChain()
     monoChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     monoChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
     monoChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
+    monoChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
+    monoChain.setBypassed<ChainPositions::HighCutQ>(chainSettings.highCutBypassed);
     
     auto peakCoefficients = makePeakFilter(chainSettings, processor.getSampleRate());
     updateCoefficients(monoChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
     
     auto lowCutCoefficients = makeLowCutFilter(chainSettings, processor.getSampleRate());
     auto highCutCoefficients = makeHighCutFilter(chainSettings, processor.getSampleRate());
+    
+    auto lowCutQCoefficients = makeLowcutQFilter(chainSettings, processor.getSampleRate());
+    updateCoefficients(monoChain.get<ChainPositions::LowCutQ>().coefficients, lowCutQCoefficients);
+    auto highCutQCoefficients = makeHighcutQFilter(chainSettings, processor.getSampleRate());
+    updateCoefficients(monoChain.get<ChainPositions::HighCutQ>().coefficients, highCutQCoefficients);
     
     updateCutFilter(monoChain.get<ChainPositions::LowCut>(),
                     lowCutCoefficients,
@@ -91,6 +97,8 @@ void FilterControl::updateResponseCurve()
     auto& lowcut = monoChain.get<ChainPositions::LowCut>();
     auto& peak = monoChain.get<ChainPositions::Peak>();
     auto& highcut = monoChain.get<ChainPositions::HighCut>();
+    auto& lowcutQ = monoChain.get<ChainPositions::LowCutQ>();
+    auto& highcutQ = monoChain.get<ChainPositions::HighCutQ>();
     
     auto sampleRate = processor.getSampleRate();
     
@@ -115,6 +123,7 @@ void FilterControl::updateResponseCurve()
                 mag *= lowcut.get<2>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
             if( !lowcut.isBypassed<3>() )
                 mag *= lowcut.get<3>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            mag *= lowcutQ.coefficients->getMagnitudeForFrequency(freq, sampleRate);
         }
         
         if(!monoChain.isBypassed<ChainPositions::HighCut>())
@@ -127,6 +136,7 @@ void FilterControl::updateResponseCurve()
                 mag *= highcut.get<2>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
             if( !highcut.isBypassed<3>() )
                 mag *= highcut.get<3>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            mag *= highcutQ.coefficients->getMagnitudeForFrequency(freq, sampleRate);
         }
         
         mags[i] = juce::Decibels::gainToDecibels(mag);

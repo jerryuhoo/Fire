@@ -83,16 +83,35 @@ void VUPanel::paint (juce::Graphics& g)
     
     if (mZoomState)
     {
+        // show db meter scale text
         float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
         float text20Y = VU_METER_Y + 20.0f / 96.0f * VU_METER_HEIGHT;
         float text40Y = VU_METER_Y + 40.0f / 96.0f * VU_METER_HEIGHT;
         float text60Y = VU_METER_Y + 60.0f / 96.0f * VU_METER_HEIGHT;
         float text80Y = VU_METER_Y + 80.0f / 96.0f * VU_METER_HEIGHT;
-        g.drawText("  0", textX, VU_METER_Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
-        g.drawText("-20", textX, text20Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
-        g.drawText("-40", textX, text40Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
-        g.drawText("-60", textX, text60Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
-        g.drawText("-80", textX, text80Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
+        float textWidth = getWidth() / 5;
+        float textHeight = getHeight() / 10;
+//        g.drawText("  0", textX, VU_METER_Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-20", textX, text20Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-40", textX, text40Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-60", textX, text60Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-80", textX, text80Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        
+        // show input/output db
+        g.setColour(juce::Colours::yellowgreen);
+        float inputValue = ((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) / 2.0f) * 96.0f - 96.0f;
+        float outputValue = ((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) / 2.0f) * 96.0f - 96.0f;
+        juce::Rectangle<int> localBounds = getLocalBounds();
+        juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
+        juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
+        g.setFont(juce::Font(KNOB_FONT, 20.0f, juce::Font::bold));
+        g.drawText(juce::String(inputValue, 1), leftArea, juce::Justification::centred);
+        g.drawText(juce::String(outputValue, 1), rightArea, juce::Justification::centred);
+        
+        g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
+        g.setFont(juce::Font(KNOB_FONT, 14.0f, juce::Font::plain));
+        g.drawText("RMS Input", leftArea.removeFromBottom(getHeight() / 3), juce::Justification::centred);
+        g.drawText("RMS Output", rightArea.removeFromBottom(getHeight() / 3), juce::Justification::centred);
     }
 }
 

@@ -112,3 +112,13 @@ void VUMeter::timerCallback()
         repaint();
     }
 }
+
+float VUMeter::getLeftChannelLevel()
+{
+    return mCh0Level;
+}
+
+float VUMeter::getRightChannelLevel()
+{
+    return mCh1Level;
+}

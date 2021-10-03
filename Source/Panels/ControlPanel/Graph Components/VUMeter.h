@@ -26,6 +26,8 @@ public:
     void resized() override;
     void setParameters(bool isInput, juce::String meterName);
     void timerCallback() override;
+    float getLeftChannelLevel();
+    float getRightChannelLevel();
 private:
     FireAudioProcessor* mProcessor;
     bool mIsInput;

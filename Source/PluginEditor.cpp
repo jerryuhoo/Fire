@@ -224,6 +224,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         bandPanel.setVisible(false);
         filterControl.setVisible(true);
         globalPanel.setVisible(true);
+        graphPanel.setFocusBandNum(-1); // -1 means global
     }
 }
 

@@ -1328,8 +1328,8 @@ float FireAudioProcessor::getOutputMeterRMSLevel(int channel, juce::String bandN
     }
     else if (bandName == "Band4")
     {
-        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedBand3);
-        else outputValue = dBToNormalizedGain(mOutputRightSmoothedBand3);
+        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedBand4);
+        else outputValue = dBToNormalizedGain(mOutputRightSmoothedBand4);
     }
     else
     {

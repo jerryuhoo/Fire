@@ -38,6 +38,7 @@ void VUPanel::paint (juce::Graphics& g)
     
     juce::String threshID = "";
     
+    bool isGlobal = false;
     if (focusBandNum == 0)
     {
         vuMeterIn.setParameters(true, "Band1");
@@ -62,13 +63,23 @@ void VUPanel::paint (juce::Graphics& g)
         vuMeterOut.setParameters(false, "Band4");
         threshID = COMP_THRESH_ID4;
     }
+    else if (focusBandNum == -1)
+    {
+        vuMeterIn.setParameters(true, "Global");
+        vuMeterOut.setParameters(false, "Global");
+        isGlobal = true;
+    }
     else jassertfalse;
     
-    float threshValue = *(processor.treeState.getRawParameterValue(threshID));
-    float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / 96.0f; // 96 is VU meter range
-    g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, 1);
-    g.drawLine(VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
-    g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+    // draw threshold pointer
+    if (!isGlobal)
+    {
+        float threshValue = *(processor.treeState.getRawParameterValue(threshID));
+        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / 96.0f; // 96 is VU meter range
+        g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, 1);
+        g.drawLine(VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+        g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+    }
     
     if (mZoomState)
     {

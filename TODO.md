@@ -2,8 +2,7 @@
 
 - Bug
 
-1. Compressor will cause noise
-
+1. enable button 0 is off then delete line won't reset.
 (except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
 
 - Feature

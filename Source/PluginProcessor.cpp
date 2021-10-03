@@ -502,17 +502,13 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
 
         processDistortion(mBuffer1, MODE_ID1, DRIVE_ID1, SAFE_ID1, OUTPUT_ID1, BIAS_ID1, REC_ID1, overdrive1);
-        
+
         normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
 
         widthProcessor1.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
 
         // compressor process
-        float ratio1 = *treeState.getRawParameterValue(COMP_RATIO_ID1);
-        float thresh1 = *treeState.getRawParameterValue(COMP_THRESH_ID1);
-        compressorProcessor1.setThreshold(thresh1);
-        compressorProcessor1.setRatio(ratio1);
-        compressorProcessor1.process(context1);
+        processCompressor(context1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1);
 
         // mix process
         mixDryWet(dryBuffer1, mBuffer1, MIX_ID1, dryWetMixer1);
@@ -544,12 +540,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         widthProcessor2.process(channeldataL, channeldataR, width2, mBuffer2.getNumSamples());
         
-        // compressor process
-        float ratio2 = *treeState.getRawParameterValue(COMP_RATIO_ID2);
-        float thresh2 = *treeState.getRawParameterValue(COMP_THRESH_ID2);
-        compressorProcessor1.setThreshold(thresh2);
-        compressorProcessor1.setRatio(ratio2);
-        compressorProcessor1.process(context2);
+        processCompressor(context2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2);
 
         // mix process
         mixDryWet(dryBuffer2, mBuffer2, MIX_ID2, dryWetMixer2);
@@ -581,12 +572,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         widthProcessor3.process(channeldataL, channeldataR, width3, mBuffer3.getNumSamples());
         
-        // compressor process
-        float ratio3 = *treeState.getRawParameterValue(COMP_RATIO_ID3);
-        float thresh3 = *treeState.getRawParameterValue(COMP_THRESH_ID3);
-        compressorProcessor1.setThreshold(thresh3);
-        compressorProcessor1.setRatio(ratio3);
-        compressorProcessor1.process(context3);
+        processCompressor(context3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3);
 
         // mix process
         mixDryWet(dryBuffer3, mBuffer3, MIX_ID3, dryWetMixer3);
@@ -612,12 +598,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         widthProcessor4.process(channeldataL, channeldataR, width4, mBuffer4.getNumSamples());
         
-        // compressor process
-        float ratio4 = *treeState.getRawParameterValue(COMP_RATIO_ID4);
-        float thresh4 = *treeState.getRawParameterValue(COMP_THRESH_ID4);
-        compressorProcessor1.setThreshold(thresh4);
-        compressorProcessor1.setRatio(ratio4);
-        compressorProcessor1.process(context4);
+        processCompressor(context4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4);
 
         // mix process
         mixDryWet(dryBuffer4, mBuffer4, MIX_ID4, dryWetMixer4);
@@ -1162,6 +1143,15 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     {
         oversamplingHQ[num]->processSamplesDown(blockInput);
     }
+}
+
+void FireAudioProcessor::processCompressor(juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, juce::dsp::Compressor<float>& compressor)
+{
+    float ratio = *treeState.getRawParameterValue(ratioID);
+    float thresh = *treeState.getRawParameterValue(threshID);
+    compressor.setThreshold(thresh);
+    compressor.setRatio(ratio);
+    compressor.process(context);
 }
 
 void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer)

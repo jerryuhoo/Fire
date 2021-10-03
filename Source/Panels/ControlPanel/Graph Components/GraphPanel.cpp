@@ -147,3 +147,8 @@ WidthGraph* GraphPanel::getWidthGraph()
 {
     return &widthGraph;
 }
+
+void GraphPanel::setFocusBandNum(int num)
+{
+    vuPanel.setFocusBandNum(num);
+}

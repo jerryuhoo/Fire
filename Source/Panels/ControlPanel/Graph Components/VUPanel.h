@@ -27,9 +27,11 @@ public:
     bool getZoomState();
     void setZoomState(bool zoomState);
     void mouseDown(const juce::MouseEvent &e) override;
+    void setFocusBandNum(int num);
     
 private:
     FireAudioProcessor &processor;
+    int focusBandNum;
     VUMeter vuMeterIn;
     VUMeter vuMeterOut;
     bool mZoomState = false; // false means small

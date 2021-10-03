@@ -30,6 +30,8 @@ public:
     void resized() override;
     void setDistortionState(int mode, float rec, float mix,
                             float bias, float drive, float rateDivide);
+    void setFocusBandNum(int num);
+    
     Oscilloscope* getOscilloscope();
     VUPanel* getVuPanel();
     DistortionGraph* getDistortionGraph();

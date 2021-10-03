@@ -2,7 +2,8 @@
 
 - Bug
 
-Great! Currently no bug found!
+1. Compressor will cause noise
+
 (except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
 
 - Feature
@@ -17,6 +18,7 @@ Great! Currently no bug found!
 8. add lfo control
 9. change A/B color when switching
 10. add max input/output value for meters (currently RMS)
+11. VU meters should change(band) when changing focus band. Should design a button to switch between global meter and band meter. (Also for width)
 
 - Improvement
 

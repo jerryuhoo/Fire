@@ -32,6 +32,37 @@ void VUPanel::paint (juce::Graphics& g)
 {
     g.setColour(COLOUR6);
     g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
+    
+    // draw compressor threshold line
+    g.setColour(KNOB_SUBFONT_COLOUR);
+    
+    juce::String threshID = "";
+    
+    if (focusBandNum == 0) threshID = COMP_THRESH_ID1;
+    else if (focusBandNum == 1) threshID = COMP_THRESH_ID2;
+    else if (focusBandNum == 2) threshID = COMP_THRESH_ID3;
+    else if (focusBandNum == 3) threshID = COMP_THRESH_ID4;
+    else jassertfalse;
+    
+    float threshValue = *(processor.treeState.getRawParameterValue(threshID));
+    float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / 96.0f; // 96 is VU meter range
+    g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, 1);
+    g.drawLine(VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+    g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+    
+    if (mZoomState)
+    {
+        float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
+        float text20Y = VU_METER_Y + 20.0f / 96.0f * VU_METER_HEIGHT;
+        float text40Y = VU_METER_Y + 40.0f / 96.0f * VU_METER_HEIGHT;
+        float text60Y = VU_METER_Y + 60.0f / 96.0f * VU_METER_HEIGHT;
+        float text80Y = VU_METER_Y + 80.0f / 96.0f * VU_METER_HEIGHT;
+        g.drawText("  0", textX, VU_METER_Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
+        g.drawText("-20", textX, text20Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
+        g.drawText("-40", textX, text40Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
+        g.drawText("-60", textX, text60Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
+        g.drawText("-80", textX, text80Y, getWidth() / 5, getHeight() / 10, juce::Justification::centred);
+    }
 }
 
 void VUPanel::resized()
@@ -62,4 +93,9 @@ void VUPanel::mouseDown(const juce::MouseEvent &e)
     {
         mZoomState = true;
     }
+}
+
+void VUPanel::setFocusBandNum(int num)
+{
+    focusBandNum = num;
 }

@@ -214,6 +214,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
         multiband.setVisible(true);
         filterControl.setVisible(false);
         bandPanel.setFocusBandNum(focusBand);
+        graphPanel.setFocusBandNum(focusBand);
         bandPanel.setVisible(true);
         globalPanel.setVisible(false);
     }

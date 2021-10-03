@@ -320,6 +320,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     highpass2.prepare(spec);
     highpass3.prepare(spec);
     
+    // gain
+    gainProcessor1.prepare(spec);
+    gainProcessor2.prepare(spec);
+    gainProcessor3.prepare(spec);
+    gainProcessor4.prepare(spec);
+    
     // compressor
     compressorProcessor1.reset();
     compressorProcessor1.prepare(spec);
@@ -494,24 +500,30 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass1.process (context1);
         }
 
-        dryBuffer1.makeCopyOf(mBuffer1);
-
-        // dsp process
-        auto* channeldataL = mBuffer1.getWritePointer(0);
-        auto* channeldataR = mBuffer1.getWritePointer(1);
-        float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
-
-        processDistortion(mBuffer1, MODE_ID1, DRIVE_ID1, SAFE_ID1, OUTPUT_ID1, BIAS_ID1, REC_ID1, overdrive1);
-
-        normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
-
-        widthProcessor1.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
-
-        // compressor process
-        processCompressor(context1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1);
-
-        // mix process
-        mixDryWet(dryBuffer1, mBuffer1, MIX_ID1, dryWetMixer1);
+//        dryBuffer1.makeCopyOf(mBuffer1);
+//
+//        // dsp process
+//        auto* channeldataL = mBuffer1.getWritePointer(0);
+//        auto* channeldataR = mBuffer1.getWritePointer(1);
+//        float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
+//
+//        // distortion process
+//        processDistortion(mBuffer1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1);
+//
+//        normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
+//
+//        // width process
+//        widthProcessor1.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
+//
+//        // compressor process
+//        processCompressor(context1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1);
+//
+//        // gain process
+//        processGain(context1, OUTPUT_ID1, gainProcessor1);
+//
+//        // mix process
+//        mixDryWet(dryBuffer1, mBuffer1, MIX_ID1, dryWetMixer1);
+        processAll(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, getTotalNumInputChannels(), recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1);
     }
     
     if (multibandState2 && lineNum >= 1)
@@ -527,23 +539,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass2.process(context2);
         }
 
-        dryBuffer2.makeCopyOf(mBuffer2);
-        
-        // dsp process
-        auto* channeldataL = mBuffer2.getWritePointer(0);
-        auto* channeldataR = mBuffer2.getWritePointer(1);
-        float width2 = *treeState.getRawParameterValue(WIDTH_ID2);
-        
-        processDistortion(mBuffer2, MODE_ID2, DRIVE_ID2, SAFE_ID2, OUTPUT_ID2, BIAS_ID2, REC_ID2, overdrive2);
-        
-        normalize(MODE_ID2, mBuffer2, totalNumInputChannels, recSmoother2, outputSmoother2);
-        
-        widthProcessor2.process(channeldataL, channeldataR, width2, mBuffer2.getNumSamples());
-        
-        processCompressor(context2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2);
-
-        // mix process
-        mixDryWet(dryBuffer2, mBuffer2, MIX_ID2, dryWetMixer2);
+        processAll(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, getTotalNumInputChannels(), recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2);
     }
     
     if (multibandState3 && lineNum >= 2)
@@ -559,23 +555,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass3.process(context3);
         }
 
-        dryBuffer3.makeCopyOf(mBuffer3);
-
-        // dsp process
-        auto* channeldataL = mBuffer3.getWritePointer(0);
-        auto* channeldataR = mBuffer3.getWritePointer(1);
-        float width3 = *treeState.getRawParameterValue(WIDTH_ID3);
-        
-        processDistortion(mBuffer3, MODE_ID3, DRIVE_ID3, SAFE_ID3, OUTPUT_ID3, BIAS_ID3, REC_ID3, overdrive3);
-        
-        normalize(MODE_ID3, mBuffer3, totalNumInputChannels, recSmoother3, outputSmoother3);
-        
-        widthProcessor3.process(channeldataL, channeldataR, width3, mBuffer3.getNumSamples());
-        
-        processCompressor(context3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3);
-
-        // mix process
-        mixDryWet(dryBuffer3, mBuffer3, MIX_ID3, dryWetMixer3);
+        processAll(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, getTotalNumInputChannels(), recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3);
     }
     
     if (multibandState4 && lineNum == 3)
@@ -587,21 +567,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         dryBuffer4.makeCopyOf(mBuffer4);
 
-        // dsp process
-        auto* channeldataL = mBuffer4.getWritePointer(0);
-        auto* channeldataR = mBuffer4.getWritePointer(1);
-        float width4 = *treeState.getRawParameterValue(WIDTH_ID4);
-        
-        processDistortion(mBuffer4, MODE_ID4, DRIVE_ID4, SAFE_ID4, OUTPUT_ID4, BIAS_ID4, REC_ID4, overdrive4);
-        
-        normalize(MODE_ID4, mBuffer4, totalNumInputChannels, recSmoother4, outputSmoother4);
-        
-        widthProcessor4.process(channeldataL, channeldataR, width4, mBuffer4.getNumSamples());
-        
-        processCompressor(context4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4);
-
-        // mix process
-        mixDryWet(dryBuffer4, mBuffer4, MIX_ID4, dryWetMixer4);
+        processAll(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, getTotalNumInputChannels(), recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4);
     }
     
     buffer.clear();
@@ -1006,7 +972,36 @@ float FireAudioProcessor::safeMode(float drive, juce::AudioBuffer<float>& buffer
     return newDrive;
 }
 
-void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String outputID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor, DCFilter, GainProcessor>& overdrive)
+void FireAudioProcessor::processAll(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor, DCFilter>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor)
+{
+    dryBuffer.makeCopyOf(bandBuffer);
+
+    // dsp process
+    auto* channeldataL = bandBuffer.getWritePointer(0);
+    auto* channeldataR = bandBuffer.getWritePointer(1);
+    float width = *treeState.getRawParameterValue(widthID);
+
+    // distortion process
+    processDistortion(bandBuffer, modeID, driveID, safeID, biasID, recID, overdrive);
+
+    // normalize wave center position
+    normalize(modeID, bandBuffer, totalNumInputChannels, recSmoother, outputSmoother1);
+
+    // width process
+    widthProcessor.process(channeldataL, channeldataR, width, bandBuffer.getNumSamples());
+
+    // compressor process
+    processCompressor(context, threshID, ratioID, compressorProcessor);
+
+    // gain process
+    processGain(context, outputID, gainProcessor);
+    
+    // mix process
+    mixDryWet(dryBuffer, bandBuffer, mixID, dryWetMixer);
+}
+
+
+void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor, DCFilter>& overdrive)
 {
     // oversampling
     juce::dsp::AudioBlock<float> blockInput(bandBuffer);
@@ -1049,7 +1044,6 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     // get parameters from sliders
     int mode = static_cast<int>(*treeState.getRawParameterValue(modeID));
     float driveValue = static_cast<float>(*treeState.getRawParameterValue(driveID));
-    float outputValue = static_cast<float>(*treeState.getRawParameterValue(outputID));
     float biasValue = static_cast<float>(*treeState.getRawParameterValue(biasID));
     float recValue = static_cast<float>(*treeState.getRawParameterValue(recID));
     
@@ -1132,10 +1126,6 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     auto& dcFilter = overdrive.get<5>();
     dcFilter.state = juce::dsp::IIR::Coefficients<float>::makeHighPass (getSampleRate(), 20.0);
 
-    auto& gainDown = overdrive.get<6>();
-    gainDown.setGainDecibels (outputValue);
-    gainDown.setRampDurationSeconds(0.05f);
-
     overdrive.process(context);
     
     // oversampling
@@ -1145,13 +1135,21 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     }
 }
 
-void FireAudioProcessor::processCompressor(juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, juce::dsp::Compressor<float>& compressor)
+void FireAudioProcessor::processCompressor(juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, CompressorProcessor& compressor)
 {
     float ratio = *treeState.getRawParameterValue(ratioID);
     float thresh = *treeState.getRawParameterValue(threshID);
     compressor.setThreshold(thresh);
     compressor.setRatio(ratio);
     compressor.process(context);
+}
+
+void FireAudioProcessor::processGain(juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor)
+{
+    float outputValue = *treeState.getRawParameterValue(outputID);
+    gainProcessor.setGainDecibels (outputValue);
+    gainProcessor.setRampDurationSeconds(0.05f);
+    gainProcessor.process(context);
 }
 
 void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer)

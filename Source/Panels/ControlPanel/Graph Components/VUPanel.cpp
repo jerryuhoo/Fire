@@ -17,8 +17,8 @@ VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), vuMeterIn(&p), vuMeterOu
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
     
-    vuMeterIn.setParameterId(1);
-    vuMeterOut.setParameterId(2);
+    vuMeterIn.setParameters(true, "Band1");
+    vuMeterOut.setParameters(false, "Band1");
     
     addAndMakeVisible(vuMeterIn);
     addAndMakeVisible(vuMeterOut);
@@ -38,10 +38,30 @@ void VUPanel::paint (juce::Graphics& g)
     
     juce::String threshID = "";
     
-    if (focusBandNum == 0) threshID = COMP_THRESH_ID1;
-    else if (focusBandNum == 1) threshID = COMP_THRESH_ID2;
-    else if (focusBandNum == 2) threshID = COMP_THRESH_ID3;
-    else if (focusBandNum == 3) threshID = COMP_THRESH_ID4;
+    if (focusBandNum == 0)
+    {
+        vuMeterIn.setParameters(true, "Band1");
+        vuMeterOut.setParameters(false, "Band1");
+        threshID = COMP_THRESH_ID1;
+    }
+    else if (focusBandNum == 1)
+    {
+        vuMeterIn.setParameters(true, "Band2");
+        vuMeterOut.setParameters(false, "Band2");
+        threshID = COMP_THRESH_ID2;
+    }
+    else if (focusBandNum == 2)
+    {
+        vuMeterIn.setParameters(true, "Band3");
+        vuMeterOut.setParameters(false, "Band3");
+        threshID = COMP_THRESH_ID3;
+    }
+    else if (focusBandNum == 3)
+    {
+        vuMeterIn.setParameters(true, "Band4");
+        vuMeterOut.setParameters(false, "Band4");
+        threshID = COMP_THRESH_ID4;
+    }
     else jassertfalse;
     
     float threshValue = *(processor.treeState.getRawParameterValue(threshID));

@@ -105,8 +105,8 @@ public:
     void setLineNum(int lineNum);
     
     // VU meters
-    float getInputMeterLevel(int channel);
-    float getOutputMeterLevel(int channel);
+    float getInputMeterRMSLevel(int channel, juce::String bandName);
+    float getOutputMeterRMSLevel(int channel, juce::String bandName);
     
     // drive lookandfeel
     float getReductionPrecent(juce::String safeId);
@@ -308,10 +308,33 @@ private:
     bool isBypassed = false;
     
     // VU meters
-    float mInputLeftSmoothed = 0;
-    float mInputRightSmoothed = 0;
-    float mOutputLeftSmoothed = 0;
-    float mOutputRightSmoothed = 0;
+    
+    void setLeftRightMeterRMSValues(juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue);
+    float mInputLeftSmoothedGlobal = 0;
+    float mInputRightSmoothedGlobal = 0;
+    float mOutputLeftSmoothedGlobal = 0;
+    float mOutputRightSmoothedGlobal = 0;
+    
+    float mInputLeftSmoothedBand1 = 0;
+    float mInputRightSmoothedBand1 = 0;
+    float mOutputLeftSmoothedBand1 = 0;
+    float mOutputRightSmoothedBand1 = 0;
+    
+    float mInputLeftSmoothedBand2 = 0;
+    float mInputRightSmoothedBand2 = 0;
+    float mOutputLeftSmoothedBand2 = 0;
+    float mOutputRightSmoothedBand2 = 0;
+    
+    float mInputLeftSmoothedBand3 = 0;
+    float mInputRightSmoothedBand3 = 0;
+    float mOutputLeftSmoothedBand3 = 0;
+    float mOutputRightSmoothedBand3 = 0;
+    
+    float mInputLeftSmoothedBand4 = 0;
+    float mInputRightSmoothedBand4 = 0;
+    float mOutputLeftSmoothedBand4 = 0;
+    float mOutputRightSmoothedBand4 = 0;
+    
     
     // Drive lookandfeel
     float mReductionPrecent1 = 0;

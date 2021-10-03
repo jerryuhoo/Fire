@@ -7,7 +7,6 @@
 
   ==============================================================================
 */
-
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
@@ -437,10 +436,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
     // VU input meter
 //    float absInputLeftValue = fabs(buffer.getMagnitude(0, 0, buffer.getNumSamples()));
-    float absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-    float absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
-    mInputLeftSmoothed = SMOOTH_COEFF * (mInputLeftSmoothed - absInputLeftValue) + absInputLeftValue;
-    mInputRightSmoothed = SMOOTH_COEFF * (mInputRightSmoothed - absInputRightValue) + absInputRightValue;
+    setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
     
     juce::dsp::AudioBlock<float> block(buffer);
     // pre-filter
@@ -483,11 +479,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandState2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
     multibandState3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
     multibandState4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
-    
-//    multibandFocus1 = *treeState.getRawParameterValue(BAND_FOCUS_ID1);
-//    multibandFocus2 = *treeState.getRawParameterValue(BAND_FOCUS_ID2);
-//    multibandFocus3 = *treeState.getRawParameterValue(BAND_FOCUS_ID3);
-//    multibandFocus4 = *treeState.getRawParameterValue(BAND_FOCUS_ID4);
 
     if (multibandState1)
     {
@@ -500,30 +491,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass1.process (context1);
         }
 
-//        dryBuffer1.makeCopyOf(mBuffer1);
-//
-//        // dsp process
-//        auto* channeldataL = mBuffer1.getWritePointer(0);
-//        auto* channeldataR = mBuffer1.getWritePointer(1);
-//        float width1 = *treeState.getRawParameterValue(WIDTH_ID1);
-//
-//        // distortion process
-//        processDistortion(mBuffer1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1);
-//
-//        normalize(MODE_ID1, mBuffer1, totalNumInputChannels, recSmoother1, outputSmoother1);
-//
-//        // width process
-//        widthProcessor1.process(channeldataL, channeldataR, width1, mBuffer1.getNumSamples());
-//
-//        // compressor process
-//        processCompressor(context1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1);
-//
-//        // gain process
-//        processGain(context1, OUTPUT_ID1, gainProcessor1);
-//
-//        // mix process
-//        mixDryWet(dryBuffer1, mBuffer1, MIX_ID1, dryWetMixer1);
+        setLeftRightMeterRMSValues(mBuffer1, mInputLeftSmoothedBand1, mInputRightSmoothedBand1);
+        
         processAll(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, getTotalNumInputChannels(), recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1);
+        
+        setLeftRightMeterRMSValues(mBuffer1, mOutputLeftSmoothedBand1, mOutputRightSmoothedBand1);
     }
     
     if (multibandState2 && lineNum >= 1)
@@ -539,7 +511,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass2.process(context2);
         }
 
+        setLeftRightMeterRMSValues(mBuffer2, mInputLeftSmoothedBand2, mInputRightSmoothedBand2);
+        
         processAll(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, getTotalNumInputChannels(), recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2);
+        
+        setLeftRightMeterRMSValues(mBuffer2, mOutputLeftSmoothedBand2, mOutputRightSmoothedBand2);
     }
     
     if (multibandState3 && lineNum >= 2)
@@ -554,12 +530,17 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass3.setCutoffFrequency(freqValue3);
             lowpass3.process(context3);
         }
-
+        
+        setLeftRightMeterRMSValues(mBuffer3, mInputLeftSmoothedBand3, mInputRightSmoothedBand3);
+        
         processAll(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, getTotalNumInputChannels(), recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3);
+        
+        setLeftRightMeterRMSValues(mBuffer3, mOutputLeftSmoothedBand3, mOutputRightSmoothedBand3);
     }
     
     if (multibandState4 && lineNum == 3)
     {
+        
         auto multibandBlock4 = juce::dsp::AudioBlock<float> (mBuffer4);
         auto context4 = juce::dsp::ProcessContextReplacing<float> (multibandBlock4);
         highpass3.setCutoffFrequency(freqValue3);
@@ -567,7 +548,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         dryBuffer4.makeCopyOf(mBuffer4);
 
+        setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
+        
         processAll(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, getTotalNumInputChannels(), recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4);
+        
+        setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
     }
     
     buffer.clear();
@@ -669,11 +654,12 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // VU output meter
-    float absOutputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-    float absOutputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
-    mOutputLeftSmoothed = SMOOTH_COEFF * (mOutputLeftSmoothed - absOutputLeftValue) + absOutputLeftValue;
-    mOutputRightSmoothed = SMOOTH_COEFF * (mOutputRightSmoothed - absOutputRightValue) + absOutputRightValue;
+//    float absOutputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+//    float absOutputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+//    mOutputLeftSmoothedGlobal = SMOOTH_COEFF * (mOutputLeftSmoothedGlobal - absOutputLeftValue) + absOutputLeftValue;
+//    mOutputRightSmoothedGlobal = SMOOTH_COEFF * (mOutputRightSmoothedGlobal - absOutputRightValue) + absOutputRightValue;
     
+    setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
     
     // Spectrum
     wetBuffer.makeCopyOf(buffer);
@@ -1273,16 +1259,83 @@ void FireAudioProcessor::setLineNum(int lineNum)
 }
 
 // VU meters
-float FireAudioProcessor::getInputMeterLevel(int channel)
+void FireAudioProcessor::setLeftRightMeterRMSValues(juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue)
 {
-    if (channel == 0) return dBToNormalizedGain(mInputLeftSmoothed);
-    else return dBToNormalizedGain(mInputRightSmoothed);
+    float absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+    float absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    // smooth value
+    leftOutValue = SMOOTH_COEFF * (leftOutValue - absInputLeftValue) + absInputLeftValue;
+    rightOutValue = SMOOTH_COEFF * (rightOutValue - absInputRightValue) + absInputRightValue;
 }
 
-float FireAudioProcessor::getOutputMeterLevel(int channel)
+float FireAudioProcessor::getInputMeterRMSLevel(int channel, juce::String bandName)
 {
-    if (channel == 0) return dBToNormalizedGain(mOutputLeftSmoothed);
-    else return dBToNormalizedGain(mOutputRightSmoothed);
+    float outputValue = 0;
+    if (bandName == "Global")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mInputLeftSmoothedGlobal);
+        else outputValue = dBToNormalizedGain(mInputRightSmoothedGlobal);
+    }
+    else if (bandName == "Band1")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mInputLeftSmoothedBand1);
+        else outputValue = dBToNormalizedGain(mInputRightSmoothedBand1);
+    }
+    else if (bandName == "Band2")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mInputLeftSmoothedBand2);
+        else outputValue = dBToNormalizedGain(mInputRightSmoothedBand2);
+    }
+    else if (bandName == "Band3")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mInputLeftSmoothedBand3);
+        else outputValue = dBToNormalizedGain(mInputRightSmoothedBand3);
+    }
+    else if (bandName == "Band4")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mInputLeftSmoothedBand4);
+        else outputValue = dBToNormalizedGain(mInputRightSmoothedBand4);
+    }
+    else
+    {
+        jassertfalse;
+    }
+    return outputValue;
+}
+
+float FireAudioProcessor::getOutputMeterRMSLevel(int channel, juce::String bandName)
+{
+    float outputValue = 0;
+    if (bandName == "Global")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedGlobal);
+        else outputValue = dBToNormalizedGain(mOutputRightSmoothedGlobal);
+    }
+    else if (bandName == "Band1")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedBand1);
+        else outputValue = dBToNormalizedGain(mOutputRightSmoothedBand1);
+    }
+    else if (bandName == "Band2")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedBand2);
+        else outputValue = dBToNormalizedGain(mOutputRightSmoothedBand2);
+    }
+    else if (bandName == "Band3")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedBand3);
+        else outputValue = dBToNormalizedGain(mOutputRightSmoothedBand3);
+    }
+    else if (bandName == "Band4")
+    {
+        if (channel == 0) outputValue = dBToNormalizedGain(mOutputLeftSmoothedBand3);
+        else outputValue = dBToNormalizedGain(mOutputRightSmoothedBand3);
+    }
+    else
+    {
+        jassertfalse;
+    }
+    return outputValue;
 }
 
 // drive lookandfeel

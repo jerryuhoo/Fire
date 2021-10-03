@@ -16,7 +16,7 @@
 //==============================================================================
 VUMeter::VUMeter(FireAudioProcessor* inProcessor)
 :   mProcessor(inProcessor),
-    mParameterId(-1),
+    mIsInput(true),
     mCh0Level(0),
     mCh1Level(0)
 {
@@ -62,31 +62,27 @@ void VUMeter::resized()
 {
 }
 
-void VUMeter::setParameterId(int inParameterId)
+void VUMeter::setParameters(bool isInput, juce::String meterName)
 {
-    mParameterId = inParameterId;
-    startTimerHz(15); //30
+    mIsInput = isInput;
+    mMeterName = meterName;
+    startTimerHz(30);
 }
 
 void VUMeter::timerCallback()
 {
     float updatedCh0Level = 0.0f;
     float updatedCh1Level = 0.0f;
-    switch (mParameterId)
+
+    if(mIsInput) // input
     {
-        case 1: // input
-        {
-            updatedCh0Level = mProcessor->getInputMeterLevel(0);
-            updatedCh1Level = mProcessor->getInputMeterLevel(1);
-        }
-            break;
-            
-        case 2: // output
-        {
-            updatedCh0Level = mProcessor->getOutputMeterLevel(0);
-            updatedCh1Level = mProcessor->getOutputMeterLevel(1);
-        }
-            break;
+        updatedCh0Level = mProcessor->getInputMeterRMSLevel(0, mMeterName);
+        updatedCh1Level = mProcessor->getInputMeterRMSLevel(1, mMeterName);
+    }
+    else // output
+    {
+        updatedCh0Level = mProcessor->getOutputMeterRMSLevel(0, mMeterName);
+        updatedCh1Level = mProcessor->getOutputMeterRMSLevel(1, mMeterName);
     }
     
     if (updatedCh0Level > mCh0Level)

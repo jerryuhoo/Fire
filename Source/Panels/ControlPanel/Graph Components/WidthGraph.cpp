@@ -76,9 +76,9 @@ void WidthGraph::paint (juce::Graphics& g)
             y = y / maxValue;
         }
         
-        g.setColour(juce::Colours::skyblue.withBrightness(0.9));
+        g.setColour(juce::Colours::skyblue.withAlpha(0.8f));
 //        g.drawEllipse(getWidth() / 2.0f + x, getHeight() + y, 0.5f, 0.5f, 0.5f);
-        g.drawEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 0.5f, 0.5f, 0.5f);
+        g.drawEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 0.5f, 0.5f, 1.0f);
     }
 }
 

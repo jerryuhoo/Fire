@@ -654,12 +654,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // VU output meter
-//    float absOutputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-//    float absOutputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
-//    mOutputLeftSmoothedGlobal = SMOOTH_COEFF * (mOutputLeftSmoothedGlobal - absOutputLeftValue) + absOutputLeftValue;
-//    mOutputRightSmoothedGlobal = SMOOTH_COEFF * (mOutputRightSmoothedGlobal - absOutputRightValue) + absOutputRightValue;
-    
-    setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
+    setLeftRightMeterRMSValues(buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
     
     // Spectrum
     wetBuffer.makeCopyOf(buffer);
@@ -667,9 +662,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
     dryBuffer.clear();
 
-
-    //visualiser.pushBuffer(buffer);
-    
 //    historyBuffer.makeCopyOf(buffer);
 }
 

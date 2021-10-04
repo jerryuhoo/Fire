@@ -130,6 +130,12 @@ void Multiband::paint (juce::Graphics& g)
     int margin2 = getWidth() / 250; // 1/100 * 4 / 10
     int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
 
+    if (lineNum == 0 && enableButton[0]->getToggleState() == false)
+    {
+        g.setColour(COLOUR_MASK_BLACK);
+        g.fillRect(0, 0, getWidth() + margin2, getHeight());
+    }
+    
     if (lineNum > 0 && multibandFocus[0])
     {
 //            g.setColour(COLOUR_MASK_RED);
@@ -482,7 +488,7 @@ void Multiband::getEnableArray(bool (&input)[4])
 
 void Multiband::reset()
 {
-    for (int i = 0; i < 4; i++)
+    for (int i = 1; i < 4; i++)
     {
         enableButton[i]->setVisible(false);
         soloButton[i]->setVisible(false);
@@ -574,7 +580,7 @@ void Multiband::setSoloRelatedBounds()
 {
     for (int i = 0; i < 4; i++)
     {
-        if (i <= lineNum && lineNum != 0)
+        if (i <= lineNum)
         {
             soloButton[i]->setVisible(true);
             enableButton[i]->setVisible(true);
@@ -594,6 +600,10 @@ void Multiband::setSoloRelatedBounds()
             enableButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getX() + freqDividerGroup[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
         }
         enableButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2, margin, size, size);
+    }
+    else if (lineNum == 0)
+    {
+        enableButton[0]->setBounds(getWidth() / 2, margin, size, size);
     }
 }
 
@@ -772,15 +782,6 @@ void Multiband::buttonClicked(juce::Button* button)
 //        }
 //    }
     
-    // delete line and reset deleted disabled band state
-    for (int i = 0; i < 4; ++i)
-    {
-        if (!enableButton[i]->getToggleState() && i > lineNum)
-        {
-            enableButton[i]->setToggleState(true, juce::NotificationType::sendNotification);
-        }
-    }
-    
     bool isChanged = false;
     
     // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
@@ -814,21 +815,11 @@ void Multiband::buttonClicked(juce::Button* button)
                 
                 soloButton[sortedIndex[i] + 1]->setVisible(true);
                 enableButton[sortedIndex[i] + 1]->setVisible(true);
-                if (lineNum == 1)
-                {
-                    soloButton[0]->setVisible(true);
-                    enableButton[0]->setVisible(true);
-                }
             }
             else // delete line
             {
                 soloButton[sortedIndex[i] + 1]->setVisible(false);
                 enableButton[sortedIndex[i] + 1]->setVisible(false);
-                if (lineNum == 0)
-                {
-                    soloButton[0]->setVisible(false);
-                    enableButton[0]->setVisible(false);
-                }
             }
             isChanged = true;
         }

@@ -52,7 +52,7 @@ private:
     
     bool move = false;
     bool mDeleteState = false;
-    float xPercent = 0.f;
+    float xPercent = 0.0f;
     int leftIndex = -1; // left index
     int rightIndex = -1; // right index
     int index = -1;

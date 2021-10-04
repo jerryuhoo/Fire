@@ -17,7 +17,7 @@
 8. add lfo control
 9. change A/B color when switching
 10. add max input/output value for meters (currently RMS)
-11. VU meters should change(band) when changing focus band. Should design a button to switch between global meter and band meter. (Also for width)
+11. VU meters should change(band) when changing focus band. Should switch between global meter and band meter. (Also for width)
 
 - Improvement
 

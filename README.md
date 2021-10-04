@@ -91,7 +91,12 @@ My Neteast channel: <a href="https://music.163.com/#/artist?id=12118139">羽翼�
 
 ## 6. Update Notes
 
-### 2020-10-2 (version 0.9.3)
+### 2021 (version 0.9.4)
+
+1. For VU meters and width graph, each represents to each band instead of global.
+2. Added more details to VU meters.
+
+### 2021-10-2 (version 0.9.3)
 
 Warning: Previous presets may not work, you have to resave your preset!
 
@@ -101,7 +106,7 @@ Warning: Previous presets may not work, you have to resave your preset!
 4. Fixed other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
 5. Now you can click graph to zoom in and out.
 
-### 2020-9-7 (version 0.9.2)
+### 2021-9-7 (version 0.9.2)
 
 1. GUI improvement.
 2. Added shape, width, and compressor groups.
@@ -109,11 +114,25 @@ Warning: Previous presets may not work, you have to resave your preset!
 4. Added VU meter and width graph.
 5. Added frequency label, and frequency automation bug fixed.
 
-### 2020-1-24 (version 0.9.1)
+### 2021-1-24 (version 0.9.1)
 
 1. Drive knob reduction and GUI improvement
 Fixed a bug that in global mode menu won't change when selecting different bands.
 
-### 2020-1-23 (version 0.9.0)
+### 2021-1-23 (version 0.9.0)
 
 1. First Beta release.
+
+## 7. License
+
+From v.0.9.4, I changed the license to AGPL-3.0.
+
+## What can you do with the source
+
+* Currently, up to version 0.9.4 is free for music producers, audio programmers who start to learn JUCE. You can fork, modify my code, but projects that used my code must be open-source.
+
+## Things you can't do with this source
+
+* Do not create an app and distribute it on the iOS app store.
+
+* Do not use the name "Fire", "Wings", or "羽翼深蓝Wings" for marketing or to name any distribution of binaries built with this source. This source code does not give you rights to infringe on trademarks. If you wanna use it for commercial, please send me an email. Otherwise, your software has to be open-source.

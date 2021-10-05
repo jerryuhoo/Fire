@@ -192,10 +192,12 @@ void DistortionGraph::paint (juce::Graphics& g)
 //    juce::Path pathShadow;
 //    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
 //    drawInnerShadow(g, pathShadow);
-}
-
-void DistortionGraph::resized()
-{
+    
+    if (isMouseOn && !mZoomState)
+    {
+        g.setColour(juce::Colours::yellow.withAlpha(0.05f));
+        g.fillAll();
+    }
 }
 
 void DistortionGraph::setState(int mode, float rec, float mix, float bias, float drive, float rateDivide)
@@ -206,33 +208,6 @@ void DistortionGraph::setState(int mode, float rec, float mix, float bias, float
     this->bias = bias;
     this->drive = drive;
     this->rateDivide = rateDivide;
-}
-
-void DistortionGraph::setScale(float scale)
-{
-    this->scale = scale;
-}
-
-bool DistortionGraph::getZoomState()
-{
-    return mZoomState;
-}
-
-void DistortionGraph::setZoomState(bool zoomState)
-{
-    mZoomState = zoomState;
-}
-
-void DistortionGraph::mouseDown(const juce::MouseEvent &e)
-{
-    if (mZoomState)
-    {
-        mZoomState = false;
-    }
-    else
-    {
-        mZoomState = true;
-    }
 }
 
 void DistortionGraph::parameterValueChanged(int parameterIndex, float newValue)

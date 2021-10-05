@@ -114,6 +114,12 @@ void VUPanel::paint (juce::Graphics& g)
         g.drawText("RMS Input", leftArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
         g.drawText("RMS Output", rightArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
     }
+    
+    if (isMouseOn && !mZoomState)
+    {
+        g.setColour(juce::Colours::yellowgreen.withAlpha(0.05f));
+        g.fillAll();
+    }
 }
 
 void VUPanel::resized()
@@ -122,28 +128,6 @@ void VUPanel::resized()
     // components that your component contains..
     vuMeterIn.setBounds(VU_METER_X_1, VU_METER_Y, VU_METER_WIDTH, VU_METER_HEIGHT);
     vuMeterOut.setBounds(VU_METER_X_2, VU_METER_Y, VU_METER_WIDTH, VU_METER_HEIGHT);
-}
-
-bool VUPanel::getZoomState()
-{
-    return mZoomState;
-}
-
-void VUPanel::setZoomState(bool zoomState)
-{
-    mZoomState = zoomState;
-}
-
-void VUPanel::mouseDown(const juce::MouseEvent &e)
-{
-    if (mZoomState)
-    {
-        mZoomState = false;
-    }
-    else
-    {
-        mZoomState = true;
-    }
 }
 
 void VUPanel::setFocusBandNum(int num)

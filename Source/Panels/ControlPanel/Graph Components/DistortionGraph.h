@@ -14,24 +14,20 @@
 #include "../../../PluginProcessor.h"
 #include "../../../GUI/LookAndFeel.h"
 #include "../../../DSP/ClippingFunctions.h"
+#include "GraphTemplate.h"
 
 //==============================================================================
 /*
 */
-class DistortionGraph  : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
+class DistortionGraph  : public GraphTemplate, juce::AudioProcessorParameter::Listener, juce::Timer
 {
 public:
     DistortionGraph(FireAudioProcessor &);
     ~DistortionGraph() override;
 
     void paint (juce::Graphics&) override;
-    void resized() override;
     void setState(int mode, float rec, float mix, float bias, float drive, float rateDivide);
-    void setScale(float scale);
-    bool getZoomState();
-    void setZoomState(bool zoomState);
-    void mouseDown(const juce::MouseEvent &e) override;
-    
+
     void parameterValueChanged (int parameterIndex, float newValue) override;
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
     void timerCallback() override;
@@ -45,7 +41,6 @@ private:
     float rateDivide = -1.0f;
     float drive = -1.0f;
     float scale = 1.0f;
-    bool mZoomState = false;
     juce::Atomic<bool> parametersChanged {false};
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)
 };

@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.9.4 b8" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.9.4 b9" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
@@ -45,6 +45,9 @@
                   file="Source/Panels/ControlPanel/Graph Components/DistortionGraph.h"/>
             <FILE id="P0iqAm" name="GraphPanel.cpp" compile="1" resource="0" file="Source/Panels/ControlPanel/Graph Components/GraphPanel.cpp"/>
             <FILE id="Sp4509" name="GraphPanel.h" compile="0" resource="0" file="Source/Panels/ControlPanel/Graph Components/GraphPanel.h"/>
+            <FILE id="pAv9Pw" name="GraphTemplate.cpp" compile="1" resource="0"
+                  file="Source/Panels/ControlPanel/Graph Components/GraphTemplate.cpp"/>
+            <FILE id="NODiZD" name="GraphTemplate.h" compile="0" resource="0" file="Source/Panels/ControlPanel/Graph Components/GraphTemplate.h"/>
             <FILE id="Ybpuak" name="Oscilloscope.cpp" compile="1" resource="0"
                   file="Source/Panels/ControlPanel/Graph Components/Oscilloscope.cpp"/>
             <FILE id="RctpQa" name="Oscilloscope.h" compile="0" resource="0" file="Source/Panels/ControlPanel/Graph Components/Oscilloscope.h"/>

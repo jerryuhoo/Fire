@@ -13,10 +13,12 @@
 #include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
 #include "VUMeter.h"
+#include "GraphTemplate.h"
+
 //==============================================================================
 /*
 */
-class VUPanel  : public juce::Component
+class VUPanel  : public GraphTemplate
 {
 public:
     VUPanel(FireAudioProcessor &);
@@ -24,9 +26,6 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    bool getZoomState();
-    void setZoomState(bool zoomState);
-    void mouseDown(const juce::MouseEvent &e) override;
     void setFocusBandNum(int num);
     
 private:
@@ -34,6 +33,5 @@ private:
     int focusBandNum;
     VUMeter vuMeterIn;
     VUMeter vuMeterOut;
-    bool mZoomState = false; // false means small
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUPanel)
 };

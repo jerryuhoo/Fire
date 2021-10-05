@@ -16,7 +16,7 @@
 //==============================================================================
 /*
 */
-class SoloButton  : public juce::Component
+class SoloButton  : public juce::ToggleButton
 {
 public:
     SoloButton();
@@ -25,14 +25,11 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    void mouseUp(const juce::MouseEvent &e) override;
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
     
-    bool getState();
-    
 private:
     bool isEntered = false;
-    bool mState = true;
+    juce::Colour getColour();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SoloButton)
 };

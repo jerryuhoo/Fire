@@ -77,7 +77,7 @@ private:
     int lineNum = 0;
     
     void changeFocus(int changedIndex, juce::String option);
-    void changeEnable(int changedIndex, juce::String option);
+    void changeEnableAndSoloButtons(int changedIndex, juce::String option);
     
     void updateLineLeftRightIndex();
     void updateLineNumAndSortedIndex();
@@ -87,6 +87,8 @@ private:
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
 
+    bool shouldSetBlackMask(int index);
+    
     int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
@@ -96,7 +98,8 @@ private:
     bool multibandFocus[4] = { true, false, false, false };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
-
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiSoloAttachment1, multiSoloAttachment2, multiSoloAttachment3, multiSoloAttachment4;
+    
     juce::Atomic<bool> parametersChanged {false};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)

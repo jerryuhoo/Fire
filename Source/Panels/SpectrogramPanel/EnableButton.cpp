@@ -24,7 +24,7 @@ EnableButton::~EnableButton()
 
 void EnableButton::paint (juce::Graphics& g)
 {
-    g.setColour(getColour().darker());
+    g.setColour(getColour().darker().darker());
     g.fillEllipse(0, 0, getWidth(), getHeight());
 //    g.setColour(COLOUR7);
 //    g.fillEllipse(1, 1, getWidth() - 2, getHeight() - 2);

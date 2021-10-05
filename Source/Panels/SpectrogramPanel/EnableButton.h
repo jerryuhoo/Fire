@@ -16,7 +16,7 @@
 //==============================================================================
 /*
 */
-class EnableButton  : public juce::ToggleButton//juce::Component
+class EnableButton  : public juce::ToggleButton
 {
 public:
     EnableButton();
@@ -27,8 +27,7 @@ public:
 
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
-    bool getState();
-    void setState(bool state);
+    
 private:
     bool isEntered = false;
     juce::Colour getColour();

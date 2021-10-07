@@ -31,7 +31,7 @@ public:
     void timerCallback() override;
     void setFocusBandNum(int num);
     void setScale(float scale);
-    void changeSliderState(int bandNum, bool isPresetChanged);
+//    void changeSliderState(int bandNum, bool isPresetChanged);
 private:
     FireAudioProcessor &processor;
     juce::Rectangle<int> bandKnobArea;

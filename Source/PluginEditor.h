@@ -113,7 +113,7 @@ private:
     // hide and show labels
 //    void sliderDragStarted (juce::Slider*) override;
 //    void sliderDragEnded (juce::Slider*) override;
-    void changeSliderState(juce::ComboBox *combobox);
+//    void changeSliderState(juce::ComboBox *combobox);
     
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>

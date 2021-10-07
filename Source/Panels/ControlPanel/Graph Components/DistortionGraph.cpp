@@ -75,7 +75,7 @@ void DistortionGraph::paint (juce::Graphics& g)
             xPos += posInc * step;
 
             // symmetrical distortion
-            if (mode < 9)
+            if (mode < 8)
             {
                 float valueAfterDrive = value;
                 
@@ -93,33 +93,30 @@ void DistortionGraph::paint (juce::Graphics& g)
                 switch (mode)
                 {
                     case 0:
-                        functionValue = waveshaping::doNothing(valueAfterDrive);
-                        break;
-                    case 1:
                         functionValue = waveshaping::arctanSoftClipping(valueAfterDrive);
                         break;
-                    case 2:
+                    case 1:
                         functionValue = waveshaping::expSoftClipping(valueAfterDrive);
                         break;
-                    case 3:
+                    case 2:
                         functionValue = waveshaping::tanhSoftClipping(valueAfterDrive);
                         break;
-                    case 4:
+                    case 3:
                         functionValue = waveshaping::cubicSoftClipping(valueAfterDrive);
                         break;
-                    case 5:
+                    case 4:
                         functionValue = waveshaping::hardClipping(valueAfterDrive);
                         break;
-                    case 6:
+                    case 5:
                         functionValue = waveshaping::sausageFattener(valueAfterDrive);
                         break;
-                    case 7:
+                    case 6:
                         functionValue = waveshaping::sinFoldback(valueAfterDrive);
                         break;
-                    case 8:
+                    case 7:
                         functionValue = waveshaping::linFoldback(valueAfterDrive);
                         break;
-                    case 9:
+                    case 8:
                         functionValue = waveshaping::limitclip(valueAfterDrive);
                         break;
                 }

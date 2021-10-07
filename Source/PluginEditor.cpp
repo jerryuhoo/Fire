@@ -354,11 +354,11 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
 {
-    if (combobox == &distortionMode1 || combobox == &distortionMode2
-        || combobox == &distortionMode3 || combobox == &distortionMode4)
-    {
-        changeSliderState(combobox);
-    }
+//    if (combobox == &distortionMode1 || combobox == &distortionMode2
+//        || combobox == &distortionMode3 || combobox == &distortionMode4)
+//    {
+//        changeSliderState(combobox);
+//    }
     if (combobox == stateComponent.getPresetBox())
     {
         int selectedId = combobox->getSelectedId();
@@ -378,12 +378,7 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
 void FireAudioProcessorEditor::initState()
 {
     // init
-    setMultiband();
-
-    changeSliderState(&distortionMode1);
-    changeSliderState(&distortionMode2);
-    changeSliderState(&distortionMode3);
-    changeSliderState(&distortionMode4);
+//    setMultiband();
 }
 
 void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
@@ -391,29 +386,26 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
     // Distortion mode select
     addAndMakeVisible(combobox);
 
-    combobox->addItem("None", 1);
-    combobox->addSeparator();
-
     combobox->addSectionHeading("Soft Clipping");
-    combobox->addItem("Arctan", 2);
-    combobox->addItem("Exp", 3);
-    combobox->addItem("Tanh", 4);
-    combobox->addItem("Cubic", 5);
+    combobox->addItem("Arctan", 1);
+    combobox->addItem("Exp", 2);
+    combobox->addItem("Tanh", 3);
+    combobox->addItem("Cubic", 4);
     combobox->addSeparator();
 
     combobox->addSectionHeading("Hard Clipping");
-    combobox->addItem("Hard", 6);
-    combobox->addItem("Sausage", 7);
+    combobox->addItem("Hard", 5);
+    combobox->addItem("Sausage", 6);
     combobox->addSeparator();
 
     combobox->addSectionHeading("Foldback");
-    combobox->addItem("Sin", 8);
-    combobox->addItem("Linear", 9);
+    combobox->addItem("Sin", 7);
+    combobox->addItem("Linear", 8);
     combobox->addSeparator();
 
-    combobox->addSectionHeading("Asymmetrical Clipping");
-    combobox->addItem("Diode 1 (beta)", 10);
-    combobox->addSeparator();
+//    combobox->addSectionHeading("Asymmetrical Clipping");
+//    combobox->addItem("Diode 1 (beta)", 9);
+//    combobox->addSeparator();
 
     combobox->setJustificationType(juce::Justification::centred);
     combobox->addListener(this);
@@ -505,22 +497,22 @@ void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Component& component
     }
 }
 
-void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)
-{
-    if (combobox == &distortionMode1)
-    {
-        bandPanel.changeSliderState(0, stateComponent.getChangedState());
-    }
-    else if (combobox == &distortionMode2)
-    {
-        bandPanel.changeSliderState(1, stateComponent.getChangedState());
-    }
-    else if (combobox == &distortionMode3)
-    {
-        bandPanel.changeSliderState(2, stateComponent.getChangedState());
-    }
-    else if (combobox == &distortionMode4)
-    {
-        bandPanel.changeSliderState(3, stateComponent.getChangedState());
-    }
-}
+//void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)
+//{
+//    if (combobox == &distortionMode1)
+//    {
+//        bandPanel.changeSliderState(0, stateComponent.getChangedState());
+//    }
+//    else if (combobox == &distortionMode2)
+//    {
+//        bandPanel.changeSliderState(1, stateComponent.getChangedState());
+//    }
+//    else if (combobox == &distortionMode3)
+//    {
+//        bandPanel.changeSliderState(2, stateComponent.getChangedState());
+//    }
+//    else if (combobox == &distortionMode4)
+//    {
+//        bandPanel.changeSliderState(3, stateComponent.getChangedState());
+//    }
+//}

@@ -15,11 +15,6 @@ namespace waveshaping
 {
 
 using JMath = juce::dsp::FastMathApproximations;
-template<typename T>
-T doNothing (T x) noexcept
-{
-    return x;
-}
 
 template<typename T>
 T arctanSoftClipping (T x) noexcept

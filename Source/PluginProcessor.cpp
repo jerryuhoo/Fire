@@ -1098,33 +1098,30 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     switch (mode)
     {
         case 0:
-            waveShaper.functionToUse = waveshaping::doNothing;
-            break;
-        case 1:
             waveShaper.functionToUse = waveshaping::arctanSoftClipping;
             break;
-        case 2:
+        case 1:
             waveShaper.functionToUse = waveshaping::expSoftClipping;
             break;
-        case 3:
+        case 2:
             waveShaper.functionToUse = waveshaping::tanhSoftClipping;
             break;
-        case 4:
+        case 3:
             waveShaper.functionToUse = waveshaping::cubicSoftClipping;
             break;
-        case 5:
+        case 4:
             waveShaper.functionToUse = waveshaping::hardClipping;
             break;
-        case 6:
+        case 5:
             waveShaper.functionToUse = waveshaping::sausageFattener;
             break;
-        case 7:
+        case 6:
             waveShaper.functionToUse = waveshaping::sinFoldback;
             break;
-        case 8:
+        case 7:
             waveShaper.functionToUse = waveshaping::linFoldback;
             break;
-        case 9:
+        case 8:
             waveShaper.functionToUse = waveshaping::limitclip;
             break;
     }
@@ -1430,10 +1427,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(HQ_ID, HQ_NAME, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID1, MODE_NAME1, 0, 9, 1));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID2, MODE_NAME2, 0, 9, 1));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID3, MODE_NAME3, 0, 9, 1));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID4, MODE_NAME4, 0, 9, 1));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID1, MODE_NAME1, 0, 7, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID2, MODE_NAME2, 0, 7, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID3, MODE_NAME3, 0, 7, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID4, MODE_NAME4, 0, 7, 0));
     
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID1, LINKED_NAME1, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID2, LINKED_NAME2, true));

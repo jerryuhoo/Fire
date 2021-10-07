@@ -637,48 +637,48 @@ void BandPanel::setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSec
 }
 
 
-void BandPanel::changeSliderState(int bandNum, bool isPresetChanged)
-{
-    if (bandNum == 0)
-    {
-        setSliderState(&processor, driveKnob1, MODE_ID1, tempDriveValue[0], isPresetChanged);
-        setSliderState(&processor, *biasKnob1, MODE_ID1, tempBiasValue[0], isPresetChanged);
-    }
-    else if (bandNum == 1)
-    {
-        setSliderState(&processor, driveKnob2, MODE_ID2, tempDriveValue[1], isPresetChanged);
-        setSliderState(&processor, *biasKnob2, MODE_ID2, tempBiasValue[1], isPresetChanged);
-    }
-    else if (bandNum == 2)
-    {
-        setSliderState(&processor, driveKnob3, MODE_ID3, tempDriveValue[2], isPresetChanged);
-        setSliderState(&processor, *biasKnob3, MODE_ID3, tempBiasValue[2], isPresetChanged);
-    }
-    else if (bandNum == 3)
-    {
-        setSliderState(&processor, driveKnob4, MODE_ID4, tempDriveValue[3], isPresetChanged);
-        setSliderState(&processor, *biasKnob4, MODE_ID4, tempBiasValue[3], isPresetChanged);
-    }
-}
-
-void BandPanel::setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue, bool isPresetChanged)
-{
-    auto val = processor->treeState.getRawParameterValue(paramId);
-    int selection = val->load();
-    if (selection == 0)
-    {
-        tempValue = slider.getValue();
-        slider.setValue(0);
-        slider.setEnabled(false);
-    }
-    else if (isPresetChanged)
-    {
-        slider.setEnabled(true);
-    }
-    else if (!slider.isEnabled())
-    {
-        slider.setValue(tempValue);
-        slider.setEnabled(true);
-    }
-}
+//void BandPanel::changeSliderState(int bandNum, bool isPresetChanged)
+//{
+//    if (bandNum == 0)
+//    {
+//        setSliderState(&processor, driveKnob1, MODE_ID1, tempDriveValue[0], isPresetChanged);
+//        setSliderState(&processor, *biasKnob1, MODE_ID1, tempBiasValue[0], isPresetChanged);
+//    }
+//    else if (bandNum == 1)
+//    {
+//        setSliderState(&processor, driveKnob2, MODE_ID2, tempDriveValue[1], isPresetChanged);
+//        setSliderState(&processor, *biasKnob2, MODE_ID2, tempBiasValue[1], isPresetChanged);
+//    }
+//    else if (bandNum == 2)
+//    {
+//        setSliderState(&processor, driveKnob3, MODE_ID3, tempDriveValue[2], isPresetChanged);
+//        setSliderState(&processor, *biasKnob3, MODE_ID3, tempBiasValue[2], isPresetChanged);
+//    }
+//    else if (bandNum == 3)
+//    {
+//        setSliderState(&processor, driveKnob4, MODE_ID4, tempDriveValue[3], isPresetChanged);
+//        setSliderState(&processor, *biasKnob4, MODE_ID4, tempBiasValue[3], isPresetChanged);
+//    }
+//}
+//
+//void BandPanel::setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue, bool isPresetChanged)
+//{
+//    auto val = processor->treeState.getRawParameterValue(paramId);
+//    int selection = val->load();
+//    if (selection == 0)
+//    {
+//        tempValue = slider.getValue();
+//        slider.setValue(0);
+//        slider.setEnabled(false);
+//    }
+//    else if (isPresetChanged)
+//    {
+//        slider.setEnabled(true);
+//    }
+//    else if (!slider.isEnabled())
+//    {
+//        slider.setValue(tempValue);
+//        slider.setEnabled(true);
+//    }
+//}
 

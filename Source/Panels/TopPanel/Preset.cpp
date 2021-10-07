@@ -439,7 +439,7 @@ menuButton{"Menu"}
 
             if (item->itemID == id)
             {
-                item->setAction ([this, id] { updatePresetBox(id); isChanged = true; });
+                item->setAction ([this, id] { updatePresetBox(id); /*isChanged = true;*/ });
             }
             else
             {
@@ -742,15 +742,15 @@ void StateComponent::resetMultiband()
     procStateAB.reset();
 }
 
-void StateComponent::setChangedState(bool state)
-{
-    isChanged = state;
-}
-
-bool StateComponent::getChangedState()
-{
-    return isChanged;
-}
+//void StateComponent::setChangedState(bool state)
+//{
+//    isChanged = state;
+//}
+//
+//bool StateComponent::getChangedState()
+//{
+//    return isChanged;
+//}
 
 juce::ComboBox* StateComponent::getPresetBox()
 {

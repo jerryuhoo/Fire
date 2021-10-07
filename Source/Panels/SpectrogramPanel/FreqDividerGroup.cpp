@@ -78,7 +78,7 @@ void FreqDividerGroup::paint (juce::Graphics& g)
 void FreqDividerGroup::resized()
 {
     margin = getHeight() / 20.0f;
-    size = getHeight() / 10.0f;
+    size = getWidth() / 1000.0f * 15;
     width = verticalLine.getWidth() / 2.0f;
     verticalLine.setBounds(0, 0, getWidth() / 100.0f, getHeight());
     closeButton.setBounds(width + margin, margin, size, size);

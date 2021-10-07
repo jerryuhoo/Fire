@@ -66,10 +66,6 @@ Multiband::Multiband(FireAudioProcessor &p) : processor(p)
     multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID2, *soloButton[1]);
     multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID3, *soloButton[2]);
     multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID4, *soloButton[3]);
-//    margin = getHeight() / 20.0f;
-//    size = freqDividerGroup[0]->getVerticalLine().getHeight() / 10.f;
-//    width = freqDividerGroup[0]->getVerticalLine().getWidth() / 2.f;
-//    updateLines();
 }
 
 Multiband::~Multiband()
@@ -194,7 +190,7 @@ void Multiband::resized()
     // This method is where you should set the bounds of any child
     // components that your component contains..
     margin = getHeight() / 20.0f;
-    size = freqDividerGroup[0]->getVerticalLine().getHeight() / 10.0f;
+    size = getWidth() / 1000.0f * 15.0f;
     width = freqDividerGroup[0]->getVerticalLine().getWidth() / 2.0f;
     
     // temp method to fix

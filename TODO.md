@@ -10,13 +10,12 @@
 2. auto-update check when open
 3. dry mix compensation
 4. add mid-side / pan knobs
-5. add solo button between vertical lines
-6. mouse drag vertically to change the output volume, like Ozone or saturn2
-7. smooth spectrogram
-8. add lfo control
-9. change A/B color when switching
-10. add max input/output value for meters (currently RMS)
-11. VU meters should change(band) when changing focus band. Should switch between global meter and band meter. (Also for width)
+5. mouse drag vertically to change the output volume, like Ozone or saturn2
+6. smooth spectrogram
+7. add lfo control
+8. change A/B color when switching
+9. add max input/output value for meters (currently RMS)
+10. VU meters should change(band) when changing focus band. Should switch between global meter and band meter. (Also for width)
 
 - Improvement
 

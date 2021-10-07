@@ -78,8 +78,9 @@ private:
     juce::TextButton
         hqButton,
         windowLeftButton,
-        windowRightButton;
-
+        windowRightButton,
+        zoomButton;
+    
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -132,6 +133,6 @@ private:
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
-
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

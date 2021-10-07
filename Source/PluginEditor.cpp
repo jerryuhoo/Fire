@@ -76,6 +76,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowLeftButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     windowLeftButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
     windowLeftButton.setLookAndFeel(&otherLookAndFeel);
+    windowLeftButton.addListener(this);
     
     // Window Right Button
     addAndMakeVisible(windowRightButton);
@@ -89,7 +90,24 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     windowRightButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     windowRightButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
     windowRightButton.setLookAndFeel(&otherLookAndFeel);
+    windowRightButton.addListener(this);
+       
+    if (windowLeftButton.getToggleState())
+    {
+        multiband.setVisible(true);
+        bandPanel.setVisible(true);
+        filterControl.setVisible(false);
+        globalPanel.setVisible(false);
+    }
 
+    if (windowRightButton.getToggleState())
+    {
+        multiband.setVisible(false);
+        bandPanel.setVisible(false);
+        filterControl.setVisible(true);
+        globalPanel.setVisible(true);
+    }
+         
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 
     setMenu(&distortionMode1);
@@ -97,6 +115,17 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     setMenu(&distortionMode3);
     setMenu(&distortionMode4);
 
+    // zoom button
+    addAndMakeVisible(zoomButton);
+    zoomButton.setClickingTogglesState(false);
+    zoomButton.setButtonText("Z");
+    zoomButton.addListener(this);
+    zoomButton.setColour(juce::TextButton::buttonColourId, COLOUR5.withAlpha(0.5f));
+    zoomButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5.withAlpha(0.5f));
+    zoomButton.setColour(juce::ComboBox::outlineColourId, COLOUR5.withAlpha(0.5f));
+    zoomButton.setColour(juce::TextButton::textColourOnId, COLOUR1.withAlpha(0.5f));
+    zoomButton.setColour(juce::TextButton::textColourOffId, COLOUR1.withAlpha(0.5f));
+        
     // use global lookandfeel
     getLookAndFeel().setColour(juce::ComboBox::textColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::ComboBox::arrowColourId, KNOB_SUBFONT_COLOUR);
@@ -175,18 +204,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t)BinaryData::firewingslogo_pngSize);
     g.drawImage(logoWings, getWidth() - part1, 0, part1, part1, 0, 0, logoWings.getWidth(), logoWings.getHeight());
 
-    bool left = windowLeftButton.getToggleState();
-    bool right = windowRightButton.getToggleState();
-
     auto frame = getLocalBounds();
     frame.setBounds(0, part1, getWidth(), part2);
-    
-    // draw layer 2
-    g.setColour(COLOUR6);
-    g.fillRect(0, part1, getWidth(), part2);
 
     int focusBand = 0;
     focusBand = multiband.getFocusBand();
+    
     if (focusBand == 0)
     {
         setDistortionGraph(MODE_ID1, DRIVE_ID1,
@@ -210,20 +233,15 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     
     setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
     
+    bool left = windowLeftButton.getToggleState();
+    bool right = windowRightButton.getToggleState();
+    
     if (left) { // if you select the left window, you will see audio wave and distortion function graphs.
-        multiband.setVisible(true);
-        filterControl.setVisible(false);
         bandPanel.setFocusBandNum(focusBand);
         graphPanel.setFocusBandNum(focusBand);
-        bandPanel.setVisible(true);
-        globalPanel.setVisible(false);
     }
     else if (right)
     {
-        multiband.setVisible(false);
-        bandPanel.setVisible(false);
-        filterControl.setVisible(true);
-        globalPanel.setVisible(true);
         graphPanel.setFocusBandNum(-1); // -1 means global
     }
 }
@@ -250,52 +268,64 @@ void FireAudioProcessorEditor::resized()
     stateComponent.setBounds(topBar);
 
     // spectrum and filter
-    juce::Rectangle<int> spectrumArea = area.removeFromTop(SPEC_HEIGHT);
-    spectrum.setBounds(spectrumArea);
-    multiband.setBounds(spectrumArea);
-    filterControl.setBounds(spectrumArea);
-    
-    // left and right window buttons
-    float windowHeight = getHeight() / 20;
-    juce::Rectangle<int> leftWindowButtonArea = area.removeFromTop(windowHeight);
-    juce::Rectangle<int> rightWindowButtonArea = leftWindowButtonArea.removeFromRight(getWidth() / 2);
-    windowLeftButton.setBounds(leftWindowButtonArea);
-    windowRightButton.setBounds(rightWindowButtonArea);
-    
-    area.removeFromLeft(getWidth() / 20);
-    area.removeFromRight(getWidth() / 20);
-    
-    juce::Rectangle<int> controlArea = area;
-    juce::Rectangle<int> controlAreaTop = area.removeFromTop(area.getHeight() / 5);
-    juce::Rectangle<int> controlAreaMid = area.removeFromTop(area.getHeight() / 4 * 3); // 3/4
+    if (zoomButton.getToggleState())
+    {
+        juce::Rectangle<int> spectrumArea = area;
+        spectrum.setBounds(spectrumArea);
+        multiband.setBounds(spectrumArea);
+        filterControl.setBounds(spectrumArea);
+    }
+    else
+    {
+        juce::Rectangle<int> spectrumArea = area.removeFromTop(SPEC_HEIGHT);
+        spectrum.setBounds(spectrumArea);
+        multiband.setBounds(spectrumArea);
+        filterControl.setBounds(spectrumArea);
+        
+        // left and right window buttons
+        float windowHeight = getHeight() / 20;
+        juce::Rectangle<int> leftWindowButtonArea = area.removeFromTop(windowHeight);
+        juce::Rectangle<int> rightWindowButtonArea = leftWindowButtonArea.removeFromRight(getWidth() / 2);
+        windowLeftButton.setBounds(leftWindowButtonArea);
+        windowRightButton.setBounds(rightWindowButtonArea);
+        
+        area.removeFromLeft(getWidth() / 20);
+        area.removeFromRight(getWidth() / 20);
+        
+        juce::Rectangle<int> controlArea = area;
+        juce::Rectangle<int> controlAreaTop = area.removeFromTop(area.getHeight() / 5);
+        juce::Rectangle<int> controlAreaMid = area.removeFromTop(area.getHeight() / 4 * 3); // 3/4
 
-    // distortion menu
-//    controlAreaTop.removeFromLeft(getWidth() / 20); // x position
-    juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft(OSC_WIDTH); // width
-    distortionModeArea.removeFromTop(controlAreaTop.getHeight() / 4);
-    distortionModeArea.removeFromBottom(controlAreaTop.getHeight() / 4);
-    distortionMode1.setBounds(distortionModeArea);
-    distortionMode2.setBounds(distortionModeArea);
-    distortionMode3.setBounds(distortionModeArea);
-    distortionMode4.setBounds(distortionModeArea);
+        // distortion menu
+    //    controlAreaTop.removeFromLeft(getWidth() / 20); // x position
+        juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft(OSC_WIDTH); // width
+        distortionModeArea.removeFromTop(controlAreaTop.getHeight() / 4);
+        distortionModeArea.removeFromBottom(controlAreaTop.getHeight() / 4);
+        distortionMode1.setBounds(distortionModeArea);
+        distortionMode2.setBounds(distortionModeArea);
+        distortionMode3.setBounds(distortionModeArea);
+        distortionMode4.setBounds(distortionModeArea);
 
-    juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
-    
-    // Graph Panel
-    graphPanel.setBounds(graphArea);
-    
-    controlArea.removeFromLeft(getWidth() / 7 * 2);
-    bandPanel.setBounds(controlArea);
-    globalPanel.setBounds(controlAreaMid);
-    
-    juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
-    juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight(getWidth() / 7);
-    
-    controlLeftKnobLeftArea.removeFromTop(controlLeftKnobLeftArea.getHeight() / 4);
-    controlLeftKnobLeftArea.removeFromBottom(controlLeftKnobLeftArea.getHeight() / 5);
+        juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
+        
+        // Graph Panel
+        graphPanel.setBounds(graphArea);
+        
+        controlArea.removeFromLeft(getWidth() / 7 * 2);
+        bandPanel.setBounds(controlArea);
+        globalPanel.setBounds(controlAreaMid);
+        
+        juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft(getWidth() / 7 * 2);
+        juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight(getWidth() / 7);
+        
+        controlLeftKnobLeftArea.removeFromTop(controlLeftKnobLeftArea.getHeight() / 4);
+        controlLeftKnobLeftArea.removeFromBottom(controlLeftKnobLeftArea.getHeight() / 5);
 
-    controlLeftKnobRightArea.removeFromTop(controlLeftKnobRightArea.getHeight() / 4);
-    controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5);
+        controlLeftKnobRightArea.removeFromTop(controlLeftKnobRightArea.getHeight() / 4);
+        controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5);
+    }
+    // Zoom button
+    zoomButton.setBounds(getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, 20, 20);
     
     // set look and feel scale
     otherLookAndFeel.scale = scale;
@@ -349,6 +379,61 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
         else
             clickedButton->setButtonText("A");
         initState();
+    }
+    if (clickedButton == &zoomButton)
+    {
+        if (zoomButton.getToggleState())
+        {
+            windowLeftButton.setVisible(true);
+            windowRightButton.setVisible(true);
+            if (windowLeftButton.getToggleState())
+            {
+                multiband.setVisible(true);
+                bandPanel.setVisible(true);
+                filterControl.setVisible(false);
+                globalPanel.setVisible(false);
+            }
+            else
+            {
+                multiband.setVisible(false);
+                bandPanel.setVisible(false);
+                filterControl.setVisible(true);
+                globalPanel.setVisible(true);
+            }
+            graphPanel.setVisible(true);
+            zoomButton.setToggleState(false, juce::NotificationType::dontSendNotification);
+        }
+        else
+        {
+            windowLeftButton.setVisible(false);
+            windowRightButton.setVisible(false);
+            distortionMode1.setVisible(false);
+            distortionMode2.setVisible(false);
+            distortionMode3.setVisible(false);
+            distortionMode4.setVisible(false);
+            graphPanel.setVisible(false);
+            bandPanel.setVisible(false);
+            globalPanel.setVisible(false);
+            zoomButton.setToggleState(true, juce::NotificationType::dontSendNotification);
+        }
+        resized();
+    }
+    if (clickedButton == &windowLeftButton)
+    {
+        if (windowLeftButton.getToggleState())
+        {
+            multiband.setVisible(true);
+            bandPanel.setVisible(true);
+            filterControl.setVisible(false);
+            globalPanel.setVisible(false);
+        }
+        else
+        {
+            multiband.setVisible(false);
+            bandPanel.setVisible(false);
+            filterControl.setVisible(true);
+            globalPanel.setVisible(true);
+        }
     }
 }
 
@@ -467,33 +552,43 @@ void FireAudioProcessorEditor::setMultiband()
 
 void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
 {
-    if (bandNum == 0)
-    {
-        component1.setVisible(true);
-        component2.setVisible(false);
-        component3.setVisible(false);
-        component4.setVisible(false);
-    }
-    else if (bandNum == 1)
-    {
-        component1.setVisible(false);
-        component2.setVisible(true);
-        component3.setVisible(false);
-        component4.setVisible(false);
-    }
-    else if (bandNum == 2)
-    {
-        component1.setVisible(false);
-        component2.setVisible(false);
-        component3.setVisible(true);
-        component4.setVisible(false);
-    }
-    else if (bandNum == 3)
+    if (zoomButton.getToggleState())
     {
         component1.setVisible(false);
         component2.setVisible(false);
         component3.setVisible(false);
-        component4.setVisible(true);
+        component4.setVisible(false);
+    }
+    else
+    {
+        if (bandNum == 0)
+        {
+            component1.setVisible(true);
+            component2.setVisible(false);
+            component3.setVisible(false);
+            component4.setVisible(false);
+        }
+        else if (bandNum == 1)
+        {
+            component1.setVisible(false);
+            component2.setVisible(true);
+            component3.setVisible(false);
+            component4.setVisible(false);
+        }
+        else if (bandNum == 2)
+        {
+            component1.setVisible(false);
+            component2.setVisible(false);
+            component3.setVisible(true);
+            component4.setVisible(false);
+        }
+        else if (bandNum == 3)
+        {
+            component1.setVisible(false);
+            component2.setVisible(false);
+            component3.setVisible(false);
+            component4.setVisible(true);
+        }
     }
 }
 

@@ -120,7 +120,6 @@ private:
         biasLabel;
     
     juce::TextButton
-        
         linkedButton1,
         linkedButton2,
         linkedButton3,

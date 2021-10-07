@@ -2,7 +2,7 @@
 
 - Bug
 
-1. enable button 0 is off then delete line won't reset.
+1. Big bug: sometimes when switching/selecting presets, some params such as drive will not load!
 (except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
 
 - Feature

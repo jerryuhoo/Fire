@@ -230,18 +230,18 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
 {
     
     //if (toIndex == 0)
-    std::array<juce::String, 11> fromArray;
-    std::array<juce::String, 11> toArray;
+    std::unique_ptr<std::array<juce::String, 11>> fromArray;
+    std::unique_ptr<std::array<juce::String, 11>> toArray;
     
-    if (fromIndex == 0) fromArray = paramsArray1;
-    if (fromIndex == 1) fromArray = paramsArray2;
-    if (fromIndex == 2) fromArray = paramsArray3;
-    if (fromIndex == 3) fromArray = paramsArray4;
+    if (fromIndex == 0) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
+    if (fromIndex == 1) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
+    if (fromIndex == 2) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
+    if (fromIndex == 3) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
     
-    if (toIndex == 0) toArray = paramsArray1;
-    if (toIndex == 1) toArray = paramsArray2;
-    if (toIndex == 2) toArray = paramsArray3;
-    if (toIndex == 3) toArray = paramsArray4;
+    if (toIndex == 0) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
+    if (toIndex == 1) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
+    if (toIndex == 2) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
+    if (toIndex == 3) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
     
     for (const auto &param : processor.getParameters())
     {
@@ -251,9 +251,9 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
             float paramFromValue = p->getValue();
             juce::String paramFromName = p->name;
             
-            for (int i = 0; i < fromArray.size(); i++)
+            for (int i = 0; i < fromArray->size(); i++)
             {
-                if (fromArray[i] == paramFromName)
+                if (fromArray.get()[0][i] == paramFromName)
                 {
                     // to array
                     for (const auto &paramTo : processor.getParameters())
@@ -261,13 +261,11 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
                         if (auto *pTo = dynamic_cast<juce::AudioProcessorParameterWithID *>(paramTo))
                         {
                             juce::String paramToName = pTo->name;
-                            for (int i = 0; i < toArray.size(); i++)
+                            
+                            if (toArray.get()[0][i] == paramToName)
                             {
-                                if (toArray[i] == paramToName)
-                                {
-                                    pTo->setValueNotifyingHost(paramFromValue);
-                                    break;
-                                }
+                                pTo->setValueNotifyingHost(paramFromValue);
+                                break;
                             }
                         }
                     }
@@ -276,56 +274,6 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
             }
         }
     }
-                
-//
-//                for (const auto &param : processor.getParameters())
-//                {
-//                    if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
-//                    {
-//                        if (toIndex == 0 && isParamInArray(p->name, paramsArray1))
-//                        {
-//                            p->setValueNotifyingHost(p->getDefaultValue());
-//                        }
-//            }
-//            else if (fromIndex == 1)
-//            {
-//                indexInArray = std::distance(paramsArray2.begin(), std::find(paramsArray2.begin(), paramsArray2.end(), p->name));
-//                fromValue = *processor.treeState.getRawParameterValue(paramsArray2[indexInArray]);
-//            }
-//            else if (fromIndex == 2)
-//            {
-//                indexInArray = std::distance(paramsArray3.begin(), std::find(paramsArray3.begin(), paramsArray3.end(), p->name));
-//                fromValue = *processor.treeState.getRawParameterValue(paramsArray3[indexInArray]);
-//            }
-//            else if (fromIndex == 3)
-//            {
-//                indexInArray = std::distance(paramsArray4.begin(), std::find(paramsArray4.begin(), paramsArray4.end(), p->name));
-//                fromValue = *processor.treeState.getRawParameterValue(paramsArray4[indexInArray]);
-//            }
-//        }
-    
-//    for (const auto &param : processor.getParameters())
-//    {
-//        if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
-//        {
-//            if (toIndex == 0 && isParamInArray(p->name, paramsArray1))
-//            {
-//                p->setValueNotifyingHost(p->getDefaultValue());
-//            }
-//            if (toIndex == 1 && isParamInArray(p->name, paramsArray2))
-//            {
-//                p->setValueNotifyingHost(p->getDefaultValue());
-//            }
-//            if (toIndex == 2 && isParamInArray(p->name, paramsArray3))
-//            {
-//                p->setValueNotifyingHost(p->getDefaultValue());
-//            }
-//            if (toIndex == 3 && isParamInArray(p->name, paramsArray4))
-//            {
-//                p->setValueNotifyingHost(p->getDefaultValue());
-//            }
-//        }
-//    }
 }
 
 bool Multiband::isParamInArray(juce::String paramName, std::array<juce::String, 11> paramArray)
@@ -430,15 +378,14 @@ void Multiband::setStatesWhenAddOrDelete(int changedIndex, juce::String option)
                     soloButton[i]->setToggleState(false, juce::NotificationType::sendNotification);
                     
                     // move parameters
-//                    setParametersToAFromB(i + 1, i);
-//                    initParameters(i);
+                    setParametersToAFromB(i + 1, i);
+                    initParameters(i);
                 }
                 else // mouse click is on the right side of buttons, keep i not change, i + 1 is new
                 {
                     enableButton[i + 1]->setToggleState(true, juce::NotificationType::sendNotification);
                     soloButton[i + 1]->setToggleState(false, juce::NotificationType::sendNotification);
-//                    initParameters(i + 1);
-                    
+                    initParameters(i + 1);
                 }
             }
         }
@@ -466,6 +413,7 @@ void Multiband::setStatesWhenAddOrDelete(int changedIndex, juce::String option)
             {
                 enableButton[i - 1]->setToggleState(enableButton[i]->getToggleState(), juce::NotificationType::sendNotification);
                 soloButton[i - 1]->setToggleState(soloButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+                setParametersToAFromB(i - 1, i);
             }
         }
     }

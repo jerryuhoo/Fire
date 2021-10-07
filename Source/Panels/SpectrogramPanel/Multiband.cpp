@@ -146,6 +146,16 @@ void Multiband::paint (juce::Graphics& g)
         g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
     }
     
+    int mouseX = getMouseXYRelative().getX();
+    int mouseY = getMouseXYRelative().getY();
+    
+    // set mouse enter white
+    if (!multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[sortedIndex[0]]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
+    }
+    
     if (lineNum > 0 && shouldSetBlackMask(0))
     {
         g.setColour(COLOUR_MASK_BLACK);
@@ -154,17 +164,27 @@ void Multiband::paint (juce::Graphics& g)
     
     for (int i = 1; i < lineNum; i++)
     {
+        int startX = freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1;
+        int bandWidth = freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX();
+        
         if (lineNum > 1 && multibandFocus[i])
         {
             juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
                                       COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
             g.setGradientFill(grad);
-            g.fillRect(freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1, 0, freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX(), getHeight());
+            g.fillRect(startX, 0, bandWidth, getHeight());
         }
+        
         if (lineNum > 1 && shouldSetBlackMask(i))
         {
             g.setColour(COLOUR_MASK_BLACK);
-            g.fillRect(freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1, 0, freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX(), getHeight());
+            g.fillRect(startX, 0, bandWidth, getHeight());
+        }
+        
+        if (!multibandFocus[i] && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
+        {
+            g.setColour(juce::Colours::white.withAlpha(0.05f));
+            g.fillRect(startX, 0, bandWidth, getHeight());
         }
     }
 
@@ -175,6 +195,14 @@ void Multiband::paint (juce::Graphics& g)
         g.setGradientFill(grad);
         g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
     }
+    
+    // set mouse enter white
+    if (!multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+    }
+    
     if (lineNum > 0 && shouldSetBlackMask(lineNum))
     {
         g.setColour(COLOUR_MASK_BLACK);

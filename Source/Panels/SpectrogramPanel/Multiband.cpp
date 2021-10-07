@@ -591,9 +591,9 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                     // create lines and close buttons and then set state
                     if (!freqDividerGroup[i]->getCloseButton().getToggleState())
                     {
-                        freqDividerGroup[i]->setCloseButtonValue(true);
                         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
                         freqDividerGroup[i]->getVerticalLine().setMoving(true);
+                        freqDividerGroup[i]->setCloseButtonValue(true);
                         break;
                     }
                 }

@@ -93,12 +93,16 @@ My Neteast channel: <a href="https://music.163.com/#/artist?id=12118139">羽翼�
 
 ### 2021 (version 0.9.4)
 
+Warning: Previous presets won't work, you have to resave your preset!
+
 1. For VU meters and width graph, each represents to each band instead of global.
 2. Added more details to VU meters.
+3. Added "solo" buttons, change "enable" buttons to "bypass" buttons.
+4. Removed "None" option in the distortion functions, because it causes bug(in version 0.9.3) and you can bypass the band now.
 
 ### 2021-10-2 (version 0.9.3)
 
-Warning: Previous presets may not work, you have to resave your preset!
+Warning: Previous presets won't work, you have to resave your preset!
 
 1. Redesign GUI.
 2. Fixed multiple bugs of multiband control(enable buttons, focus band, vertical lines, etc.), redesigned the code structure.

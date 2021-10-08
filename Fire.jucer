@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="0.9.4 b14" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="0.9.4 b15" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17">
   <MAINGROUP id="X9e8F0" name="Fire">
@@ -11,6 +11,10 @@
         <GROUP id="{43790AD2-FCF5-17E2-2CA5-275101E55D0C}" name="SpectrogramPanel">
           <FILE id="Ql023g" name="CloseButton.cpp" compile="1" resource="0" file="Source/Panels/SpectrogramPanel/CloseButton.cpp"/>
           <FILE id="RLvWtL" name="CloseButton.h" compile="0" resource="0" file="Source/Panels/SpectrogramPanel/CloseButton.h"/>
+          <FILE id="CZ02Ep" name="DraggableButton.cpp" compile="1" resource="0"
+                file="Source/Panels/SpectrogramPanel/DraggableButton.cpp"/>
+          <FILE id="zn8sxX" name="DraggableButton.h" compile="0" resource="0"
+                file="Source/Panels/SpectrogramPanel/DraggableButton.h"/>
           <FILE id="k0bTjg" name="EnableButton.cpp" compile="1" resource="0"
                 file="Source/Panels/SpectrogramPanel/EnableButton.cpp"/>
           <FILE id="SG4n7r" name="EnableButton.h" compile="0" resource="0" file="Source/Panels/SpectrogramPanel/EnableButton.h"/>

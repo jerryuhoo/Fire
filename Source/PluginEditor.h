@@ -59,14 +59,14 @@ private:
     // Multiband
     Multiband multiband {processor};
     
-    // Filter Control
-    FilterControl filterControl {processor};
-    
     // Band
     BandPanel bandPanel {processor};
     
     // Global
     GlobalPanel globalPanel;
+    
+    // Filter Control
+    FilterControl filterControl {processor, globalPanel};
 
     // Spectrum
     SpectrumComponent spectrum;

@@ -13,16 +13,20 @@
 #include "../../GUI/InterfaceDefines.h"
 
 //==============================================================================
-FilterControl::FilterControl(FireAudioProcessor &p) : processor(p)
+FilterControl::FilterControl(FireAudioProcessor &p, GlobalPanel &panel) : processor(p), globalPanel(panel)
 {
     const auto& params = processor.getParameters();
     for( auto param : params )
     {
         param->addListener(this);
     }
-
+    
     updateChain();
     startTimerHz(60);
+    
+    addAndMakeVisible(draggableLowButton);
+    addAndMakeVisible(draggablePeakButton);
+    addAndMakeVisible(draggableHighButton);
 }
 
 FilterControl::~FilterControl()
@@ -40,13 +44,61 @@ void FilterControl::paint (juce::Graphics& g)
     g.strokePath(responseCurve, juce::PathStrokeType(2.f));
     g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
     g.fillPath(responseCurve);
+    
+    float size = getWidth() / 1000.0f * 15;
+    
+    float buttonX = getMouseXYRelative().getX() - size / 2.0f;
+    float buttonY = getMouseXYRelative().getY() - size / 2.0f;
+    if (buttonX < 0) buttonX = 0;
+    if (buttonX > getWidth()) buttonX = getWidth() - size;
+    if (buttonY < getHeight() / 48.0f * (24 - 15) - size / 2.0f) buttonY = getHeight() / 48.0f * (24 - 15) - size / 2.0f;
+    if (buttonY > getHeight() / 48.0f * (24 + 15) - size / 2.0f) buttonY = getHeight() / 48.0f * (24 + 15) - size / 2.0f;
+    
+    if (draggableLowButton.isMouseButtonDown())
+    {
+        globalPanel.setToggleButtonState("lowcut");
+        draggableLowButton.setBounds(buttonX, buttonY, size, size);
+        globalPanel.getLowcutFreqKnob().setValue(juce::mapToLog10(static_cast<double>(getMouseXYRelative().getX() / static_cast<double>(getWidth())), 20.0, 20000.0));
+        globalPanel.getLowcutGainKnob().setValue(15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
+    }
+    if (draggablePeakButton.isMouseButtonDown())
+    {
+        globalPanel.setToggleButtonState("peak");
+        draggablePeakButton.setBounds(buttonX, buttonY, size, size);
+        globalPanel.getPeakFreqKnob().setValue(juce::mapToLog10(static_cast<double>(getMouseXYRelative().getX() / static_cast<double>(getWidth())), 20.0, 20000.0));
+        globalPanel.getPeakGainKnob().setValue(15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
+    }
+    if (draggableHighButton.isMouseButtonDown())
+    {
+        globalPanel.setToggleButtonState("highcut");
+        draggableHighButton.setBounds(buttonX, buttonY, size, size);
+        globalPanel.getHighcutFreqKnob().setValue(juce::mapToLog10(static_cast<double>(getMouseXYRelative().getX() / static_cast<double>(getWidth())), 20.0, 20000.0));
+        globalPanel.getHighcutGainKnob().setValue(15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
+    }
+    
 }
 
 void FilterControl::resized()
 {
     updateResponseCurve();
+    setDraggableButtonBounds();
 }
 
+void FilterControl::setDraggableButtonBounds()
+{
+    float size = getWidth() / 1000.0f * 15;
+    float lowcutX = getWidth() * juce::mapFromLog10(static_cast<double>(*processor.treeState.getRawParameterValue(LOWCUT_FREQ_ID)), 20.0, 20000.0);
+    float peakX = getWidth() * juce::mapFromLog10(static_cast<double>(*processor.treeState.getRawParameterValue(PEAK_FREQ_ID)), 20.0, 20000.0);
+    float highcutX = getWidth() * juce::mapFromLog10(static_cast<double>(*processor.treeState.getRawParameterValue(HIGHCUT_FREQ_ID)), 20.0, 20000.0);
+    
+    float lowcutY = getHeight() / 2.0f * *processor.treeState.getRawParameterValue(LOWCUT_GAIN_ID) / 24.0f;
+    float peakY = getHeight() / 2.0f * *processor.treeState.getRawParameterValue(PEAK_GAIN_ID) / 24.0f;
+    float highcutY = getHeight() / 2.0f * *processor.treeState.getRawParameterValue(HIGHCUT_GAIN_ID) / 24.0f;
+    
+    draggableLowButton.setBounds(lowcutX - size / 2.0f, getHeight() / 2.0f - lowcutY - size / 2.0f, size, size);
+    draggablePeakButton.setBounds(peakX - size / 2.0f, getHeight() / 2.0f - peakY - size / 2.0f, size, size);
+    draggableHighButton.setBounds(highcutX - size / 2.0f, getHeight() / 2.0f - highcutY - size / 2.0f, size, size);
+}
 //void FilterControl::setParams(float lowCut,
 //                              float highCut,
 //                              float cutRes,
@@ -177,7 +229,7 @@ void FilterControl::timerCallback()
     {
         updateChain();
         updateResponseCurve();
+        setDraggableButtonBounds();
     }
-    
     repaint();
 }

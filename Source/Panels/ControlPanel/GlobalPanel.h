@@ -31,6 +31,15 @@ public:
     void timerCallback() override;
     
     void setScale(float scale);
+    juce::Slider& getLowcutFreqKnob();
+    juce::Slider& getPeakFreqKnob();
+    juce::Slider& getHighcutFreqKnob();
+    juce::Slider& getLowcutGainKnob();
+    juce::Slider& getPeakGainKnob();
+    juce::Slider& getHighcutGainKnob();
+    
+    void setToggleButtonState(juce::String toggleButton);
+    
 private:
     float scale = 1.0f;
     // override listener functions

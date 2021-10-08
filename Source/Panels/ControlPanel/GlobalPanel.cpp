@@ -461,6 +461,36 @@ void GlobalPanel::setScale(float scale)
     this->scale = scale;
 }
 
+juce::Slider& GlobalPanel::getLowcutFreqKnob()
+{
+    return lowcutFreqKnob;
+}
+
+juce::Slider& GlobalPanel::getPeakFreqKnob()
+{
+    return peakFreqKnob;
+}
+
+juce::Slider& GlobalPanel::getHighcutFreqKnob()
+{
+    return highcutFreqKnob;
+}
+
+juce::Slider& GlobalPanel::getLowcutGainKnob()
+{
+    return lowcutGainKnob;
+}
+
+juce::Slider& GlobalPanel::getPeakGainKnob()
+{
+    return peakGainKnob;
+}
+
+juce::Slider& GlobalPanel::getHighcutGainKnob()
+{
+    return highcutGainKnob;
+}
+
 void GlobalPanel::updateToggleState()
 {
 //    if (*apvts.getRawParameterValue(OFF_ID))
@@ -479,4 +509,14 @@ void GlobalPanel::updateToggleState()
 //        lowcutFreqKnob.setEnabled(true);
 //        lowcutQKnob.setEnabled(true);
 //    }
+}
+
+void GlobalPanel::setToggleButtonState(juce::String toggleButton)
+{
+    if (toggleButton == "lowcut")
+        filterHighPassButton.setToggleState(true, juce::NotificationType::dontSendNotification);
+    if (toggleButton == "peak")
+        filterPeakButton.setToggleState(true, juce::NotificationType::dontSendNotification);
+    if (toggleButton == "highcut")
+        filterLowPassButton.setToggleState(true, juce::NotificationType::dontSendNotification);
 }

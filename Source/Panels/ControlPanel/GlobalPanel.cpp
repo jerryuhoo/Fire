@@ -401,8 +401,8 @@ void GlobalPanel::resized()
     outputKnobAreaLeft = outputKnobAreaLeft.reduced(getHeight() / 15, getHeight() / 5).reduced(outputKnobArea.getWidth() / 15, 0);
     outputKnobAreaRight = outputKnobAreaRight.reduced(getHeight() / 15, getHeight() / 5).reduced(outputKnobArea.getWidth() / 15, 0);
     
-    mixKnob.setBounds(outputKnobAreaLeft);
-    outputKnob.setBounds(outputKnobAreaRight);
+    outputKnob.setBounds(outputKnobAreaLeft);
+    mixKnob.setBounds(outputKnobAreaRight);
     
     lowPassButtonLnf.scale = scale;
     bandPassButtonLnf.scale = scale;

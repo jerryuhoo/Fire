@@ -77,6 +77,7 @@ public:
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
+    void setHistoryArray(int bandIndex);
     juce::Array<float> getHistoryArrayL();
     juce::Array<float> getHistoryArrayR();
     
@@ -231,6 +232,7 @@ private:
     GainProcessor gainProcessor2;
     GainProcessor gainProcessor3;
     GainProcessor gainProcessor4;
+    GainProcessor gainProcessorGlobal;
     
     DryWetMixer dryWetMixer1;
     DryWetMixer dryWetMixer2;

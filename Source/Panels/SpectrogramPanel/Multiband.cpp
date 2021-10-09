@@ -79,6 +79,19 @@ Multiband::~Multiband()
 
 void Multiband::paint (juce::Graphics& g)
 {
+    // set graph buffer
+    int focusIndex = 0;
+    for (int i = 0; i < 4; i++)
+    {
+        if (multibandFocus[i])
+        {
+            focusIndex = i;
+            break;
+        }
+    }
+
+    if (isVisible()) processor.setHistoryArray(focusIndex);
+    
     // set value only when line is deleted, added, moving
     if (getDeleteState() || getAddState() || getMovingState())
     {

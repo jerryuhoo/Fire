@@ -324,6 +324,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessor2.prepare(spec);
     gainProcessor3.prepare(spec);
     gainProcessor4.prepare(spec);
+    gainProcessorGlobal.prepare(spec);
     
     // compressor
     compressorProcessor1.reset();
@@ -624,61 +625,29 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         updateFilter();
     }
 
-    float mix = *treeState.getRawParameterValue(MIX_ID);
-    mixSmootherGlobal.setTargetValue(mix);
+//    float mix = *treeState.getRawParameterValue(MIX_ID);
+//    mixSmootherGlobal.setTargetValue(mix);
+//
+//    float output = juce::Decibels::decibelsToGain((float)*treeState.getRawParameterValue(OUTPUT_ID));
+//    outputSmootherGlobal.setTargetValue(output);
 
-    float output = juce::Decibels::decibelsToGain((float)*treeState.getRawParameterValue(OUTPUT_ID));
-    outputSmootherGlobal.setTargetValue(output);
-
-    // mix control
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto *channelData = buffer.getWritePointer(channel);
-        auto *cleanSignal = dryBuffer.getWritePointer(channel);
-        //auto* cleanSignal = mDelayBuffer.getWritePointer(channel);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            float smoothMixValue = mixSmootherGlobal.getNextValue();
-            float smoothOutputValue = outputSmootherGlobal.getNextValue();
-
-            // channelData[sample] = (1.f - mix) * cleanSignal[sample] + mix * channelData[sample];
-            channelData[sample] = (1.f - smoothMixValue) * cleanSignal[sample] + smoothMixValue * channelData[sample] * smoothOutputValue;
-            // channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
-            
-            // mDelay is delayed clean signal
-            if (sample % 10 == 0)
-            {
-                if (channel == 0)
-                {
-                    historyArrayL.add(channelData[sample]);
-                }
-                else if (channel == 1)
-                {
-                    historyArrayR.add(channelData[sample]);
-                }
-                if (historyArrayL.size() > historyLength)
-                {
-                    historyArrayL.remove(0);
-                }
-                if (historyArrayR.size() > historyLength)
-                {
-                    historyArrayR.remove(0);
-                }
-            }
-        }
-    }
-
-    // VU output meter
-    setLeftRightMeterRMSValues(buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
+    // global gain
+    auto globalBlock = juce::dsp::AudioBlock<float> (buffer);
+    auto contextGlobal = juce::dsp::ProcessContextReplacing<float> (globalBlock);
+    processGain(contextGlobal, OUTPUT_ID, gainProcessorGlobal);
+    
+    // mix dry wet
+    mixDryWet(dryBuffer, buffer, MIX_ID, dryWetMixerGlobal);
     
     // Spectrum
     wetBuffer.makeCopyOf(buffer);
     pushDataToFFT();
-
+    
+    // VU output meter
+    setLeftRightMeterRMSValues(buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
+    
     dryBuffer.clear();
 
-//    historyBuffer.makeCopyOf(buffer);
 }
 
 //==============================================================================
@@ -886,6 +855,60 @@ float FireAudioProcessor::getNewDrive(juce::String driveId)
         return newDrive4;
     jassertfalse;
     return -1.0f;
+}
+
+void FireAudioProcessor::setHistoryArray(int bandIndex)
+{
+    juce::AudioBuffer<float> buffer;
+
+    if (bandIndex == 0)
+    {
+        buffer = mBuffer1;
+    }
+    else if (bandIndex == 1)
+    {
+        buffer = mBuffer2;
+    }
+    else if (bandIndex == 2)
+    {
+        buffer = mBuffer3;
+    }
+    else if (bandIndex == 3)
+    {
+        buffer = mBuffer4;
+    }
+    else
+    {
+        buffer = wetBuffer;
+    }
+    
+    for (int channel = 0; channel < getTotalNumOutputChannels(); ++channel)
+    {
+        auto *channelData = buffer.getWritePointer(channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            // mDelay is delayed clean signal
+            if (sample % 10 == 0)
+            {
+                if (channel == 0)
+                {
+                    historyArrayL.add(channelData[sample]);
+                }
+                else if (channel == 1)
+                {
+                    historyArrayR.add(channelData[sample]);
+                }
+                if (historyArrayL.size() > historyLength)
+                {
+                    historyArrayL.remove(0);
+                }
+                if (historyArrayR.size() > historyLength)
+                {
+                    historyArrayR.remove(0);
+                }
+            }
+        }
+    }
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayL()

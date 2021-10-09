@@ -78,7 +78,7 @@ void Oscilloscope::paint (juce::Graphics& g)
         float valR = historyR[scaledIndex];
         
         // normalize
-        if (maxValue > 0.00001f)
+        if (maxValue > 0.005f)
         {
             valL = valL / maxValue * 0.6f;
             valR = valR / maxValue * 0.6f;

@@ -468,15 +468,16 @@ void BandPanel::resized()
     juce::Rectangle<int> outputKnobAreaRight = outputKnobAreaLeft.removeFromRight(bandKnobArea.getWidth() / 2);
     outputKnobAreaLeft = outputKnobAreaLeft.reduced(0, outputKnobAreaLeft.getHeight() / 5);
     outputKnobAreaRight = outputKnobAreaRight.reduced(0, outputKnobAreaRight.getHeight() / 5);
-    mixKnob1.setBounds(outputKnobAreaLeft);
-    mixKnob2.setBounds(outputKnobAreaLeft);
-    mixKnob3.setBounds(outputKnobAreaLeft);
-    mixKnob4.setBounds(outputKnobAreaLeft);
 
-    outputKnob1.setBounds(outputKnobAreaRight);
-    outputKnob2.setBounds(outputKnobAreaRight);
-    outputKnob3.setBounds(outputKnobAreaRight);
-    outputKnob4.setBounds(outputKnobAreaRight);
+    outputKnob1.setBounds(outputKnobAreaLeft);
+    outputKnob2.setBounds(outputKnobAreaLeft);
+    outputKnob3.setBounds(outputKnobAreaLeft);
+    outputKnob4.setBounds(outputKnobAreaLeft);
+    
+    mixKnob1.setBounds(outputKnobAreaRight);
+    mixKnob2.setBounds(outputKnobAreaRight);
+    mixKnob3.setBounds(outputKnobAreaRight);
+    mixKnob4.setBounds(outputKnobAreaRight);
 
     // buttons
     juce::Rectangle<int> outputButtonArea = outputKnobArea;

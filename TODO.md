@@ -9,13 +9,12 @@
 1. add enable button for compressor, downsample, width, filter, etc.
 2. auto-update check when open
 3. dry mix compensation
-4. add mid-side / pan knobs
-5. mouse drag vertically to change the output volume, like Ozone or saturn2
-6. smooth spectrogram
-7. add lfo control
-8. change A/B color when switching
-9. add max input/output value for meters (currently RMS)
-10. draggle eq mouse wheel change Q, mouse click set enable/disable
+4. mouse drag vertically to change the output volume, like Ozone or saturn2
+5. smooth spectrogram
+6. add lfo control
+7. change A/B color when switching
+8. add max input/output value for meters (currently RMS)
+9. draggle eq mouse wheel change Q, mouse click set enable/disable
 
 - Improvement
 

@@ -1046,3 +1046,8 @@ void Multiband::buttonClicked(juce::Button* button)
 //        }
 //    }
 }
+
+EnableButton& Multiband::getEnableButton(const int index)
+{
+    return *enableButton[index];
+}

@@ -58,6 +58,7 @@ public:
     void dragLinesByFreq(int freq, int index);
     int getFocusBand();
     void updateLines(int option);
+    EnableButton& getEnableButton(int index);
     
     void parameterValueChanged (int parameterIndex, float newValue) override;
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }

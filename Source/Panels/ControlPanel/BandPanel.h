@@ -32,6 +32,7 @@ public:
     void setFocusBandNum(int num);
     void setScale(float scale);
 //    void changeSliderState(int bandNum, bool isPresetChanged);
+    void setBandKnobsStates(int index, bool state);
 private:
     FireAudioProcessor &processor;
     juce::Rectangle<int> bandKnobArea;
@@ -141,6 +142,12 @@ private:
     juce::OwnedArray<juce::Component, juce::CriticalSection> widthVector;
     juce::OwnedArray<juce::Component, juce::CriticalSection> compressorVector;
     juce::OwnedArray<juce::Component, juce::CriticalSection> oscVector;
+    
+    
+    juce::Array<juce::Component *> componentArray1;
+    juce::Array<juce::Component *> componentArray2;
+    juce::Array<juce::Component *> componentArray3;
+    juce::Array<juce::Component *> componentArray4;
     
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>

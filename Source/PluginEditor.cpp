@@ -39,6 +39,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     addAndMakeVisible(multiband);
     addAndMakeVisible(filterControl);
 
+    for (int i = 0; i < 4; i++)
+    {
+        multiband.getEnableButton(i).addListener(this);
+    }
+        
     spectrum.setInterceptsMouseClicks(false, false);
     spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
     
@@ -435,6 +440,21 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
             globalPanel.setVisible(true);
         }
     }
+    for (int i = 0; i < 4; i++)
+    {
+        if (clickedButton == &multiband.getEnableButton(i))
+        {
+            if (clickedButton->getToggleState())
+            {
+                bandPanel.setBandKnobsStates(i, true);
+            }
+            else
+            {
+                bandPanel.setBandKnobsStates(i, false);
+            }
+        }
+    }
+    
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)

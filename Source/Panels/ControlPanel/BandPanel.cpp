@@ -295,6 +295,7 @@ BandPanel::~BandPanel()
     shapeSwitch.setLookAndFeel(nullptr);
     widthSwitch.setLookAndFeel(nullptr);
     compressorSwitch.setLookAndFeel(nullptr);
+    
 }
 
 void BandPanel::paint (juce::Graphics& g)
@@ -637,49 +638,31 @@ void BandPanel::setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSec
     }
 }
 
+void BandPanel::setBandKnobsStates(int index, bool state)
+{
+    componentArray1 = {&driveKnob1, &outputKnob1, &mixKnob1, recKnob1, biasKnob1, compThreshKnob1, compRatioKnob1, widthKnob1, &linkedButton1, &safeButton1};
+    componentArray2 = {&driveKnob2, &outputKnob2, &mixKnob2, recKnob2, biasKnob2, compThreshKnob2, compRatioKnob2, widthKnob2, &linkedButton2, &safeButton2};
+    componentArray3 = {&driveKnob3, &outputKnob3, &mixKnob3, recKnob3, biasKnob3, compThreshKnob3, compRatioKnob3, widthKnob3, &linkedButton3, &safeButton3};
+    componentArray4 = {&driveKnob4, &outputKnob4, &mixKnob4, recKnob4, biasKnob4, compThreshKnob4, compRatioKnob4, widthKnob4, &linkedButton4, &safeButton4};
+    
+    juce::Array<juce::Component *>* componentArray;
+    if (index == 0) componentArray = &componentArray1;
+    if (index == 1) componentArray = &componentArray2;
+    if (index == 2) componentArray = &componentArray3;
+    if (index == 3) componentArray = &componentArray4;
 
-//void BandPanel::changeSliderState(int bandNum, bool isPresetChanged)
-//{
-//    if (bandNum == 0)
-//    {
-//        setSliderState(&processor, driveKnob1, MODE_ID1, tempDriveValue[0], isPresetChanged);
-//        setSliderState(&processor, *biasKnob1, MODE_ID1, tempBiasValue[0], isPresetChanged);
-//    }
-//    else if (bandNum == 1)
-//    {
-//        setSliderState(&processor, driveKnob2, MODE_ID2, tempDriveValue[1], isPresetChanged);
-//        setSliderState(&processor, *biasKnob2, MODE_ID2, tempBiasValue[1], isPresetChanged);
-//    }
-//    else if (bandNum == 2)
-//    {
-//        setSliderState(&processor, driveKnob3, MODE_ID3, tempDriveValue[2], isPresetChanged);
-//        setSliderState(&processor, *biasKnob3, MODE_ID3, tempBiasValue[2], isPresetChanged);
-//    }
-//    else if (bandNum == 3)
-//    {
-//        setSliderState(&processor, driveKnob4, MODE_ID4, tempDriveValue[3], isPresetChanged);
-//        setSliderState(&processor, *biasKnob4, MODE_ID4, tempBiasValue[3], isPresetChanged);
-//    }
-//}
-//
-//void BandPanel::setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue, bool isPresetChanged)
-//{
-//    auto val = processor->treeState.getRawParameterValue(paramId);
-//    int selection = val->load();
-//    if (selection == 0)
-//    {
-//        tempValue = slider.getValue();
-//        slider.setValue(0);
-//        slider.setEnabled(false);
-//    }
-//    else if (isPresetChanged)
-//    {
-//        slider.setEnabled(true);
-//    }
-//    else if (!slider.isEnabled())
-//    {
-//        slider.setValue(tempValue);
-//        slider.setEnabled(true);
-//    }
-//}
-
+    if (state)
+    {
+        for (int i = 0; i < componentArray->size(); i++)
+        {
+            componentArray->data()[i]->setEnabled(true);
+        }
+    }
+    else
+    {
+        for (int i = 0; i < componentArray->size(); i++)
+        {
+            componentArray->data()[i]->setEnabled(false);
+        }
+    }
+}

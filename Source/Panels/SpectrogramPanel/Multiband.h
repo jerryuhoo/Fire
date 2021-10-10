@@ -17,6 +17,7 @@
 #include <vector>
 #include "FreqDividerGroup.h"
 #include "../../PluginProcessor.h"
+#include "../TopPanel/Preset.h"
 //==============================================================================
 /*
 */
@@ -24,7 +25,7 @@
 class Multiband  : public juce::Component, juce::Timer, juce::Slider::Listener, juce::AudioProcessorParameter::Listener, juce::Button::Listener
 {
 public:
-    Multiband(FireAudioProcessor &);
+    Multiband(FireAudioProcessor &, state::StateComponent &);
     ~Multiband() override;
 
     void paint (juce::Graphics&) override;
@@ -62,6 +63,7 @@ public:
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
 private:
     FireAudioProcessor &processor;
+    state::StateComponent &stateComponent;
     float margin;
     float size = 15.0f;
     float width = 5.0f;

@@ -12,7 +12,7 @@
 #include "Multiband.h"
 #include <algorithm>
 //==============================================================================
-Multiband::Multiband(FireAudioProcessor &p) : processor(p)
+Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : processor(p), stateComponent(sc)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
@@ -939,50 +939,58 @@ void Multiband::buttonClicked(juce::Button* button)
 //        }
 //    }
     
-    bool isChanged = false;
-    
-    // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
-    for (int i = 0; i < 3; i++)
+    if (stateComponent.getChangedState())
     {
-        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
+        stateComponent.setChangedState(false);
+        updateLines();
+    }
+    else
+    {
+        bool isChanged = false;
+        
+        // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
+        for (int i = 0; i < 3; i++)
         {
-            int changedIndex = i;
-            if (!button->getToggleState()) // delete line
+            if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
             {
-                // change focus
-                setStatesWhenAddOrDelete(changedIndex, "delete");
+                int changedIndex = i;
+                if (!button->getToggleState()) // delete line
+                {
+                    // change focus
+                    setStatesWhenAddOrDelete(changedIndex, "delete");
+                }
             }
         }
-    }
 
-    updateLines();
-    
-    // set soloButtons visibility
-    for (int i = 0; i < 3; i++)
-    {
-        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
+        updateLines();
+        
+        // set soloButtons visibility
+        for (int i = 0; i < 3; i++)
         {
-            int changedIndex = i;
-            if (button->getToggleState()) // add a line
+            if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
             {
-                // change focus
-                setStatesWhenAddOrDelete(changedIndex, "add");
-                
-                soloButton[sortedIndex[i] + 1]->setVisible(true);
-                enableButton[sortedIndex[i] + 1]->setVisible(true);
+                int changedIndex = i;
+                if (button->getToggleState()) // add a line
+                {
+                    // change focus
+                    setStatesWhenAddOrDelete(changedIndex, "add");
+                    
+                    soloButton[sortedIndex[i] + 1]->setVisible(true);
+                    enableButton[sortedIndex[i] + 1]->setVisible(true);
+                }
+                else // delete line
+                {
+                    soloButton[sortedIndex[i] + 1]->setVisible(false);
+                    enableButton[sortedIndex[i] + 1]->setVisible(false);
+                }
+                isChanged = true;
             }
-            else // delete line
-            {
-                soloButton[sortedIndex[i] + 1]->setVisible(false);
-                enableButton[sortedIndex[i] + 1]->setVisible(false);
-            }
-            isChanged = true;
         }
-    }
-    
-    if (isChanged)
-    {
-        setSoloRelatedBounds();
-        processor.setLineNum(getLineNum());
+        
+        if (isChanged)
+        {
+            setSoloRelatedBounds();
+            processor.setLineNum(getLineNum());
+        }
     }
 }

@@ -57,7 +57,7 @@ private:
     GraphPanel graphPanel {processor};
     
     // Multiband
-    Multiband multiband {processor};
+    Multiband multiband {processor, stateComponent};
     
     // Band
     BandPanel bandPanel {processor};

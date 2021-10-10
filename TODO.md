@@ -15,8 +15,7 @@
 7. add lfo control
 8. change A/B color when switching
 9. add max input/output value for meters (currently RMS)
-10. VU meters should change(band) when changing focus band. Should switch between global meter and band meter. (Also for width)
-11. draggle eq mouse wheel change Q, mouse click set enable/disable
+10. draggle eq mouse wheel change Q, mouse click set enable/disable
 
 - Improvement
 

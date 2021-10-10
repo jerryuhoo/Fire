@@ -114,8 +114,8 @@ public:
     /*juce::TextButton& getNextButton();
     juce::TextButton& getPreviousButton();*/
     
-//    void setChangedState(bool state);
-//    bool getChangedState();
+    void setChangedState(bool state);
+    bool getChangedState();
     juce::ComboBox* getPresetBox();
     juce::Button* getToggleABButton();
     void updatePresetBox(int selectedId);
@@ -147,7 +147,7 @@ private:
     juce::PopupMenu presetMenu;
     
     bool isInit = false;
-//    bool isChanged = false;
+    bool isChanged = false;
     
     void buttonClicked(juce::Button *clickedButton) override;
     void comboBoxChanged(juce::ComboBox *changedComboBox) override;

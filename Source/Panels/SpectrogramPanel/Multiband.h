@@ -57,7 +57,7 @@ public:
     void dragLines(float xPercent);
     void dragLinesByFreq(int freq, int index);
     int getFocusBand();
-    void updateLines();
+    void updateLines(int option);
     
     void parameterValueChanged (int parameterIndex, float newValue) override;
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
@@ -77,6 +77,7 @@ private:
     void mouseDrag(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
     int lineNum = 0;
+    int changePresetLineCount = 0; // only for preset change count
     
     std::array<juce::String, 11> paramsArray1 = {MODE_NAME1, LINKED_NAME1, SAFE_NAME1, DRIVE_NAME1, COMP_RATIO_NAME1, COMP_THRESH_NAME1, WIDTH_NAME1, OUTPUT_NAME1, MIX_NAME1, BIAS_NAME1, REC_NAME1};
     std::array<juce::String, 11> paramsArray2 = {MODE_NAME2, LINKED_NAME2, SAFE_NAME2, DRIVE_NAME2, COMP_RATIO_NAME2, COMP_THRESH_NAME2, WIDTH_NAME2, OUTPUT_NAME2, MIX_NAME2, BIAS_NAME2, REC_NAME2};
@@ -88,9 +89,9 @@ private:
     void setStatesWhenAddOrDelete(int changedIndex, juce::String option);
     
     void updateLineLeftRightIndex();
-    void updateLineNumAndSortedIndex();
+    void updateLineNumAndSortedIndex(int option);
     void setLineRelatedBoundsByX(int i);
-    //void setLineRelatedBoundsByFreq(int i);
+    void setLineRelatedBoundsByFreq(int i);
     void setSoloRelatedBounds();
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;

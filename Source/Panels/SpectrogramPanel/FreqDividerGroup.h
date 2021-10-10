@@ -33,7 +33,7 @@ public:
     bool getDeleteState();
     void setDeleteState(bool deleteState);
     
-    juce::ToggleButton& getCloseButton();
+    CloseButton& getCloseButton();
     void setCloseButtonValue(bool value);
     VerticalLine& getVerticalLine();
 private:

@@ -21,7 +21,8 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p, int index) : processor
 
     addAndMakeVisible(verticalLine);
     addAndMakeVisible(closeButton);
-    closeButton.onClick = [this] { updateCloseButtonState (); };
+    closeButton.addListener(this);
+//    closeButton.onClick = [this] { updateCloseButtonState (); };
     
     verticalLine.addListener(this);
     
@@ -126,7 +127,7 @@ VerticalLine& FreqDividerGroup::getVerticalLine()
     return verticalLine;
 }
 
-juce::ToggleButton& FreqDividerGroup::getCloseButton()
+CloseButton& FreqDividerGroup::getCloseButton()
 {
     return closeButton;
 }
@@ -139,7 +140,22 @@ void FreqDividerGroup::setCloseButtonValue(bool value)
 
 void FreqDividerGroup::buttonClicked(juce::Button* button)
 {
-
+    if (button == &closeButton)
+    {
+        if (closeButton.getToggleState())
+        {
+            setVisible(true);
+            closeButton.setVisible(true);
+            closeButton.setMouseClickState(false);
+        }
+        else
+        {
+            verticalLine.setDeleteState(true);
+            setVisible(false);
+            closeButton.setVisible(false);
+            freqTextLabel.setVisible(false);
+        }
+    }
 }
 
 void FreqDividerGroup::sliderValueChanged(juce::Slider *slider)
@@ -155,18 +171,19 @@ void FreqDividerGroup::sliderValueChanged(juce::Slider *slider)
 
 void FreqDividerGroup::updateCloseButtonState()
 {
-    if (closeButton.getToggleState())
-    {
-        setVisible(true);
-        closeButton.setVisible(true);
-    }
-    else
-    {
-        verticalLine.setDeleteState(true);
-        setVisible(false);
-        closeButton.setVisible(false);
-        freqTextLabel.setVisible(false);
-    }
+//    if (closeButton.getToggleState())
+//    {
+//        setVisible(true);
+//        closeButton.setVisible(true);
+//        closeButton.setMouseClickState(false);
+//    }
+//    else
+//    {
+//        verticalLine.setDeleteState(true);
+//        setVisible(false);
+//        closeButton.setVisible(false);
+//        freqTextLabel.setVisible(false);
+//    }
 }
 
 void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent &e)

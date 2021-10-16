@@ -58,6 +58,7 @@ public:
     void dragLinesByFreq(int freq, int index);
     int getFocusBand();
     void updateLines(int option);
+    void setSoloRelatedBounds();
     EnableButton& getEnableButton(int index);
     
     void parameterValueChanged (int parameterIndex, float newValue) override;
@@ -93,7 +94,7 @@ private:
     void updateLineNumAndSortedIndex(int option);
     void setLineRelatedBoundsByX(int i);
     void setLineRelatedBoundsByFreq(int i);
-    void setSoloRelatedBounds();
+    
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
 

@@ -6,7 +6,9 @@
 
 ## 1. Introduce
 
- This is a multi-band distortion plugin 『Fire』. It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
+This is a multi-band distortion plugin 『Fire』. It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
+
+:musical_note: Home Page for Wings Music: <a href="https://jerryuhoo.github.io/">Wings Music</a>
 
 Hope you like it!
 

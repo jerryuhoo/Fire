@@ -65,7 +65,7 @@ private:
         switchButtonsGlobal = 1005
     };
     
-    juce::Rectangle<int> GlobalEffectArea;
+    juce::Rectangle<int> globalEffectArea;
     juce::Rectangle<int> outputKnobArea;
     
     // Sliders
@@ -112,6 +112,8 @@ private:
         filterHighPassButton;
 
     juce::TextButton filterSwitch, otherSwitch;
+    
+    juce::ToggleButton filterBypassButton, downsampleBypassButton;
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

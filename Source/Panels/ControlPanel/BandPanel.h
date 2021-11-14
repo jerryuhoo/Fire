@@ -50,7 +50,7 @@ private:
     void setFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
     void linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton);
-    void setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSection> &array);
+    void setVisibility(juce::OwnedArray<juce::Component, juce::CriticalSection> &array, bool isVisible);
     void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue, bool isPresetChanged);
     
     enum RadioButtonIds
@@ -129,6 +129,9 @@ private:
         safeButton2,
         safeButton3,
         safeButton4;
+    
+    juce::ToggleButton *widthBypassButton, *compressorBypassButton;
+//    juce::ToggleButton widthBypassButton;
     
     // switches
     juce::TextButton

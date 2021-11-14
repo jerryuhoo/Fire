@@ -318,6 +318,12 @@
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
 #define COLOUR_GROUP        juce::Colour(50, 50, 50)
-
+#define DRIVE_COLOUR        juce::Colours::red
+#define SHAPE_COLOUR        juce::Colours::yellow
+#define WIDTH_COLOUR        juce::Colours::skyblue
+#define COMP_COLOUR         juce::Colours::yellowgreen
+#define FILTER_COLOUR       juce::Colours::hotpink
+#define DOWNSAMPLE_COLOUR   juce::Colours::purple
+    
 // VU meters
 #define SMOOTH_COEFF        0.2

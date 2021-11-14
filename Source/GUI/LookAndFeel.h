@@ -306,19 +306,71 @@ public:
 
         juce::Rectangle<float> tickBounds(x, y, w, h);
 
-        g.setColour(COLOUR2);
-        g.fillEllipse(tickBounds);
-
+        juce::Colour tickColour;
         if (ticked)
         {
-            g.setColour(component.findColour(juce::ToggleButton::tickColourId));
+            tickColour = component.findColour(juce::ToggleButton::tickColourId);
         }
         else
         {
-            g.setColour(COLOUR2);
+            tickColour = juce::Colours::grey;
         }
         juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
+        
+        
+        g.setColour(tickColour.darker().darker());
+        g.fillEllipse(tickBounds);
+
+        g.setColour(tickColour);
+        
+        auto radius = juce::jmin(tickBounds.getWidth(), tickBounds.getHeight()) / 2.0f;
+        auto lineW = radius * 0.2f;
+        auto arcRadius = radius - lineW * 2.0f;
+
+        juce::Path backgroundArc;
+        backgroundArc.addCentredArc(tickBounds.getCentreX(),
+                                    tickBounds.getCentreY(),
+                                    arcRadius,
+                                    arcRadius,
+                                    0.0f,
+                                    2 * M_PI * 0.1f,
+                                    2 * M_PI * 0.9f,
+                                    true);
+
+        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.drawLine(tickBounds.getX() + tickBounds.getWidth() / 2.0f, tickBounds.getY() + tickBounds.getHeight() / 6.0f, tickBounds.getX() + tickBounds.getWidth() / 2.0f, tickBounds.getY() + tickBounds.getHeight() / 2.0f, lineW);
+    }
+    
+    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
+                                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+//        auto fontSize = juce::jmin (15.0f, (float) button.getHeight() * 0.75f);
+//        auto tickWidth = fontSize * 1.1f;
+
+        drawTickBox (g, button, button.getWidth() / 4.0f, button.getHeight() / 4.0f,
+                     button.getWidth() / 2.0f, button.getHeight() / 2.0f,
+                     button.getToggleState(),
+                     button.isEnabled(),
+                     shouldDrawButtonAsHighlighted,
+                     shouldDrawButtonAsDown);
+//        drawTickBox (g, button, 4.0f, ((float) button.getHeight() - tickWidth) * 0.5f,
+//                     tickWidth, tickWidth,
+//                     button.getToggleState(),
+//                     button.isEnabled(),
+//                     shouldDrawButtonAsHighlighted,
+//                     shouldDrawButtonAsDown);
+
+//        g.setColour (button.findColour (juce::ToggleButton::textColourId));
+//        g.setFont (fontSize);
+//
+//        if (! button.isEnabled())
+//            g.setOpacity (0.5f);
+//
+//        g.drawFittedText (button.getButtonText(),
+//                          button.getLocalBounds().withTrimmedLeft (juce::roundToInt (tickWidth) + 10)
+//                                                 .withTrimmedRight (2),
+//                          juce::Justification::centredLeft, 10);
     }
     
     // rounded menu box

@@ -133,11 +133,11 @@ Fixed a bug that in global mode menu won't change when selecting different bands
 
 From v.0.9.4, I changed the license to AGPL-3.0.
 
-## What can you do with the source
+### What can you do with the source
 
 * Currently, up to version 0.9.4 is free for music producers, audio programmers who start to learn JUCE. You can fork, modify my code, but projects that used my code must be open-source.
 
-## Things you can't do with this source
+### Things you can't do with this source
 
 * Do not create an app and distribute it on the iOS app store.
 

@@ -43,10 +43,16 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
-    addAndMakeVisible(downsampleBypassButton);
-    downsampleBypassButton.setColour(juce::ToggleButton::tickColourId, DOWNSAMPLE_COLOUR);
+    filterBypassButton = new juce::ToggleButton();
+    downsampleBypassButton = new juce::ToggleButton();
+
     addAndMakeVisible(filterBypassButton);
-    filterBypassButton.setColour(juce::ToggleButton::tickColourId, FILTER_COLOUR);
+    filterBypassButton->setColour(juce::ToggleButton::tickColourId, FILTER_COLOUR);
+    filterBypassButton->addListener(this);
+    addAndMakeVisible(downsampleBypassButton);
+    downsampleBypassButton->setColour(juce::ToggleButton::tickColourId, DOWNSAMPLE_COLOUR);
+    downsampleBypassButton->addListener(this);
+    
     
     // lowcut freq knob
     setRotarySlider(lowcutFreqKnob, FILTER_COLOUR.withBrightness(0.8f));
@@ -203,6 +209,10 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     otherSwitch.setColour(juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     otherSwitch.setLookAndFeel(&flatButtonLnf);
     
+    // init state
+    setBypassState(0, filterBypassButton->getToggleState());
+    setBypassState(1, downsampleBypassButton->getToggleState());
+
     // Attachment
     outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, OUTPUT_ID, outputKnob);
     mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(apvts, MIX_ID, mixKnob);
@@ -276,7 +286,7 @@ void GlobalPanel::paint (juce::Graphics& g)
     
     if (isFilterSwitchOn)
     {
-        filterBypassButton.setVisible(true);
+        filterBypassButton->setVisible(true);
         filterHighPassButton.setVisible(true);
         filterPeakButton.setVisible(true);
         filterLowPassButton.setVisible(true);
@@ -323,16 +333,16 @@ void GlobalPanel::paint (juce::Graphics& g)
             highcutSlopeMode.setVisible(false);
         }
         downSampleKnob.setVisible(false);
-        downsampleBypassButton.setVisible(false);
+        downsampleBypassButton->setVisible(false);
     }
     if (isOtherSwitchOn)
     {
-        filterBypassButton.setVisible(false);
+        filterBypassButton->setVisible(false);
         filterHighPassButton.setVisible(false);
         filterPeakButton.setVisible(false);
         filterLowPassButton.setVisible(false);
         
-        downsampleBypassButton.setVisible(true);
+        downsampleBypassButton->setVisible(true);
         downSampleKnob.setVisible(true);
         lowcutFreqKnob.setVisible(false);
         lowcutQKnob.setVisible(false);
@@ -379,8 +389,8 @@ void GlobalPanel::resized()
     
     juce::Rectangle<int> bypassButtonArea = globalEffectArea;
     bypassButtonArea = bypassButtonArea.removeFromBottom(globalEffectArea.getHeight() / 5).reduced(globalEffectArea.getWidth() / 2 - globalEffectArea.getHeight() / 10, 0);
-    filterBypassButton.setBounds(bypassButtonArea);
-    downsampleBypassButton.setBounds(bypassButtonArea);
+    filterBypassButton->setBounds(bypassButtonArea);
+    downsampleBypassButton->setBounds(bypassButtonArea);
     
     juce::Rectangle<int> filterKnobAreaLeft = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 3);
     juce::Rectangle<int> filterKnobAreaMid = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 2);
@@ -441,6 +451,28 @@ void GlobalPanel::timerCallback()
 
 void GlobalPanel::buttonClicked(juce::Button *clickedButton)
 {
+    if (clickedButton == filterBypassButton)
+    {
+        if (filterBypassButton->getToggleState())
+        {
+            setBypassState(0, true);
+        }
+        else
+        {
+            setBypassState(0, false);
+        }
+    }
+    else if (clickedButton == downsampleBypassButton)
+    {
+        if (downsampleBypassButton->getToggleState())
+        {
+            setBypassState(1, true);
+        }
+        else
+        {
+            setBypassState(1, false);
+        }
+    }
 }
 
 void GlobalPanel::setRotarySlider(juce::Slider& slider, juce::Colour colour)
@@ -536,4 +568,29 @@ void GlobalPanel::setToggleButtonState(juce::String toggleButton)
         filterPeakButton.setToggleState(true, juce::NotificationType::dontSendNotification);
     if (toggleButton == "highcut")
         filterLowPassButton.setToggleState(true, juce::NotificationType::dontSendNotification);
+}
+
+void GlobalPanel::setBypassState(int index, bool state)
+{
+    componentArray1 = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode };
+    componentArray2 = { &downSampleKnob };
+
+    juce::Array<juce::Component*>* componentArray;
+    if (index == 0) componentArray = &componentArray1;
+    if (index == 1) componentArray = &componentArray2;
+
+    if (state)
+    {
+        for (int i = 0; i < componentArray->size(); i++)
+        {
+            componentArray->data()[i]->setEnabled(true);
+        }
+    }
+    else
+    {
+        for (int i = 0; i < componentArray->size(); i++)
+        {
+            componentArray->data()[i]->setEnabled(false);
+        }
+    }
 }

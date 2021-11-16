@@ -51,8 +51,8 @@ private:
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
     void linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton);
     void setVisibility(juce::OwnedArray<juce::Component, juce::CriticalSection> &array, bool isVisible);
-    void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue, bool isPresetChanged);
-    
+    void setBypassState(int index, bool state);
+
     enum RadioButtonIds
     {
         // filter state: off, pre, post

@@ -229,9 +229,14 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     
     addAndMakeVisible(widthBypassButton);
     widthBypassButton->setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR);
+    widthBypassButton->addListener(this);
     addAndMakeVisible(compressorBypassButton);
     compressorBypassButton->setColour(juce::ToggleButton::tickColourId, COMP_COLOUR);
+    compressorBypassButton->addListener(this);
 
+    // init state
+    setBypassState(0, compressorBypassButton->getToggleState());
+    setBypassState(1, widthBypassButton->getToggleState());
     
     // Attachment
     driveAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID1, driveKnob1);
@@ -546,20 +551,48 @@ void BandPanel::timerCallback()
 void BandPanel::buttonClicked(juce::Button *clickedButton)
 {
     juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
-    if(oscSwitch.getToggleState())
+    
+    if (clickedButton == &oscSwitch)
     {
-        driveKnob1.setBounds(bigDriveArea);
-        driveKnob2.setBounds(bigDriveArea);
-        driveKnob3.setBounds(bigDriveArea);
-        driveKnob4.setBounds(bigDriveArea);
+        if (oscSwitch.getToggleState())
+        {
+            driveKnob1.setBounds(bigDriveArea);
+            driveKnob2.setBounds(bigDriveArea);
+            driveKnob3.setBounds(bigDriveArea);
+            driveKnob4.setBounds(bigDriveArea);
+        }
+        else
+        {
+            driveKnob1.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+            driveKnob2.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+            driveKnob3.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+            driveKnob4.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+        }
     }
-    else
+    else if (clickedButton == compressorBypassButton)
     {
-        driveKnob1.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-        driveKnob2.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-        driveKnob3.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-        driveKnob4.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+        if (compressorBypassButton->getToggleState())
+        {
+            setBypassState(0, true);
+        }
+        else
+        {
+            setBypassState(0, false);
+        }
     }
+    else if (clickedButton == widthBypassButton)
+    {
+        if (widthBypassButton->getToggleState())
+        {
+            setBypassState(1, true);
+        }
+        else
+        {
+            setBypassState(1, false);
+        }
+    }
+
+
     repaint();
 }
 
@@ -652,6 +685,31 @@ void BandPanel::setVisibility(juce::OwnedArray<juce::Component, juce::CriticalSe
         else
         {
             array[i]->setVisible(false);
+        }
+    }
+}
+
+void BandPanel::setBypassState(int index, bool state)
+{
+    componentArray1 = { compThreshKnob1, compRatioKnob1, compThreshKnob2, compRatioKnob2, compThreshKnob3, compRatioKnob3, compThreshKnob4, compRatioKnob4 };
+    componentArray2 = { widthKnob1, widthKnob2, widthKnob3, widthKnob4 };
+
+    juce::Array<juce::Component*>* componentArray;
+    if (index == 0) componentArray = &componentArray1;
+    if (index == 1) componentArray = &componentArray2;
+
+    if (state)
+    {
+        for (int i = 0; i < componentArray->size(); i++)
+        {
+            componentArray->data()[i]->setEnabled(true);
+        }
+    }
+    else
+    {
+        for (int i = 0; i < componentArray->size(); i++)
+        {
+            componentArray->data()[i]->setEnabled(false);
         }
     }
 }

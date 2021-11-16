@@ -51,6 +51,8 @@ private:
     void setRotarySlider(juce::Slider& slider, juce::Colour colour);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void updateToggleState();
+    void setBypassState(int index, bool state);
+
     enum RadioButtonIds
     {
         // filter state: off, pre, post
@@ -113,7 +115,7 @@ private:
 
     juce::TextButton filterSwitch, otherSwitch;
     
-    juce::ToggleButton filterBypassButton, downsampleBypassButton;
+    juce::ToggleButton *filterBypassButton, *downsampleBypassButton;
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
@@ -155,6 +157,10 @@ private:
 
     juce::ComboBox lowcutSlopeMode;
     juce::ComboBox highcutSlopeMode;
+
+    // filter and downsample
+    juce::Array<juce::Component*> componentArray1;
+    juce::Array<juce::Component*> componentArray2;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lowcutModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> highcutModeAttachment;

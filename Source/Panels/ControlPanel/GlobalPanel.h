@@ -52,7 +52,8 @@ private:
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void updateToggleState();
     void setBypassState(int index, bool state);
-
+    void updateBypassState(juce::ToggleButton &clickedButton, int index);
+    
     enum RadioButtonIds
     {
         // filter state: off, pre, post
@@ -115,7 +116,7 @@ private:
 
     juce::TextButton filterSwitch, otherSwitch;
     
-    juce::ToggleButton *filterBypassButton, *downsampleBypassButton;
+    std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
     
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

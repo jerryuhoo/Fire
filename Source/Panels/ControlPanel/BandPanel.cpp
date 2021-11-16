@@ -15,30 +15,15 @@
 BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
 {
     // init vec
-    shapeVector.add(recKnob1 = new juce::Slider());
-    shapeVector.add(recKnob2 = new juce::Slider());
-    shapeVector.add(recKnob3 = new juce::Slider());
-    shapeVector.add(recKnob4 = new juce::Slider());
-    shapeVector.add(biasKnob1 = new juce::Slider());
-    shapeVector.add(biasKnob2 = new juce::Slider());
-    shapeVector.add(biasKnob3 = new juce::Slider());
-    shapeVector.add(biasKnob4 = new juce::Slider());
+    shapeVector = { &recKnob1, &recKnob2, &recKnob3, &recKnob4, &biasKnob1, &biasKnob2, &biasKnob3, &biasKnob4 };
     
-    widthVector.add(widthKnob1 = new juce::Slider());
-    widthVector.add(widthKnob2 = new juce::Slider());
-    widthVector.add(widthKnob3 = new juce::Slider());
-    widthVector.add(widthKnob4 = new juce::Slider());
-    widthVector.add(widthBypassButton = new juce::ToggleButton());
+    widthBypassButton = std::make_unique<juce::ToggleButton>();
+    widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4};
+    widthVector.add(&*widthBypassButton);
     
-    compressorVector.add(compThreshKnob1 = new juce::Slider());
-    compressorVector.add(compThreshKnob2 = new juce::Slider());
-    compressorVector.add(compThreshKnob3 = new juce::Slider());
-    compressorVector.add(compThreshKnob4 = new juce::Slider());
-    compressorVector.add(compRatioKnob1 = new juce::Slider());
-    compressorVector.add(compRatioKnob2 = new juce::Slider());
-    compressorVector.add(compRatioKnob3 = new juce::Slider());
-    compressorVector.add(compRatioKnob4 = new juce::Slider());
-    compressorVector.add(compressorBypassButton = new juce::ToggleButton());
+    compressorBypassButton = std::make_unique<juce::ToggleButton>();
+    compressorVector = {&compThreshKnob1, &compThreshKnob2, &compThreshKnob3, &compThreshKnob4, &compRatioKnob1, &compRatioKnob2, &compRatioKnob3, &compRatioKnob4};
+    compressorVector.add(&*compressorBypassButton);
     
     // drive knobs
     driveKnob1.setLookAndFeel(&driveLookAndFeel1);
@@ -86,73 +71,73 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     setRotarySlider(mixKnob4, COLOUR1);
     
     // compressor ratio knobs
-    setRotarySlider(*compRatioKnob1, COMP_COLOUR);
-    setRotarySlider(*compRatioKnob2, COMP_COLOUR);
-    setRotarySlider(*compRatioKnob3, COMP_COLOUR);
-    setRotarySlider(*compRatioKnob4, COMP_COLOUR);
+    setRotarySlider(compRatioKnob1, COMP_COLOUR);
+    setRotarySlider(compRatioKnob2, COMP_COLOUR);
+    setRotarySlider(compRatioKnob3, COMP_COLOUR);
+    setRotarySlider(compRatioKnob4, COMP_COLOUR);
 
     addAndMakeVisible(CompRatioLabel);
     CompRatioLabel.setText("Ratio", juce::dontSendNotification);
     CompRatioLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     CompRatioLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
-    CompRatioLabel.attachToComponent(compRatioKnob1, false);
+    CompRatioLabel.attachToComponent(&compRatioKnob1, false);
     CompRatioLabel.setJustificationType(juce::Justification::centred);
     
     // compressor threashold knobs
-    setRotarySlider(*compThreshKnob1, COMP_COLOUR);
-    setRotarySlider(*compThreshKnob2, COMP_COLOUR);
-    setRotarySlider(*compThreshKnob3, COMP_COLOUR);
-    setRotarySlider(*compThreshKnob4, COMP_COLOUR);
+    setRotarySlider(compThreshKnob1, COMP_COLOUR);
+    setRotarySlider(compThreshKnob2, COMP_COLOUR);
+    setRotarySlider(compThreshKnob3, COMP_COLOUR);
+    setRotarySlider(compThreshKnob4, COMP_COLOUR);
 
-    compThreshKnob1->setTextValueSuffix("db");
-    compThreshKnob2->setTextValueSuffix("db");
-    compThreshKnob3->setTextValueSuffix("db");
-    compThreshKnob4->setTextValueSuffix("db");
+    compThreshKnob1.setTextValueSuffix("db");
+    compThreshKnob2.setTextValueSuffix("db");
+    compThreshKnob3.setTextValueSuffix("db");
+    compThreshKnob4.setTextValueSuffix("db");
     
     addAndMakeVisible(CompThreshLabel);
     CompThreshLabel.setText("Threshold", juce::dontSendNotification);
     CompThreshLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     CompThreshLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
-    CompThreshLabel.attachToComponent(compThreshKnob1, false);
+    CompThreshLabel.attachToComponent(&compThreshKnob1, false);
     CompThreshLabel.setJustificationType(juce::Justification::centred);
     
     // width knobs
-    setRotarySlider(*widthKnob1, WIDTH_COLOUR);
-    setRotarySlider(*widthKnob2, WIDTH_COLOUR);
-    setRotarySlider(*widthKnob3, WIDTH_COLOUR);
-    setRotarySlider(*widthKnob4, WIDTH_COLOUR);
+    setRotarySlider(widthKnob1, WIDTH_COLOUR);
+    setRotarySlider(widthKnob2, WIDTH_COLOUR);
+    setRotarySlider(widthKnob3, WIDTH_COLOUR);
+    setRotarySlider(widthKnob4, WIDTH_COLOUR);
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
     widthLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     widthLabel.setColour(juce::Label::textColourId, WIDTH_COLOUR);
-    widthLabel.attachToComponent(widthKnob1, false);
+    widthLabel.attachToComponent(&widthKnob1, false);
     widthLabel.setJustificationType(juce::Justification::centred);
 
     // bias knobs
-    setRotarySlider(*biasKnob1, COLOUR1);
-    setRotarySlider(*biasKnob2, COLOUR1);
-    setRotarySlider(*biasKnob3, COLOUR1);
-    setRotarySlider(*biasKnob4, COLOUR1);
+    setRotarySlider(biasKnob1, COLOUR1);
+    setRotarySlider(biasKnob2, COLOUR1);
+    setRotarySlider(biasKnob3, COLOUR1);
+    setRotarySlider(biasKnob4, COLOUR1);
     
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
     biasLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     biasLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    biasLabel.attachToComponent(biasKnob1, false);
+    biasLabel.attachToComponent(&biasKnob1, false);
     biasLabel.setJustificationType(juce::Justification::centred);
     
     // rec knobs
-    setRotarySlider(*recKnob1, COLOUR1);
-    setRotarySlider(*recKnob2, COLOUR1);
-    setRotarySlider(*recKnob3, COLOUR1);
-    setRotarySlider(*recKnob4, COLOUR1);
+    setRotarySlider(recKnob1, COLOUR1);
+    setRotarySlider(recKnob2, COLOUR1);
+    setRotarySlider(recKnob3, COLOUR1);
+    setRotarySlider(recKnob4, COLOUR1);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
     recLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     recLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
-    recLabel.attachToComponent(recKnob1, false);
+    recLabel.attachToComponent(&recKnob1, false);
     recLabel.setJustificationType(juce::Justification::centred);
     
     // Linked Button
@@ -227,12 +212,13 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     widthSwitch.setLookAndFeel(&flatButtonLnf);
     widthSwitch.addListener(this);
     
-    addAndMakeVisible(widthBypassButton);
-    widthBypassButton->setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR);
-    widthBypassButton->addListener(this);
-    addAndMakeVisible(compressorBypassButton);
+    addAndMakeVisible(*compressorBypassButton);
     compressorBypassButton->setColour(juce::ToggleButton::tickColourId, COMP_COLOUR);
-    compressorBypassButton->addListener(this);
+    compressorBypassButton->onClick = [this] { updateBypassState (*compressorBypassButton, 0); };
+    addAndMakeVisible(*widthBypassButton);
+    widthBypassButton->setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR);
+    widthBypassButton->onClick = [this] { updateBypassState (*widthBypassButton, 1); };
+    
 
     // init state
     setBypassState(0, compressorBypassButton->getToggleState());
@@ -244,15 +230,15 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     driveAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID3, driveKnob3);
     driveAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID4, driveKnob4);
     
-    compRatioAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID1, *compRatioKnob1);
-    compRatioAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID2, *compRatioKnob2);
-    compRatioAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID3, *compRatioKnob3);
-    compRatioAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID4, *compRatioKnob4);
+    compRatioAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID1, compRatioKnob1);
+    compRatioAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID2, compRatioKnob2);
+    compRatioAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID3, compRatioKnob3);
+    compRatioAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_RATIO_ID4, compRatioKnob4);
     
-    compThreshAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID1, *compThreshKnob1);
-    compThreshAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID2, *compThreshKnob2);
-    compThreshAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID3, *compThreshKnob3);
-    compThreshAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID4, *compThreshKnob4);
+    compThreshAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID1, compThreshKnob1);
+    compThreshAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID2, compThreshKnob2);
+    compThreshAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID3, compThreshKnob3);
+    compThreshAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, COMP_THRESH_ID4, compThreshKnob4);
     
     outputAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, OUTPUT_ID1, outputKnob1);
     outputAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, OUTPUT_ID2, outputKnob2);
@@ -264,15 +250,15 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     mixAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, MIX_ID3, mixKnob3);
     mixAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, MIX_ID4, mixKnob4);
     
-    biasAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID1, *biasKnob1);
-    biasAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID2, *biasKnob2);
-    biasAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID3, *biasKnob3);
-    biasAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID4, *biasKnob4);
+    biasAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID1, biasKnob1);
+    biasAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID2, biasKnob2);
+    biasAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID3, biasKnob3);
+    biasAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, BIAS_ID4, biasKnob4);
     
-    recAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID1, *recKnob1);
-    recAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID2, *recKnob2);
-    recAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID3, *recKnob3);
-    recAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID4, *recKnob4);
+    recAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID1, recKnob1);
+    recAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID2, recKnob2);
+    recAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID3, recKnob3);
+    recAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, REC_ID4, recKnob4);
     
     linkedAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINKED_ID1, linkedButton1);
     linkedAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINKED_ID2, linkedButton2);
@@ -284,10 +270,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     safeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, SAFE_ID3, safeButton3);
     safeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, SAFE_ID4, safeButton4);
     
-    widthAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID1, *widthKnob1);
-    widthAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID2, *widthKnob2);
-    widthAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID3, *widthKnob3);
-    widthAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID4, *widthKnob4);
+    widthAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID1, widthKnob1);
+    widthAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID2, widthKnob2);
+    widthAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID3, widthKnob3);
+    widthAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID4, widthKnob4);
 }
 
 BandPanel::~BandPanel()
@@ -334,8 +320,8 @@ void BandPanel::paint (juce::Graphics& g)
     if (isCompressorSwitchOn)
     {
         setVisibility(compressorVector, true);
-        setFourKnobsVisibility(*compRatioKnob1, *compRatioKnob2, *compRatioKnob3, *compRatioKnob4, focusBandNum);
-        setFourKnobsVisibility(*compThreshKnob1, *compThreshKnob2, *compThreshKnob3, *compThreshKnob4, focusBandNum);
+        setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
+        setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
         setVisibility(shapeVector, false);
         setVisibility(widthVector, false);
         CompRatioLabel.setVisible(true);
@@ -350,8 +336,8 @@ void BandPanel::paint (juce::Graphics& g)
     }
     if (isShapeSwitchOn)
     {
-        setFourKnobsVisibility(*recKnob1, *recKnob2, *recKnob3, *recKnob4, focusBandNum);
-        setFourKnobsVisibility(*biasKnob1, *biasKnob2, *biasKnob3, *biasKnob4, focusBandNum);
+        setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
+        setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
         setVisibility(compressorVector, false);
         setVisibility(widthVector, false);
         CompRatioLabel.setVisible(false);
@@ -368,7 +354,7 @@ void BandPanel::paint (juce::Graphics& g)
     if (isWidthSwitchOn)
     {
         setVisibility(widthVector, true);
-        setFourKnobsVisibility(*widthKnob1, *widthKnob2, *widthKnob3, *widthKnob4, focusBandNum); // put after setVisibility
+        setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
         setVisibility(shapeVector, false);
         setVisibility(compressorVector, false);
         CompRatioLabel.setVisible(false);
@@ -450,36 +436,36 @@ void BandPanel::resized()
     juce::Rectangle<int> bandKnobAreaRight = bandKnobAreaLeft.removeFromRight(bandKnobArea.getWidth() / 2);
     bandKnobAreaLeft = bandKnobAreaLeft.reduced(0, bandKnobAreaLeft.getHeight() / 5);
     bandKnobAreaRight = bandKnobAreaRight.reduced(0, bandKnobAreaRight.getHeight() / 5);
-    recKnob1->setBounds(bandKnobAreaLeft);
-    recKnob2->setBounds(bandKnobAreaLeft);
-    recKnob3->setBounds(bandKnobAreaLeft);
-    recKnob4->setBounds(bandKnobAreaLeft);
+    recKnob1.setBounds(bandKnobAreaLeft);
+    recKnob2.setBounds(bandKnobAreaLeft);
+    recKnob3.setBounds(bandKnobAreaLeft);
+    recKnob4.setBounds(bandKnobAreaLeft);
 
-    biasKnob1->setBounds(bandKnobAreaRight);
-    biasKnob2->setBounds(bandKnobAreaRight);
-    biasKnob3->setBounds(bandKnobAreaRight);
-    biasKnob4->setBounds(bandKnobAreaRight);
+    biasKnob1.setBounds(bandKnobAreaRight);
+    biasKnob2.setBounds(bandKnobAreaRight);
+    biasKnob3.setBounds(bandKnobAreaRight);
+    biasKnob4.setBounds(bandKnobAreaRight);
     
     // width
     juce::Rectangle<int> bypassButtonArea = bandKnobArea;
     bypassButtonArea = bypassButtonArea.removeFromBottom(bandKnobArea.getHeight() / 5).reduced(bandKnobArea.getWidth() / 2 - bandKnobArea.getHeight() / 10, 0);
     widthBypassButton->setBounds(bypassButtonArea);
-    widthKnob1->setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-    widthKnob2->setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-    widthKnob3->setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-    widthKnob4->setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+    widthKnob1.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+    widthKnob2.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+    widthKnob3.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+    widthKnob4.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     
     // compressor
     compressorBypassButton->setBounds(bypassButtonArea);
-    compThreshKnob1->setBounds(bandKnobAreaLeft);
-    compThreshKnob2->setBounds(bandKnobAreaLeft);
-    compThreshKnob3->setBounds(bandKnobAreaLeft);
-    compThreshKnob4->setBounds(bandKnobAreaLeft);
+    compThreshKnob1.setBounds(bandKnobAreaLeft);
+    compThreshKnob2.setBounds(bandKnobAreaLeft);
+    compThreshKnob3.setBounds(bandKnobAreaLeft);
+    compThreshKnob4.setBounds(bandKnobAreaLeft);
     
-    compRatioKnob1->setBounds(bandKnobAreaRight);
-    compRatioKnob2->setBounds(bandKnobAreaRight);
-    compRatioKnob3->setBounds(bandKnobAreaRight);
-    compRatioKnob4->setBounds(bandKnobAreaRight);
+    compRatioKnob1.setBounds(bandKnobAreaRight);
+    compRatioKnob2.setBounds(bandKnobAreaRight);
+    compRatioKnob3.setBounds(bandKnobAreaRight);
+    compRatioKnob4.setBounds(bandKnobAreaRight);
 
     juce::Rectangle<int> outputKnobAreaLeft = outputKnobArea;
     juce::Rectangle<int> outputKnobAreaRight = outputKnobAreaLeft.removeFromRight(bandKnobArea.getWidth() / 2);
@@ -548,6 +534,18 @@ void BandPanel::timerCallback()
 {
 }
 
+void BandPanel::updateBypassState(juce::ToggleButton &clickedButton, int index)
+{
+    if (clickedButton.getToggleState())
+    {
+        setBypassState(index, true);
+    }
+    else
+    {
+        setBypassState(index, false);
+    }
+}
+
 void BandPanel::buttonClicked(juce::Button *clickedButton)
 {
     juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
@@ -569,30 +567,6 @@ void BandPanel::buttonClicked(juce::Button *clickedButton)
             driveKnob4.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
         }
     }
-    else if (clickedButton == compressorBypassButton)
-    {
-        if (compressorBypassButton->getToggleState())
-        {
-            setBypassState(0, true);
-        }
-        else
-        {
-            setBypassState(0, false);
-        }
-    }
-    else if (clickedButton == widthBypassButton)
-    {
-        if (widthBypassButton->getToggleState())
-        {
-            setBypassState(1, true);
-        }
-        else
-        {
-            setBypassState(1, false);
-        }
-    }
-
-
     repaint();
 }
 
@@ -674,7 +648,7 @@ void BandPanel::setScale(float scale)
     this->scale = scale;
 }
 
-void BandPanel::setVisibility(juce::OwnedArray<juce::Component, juce::CriticalSection> &array, bool isVisible)
+void BandPanel::setVisibility(juce::Array<juce::Component *> &array, bool isVisible)
 {
     for (int i = 0; i < array.size(); ++i)
     {
@@ -691,13 +665,13 @@ void BandPanel::setVisibility(juce::OwnedArray<juce::Component, juce::CriticalSe
 
 void BandPanel::setBypassState(int index, bool state)
 {
-    componentArray1 = { compThreshKnob1, compRatioKnob1, compThreshKnob2, compRatioKnob2, compThreshKnob3, compRatioKnob3, compThreshKnob4, compRatioKnob4 };
-    componentArray2 = { widthKnob1, widthKnob2, widthKnob3, widthKnob4 };
+    componentArray1 = { &compThreshKnob1, &compRatioKnob1, &compThreshKnob2, &compRatioKnob2, &compThreshKnob3, &compRatioKnob3, &compThreshKnob4, &compRatioKnob4 };
+    componentArray2 = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4 };
 
     juce::Array<juce::Component*>* componentArray;
     if (index == 0) componentArray = &componentArray1;
     if (index == 1) componentArray = &componentArray2;
-
+    
     if (state)
     {
         for (int i = 0; i < componentArray->size(); i++)
@@ -716,10 +690,10 @@ void BandPanel::setBypassState(int index, bool state)
 
 void BandPanel::setBandKnobsStates(int index, bool state)
 {
-    componentArray1 = {&driveKnob1, &outputKnob1, &mixKnob1, recKnob1, biasKnob1, compThreshKnob1, compRatioKnob1, widthKnob1, &linkedButton1, &safeButton1};
-    componentArray2 = {&driveKnob2, &outputKnob2, &mixKnob2, recKnob2, biasKnob2, compThreshKnob2, compRatioKnob2, widthKnob2, &linkedButton2, &safeButton2};
-    componentArray3 = {&driveKnob3, &outputKnob3, &mixKnob3, recKnob3, biasKnob3, compThreshKnob3, compRatioKnob3, widthKnob3, &linkedButton3, &safeButton3};
-    componentArray4 = {&driveKnob4, &outputKnob4, &mixKnob4, recKnob4, biasKnob4, compThreshKnob4, compRatioKnob4, widthKnob4, &linkedButton4, &safeButton4};
+    componentArray1 = {&driveKnob1, &outputKnob1, &mixKnob1, &recKnob1, &biasKnob1, &compThreshKnob1, &compRatioKnob1, &widthKnob1, &linkedButton1, &safeButton1};
+    componentArray2 = {&driveKnob2, &outputKnob2, &mixKnob2, &recKnob2, &biasKnob2, &compThreshKnob2, &compRatioKnob2, &widthKnob2, &linkedButton2, &safeButton2};
+    componentArray3 = {&driveKnob3, &outputKnob3, &mixKnob3, &recKnob3, &biasKnob3, &compThreshKnob3, &compRatioKnob3, &widthKnob3, &linkedButton3, &safeButton3};
+    componentArray4 = {&driveKnob4, &outputKnob4, &mixKnob4, &recKnob4, &biasKnob4, &compThreshKnob4, &compRatioKnob4, &widthKnob4, &linkedButton4, &safeButton4};
     
     juce::Array<juce::Component *>* componentArray;
     if (index == 0) componentArray = &componentArray1;

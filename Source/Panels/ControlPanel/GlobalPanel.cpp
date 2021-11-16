@@ -43,15 +43,15 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     downSampleLabel.attachToComponent(&downSampleKnob, false);
     downSampleLabel.setJustificationType(juce::Justification::centred);
 
-    filterBypassButton = new juce::ToggleButton();
-    downsampleBypassButton = new juce::ToggleButton();
+    filterBypassButton = std::make_unique<juce::ToggleButton>();
+    downsampleBypassButton = std::make_unique<juce::ToggleButton>();
 
-    addAndMakeVisible(filterBypassButton);
+    addAndMakeVisible(*filterBypassButton);
     filterBypassButton->setColour(juce::ToggleButton::tickColourId, FILTER_COLOUR);
-    filterBypassButton->addListener(this);
-    addAndMakeVisible(downsampleBypassButton);
+    filterBypassButton->onClick = [this] { updateBypassState (*filterBypassButton, 0); };
+    addAndMakeVisible(*downsampleBypassButton);
     downsampleBypassButton->setColour(juce::ToggleButton::tickColourId, DOWNSAMPLE_COLOUR);
-    downsampleBypassButton->addListener(this);
+    downsampleBypassButton->onClick = [this] { updateBypassState (*downsampleBypassButton, 1); };
     
     
     // lowcut freq knob
@@ -451,28 +451,7 @@ void GlobalPanel::timerCallback()
 
 void GlobalPanel::buttonClicked(juce::Button *clickedButton)
 {
-    if (clickedButton == filterBypassButton)
-    {
-        if (filterBypassButton->getToggleState())
-        {
-            setBypassState(0, true);
-        }
-        else
-        {
-            setBypassState(0, false);
-        }
-    }
-    else if (clickedButton == downsampleBypassButton)
-    {
-        if (downsampleBypassButton->getToggleState())
-        {
-            setBypassState(1, true);
-        }
-        else
-        {
-            setBypassState(1, false);
-        }
-    }
+    
 }
 
 void GlobalPanel::setRotarySlider(juce::Slider& slider, juce::Colour colour)
@@ -558,6 +537,19 @@ void GlobalPanel::updateToggleState()
 //        lowcutFreqKnob.setEnabled(true);
 //        lowcutQKnob.setEnabled(true);
 //    }
+    
+}
+
+void GlobalPanel::updateBypassState(juce::ToggleButton &clickedButton, int index)
+{
+    if (clickedButton.getToggleState())
+    {
+        setBypassState(index, true);
+    }
+    else
+    {
+        setBypassState(index, false);
+    }
 }
 
 void GlobalPanel::setToggleButtonState(juce::String toggleButton)

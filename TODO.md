@@ -6,16 +6,13 @@
 
 - Feature
 
-1. add enable button for compressor, downsample, width, filter, etc.
-2. auto-update check when open
-3. dry mix compensation
-4. mouse drag vertically to change the output volume, like Ozone or saturn2
-5. smooth spectrogram
-6. add lfo control
-7. change A/B color when switching
-8. add max input/output value for meters (currently RMS)
-9. draggle eq mouse wheel change Q, mouse click set enable/disable
+1. auto-update check when open
+2. mouse drag vertically to change the output volume, like Ozone or saturn2
+3. smooth spectrogram
+4. add lfo control
+5. add max input/output value for meters (currently RMS)
+6. draggle eq mouse wheel change Q, mouse click set enable/disable
 
 - Improvement
 
-1. reduce paint CPU usage
+1. test CPU usage

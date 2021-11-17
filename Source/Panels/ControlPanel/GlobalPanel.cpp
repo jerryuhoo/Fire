@@ -265,6 +265,9 @@ GlobalPanel::GlobalPanel(juce::AudioProcessorValueTreeState& apvts)
     
     lowcutModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(apvts, LOWCUT_SLOPE_ID, lowcutSlopeMode);
     highcutModeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(apvts, HIGHCUT_SLOPE_ID, highcutSlopeMode);
+    
+    filterBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, FILTER_BYPASS_ID, *filterBypassButton);
+    downsampleBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, DOWNSAMPLE_BYPASS_ID, *downsampleBypassButton);
 }
 
 GlobalPanel::~GlobalPanel()
@@ -564,7 +567,7 @@ void GlobalPanel::setToggleButtonState(juce::String toggleButton)
 
 void GlobalPanel::setBypassState(int index, bool state)
 {
-    componentArray1 = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode };
+    componentArray1 = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode, &peakGainKnob, &peakQKnob };
     componentArray2 = { &downSampleKnob };
 
     juce::Array<juce::Component*>* componentArray;

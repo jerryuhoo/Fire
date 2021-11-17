@@ -206,6 +206,9 @@ private:
         safeAttachment2,
         safeAttachment3,
         safeAttachment4;
+    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorBypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> widthBypassAttachment;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

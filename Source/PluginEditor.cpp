@@ -538,7 +538,9 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
     float mix = static_cast<float>(*processor.treeState.getRawParameterValue(mixId));
     float bias = static_cast<float>(*processor.treeState.getRawParameterValue(biasId));
     float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
-
+    
+    if (!*processor.treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID)) rateDivide = 1;
+    
     graphPanel.setDistortionState(mode, rec, mix, bias, drive, rateDivide);
 }
 

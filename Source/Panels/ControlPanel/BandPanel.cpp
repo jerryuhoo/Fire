@@ -274,6 +274,9 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     widthAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID2, widthKnob2);
     widthAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID3, widthKnob3);
     widthAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID4, widthKnob4);
+    
+    compressorBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, COMP_BYPASS_ID, *compressorBypassButton);
+    widthBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WIDTH_BYPASS_ID, *widthBypassButton);
 }
 
 BandPanel::~BandPanel()

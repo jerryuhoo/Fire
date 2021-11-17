@@ -213,6 +213,16 @@
 #define LINE_STATE_ID3      "lineState3"
 #define LINE_STATE_NAME3    "LineState3"
 
+#define COMP_BYPASS_ID          "compressorBypass"
+#define COMP_BYPASS_NAME        "CompressorBypass"
+#define WIDTH_BYPASS_ID         "widthBypass"
+#define WIDTH_BYPASS_NAME       "WidthBypass"
+#define FILTER_BYPASS_ID        "filterBypass"
+#define FILTER_BYPASS_NAME      "FilterBypass"
+#define DOWNSAMPLE_BYPASS_ID    "downsampleBypass"
+#define DOWNSAMPLE_BYPASS_NAME  "DownsampleBypass"
+
+
 // Define Font
 #define KNOB_FONT           "Futura"
 #define KNOB_FONT_SIZE      18.0f

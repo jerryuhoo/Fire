@@ -441,12 +441,12 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     
     juce::dsp::AudioBlock<float> block(buffer);
     // pre-filter
-    bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
-    if (preButton)
-    {
+//    bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
+//    if (preButton)
+//    {
         //filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
-        updateFilter();
-    }
+//        updateFilter();
+//    }
 
     // multiband process
     int freqValue1 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID1));
@@ -595,35 +595,40 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     }
 
     // downsample
-    int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
+    if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
     {
-        auto *channelData = buffer.getWritePointer(channel);
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {   
-            //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
-            if (rateDivide > 1)
+        int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
+        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        {
+            auto *channelData = buffer.getWritePointer(channel);
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
             {
-                if (sample % rateDivide != 0)
-                    channelData[sample] = channelData[sample - sample % rateDivide];
+                //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
+                if (rateDivide > 1)
+                {
+                    if (sample % rateDivide != 0)
+                        channelData[sample] = channelData[sample - sample % rateDivide];
+                }
             }
         }
     }
-
-    updateFilter();
-    auto leftBlock = block.getSingleChannelBlock(0);
-    auto rightBlock = block.getSingleChannelBlock(1);
-    leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
-    rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
     
-    //post-filter
-    bool postButton = *treeState.getRawParameterValue(POST_ID);
-    if (postButton)
+    if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
     {
+        updateFilter();
+        auto leftBlock = block.getSingleChannelBlock(0);
+        auto rightBlock = block.getSingleChannelBlock(1);
+        leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
+        rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
+    }
+    //post-filter
+//    bool postButton = *treeState.getRawParameterValue(POST_ID);
+//    if (postButton)
+//    {
         //filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
 //        mainChain.process(juce::dsp::ProcessContextReplacing<float>(block));
-        updateFilter();
-    }
+//        updateFilter();
+//    }
 
 //    float mix = *treeState.getRawParameterValue(MIX_ID);
 //    mixSmootherGlobal.setTargetValue(mix);
@@ -1032,10 +1037,12 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     normalize(modeID, bandBuffer, totalNumInputChannels, recSmoother, outputSmoother1);
 
     // width process
-    widthProcessor.process(channeldataL, channeldataR, width, bandBuffer.getNumSamples());
+    if (*treeState.getRawParameterValue(WIDTH_BYPASS_ID))
+        widthProcessor.process(channeldataL, channeldataR, width, bandBuffer.getNumSamples());
 
     // compressor process
-    processCompressor(context, threshID, ratioID, compressorProcessor);
+    if (*treeState.getRawParameterValue(COMP_BYPASS_ID))
+        processCompressor(context, threshID, ratioID, compressorProcessor);
 
     // gain process
     processGain(context, outputID, gainProcessor);
@@ -1556,6 +1563,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID, COMP_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID, WIDTH_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(FILTER_BYPASS_ID, FILTER_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(DOWNSAMPLE_BYPASS_ID, DOWNSAMPLE_BYPASS_NAME, false));
     
     return {parameters.begin(), parameters.end()};
 }

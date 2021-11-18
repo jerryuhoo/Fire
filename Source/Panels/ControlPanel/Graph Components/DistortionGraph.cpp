@@ -47,7 +47,8 @@ void DistortionGraph::paint (juce::Graphics& g)
 //    juce::Rectangle<float> rectFloat(0, 0, getWidth(), getHeight());
 //    g.fillRoundedRectangle(rectFloat, cornerSize);
     
-    if (mode < 9)
+    // symmetrical distortion
+    if (mode <= 15)
     {
         float functionValue = 0.0f;
         float mixValue;
@@ -74,52 +75,57 @@ void DistortionGraph::paint (juce::Graphics& g)
             value += valInc * step;
             xPos += posInc * step;
 
-            // symmetrical distortion
-            if (mode < 8)
+            float valueAfterDrive = value;
+            
+            // downsample
+            if (rateDivide > 1.0f)
             {
-                float valueAfterDrive = value;
-                
-                // downsample
-                if (rateDivide > 1.0f)
-                {
-                    //functionValue = distortionProcessor.distortionProcess(ceilf(value / (rateDivide/256.0f) ) * (rateDivide/256.0f));
-                    valueAfterDrive = ceilf(valueAfterDrive / (rateDivide/256.0f) ) * (rateDivide/256.0f);
-                }
-                
-                //functionValue = distortionProcessor.distortionProcess(value);
-                //valueAfterDrive = value * drive + bias;
-                valueAfterDrive = valueAfterDrive * drive + bias;
-  
-                switch (mode)
-                {
-                    case 0:
-                        functionValue = waveshaping::arctanSoftClipping(valueAfterDrive);
-                        break;
-                    case 1:
-                        functionValue = waveshaping::expSoftClipping(valueAfterDrive);
-                        break;
-                    case 2:
-                        functionValue = waveshaping::tanhSoftClipping(valueAfterDrive);
-                        break;
-                    case 3:
-                        functionValue = waveshaping::cubicSoftClipping(valueAfterDrive);
-                        break;
-                    case 4:
-                        functionValue = waveshaping::hardClipping(valueAfterDrive);
-                        break;
-                    case 5:
-                        functionValue = waveshaping::sausageFattener(valueAfterDrive);
-                        break;
-                    case 6:
-                        functionValue = waveshaping::sinFoldback(valueAfterDrive);
-                        break;
-                    case 7:
-                        functionValue = waveshaping::linFoldback(valueAfterDrive);
-                        break;
-                    case 8:
-                        functionValue = waveshaping::limitclip(valueAfterDrive);
-                        break;
-                }
+                //functionValue = distortionProcessor.distortionProcess(ceilf(value / (rateDivide/256.0f) ) * (rateDivide/256.0f));
+                valueAfterDrive = ceilf(valueAfterDrive / (rateDivide/256.0f) ) * (rateDivide/256.0f);
+            }
+            
+            //functionValue = distortionProcessor.distortionProcess(value);
+            //valueAfterDrive = value * drive + bias;
+            valueAfterDrive = valueAfterDrive * drive + bias;
+
+            switch (mode)
+            {
+                case 0:
+                    functionValue = waveshaping::arctanSoftClipping(valueAfterDrive);
+                    break;
+                case 1:
+                    functionValue = waveshaping::expSoftClipping(valueAfterDrive);
+                    break;
+                case 2:
+                    functionValue = waveshaping::tanhSoftClipping(valueAfterDrive);
+                    break;
+                case 3:
+                    functionValue = waveshaping::cubicSoftClipping(valueAfterDrive);
+                    break;
+                case 4:
+                    functionValue = waveshaping::hardClipping(valueAfterDrive);
+                    break;
+                case 5:
+                    functionValue = waveshaping::sausageFattener(valueAfterDrive);
+                    break;
+                case 6:
+                    functionValue = waveshaping::sinFoldback(valueAfterDrive);
+                    break;
+                case 7:
+                    functionValue = waveshaping::linFoldback(valueAfterDrive);
+                    break;
+                case 8:
+                    functionValue = waveshaping::limitClip(valueAfterDrive);
+                    break;
+                case 9:
+                    functionValue = waveshaping::singleSinClip(valueAfterDrive);
+                    break;
+                case 10:
+                    functionValue = waveshaping::logicClip(valueAfterDrive);
+                    break;
+                case 11:
+                    functionValue = waveshaping::tanclip(valueAfterDrive);
+                    break;
             }
 
             // retification

@@ -266,7 +266,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     updateFilter();
     leftChain.prepare(spec);
     rightChain.prepare(spec);
-    // mode 8 diode================
+    // mode diode================
     inputTemp.clear();
     VdiodeL = 0.0f;
     VdiodeR = 0.0f;
@@ -1152,7 +1152,16 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
             waveShaper.functionToUse = waveshaping::linFoldback;
             break;
         case 8:
-            waveShaper.functionToUse = waveshaping::limitclip;
+            waveShaper.functionToUse = waveshaping::limitClip;
+            break;
+        case 9:
+            waveShaper.functionToUse = waveshaping::singleSinClip;
+            break;
+        case 10:
+            waveShaper.functionToUse = waveshaping::logicClip;
+            break;
+        case 11:
+            waveShaper.functionToUse = waveshaping::tanclip;
             break;
     }
     
@@ -1214,7 +1223,7 @@ void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::Au
 
 void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother)
 {
-    int mode = static_cast<int>(*treeState.getRawParameterValue(modeID));
+//    int mode = static_cast<int>(*treeState.getRawParameterValue(modeID));
     
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
@@ -1223,36 +1232,36 @@ void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>
         juce::Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());
         float min = range.getStart();
         float max = range.getEnd();
-        float magnitude = range.getLength() / 2.0f;
-
+        
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
             // centralization
-            if (mode == 9 || recSmoother.getNextValue() > 0)
+            if (/*mode == diodemode  || */recSmoother.getNextValue() > 0)
             {
                 centralSmoother.setTargetValue((max + min) / 2.0f);
                 channelData[sample] = channelData[sample] - centralSmoother.getNextValue();
             }
 
-            // normalization
-            if (mode == 9)
-            {
-                normalSmoother.setTargetValue(magnitude);
-                if (normalSmoother.getNextValue() != 0 && channelData[sample] != 0)
-                {
-                    channelData[sample] = channelData[sample] / normalSmoother.getNextValue();
-                }
-
-                // final protection
-                if (channelData[sample] > 1)
-                {
-                    channelData[sample] = 1;
-                }
-                else if (channelData[sample] < -1)
-                {
-                    channelData[sample] = -1;
-                }
-            }
+//            // normalization
+//            if (mode == diode mode)
+//            {
+//                float magnitude = range.getLength() / 2.0f;
+//                normalSmoother.setTargetValue(magnitude);
+//                if (normalSmoother.getNextValue() != 0 && channelData[sample] != 0)
+//                {
+//                    channelData[sample] = channelData[sample] / normalSmoother.getNextValue();
+//                }
+//
+//                // final protection
+//                if (channelData[sample] > 1)
+//                {
+//                    channelData[sample] = 1;
+//                }
+//                else if (channelData[sample] < -1)
+//                {
+//                    channelData[sample] = -1;
+//                }
+//            }
 
             // output control
             channelData[sample] *= outputSmoother.getNextValue();
@@ -1457,10 +1466,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(HQ_ID, HQ_NAME, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID1, MODE_NAME1, 0, 7, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID2, MODE_NAME2, 0, 7, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID3, MODE_NAME3, 0, 7, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID4, MODE_NAME4, 0, 7, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID1, MODE_NAME1, 0, 11, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID2, MODE_NAME2, 0, 11, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID3, MODE_NAME3, 0, 11, 0));
+    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID4, MODE_NAME4, 0, 11, 0));
     
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID1, LINKED_NAME1, true));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID2, LINKED_NAME2, true));

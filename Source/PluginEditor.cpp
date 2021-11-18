@@ -491,6 +491,13 @@ void FireAudioProcessorEditor::initState()
 
 void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
 {
+    /** To add more distortion functions, you need to change:
+     1. here
+     2. createParameters in PluginProcessor.cpp
+     3. processDistortion in PluginProcessor.cpp
+     4. ClippingFunctions.h
+     5. DistortionGraph.cpp
+     */
     // Distortion mode select
     addAndMakeVisible(combobox);
 
@@ -509,6 +516,13 @@ void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
     combobox->addSectionHeading("Foldback");
     combobox->addItem("Sin", 7);
     combobox->addItem("Linear", 8);
+    combobox->addSeparator();
+    
+    combobox->addSectionHeading("Other");
+    combobox->addItem("Limit", 9);
+    combobox->addItem("Single Sin", 10);
+    combobox->addItem("Logic", 11);
+    combobox->addItem("Pit", 12);
     combobox->addSeparator();
 
 //    combobox->addSectionHeading("Asymmetrical Clipping");

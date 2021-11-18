@@ -22,11 +22,6 @@ T arctanSoftClipping (T x) noexcept
     return atan(x) / 2.0f;
 }
 
-//T logiclip (T x) noexcept
-//{
-//    return 2.0f / (1.0f + JMath::exp (-2.0f * x)) - 1.0f;
-//}
-
 template<typename T>
 T expSoftClipping (T x) noexcept
 {
@@ -119,47 +114,37 @@ T linFoldback (T x) noexcept
 }
 
 template<typename T>
-T limitclip (T x) noexcept
+T limitClip (T x) noexcept
 {
     return juce::jlimit (-0.1f, 0.1f, x);
 }
 
-//template<typename T>
-//T hardclip (T x) noexcept
-//{
-//    return signbit(x) * std::fminf (std::fabsf(x), 1.0f);
-//}
-//
-//template<typename T>
-//T tanclip (T x) noexcept
-//{
-//    float soft = 0.0f;
-//    return JMath::tanh ((1.0f - 0.5f * soft) * x);
-//}
-//
-//template<typename T>
-//T quintic (T x) noexcept
-//{
-//    if (std::fabsf (x) < 1.25f)
-//    {
-//        return x - (256.0f / 3125.0f) * std::powf (x, 5.0f);
-//    } else
-//    {
-//        return signbit (x) * 1.0f;
-//    }
-//}
-//
-//template<typename T>
-//T cubicBasic (T x) noexcept
-//{
-//    if (std::fabsf (x) < 1.5f)
-//    {
-//        return x - (4.0f / 27.0f) * std::powf (x, 3.0f);
-//    } else
-//    {
-//        return signbit (x) * 1.0f;
-//    }
-//}
+template<typename T>
+T singleSinClip (T x) noexcept
+{
+    if (std::fabsf (x) < juce::MathConstants<T>::pi)
+    {
+        return JMath::sin (x);
+    }
+    else
+    {
+        return 0;//signbit (x) * 1.0f;
+    }
+}
+
+template<typename T>
+T logicClip (T x) noexcept
+{
+    return 2.0f / (1.0f + JMath::exp (-2.0f * x)) - 1.0f;
+}
+
+template<typename T>
+T tanclip (T x) noexcept
+{
+    float soft = 0.0f;
+    return juce::jlimit (-1.0f, 1.0f, static_cast<float>(JMath::tanh ((1.0f - 0.5f * soft) * x) - 0.02 * x));
+}
+
 //
 //template<typename T>
 //T algClip (T x) noexcept
@@ -167,32 +152,15 @@ T limitclip (T x) noexcept
 //    float soft = 0.0f;
 //    return x / std::sqrtf ((1.0f + 2.0f * soft + std::powf (x, 2.0f)));
 //}
-//
+
 //template<typename T>
 //T arcClip (T x) noexcept
 //{
 //    float soft = 0.0f;
 //    return (2.0f / juce::MathConstants<T>::pi) * std::atanf ((1.6f - soft * 0.6f) * x);
 //}
-//
-//template<typename T>
-//T sinclip (T x) noexcept
-//{
-//    if (std::fabsf (x) < juce::MathConstants<T>::pi)
-//    {
-//        return JMath::sin (x);
-//    }
-//    else
-//    {
-//        return signbit (x) * 1.0f;
-//    }
-//}
-//
-//template<typename T>
-//T limitclip (T x) noexcept
-//{
-//    return juce::jlimit (-0.1f, 0.1f, x);
-//}
+
+
 
 template<typename T>
 T rectificationProcess (T x, T rectification) noexcept

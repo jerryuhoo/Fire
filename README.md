@@ -103,6 +103,7 @@ Warning: Previous presets won't work, you have to resave your preset!
 3. Added "solo" buttons, change "enable" buttons to "bypass" buttons.
 4. Removed "None" option in the distortion functions, because it causes bug(in version 0.9.3) and you can bypass the band now.
 5. Added bypass buttons for compressor, width, filter, downsample.
+6. Added 4 new distortion functions.
 
 ### 2021-10-2 (version 0.9.3)
 

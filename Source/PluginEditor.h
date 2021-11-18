@@ -133,6 +133,7 @@ private:
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
+    ZoomLookAndFeel zoomLookAndFeel;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

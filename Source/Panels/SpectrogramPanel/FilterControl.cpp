@@ -42,7 +42,7 @@ void FilterControl::paint (juce::Graphics& g)
 {
     if (isVisible()) processor.setHistoryArray(5); // 5 means global
     g.setColour(juce::Colours::hotpink.withBrightness(0.8f));
-    g.strokePath(responseCurve, juce::PathStrokeType(2.f));
+    g.strokePath(responseCurve, juce::PathStrokeType(2.0f));
     g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
     g.fillPath(responseCurve);
     

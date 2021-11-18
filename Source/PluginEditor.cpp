@@ -123,13 +123,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // zoom button
     addAndMakeVisible(zoomButton);
     zoomButton.setClickingTogglesState(false);
-    zoomButton.setButtonText("Z");
+//    zoomButton.setButtonText("Z");
     zoomButton.addListener(this);
     zoomButton.setColour(juce::TextButton::buttonColourId, COLOUR5.withAlpha(0.5f));
     zoomButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5.withAlpha(0.5f));
     zoomButton.setColour(juce::ComboBox::outlineColourId, COLOUR5.withAlpha(0.5f));
-    zoomButton.setColour(juce::TextButton::textColourOnId, COLOUR1.withAlpha(0.5f));
+    zoomButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     zoomButton.setColour(juce::TextButton::textColourOffId, COLOUR1.withAlpha(0.5f));
+    zoomButton.setLookAndFeel(&zoomLookAndFeel);
         
     // use global lookandfeel
     getLookAndFeel().setColour(juce::ComboBox::textColourId, KNOB_SUBFONT_COLOUR);
@@ -164,6 +165,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     setLookAndFeel(nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
     windowRightButton.setLookAndFeel(nullptr);
     windowLeftButton.setLookAndFeel(nullptr);
+    zoomButton.setLookAndFeel(nullptr);
 //    distortionMode1.setLookAndFeel(nullptr);
 //    distortionMode2.setLookAndFeel(nullptr);
 //    distortionMode3.setLookAndFeel(nullptr);
@@ -331,7 +333,7 @@ void FireAudioProcessorEditor::resized()
     }
     // Zoom button
     zoomButton.setBounds(getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, 20, 20);
-    
+
     // set look and feel scale
     otherLookAndFeel.scale = scale;
     bandPanel.setScale(scale);

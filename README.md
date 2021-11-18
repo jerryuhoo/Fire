@@ -8,7 +8,7 @@
 
 This is a multi-band distortion plugin 『Fire』. It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
 
-:musical_note: Home Page for Wings Music: <a href="https://jerryuhoo.github.io/">Wings Music</a>
+:musical_note: Home Page for Wings Music: [Wings Music](https://jerryuhoo.github.io/)
 
 Hope you like it!
 
@@ -16,11 +16,11 @@ Hope you like it!
 
 ### Download from Release Page
 
-<a href="https://github.com/jerryuhoo/Fire/releases/latest">Download here</a>
+[Download here](https://github.com/jerryuhoo/Fire/releases/latest)
 
 ### Build by JUCE
 
-Open .jucer file by Projucer then select your IDE to build 『Fire』. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the <a href="https://www.juce.com" rel="nofollow">latest JUCE release</a>.</li>
+Open .jucer file by Projucer then select your IDE to build 『Fire』. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the [latest JUCE release](https://www.juce.com)
 
 Note: You should choose Release mode rather than Debug mode(or disable Debug mode) in .fire Exporters page. Build with debug mode will cause high CPU usage.
 
@@ -73,23 +73,24 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 ## 4. Support the author
 
-欢迎关注网易云音乐：<a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings</a>
+我也是一个音乐制作人，欢迎关注网易云音乐：[羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
 
-My Neteast channel: <a href="https://music.163.com/#/artist?id=12118139">羽翼深蓝Wings
+I am also a music producer, welcome to follow my Netease channel: [羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
 
 <div align=center>
     <img src="support.png" width = "50%"/>
+
 </div>
 
 ## 5. References
 
-5.1. A great example of using XML by <a href="https://github.com/johnflynnjohnflynn/TestParameters02">johnflynnjohnflynn</a> to save presets to file example. I changed the code to save presets as mutiple files.
+5.1. A great example of using XML by [johnflynnjohnflynn](https://github.com/johnflynnjohnflynn/TestParameters02) to save presets to file example. I changed the code to save presets as mutiple files.
 
-5.2. <a href="https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227">Diode Clipping algorithm</a> from JUCE forum
+5.2. [Diode Clipping algorithm](https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227) from JUCE forum
 
-5.3. <a href="https://github.com/adriannaziel/SpectrumAnalyser_et">Spectrum Analyser</a> by adriannaziel
+5.3. [Spectrum Analyser](https://github.com/adriannaziel/SpectrumAnalyser_et) by adriannaziel
 
-5.4. <a href="a href=https://github.com/matkatmusic/SimpleEQ">SimpleEQ</a> by matkatmusic
+5.4. [SimpleEQ](https://github.com/matkatmusic/SimpleEQ) by matkatmusic
 
 ## 6. Update Notes
 

@@ -31,7 +31,8 @@ public:
     void timerCallback() override;
     void setFocusBandNum(int num);
     void setScale(float scale);
-    void changeSliderState(int bandNum, bool isPresetChanged);
+//    void changeSliderState(int bandNum, bool isPresetChanged);
+    void setBandKnobsStates(int index, bool state);
 private:
     FireAudioProcessor &processor;
     juce::Rectangle<int> bandKnobArea;
@@ -49,9 +50,10 @@ private:
     void setFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
     void linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton);
-    void setInvisible(juce::OwnedArray<juce::Component, juce::CriticalSection> &array);
-    void setSliderState(FireAudioProcessor* processor, juce::Slider& slider, juce::String paramId, float &tempValue, bool isPresetChanged);
-    
+    void setVisibility(juce::Array<juce::Component *> &array, bool isVisible);
+    void updateBypassState(juce::ToggleButton &clickedButton, int index);
+    void setBypassState(int index, bool state);
+
     enum RadioButtonIds
     {
         // filter state: off, pre, post
@@ -82,30 +84,30 @@ private:
         mixKnob3,
         mixKnob4;
     
-    juce::Slider* recKnob1;
-    juce::Slider* recKnob2;
-    juce::Slider* recKnob3;
-    juce::Slider* recKnob4;
+    juce::Slider recKnob1;
+    juce::Slider recKnob2;
+    juce::Slider recKnob3;
+    juce::Slider recKnob4;
     
-    juce::Slider* biasKnob1;
-    juce::Slider* biasKnob2;
-    juce::Slider* biasKnob3;
-    juce::Slider* biasKnob4;
+    juce::Slider biasKnob1;
+    juce::Slider biasKnob2;
+    juce::Slider biasKnob3;
+    juce::Slider biasKnob4;
 
-    juce::Slider* compRatioKnob1;
-    juce::Slider* compRatioKnob2;
-    juce::Slider* compRatioKnob3;
-    juce::Slider* compRatioKnob4;
+    juce::Slider compRatioKnob1;
+    juce::Slider compRatioKnob2;
+    juce::Slider compRatioKnob3;
+    juce::Slider compRatioKnob4;
     
-    juce::Slider* compThreshKnob1;
-    juce::Slider* compThreshKnob2;
-    juce::Slider* compThreshKnob3;
-    juce::Slider* compThreshKnob4;
+    juce::Slider compThreshKnob1;
+    juce::Slider compThreshKnob2;
+    juce::Slider compThreshKnob3;
+    juce::Slider compThreshKnob4;
     
-    juce::Slider* widthKnob1;
-    juce::Slider* widthKnob2;
-    juce::Slider* widthKnob3;
-    juce::Slider* widthKnob4;
+    juce::Slider widthKnob1;
+    juce::Slider widthKnob2;
+    juce::Slider widthKnob3;
+    juce::Slider widthKnob4;
     
     juce::Label
         driveLabel,
@@ -120,7 +122,6 @@ private:
         biasLabel;
     
     juce::TextButton
-        
         linkedButton1,
         linkedButton2,
         linkedButton3,
@@ -130,6 +131,9 @@ private:
         safeButton3,
         safeButton4;
     
+//    juce::ToggleButton *widthBypassButton, *compressorBypassButton;
+    std::unique_ptr<juce::ToggleButton> widthBypassButton, compressorBypassButton;
+    
     // switches
     juce::TextButton
         oscSwitch,
@@ -138,10 +142,16 @@ private:
         compressorSwitch;
     
     // vectors for sliders
-    juce::OwnedArray<juce::Component, juce::CriticalSection> shapeVector;
-    juce::OwnedArray<juce::Component, juce::CriticalSection> widthVector;
-    juce::OwnedArray<juce::Component, juce::CriticalSection> compressorVector;
-    juce::OwnedArray<juce::Component, juce::CriticalSection> oscVector;
+    juce::Array<juce::Component *> shapeVector;
+    juce::Array<juce::Component *> widthVector;
+    juce::Array<juce::Component *> compressorVector;
+    juce::Array<juce::Component *> oscVector;
+    
+    
+    juce::Array<juce::Component *> componentArray1;
+    juce::Array<juce::Component *> componentArray2;
+    juce::Array<juce::Component *> componentArray3;
+    juce::Array<juce::Component *> componentArray4;
     
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
@@ -196,6 +206,9 @@ private:
         safeAttachment2,
         safeAttachment3,
         safeAttachment4;
+    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorBypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> widthBypassAttachment;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

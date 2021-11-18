@@ -78,7 +78,7 @@ void Oscilloscope::paint (juce::Graphics& g)
         float valR = historyR[scaledIndex];
         
         // normalize
-        if (maxValue > 0.00001f)
+        if (maxValue > 0.005f)
         {
             valL = valL / maxValue * 0.6f;
             valR = valR / maxValue * 0.6f;
@@ -106,37 +106,53 @@ void Oscilloscope::paint (juce::Graphics& g)
 //    juce::Path pathShadow;
 //    pathShadow.addRoundedRectangle(rectFloat.reduced (0.5f, 0.5f), cornerSize);
 //    drawInnerShadow(g, pathShadow);
-}
-
-void Oscilloscope::resized()
-{
-    // This method is where you should set the bounds of any child
-    // components that your component contains..
-}
-
-void Oscilloscope::setScale(float scale)
-{
-    this->scale = scale;
-}
-
-bool Oscilloscope::getZoomState()
-{
-    return mZoomState;
-}
-
-void Oscilloscope::setZoomState(bool zoomState)
-{
-    mZoomState = zoomState;
-}
-
-void Oscilloscope::mouseDown(const juce::MouseEvent &e)
-{
-    if (mZoomState)
+    
+    if (isMouseOn && !mZoomState)
     {
-        mZoomState = false;
-    }
-    else
-    {
-        mZoomState = true;
+        g.setColour(juce::Colours::red.withAlpha(0.05f));
+        g.fillAll();
     }
 }
+
+//void Oscilloscope::resized()
+//{
+//    // This method is where you should set the bounds of any child
+//    // components that your component contains..
+//}
+//
+//void Oscilloscope::setScale(float scale)
+//{
+//    this->scale = scale;
+//}
+//
+//bool Oscilloscope::getZoomState()
+//{
+//    return mZoomState;
+//}
+//
+//void Oscilloscope::setZoomState(bool zoomState)
+//{
+//    mZoomState = zoomState;
+//}
+//
+//void Oscilloscope::mouseDown(const juce::MouseEvent &e)
+//{
+//    if (mZoomState)
+//    {
+//        mZoomState = false;
+//    }
+//    else
+//    {
+//        mZoomState = true;
+//    }
+//}
+//
+//void Oscilloscope::mouseEnter(const juce::MouseEvent &e)
+//{
+//    isMouseOn = true;
+//}
+//
+//void Oscilloscope::mouseExit(const juce::MouseEvent &e)
+//{
+//    isMouseOn = false;
+//}

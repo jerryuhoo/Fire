@@ -10,9 +10,9 @@
 
 #include <JuceHeader.h>
 #include "Multiband.h"
-
+#include <algorithm>
 //==============================================================================
-Multiband::Multiband(FireAudioProcessor &p) : processor(p)
+Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : processor(p), stateComponent(sc)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
@@ -29,6 +29,7 @@ Multiband::Multiband(FireAudioProcessor &p) : processor(p)
     
     soloButton[0] = std::make_unique<SoloButton>();
     addAndMakeVisible(*soloButton[0]);
+    soloButton[0]->addListener(this);
     
     enableButton[0] = std::make_unique<EnableButton>();
     addAndMakeVisible(*enableButton[0]);
@@ -49,6 +50,7 @@ Multiband::Multiband(FireAudioProcessor &p) : processor(p)
         
         soloButton[i + 1] = std::make_unique<SoloButton>();
         addAndMakeVisible(*soloButton[i + 1]);
+        soloButton[i + 1]->addListener(this);
         
         enableButton[i + 1] = std::make_unique<EnableButton>();
         addAndMakeVisible(*enableButton[i + 1]);
@@ -60,10 +62,10 @@ Multiband::Multiband(FireAudioProcessor &p) : processor(p)
     multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID3, *enableButton[2]);
     multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID4, *enableButton[3]);
 
-//    margin = getHeight() / 20.0f;
-//    size = freqDividerGroup[0]->getVerticalLine().getHeight() / 10.f;
-//    width = freqDividerGroup[0]->getVerticalLine().getWidth() / 2.f;
-//    updateLines();
+    multiSoloAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID1, *soloButton[0]);
+    multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID2, *soloButton[1]);
+    multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID3, *soloButton[2]);
+    multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID4, *soloButton[3]);
 }
 
 Multiband::~Multiband()
@@ -77,24 +79,49 @@ Multiband::~Multiband()
 
 void Multiband::paint (juce::Graphics& g)
 {
-    // set value only when line is deleted, added, moving
-    if (getDeleteState() || getAddState() || getMovingState())
+    // set graph buffer
+    int focusIndex = 0;
+    bool findFocus = false;
+    for (int i = 0; i < lineNum + 1; i++)
     {
-        if (getDeleteState())
+        if (multibandFocus[i])
         {
-            updateLines();
-            setDeleteState(false);
+            focusIndex = i;
+            findFocus = true;
+            break;
         }
-        else if (getAddState())
+    }
+    
+    if (!findFocus)
+    {
+        focusIndex = lineNum;
+        multibandFocus[lineNum] = true;
+        for (int i = lineNum + 1; i < 4; i++)
         {
-            updateLines();
-            setAddState(false);
+            multibandFocus[i] = false;
         }
-        if (getMovingState())
-        {
-            updateLines();
+    }
+
+    if (isVisible()) processor.setHistoryArray(focusIndex);
+    
+    // set value only when line is deleted, added, moving
+    if (/*getDeleteState() || getAddState() ||*/ getMovingState())
+    {
+//        if (getDeleteState())
+//        {
+//            updateLines();
+//            setDeleteState(false);
+//        }
+//        else if (getAddState())
+//        {
+//            updateLines();
+//            setAddState(false);
+//        }
+//        if (getMovingState())
+//        {
+            updateLines(0);
             setMovingState(false);
-        }
+//        }
     }
     
     // draw line that will be added next
@@ -130,16 +157,31 @@ void Multiband::paint (juce::Graphics& g)
     int margin2 = getWidth() / 250; // 1/100 * 4 / 10
     int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
 
+    if (lineNum == 0 && shouldSetBlackMask(0))
+    {
+        g.setColour(COLOUR_MASK_BLACK);
+        g.fillRect(0, 0, getWidth() + margin2, getHeight());
+    }
+    
     if (lineNum > 0 && multibandFocus[0])
     {
-//            g.setColour(COLOUR_MASK_RED);
         juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
                                   COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
         g.setGradientFill(grad);
         g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
     }
     
-    if (lineNum > 0 && enableButton[0]->getToggleState() == false)
+    int mouseX = getMouseXYRelative().getX();
+    int mouseY = getMouseXYRelative().getY();
+    
+    // set mouse enter white
+    if (!multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[sortedIndex[0]]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
+    }
+    
+    if (lineNum > 0 && shouldSetBlackMask(0))
     {
         g.setColour(COLOUR_MASK_BLACK);
         g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
@@ -147,30 +189,46 @@ void Multiband::paint (juce::Graphics& g)
     
     for (int i = 1; i < lineNum; i++)
     {
+        int startX = freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1;
+        int bandWidth = freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX();
+        
         if (lineNum > 1 && multibandFocus[i])
         {
-//                g.setColour(COLOUR_MASK_RED);
             juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
                                       COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
             g.setGradientFill(grad);
-            g.fillRect(freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1, 0, freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX(), getHeight());
+            g.fillRect(startX, 0, bandWidth, getHeight());
         }
-        if (lineNum > 1 && enableButton[i]->getToggleState() == false)
+        
+        if (lineNum > 1 && shouldSetBlackMask(i))
         {
             g.setColour(COLOUR_MASK_BLACK);
-            g.fillRect(freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1, 0, freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX(), getHeight());
+            g.fillRect(startX, 0, bandWidth, getHeight());
+        }
+        
+        if (!multibandFocus[i] && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
+        {
+            g.setColour(juce::Colours::white.withAlpha(0.05f));
+            g.fillRect(startX, 0, bandWidth, getHeight());
         }
     }
 
     if (lineNum > 0 && multibandFocus[lineNum])
     {
-//            g.setColour(COLOUR_MASK_RED);
         juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
                                   COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
         g.setGradientFill(grad);
         g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
     }
-    if (lineNum > 0 && enableButton[lineNum]->getToggleState() == false)
+    
+    // set mouse enter white
+    if (!multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+    }
+    
+    if (lineNum > 0 && shouldSetBlackMask(lineNum))
     {
         g.setColour(COLOUR_MASK_BLACK);
         g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
@@ -178,6 +236,28 @@ void Multiband::paint (juce::Graphics& g)
     
 //    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
 //    dragLines(targetXPercent);
+    
+    // if a line is deleted
+    for (int i = 0; i < 3; i++)
+    {
+        if (freqDividerGroup[i]->getCloseButton().isMouseButtonDown() && !freqDividerGroup[i]->getCloseButton().getMouseClickState())
+        {
+            setStatesWhenAddOrDelete(i, "delete");
+            updateLines(0);
+            setSoloRelatedBounds();
+            freqDividerGroup[i]->getCloseButton().setMouseClickState(true);
+            processor.setLineNum(lineNum);
+        }
+    }
+    
+    // if preset is changed
+    if (stateComponent.getChangedState())
+    {
+        stateComponent.setChangedState(false);
+        updateLines(1); // 1 means setBounds by setting frequency
+        setSoloRelatedBounds();
+        processor.setLineNum(lineNum);
+    }
 }
 
 void Multiband::resized()
@@ -185,7 +265,7 @@ void Multiband::resized()
     // This method is where you should set the bounds of any child
     // components that your component contains..
     margin = getHeight() / 20.0f;
-    size = freqDividerGroup[0]->getVerticalLine().getHeight() / 10.0f;
+    size = getWidth() / 1000.0f * 15.0f;
     width = freqDividerGroup[0]->getVerticalLine().getWidth() / 2.0f;
     
     // temp method to fix
@@ -198,42 +278,200 @@ void Multiband::resized()
         width = 5.0f;
     }
 
-    updateLines();
+    updateLines(0);
     setSoloRelatedBounds();
 }
 
-void Multiband::changeFocus(int changedIndex, juce::String option)
+bool Multiband::shouldSetBlackMask(int index)
 {
+    bool otherBandSoloIsOn = false;
+    for (int i = 0; i <= lineNum; i++)
+    {
+        if (i == index) continue;
+        if (soloButton[i]->getToggleState())
+        {
+            otherBandSoloIsOn = true;
+            break;
+        }
+    }
+    return (!soloButton[index]->getToggleState() && otherBandSoloIsOn);
+}
+
+void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
+{
+    
+    //if (toIndex == 0)
+    std::unique_ptr<std::array<juce::String, 11>> fromArray;
+    std::unique_ptr<std::array<juce::String, 11>> toArray;
+    
+    if (fromIndex == 0) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
+    if (fromIndex == 1) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
+    if (fromIndex == 2) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
+    if (fromIndex == 3) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
+    
+    if (toIndex == 0) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
+    if (toIndex == 1) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
+    if (toIndex == 2) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
+    if (toIndex == 3) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
+    
+    for (const auto &param : processor.getParameters())
+    {
+        if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
+        {
+            // from array
+            float paramFromValue = p->getValue();
+            juce::String paramFromName = p->name;
+            
+            for (int i = 0; i < fromArray->size(); i++)
+            {
+                if (fromArray.get()[0][i] == paramFromName)
+                {
+                    // to array
+                    for (const auto &paramTo : processor.getParameters())
+                    {
+                        if (auto *pTo = dynamic_cast<juce::AudioProcessorParameterWithID *>(paramTo))
+                        {
+                            juce::String paramToName = pTo->name;
+                            
+                            if (toArray.get()[0][i] == paramToName)
+                            {
+                                pTo->setValueNotifyingHost(paramFromValue);
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+bool Multiband::isParamInArray(juce::String paramName, std::array<juce::String, 11> paramArray)
+{
+    bool isInArray =false;
+    
+    for (int i = 0; i < paramArray.size(); i++)
+    {
+        if(paramName == paramArray[i])
+        {
+            isInArray = true;
+            break;
+        }
+    }
+    
+    return isInArray;
+}
+
+void Multiband::initParameters(int bandindex)
+{
+    for (const auto &param : processor.getParameters())
+        if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
+        {
+            if (bandindex == 0 && isParamInArray(p->name, paramsArray1))
+            {
+                p->setValueNotifyingHost(p->getDefaultValue());
+            }
+            if (bandindex == 1 && isParamInArray(p->name, paramsArray2))
+            {
+                p->setValueNotifyingHost(p->getDefaultValue());
+            }
+            if (bandindex == 2 && isParamInArray(p->name, paramsArray3))
+            {
+                p->setValueNotifyingHost(p->getDefaultValue());
+            }
+            if (bandindex == 3 && isParamInArray(p->name, paramsArray4))
+            {
+                p->setValueNotifyingHost(p->getDefaultValue());
+            }
+        }
+}
+
+void Multiband::setStatesWhenAddOrDelete(int changedIndex, juce::String option)
+{
+    /**
+     set enable buttons states, solo button states, focus band, and parameters for band processing
+     */
+    
     // get current focus index
     int focusIndex = 0;
-    for (int i = 0; i < 4; i++)
+    bool findFocus = false;
+    for (int i = 0; i < lineNum + 1; i++)
     {
         if (multibandFocus[i])
         {
             focusIndex = i;
+            findFocus = true;
             break;
+        }
+    }
+    
+    if (!findFocus)
+    {
+        focusIndex = lineNum;
+        multibandFocus[lineNum] = true;
+        for (int i = lineNum + 1; i < 4; i++)
+        {
+            multibandFocus[i] = false;
         }
     }
     
     // get changed index -> position index
     int newLinePosIndex = 0; // (count from left to right in the window)
-//    newLinePosIndex = freqDividerGroup[changedIndex]->getVerticalLine().getIndex();
-    for (int i = 0; i < lineNum; i++)
-    {
-        if (changedIndex == sortedIndex[i])
-        {
-            newLinePosIndex = i;
-            break;
-        }
-    }
+    newLinePosIndex = freqDividerGroup[changedIndex]->getVerticalLine().getIndex();
+//    for (int i = 0; i < lineNum; i++)
+//    {
+//        if (changedIndex == sortedIndex[i])
+//        {
+//            newLinePosIndex = i;
+//            break;
+//        }
+//    }
+    
+    /**
+     When adding or deleting lines, this function is to keep enable and solo buttons in the right order and states.
+     For example, you have [e1 | e2 | e3 | e4], If you delete line1 [e1 | e2 | <---- delete here!   e3 | e4]  we should only change e2/e3 state(in the middle),
+     not affecting e1 and e4.
+     */
     
     if (option == "add")
     {
         // change focus index when line is added
-        if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < enableButton[focusIndex]->getX()))
+        if (newLinePosIndex < focusIndex || (newLinePosIndex == focusIndex && getMouseXYRelative().getX() < (enableButton[focusIndex]->getX() + soloButton[focusIndex]->getX()) / 2.0f ))
         {
             multibandFocus[focusIndex] = false;
             multibandFocus[focusIndex + 1] = true;
+            
+        }
+
+        // change enable/solo index when line is added
+        for (int i = lineNum - 1; i >= 0; --i)
+        {
+            // add new line, move the olds to the right
+            if (i >= newLinePosIndex)
+            {
+                // add when mouse click is on the left side of buttons, move i to i + 1
+                if (getMouseXYRelative().getX() < (enableButton[i]->getX() + soloButton[i]->getX()) / 2.0f)
+                {
+                    // old button
+                    enableButton[i + 1]->setToggleState(enableButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+                    // new added button
+                    enableButton[i]->setToggleState(true, juce::NotificationType::sendNotification);
+                    
+                    soloButton[i + 1]->setToggleState(soloButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+                    soloButton[i]->setToggleState(false, juce::NotificationType::sendNotification);
+                    
+                    // move parameters
+                    setParametersToAFromB(i + 1, i);
+                    initParameters(i);
+                }
+                else // mouse click is on the right side of buttons, keep i not change, i + 1 is new
+                {
+                    enableButton[i + 1]->setToggleState(true, juce::NotificationType::sendNotification);
+                    soloButton[i + 1]->setToggleState(false, juce::NotificationType::sendNotification);
+                    initParameters(i + 1);
+                }
+            }
         }
     }
     else if (option == "delete")
@@ -244,35 +482,8 @@ void Multiband::changeFocus(int changedIndex, juce::String option)
             multibandFocus[focusIndex] = false;
             multibandFocus[focusIndex - 1] = true;
         }
-    }
-}
-
-void Multiband::changeEnable(int changedIndex, juce::String option)
-{
-    // get changed index -> position index
-    int newLinePosIndex = 0; // (count from left to right in the window)
-    newLinePosIndex = freqDividerGroup[changedIndex]->getVerticalLine().getIndex();
-    
-    if (option == "add")
-    {
-        // change enable index when line is added
-        for (int i = lineNum - 1; i >= 0; --i)
-        {
-            // new line is added on the left side of disabled button
-            if ((!enableButton[i]->getToggleState() && i > newLinePosIndex) ||
-                (!enableButton[i]->getToggleState() && getMouseXYRelative().getX() < enableButton[i]->getX()))
-            {
-                enableButton[i]->setToggleState(true, juce::NotificationType::sendNotification);;
-//                if (i < lineNum)
-//                {
-                    enableButton[i + 1]->setToggleState(false, juce::NotificationType::sendNotification);
-//                }
-            }
-        }
-    }
-    else if (option == "delete")
-    {
-        // change enable index when line is deleted
+        
+        // change enable/solo index when line is deleted
         for (int i = 1; i <= lineNum + 1; ++i) // line is already deleted so +1
         {
             // for safety
@@ -281,29 +492,25 @@ void Multiband::changeEnable(int changedIndex, juce::String option)
                 break;
             }
             
-            // new line is deleted on the left side of disabled button
-            if (!enableButton[i]->getToggleState() && i > newLinePosIndex)
+            // move the right side of the deleted line to the left
+            if (i > newLinePosIndex)
             {
-                enableButton[i]->setToggleState(true, juce::NotificationType::sendNotification);;
-                enableButton[i - 1]->setToggleState(false, juce::NotificationType::sendNotification);
+                enableButton[i - 1]->setToggleState(enableButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+                soloButton[i - 1]->setToggleState(soloButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+                setParametersToAFromB(i - 1, i);
             }
         }
-        
-        // special case: delete first line and only line number is 1 (after deleting it is 0), then delete enable[0] state
-        if (newLinePosIndex == 0 && lineNum == 0)
-        {
-            enableButton[0]->setToggleState(true, juce::NotificationType::sendNotification);;
-        }
     }
+    setSoloRelatedBounds();
 }
 
-void Multiband::updateLines()
+void Multiband::updateLines(int option)
 {
-    updateLineNumAndSortedIndex();
+    updateLineNumAndSortedIndex(option);
     updateLineLeftRightIndex();
 }
 
-void Multiband::updateLineNumAndSortedIndex()
+void Multiband::updateLineNumAndSortedIndex(int option)
 {
     int count = 0;
     
@@ -311,7 +518,14 @@ void Multiband::updateLineNumAndSortedIndex()
     {
         if (freqDividerGroup[i]->getCloseButton().getToggleState())
         {
-            setLineRelatedBoundsByX(i);
+            if (option == 0)
+            {
+                setLineRelatedBoundsByX(i);
+            }
+            else
+            {
+                setLineRelatedBoundsByFreq(i);
+            }
             sortedIndex[count] = i;
             count++;
         }
@@ -417,13 +631,15 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                     // create lines and close buttons and then set state
                     if (!freqDividerGroup[i]->getCloseButton().getToggleState())
                     {
-                        freqDividerGroup[i]->setCloseButtonValue(true);
                         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
                         freqDividerGroup[i]->getVerticalLine().setMoving(true);
+                        freqDividerGroup[i]->setCloseButtonValue(true);
+                        updateLines(0);
+                        processor.setLineNum(lineNum);
+                        setStatesWhenAddOrDelete(i, "add");
                         break;
                     }
                 }
-                updateLines();
             }
         }
     }
@@ -482,7 +698,7 @@ void Multiband::getEnableArray(bool (&input)[4])
 
 void Multiband::reset()
 {
-    for (int i = 0; i < 4; i++)
+    for (int i = 1; i < 4; i++)
     {
         enableButton[i]->setVisible(false);
         soloButton[i]->setVisible(false);
@@ -557,24 +773,24 @@ void Multiband::setLineRelatedBoundsByX(int i)
     if(freqDividerGroup[i]->getCloseButton().getToggleState())
     {
         freqDividerGroup[i]->setBounds(freqDividerGroup[i]->getVerticalLine().getXPercent() * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
-
         int freq = static_cast<int>(SpectrumComponent::transformFromLog(freqDividerGroup[i]->getVerticalLine().getXPercent()));
         freqDividerGroup[i]->getVerticalLine().setValue(freq);
     }
 }
 
-//void Multiband::setLineRelatedBoundsByFreq(int i)
-//{
-//    int freq = freqDividerGroup[i]->getFrequency();
-//    float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
-//    freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
-//}
+void Multiband::setLineRelatedBoundsByFreq(int i)
+{
+    int freq = freqDividerGroup[i]->getVerticalLine().getValue();
+    float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
+    freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
+    freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
+}
 
 void Multiband::setSoloRelatedBounds()
 {
     for (int i = 0; i < 4; i++)
     {
-        if (i <= lineNum && lineNum != 0)
+        if (i <= lineNum)
         {
             soloButton[i]->setVisible(true);
             enableButton[i]->setVisible(true);
@@ -588,12 +804,20 @@ void Multiband::setSoloRelatedBounds()
     // setBounds of soloButtons and enableButtons
     if (lineNum >= 1)
     {
-        enableButton[0]->setBounds(freqDividerGroup[sortedIndex[0]]->getX() / 2, margin, size, size);
+        enableButton[0]->setBounds(freqDividerGroup[sortedIndex[0]]->getX() / 2 - size, margin, size, size);
+        soloButton[0]->setBounds(freqDividerGroup[sortedIndex[0]]->getX() / 2 + size, margin, size, size);
         for (int i = 1; i < lineNum; i++)
         {
-            enableButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getX() + freqDividerGroup[sortedIndex[i - 1]]->getX()) / 2, margin, size, size);
+            enableButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getX() + freqDividerGroup[sortedIndex[i - 1]]->getX()) / 2 - size, margin, size, size);
+            soloButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getX() + freqDividerGroup[sortedIndex[i - 1]]->getX()) / 2 + size, margin, size, size);
         }
-        enableButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2, margin, size, size);
+        enableButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2 - size, margin, size, size);
+        soloButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2 + size, margin, size, size);
+    }
+    else if (lineNum == 0)
+    {
+        enableButton[0]->setBounds(getWidth() / 2 - size, margin, size, size);
+        soloButton[0]->setBounds(getWidth() / 2 + size, margin, size, size);
     }
 }
 
@@ -771,72 +995,59 @@ void Multiband::buttonClicked(juce::Button* button)
 //            }
 //        }
 //    }
-    
-    // delete line and reset deleted disabled band state
-    for (int i = 0; i < 4; ++i)
-    {
-        if (!enableButton[i]->getToggleState() && i > lineNum)
-        {
-            enableButton[i]->setToggleState(true, juce::NotificationType::sendNotification);
-        }
-    }
-    
-    bool isChanged = false;
-    
-    // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
-    for (int i = 0; i < 3; i++)
-    {
-        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
-        {
-            int changedIndex = i;
-            if (!button->getToggleState()) // delete line
-            {
-                // change focus
-                changeFocus(changedIndex, "delete");
-                changeEnable(changedIndex, "delete");
-            }
-        }
-    }
 
-    updateLines();
-    
-    // set soloButtons visibility
-    for (int i = 0; i < 3; i++)
-    {
-        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
-        {
-            int changedIndex = i;
-            if (button->getToggleState()) // add a line
-            {
-                // change focus
-                changeFocus(changedIndex, "add");
-                changeEnable(changedIndex, "add");
-                
-                soloButton[sortedIndex[i] + 1]->setVisible(true);
-                enableButton[sortedIndex[i] + 1]->setVisible(true);
-                if (lineNum == 1)
-                {
-                    soloButton[0]->setVisible(true);
-                    enableButton[0]->setVisible(true);
-                }
-            }
-            else // delete line
-            {
-                soloButton[sortedIndex[i] + 1]->setVisible(false);
-                enableButton[sortedIndex[i] + 1]->setVisible(false);
-                if (lineNum == 0)
-                {
-                    soloButton[0]->setVisible(false);
-                    enableButton[0]->setVisible(false);
-                }
-            }
-            isChanged = true;
-        }
-    }
-    
-    if (isChanged)
-    {
-        setSoloRelatedBounds();
-        processor.setLineNum(getLineNum());
-    }
+//    if (button == &freqDividerGroup[0]->getCloseButton() ||
+//        button == &freqDividerGroup[1]->getCloseButton() ||
+//        button == &freqDividerGroup[2]->getCloseButton())
+//    {
+//        bool isChanged = false;
+//
+//    //    // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
+//    //    for (int i = 0; i < 3; i++)
+//    //    {
+//    //        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
+//    //        {
+//    //            int changedIndex = i;
+//    //            if (!button->getToggleState()) // delete line
+//    //            {
+//    //                // change focus
+//    //                setStatesWhenAddOrDelete(changedIndex, "delete");
+//    //            }
+//    //        }
+//    //    }
+//
+//        updateLines();
+//
+//        // set soloButtons visibility
+//        for (int i = 0; i < 3; i++)
+//        {
+////            int changedIndex = i;
+//            if (button->getToggleState()) // add a line
+//            {
+//                // change focus
+////                setStatesWhenAddOrDelete(changedIndex, "add");
+//
+//                soloButton[sortedIndex[i] + 1]->setVisible(true);
+//                enableButton[sortedIndex[i] + 1]->setVisible(true);
+//            }
+//            else // delete line
+//            {
+//                soloButton[sortedIndex[i] + 1]->setVisible(false);
+//                enableButton[sortedIndex[i] + 1]->setVisible(false);
+//            }
+//            isChanged = true;
+//        }
+//
+//        if (isChanged)
+//        {
+//    //        setSoloRelatedBounds();
+//            processor.setLineNum(lineNum);
+//    //        DBG(lineNum);
+//        }
+//    }
+}
+
+EnableButton& Multiband::getEnableButton(const int index)
+{
+    return *enableButton[index];
 }

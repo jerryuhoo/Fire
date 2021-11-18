@@ -1,8 +1,8 @@
 /*
   ==============================================================================
 
-    CloseButton.h
-    Created: 8 Nov 2020 7:57:32pm
+    GraphTemplate.h
+    Created: 5 Oct 2021 11:42:57am
     Author:  羽翼深蓝Wings
 
   ==============================================================================
@@ -11,29 +11,31 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include "VerticalLine.h"
-#include "../../GUI/LookAndFeel.h"
+#include "../../../GUI/InterfaceDefines.h"
 
 //==============================================================================
 /*
 */
-class CloseButton : public juce::ToggleButton//juce::Component
+class GraphTemplate  : public juce::Component
 {
 public:
-    CloseButton(VerticalLine &v);
-    ~CloseButton() override;
+    GraphTemplate();
+    ~GraphTemplate() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setMouseClickState(bool state);
-    bool getMouseClickState();
-private:
-    VerticalLine &verticalLine;
-    bool isEntered = false;
-    bool mouseClickState = false;
+    void setScale(float scale);
+    bool getZoomState();
+    void setZoomState(bool zoomState);
     void mouseDown(const juce::MouseEvent &e) override;
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloseButton)
+private:
+    float scale = 1.0f;
+    
+protected:
+    bool isMouseOn = false;
+    bool mZoomState = false;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GraphTemplate)
 };

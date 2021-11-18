@@ -24,12 +24,27 @@ EnableButton::~EnableButton()
 
 void EnableButton::paint (juce::Graphics& g)
 {
-    g.setColour(getColour().darker());
-    g.fillEllipse(0, 0, getWidth(), getHeight());
-//    g.setColour(COLOUR7);
-//    g.fillEllipse(1, 1, getWidth() - 2, getHeight() - 2);
+    g.setColour(getColour().darker().darker());
+    g.fillEllipse(0.0f, 0.0f, getWidth(), getHeight());
+
     g.setColour(getColour());
-    g.fillEllipse(getWidth() / 5.0f, getHeight() / 5.0f, getWidth() / 5.0f * 3, getHeight() / 5.0f * 3);
+    auto bounds = juce::Rectangle<int>(getLocalBounds()).toFloat();
+    auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+    auto lineW = radius * 0.2f;
+    auto arcRadius = radius - lineW * 2.0f;
+
+    juce::Path backgroundArc;
+    backgroundArc.addCentredArc(bounds.getCentreX(),
+                                bounds.getCentreY(),
+                                arcRadius,
+                                arcRadius,
+                                0.0f,
+                                2 * M_PI * 0.1f,
+                                2 * M_PI * 0.9f,
+                                true);
+
+    g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.drawLine(getWidth() / 2.0f, getHeight() / 6.0f, getWidth() / 2.0f, getHeight() / 2.0f, lineW);
 }
 
 void EnableButton::resized()

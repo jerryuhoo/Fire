@@ -439,7 +439,7 @@ menuButton{"Menu"}
 
             if (item->itemID == id)
             {
-                item->setAction ([this, id] { updatePresetBox(id); isChanged = true; });
+                item->setAction ([this, id] { updatePresetBox(id); });
             }
             else
             {
@@ -561,6 +561,7 @@ void StateComponent::comboBoxChanged(juce::ComboBox *changedComboBox)
 
 void StateComponent::updatePresetBox(int selectedId) // when preset is changed
 {
+    isChanged = true; // do it first
     const juce::String presetId{ "preset" + (juce::String)selectedId };
     procStatePresets.setCurrentPresetId(selectedId);
     procStatePresets.loadPreset(presetId);
@@ -689,6 +690,7 @@ void StateComponent::popPresetMenu()
     {
         if (result == 1)  // init
         {
+            isChanged = true;
             // set all parameters to default
             procStatePresets.initPreset();
             // set GUI verticle lines to default

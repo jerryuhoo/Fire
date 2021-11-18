@@ -31,6 +31,15 @@ public:
     void timerCallback() override;
     
     void setScale(float scale);
+    juce::Slider& getLowcutFreqKnob();
+    juce::Slider& getPeakFreqKnob();
+    juce::Slider& getHighcutFreqKnob();
+    juce::Slider& getLowcutGainKnob();
+    juce::Slider& getPeakGainKnob();
+    juce::Slider& getHighcutGainKnob();
+    
+    void setToggleButtonState(juce::String toggleButton);
+    
 private:
     float scale = 1.0f;
     // override listener functions
@@ -42,6 +51,9 @@ private:
     void setRotarySlider(juce::Slider& slider, juce::Colour colour);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void updateToggleState();
+    void setBypassState(int index, bool state);
+    void updateBypassState(juce::ToggleButton &clickedButton, int index);
+    
     enum RadioButtonIds
     {
         // filter state: off, pre, post
@@ -56,7 +68,7 @@ private:
         switchButtonsGlobal = 1005
     };
     
-    juce::Rectangle<int> GlobalEffectArea;
+    juce::Rectangle<int> globalEffectArea;
     juce::Rectangle<int> outputKnobArea;
     
     // Sliders
@@ -104,6 +116,8 @@ private:
 
     juce::TextButton filterSwitch, otherSwitch;
     
+    std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
+    
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
@@ -145,8 +159,15 @@ private:
     juce::ComboBox lowcutSlopeMode;
     juce::ComboBox highcutSlopeMode;
 
+    // filter and downsample
+    juce::Array<juce::Component*> componentArray1;
+    juce::Array<juce::Component*> componentArray2;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lowcutModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> highcutModeAttachment;
+    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> filterBypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> downsampleBypassAttachment;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalPanel)
 };

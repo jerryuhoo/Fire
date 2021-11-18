@@ -13,13 +13,15 @@
 #include <JuceHeader.h>
 #include "../../PluginProcessor.h"
 #include "../../Utility/AudioHelpers.h"
+#include "DraggableButton.h"
+#include "../ControlPanel/GlobalPanel.h"
 //==============================================================================
 /*
 */
 class FilterControl  : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
 {
 public:
-    FilterControl(FireAudioProcessor &);
+    FilterControl(FireAudioProcessor &, GlobalPanel &);
     ~FilterControl() override;
 
     void paint (juce::Graphics&) override;
@@ -34,6 +36,7 @@ public:
     void timerCallback() override;
 private:
     FireAudioProcessor &processor;
+    GlobalPanel &globalPanel;
 //    float mLowCut;
 //    float mHighCut;
 //    float mCutRes;
@@ -50,5 +53,8 @@ private:
     juce::Atomic<bool> parametersChanged {false};
     void updateResponseCurve();
     void updateChain();
+    void setDraggableButtonBounds();
+    DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FilterControl)
 };

@@ -24,11 +24,14 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setParameterId(int inParameterId);
+    void setParameters(bool isInput, juce::String meterName);
     void timerCallback() override;
+    float getLeftChannelLevel();
+    float getRightChannelLevel();
 private:
     FireAudioProcessor* mProcessor;
-    int mParameterId;
+    bool mIsInput;
+    juce::String mMeterName;
     float mCh0Level;
     float mCh1Level;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUMeter)

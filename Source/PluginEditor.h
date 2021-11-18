@@ -57,16 +57,16 @@ private:
     GraphPanel graphPanel {processor};
     
     // Multiband
-    Multiband multiband {processor};
-    
-    // Filter Control
-    FilterControl filterControl {processor};
+    Multiband multiband {processor, stateComponent};
     
     // Band
     BandPanel bandPanel {processor};
     
     // Global
     GlobalPanel globalPanel;
+    
+    // Filter Control
+    FilterControl filterControl {processor, globalPanel};
 
     // Spectrum
     SpectrumComponent spectrum;
@@ -78,8 +78,9 @@ private:
     juce::TextButton
         hqButton,
         windowLeftButton,
-        windowRightButton;
-
+        windowRightButton,
+        zoomButton;
+    
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -113,7 +114,7 @@ private:
     // hide and show labels
 //    void sliderDragStarted (juce::Slider*) override;
 //    void sliderDragEnded (juce::Slider*) override;
-    void changeSliderState(juce::ComboBox *combobox);
+//    void changeSliderState(juce::ComboBox *combobox);
     
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -132,6 +133,7 @@ private:
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
-
+    ZoomLookAndFeel zoomLookAndFeel;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

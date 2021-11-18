@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION             "0.9.3"
+#define VERSION             "0.9.4"
 #define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION   ".fire"
@@ -213,6 +213,16 @@
 #define LINE_STATE_ID3      "lineState3"
 #define LINE_STATE_NAME3    "LineState3"
 
+#define COMP_BYPASS_ID          "compressorBypass"
+#define COMP_BYPASS_NAME        "CompressorBypass"
+#define WIDTH_BYPASS_ID         "widthBypass"
+#define WIDTH_BYPASS_NAME       "WidthBypass"
+#define FILTER_BYPASS_ID        "filterBypass"
+#define FILTER_BYPASS_NAME      "FilterBypass"
+#define DOWNSAMPLE_BYPASS_ID    "downsampleBypass"
+#define DOWNSAMPLE_BYPASS_NAME  "DownsampleBypass"
+
+
 // Define Font
 #define KNOB_FONT           "Futura"
 #define KNOB_FONT_SIZE      18.0f
@@ -318,6 +328,12 @@
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
 #define COLOUR_GROUP        juce::Colour(50, 50, 50)
-
+#define DRIVE_COLOUR        juce::Colours::red
+#define SHAPE_COLOUR        juce::Colours::yellow
+#define WIDTH_COLOUR        juce::Colours::skyblue
+#define COMP_COLOUR         juce::Colours::yellowgreen
+#define FILTER_COLOUR       juce::Colours::hotpink
+#define DOWNSAMPLE_COLOUR   juce::Colours::purple
+    
 // VU meters
 #define SMOOTH_COEFF        0.2

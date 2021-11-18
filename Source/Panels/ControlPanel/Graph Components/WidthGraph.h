@@ -12,26 +12,23 @@
 
 #include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
+#include "GraphTemplate.h"
 
 //==============================================================================
 /*
 */
-class WidthGraph  : public juce::Component
+class WidthGraph  : public GraphTemplate
 {
 public:
     WidthGraph(FireAudioProcessor &);
     ~WidthGraph() override;
 
     void paint (juce::Graphics&) override;
-    void resized() override;
-    bool getZoomState();
-    void setZoomState(bool zoomState);
-    void mouseDown(const juce::MouseEvent &e) override;
     
 private:
     FireAudioProcessor &processor;
     juce::Array<float> historyL;
     juce::Array<float> historyR;
-    bool mZoomState = false; // false means small
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
 };

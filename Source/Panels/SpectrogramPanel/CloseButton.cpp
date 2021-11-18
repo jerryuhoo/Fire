@@ -46,6 +46,11 @@ void CloseButton::resized()
     // components that your component contains..
 }
 
+void CloseButton::mouseDown(const juce::MouseEvent &e)
+{
+    setToggleState(false, juce::sendNotification);
+}
+
 void CloseButton::mouseEnter(const juce::MouseEvent &e)
 {
     isEntered = true;
@@ -54,4 +59,14 @@ void CloseButton::mouseEnter(const juce::MouseEvent &e)
 void CloseButton::mouseExit(const juce::MouseEvent &e)
 {
     isEntered = false;
+}
+
+void CloseButton::setMouseClickState(bool state)
+{
+    mouseClickState = state;
+}
+
+bool CloseButton::getMouseClickState()
+{
+    return mouseClickState;
 }

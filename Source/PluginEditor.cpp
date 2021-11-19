@@ -25,8 +25,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // however, AU plugin calls constructor after setStateInformation/
     // So I set delay of 1 ms to reset size and other stuff.
     // call function after 1 ms
-    std::function<void()> initFunction = [this]() { initEditor(); };
-    juce::Timer::callAfterDelay(1, initFunction);
+    /*std::function<void()> initFunction = [this]() { initEditor(); };
+    juce::Timer::callAfterDelay(1, initFunction);*/
+    initEditor();
     
     // Graph
     addAndMakeVisible(graphPanel);
@@ -176,7 +177,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
 void FireAudioProcessorEditor::initEditor()
 {
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
-    
+    processor.setLineNum(multiband.getLineNum());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     

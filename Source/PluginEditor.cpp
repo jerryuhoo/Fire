@@ -177,7 +177,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
 void FireAudioProcessorEditor::initEditor()
 {
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
-    processor.setLineNum(multiband.getLineNum());
+//    processor.setLineNum(multiband.getLineNum());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     

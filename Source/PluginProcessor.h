@@ -103,7 +103,7 @@ public:
     
     // get number of activated lines
     // int getLineNum();
-    void setLineNum(int lineNum);
+    void setLineNum();
     
     // VU meters
     float getInputMeterRMSLevel(int channel, juce::String bandName);

@@ -453,9 +453,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     int freqValue2 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID2));
     int freqValue3 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID3));
 
-    bool lineState1 = static_cast<int>(*treeState.getRawParameterValue(LINE_STATE_ID1));
-    bool lineState2 = static_cast<int>(*treeState.getRawParameterValue(LINE_STATE_ID2));
-    bool lineState3 = static_cast<int>(*treeState.getRawParameterValue(LINE_STATE_ID3));
+    bool lineState1 = static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID1));
+    bool lineState2 = static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID2));
+    bool lineState3 = static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID3));
     
     // sort freq
     std::array<int, 3> freqArray = {0, 0, 0};
@@ -464,6 +464,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     if (lineState2) freqArray[count++] = freqValue2;
     if (lineState3) freqArray[count++] = freqValue3;
 
+    //TODO: Temp fix. Should not set lineNum in processblock every time.
+    lineNum = count;
+    
     std::sort(freqArray.begin(), freqArray.begin() + count);
     
     freqValue1 = freqArray[0];
@@ -1324,9 +1327,25 @@ void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<fl
 //    return lineNum;
 //}
 
-void FireAudioProcessor::setLineNum(int lineNum)
+void FireAudioProcessor::setLineNum()
 {
-    this->lineNum = lineNum;
+    // maybe this method is useless, or delete "lineNum = count" in processBlock
+    int num = 0;
+
+    if (*treeState.getRawParameterValue(LINE_STATE_ID1))
+    {
+        num += 1;
+    }
+    if (*treeState.getRawParameterValue(LINE_STATE_ID2))
+    {
+        num += 1;
+    }
+    if (*treeState.getRawParameterValue(LINE_STATE_ID3))
+    {
+        num += 1;
+    }
+
+    this->lineNum = num;
 }
 
 // VU meters

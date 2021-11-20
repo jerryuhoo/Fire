@@ -246,7 +246,7 @@ void Multiband::paint (juce::Graphics& g)
             updateLines(0);
             setSoloRelatedBounds();
             freqDividerGroup[i]->getCloseButton().setMouseClickState(true);
-            processor.setLineNum(lineNum);
+            processor.setLineNum();
         }
     }
     
@@ -256,7 +256,7 @@ void Multiband::paint (juce::Graphics& g)
         stateComponent.setChangedState(false);
         updateLines(1); // 1 means setBounds by setting frequency
         setSoloRelatedBounds();
-        processor.setLineNum(lineNum);
+        processor.setLineNum();
     }
 }
 
@@ -635,7 +635,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         freqDividerGroup[i]->getVerticalLine().setMoving(true);
                         freqDividerGroup[i]->setCloseButtonValue(true);
                         updateLines(0);
-                        processor.setLineNum(lineNum);
+                        processor.setLineNum();
                         setStatesWhenAddOrDelete(i, "add");
                         break;
                     }

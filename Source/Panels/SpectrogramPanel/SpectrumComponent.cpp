@@ -67,18 +67,25 @@ void SpectrumComponent::paint (juce::Graphics& g)
     g.drawFittedText("-80 db", 0, getHeight() / 6 * 5 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
     
     // paint graph
-	paintSpectrum(g);
+    g.setColour(juce::Colours::white);
+	paintSpectrum();
+    spectrumImage.multiplyAllAlphas(0.9);
+    spectrumImage.moveImageSection(0, 10, 0, 0, spectrumImage.getWidth(), spectrumImage.getHeight());
+    g.drawImageAt(spectrumImage, 0, 0);
 }
 
 void SpectrumComponent::resized()
 {
     // This method is where you should set the bounds of any child
     // components that your component contains..
+    spectrumImage = spectrumImage.rescaled(getWidth(), getHeight());
 }
 
-void SpectrumComponent::paintSpectrum(juce::Graphics & g)
+void SpectrumComponent::paintSpectrum()
 {
     // this method is to paint spectrogram
+    juce::Graphics g(spectrumImage);
+    
     auto width = getLocalBounds().getWidth();
     auto height = getLocalBounds().getHeight();
     
@@ -114,23 +121,18 @@ void SpectrumComponent::paintSpectrum(juce::Graphics & g)
     juce::Path roundedPath = p.createPathWithRoundedCorners(10.0f);
     
     // draw the outline of the path
-//    g.setColour (COLOUR7.withAlpha(0.5f));
-//    g.strokePath(roundedPath, juce::PathStrokeType(4.0f));
-    
     roundedPath.lineTo(width, height);
     roundedPath.lineTo(0, height);
+    roundedPath.closeSubPath();
     
     g.setColour (COLOUR1);
             
-    juce::ColourGradient grad(juce::Colours::red.withAlpha(0.5f), 0, 0,
-                              COLOUR1.withAlpha(0.5f), 0, getLocalBounds().getHeight(), false);
-    
-//    juce::ColourGradient grad(juce::Colours::red, 0, 0,
-//                              juce::Colours::yellow, 0, getLocalBounds().getHeight(), false);
-    
+    juce::ColourGradient grad(juce::Colours::red.withAlpha(0.8f), 0, 0,
+                              COLOUR1.withAlpha(0.8f), 0, getLocalBounds().getHeight(), false);
+
     g.setGradientFill(grad);
-    
     g.fillPath(roundedPath);
+//    g.strokePath(roundedPath, juce::PathStrokeType(2));
 }
 
 void SpectrumComponent::prepareToPaintSpectrum(int numBins, float * data)

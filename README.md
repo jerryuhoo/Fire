@@ -1,4 +1,4 @@
-# Fire (Version 0.9.4) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
+# Fire (Version 0.9.5) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -93,6 +93,10 @@ I am also a music producer, welcome to follow my Netease channel: [羽翼深蓝W
 5.4. [SimpleEQ](https://github.com/matkatmusic/SimpleEQ) by matkatmusic
 
 ## 6. Update Notes
+
+### 2022 (version 0.9.5)
+
+1. Smoothed the graph of spectrogram.
 
 ### 2021-11-18 (version 0.9.4)
 

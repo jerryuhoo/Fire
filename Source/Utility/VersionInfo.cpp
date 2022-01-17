@@ -48,9 +48,11 @@ std::unique_ptr<juce::InputStream> VersionInfo::createInputStreamForAsset (const
     juce::URL downloadUrl (asset.url);
     juce::StringPairArray responseHeaders;
 
-    return std::unique_ptr<juce::InputStream> (downloadUrl.createInputStream (false, nullptr, nullptr,
-                                                                        "Accept: application/octet-stream",
-                                                                        5000, &responseHeaders, &statusCode, 1));
+    return std::unique_ptr<juce::InputStream> (downloadUrl.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withExtraHeaders ("Accept: application/octet-stream")
+                                                 .withConnectionTimeoutMs (5000)
+                                                 .withResponseHeaders (&responseHeaders)
+                                                 .withStatusCode (&statusCode)
+                                                 .withNumRedirectsToFollow (1)));
 }
 
 bool VersionInfo::isNewerVersionThanCurrent()
@@ -76,7 +78,7 @@ bool VersionInfo::isNewerVersionThanCurrent()
 std::unique_ptr<VersionInfo> VersionInfo::fetch (const juce::String& endpoint)
 {
     juce::URL latestVersionURL ("https://api.github.com/repos/jerryuhoo/Fire/releases/" + endpoint);
-    std::unique_ptr<juce::InputStream> inStream (latestVersionURL.createInputStream (false, nullptr, nullptr, {}, 5000));
+    std::unique_ptr<juce::InputStream> inStream (latestVersionURL.createInputStream (juce::URL::InputStreamOptions (juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs (5000)));
 
     if (inStream == nullptr)
         return nullptr;

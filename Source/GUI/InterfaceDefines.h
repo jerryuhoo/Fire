@@ -10,7 +10,7 @@
 
 #pragma once
 
-#define VERSION             "0.9.4"
+#define VERSION             "0.9.5"
 #define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION   ".fire"

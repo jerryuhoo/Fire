@@ -71,7 +71,7 @@ juce_add_plugin(Fire
         PLUGIN_MANUFACTURER_CODE Manu                   # A four-character manufacturer id with at least one upper-case character
         PLUGIN_CODE Nykr                                # A unique four-character plugin id with exactly one upper-case character
         # GarageBand 10.3 requires the first letter to be upper-case, and the remaining letters to be lower-case
-        FORMATS AU VST3 AAX VST                         # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
+        FORMATS AU VST3                                 # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
         PRODUCT_NAME "Fire")                            # The name of the final executable, which can differ from the target name
 
 target_link_libraries(Fire PUBLIC readerwriterqueue)

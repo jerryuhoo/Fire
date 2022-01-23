@@ -28,11 +28,13 @@ public:
 	static float transformToLog(double valueToTransform);
     static float transformFromLog(double between0and1); 
 	void resized() override;
-	void paintSpectrum(juce::Graphics & g);
+	void paintSpectrum();
 
 private:
 	int numberOfBins = 1;
     float spectrumData[1024] = {0};
+    
+    juce::Image spectrumImage = juce::Image(juce::Image::RGB, 1000, 300, true);
     
 	static const int frequenciesForLines[];
 	static const int numberOfLines;    

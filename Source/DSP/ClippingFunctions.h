@@ -122,7 +122,7 @@ T limitClip (T x) noexcept
 template<typename T>
 T singleSinClip (T x) noexcept
 {
-    if (std::fabsf (x) < juce::MathConstants<T>::pi)
+    if (std::fabs (x) < juce::MathConstants<T>::pi)
     {
         return JMath::sin (x);
     }

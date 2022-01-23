@@ -504,7 +504,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         if (multibandEnable1)
         {
-            processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, getTotalNumInputChannels(), recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1);
+            processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, totalNumInputChannels, recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1);
         }
 
         setLeftRightMeterRMSValues(mBuffer1, mOutputLeftSmoothedBand1, mOutputRightSmoothedBand1);
@@ -527,7 +527,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         if (multibandEnable2)
         {
-            processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, getTotalNumInputChannels(), recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2);
+            processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, totalNumInputChannels, recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2);
         }
         
         setLeftRightMeterRMSValues(mBuffer2, mOutputLeftSmoothedBand2, mOutputRightSmoothedBand2);
@@ -550,7 +550,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         if (multibandEnable3)
         {
-            processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, getTotalNumInputChannels(), recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3);
+            processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, totalNumInputChannels, recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3);
         }
         
         setLeftRightMeterRMSValues(mBuffer3, mOutputLeftSmoothedBand3, mOutputRightSmoothedBand3);
@@ -569,32 +569,47 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         if (multibandEnable4)
         {
-            processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, getTotalNumInputChannels(), recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4);
+            processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4);
         }
         
         setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
     }
     
     buffer.clear();
+    
+    int leftChannelId;
+    int rightChannelId;
+    if (totalNumInputChannels == 2)
+    {
+        leftChannelId = 0;
+        rightChannelId = 1;
+    }
+    else
+    {
+        leftChannelId = 0;
+        rightChannelId = 0;
+    }
+    
+    
     if (!shouldSetBlackMask(0))
     {
-        buffer.addFrom(0, 0, mBuffer1, 0, 0, numSamples);
-        buffer.addFrom(1, 0, mBuffer1, 1, 0, numSamples);
+        buffer.addFrom(leftChannelId, 0, mBuffer1, leftChannelId, 0, numSamples);
+        buffer.addFrom(rightChannelId, 0, mBuffer1, rightChannelId, 0, numSamples);
     }
     if (!shouldSetBlackMask(1) && lineNum >= 1)
     {
-        buffer.addFrom(0, 0, mBuffer2, 0, 0, numSamples);
-        buffer.addFrom(1, 0, mBuffer2, 1, 0, numSamples);
+        buffer.addFrom(leftChannelId, 0, mBuffer2, leftChannelId, 0, numSamples);
+        buffer.addFrom(rightChannelId, 0, mBuffer2, rightChannelId, 0, numSamples);
     }
     if (!shouldSetBlackMask(2) && lineNum >= 2)
     {
-        buffer.addFrom(0, 0, mBuffer3, 0, 0, numSamples);
-        buffer.addFrom(1, 0, mBuffer3, 1, 0, numSamples);
+        buffer.addFrom(leftChannelId, 0, mBuffer3, leftChannelId, 0, numSamples);
+        buffer.addFrom(rightChannelId, 0, mBuffer3, rightChannelId, 0, numSamples);
     }
     if (!shouldSetBlackMask(3) && lineNum == 3)
     {
-        buffer.addFrom(0, 0, mBuffer4, 0, 0, numSamples);
-        buffer.addFrom(1, 0, mBuffer4, 1, 0, numSamples);
+        buffer.addFrom(leftChannelId, 0, mBuffer4, leftChannelId, 0, numSamples);
+        buffer.addFrom(rightChannelId, 0, mBuffer4, rightChannelId, 0, numSamples);
     }
 
     // downsample
@@ -619,8 +634,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
     {
         updateFilter();
-        auto leftBlock = block.getSingleChannelBlock(0);
-        auto rightBlock = block.getSingleChannelBlock(1);
+        auto leftBlock = block.getSingleChannelBlock(leftChannelId);
+        auto rightBlock = block.getSingleChannelBlock(rightChannelId);
         leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
         rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
     }
@@ -1029,8 +1044,18 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     dryBuffer.makeCopyOf(bandBuffer);
 
     // dsp process
-    auto* channeldataL = bandBuffer.getWritePointer(0);
-    auto* channeldataR = bandBuffer.getWritePointer(1);
+    float* channeldataL;
+    float* channeldataR;
+    if (totalNumInputChannels == 2)
+    {
+        channeldataL = bandBuffer.getWritePointer(0);
+        channeldataR = bandBuffer.getWritePointer(1);
+    }
+    else
+    {
+        channeldataL = bandBuffer.getWritePointer(0);
+        channeldataR = bandBuffer.getWritePointer(0);
+    }
     float width = *treeState.getRawParameterValue(widthID);
 
     // distortion process
@@ -1115,7 +1140,15 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     gainUp.setGainLinear(newDrive);
     gainUp.setRampDurationSeconds(0.05f);
     
-    float maxValue = juce::jmax(bandBuffer.getRMSLevel(0, 0, bandBuffer.getNumSamples()), bandBuffer.getRMSLevel(1, 0, bandBuffer.getNumSamples())) ;
+    float maxValue;
+    if (getTotalNumInputChannels() == 2)
+    {
+        maxValue = juce::jmax(bandBuffer.getRMSLevel(0, 0, bandBuffer.getNumSamples()), bandBuffer.getRMSLevel(1, 0, bandBuffer.getNumSamples())) ;
+    }
+    else
+    {
+        maxValue = bandBuffer.getRMSLevel(0, 0, bandBuffer.getNumSamples());
+    }
     
     if (maxValue < 0.00001f)
     {
@@ -1351,8 +1384,18 @@ void FireAudioProcessor::setLineNum()
 // VU meters
 void FireAudioProcessor::setLeftRightMeterRMSValues(juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue)
 {
-    float absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-    float absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    float absInputLeftValue;
+    float absInputRightValue;
+    if (getTotalNumInputChannels() == 2)
+    {
+        absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+        absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
+    }
+    else
+    {
+        absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
+        absInputRightValue = absInputLeftValue;
+    }
     // smooth value
     leftOutValue = SMOOTH_COEFF * (leftOutValue - absInputLeftValue) + absInputLeftValue;
     rightOutValue = SMOOTH_COEFF * (rightOutValue - absInputRightValue) + absInputRightValue;

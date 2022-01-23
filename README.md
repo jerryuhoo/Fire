@@ -1,4 +1,4 @@
-# Fire (Version 0.9.4) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)
+# Fire (Version 0.9.5) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -10,9 +10,9 @@ This is a multi-band distortion plugin 『Fire』. It can be used in DAWs which 
 
 Demo video:
 
-(YouTube) https://youtu.be/sccW_8W_0o4
+(YouTube) <https://youtu.be/sccW_8W_0o4>
 
-(Bilibili) https://www.bilibili.com/video/BV17f4y1M7Hm
+(Bilibili) <https://www.bilibili.com/video/BV17f4y1M7Hm>
 
 :musical_note: Home Page for Wings Music: [Wings Music](https://jerryuhoo.github.io/)
 
@@ -81,11 +81,12 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 我也是一个音乐制作人，欢迎关注网易云音乐：[羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
 
-I am also a music producer, welcome to follow my Netease channel: [羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
+I am also a music producer.
+Netease channel: [羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
+SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 <div align=center>
     <img src="support.png" width = "50%"/>
-
 </div>
 
 ## 5. References
@@ -99,6 +100,12 @@ I am also a music producer, welcome to follow my Netease channel: [羽翼深蓝W
 5.4. [SimpleEQ](https://github.com/matkatmusic/SimpleEQ) by matkatmusic
 
 ## 6. Update Notes
+
+### 2022-1 (version 0.9.5)
+
+1. Smoothed the graph of spectrogram.
+2. Fix Logic Pro crash.
+3. Add GitHub CI.
 
 ### 2021-11-18 (version 0.9.4)
 

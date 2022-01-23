@@ -53,10 +53,17 @@ juce::Colour DraggableButton::getColour()
 {
     if (isEntered)
     {
-        return juce::Colours::hotpink.withAlpha(0.8f);
+        if (mState) return juce::Colours::hotpink.withAlpha(0.8f);
+        else return juce::Colours::dimgrey.withAlpha(0.8f);
     }
     else
     {
-        return juce::Colours::hotpink;
+        if (mState) return juce::Colours::hotpink;
+        else return juce::Colours::lightgrey;
     }
+}
+
+void DraggableButton::setState(const bool state)
+{
+    mState = state;
 }

@@ -8,6 +8,12 @@
 
 This is a multi-band distortion plugin 『Fire』. It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
 
+Demo video:
+
+(YouTube) <https://youtu.be/sccW_8W_0o4>
+
+(Bilibili) <https://www.bilibili.com/video/BV17f4y1M7Hm>
+
 :musical_note: Home Page for Wings Music: [Wings Music](https://jerryuhoo.github.io/)
 
 Hope you like it!
@@ -75,11 +81,12 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 我也是一个音乐制作人，欢迎关注网易云音乐：[羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
 
-I am also a music producer, welcome to follow my Netease channel: [羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
+I am also a music producer.
+Netease channel: [羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
+SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 <div align=center>
     <img src="support.png" width = "50%"/>
-
 </div>
 
 ## 5. References

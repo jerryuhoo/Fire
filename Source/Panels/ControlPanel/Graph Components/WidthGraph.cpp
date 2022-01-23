@@ -64,6 +64,7 @@ void WidthGraph::paint (juce::Graphics& g)
         }
     }
     
+    g.setColour(juce::Colours::skyblue.withAlpha(0.8f));
     for (int i = 0; i < historyL.size(); i++)
     {
         float x = historyL[i] * getHeight() / 4.0f;
@@ -75,10 +76,8 @@ void WidthGraph::paint (juce::Graphics& g)
             x = x / maxValue;
             y = y / maxValue;
         }
-        
-        g.setColour(juce::Colours::skyblue.withAlpha(0.8f));
-//        g.drawEllipse(getWidth() / 2.0f + x, getHeight() + y, 0.5f, 0.5f, 0.5f);
-        g.drawEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 0.5f, 0.5f, 1.0f);
+
+        g.fillEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 1.0f, 1.0f);
     }
     
     if (isMouseOn && !mZoomState)

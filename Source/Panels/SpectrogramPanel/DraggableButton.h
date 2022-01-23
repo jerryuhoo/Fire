@@ -26,9 +26,11 @@ public:
     
     void mouseEnter(const juce::MouseEvent &e) override;
     void mouseExit(const juce::MouseEvent &e) override;
+    void setState(const bool state);
     
 private:
     bool isEntered = false;
     juce::Colour getColour();
+    bool mState = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DraggableButton)
 };

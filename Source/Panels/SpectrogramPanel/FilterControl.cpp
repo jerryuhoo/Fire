@@ -41,11 +41,33 @@ FilterControl::~FilterControl()
 void FilterControl::paint (juce::Graphics& g)
 {
     if (isVisible()) processor.setHistoryArray(5); // 5 means global
-    g.setColour(juce::Colours::hotpink.withBrightness(0.8f));
-    g.strokePath(responseCurve, juce::PathStrokeType(2.0f));
-    g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
-    g.fillPath(responseCurve);
     
+    bool isFilterBypassed = *processor.treeState.getRawParameterValue(FILTER_BYPASS_ID);
+    if (isFilterBypassed)
+    {
+        draggableLowButton.setState(true);
+        draggablePeakButton.setState(true);
+        draggableHighButton.setState(true);
+        
+        g.setColour(juce::Colours::hotpink.withBrightness(0.8f));
+        g.strokePath(responseCurve, juce::PathStrokeType(2.0f));
+        
+        g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
+        g.fillPath(responseCurve);
+    }
+    else
+    {
+        draggableLowButton.setState(false);
+        draggablePeakButton.setState(false);
+        draggableHighButton.setState(false);
+        
+        g.setColour(juce::Colours::dimgrey.withBrightness(0.8f));
+        g.strokePath(responseCurve, juce::PathStrokeType(2.0f));
+        
+        g.setColour(juce::Colours::dimgrey.withBrightness(0.8f).withAlpha(0.2f));
+        g.fillPath(responseCurve);
+    }
+
     float size = getWidth() / 1000.0f * 15;
     
     float buttonX = getMouseXYRelative().getX() - size / 2.0f;

@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "JucePluginDefines.h"
+#include "../../JuceLibraryCode/JucePluginDefines.h"
 
 #define VERSION             JucePlugin_VersionString
 #define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"

@@ -58,21 +58,21 @@ FetchContent_MakeAvailable(readerwriterqueue)
 # Check the readme at `docs/CMake API.md` in the JUCE repo for the full list.
 
 juce_add_plugin(Fire
-        # VERSION ...                               # Set this if the plugin version is different to the project version
-        # ICON_BIG ...                              # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
+        # VERSION ...                                   # Set this if the plugin version is different to the project version
+        # ICON_BIG ...                                  # ICON_* arguments specify a path to an image file to use as an icon for the Standalone
         # ICON_SMALL ...
-        COMPANY_NAME Wings                   # Specify the name of the plugin's author
-        IS_SYNTH FALSE                               # Is this a synth or an effect?
-        NEEDS_MIDI_INPUT TRUE                       # Does the plugin need midi input?
-        NEEDS_MIDI_OUTPUT FALSE                      # Does the plugin need midi output?
-        IS_MIDI_EFFECT FALSE                         # Is this plugin a MIDI effect?
-        # EDITOR_WANTS_KEYBOARD_FOCUS TRUE/FALSE    # Does the editor need keyboard focus?
-        COPY_PLUGIN_AFTER_BUILD TRUE                # Should the plugin be installed to a default location after building?
-        PLUGIN_MANUFACTURER_CODE Manu               # A four-character manufacturer id with at least one upper-case character
-        PLUGIN_CODE Nykr                            # A unique four-character plugin id with exactly one upper-case character
+        COMPANY_NAME Wings                              # Specify the name of the plugin's author
+        IS_SYNTH FALSE                                  # Is this a synth or an effect?
+        NEEDS_MIDI_INPUT TRUE                           # Does the plugin need midi input?
+        NEEDS_MIDI_OUTPUT FALSE                         # Does the plugin need midi output?
+        IS_MIDI_EFFECT FALSE                            # Is this plugin a MIDI effect?
+        # EDITOR_WANTS_KEYBOARD_FOCUS TRUE/FALSE        # Does the editor need keyboard focus?
+        COPY_PLUGIN_AFTER_BUILD TRUE                    # Should the plugin be installed to a default location after building?
+        PLUGIN_MANUFACTURER_CODE Manu                   # A four-character manufacturer id with at least one upper-case character
+        PLUGIN_CODE Nykr                                # A unique four-character plugin id with exactly one upper-case character
         # GarageBand 10.3 requires the first letter to be upper-case, and the remaining letters to be lower-case
-        FORMATS AU VST3                  # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
-        PRODUCT_NAME "Fire")                    # The name of the final executable, which can differ from the target name
+        FORMATS AU VST3 AAX VST                         # The formats to build. Other valid formats are: AAX Unity VST AU AUv3
+        PRODUCT_NAME "Fire")                            # The name of the final executable, which can differ from the target name
 
 target_link_libraries(Fire PUBLIC readerwriterqueue)
 target_link_libraries(Fire PRIVATE juce::juce_dsp)
@@ -163,46 +163,40 @@ target_link_libraries(Fire
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags)
 
-# # BUILD_TESTING is ON by default
-# # include(CTest) does this too, but adds tons of targets we don't want
-# enable_testing()
+# BUILD_TESTING is ON by default
+# include(CTest) does this too, but adds tons of targets we don't want
+enable_testing()
 
-# # All test .cpp files should be listed here
-# set(TestFiles
-#         test/CatchMain.cpp
-#         test/PluginInfo.cpp
-#         test/MidiValue.cpp
-#         test/MidiProcessor.cpp
-#         test/Presets.cpp
-#         test/Recorder.cpp
-#         test/Scales.cpp
-#         test/Stretcher.cpp)
+# All test .cpp files should be listed here
+set(TestFiles
+        test/CatchMain.cpp
+        test/PluginTest.cpp)
 
-# # Download the tagged version of Catch2
-# Include(FetchContent)
-# FetchContent_Declare(
-#         Catch2
-#         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-#         GIT_TAG v2.13.7)
-# FetchContent_MakeAvailable(Catch2)
+# Download the tagged version of Catch2
+Include(FetchContent)
+FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG v2.13.7)
+FetchContent_MakeAvailable(Catch2)
 
-# # Setup the test executable, again C++ 20 please
-# add_executable(Tests ${TestFiles})
-# target_compile_features(Tests PRIVATE cxx_std_20)
+# Setup the test executable, again C++ 20 please
+add_executable(Tests ${TestFiles})
+target_compile_features(Tests PRIVATE cxx_std_20)
 
-# # Pull in our plugin code for tests
-# target_include_directories(Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-# target_link_libraries(Tests PRIVATE Catch2::Catch2 Fire FireData juce::juce_audio_utils)
+# Pull in our plugin code for tests
+target_include_directories(Tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(Tests PRIVATE Catch2::Catch2 Fire FireData juce::juce_audio_utils)
 
-# # Make an Xcode Scheme for the test executable so we can run tests in the IDE
-# set_target_properties(Tests PROPERTIES XCODE_GENERATE_SCHEME ON)
+# Make an Xcode Scheme for the test executable so we can run tests in the IDE
+set_target_properties(Tests PROPERTIES XCODE_GENERATE_SCHEME ON)
 
-# # Organize the test source in the Tests/ folder in the IDE
-# source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/test PREFIX "" FILES ${TestFiles})
+# Organize the test source in the Tests/ folder in the IDE
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/test PREFIX "" FILES ${TestFiles})
 
 # Load and use the .cmake file provided by Catch2
 # https://github.com/catchorg/Catch2/blob/devel/docs/cmake-integration.md#parseandaddcatchtestscmake
 # We have to manually provide the source directory here for now
 # https://github.com/catchorg/Catch2/issues/2026
-# include(${Catch2_SOURCE_DIR}/contrib/Catch.cmake)
-# catch_discover_tests(Tests)
+include(${Catch2_SOURCE_DIR}/contrib/Catch.cmake)
+catch_discover_tests(Tests)

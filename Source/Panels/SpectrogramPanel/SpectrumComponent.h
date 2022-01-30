@@ -34,7 +34,7 @@ private:
 	int numberOfBins = 1;
     float spectrumData[1024] = {0};
     
-    juce::Image spectrumImage = juce::Image(juce::Image::RGB, 1000, 300, true);
+    juce::Image spectrumImage = juce::Image(juce::Image::ARGB, 1000, 300, true);
     
 	static const int frequenciesForLines[];
 	static const int numberOfLines;    

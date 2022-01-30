@@ -25,9 +25,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // however, AU plugin calls constructor after setStateInformation/
     // So I set delay of 1 ms to reset size and other stuff.
     // call function after 1 ms
-    /*std::function<void()> initFunction = [this]() { initEditor(); };
-    juce::Timer::callAfterDelay(1, initFunction);*/
-    initEditor();
+    std::function<void()> initFunction = [this]() { initEditor(); };
+    juce::Timer::callAfterDelay(1, initFunction);
+    //initEditor();
     
     // Graph
     addAndMakeVisible(graphPanel);
@@ -180,8 +180,8 @@ void FireAudioProcessorEditor::initEditor()
 //    processor.setLineNum(multiband.getLineNum());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
-    
-//    setMultiband();
+    //multiband.updateLines(1);
+    setMultiband();
 }
 
 //==============================================================================
@@ -480,14 +480,8 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox *combobox)
         {
             stateComponent.updatePresetBox(selectedId);
         }
-        initState();
+        //setMultiband();
     }
-}
-
-void FireAudioProcessorEditor::initState()
-{
-    // init
-//    setMultiband();
 }
 
 void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
@@ -568,11 +562,11 @@ void FireAudioProcessorEditor::setMultiband()
 //    bool lineState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID3));
 //    multiband.setLineState(lineState1, lineState2, lineState3);
 //
-//    int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
-//    int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
-//    int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
-//
-//    multiband.setFrequency(freq1, freq2, freq3);
+    int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
+    int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
+    int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
+
+    multiband.setFrequency(freq1, freq2, freq3);
 //
 //    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1));
 //    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2));
@@ -585,8 +579,8 @@ void FireAudioProcessorEditor::setMultiband()
 //    bool enableState4 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID4));
 //    multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
     
-    multiband.updateLines(0);
-    multiband.setSoloRelatedBounds();
+    multiband.updateLines(1);
+//    multiband.setSoloRelatedBounds();
 //    multiband.setFocus();
 //    processor.setLineNum(multiband.getLineNum());
 }

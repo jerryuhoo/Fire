@@ -868,12 +868,21 @@ void Multiband::getLinePos(float (&input)[3])
 
 void Multiband::setFrequency(int freq1, int freq2, int freq3)
 {
-    if(freqDividerGroup[0]->getCloseButton().getToggleState())
-        freqDividerGroup[0]->getVerticalLine().setValue(freq1);
-    if(freqDividerGroup[1]->getCloseButton().getToggleState())
-        freqDividerGroup[1]->getVerticalLine().setValue(freq2);
+    if (freqDividerGroup[0]->getCloseButton().getToggleState())
+    {
+        //freqDividerGroup[0]->getVerticalLine().setValue(freq1);
+        freqDividerGroup[0]->setFreq(freq1);
+    }
+    if (freqDividerGroup[1]->getCloseButton().getToggleState())
+    {
+        //freqDividerGroup[1]->getVerticalLine().setValue(freq2);
+        freqDividerGroup[1]->setFreq(freq2);
+    }
     if(freqDividerGroup[2]->getCloseButton().getToggleState())
-        freqDividerGroup[2]->getVerticalLine().setValue(freq3);
+    {
+        //freqDividerGroup[2]->getVerticalLine().setValue(freq3);
+        freqDividerGroup[2]->setFreq(freq3);
+    }
 }
 
 void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)

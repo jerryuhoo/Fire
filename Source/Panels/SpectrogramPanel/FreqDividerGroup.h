@@ -36,6 +36,8 @@ public:
     CloseButton& getCloseButton();
     void setCloseButtonValue(bool value);
     VerticalLine& getVerticalLine();
+
+    void setFreq(float f);
 private:
     FireAudioProcessor &processor;
     VerticalLine verticalLine;

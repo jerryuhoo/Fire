@@ -191,6 +191,12 @@ void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent &e)
     // do nothing, override the silder function, which will reset value.
 }
 
+void FreqDividerGroup::setFreq(float f)
+{
+    verticalLine.setValue(f);
+    freqTextLabel.setFreq(f);
+}
+
 void FreqDividerGroup::mouseUp(const juce::MouseEvent &e) {}
 void FreqDividerGroup::mouseEnter(const juce::MouseEvent &e) {}
 void FreqDividerGroup::mouseExit(const juce::MouseEvent &e) {}

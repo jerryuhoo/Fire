@@ -101,45 +101,47 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
-### 2022-1 (version 0.9.5)
+### 2022-2-5 (version 0.9.5)
 
 1. Smoothed the graph of spectrogram.
 2. Fix Logic Pro crash.
 3. Add GitHub CI.
+4. Fix vst3 bug.
+5. Fix A/B mode bug.
 
 ### 2021-11-18 (version 0.9.4)
 
 Warning: Previous presets won't work, you have to resave your preset!
 
 1. For VU meters and width graph, each represents to each band instead of global.
-2. Added more details to VU meters.
-3. Added "solo" buttons, change "enable" buttons to "bypass" buttons.
-4. Removed "None" option in the distortion functions, because it causes bug(in version 0.9.3) and you can bypass the band now.
-5. Added bypass buttons for compressor, width, filter, downsample.
-6. Added 4 new distortion functions.
+2. Add more details to VU meters.
+3. Add "solo" buttons, change "enable" buttons to "bypass" buttons.
+4. Remove "None" option in the distortion functions, because it causes bug(in version 0.9.3) and you can bypass the band now.
+5. Add bypass buttons for compressor, width, filter, downsample.
+6. Add 4 new distortion functions.
 
 ### 2021-10-2 (version 0.9.3)
 
 Warning: Previous presets won't work, you have to resave your preset!
 
 1. Redesign GUI.
-2. Fixed multiple bugs of multiband control(enable buttons, focus band, vertical lines, etc.), redesigned the code structure.
-3. Added new filter control and filter graph.
-4. Fixed other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
+2. Fix multiple bugs of multiband control(enable buttons, focus band, vertical lines, etc.), redesigned the code structure.
+3. Add new filter control and filter graph.
+4. Fix other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
 5. Now you can click graph to zoom in and out.
 
 ### 2021-9-7 (version 0.9.2)
 
 1. GUI improvement.
-2. Added shape, width, and compressor groups.
+2. Add shape, width, and compressor groups.
 3. Spectrogram display bug fixed.
-4. Added VU meter and width graph.
-5. Added frequency label, and frequency automation bug fixed.
+4. Add VU meter and width graph.
+5. Add frequency label, and frequency automation bug fixed.
 
 ### 2021-1-24 (version 0.9.1)
 
 1. Drive knob reduction and GUI improvement
-Fixed a bug that in global mode menu won't change when selecting different bands.
+Fix a bug that in global mode menu won't change when selecting different bands.
 
 ### 2021-1-23 (version 0.9.0)
 

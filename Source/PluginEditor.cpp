@@ -25,9 +25,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // however, AU plugin calls constructor after setStateInformation/
     // So I set delay of 1 ms to reset size and other stuff.
     // call function after 1 ms
-//    std::function<void()> initFunction = [this]() { initEditor(); };
-//    juce::Timer::callAfterDelay(1, initFunction);
-    initEditor();
+    std::function<void()> initFunction = [this]() { initEditor(); };
+    juce::Timer::callAfterDelay(1, initFunction);
+//    initEditor();
     
     // Graph
     addAndMakeVisible(graphPanel);
@@ -579,8 +579,8 @@ void FireAudioProcessorEditor::setMultiband()
 //    bool enableState4 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID4));
 //    multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
     
-    multiband.updateLines(1);
-    multiband.setSoloRelatedBounds();
+//    multiband.updateLines(1);
+//    multiband.setSoloRelatedBounds();
 //    multiband.setFocus();
 //    processor.setLineNum(multiband.getLineNum());
 }

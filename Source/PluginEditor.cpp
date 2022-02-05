@@ -580,7 +580,7 @@ void FireAudioProcessorEditor::setMultiband()
 //    multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
     
     multiband.updateLines(1);
-//    multiband.setSoloRelatedBounds();
+    multiband.setSoloRelatedBounds();
 //    multiband.setFocus();
 //    processor.setLineNum(multiband.getLineNum());
 }

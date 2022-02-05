@@ -566,7 +566,7 @@ void FireAudioProcessorEditor::setMultiband()
     int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
     int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
 //
-    multiband.setFrequency(freq1, freq2, freq3);
+//    multiband.setFrequency(freq1, freq2, freq3);
 //
 //    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1));
 //    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2));

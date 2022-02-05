@@ -562,9 +562,9 @@ void FireAudioProcessorEditor::setMultiband()
 //    bool lineState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID3));
 //    multiband.setLineState(lineState1, lineState2, lineState3);
 //
-    int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
-    int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
-    int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
+//    int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
+//    int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
+//    int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
 //
 //    multiband.setFrequency(freq1, freq2, freq3);
 //

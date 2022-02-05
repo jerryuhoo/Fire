@@ -9,7 +9,7 @@ env:
   PROJECT_NAME: Fire # Must match the JUCE project name from juce_add_plugin
   CMAKE_VERSION: 3.16.2
   NINJA_VERSION: 1.9.0
-  BUILD_TYPE: Debug
+  BUILD_TYPE: Release
   CCACHE_VERSION: 3.7.7
   DISPLAY: :0 # linux pluginval needs this
 

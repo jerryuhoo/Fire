@@ -572,7 +572,7 @@ void FireAudioProcessorEditor::setMultiband()
 //    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2));
 //    float pos3 = static_cast<float>(SpectrumComponent::transformToLog(freq3));
 //    multiband.setLinePos(pos1, pos2, pos3);
-//
+
 //    bool enableState1 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID1));
 //    bool enableState2 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID2));
 //    bool enableState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID3));
@@ -580,7 +580,7 @@ void FireAudioProcessorEditor::setMultiband()
 //    multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
     
     multiband.updateLines(1);
-//    multiband.setSoloRelatedBounds();
+    multiband.setSoloRelatedBounds();
 //    multiband.setFocus();
 //    processor.setLineNum(multiband.getLineNum());
 }

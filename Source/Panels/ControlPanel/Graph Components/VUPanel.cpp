@@ -76,9 +76,18 @@ void VUPanel::paint (juce::Graphics& g)
     {
         float threshValue = *(processor.treeState.getRawParameterValue(threshID));
         float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / 96.0f; // 96 is VU meter range
-        g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, 1);
-        g.drawLine(VU_METER_X_1 - getWidth() / 20, compressorLineY - getHeight() / 20, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
-        g.drawLine(VU_METER_X_1, compressorLineY, VU_METER_X_1 - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+        float pointerX;
+        if (processor.getTotalNumInputChannels() == 2)
+        {
+            pointerX = VU_METER_X_1;
+        }
+        else
+        {
+            pointerX = VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
+        }
+        g.drawLine(pointerX, compressorLineY, pointerX - getWidth() / 20, compressorLineY - getHeight() / 20, 1);
+        g.drawLine(pointerX - getWidth() / 20, compressorLineY - getHeight() / 20, pointerX - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+        g.drawLine(pointerX, compressorLineY, pointerX - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
     }
     
     if (mZoomState)

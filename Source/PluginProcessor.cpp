@@ -1043,21 +1043,6 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
 {
     dryBuffer.makeCopyOf(bandBuffer);
 
-    // dsp process
-    float* channeldataL;
-    float* channeldataR;
-    if (totalNumInputChannels == 2)
-    {
-        channeldataL = bandBuffer.getWritePointer(0);
-        channeldataR = bandBuffer.getWritePointer(1);
-    }
-    else
-    {
-        channeldataL = bandBuffer.getWritePointer(0);
-        channeldataR = bandBuffer.getWritePointer(0);
-    }
-    float width = *treeState.getRawParameterValue(widthID);
-
     // distortion process
     processDistortion(bandBuffer, modeID, driveID, safeID, biasID, recID, overdrive);
 
@@ -1065,8 +1050,15 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     normalize(modeID, bandBuffer, totalNumInputChannels, recSmoother, outputSmoother1);
 
     // width process
-    if (*treeState.getRawParameterValue(WIDTH_BYPASS_ID))
+    if (*treeState.getRawParameterValue(WIDTH_BYPASS_ID) && totalNumInputChannels == 2)
+    {
+        float* channeldataL;
+        float* channeldataR;
+        float width = *treeState.getRawParameterValue(widthID);
+        channeldataL = bandBuffer.getWritePointer(0);
+        channeldataR = bandBuffer.getWritePointer(1);
         widthProcessor.process(channeldataL, channeldataR, width, bandBuffer.getNumSamples());
+    }
 
     // compressor process
     if (*treeState.getRawParameterValue(COMP_BYPASS_ID))

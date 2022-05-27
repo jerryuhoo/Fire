@@ -50,14 +50,25 @@ void Oscilloscope::paint (juce::Graphics& g)
                               juce::Colours::red.withAlpha(0.0f), 0, getHeight() / 2, true);
     g.setGradientFill(grad);
     
-    
+    bool monoChannel = false;
     historyL = processor.getHistoryArrayL();
-    historyR = processor.getHistoryArrayR();
+    if (processor.getTotalNumInputChannels() == 1)
+    {
+        monoChannel = true;
+    }
+    else
+    {
+        historyR = processor.getHistoryArrayR();
+    }
     
     juce::Path pathL;
     juce::Path pathR;
     
-    float amp = getHeight() / 4;
+    float amp;
+    if (monoChannel)
+        amp = getHeight() / 2;
+    else
+        amp = getHeight() / 4;
     
     // get max
     float maxValue = 0.0f;
@@ -71,36 +82,45 @@ void Oscilloscope::paint (juce::Graphics& g)
     }
     
     //TODO: this may cause high CPU usage! maybe use i += 2?
+    float valL;
+    float valR;
+    
     for (int i = 0; i < getWidth(); i++) { 
         int scaledIndex = static_cast<int>(i * (float)historyL.size() / (float)getWidth());
 
-        float valL = historyL[scaledIndex];
-        float valR = historyR[scaledIndex];
+        valL = historyL[scaledIndex];
+        if (!monoChannel)
+            valR = historyR[scaledIndex];
         
         // normalize
         if (maxValue > 0.005f)
         {
             valL = valL / maxValue * 0.6f;
-            valR = valR / maxValue * 0.6f;
+            if (!monoChannel)
+                valR = valR / maxValue * 0.6f;
         }
         
         valL = juce::jlimit<float>(-1, 1, valL);
-        valR = juce::jlimit<float>(-1, 1, valR);
+        if (!monoChannel)
+            valR = juce::jlimit<float>(-1, 1, valR);
 
         if (i == 0)
         {
             pathL.startNewSubPath(0, amp);
-            pathR.startNewSubPath(0, amp * 3);
+            if (!monoChannel)
+                pathR.startNewSubPath(0, amp * 3);
         }
         else
         {
             pathL.lineTo(i, amp - valL * amp);
-            pathR.lineTo(i, amp * 3 - valR * amp);
+            if (!monoChannel)
+                pathR.lineTo(i, amp * 3 - valR * amp);
         }
     }
 
     g.strokePath(pathL, juce::PathStrokeType(2.0));
-    g.strokePath(pathR, juce::PathStrokeType(2.0));
+    if (!monoChannel)
+        g.strokePath(pathR, juce::PathStrokeType(2.0));
     
     // shadow
 //    juce::Path pathShadow;

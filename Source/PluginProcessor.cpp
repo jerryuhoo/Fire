@@ -916,18 +916,18 @@ void FireAudioProcessor::setHistoryArray(int bandIndex)
                 if (channel == 0)
                 {
                     historyArrayL.add(channelData[sample]);
+                    if (historyArrayL.size() > historyLength)
+                    {
+                        historyArrayL.remove(0);
+                    }
                 }
                 else if (channel == 1)
                 {
                     historyArrayR.add(channelData[sample]);
-                }
-                if (historyArrayL.size() > historyLength)
-                {
-                    historyArrayL.remove(0);
-                }
-                if (historyArrayR.size() > historyLength)
-                {
-                    historyArrayR.remove(0);
+                    if (historyArrayR.size() > historyLength)
+                    {
+                        historyArrayR.remove(0);
+                    }
                 }
             }
         }

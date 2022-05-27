@@ -106,6 +106,15 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     setRotarySlider(widthKnob2, WIDTH_COLOUR);
     setRotarySlider(widthKnob3, WIDTH_COLOUR);
     setRotarySlider(widthKnob4, WIDTH_COLOUR);
+    
+    // set width knob availability
+    if (processor.getTotalNumInputChannels() == 1)
+    {
+        widthKnob1.setEnabled(false);
+        widthKnob2.setEnabled(false);
+        widthKnob3.setEnabled(false);
+        widthKnob4.setEnabled(false);
+    }
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
@@ -218,6 +227,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     addAndMakeVisible(*widthBypassButton);
     widthBypassButton->setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR);
     widthBypassButton->onClick = [this] { updateBypassState (*widthBypassButton, 1); };
+    if (processor.getTotalNumInputChannels() == 1)
+    {
+        widthBypassButton->setEnabled(false);
+    }
     
 
     // init state

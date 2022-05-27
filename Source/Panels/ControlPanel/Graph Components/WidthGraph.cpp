@@ -43,8 +43,16 @@ void WidthGraph::paint (juce::Graphics& g)
 //    p.addRectangle(rect);
 //    g.strokePath(p, juce::PathStrokeType(1), t);
     
+    // get history array values
     historyL = processor.getHistoryArrayL();
-    historyR = processor.getHistoryArrayR();
+    if (processor.getTotalNumInputChannels() == 2)
+    {
+        historyR = processor.getHistoryArrayR();
+    }
+    else if (processor.getTotalNumInputChannels() == 1)
+    {
+        historyR = processor.getHistoryArrayL();
+    }
     
     // This is Lissajous Graph
     

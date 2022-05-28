@@ -232,11 +232,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     wetBuffer.clear();
 
     // oversampling init
+    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
     oversampling->reset();
     oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
 
     for (size_t i = 0; i < 4; i++)
     {
+        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
         oversamplingHQ[i]->reset();
         oversamplingHQ[i]->initProcessing(static_cast<size_t>(samplesPerBlock));
     }

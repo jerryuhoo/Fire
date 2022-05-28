@@ -1,4 +1,4 @@
-# Fire (Version 0.9.5) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
+# Fire (Version 0.9.6) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -100,6 +100,11 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 5.4. [SimpleEQ](https://github.com/matkatmusic/SimpleEQ) by matkatmusic
 
 ## 6. Update Notes
+
+### 2022-5-28 (version 0.9.6)
+
+1. Fix a crash when turn on HQ mode in mono channel mode in Logic Pro.
+2. Improve graphs in mono channel mode.
 
 ### 2022-2-5 (version 0.9.5)
 

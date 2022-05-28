@@ -105,6 +105,7 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 1. Fix a crash when turn on HQ mode in mono channel mode in Logic Pro.
 2. Improve graphs in mono channel mode.
+3. Fix an issue where graphs are not refreshed before playing in Logic Pro.
 
 ### 2022-2-5 (version 0.9.5)
 

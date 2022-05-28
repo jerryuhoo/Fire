@@ -17,6 +17,7 @@ Oscilloscope::Oscilloscope(FireAudioProcessor &p) : processor(p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
+    startTimerHz(60);
 }
 
 Oscilloscope::~Oscilloscope()
@@ -134,45 +135,7 @@ void Oscilloscope::paint (juce::Graphics& g)
     }
 }
 
-//void Oscilloscope::resized()
-//{
-//    // This method is where you should set the bounds of any child
-//    // components that your component contains..
-//}
-//
-//void Oscilloscope::setScale(float scale)
-//{
-//    this->scale = scale;
-//}
-//
-//bool Oscilloscope::getZoomState()
-//{
-//    return mZoomState;
-//}
-//
-//void Oscilloscope::setZoomState(bool zoomState)
-//{
-//    mZoomState = zoomState;
-//}
-//
-//void Oscilloscope::mouseDown(const juce::MouseEvent &e)
-//{
-//    if (mZoomState)
-//    {
-//        mZoomState = false;
-//    }
-//    else
-//    {
-//        mZoomState = true;
-//    }
-//}
-//
-//void Oscilloscope::mouseEnter(const juce::MouseEvent &e)
-//{
-//    isMouseOn = true;
-//}
-//
-//void Oscilloscope::mouseExit(const juce::MouseEvent &e)
-//{
-//    isMouseOn = false;
-//}
+void Oscilloscope::timerCallback()
+{
+    repaint();
+}

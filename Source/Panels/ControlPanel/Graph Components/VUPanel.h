@@ -18,7 +18,7 @@
 //==============================================================================
 /*
 */
-class VUPanel  : public GraphTemplate
+class VUPanel  : public GraphTemplate, juce::Timer
 {
 public:
     VUPanel(FireAudioProcessor &);
@@ -27,6 +27,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void setFocusBandNum(int num);
+    void timerCallback() override;
     
 private:
     FireAudioProcessor &processor;

@@ -22,6 +22,8 @@ VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), vuMeterIn(&p), vuMeterOu
     
     addAndMakeVisible(vuMeterIn);
     addAndMakeVisible(vuMeterOut);
+    
+    startTimerHz(60);
 }
 
 VUPanel::~VUPanel()
@@ -142,4 +144,9 @@ void VUPanel::resized()
 void VUPanel::setFocusBandNum(int num)
 {
     focusBandNum = num;
+}
+
+void VUPanel::timerCallback()
+{
+    repaint();
 }

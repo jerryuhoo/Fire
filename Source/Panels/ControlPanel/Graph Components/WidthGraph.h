@@ -17,13 +17,14 @@
 //==============================================================================
 /*
 */
-class WidthGraph  : public GraphTemplate
+class WidthGraph  : public GraphTemplate, juce::Timer
 {
 public:
     WidthGraph(FireAudioProcessor &);
     ~WidthGraph() override;
 
     void paint (juce::Graphics&) override;
+    void timerCallback() override;
     
 private:
     FireAudioProcessor &processor;

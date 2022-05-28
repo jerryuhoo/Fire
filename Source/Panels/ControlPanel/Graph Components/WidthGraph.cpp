@@ -17,6 +17,7 @@ WidthGraph::WidthGraph(FireAudioProcessor &p) : processor(p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
+    startTimerHz(60);
 }
 
 WidthGraph::~WidthGraph()
@@ -93,4 +94,9 @@ void WidthGraph::paint (juce::Graphics& g)
         g.setColour(juce::Colours::skyblue.withAlpha(0.05f));
         g.fillAll();
     }
+}
+
+void WidthGraph::timerCallback()
+{
+    repaint();
 }

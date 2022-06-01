@@ -232,11 +232,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     wetBuffer.clear();
 
     // oversampling init
+    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
     oversampling->reset();
     oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
 
     for (size_t i = 0; i < 4; i++)
     {
+        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
         oversamplingHQ[i]->reset();
         oversamplingHQ[i]->initProcessing(static_cast<size_t>(samplesPerBlock));
     }
@@ -916,18 +918,18 @@ void FireAudioProcessor::setHistoryArray(int bandIndex)
                 if (channel == 0)
                 {
                     historyArrayL.add(channelData[sample]);
+                    if (historyArrayL.size() > historyLength)
+                    {
+                        historyArrayL.remove(0);
+                    }
                 }
                 else if (channel == 1)
                 {
                     historyArrayR.add(channelData[sample]);
-                }
-                if (historyArrayL.size() > historyLength)
-                {
-                    historyArrayL.remove(0);
-                }
-                if (historyArrayR.size() > historyLength)
-                {
-                    historyArrayR.remove(0);
+                    if (historyArrayR.size() > historyLength)
+                    {
+                        historyArrayR.remove(0);
+                    }
                 }
             }
         }
@@ -1043,21 +1045,6 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
 {
     dryBuffer.makeCopyOf(bandBuffer);
 
-    // dsp process
-    float* channeldataL;
-    float* channeldataR;
-    if (totalNumInputChannels == 2)
-    {
-        channeldataL = bandBuffer.getWritePointer(0);
-        channeldataR = bandBuffer.getWritePointer(1);
-    }
-    else
-    {
-        channeldataL = bandBuffer.getWritePointer(0);
-        channeldataR = bandBuffer.getWritePointer(0);
-    }
-    float width = *treeState.getRawParameterValue(widthID);
-
     // distortion process
     processDistortion(bandBuffer, modeID, driveID, safeID, biasID, recID, overdrive);
 
@@ -1065,8 +1052,15 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     normalize(modeID, bandBuffer, totalNumInputChannels, recSmoother, outputSmoother1);
 
     // width process
-    if (*treeState.getRawParameterValue(WIDTH_BYPASS_ID))
+    if (*treeState.getRawParameterValue(WIDTH_BYPASS_ID) && totalNumInputChannels == 2)
+    {
+        float* channeldataL;
+        float* channeldataR;
+        float width = *treeState.getRawParameterValue(widthID);
+        channeldataL = bandBuffer.getWritePointer(0);
+        channeldataR = bandBuffer.getWritePointer(1);
         widthProcessor.process(channeldataL, channeldataR, width, bandBuffer.getNumSamples());
+    }
 
     // compressor process
     if (*treeState.getRawParameterValue(COMP_BYPASS_ID))

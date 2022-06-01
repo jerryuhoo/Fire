@@ -28,6 +28,7 @@ public:
     void timerCallback() override;
     float getLeftChannelLevel();
     float getRightChannelLevel();
+    
 private:
     FireAudioProcessor* mProcessor;
     bool mIsInput;

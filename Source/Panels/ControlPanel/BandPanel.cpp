@@ -218,7 +218,6 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     addAndMakeVisible(*widthBypassButton);
     widthBypassButton->setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR);
     widthBypassButton->onClick = [this] { updateBypassState (*widthBypassButton, 1); };
-    
 
     // init state
     setBypassState(0, compressorBypassButton->getToggleState());

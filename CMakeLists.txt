@@ -19,7 +19,7 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment ve
 # `project()` command. `project()` sets up some helpful variables that describe source/binary
 # directories, and the current project version. This is a standard CMake command.
 
-project(Fire VERSION 0.9.5)
+project(Fire VERSION 0.9.6)
 
 # If you've installed JUCE somehow (via a package manager, or directly using the CMake install
 # target), you'll need to tell this project that it depends on the installed copy of JUCE. If you've
@@ -34,7 +34,7 @@ include(FetchContent)
 FetchContent_Declare(
         JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG 6.1.5
+        GIT_TAG 6.1.6
 )
 FetchContent_MakeAvailable(JUCE)
 

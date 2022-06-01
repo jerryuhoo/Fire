@@ -35,10 +35,17 @@ void VUMeter::paint (juce::Graphics& g)
     g.setColour(COLOUR6);
     const int meterWidth = getWidth() / 3;
     
-    // left
-    g.fillRect(0, 0, meterWidth, getHeight());
-    // right
-    g.fillRect(meterWidth * 2, 0, meterWidth, getHeight());
+    if (mProcessor->getTotalNumInputChannels() == 2)
+    {
+        // left
+        g.fillRect(0, 0, meterWidth, getHeight());
+        // right
+        g.fillRect(meterWidth * 2, 0, meterWidth, getHeight());
+    }
+    else
+    {
+        g.fillRect(meterWidth, 0, meterWidth, getHeight());
+    }
     
     int ch0fill = getHeight() - (getHeight() * mCh0Level);
     int ch1fill = getHeight() - (getHeight() * mCh1Level);
@@ -54,8 +61,16 @@ void VUMeter::paint (juce::Graphics& g)
     
     g.setColour(juce::Colours::yellowgreen.withBrightness(0.9));
     
-    g.fillRect(0, ch0fill, meterWidth, getHeight());
-    g.fillRect(meterWidth * 2, ch1fill, meterWidth, getHeight());
+    if (mProcessor->getTotalNumInputChannels() == 2)
+    {
+        g.fillRect(0, ch0fill, meterWidth, getHeight());
+        g.fillRect(meterWidth * 2, ch1fill, meterWidth, getHeight());
+    }
+    else
+    {
+        g.fillRect(meterWidth, ch0fill, meterWidth, getHeight());
+    }
+    
 }
 
 void VUMeter::resized()

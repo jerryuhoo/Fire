@@ -718,7 +718,7 @@ void StateComponent::popPresetMenu()
             {
                 juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Error", "No release found or disconnected from the network!");
             }
-            else if(versionInfo->versionString != VERSION)
+            else if(!versionInfo->versionString.contains(VERSION))
             {
                 version = versionInfo->versionString;
                 const auto callback = juce::ModalCallbackFunction::create ([this](int result) {

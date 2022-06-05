@@ -54,7 +54,7 @@ void FreqTextLabel::paint (juce::Graphics& g)
     }
     
     float alpha = juce::jmin(1.0f, currentStep / static_cast<float>(maxStep));
-    setAlpha(juce::jmax(alpha, 0.01f));
+    setAlpha(alpha);
     float cornerSize = 10.0f * mScale;
     juce::Rectangle<float> rect = getLocalBounds().toFloat();
     g.setColour (COLOUR1.withAlpha(0.5f));
@@ -120,4 +120,6 @@ void FreqTextLabel::setFade(bool update, bool isFadeIn)
 {
     mUpdate = update;
     mFadeIn = isFadeIn;
+    if (isFadeIn && getAlpha() == 0)
+        setAlpha(0.01f);
 }

@@ -339,6 +339,7 @@ void FireAudioProcessorEditor::resized()
     otherLookAndFeel.scale = scale;
     bandPanel.setScale(scale);
     globalPanel.setScale(scale);
+    multiband.setScale(scale);
 }
 
 void FireAudioProcessorEditor::timerCallback()

@@ -63,6 +63,7 @@ public:
     
     void parameterValueChanged (int parameterIndex, float newValue) override;
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
+    void setScale(float scale);
 private:
     FireAudioProcessor &processor;
     state::StateComponent &stateComponent;

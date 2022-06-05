@@ -1060,3 +1060,11 @@ EnableButton& Multiband::getEnableButton(const int index)
 {
     return *enableButton[index];
 }
+
+void Multiband::setScale(float scale)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        freqDividerGroup[i]->setScale(scale);
+    }
+}

@@ -20,6 +20,7 @@ FreqTextLabel::FreqTextLabel(VerticalLine &v) : verticalLine(v)
     addAndMakeVisible(freqLabel);
     freqLabel.setEditable(true);
     setLookAndFeel(&flatButtonLnf);
+    startTimerHz(60);
 }
 
 FreqTextLabel::~FreqTextLabel()
@@ -29,19 +30,41 @@ FreqTextLabel::~FreqTextLabel()
 
 void FreqTextLabel::paint (juce::Graphics& g)
 {
-    g.setColour (COLOUR1.withAlpha(0.2f));
-    //g.setColour (juce::Colours::white);
-    g.fillAll();
+    if (mUpdate && mFadeIn)
+    {
+        if (currentStep < maxStep)
+        {
+            currentStep += 1;
+        }
+        else
+        {
+            mUpdate = false;
+        }
+    }
+    else if (mUpdate && !mFadeIn)
+    {
+        if (currentStep > 0)
+        {
+            currentStep -= 1;
+        }
+        else
+        {
+            mUpdate = false;
+        }
+    }
+    
+    float alpha = juce::jmin(1.0f, currentStep / static_cast<float>(maxStep));
+    setAlpha(juce::jmax(alpha, 0.01f));
+    float cornerSize = 10.0f * mScale;
+    juce::Rectangle<float> rect = getLocalBounds().toFloat();
+    g.setColour (COLOUR1.withAlpha(0.5f));
+    g.fillRoundedRectangle(rect, cornerSize);
     g.setColour (COLOUR1);
-    g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
     //    g.drawText (static_cast<juce::String>(mFrequency) + " Hz", getLocalBounds(),
     //                juce::Justification::centred, true);   // draw some placeholder text
     
     freqLabel.setBounds(0, 0, getWidth(), getHeight());
     freqLabel.setColour (juce::Label::textColourId, juce::Colours::white);
-    freqLabel.setColour(juce::Label::outlineColourId, COLOUR1);
-    freqLabel.setColour(juce::Label::outlineWhenEditingColourId, COLOUR1);
-    freqLabel.setColour(juce::Label::backgroundWhenEditingColourId, COLOUR7);
 
     freqLabel.setJustificationType (juce::Justification::centred);
     freqLabel.setFont (juce::Font (14.0f * mScale, juce::Font::plain));
@@ -62,7 +85,7 @@ void FreqTextLabel::paint (juce::Graphics& g)
 
 void FreqTextLabel::resized()
 {
-    
+    repaint();
 }
 
 void FreqTextLabel::setFreq(int freq)
@@ -83,4 +106,18 @@ void FreqTextLabel::setScale(float scale)
 bool FreqTextLabel::isMouseOverCustom()
 {
     return isMouseOver() || freqLabel.isMouseOverOrDragging() || freqLabel.isBeingEdited();
+}
+
+void FreqTextLabel::timerCallback()
+{
+    if(mUpdate)
+    {
+        repaint();
+    }
+}
+
+void FreqTextLabel::setFade(bool update, bool isFadeIn)
+{
+    mUpdate = update;
+    mFadeIn = isFadeIn;
 }

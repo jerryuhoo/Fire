@@ -17,7 +17,7 @@
 //==============================================================================
 /*
 */
-class FreqTextLabel  : public juce::Component
+class FreqTextLabel  : public juce::Component, juce::Timer
 {
 public:
     FreqTextLabel(VerticalLine &v);
@@ -29,12 +29,18 @@ public:
     int getFreq();
     void setScale(float scale);
     bool isMouseOverCustom();
+    void timerCallback() override;
+    void setFade(bool update, bool isFadeIn);
     
 private:
     VerticalLine &verticalLine;
     int mFrequency;
     float mScale = 1.0f;
-    bool changeState = false;
+    bool mUpdate = false;
+    bool mFadeIn = true;
+    int currentStep = 0;
+    const int maxStep = 5;
+    
     juce::Label freqLabel;
     FlatButtonLnf flatButtonLnf;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqTextLabel)

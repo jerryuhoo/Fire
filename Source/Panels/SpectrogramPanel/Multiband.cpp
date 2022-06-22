@@ -990,73 +990,18 @@ void Multiband::parameterValueChanged(int parameterIndex, float newValue)
 
 void Multiband::buttonClicked(juce::Button* button)
 {
-//    for (int i = 0 ; i < 4; i++)
-//    {
-//        if (button == &*enableButton[i])
-//        {
-//            if (enableButton[i]->getToggleState())
-//            {
-//
-//            }
-//            else
-//            {
-//
-//            }
-//        }
-//    }
 
-//    if (button == &freqDividerGroup[0]->getCloseButton() ||
-//        button == &freqDividerGroup[1]->getCloseButton() ||
-//        button == &freqDividerGroup[2]->getCloseButton())
-//    {
-//        bool isChanged = false;
-//
-//    //    // set band focus, put delete code before sort(updateLineNumAndSortedIndex)
-//    //    for (int i = 0; i < 3; i++)
-//    //    {
-//    //        if (button == &freqDividerGroup[i]->getCloseButton()) // add a new line
-//    //        {
-//    //            int changedIndex = i;
-//    //            if (!button->getToggleState()) // delete line
-//    //            {
-//    //                // change focus
-//    //                setStatesWhenAddOrDelete(changedIndex, "delete");
-//    //            }
-//    //        }
-//    //    }
-//
-//        updateLines();
-//
-//        // set soloButtons visibility
-//        for (int i = 0; i < 3; i++)
-//        {
-////            int changedIndex = i;
-//            if (button->getToggleState()) // add a line
-//            {
-//                // change focus
-////                setStatesWhenAddOrDelete(changedIndex, "add");
-//
-//                soloButton[sortedIndex[i] + 1]->setVisible(true);
-//                enableButton[sortedIndex[i] + 1]->setVisible(true);
-//            }
-//            else // delete line
-//            {
-//                soloButton[sortedIndex[i] + 1]->setVisible(false);
-//                enableButton[sortedIndex[i] + 1]->setVisible(false);
-//            }
-//            isChanged = true;
-//        }
-//
-//        if (isChanged)
-//        {
-//    //        setSoloRelatedBounds();
-//            processor.setLineNum(lineNum);
-//    //        DBG(lineNum);
-//        }
-//    }
 }
 
 EnableButton& Multiband::getEnableButton(const int index)
 {
     return *enableButton[index];
+}
+
+void Multiband::setScale(float scale)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        freqDividerGroup[i]->setScale(scale);
+    }
 }

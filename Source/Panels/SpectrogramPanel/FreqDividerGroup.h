@@ -38,6 +38,7 @@ public:
     VerticalLine& getVerticalLine();
 
     void setFreq(float f);
+    void setScale(float scale);
 private:
     FireAudioProcessor &processor;
     VerticalLine verticalLine;
@@ -63,5 +64,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;
+    OtherLookAndFeel otherLookAndFeel;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)
 };

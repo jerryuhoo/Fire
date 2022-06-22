@@ -48,11 +48,13 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor &p, int index) : processor
     // The parent component WON'T respond to mouse clicks,
     // while child components WILL respond to mouse clicks!
     setInterceptsMouseClicks(false, true);
+    freqTextLabel.setLookAndFeel(&otherLookAndFeel);
 }
 
 FreqDividerGroup::~FreqDividerGroup()
 {
     closeButton.removeListener(this);
+    freqTextLabel.setLookAndFeel(nullptr);
 }
 
 void FreqDividerGroup::paint (juce::Graphics& g)
@@ -62,11 +64,12 @@ void FreqDividerGroup::paint (juce::Graphics& g)
         
         if (verticalLine.isMoving() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
+            freqTextLabel.setFade(true, true);
             freqTextLabel.setVisible(true);
         }
         else
         {
-            freqTextLabel.setVisible(false);
+            freqTextLabel.setFade(true, false);
         }
     }
     else
@@ -83,8 +86,7 @@ void FreqDividerGroup::resized()
     width = verticalLine.getWidth() / 2.0f;
     verticalLine.setBounds(0, 0, getWidth() / 100.0f, getHeight());
     closeButton.setBounds(width + margin, margin, size, size);
-    //freqTextLabel.setBounds(width + margin - width * 7, getHeight() / 5 + margin, width * 15, size);
-    freqTextLabel.setBounds(width + margin, getHeight() / 5 + margin, size * 4, size * 2);
+    freqTextLabel.setBounds(width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
 }
 
 bool FreqDividerGroup::getDeleteState()
@@ -202,3 +204,9 @@ void FreqDividerGroup::mouseEnter(const juce::MouseEvent &e) {}
 void FreqDividerGroup::mouseExit(const juce::MouseEvent &e) {}
 void FreqDividerGroup::mouseDown(const juce::MouseEvent &e) {}
 void FreqDividerGroup::mouseDrag(const juce::MouseEvent &e) {}
+
+void FreqDividerGroup::setScale(float scale)
+{
+    otherLookAndFeel.scale = scale;
+    freqTextLabel.setScale(scale);
+}

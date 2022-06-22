@@ -101,6 +101,11 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
+### 2022-6-22 (version 0.9.7)
+
+1. Fix HQ not working bug in v0.9.6.
+2. Add fade in/out of frequency text labels.
+
 ### 2022-5-28 (version 0.9.6)
 
 1. Fix a crash when turn on HQ mode in mono channel mode in Logic Pro.

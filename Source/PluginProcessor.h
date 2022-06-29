@@ -239,11 +239,11 @@ private:
     GainProcessor gainProcessor4;
     GainProcessor gainProcessorGlobal;
     
-    DryWetMixer dryWetMixer1;
-    DryWetMixer dryWetMixer2;
-    DryWetMixer dryWetMixer3;
-    DryWetMixer dryWetMixer4;
-    DryWetMixer dryWetMixerGlobal;
+    DryWetMixer dryWetMixer1{100};
+    DryWetMixer dryWetMixer2{100};
+    DryWetMixer dryWetMixer3{100};
+    DryWetMixer dryWetMixer4{100};
+    DryWetMixer dryWetMixerGlobal{100};
     
     // oversampling
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
@@ -312,9 +312,9 @@ private:
     
     // void compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context);
     
-    void mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer);
+    void mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, float latency);
     
-    void mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer);
+    float mLatency = 0.0f;
     
     // Save size
     int editorWidth = INIT_WIDTH;

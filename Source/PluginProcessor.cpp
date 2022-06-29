@@ -656,7 +656,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     processGain(contextGlobal, OUTPUT_ID, gainProcessorGlobal);
     
     // mix dry wet
-    mixDryWet(dryBuffer, buffer, MIX_ID, dryWetMixerGlobal);
+    mixDryWet(dryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
     
     // Spectrum
     wetBuffer.makeCopyOf(buffer);
@@ -1064,7 +1064,7 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     processGain(context, outputID, gainProcessor);
     
     // mix process
-    mixDryWet(dryBuffer, bandBuffer, mixID, dryWetMixer);
+    mixDryWet(dryBuffer, bandBuffer, mixID, dryWetMixer, mLatency);
 }
 
 
@@ -1083,26 +1083,19 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     {
         blockInput = blockInput.getSubBlock(0, bandBuffer.getNumSamples());
         blockOutput = oversamplingHQ[num]->processSamplesUp(blockInput);
-
-        // the wet in high quality mode will have a latency of 3~4 samples.
-        // so I must add the same latency to drybuffer.
-        // But I don't know why the drybuffer is still 1 sample slower than the wet one.
-        // So I added 1.  really weird :(
-        int latency = juce::roundToInt(oversamplingHQ[num]->getLatencyInSamples()) + 1;
-
-        mDelay.setLatency(latency);
-        mDelay.setState(true);
+        
+        // use float is more accurate and solved the +1 problem caused by int
+        mLatency = oversamplingHQ[num]->getLatencyInSamples();
 
         // report latency to the host
-        //setLatencySamples(latency);
+        setLatencySamples(juce::roundToInt(mLatency));
     }
     else
     {
         //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
         blockOutput = blockInput.getSubBlock(0, bandBuffer.getNumSamples());
-        mDelay.setState(false);
-        // latency = 0
-        //setLatencySamples(0);
+        mLatency = 0;
+        setLatencySamples(0);
     }
     
     // band process
@@ -1232,14 +1225,15 @@ void FireAudioProcessor::processGain(juce::dsp::ProcessContextReplacing<float> c
     gainProcessor.process(context);
 }
 
-void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer)
+void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, float latency)
 {
     float mixValue = static_cast<float>(*treeState.getRawParameterValue(mixID));
     auto dryBlock = juce::dsp::AudioBlock<float> (dryBuffer);
     auto wetBlock = juce::dsp::AudioBlock<float> (wetBuffer);
-
+    
     dryWetMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     dryWetMixer.pushDrySamples (dryBlock);
+    dryWetMixer.setWetLatency(latency);
     dryWetMixer.setWetMixProportion(mixValue);
     dryWetMixer.mixWetSamples (wetBlock);
 }
@@ -1322,24 +1316,6 @@ void FireAudioProcessor::setSavedHeight(const int height)
 bool FireAudioProcessor::getBypassedState()
 {
     return isBypassed;
-}
-
-void FireAudioProcessor::mixProcessor(juce::String mixId, juce::SmoothedValue<float> &mixSmoother, int totalNumInputChannels, juce::AudioBuffer<float> &buffer, juce::AudioBuffer<float> dryBuffer)
-{
-    float mix = *treeState.getRawParameterValue(mixId);
-    mixSmoother.setTargetValue(mix);
-    // mix control
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto *channelData = buffer.getWritePointer(channel);
-        auto *cleanSignal = dryBuffer.getWritePointer(channel);
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            float smoothMixValue = mixSmoother.getNextValue();
-            channelData[sample] = (1.0f - smoothMixValue) * mDelay.process(cleanSignal[sample], channel, buffer.getNumSamples()) + smoothMixValue * channelData[sample];
-        }
-    }
 }
 
 //int FireAudioProcessor::getLineNum()

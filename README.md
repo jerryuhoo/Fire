@@ -101,6 +101,12 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
+### 2022-6-29 (version 0.9.8)
+
+1. Fix phasing issue in HQ mode.
+2. Fix low frequency drop in HQ mode.
+[v0.9.3 - v0.9.7 has those bugs]
+
 ### 2022-6-22 (version 0.9.7)
 
 1. Fix HQ not working bug in v0.9.6.

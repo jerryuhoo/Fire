@@ -1094,7 +1094,6 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     {
         //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
         blockOutput = blockInput.getSubBlock(0, bandBuffer.getNumSamples());
-        mLatency = 0;
         setLatencySamples(0);
     }
     
@@ -1233,7 +1232,14 @@ void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::Au
     
     dryWetMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     dryWetMixer.pushDrySamples (dryBlock);
-    dryWetMixer.setWetLatency(latency);
+    if (*treeState.getRawParameterValue(HQ_ID))
+    {
+        dryWetMixer.setWetLatency(latency);
+    }
+    else
+    {
+        dryWetMixer.setWetLatency(0);
+    }
     dryWetMixer.setWetMixProportion(mixValue);
     dryWetMixer.mixWetSamples (wetBlock);
 }

@@ -134,9 +134,9 @@ private:
     SpectrumProcessor spectrum_processor;
 
     // dry audio buffer
-    juce::AudioBuffer<float> dryBuffer;
+    juce::AudioBuffer<float> mDryBuffer;
     // wet audio buffer
-    juce::AudioBuffer<float> wetBuffer;
+    juce::AudioBuffer<float> mWetBuffer;
     
     // dsp::AudioBlock<float> blockOutput;
     juce::dsp::ProcessSpec spec;
@@ -280,7 +280,6 @@ private:
                                           lowpass3, highpass3;
     
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
-    juce::AudioBuffer<float> dryBuffer1, dryBuffer2, dryBuffer3, dryBuffer4;
     
     bool multibandEnable1 = true;
     bool multibandEnable2 = true;

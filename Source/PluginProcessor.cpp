@@ -227,11 +227,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
     
     // dry wet buffer init
-    dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
-    dryBuffer.clear();
+    mDryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    mDryBuffer.clear();
     
-    wetBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
-    wetBuffer.clear();
+    mWetBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    mWetBuffer.clear();
 
     // oversampling init
     oversampling->reset();
@@ -292,15 +292,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mBuffer2.clear();
     mBuffer3.clear();
     mBuffer4.clear();
-
-    dryBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    dryBuffer2.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    dryBuffer3.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    dryBuffer4.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    dryBuffer1.clear();
-    dryBuffer2.clear();
-    dryBuffer3.clear();
-    dryBuffer4.clear();
     
     lowpass1.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
     lowpass2.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
@@ -429,7 +420,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         buffer.clear(i, 0, buffer.getNumSamples());
 
     // save clean signal
-    dryBuffer.makeCopyOf(buffer);
+    mDryBuffer.makeCopyOf(buffer);
 
     // VU input meter
 //    float absInputLeftValue = fabs(buffer.getMagnitude(0, 0, buffer.getNumSamples()));
@@ -558,8 +549,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         auto context4 = juce::dsp::ProcessContextReplacing<float> (multibandBlock4);
         highpass3.setCutoffFrequency(freqValue3);
         highpass3.process (context4);
-        
-        dryBuffer4.makeCopyOf(mBuffer4);
 
         setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
         
@@ -656,16 +645,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     processGain(contextGlobal, OUTPUT_ID, gainProcessorGlobal);
     
     // mix dry wet
-    mixDryWet(dryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
+    mixDryWet(mDryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
     
     // Spectrum
-    wetBuffer.makeCopyOf(buffer);
+    mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT();
     
     // VU output meter
     setLeftRightMeterRMSValues(buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
     
-    dryBuffer.clear();
+    mDryBuffer.clear();
 
 }
 
@@ -898,7 +887,7 @@ void FireAudioProcessor::setHistoryArray(int bandIndex)
     }
     else
     {
-        buffer = wetBuffer;
+        buffer = mWetBuffer;
     }
     
     for (int channel = 0; channel < getTotalNumOutputChannels(); ++channel)
@@ -958,11 +947,11 @@ bool FireAudioProcessor::isFFTBlockReady()
 void FireAudioProcessor::pushDataToFFT()
 {
     
-    if (wetBuffer.getNumChannels() > 0)
+    if (mWetBuffer.getNumChannels() > 0)
     {
-        auto* channelData = wetBuffer.getReadPointer(0);
+        auto* channelData = mWetBuffer.getReadPointer(0);
 
-        for (auto i = 0; i < wetBuffer.getNumSamples(); ++i)
+        for (auto i = 0; i < mWetBuffer.getNumSamples(); ++i)
             spectrum_processor.pushNextSampleIntoFifo(channelData[i]);
     }
 }
@@ -1037,6 +1026,7 @@ bool FireAudioProcessor::getSoloStateFromIndex(int index)
 
 void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter &dcFilter)
 {
+    juce::AudioBuffer<float> dryBuffer;
     dryBuffer.makeCopyOf(bandBuffer);
 
     // distortion process

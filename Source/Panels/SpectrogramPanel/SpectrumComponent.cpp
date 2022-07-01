@@ -72,6 +72,26 @@ void SpectrumComponent::paint (juce::Graphics& g)
     spectrumImage.multiplyAllAlphas(0.9);
     spectrumImage.moveImageSection(0, 10, 0, 0, spectrumImage.getWidth(), spectrumImage.getHeight());
     g.drawImageAt(spectrumImage, 0, 0);
+    
+    float boxWidth = 100.0f;
+    bool mouseOver;
+    if (getMouseXYRelative().getX() > 0 && getMouseXYRelative().getX() < getWidth()
+        && getMouseXYRelative().getY() > 0 && getMouseXYRelative().getY() < getHeight())
+    {
+        mouseOver = true;
+    }
+    else
+    {
+        mouseOver = false;
+    }
+    
+    if (maxDecibel >= -99.9f && mouseOver)
+    {
+        g.setColour(COLOUR1);
+        g.drawText(static_cast<juce::String>(maxDecibel) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 2.0f, boxWidth, boxWidth, juce::Justification::centred);
+        g.drawText(static_cast<juce::String>(maxFreq) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY(), boxWidth, boxWidth, juce::Justification::centred);
+    }
+    
 }
 
 void SpectrumComponent::resized()
@@ -100,8 +120,9 @@ void SpectrumComponent::paintSpectrum()
         // sample range [0, 1] to decibel range[-∞, 0] to [0, 1]
         // 4096 is 1 << 11, which is fftSize.
         auto fftSize = 1 << 11;
-        float yPercent = juce::jmap (juce::jlimit (mindB, maxdB, juce::Decibels::gainToDecibels (spectrumData[i])
-                                                 - juce::Decibels::gainToDecibels(static_cast<float>(fftSize))),
+        float currentDecibel = juce::Decibels::gainToDecibels (spectrumData[i])
+        - juce::Decibels::gainToDecibels(static_cast<float>(fftSize));
+        float yPercent = juce::jmap (juce::jlimit (mindB, maxdB, currentDecibel),
                        mindB, maxdB, 0.0f, 1.0f);
         
         // skip some points to save cpu
@@ -111,9 +132,22 @@ void SpectrumComponent::paintSpectrum()
 //        if (i > numberOfBins / 4 * 3 && i % 10 != 0) continue;
         
         // connect points
-        p.lineTo(transformToLog((float)i / numberOfBins * 22050) * width,
-                         juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f));
-        
+        float currentX = transformToLog((float)i / numberOfBins * 22050) * width;
+        float currentY = juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f);
+        p.lineTo(currentX, currentY);
+
+        if (i == 1)
+        {
+            maxDecibel = -100.0f;
+            maxFreq = 0.0f;
+        }
+        if (currentDecibel > maxDecibel)
+        {
+            maxDecibel = currentDecibel;
+            maxFreq = (float)i / numberOfBins * 22050;
+            maxDecibelPoint.setXY(currentX, currentY);
+        }
+
         // reference: https://docs.juce.com/master/tutorial_spectrum_analyser.html
     }
 

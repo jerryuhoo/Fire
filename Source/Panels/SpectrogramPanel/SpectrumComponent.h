@@ -33,11 +33,13 @@ public:
 private:
 	int numberOfBins = 1;
     float spectrumData[1024] = {0};
-    float maxDecibel = -100.0f;
+    float maxData[1024] = {0};
+    float maxDecibelValue = -100.0f;
     float maxFreq = 0.0f;
     juce::Point<float> maxDecibelPoint;
     
-    juce::Image spectrumImage = juce::Image(juce::Image::ARGB, 1000, 300, true);
+    juce::Image currentSpectrumImage = juce::Image(juce::Image::ARGB, 1000, 300, true);
+    juce::Image maxSpectrumImage = juce::Image(juce::Image::ARGB, 1000, 300, true);
     
 	static const int frequenciesForLines[];
 	static const int numberOfLines;    

@@ -150,11 +150,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousLowcutFreq = (float)*treeState.getRawParameterValue(LOWCUT_FREQ_ID);
     previousHighcutFreq = (float)*treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
     previousPeakFreq = (float)*treeState.getRawParameterValue(PEAK_FREQ_ID);
-    
-    newDrive1 = 0;
-    newDrive2 = 0;
-    newDrive3 = 0;
-    newDrive4 = 0;
 
     driveSmoother1.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
     driveSmoother1.setCurrentAndTargetValue(previousDrive1);
@@ -849,20 +844,6 @@ bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
         return true;
     else
         return false;
-}
-
-float FireAudioProcessor::getNewDrive(juce::String driveId)
-{
-    if (driveId == DRIVE_ID1)
-        return newDrive1;
-    if (driveId == DRIVE_ID2)
-        return newDrive2;
-    if (driveId == DRIVE_ID3)
-        return newDrive3;
-    if (driveId == DRIVE_ID4)
-        return newDrive4;
-    jassertfalse;
-    return -1.0f;
 }
 
 void FireAudioProcessor::setHistoryArray(int bandIndex)

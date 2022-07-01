@@ -71,9 +71,6 @@ public:
 
     bool isSlient(juce::AudioBuffer<float> buffer);
 
-    // new drive after protection
-    float getNewDrive(juce::String driveId);
-
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -171,10 +168,10 @@ private:
     float previousHighcutFreq = 0.0f;
     float previousPeakFreq = 0.0f;
     
-    float newDrive1 = 0.0f;
-    float newDrive2 = 0.0f;
-    float newDrive3 = 0.0f;
-    float newDrive4 = 0.0f;
+    float newDrive1 = 1.0f;
+    float newDrive2 = 1.0f;
+    float newDrive3 = 1.0f;
+    float newDrive4 = 1.0f;
 
     juce::SmoothedValue<float> driveSmoother1;
     juce::SmoothedValue<float> driveSmoother2;
@@ -352,10 +349,10 @@ private:
     
     
     // Drive lookandfeel
-    float mReductionPrecent1 = 0;
-    float mReductionPrecent2 = 0;
-    float mReductionPrecent3 = 0;
-    float mReductionPrecent4 = 0;
+    float mReductionPrecent1 = 1;
+    float mReductionPrecent2 = 1;
+    float mReductionPrecent3 = 1;
+    float mReductionPrecent4 = 1;
     float mSampleMaxValue1 = 0;
     float mSampleMaxValue2 = 0;
     float mSampleMaxValue3 = 0;

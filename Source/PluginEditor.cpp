@@ -541,8 +541,24 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 {
     // paint distortion function
     int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
-//    float drive = static_cast<int>(*processor.treeState.getRawParameterValue(driveId));
-    float drive = processor.getNewDrive(driveId);
+
+    // protection
+    float drive = static_cast<int>(*processor.treeState.getRawParameterValue(driveId));
+    drive = drive * 6.5f / 100.0f;
+    float powerDrive = powf(2, drive);
+
+    float sampleMaxValue = processor.getSampleMaxValue(safeId);
+    bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
+
+    if (isSafeModeOn && sampleMaxValue * powerDrive > 2.0f)
+    {
+        drive = 2.0f / sampleMaxValue + 0.1 * std::log2f(powerDrive);
+    }
+    else
+    {
+        drive = powerDrive;
+    }
+    
     /// bypass audio will not run processblock
     //drive = processor.safeMode(drive, processor.getHistoryArrayL(), safeId);
     

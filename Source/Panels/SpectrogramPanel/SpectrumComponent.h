@@ -36,6 +36,7 @@ private:
     float maxData[1024] = {0};
     float maxDecibelValue = -100.0f;
     float maxFreq = 0.0f;
+    bool mouseOver = false;
     juce::Point<float> maxDecibelPoint;
     
     juce::Image currentSpectrumImage = juce::Image(juce::Image::ARGB, 1000, 300, true);

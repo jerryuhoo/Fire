@@ -84,7 +84,7 @@ public:
     
     // FFT
     float * getFFTData();
-    int getFFTSize();//TMP!!!!!!!!!!!
+    int getScopeSize();
     bool isFFTBlockReady();
     void pushDataToFFT();
     void processFFT(float * tempFFTData);

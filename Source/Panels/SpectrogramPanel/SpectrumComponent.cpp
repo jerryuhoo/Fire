@@ -69,9 +69,11 @@ void SpectrumComponent::paint (juce::Graphics& g)
     
     // paint peak text
     float boxWidth = 100.0f;
-    bool mouseOver;
-    if (getMouseXYRelative().getX() > 0 && getMouseXYRelative().getX() < getWidth()
-        && getMouseXYRelative().getY() > 0 && getMouseXYRelative().getY() < getHeight())
+    
+    float mouseX = getMouseXYRelative().getX();
+    float mouseY = getMouseXYRelative().getY();
+    if (mouseX > 0 && mouseX < getWidth()
+        && mouseY > 0 && mouseY < getHeight())
     {
         mouseOver = true;
     }
@@ -90,6 +92,7 @@ void SpectrumComponent::paint (juce::Graphics& g)
     {
         maxDecibelValue = -100.0f;
         maxFreq = 0.0f;
+        maxDecibelPoint.setXY(-10.0f, -10.0f);
         for (int i = 0; i < 1024; i++)
         {
             maxData[i] = 0;
@@ -130,6 +133,9 @@ void SpectrumComponent::paintSpectrum()
         // sample range [0, 1] to decibel range[-∞, 0] to [0, 1]
         // 4096 is 1 << 11, which is fftSize.
         auto fftSize = 1 << 11;
+//        DBG(juce::Decibels::gainToDecibels (spectrumData[i]));
+//        DBG(spectrumData[i]);
+//        DBG("---");
         float currentDecibel = juce::Decibels::gainToDecibels (spectrumData[i])
             - juce::Decibels::gainToDecibels(static_cast<float>(fftSize));
         float maxDecibel = juce::Decibels::gainToDecibels (maxData[i])
@@ -149,10 +155,9 @@ void SpectrumComponent::paintSpectrum()
         float currentY = juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f);
         float maxY = juce::jmap (yMaxPercent, 0.0f, 1.0f, (float) height, 0.0f);
         currentSpecPath.lineTo(currentX, currentY);
-        if (yMaxPercent > 0.001f)
-        {
-            maxSpecPath.lineTo(currentX, maxY);
-        }
+        
+        maxSpecPath.lineTo(currentX, maxY);
+        
         if (i == 1)
         {
 //            maxDecibelValue = -100.0f;
@@ -160,7 +165,7 @@ void SpectrumComponent::paintSpectrum()
         }
         if (currentDecibel > maxDecibelValue)
         {
-            maxDecibelValue = currentDecibel;
+            maxDecibelValue = currentDecibel; // TODO: not accurate!
             maxFreq = (float)i / numberOfBins * 22050;
             maxDecibelPoint.setXY(currentX, currentY);
         }
@@ -197,8 +202,13 @@ void SpectrumComponent::paintSpectrum()
     gCurrent.fillPath(roundedCurrentPath);
 //    g.strokePath(roundedPath, juce::PathStrokeType(2));
     
-    gMax.setColour (juce::Colours::white);
-    gMax.strokePath(roundedMaxPath, juce::PathStrokeType(2));
+    if (mouseOver)
+    {
+        gMax.setColour (juce::Colours::white);
+        gMax.strokePath(roundedMaxPath, juce::PathStrokeType(2));
+        gMax.drawEllipse(maxDecibelPoint.getX() - 2.0f, maxDecibelPoint.getY() - 2.0f, 4.0f, 4.0f, 1.0f);
+    }
+    
 }
 
 void SpectrumComponent::prepareToPaintSpectrum(int numBins, float * data)

@@ -915,9 +915,9 @@ float * FireAudioProcessor::getFFTData()
     return spectrum_processor.fftData;
 }
 
-int FireAudioProcessor::getFFTSize()
+int FireAudioProcessor::getScopeSize()
 {
-    return spectrum_processor.fftSize / 2 ;
+    return spectrum_processor.scopeSize ;
 }
 
 bool FireAudioProcessor::isFFTBlockReady()

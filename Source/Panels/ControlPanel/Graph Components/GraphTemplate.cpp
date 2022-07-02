@@ -38,6 +38,11 @@ void GraphTemplate::setScale(float scale)
     this->scale = scale;
 }
 
+float GraphTemplate::getScale()
+{
+    return scale;
+}
+
 bool GraphTemplate::getZoomState()
 {
     return mZoomState;
@@ -53,10 +58,12 @@ void GraphTemplate::mouseDown(const juce::MouseEvent &e)
     if (mZoomState)
     {
         mZoomState = false;
+        scale = 1;
     }
     else
     {
         mZoomState = true;
+        scale = 2;
     }
 }
 

@@ -25,6 +25,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void timerCallback() override;
+    void resized() override;
     
 private:
     FireAudioProcessor &processor;

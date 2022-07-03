@@ -486,7 +486,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         if (multibandEnable1)
         {
-            processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, totalNumInputChannels, recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1, dcFilter1);
+            processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, totalNumInputChannels, recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1, dcFilter1, WIDTH_BYPASS_ID1, COMP_BYPASS_ID1);
         }
 
         setLeftRightMeterRMSValues(mBuffer1, mOutputLeftSmoothedBand1, mOutputRightSmoothedBand1);
@@ -509,7 +509,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         if (multibandEnable2)
         {
-            processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, totalNumInputChannels, recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2, dcFilter2);
+            processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, totalNumInputChannels, recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2, dcFilter2, WIDTH_BYPASS_ID2, COMP_BYPASS_ID2);
         }
         
         setLeftRightMeterRMSValues(mBuffer2, mOutputLeftSmoothedBand2, mOutputRightSmoothedBand2);
@@ -532,7 +532,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         if (multibandEnable3)
         {
-            processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, totalNumInputChannels, recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3, dcFilter3);
+            processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, totalNumInputChannels, recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3, dcFilter3, WIDTH_BYPASS_ID3, COMP_BYPASS_ID3);
         }
         
         setLeftRightMeterRMSValues(mBuffer3, mOutputLeftSmoothedBand3, mOutputRightSmoothedBand3);
@@ -549,7 +549,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         
         if (multibandEnable4)
         {
-            processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4, dcFilter4);
+            processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4, dcFilter4, WIDTH_BYPASS_ID4, COMP_BYPASS_ID4);
         }
         
         setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
@@ -1005,7 +1005,7 @@ bool FireAudioProcessor::getSoloStateFromIndex(int index)
     return false;
 }
 
-void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter &dcFilter)
+void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter &dcFilter, juce::String widthBypassID, juce::String compBypassID)
 {
     juce::AudioBuffer<float> dryBuffer;
     dryBuffer.makeCopyOf(bandBuffer);
@@ -1017,7 +1017,7 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     normalize(modeID, bandBuffer, totalNumInputChannels, recSmoother, outputSmoother1);
 
     // width process
-    if (*treeState.getRawParameterValue(WIDTH_BYPASS_ID) && totalNumInputChannels == 2)
+    if (*treeState.getRawParameterValue(widthBypassID) && totalNumInputChannels == 2)
     {
         float* channeldataL;
         float* channeldataR;
@@ -1028,7 +1028,7 @@ void FireAudioProcessor::processOneBand(juce::AudioBuffer<float>& bandBuffer, ju
     }
 
     // compressor process
-    if (*treeState.getRawParameterValue(COMP_BYPASS_ID))
+    if (*treeState.getRawParameterValue(compBypassID))
         processCompressor(context, threshID, ratioID, compressorProcessor);
 
     // gain process
@@ -1575,8 +1575,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID, COMP_BYPASS_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID, WIDTH_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID1, COMP_BYPASS_NAME1, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID2, COMP_BYPASS_NAME2, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID3, COMP_BYPASS_NAME3, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID4, COMP_BYPASS_NAME4, false));
+    
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID1, WIDTH_BYPASS_NAME1, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID2, WIDTH_BYPASS_NAME2, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID3, WIDTH_BYPASS_NAME3, false));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID4, WIDTH_BYPASS_NAME4, false));
+    
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(FILTER_BYPASS_ID, FILTER_BYPASS_NAME, false));
     parameters.push_back(std::make_unique<juce::AudioParameterBool>(DOWNSAMPLE_BYPASS_ID, DOWNSAMPLE_BYPASS_NAME, false));
     

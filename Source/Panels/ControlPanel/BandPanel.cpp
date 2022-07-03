@@ -17,23 +17,27 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     // init vec
     shapeVector = { &recKnob1, &recKnob2, &recKnob3, &recKnob4, &biasKnob1, &biasKnob2, &biasKnob3, &biasKnob4 };
     
-    widthBypassButton = std::make_unique<juce::ToggleButton>();
-    widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4};
-    widthVector.add(&*widthBypassButton);
+    widthBypassButton1 = std::make_unique<juce::ToggleButton>();
+    widthBypassButton2 = std::make_unique<juce::ToggleButton>();
+    widthBypassButton3 = std::make_unique<juce::ToggleButton>();
+    widthBypassButton4 = std::make_unique<juce::ToggleButton>();
+    widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4, &*widthBypassButton1, &*widthBypassButton2, &*widthBypassButton3, &*widthBypassButton4};
     
-    compressorBypassButton = std::make_unique<juce::ToggleButton>();
-    compressorVector = {&compThreshKnob1, &compThreshKnob2, &compThreshKnob3, &compThreshKnob4, &compRatioKnob1, &compRatioKnob2, &compRatioKnob3, &compRatioKnob4};
-    compressorVector.add(&*compressorBypassButton);
+    compressorBypassButton1 = std::make_unique<juce::ToggleButton>();
+    compressorBypassButton2 = std::make_unique<juce::ToggleButton>();
+    compressorBypassButton3 = std::make_unique<juce::ToggleButton>();
+    compressorBypassButton4 = std::make_unique<juce::ToggleButton>();
+    compressorVector = {&compThreshKnob1, &compThreshKnob2, &compThreshKnob3, &compThreshKnob4, &compRatioKnob1, &compRatioKnob2, &compRatioKnob3, &compRatioKnob4, &*compressorBypassButton1, &*compressorBypassButton2, &*compressorBypassButton3, &*compressorBypassButton4};
     
     // drive knobs
     driveKnob1.setLookAndFeel(&driveLookAndFeel1);
     driveKnob2.setLookAndFeel(&driveLookAndFeel2);
     driveKnob3.setLookAndFeel(&driveLookAndFeel3);
     driveKnob4.setLookAndFeel(&driveLookAndFeel4);
-    setListenerKnob(driveKnob1);
-    setListenerKnob(driveKnob2);
-    setListenerKnob(driveKnob3);
-    setListenerKnob(driveKnob4);
+    initListenerKnob(driveKnob1);
+    initListenerKnob(driveKnob2);
+    initListenerKnob(driveKnob3);
+    initListenerKnob(driveKnob4);
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", juce::dontSendNotification);
@@ -43,10 +47,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     driveLabel.setJustificationType(juce::Justification::centred);
     
     // output knobs
-    setListenerKnob(outputKnob1);
-    setListenerKnob(outputKnob2);
-    setListenerKnob(outputKnob3);
-    setListenerKnob(outputKnob4);
+    initListenerKnob(outputKnob1);
+    initListenerKnob(outputKnob2);
+    initListenerKnob(outputKnob3);
+    initListenerKnob(outputKnob4);
     outputKnob1.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
     outputKnob2.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
     outputKnob3.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
@@ -65,16 +69,16 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     outputKnob4.setTextValueSuffix("db");
     
     // mix knobs
-    setRotarySlider(mixKnob1, COLOUR1);
-    setRotarySlider(mixKnob2, COLOUR1);
-    setRotarySlider(mixKnob3, COLOUR1);
-    setRotarySlider(mixKnob4, COLOUR1);
+    initRotarySlider(mixKnob1, COLOUR1);
+    initRotarySlider(mixKnob2, COLOUR1);
+    initRotarySlider(mixKnob3, COLOUR1);
+    initRotarySlider(mixKnob4, COLOUR1);
     
     // compressor ratio knobs
-    setRotarySlider(compRatioKnob1, COMP_COLOUR);
-    setRotarySlider(compRatioKnob2, COMP_COLOUR);
-    setRotarySlider(compRatioKnob3, COMP_COLOUR);
-    setRotarySlider(compRatioKnob4, COMP_COLOUR);
+    initRotarySlider(compRatioKnob1, COMP_COLOUR);
+    initRotarySlider(compRatioKnob2, COMP_COLOUR);
+    initRotarySlider(compRatioKnob3, COMP_COLOUR);
+    initRotarySlider(compRatioKnob4, COMP_COLOUR);
 
     addAndMakeVisible(CompRatioLabel);
     CompRatioLabel.setText("Ratio", juce::dontSendNotification);
@@ -84,10 +88,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     CompRatioLabel.setJustificationType(juce::Justification::centred);
     
     // compressor threashold knobs
-    setRotarySlider(compThreshKnob1, COMP_COLOUR);
-    setRotarySlider(compThreshKnob2, COMP_COLOUR);
-    setRotarySlider(compThreshKnob3, COMP_COLOUR);
-    setRotarySlider(compThreshKnob4, COMP_COLOUR);
+    initRotarySlider(compThreshKnob1, COMP_COLOUR);
+    initRotarySlider(compThreshKnob2, COMP_COLOUR);
+    initRotarySlider(compThreshKnob3, COMP_COLOUR);
+    initRotarySlider(compThreshKnob4, COMP_COLOUR);
 
     compThreshKnob1.setTextValueSuffix("db");
     compThreshKnob2.setTextValueSuffix("db");
@@ -102,10 +106,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     CompThreshLabel.setJustificationType(juce::Justification::centred);
     
     // width knobs
-    setRotarySlider(widthKnob1, WIDTH_COLOUR);
-    setRotarySlider(widthKnob2, WIDTH_COLOUR);
-    setRotarySlider(widthKnob3, WIDTH_COLOUR);
-    setRotarySlider(widthKnob4, WIDTH_COLOUR);
+    initRotarySlider(widthKnob1, WIDTH_COLOUR);
+    initRotarySlider(widthKnob2, WIDTH_COLOUR);
+    initRotarySlider(widthKnob3, WIDTH_COLOUR);
+    initRotarySlider(widthKnob4, WIDTH_COLOUR);
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
@@ -115,10 +119,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     widthLabel.setJustificationType(juce::Justification::centred);
 
     // bias knobs
-    setRotarySlider(biasKnob1, COLOUR1);
-    setRotarySlider(biasKnob2, COLOUR1);
-    setRotarySlider(biasKnob3, COLOUR1);
-    setRotarySlider(biasKnob4, COLOUR1);
+    initRotarySlider(biasKnob1, COLOUR1);
+    initRotarySlider(biasKnob2, COLOUR1);
+    initRotarySlider(biasKnob3, COLOUR1);
+    initRotarySlider(biasKnob4, COLOUR1);
     
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
@@ -128,10 +132,10 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     biasLabel.setJustificationType(juce::Justification::centred);
     
     // rec knobs
-    setRotarySlider(recKnob1, COLOUR1);
-    setRotarySlider(recKnob2, COLOUR1);
-    setRotarySlider(recKnob3, COLOUR1);
-    setRotarySlider(recKnob4, COLOUR1);
+    initRotarySlider(recKnob1, COLOUR1);
+    initRotarySlider(recKnob2, COLOUR1);
+    initRotarySlider(recKnob3, COLOUR1);
+    initRotarySlider(recKnob4, COLOUR1);
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
@@ -141,16 +145,16 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     recLabel.setJustificationType(juce::Justification::centred);
     
     // Linked Button
-    setFlatButton(linkedButton1, LINKED_ID1, "L");
-    setFlatButton(linkedButton2, LINKED_ID2, "L");
-    setFlatButton(linkedButton3, LINKED_ID3, "L");
-    setFlatButton(linkedButton4, LINKED_ID4, "L");
+    initFlatButton(linkedButton1, LINKED_ID1, "L");
+    initFlatButton(linkedButton2, LINKED_ID2, "L");
+    initFlatButton(linkedButton3, LINKED_ID3, "L");
+    initFlatButton(linkedButton4, LINKED_ID4, "L");
     
     // safe overload Button
-    setFlatButton(safeButton1, SAFE_ID1, "S");
-    setFlatButton(safeButton2, SAFE_ID2, "S");
-    setFlatButton(safeButton3, SAFE_ID3, "S");
-    setFlatButton(safeButton4, SAFE_ID4, "S");
+    initFlatButton(safeButton1, SAFE_ID1, "S");
+    initFlatButton(safeButton2, SAFE_ID2, "S");
+    initFlatButton(safeButton3, SAFE_ID3, "S");
+    initFlatButton(safeButton4, SAFE_ID4, "S");
     
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", juce::dontSendNotification);
@@ -212,16 +216,15 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     widthSwitch.setLookAndFeel(&flatButtonLnf);
     widthSwitch.addListener(this);
     
-    addAndMakeVisible(*compressorBypassButton);
-    compressorBypassButton->setColour(juce::ToggleButton::tickColourId, COMP_COLOUR);
-    compressorBypassButton->onClick = [this] { updateBypassState (*compressorBypassButton, 0); };
-    addAndMakeVisible(*widthBypassButton);
-    widthBypassButton->setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR);
-    widthBypassButton->onClick = [this] { updateBypassState (*widthBypassButton, 1); };
+    initBypassButton(*compressorBypassButton1, COMP_COLOUR, 0);
+    initBypassButton(*compressorBypassButton2, COMP_COLOUR, 1);
+    initBypassButton(*compressorBypassButton3, COMP_COLOUR, 2);
+    initBypassButton(*compressorBypassButton4, COMP_COLOUR, 3);
 
-    // init state
-    setBypassState(0, compressorBypassButton->getToggleState());
-    setBypassState(1, widthBypassButton->getToggleState());
+    initBypassButton(*widthBypassButton1, WIDTH_COLOUR, 4);
+    initBypassButton(*widthBypassButton2, WIDTH_COLOUR, 5);
+    initBypassButton(*widthBypassButton3, WIDTH_COLOUR, 6);
+    initBypassButton(*widthBypassButton4, WIDTH_COLOUR, 7);
     
     // Attachment
     driveAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, DRIVE_ID1, driveKnob1);
@@ -274,8 +277,28 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     widthAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID3, widthKnob3);
     widthAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, WIDTH_ID4, widthKnob4);
     
-    compressorBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, COMP_BYPASS_ID, *compressorBypassButton);
-    widthBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WIDTH_BYPASS_ID, *widthBypassButton);
+    compressorBypassAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, COMP_BYPASS_ID1, *compressorBypassButton1);
+    compressorBypassAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, COMP_BYPASS_ID2, *compressorBypassButton2);
+    compressorBypassAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, COMP_BYPASS_ID3, *compressorBypassButton3);
+    compressorBypassAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, COMP_BYPASS_ID4, *compressorBypassButton4);
+    widthBypassAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WIDTH_BYPASS_ID1, *widthBypassButton1);
+    widthBypassAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WIDTH_BYPASS_ID2, *widthBypassButton2);
+    widthBypassAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WIDTH_BYPASS_ID3, *widthBypassButton3);
+    widthBypassAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, WIDTH_BYPASS_ID4, *widthBypassButton4);
+    
+    
+    // save xml state to temp
+    compBypassTemp[0] = *processor.treeState.getRawParameterValue(COMP_BYPASS_ID1);
+    compBypassTemp[1] = *processor.treeState.getRawParameterValue(COMP_BYPASS_ID2);
+    compBypassTemp[2] = *processor.treeState.getRawParameterValue(COMP_BYPASS_ID3);
+    compBypassTemp[3] = *processor.treeState.getRawParameterValue(COMP_BYPASS_ID4);
+    
+    widthBypassTemp[0] = *processor.treeState.getRawParameterValue(WIDTH_BYPASS_ID1);
+    widthBypassTemp[1] = *processor.treeState.getRawParameterValue(WIDTH_BYPASS_ID2);
+    widthBypassTemp[2] = *processor.treeState.getRawParameterValue(WIDTH_BYPASS_ID3);
+    widthBypassTemp[3] = *processor.treeState.getRawParameterValue(WIDTH_BYPASS_ID4);
+    
+    //
 }
 
 BandPanel::~BandPanel()
@@ -306,7 +329,7 @@ void BandPanel::paint (juce::Graphics& g)
     bool isShapeSwitchOn = shapeSwitch.getToggleState();
     bool isCompressorSwitchOn = compressorSwitch.getToggleState();
     
-    setFourKnobsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, focusBandNum);
+    setFourComponentsVisibility(driveKnob1, driveKnob2, driveKnob3, driveKnob4, focusBandNum);
     
     if (isOscSwitchOn)
     {
@@ -322,8 +345,9 @@ void BandPanel::paint (juce::Graphics& g)
     if (isCompressorSwitchOn)
     {
         setVisibility(compressorVector, true);
-        setFourKnobsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
-        setFourKnobsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
+        setFourComponentsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
+        setFourComponentsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
+        setFourComponentsVisibility(*compressorBypassButton1, *compressorBypassButton2, *compressorBypassButton3, *compressorBypassButton4, focusBandNum);
         setVisibility(shapeVector, false);
         setVisibility(widthVector, false);
         CompRatioLabel.setVisible(true);
@@ -338,8 +362,8 @@ void BandPanel::paint (juce::Graphics& g)
     }
     if (isShapeSwitchOn)
     {
-        setFourKnobsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
-        setFourKnobsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
+        setFourComponentsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
+        setFourComponentsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
         setVisibility(compressorVector, false);
         setVisibility(widthVector, false);
         CompRatioLabel.setVisible(false);
@@ -356,7 +380,8 @@ void BandPanel::paint (juce::Graphics& g)
     if (isWidthSwitchOn)
     {
         setVisibility(widthVector, true);
-        setFourKnobsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
+        setFourComponentsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
+        setFourComponentsVisibility(*widthBypassButton1, *widthBypassButton2, *widthBypassButton3, *widthBypassButton4, focusBandNum);
         setVisibility(shapeVector, false);
         setVisibility(compressorVector, false);
         CompRatioLabel.setVisible(false);
@@ -370,11 +395,11 @@ void BandPanel::paint (juce::Graphics& g)
 //            graphPanel.getWidthGraph()->setZoomState(true);
     }
     
-    setFourKnobsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, focusBandNum);
-    setFourKnobsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, focusBandNum);
+    setFourComponentsVisibility(outputKnob1, outputKnob2, outputKnob3, outputKnob4, focusBandNum);
+    setFourComponentsVisibility(mixKnob1, mixKnob2, mixKnob3, mixKnob4, focusBandNum);
     
-    setFourKnobsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, focusBandNum);
-    setFourKnobsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, focusBandNum);
+    setFourComponentsVisibility(linkedButton1, linkedButton2, linkedButton3, linkedButton4, focusBandNum);
+    setFourComponentsVisibility(safeButton1, safeButton2, safeButton3, safeButton4, focusBandNum);
 
     g.setColour(COLOUR6);
     if (!isOscSwitchOn)
@@ -451,14 +476,20 @@ void BandPanel::resized()
     // width
     juce::Rectangle<int> bypassButtonArea = bandKnobArea;
     bypassButtonArea = bypassButtonArea.removeFromBottom(bandKnobArea.getHeight() / 5).reduced(bandKnobArea.getWidth() / 2 - bandKnobArea.getHeight() / 10, 0);
-    widthBypassButton->setBounds(bypassButtonArea);
+    widthBypassButton1->setBounds(bypassButtonArea);
+    widthBypassButton2->setBounds(bypassButtonArea);
+    widthBypassButton3->setBounds(bypassButtonArea);
+    widthBypassButton4->setBounds(bypassButtonArea);
     widthKnob1.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     widthKnob2.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     widthKnob3.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     widthKnob4.setBounds(bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     
     // compressor
-    compressorBypassButton->setBounds(bypassButtonArea);
+    compressorBypassButton1->setBounds(bypassButtonArea);
+    compressorBypassButton2->setBounds(bypassButtonArea);
+    compressorBypassButton3->setBounds(bypassButtonArea);
+    compressorBypassButton4->setBounds(bypassButtonArea);
     compThreshKnob1.setBounds(bandKnobAreaLeft);
     compThreshKnob2.setBounds(bandKnobAreaLeft);
     compThreshKnob3.setBounds(bandKnobAreaLeft);
@@ -538,14 +569,8 @@ void BandPanel::timerCallback()
 
 void BandPanel::updateBypassState(juce::ToggleButton &clickedButton, int index)
 {
-    if (clickedButton.getToggleState())
-    {
-        setBypassState(index, true);
-    }
-    else
-    {
-        setBypassState(index, false);
-    }
+    bool state = clickedButton.getToggleState();
+    setBypassState(index, state);
 }
 
 void BandPanel::buttonClicked(juce::Button *clickedButton)
@@ -572,7 +597,7 @@ void BandPanel::buttonClicked(juce::Button *clickedButton)
     repaint();
 }
 
-void BandPanel::setListenerKnob(juce::Slider& slider)
+void BandPanel::initListenerKnob(juce::Slider& slider)
 {
     addAndMakeVisible(slider);
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -580,8 +605,7 @@ void BandPanel::setListenerKnob(juce::Slider& slider)
     slider.addListener(this);
 }
 
-
-void BandPanel::setRotarySlider(juce::Slider& slider, juce::Colour colour)
+void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
 {
     addAndMakeVisible(slider);
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -589,7 +613,7 @@ void BandPanel::setRotarySlider(juce::Slider& slider, juce::Colour colour)
     slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
 }
 
-void BandPanel::setFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName)
+void BandPanel::initFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName)
 {
     addAndMakeVisible(button);
     button.setClickingTogglesState(true);
@@ -605,7 +629,16 @@ void BandPanel::setFlatButton(juce::TextButton& button, juce::String paramId, ju
     button.setLookAndFeel(&flatButtonLnf);
 }
 
-void BandPanel::setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
+void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour, int index)
+{
+    addAndMakeVisible(bypassButton);
+    bypassButton.setColour(juce::ToggleButton::tickColourId, colour);
+    bypassButton.onClick = [this, &bypassButton, index] { updateBypassState (bypassButton, index); };
+    updateBypassState(bypassButton, index);
+    bypassButton.addListener(this);
+}
+
+void BandPanel::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
 {
     driveLabel.setVisible(true);
     mixLabel.setVisible(true);
@@ -667,17 +700,109 @@ void BandPanel::setVisibility(juce::Array<juce::Component *> &array, bool isVisi
 
 void BandPanel::setBypassState(int index, bool state)
 {
-    componentArray1 = { &compThreshKnob1, &compRatioKnob1, &compThreshKnob2, &compRatioKnob2, &compThreshKnob3, &compRatioKnob3, &compThreshKnob4, &compRatioKnob4 };
-    componentArray2 = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4 };
+    componentArray1 = { &compThreshKnob1, &compRatioKnob1};
+    componentArray2 = { &compThreshKnob2, &compRatioKnob2};
+    componentArray3 = { &compThreshKnob3, &compRatioKnob3};
+    componentArray4 = { &compThreshKnob4, &compRatioKnob4};
+    componentArray5 = { &widthKnob1 };
+    componentArray6 = { &widthKnob2 };
+    componentArray7 = { &widthKnob3 };
+    componentArray8 = { &widthKnob4 };
 
     juce::Array<juce::Component*>* componentArray;
+    // 0-3 -> comp 1-4
+    // 4-7 -> width 1-4
     if (index == 0) componentArray = &componentArray1;
     if (index == 1) componentArray = &componentArray2;
+    if (index == 2) componentArray = &componentArray3;
+    if (index == 3) componentArray = &componentArray4;
+    if (index == 4) componentArray = &componentArray5;
+    if (index == 5) componentArray = &componentArray6;
+    if (index == 6) componentArray = &componentArray7;
+    if (index == 7) componentArray = &componentArray8;
     
+    // when changing subbypass buttons, also save the states to temp arrays
+    if (index >= 0 && index < 4)
+    {
+        compBypassTemp[index] = state;
+    }
+    else if (index >= 4 && index < 8)
+    {
+        widthBypassTemp[index - 4] = state;
+    }
+    // set subknobs states
+    for (int i = 0; i < componentArray->size(); i++)
+    {
+        componentArray->data()[i]->setEnabled(state);
+    }
+}
+
+void BandPanel::setBandKnobsStates(int index, bool state, bool callFromSubBypass)
+{
+    componentArray1 = {&driveKnob1, &outputKnob1, &mixKnob1, &recKnob1, &biasKnob1, &compThreshKnob1, &compRatioKnob1, &widthKnob1, &linkedButton1, &safeButton1};
+    componentArray2 = {&driveKnob2, &outputKnob2, &mixKnob2, &recKnob2, &biasKnob2, &compThreshKnob2, &compRatioKnob2, &widthKnob2, &linkedButton2, &safeButton2};
+    componentArray3 = {&driveKnob3, &outputKnob3, &mixKnob3, &recKnob3, &biasKnob3, &compThreshKnob3, &compRatioKnob3, &widthKnob3, &linkedButton3, &safeButton3};
+    componentArray4 = {&driveKnob4, &outputKnob4, &mixKnob4, &recKnob4, &biasKnob4, &compThreshKnob4, &compRatioKnob4, &widthKnob4, &linkedButton4, &safeButton4};
+    
+    bool widthBypassState, compBypassState;
+    // turn off bypassbuttons, subbypass buttons will also turn off
+    if (!state)
+    {
+        widthBypassState = false;
+        compBypassState = false;
+    }
+    else // turn on bypassbuttons, subbypass buttons states will depends on original states(temp)
+    {
+        widthBypassState = widthBypassTemp[index];
+        compBypassState = compBypassTemp[index];
+    }
+        
+    juce::Array<juce::Component *>* componentArray;
+    if (index == 0)
+    {
+        componentArray = &componentArray1;
+        if (!callFromSubBypass)
+        {
+            widthBypassButton1->setToggleState(widthBypassState, juce::NotificationType::dontSendNotification);
+            compressorBypassButton1->setToggleState(compBypassState, juce::NotificationType::dontSendNotification);
+        }
+    }
+    else if (index == 1)
+    {
+        componentArray = &componentArray2;
+        if (!callFromSubBypass)
+        {
+            widthBypassButton2->setToggleState(widthBypassState, juce::NotificationType::dontSendNotification);
+            compressorBypassButton2->setToggleState(compBypassState, juce::NotificationType::dontSendNotification);
+        }
+    }
+    else if (index == 2)
+    {
+        componentArray = &componentArray3;
+        if (!callFromSubBypass)
+        {
+            widthBypassButton3->setToggleState(widthBypassState, juce::NotificationType::dontSendNotification);
+            compressorBypassButton3->setToggleState(compBypassState, juce::NotificationType::dontSendNotification);
+        }
+    }
+    else if (index == 3)
+    {
+        componentArray = &componentArray4;
+        if (!callFromSubBypass)
+        {
+            widthBypassButton4->setToggleState(widthBypassState, juce::NotificationType::dontSendNotification);
+            compressorBypassButton4->setToggleState(compBypassState, juce::NotificationType::dontSendNotification);
+        }
+    }
+
     if (state)
     {
         for (int i = 0; i < componentArray->size(); i++)
         {
+            if (canEnableSubKnobs(*componentArray->data()[i]))
+            {
+                continue;
+            }
             componentArray->data()[i]->setEnabled(true);
         }
     }
@@ -690,31 +815,50 @@ void BandPanel::setBypassState(int index, bool state)
     }
 }
 
-void BandPanel::setBandKnobsStates(int index, bool state)
+bool BandPanel::canEnableSubKnobs(juce::Component &component)
 {
-    componentArray1 = {&driveKnob1, &outputKnob1, &mixKnob1, &recKnob1, &biasKnob1, &compThreshKnob1, &compRatioKnob1, &widthKnob1, &linkedButton1, &safeButton1};
-    componentArray2 = {&driveKnob2, &outputKnob2, &mixKnob2, &recKnob2, &biasKnob2, &compThreshKnob2, &compRatioKnob2, &widthKnob2, &linkedButton2, &safeButton2};
-    componentArray3 = {&driveKnob3, &outputKnob3, &mixKnob3, &recKnob3, &biasKnob3, &compThreshKnob3, &compRatioKnob3, &widthKnob3, &linkedButton3, &safeButton3};
-    componentArray4 = {&driveKnob4, &outputKnob4, &mixKnob4, &recKnob4, &biasKnob4, &compThreshKnob4, &compRatioKnob4, &widthKnob4, &linkedButton4, &safeButton4};
-    
-    juce::Array<juce::Component *>* componentArray;
-    if (index == 0) componentArray = &componentArray1;
-    if (index == 1) componentArray = &componentArray2;
-    if (index == 2) componentArray = &componentArray3;
-    if (index == 3) componentArray = &componentArray4;
-
-    if (state)
-    {
-        for (int i = 0; i < componentArray->size(); i++)
-        {
-            componentArray->data()[i]->setEnabled(true);
-        }
-    }
+    if (&component == &compThreshKnob1 && !compressorBypassButton1->getToggleState())
+        return true;
+    else if (&component == &compRatioKnob1 && !compressorBypassButton1->getToggleState())
+        return true;
+    else if (&component == &compThreshKnob2 && !compressorBypassButton2->getToggleState())
+        return true;
+    else if (&component == &compRatioKnob2 && !compressorBypassButton2->getToggleState())
+        return true;
+    else if (&component == &compThreshKnob3 && !compressorBypassButton3->getToggleState())
+        return true;
+    else if (&component == &compRatioKnob3 && !compressorBypassButton3->getToggleState())
+        return true;
+    else if (&component == &compThreshKnob4 && !compressorBypassButton4->getToggleState())
+        return true;
+    else if (&component == &compRatioKnob4 && !compressorBypassButton4->getToggleState())
+        return true;
+    else if (&component == &widthKnob1 && !widthBypassButton1->getToggleState())
+        return true;
+    else if (&component == &widthKnob2 && !widthBypassButton2->getToggleState())
+        return true;
+    else if (&component == &widthKnob3 && !widthBypassButton3->getToggleState())
+        return true;
+    else if (&component == &widthKnob4 && !widthBypassButton4->getToggleState())
+        return true;
     else
-    {
-        for (int i = 0; i < componentArray->size(); i++)
-        {
-            componentArray->data()[i]->setEnabled(false);
-        }
-    }
+        return false;
+}
+
+juce::ToggleButton& BandPanel::getCompButton(const int index)
+{
+    if (index == 0) return *compressorBypassButton1;
+    else if (index == 1) return *compressorBypassButton2;
+    else if (index == 2) return *compressorBypassButton3;
+    else if (index == 3) return *compressorBypassButton4;
+    else jassertfalse;
+}
+
+juce::ToggleButton& BandPanel::getWidthButton(const int index)
+{
+    if (index == 0) return *widthBypassButton1;
+    else if (index == 1) return *widthBypassButton2;
+    else if (index == 2) return *widthBypassButton3;
+    else if (index == 3) return *widthBypassButton4;
+    else jassertfalse;
 }

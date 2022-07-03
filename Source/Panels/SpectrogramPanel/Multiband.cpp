@@ -1005,3 +1005,9 @@ void Multiband::setScale(float scale)
         freqDividerGroup[i]->setScale(scale);
     }
 }
+
+void Multiband::setBandBypassStates(int index, bool state)
+{
+    // TODO: check delete insert is right?
+    enableButton[index]->setToggleState(state, juce::NotificationType::dontSendNotification);
+}

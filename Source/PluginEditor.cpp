@@ -43,6 +43,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     for (int i = 0; i < 4; i++)
     {
         multiband.getEnableButton(i).addListener(this);
+        bandPanel.getCompButton(i).addListener(this);
+        bandPanel.getWidthButton(i).addListener(this);
     }
         
     spectrum.setInterceptsMouseClicks(false, false);
@@ -239,7 +241,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
     }
     
-    setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
+    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
     
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
@@ -447,16 +449,20 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
     }
     for (int i = 0; i < 4; i++)
     {
+        // bypass button for each band
         if (clickedButton == &multiband.getEnableButton(i))
         {
-            if (clickedButton->getToggleState())
+            bandPanel.setBandKnobsStates(i, clickedButton->getToggleState(), false);
+        }
+        // bypass button for band compressor/width
+        if (clickedButton == &bandPanel.getCompButton(i) || clickedButton == &bandPanel.getWidthButton(i))
+        {
+            bool state = clickedButton->getToggleState();
+            if (state)
             {
-                bandPanel.setBandKnobsStates(i, true);
-            }
-            else
-            {
-                bandPanel.setBandKnobsStates(i, false);
-            }
+                multiband.setBandBypassStates(i, state);
+                bandPanel.setBandKnobsStates(i, state, true);
+            }   
         }
     }
     
@@ -602,7 +608,7 @@ void FireAudioProcessorEditor::setMultiband()
 //    processor.setLineNum(multiband.getLineNum());
 }
 
-void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
+void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
 {
     if (zoomButton.getToggleState())
     {

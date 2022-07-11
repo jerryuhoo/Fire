@@ -298,7 +298,11 @@ BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
     widthBypassTemp[2] = *processor.treeState.getRawParameterValue(WIDTH_BYPASS_ID3);
     widthBypassTemp[3] = *processor.treeState.getRawParameterValue(WIDTH_BYPASS_ID4);
     
-    //
+    // init band knobs states
+    setBandKnobsStates(0, *processor.treeState.getRawParameterValue(BAND_ENABLE_ID1), false);
+    setBandKnobsStates(1, *processor.treeState.getRawParameterValue(BAND_ENABLE_ID2), false);
+    setBandKnobsStates(2, *processor.treeState.getRawParameterValue(BAND_ENABLE_ID3), false);
+    setBandKnobsStates(3, *processor.treeState.getRawParameterValue(BAND_ENABLE_ID4), false);
 }
 
 BandPanel::~BandPanel()

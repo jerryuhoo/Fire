@@ -414,11 +414,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // save clean signal
-    mDryBuffer.makeCopyOf(buffer);
-
     // VU input meter
-//    float absInputLeftValue = fabs(buffer.getMagnitude(0, 0, buffer.getNumSamples()));
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
     
     juce::dsp::AudioBlock<float> block(buffer);
@@ -471,6 +467,20 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
     multibandSolo3 = *treeState.getRawParameterValue(BAND_SOLO_ID3);
     multibandSolo4 = *treeState.getRawParameterValue(BAND_SOLO_ID4);
     
+    // set channels
+    int leftChannelId;
+    int rightChannelId;
+    if (totalNumInputChannels == 2)
+    {
+        leftChannelId = 0;
+        rightChannelId = 1;
+    }
+    else
+    {
+        leftChannelId = 0;
+        rightChannelId = 0;
+    }
+    
     if (lineNum >= 0)
     {
         auto multibandBlock1 = juce::dsp::AudioBlock<float> (mBuffer1);
@@ -481,7 +491,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass1.setCutoffFrequency(freqValue1);
             lowpass1.process (context1);
         }
-
+        
+        mDryBuffer.addFrom(leftChannelId, 0, mBuffer1, leftChannelId, 0, numSamples);
+        mDryBuffer.addFrom(rightChannelId, 0, mBuffer1, rightChannelId, 0, numSamples);
+        
         setLeftRightMeterRMSValues(mBuffer1, mInputLeftSmoothedBand1, mInputRightSmoothedBand1);
 
         if (multibandEnable1)
@@ -504,7 +517,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass2.setCutoffFrequency(freqValue2);
             lowpass2.process(context2);
         }
-
+        
+        mDryBuffer.addFrom(leftChannelId, 0, mBuffer2, leftChannelId, 0, numSamples);
+        mDryBuffer.addFrom(rightChannelId, 0, mBuffer2, rightChannelId, 0, numSamples);
+        
         setLeftRightMeterRMSValues(mBuffer2, mInputLeftSmoothedBand2, mInputRightSmoothedBand2);
         
         if (multibandEnable2)
@@ -528,6 +544,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass3.process(context3);
         }
         
+        mDryBuffer.addFrom(leftChannelId, 0, mBuffer3, leftChannelId, 0, numSamples);
+        mDryBuffer.addFrom(rightChannelId, 0, mBuffer3, rightChannelId, 0, numSamples);
+        
         setLeftRightMeterRMSValues(mBuffer3, mInputLeftSmoothedBand3, mInputRightSmoothedBand3);
         
         if (multibandEnable3)
@@ -547,6 +566,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
 
         setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
         
+        mDryBuffer.addFrom(leftChannelId, 0, mBuffer4, leftChannelId, 0, numSamples);
+        mDryBuffer.addFrom(rightChannelId, 0, mBuffer4, rightChannelId, 0, numSamples);
+        
         if (multibandEnable4)
         {
             processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4, dcFilter4, WIDTH_BYPASS_ID4, COMP_BYPASS_ID4);
@@ -555,20 +577,30 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
         setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
     }
     
-    buffer.clear();
+    // set latency if all enable buttons are on, else set to 0
+    if (lineNum == 0 && !multibandEnable1)
+    {
+        mLatency = 0;
+        setLatencySamples(mLatency);
+    }
+    if (lineNum == 1 && !multibandEnable1 && !multibandEnable2)
+    {
+        mLatency = 0;
+        setLatencySamples(mLatency);
+    }
+    if (lineNum == 2 && !multibandEnable1 && !multibandEnable2 && !multibandEnable3)
+    {
+        mLatency = 0;
+        setLatencySamples(mLatency);
+    }
+    if (lineNum == 3 && !multibandEnable1 && !multibandEnable2 && !multibandEnable3 && !multibandEnable4)
+    {
+        mLatency = 0;
+        setLatencySamples(mLatency);
+    }
     
-    int leftChannelId;
-    int rightChannelId;
-    if (totalNumInputChannels == 2)
-    {
-        leftChannelId = 0;
-        rightChannelId = 1;
-    }
-    else
-    {
-        leftChannelId = 0;
-        rightChannelId = 0;
-    }
+    
+    buffer.clear();
     
     
     if (!shouldSetBlackMask(0))
@@ -1065,6 +1097,7 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     {
         //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
         blockOutput = blockInput.getSubBlock(0, bandBuffer.getNumSamples());
+        mLatency = 0;
         setLatencySamples(0);
     }
     

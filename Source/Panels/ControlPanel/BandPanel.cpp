@@ -12,21 +12,21 @@
 #include "BandPanel.h"
 
 //==============================================================================
-BandPanel::BandPanel(FireAudioProcessor &p) : processor(p)
+BandPanel::BandPanel(FireAudioProcessor &p) :
+processor(p),
+compressorBypassButton1(std::make_unique<juce::ToggleButton>()),
+compressorBypassButton2(std::make_unique<juce::ToggleButton>()),
+compressorBypassButton3(std::make_unique<juce::ToggleButton>()),
+compressorBypassButton4(std::make_unique<juce::ToggleButton>()),
+widthBypassButton1(std::make_unique<juce::ToggleButton>()),
+widthBypassButton2(std::make_unique<juce::ToggleButton>()),
+widthBypassButton3(std::make_unique<juce::ToggleButton>()),
+widthBypassButton4(std::make_unique<juce::ToggleButton>())
 {
     // init vec
     shapeVector = { &recKnob1, &recKnob2, &recKnob3, &recKnob4, &biasKnob1, &biasKnob2, &biasKnob3, &biasKnob4 };
-    
-    widthBypassButton1 = std::make_unique<juce::ToggleButton>();
-    widthBypassButton2 = std::make_unique<juce::ToggleButton>();
-    widthBypassButton3 = std::make_unique<juce::ToggleButton>();
-    widthBypassButton4 = std::make_unique<juce::ToggleButton>();
     widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4, &*widthBypassButton1, &*widthBypassButton2, &*widthBypassButton3, &*widthBypassButton4};
-    
-    compressorBypassButton1 = std::make_unique<juce::ToggleButton>();
-    compressorBypassButton2 = std::make_unique<juce::ToggleButton>();
-    compressorBypassButton3 = std::make_unique<juce::ToggleButton>();
-    compressorBypassButton4 = std::make_unique<juce::ToggleButton>();
+
     compressorVector = {&compThreshKnob1, &compThreshKnob2, &compThreshKnob3, &compThreshKnob4, &compRatioKnob1, &compRatioKnob2, &compRatioKnob3, &compRatioKnob4, &*compressorBypassButton1, &*compressorBypassButton2, &*compressorBypassButton3, &*compressorBypassButton4};
     
     // drive knobs

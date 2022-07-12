@@ -335,7 +335,7 @@ void FireAudioProcessorEditor::resized()
         controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5);
     }
     // Zoom button
-    zoomButton.setBounds(getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, 20, 20);
+    zoomButton.setBounds(getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, getHeight() / 25, getHeight() / 25);
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;

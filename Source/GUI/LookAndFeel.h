@@ -1565,6 +1565,7 @@ public:
         pathArrow1.lineTo(startX, startY);
         pathArrow1.lineTo(startX + width / 4.0f, startY);
 //        g.strokePath(pathArrow1, juce::PathStrokeType(1.0f));
+        pathArrow1.closeSubPath();
         g.fillPath(pathArrow1);
         
         juce::Path pathArrow2;
@@ -1572,6 +1573,7 @@ public:
         pathArrow2.lineTo(endX, endY);
         pathArrow2.lineTo(endX - width / 4.0f, endY);
 //        g.strokePath(pathArrow2, juce::PathStrokeType(1.0f));
+        pathArrow2.closeSubPath();
         g.fillPath(pathArrow2);
     }
 

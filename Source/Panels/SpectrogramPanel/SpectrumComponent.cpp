@@ -151,22 +151,17 @@ void SpectrumComponent::paintSpectrum()
 //        if (i > numberOfBins / 4 * 3 && i % 10 != 0) continue;
         
         // connect points
-        float currentX = transformToLog((float)i / numberOfBins * 22050) * width;
+        float currentX = transformToLog((float)i / numberOfBins * 11025) * width;
         float currentY = juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f);
         float maxY = juce::jmap (yMaxPercent, 0.0f, 1.0f, (float) height, 0.0f);
         currentSpecPath.lineTo(currentX, currentY);
         
         maxSpecPath.lineTo(currentX, maxY);
         
-        if (i == 1)
-        {
-//            maxDecibelValue = -100.0f;
-//            maxFreq = 0.0f;
-        }
         if (currentDecibel > maxDecibelValue)
         {
             maxDecibelValue = currentDecibel; // TODO: not accurate!
-            maxFreq = (float)i / numberOfBins * 22050;
+            maxFreq = (float)i / numberOfBins * 11025;
             maxDecibelPoint.setXY(currentX, currentY);
         }
         if (spectrumData[i] > maxData[i])

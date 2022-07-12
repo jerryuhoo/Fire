@@ -85,8 +85,8 @@ void SpectrumComponent::paint (juce::Graphics& g)
     if (maxDecibelValue >= -99.9f && mouseOver)
     {
         g.setColour(juce::Colours::lightgrey);
-//        g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
-        g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
+        g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
+        g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY(), boxWidth, boxWidth, juce::Justification::centred);
     }
     else
     {
@@ -131,13 +131,8 @@ void SpectrumComponent::paintSpectrum()
     for (int i = 1; i < numberOfBins; i += resolution)
     {
         // sample range [0, 1] to decibel range[-∞, 0] to [0, 1]
-        // 4096 is 1 << 11, which is fftSize.
         auto fftSize = 1 << 11;
-//        DBG(juce::Decibels::gainToDecibels (spectrumData[i]));
-//        DBG(spectrumData[i]);
-//        DBG("---");
-        float currentDecibel = juce::Decibels::gainToDecibels (spectrumData[i])
-            - juce::Decibels::gainToDecibels(static_cast<float>(fftSize));
+        float currentDecibel = juce::Decibels::gainToDecibels (spectrumData[i] / static_cast<float>(numberOfBins));
         float maxDecibel = juce::Decibels::gainToDecibels (maxData[i])
             - juce::Decibels::gainToDecibels(static_cast<float>(fftSize));
         float yPercent = juce::jmap (juce::jlimit (mindB, maxdB, currentDecibel),
@@ -161,7 +156,7 @@ void SpectrumComponent::paintSpectrum()
         
         if (currentDecibel > maxDecibelValue)
         {
-            maxDecibelValue = currentDecibel; // not accurate!
+            maxDecibelValue = currentDecibel;
             maxFreq = currentFreq;
             maxDecibelPoint.setXY(currentX, currentY);
         }

@@ -24,7 +24,7 @@ public:
     ~SpectrumComponent();
 
 	void paint(juce::Graphics& g) override;
-	void prepareToPaintSpectrum(int numberOfBins, float * spectrumData);
+	void prepareToPaintSpectrum(int numberOfBins, float * spectrumData, float binWidth);
 	static float transformToLog(double valueToTransform);
     static float transformFromLog(double between0and1); 
 	void resized() override;
@@ -43,7 +43,7 @@ private:
     juce::Image maxSpectrumImage = juce::Image(juce::Image::ARGB, 1000, 300, true);
     
 	static const int frequenciesForLines[];
-	static const int numberOfLines;    
-
+	static const int numberOfLines;
+    float mBinWidth;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrumComponent)
 };

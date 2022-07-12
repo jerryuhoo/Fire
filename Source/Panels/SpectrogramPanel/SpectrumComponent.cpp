@@ -48,13 +48,13 @@ void SpectrumComponent::paint (juce::Graphics& g)
     }
     
     // paint vertical db numbers
-    float fontWidth = 50;
-    float fontHeight = getHeight() / 5;
-    float centerAlign = fontHeight / 2;
-    g.drawFittedText("-20 db", 0, getHeight() / 6 * 2 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
-    g.drawFittedText("-40 db", 0, getHeight() / 6 * 3 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
-    g.drawFittedText("-60 db", 0, getHeight() / 6 * 4 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
-    g.drawFittedText("-80 db", 0, getHeight() / 6 * 5 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
+//    float fontWidth = 50;
+//    float fontHeight = getHeight() / 5;
+//    float centerAlign = fontHeight / 2;
+//    g.drawFittedText("-20 db", 0, getHeight() / 6 * 2 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
+//    g.drawFittedText("-40 db", 0, getHeight() / 6 * 3 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
+//    g.drawFittedText("-60 db", 0, getHeight() / 6 * 4 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
+//    g.drawFittedText("-80 db", 0, getHeight() / 6 * 5 - centerAlign, fontWidth, fontHeight, juce::Justification::centred, 2);
     
     // paint current spectrum
     g.setColour(juce::Colours::white);
@@ -85,8 +85,8 @@ void SpectrumComponent::paint (juce::Graphics& g)
     if (maxDecibelValue >= -99.9f && mouseOver)
     {
         g.setColour(juce::Colours::lightgrey);
-        g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
-        g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY(), boxWidth, boxWidth, juce::Justification::centred);
+//        g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
+        g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
     }
     else
     {
@@ -127,8 +127,8 @@ void SpectrumComponent::paintSpectrum()
     
     juce::Path maxSpecPath;
     maxSpecPath.startNewSubPath(0, height + 1);
-
-    for (int i = 1; i < numberOfBins; i++)
+    int resolution = 2;
+    for (int i = 1; i < numberOfBins; i += resolution)
     {
         // sample range [0, 1] to decibel range[-∞, 0] to [0, 1]
         // 4096 is 1 << 11, which is fftSize.
@@ -151,7 +151,8 @@ void SpectrumComponent::paintSpectrum()
 //        if (i > numberOfBins / 4 * 3 && i % 10 != 0) continue;
         
         // connect points
-        float currentX = transformToLog((float)i / numberOfBins * 11025) * width;
+        double currentFreq = i * mBinWidth;
+        float currentX = transformToLog(currentFreq) * width;
         float currentY = juce::jmap (yPercent, 0.0f, 1.0f, (float) height, 0.0f);
         float maxY = juce::jmap (yMaxPercent, 0.0f, 1.0f, (float) height, 0.0f);
         currentSpecPath.lineTo(currentX, currentY);
@@ -160,8 +161,8 @@ void SpectrumComponent::paintSpectrum()
         
         if (currentDecibel > maxDecibelValue)
         {
-            maxDecibelValue = currentDecibel; // TODO: not accurate!
-            maxFreq = (float)i / numberOfBins * 11025;
+            maxDecibelValue = currentDecibel; // not accurate!
+            maxFreq = currentFreq;
             maxDecibelPoint.setXY(currentX, currentY);
         }
         if (spectrumData[i] > maxData[i])
@@ -206,10 +207,11 @@ void SpectrumComponent::paintSpectrum()
     
 }
 
-void SpectrumComponent::prepareToPaintSpectrum(int numBins, float * data)
+void SpectrumComponent::prepareToPaintSpectrum(int numBins, float * data, float binWidth)
 {
 	numberOfBins = numBins;
     memmove(spectrumData, data, sizeof(spectrumData));
+    mBinWidth = binWidth;
 }
 
 float SpectrumComponent::transformToLog(double valueToTransform) // freq to x

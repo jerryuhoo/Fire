@@ -21,7 +21,7 @@ public:
 	{
 		fftOrder = 11,
 		fftSize = 1 << fftOrder, // 2^ ??
-        scopeSize = 512
+        numBins = fftSize / 2
 	};
 
     float fftData[2 * fftSize] = {0};

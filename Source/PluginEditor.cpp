@@ -48,7 +48,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     }
         
     spectrum.setInterceptsMouseClicks(false, false);
-    spectrum.prepareToPaintSpectrum(processor.getScopeSize(), processor.getFFTData());
+    spectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(), processor.getSampleRate() / (float) processor.getFFTSize());
     
     // presets
     addAndMakeVisible(stateComponent);
@@ -363,7 +363,7 @@ void FireAudioProcessorEditor::timerCallback()
         // doing process, fifo data to fft data
         processor.processFFT(tempFFTData);
         // prepare to paint the spectrum
-        spectrum.prepareToPaintSpectrum(processor.getScopeSize(), tempFFTData);
+        spectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTData, processor.getSampleRate() / (float) processor.getFFTSize());
 
         graphPanel.repaint();
         spectrum.repaint();

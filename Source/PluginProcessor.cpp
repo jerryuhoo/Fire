@@ -43,8 +43,6 @@ FireAudioProcessor::FireAudioProcessor()
 #endif
 {
     // factor = 2 means 2^2 = 4, 4x oversampling
-    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
-    oversampling.reset(new juce::dsp::Oversampling<float>(getTotalNumInputChannels(), 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
     for (size_t i = 0; i < 4; i++)
     {
         oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
@@ -54,7 +52,6 @@ FireAudioProcessor::FireAudioProcessor()
 
 FireAudioProcessor::~FireAudioProcessor()
 {
-    oversampling.reset();
 }
 
 //==============================================================================
@@ -229,9 +226,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mWetBuffer.clear();
 
     // oversampling init
-    oversampling->reset();
-    oversampling->initProcessing(static_cast<size_t>(samplesPerBlock));
-
     for (size_t i = 0; i < 4; i++)
     {
         oversamplingHQ[i]->reset();
@@ -1100,7 +1094,6 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     }
     else
     {
-        //dsp::AudioBlock<float> blockOutput = oversampling->processSamplesUp(blockInput);
         blockOutput = blockInput.getSubBlock(0, bandBuffer.getNumSamples());
         mLatency = 0;
         setLatencySamples(0);

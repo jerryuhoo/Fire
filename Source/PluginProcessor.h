@@ -244,7 +244,6 @@ private:
     DryWetMixer dryWetMixerGlobal{100};
     
     // oversampling
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4]; // HQ use 4x
 
     int oversampleFactor = 1;

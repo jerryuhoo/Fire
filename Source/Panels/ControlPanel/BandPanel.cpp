@@ -856,6 +856,7 @@ juce::ToggleButton& BandPanel::getCompButton(const int index)
     else if (index == 2) return *compressorBypassButton3;
     else if (index == 3) return *compressorBypassButton4;
     else jassertfalse;
+    return *compressorBypassButton1;
 }
 
 juce::ToggleButton& BandPanel::getWidthButton(const int index)
@@ -865,4 +866,5 @@ juce::ToggleButton& BandPanel::getWidthButton(const int index)
     else if (index == 2) return *widthBypassButton3;
     else if (index == 3) return *widthBypassButton4;
     else jassertfalse;
+    return *compressorBypassButton1;
 }

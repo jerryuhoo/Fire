@@ -31,7 +31,7 @@ public:
 	void paintSpectrum();
 
 private:
-	int numberOfBins = 1;
+	int numberOfBins;
     float spectrumData[1024] = {0};
     float maxData[1024] = {0};
     float maxDecibelValue = -100.0f;

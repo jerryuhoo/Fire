@@ -14,7 +14,7 @@
 const int SpectrumComponent::frequenciesForLines[] = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000 };
 const int SpectrumComponent::numberOfLines = 28;
 //==============================================================================
-SpectrumComponent::SpectrumComponent()
+SpectrumComponent::SpectrumComponent() : numberOfBins(1024)
 {
 }
 
@@ -68,10 +68,9 @@ void SpectrumComponent::paint (juce::Graphics& g)
     g.drawImageAt(maxSpectrumImage, 0, 0);
     
     // paint peak text
-    float boxWidth = 100.0f;
-    
     float mouseX = getMouseXYRelative().getX();
     float mouseY = getMouseXYRelative().getY();
+    
     if (mouseX > 0 && mouseX < getWidth()
         && mouseY > 0 && mouseY < getHeight())
     {
@@ -84,6 +83,7 @@ void SpectrumComponent::paint (juce::Graphics& g)
     
     if (maxDecibelValue >= -99.9f && mouseOver)
     {
+        float boxWidth = 100.0f;
         g.setColour(juce::Colours::lightgrey);
         g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
         g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY(), boxWidth, boxWidth, juce::Justification::centred);

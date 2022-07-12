@@ -14,7 +14,7 @@
 const int SpectrumComponent::frequenciesForLines[] = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000 };
 const int SpectrumComponent::numberOfLines = 28;
 //==============================================================================
-SpectrumComponent::SpectrumComponent() : numberOfBins(1024)
+SpectrumComponent::SpectrumComponent() : numberOfBins(1024), mBinWidth(44100 / (float)2048)
 {
 }
 
@@ -178,7 +178,7 @@ void SpectrumComponent::paintSpectrum()
     
     
     
-    juce::Path roundedMaxPath = maxSpecPath.createPathWithRoundedCorners(15.0f);
+    juce::Path roundedMaxPath = maxSpecPath.createPathWithRoundedCorners(10.0f);
     roundedMaxPath.lineTo(width, height + 1);
 //    roundedMaxPath.lineTo(0, height);
 //    roundedMaxPath.closeSubPath();
@@ -197,7 +197,7 @@ void SpectrumComponent::paintSpectrum()
     {
         gMax.setColour (juce::Colours::white);
         gMax.strokePath(roundedMaxPath, juce::PathStrokeType(2));
-        gMax.drawEllipse(maxDecibelPoint.getX() - 2.0f, maxDecibelPoint.getY() - 2.0f, 4.0f, 4.0f, 1.0f);
+        gMax.drawEllipse(maxDecibelPoint.getX() - 2.0f, maxDecibelPoint.getY() + 10.0f, 4.0f, 4.0f, 1.0f);
     }
     
 }

@@ -32,7 +32,10 @@ public:
     void setFocusBandNum(int num);
     void setScale(float scale);
 //    void changeSliderState(int bandNum, bool isPresetChanged);
-    void setBandKnobsStates(int index, bool state);
+    void setBandKnobsStates(int index, bool state, bool callFromSubBypass);
+    juce::ToggleButton& getCompButton(const int index);
+    juce::ToggleButton& getWidthButton(const int index);
+    
 private:
     FireAudioProcessor &processor;
     juce::Rectangle<int> bandKnobArea;
@@ -45,15 +48,17 @@ private:
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox *combobox) override;
     void buttonClicked(juce::Button *clickedButton) override;
-    void setListenerKnob(juce::Slider& slider);
-    void setRotarySlider(juce::Slider& slider, juce::Colour colour);
-    void setFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
-    void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void initListenerKnob(juce::Slider& slider);
+    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
+    void initFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour, int index);
+    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
     void linkValue(juce::Slider &xSlider, juce::Slider &driveSlider, juce::Slider &outputSlider, juce::TextButton& linkedButton);
     void setVisibility(juce::Array<juce::Component *> &array, bool isVisible);
     void updateBypassState(juce::ToggleButton &clickedButton, int index);
     void setBypassState(int index, bool state);
-
+    bool canEnableSubKnobs(juce::Component &component);
+    
     enum RadioButtonIds
     {
         // filter state: off, pre, post
@@ -132,7 +137,18 @@ private:
         safeButton4;
     
 //    juce::ToggleButton *widthBypassButton, *compressorBypassButton;
-    std::unique_ptr<juce::ToggleButton> widthBypassButton, compressorBypassButton;
+    std::unique_ptr<juce::ToggleButton>
+        compressorBypassButton1,
+        compressorBypassButton2,
+        compressorBypassButton3,
+        compressorBypassButton4,
+        widthBypassButton1,
+        widthBypassButton2,
+        widthBypassButton3,
+        widthBypassButton4;
+        
+    bool compBypassTemp[4] = {false};
+    bool widthBypassTemp[4] = {false};
     
     // switches
     juce::TextButton
@@ -152,6 +168,10 @@ private:
     juce::Array<juce::Component *> componentArray2;
     juce::Array<juce::Component *> componentArray3;
     juce::Array<juce::Component *> componentArray4;
+    juce::Array<juce::Component *> componentArray5;
+    juce::Array<juce::Component *> componentArray6;
+    juce::Array<juce::Component *> componentArray7;
+    juce::Array<juce::Component *> componentArray8;
     
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
@@ -207,8 +227,8 @@ private:
         safeAttachment3,
         safeAttachment4;
     
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorBypassAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> widthBypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorBypassAttachment1, compressorBypassAttachment2, compressorBypassAttachment3, compressorBypassAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> widthBypassAttachment1, widthBypassAttachment2, widthBypassAttachment3, widthBypassAttachment4;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

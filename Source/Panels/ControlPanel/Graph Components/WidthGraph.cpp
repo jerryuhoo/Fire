@@ -73,8 +73,8 @@ void WidthGraph::paint (juce::Graphics& g)
         }
     }
     
-    g.setColour(juce::Colours::skyblue.withAlpha(0.8f));
-    for (int i = 0; i < historyL.size(); i++)
+    g.setColour(juce::Colours::skyblue.withAlpha(0.2f));
+    for (int i = 0; i < historyL.size(); i += 2)
     {
         float x = historyL[i] * getHeight() / 4.0f;
         float y = historyR[i] * getHeight() / 4.0f;
@@ -86,7 +86,8 @@ void WidthGraph::paint (juce::Graphics& g)
             y = y / maxValue;
         }
 
-        g.fillEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 1.0f, 1.0f);
+//        g.fillEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 1.0f, 1.0f);
+        g.fillEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 2.0f * getScale(), 2.0f * getScale());
     }
     
     if (isMouseOn && !mZoomState)
@@ -99,4 +100,9 @@ void WidthGraph::paint (juce::Graphics& g)
 void WidthGraph::timerCallback()
 {
     repaint();
+}
+
+void WidthGraph::resized()
+{
+    // TODO: resize
 }

@@ -301,18 +301,18 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
 {
     
     //if (toIndex == 0)
-    std::unique_ptr<std::array<juce::String, 11>> fromArray;
-    std::unique_ptr<std::array<juce::String, 11>> toArray;
+    std::unique_ptr<std::vector<juce::String>> fromArray;
+    std::unique_ptr<std::vector<juce::String>> toArray;
     
-    if (fromIndex == 0) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
-    if (fromIndex == 1) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
-    if (fromIndex == 2) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
-    if (fromIndex == 3) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
+    if (fromIndex == 0) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray1);
+    if (fromIndex == 1) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray2);
+    if (fromIndex == 2) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray3);
+    if (fromIndex == 3) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray4);
     
-    if (toIndex == 0) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
-    if (toIndex == 1) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
-    if (toIndex == 2) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
-    if (toIndex == 3) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
+    if (toIndex == 0) toArray = std::make_unique<std::vector<juce::String>>(paramsArray1);
+    if (toIndex == 1) toArray = std::make_unique<std::vector<juce::String>>(paramsArray2);
+    if (toIndex == 2) toArray = std::make_unique<std::vector<juce::String>>(paramsArray3);
+    if (toIndex == 3) toArray = std::make_unique<std::vector<juce::String>>(paramsArray4);
     
     for (const auto &param : processor.getParameters())
     {
@@ -347,7 +347,7 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
     }
 }
 
-bool Multiband::isParamInArray(juce::String paramName, std::array<juce::String, 11> paramArray)
+bool Multiband::isParamInArray(juce::String paramName, std::vector<juce::String> paramArray)
 {
     bool isInArray =false;
     
@@ -1004,4 +1004,10 @@ void Multiband::setScale(float scale)
     {
         freqDividerGroup[i]->setScale(scale);
     }
+}
+
+void Multiband::setBandBypassStates(int index, bool state)
+{
+    // TODO: check delete insert is right?
+    enableButton[index]->setToggleState(state, juce::NotificationType::dontSendNotification);
 }

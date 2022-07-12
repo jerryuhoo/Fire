@@ -103,7 +103,7 @@ private:
     void setDistortionGraph(juce::String modeId, juce::String driveId,
         juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
 
-    void setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
     // override listener functions
 

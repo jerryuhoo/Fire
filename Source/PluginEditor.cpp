@@ -25,8 +25,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // however, AU plugin calls constructor after setStateInformation/
     // So I set delay of 1 ms to reset size and other stuff.
     // call function after 1 ms
-    std::function<void()> initFunction = [this]() { initEditor(); };
-    juce::Timer::callAfterDelay(1, initFunction);
+//    std::function<void()> initFunction = [this]() { initEditor(); };
+//    juce::Timer::callAfterDelay(1, initFunction);
     //initEditor();
     
     // Graph
@@ -159,6 +159,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // resize limit
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
+
+    setMultiband();
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
@@ -178,12 +180,12 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
 
 void FireAudioProcessorEditor::initEditor()
 {
-    setSize(processor.getSavedWidth(), processor.getSavedHeight());
+//    setSize(processor.getSavedWidth(), processor.getSavedHeight());
 //    processor.setLineNum(multiband.getLineNum());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     //multiband.updateLines(1);
-    setMultiband();
+    //setMultiband();
 }
 
 //==============================================================================

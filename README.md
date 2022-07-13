@@ -101,13 +101,14 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
-### 2022-7 (version 0.9.9)
+### 2022-7-13 (version 0.9.9)
 
 1. Fix the bug of freezing distortion graph before playing the audio. (in Logic Pro)
 2. Fix the bug of global mix button phasing issue.
 3. New function! When you move your mouse to the spectrogram, the peak frequency and decibel will be calculated.
 4. New separate bypass buttons for each band.
 5. Improve width graph, reduce CPU usage.
+6. Fix the bug that close button sometimes doesn't work.
 
 ### 2022-6-29 (version 0.9.8)
 

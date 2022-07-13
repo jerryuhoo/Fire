@@ -148,7 +148,6 @@ void FreqDividerGroup::buttonClicked(juce::Button* button)
         {
             setVisible(true);
             closeButton.setVisible(true);
-            closeButton.setMouseClickState(false);
         }
         else
         {
@@ -177,7 +176,6 @@ void FreqDividerGroup::updateCloseButtonState()
 //    {
 //        setVisible(true);
 //        closeButton.setVisible(true);
-//        closeButton.setMouseClickState(false);
 //    }
 //    else
 //    {

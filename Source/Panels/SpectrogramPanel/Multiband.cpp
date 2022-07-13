@@ -985,7 +985,6 @@ void Multiband::buttonClicked(juce::Button* button)
             setStatesWhenAddOrDelete(i, "delete");
             updateLines(0);
             setSoloRelatedBounds();
-            freqDividerGroup[i]->getCloseButton().setMouseClickState(true);
             processor.setLineNum();
         }
     }

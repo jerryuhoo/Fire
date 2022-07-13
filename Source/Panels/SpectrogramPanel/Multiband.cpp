@@ -237,19 +237,6 @@ void Multiband::paint (juce::Graphics& g)
 //    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
 //    dragLines(targetXPercent);
     
-    // if a line is deleted
-    for (int i = 0; i < 3; i++)
-    {
-        if (freqDividerGroup[i]->getCloseButton().isMouseButtonDown() && !freqDividerGroup[i]->getCloseButton().getMouseClickState())
-        {
-            setStatesWhenAddOrDelete(i, "delete");
-            updateLines(0);
-            setSoloRelatedBounds();
-            freqDividerGroup[i]->getCloseButton().setMouseClickState(true);
-            processor.setLineNum();
-        }
-    }
-    
     // if preset is changed
     if (stateComponent.getChangedState())
     {
@@ -990,7 +977,18 @@ void Multiband::parameterValueChanged(int parameterIndex, float newValue)
 
 void Multiband::buttonClicked(juce::Button* button)
 {
-
+    // click closebutton, if the togglestate is false, means delete line.
+    for (int i = 0; i < 3; i++)
+    {
+        if (button == &freqDividerGroup[i]->getCloseButton() && !freqDividerGroup[i]->getCloseButton().getToggleState())
+        {
+            setStatesWhenAddOrDelete(i, "delete");
+            updateLines(0);
+            setSoloRelatedBounds();
+            freqDividerGroup[i]->getCloseButton().setMouseClickState(true);
+            processor.setLineNum();
+        }
+    }
 }
 
 EnableButton& Multiband::getEnableButton(const int index)

@@ -25,6 +25,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void setScale(float scale);
+    float getScale();
     bool getZoomState();
     void setZoomState(bool zoomState);
     void mouseDown(const juce::MouseEvent &e) override;

@@ -1,4 +1,4 @@
-# Fire (Version 0.9.8) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
+# Fire (Version 0.9.9) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -101,10 +101,20 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
+### 2022-7-13 (version 0.9.9)
+
+1. Fix the bug of freezing distortion graph before playing the audio. (in Logic Pro)
+2. Fix the bug of global mix button phasing issue.
+3. New function! When you move your mouse to the spectrogram, the peak frequency and decibel will be calculated.
+4. New separate bypass buttons for each band.
+5. Improve width graph, reduce CPU usage.
+6. Fix the bug that close button sometimes doesn't work.
+
 ### 2022-6-29 (version 0.9.8)
 
 1. Fix phasing issue in HQ mode.
 2. Fix low frequency drop in HQ mode.
+
 [v0.9.3 - v0.9.7 has those bugs]
 
 ### 2022-6-22 (version 0.9.7)

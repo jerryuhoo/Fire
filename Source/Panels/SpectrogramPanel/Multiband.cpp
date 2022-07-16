@@ -237,19 +237,6 @@ void Multiband::paint (juce::Graphics& g)
 //    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
 //    dragLines(targetXPercent);
     
-    // if a line is deleted
-    for (int i = 0; i < 3; i++)
-    {
-        if (freqDividerGroup[i]->getCloseButton().isMouseButtonDown() && !freqDividerGroup[i]->getCloseButton().getMouseClickState())
-        {
-            setStatesWhenAddOrDelete(i, "delete");
-            updateLines(0);
-            setSoloRelatedBounds();
-            freqDividerGroup[i]->getCloseButton().setMouseClickState(true);
-            processor.setLineNum();
-        }
-    }
-    
     // if preset is changed
     if (stateComponent.getChangedState())
     {
@@ -301,18 +288,18 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
 {
     
     //if (toIndex == 0)
-    std::unique_ptr<std::array<juce::String, 11>> fromArray;
-    std::unique_ptr<std::array<juce::String, 11>> toArray;
+    std::unique_ptr<std::vector<juce::String>> fromArray;
+    std::unique_ptr<std::vector<juce::String>> toArray;
     
-    if (fromIndex == 0) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
-    if (fromIndex == 1) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
-    if (fromIndex == 2) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
-    if (fromIndex == 3) fromArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
+    if (fromIndex == 0) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray1);
+    if (fromIndex == 1) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray2);
+    if (fromIndex == 2) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray3);
+    if (fromIndex == 3) fromArray = std::make_unique<std::vector<juce::String>>(paramsArray4);
     
-    if (toIndex == 0) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray1);
-    if (toIndex == 1) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray2);
-    if (toIndex == 2) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray3);
-    if (toIndex == 3) toArray = std::make_unique<std::array<juce::String, 11>>(paramsArray4);
+    if (toIndex == 0) toArray = std::make_unique<std::vector<juce::String>>(paramsArray1);
+    if (toIndex == 1) toArray = std::make_unique<std::vector<juce::String>>(paramsArray2);
+    if (toIndex == 2) toArray = std::make_unique<std::vector<juce::String>>(paramsArray3);
+    if (toIndex == 3) toArray = std::make_unique<std::vector<juce::String>>(paramsArray4);
     
     for (const auto &param : processor.getParameters())
     {
@@ -347,7 +334,7 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
     }
 }
 
-bool Multiband::isParamInArray(juce::String paramName, std::array<juce::String, 11> paramArray)
+bool Multiband::isParamInArray(juce::String paramName, std::vector<juce::String> paramArray)
 {
     bool isInArray =false;
     
@@ -990,7 +977,17 @@ void Multiband::parameterValueChanged(int parameterIndex, float newValue)
 
 void Multiband::buttonClicked(juce::Button* button)
 {
-
+    // click closebutton, if the togglestate is false, means delete line.
+    for (int i = 0; i < 3; i++)
+    {
+        if (button == &freqDividerGroup[i]->getCloseButton() && !freqDividerGroup[i]->getCloseButton().getToggleState())
+        {
+            setStatesWhenAddOrDelete(i, "delete");
+            updateLines(0);
+            setSoloRelatedBounds();
+            processor.setLineNum();
+        }
+    }
 }
 
 EnableButton& Multiband::getEnableButton(const int index)
@@ -1004,4 +1001,10 @@ void Multiband::setScale(float scale)
     {
         freqDividerGroup[i]->setScale(scale);
     }
+}
+
+void Multiband::setBandBypassStates(int index, bool state)
+{
+    // TODO: check delete insert is right?
+    enableButton[index]->setToggleState(state, juce::NotificationType::dontSendNotification);
 }

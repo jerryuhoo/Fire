@@ -25,8 +25,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // however, AU plugin calls constructor after setStateInformation/
     // So I set delay of 1 ms to reset size and other stuff.
     // call function after 1 ms
-    std::function<void()> initFunction = [this]() { initEditor(); };
-    juce::Timer::callAfterDelay(1, initFunction);
+//    std::function<void()> initFunction = [this]() { initEditor(); };
+//    juce::Timer::callAfterDelay(1, initFunction);
     //initEditor();
     
     // Graph
@@ -43,10 +43,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     for (int i = 0; i < 4; i++)
     {
         multiband.getEnableButton(i).addListener(this);
+        bandPanel.getCompButton(i).addListener(this);
+        bandPanel.getWidthButton(i).addListener(this);
     }
         
     spectrum.setInterceptsMouseClicks(false, false);
-    spectrum.prepareToPaintSpectrum(processor.getFFTSize(), processor.getFFTData());
+    spectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(), processor.getSampleRate() / (float) processor.getFFTSize());
     
     // presets
     addAndMakeVisible(stateComponent);
@@ -157,6 +159,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     // resize limit
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     getConstrainer ()->setFixedAspectRatio (2); // set fixed resize rate
+
+    setMultiband();
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
@@ -176,12 +180,12 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
 
 void FireAudioProcessorEditor::initEditor()
 {
-    setSize(processor.getSavedWidth(), processor.getSavedHeight());
+//    setSize(processor.getSavedWidth(), processor.getSavedHeight());
 //    processor.setLineNum(multiband.getLineNum());
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     //multiband.updateLines(1);
-    setMultiband();
+    //setMultiband();
 }
 
 //==============================================================================
@@ -239,7 +243,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
             REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
     }
     
-    setFourKnobsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
+    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusBand);
     
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
@@ -333,7 +337,7 @@ void FireAudioProcessorEditor::resized()
         controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5);
     }
     // Zoom button
-    zoomButton.setBounds(getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, 20, 20);
+    zoomButton.setBounds(getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, getHeight() / 25, getHeight() / 25);
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;
@@ -361,7 +365,7 @@ void FireAudioProcessorEditor::timerCallback()
         // doing process, fifo data to fft data
         processor.processFFT(tempFFTData);
         // prepare to paint the spectrum
-        spectrum.prepareToPaintSpectrum(processor.getFFTSize(), tempFFTData);
+        spectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTData, processor.getSampleRate() / (float) processor.getFFTSize());
 
         graphPanel.repaint();
         spectrum.repaint();
@@ -447,16 +451,20 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
     }
     for (int i = 0; i < 4; i++)
     {
+        // bypass button for each band
         if (clickedButton == &multiband.getEnableButton(i))
         {
-            if (clickedButton->getToggleState())
+            bandPanel.setBandKnobsStates(i, clickedButton->getToggleState(), false);
+        }
+        // bypass button for band compressor/width
+        if (clickedButton == &bandPanel.getCompButton(i) || clickedButton == &bandPanel.getWidthButton(i))
+        {
+            bool state = clickedButton->getToggleState();
+            if (state)
             {
-                bandPanel.setBandKnobsStates(i, true);
-            }
-            else
-            {
-                bandPanel.setBandKnobsStates(i, false);
-            }
+                multiband.setBandBypassStates(i, state);
+                bandPanel.setBandKnobsStates(i, state, true);
+            }   
         }
     }
     
@@ -541,8 +549,24 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 {
     // paint distortion function
     int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
-//    float drive = static_cast<int>(*processor.treeState.getRawParameterValue(driveId));
-    float drive = processor.getNewDrive(driveId);
+
+    // protection
+    float drive = static_cast<int>(*processor.treeState.getRawParameterValue(driveId));
+    drive = drive * 6.5f / 100.0f;
+    float powerDrive = powf(2, drive);
+
+    float sampleMaxValue = processor.getSampleMaxValue(safeId);
+    bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
+
+    if (isSafeModeOn && sampleMaxValue * powerDrive > 2.0f)
+    {
+        drive = 2.0f / sampleMaxValue + 0.1 * std::log2f(powerDrive);
+    }
+    else
+    {
+        drive = powerDrive;
+    }
+    
     /// bypass audio will not run processblock
     //drive = processor.safeMode(drive, processor.getHistoryArrayL(), safeId);
     
@@ -586,7 +610,7 @@ void FireAudioProcessorEditor::setMultiband()
 //    processor.setLineNum(multiband.getLineNum());
 }
 
-void FireAudioProcessorEditor::setFourKnobsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
+void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
 {
     if (zoomButton.getToggleState())
     {

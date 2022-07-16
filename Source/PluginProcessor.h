@@ -71,9 +71,6 @@ public:
 
     bool isSlient(juce::AudioBuffer<float> buffer);
 
-    // new drive after protection
-    float getNewDrive(juce::String driveId);
-
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -87,7 +84,8 @@ public:
     
     // FFT
     float * getFFTData();
-    int getFFTSize();//TMP!!!!!!!!!!!
+    int getNumBins();
+    int getFFTSize();
     bool isFFTBlockReady();
     void pushDataToFFT();
     void processFFT(float * tempFFTData);
@@ -171,10 +169,10 @@ private:
     float previousHighcutFreq = 0.0f;
     float previousPeakFreq = 0.0f;
     
-    float newDrive1 = 0.0f;
-    float newDrive2 = 0.0f;
-    float newDrive3 = 0.0f;
-    float newDrive4 = 0.0f;
+    float newDrive1 = 1.0f;
+    float newDrive2 = 1.0f;
+    float newDrive3 = 1.0f;
+    float newDrive4 = 1.0f;
 
     juce::SmoothedValue<float> driveSmoother1;
     juce::SmoothedValue<float> driveSmoother2;
@@ -246,7 +244,6 @@ private:
     DryWetMixer dryWetMixerGlobal{100};
     
     // oversampling
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;   // normal use 2x
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4]; // HQ use 4x
 
     int oversampleFactor = 1;
@@ -299,7 +296,7 @@ private:
     bool shouldSetBlackMask(int index);
     bool getSoloStateFromIndex(int index);
     
-    void processOneBand(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter &dcFilter);
+    void processOneBand(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter &dcFilter, juce::String widthBypassID, juce::String compBypassID);
     
     void processDistortion(juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, DCFilter& dcFilter);
     
@@ -352,10 +349,10 @@ private:
     
     
     // Drive lookandfeel
-    float mReductionPrecent1 = 0;
-    float mReductionPrecent2 = 0;
-    float mReductionPrecent3 = 0;
-    float mReductionPrecent4 = 0;
+    float mReductionPrecent1 = 1;
+    float mReductionPrecent2 = 1;
+    float mReductionPrecent3 = 1;
+    float mReductionPrecent4 = 1;
     float mSampleMaxValue1 = 0;
     float mSampleMaxValue2 = 0;
     float mSampleMaxValue3 = 0;

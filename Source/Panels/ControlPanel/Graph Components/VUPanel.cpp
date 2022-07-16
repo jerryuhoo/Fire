@@ -12,7 +12,7 @@
 #include "VUPanel.h"
 
 //==============================================================================
-VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), vuMeterIn(&p), vuMeterOut(&p)
+VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), focusBandNum(0), vuMeterIn(&p), vuMeterOut(&p)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.

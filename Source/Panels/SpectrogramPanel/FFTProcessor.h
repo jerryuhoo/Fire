@@ -17,18 +17,15 @@ public:
         window.fillWindowingTables(fftSize, juce::dsp::WindowingFunction<float>::blackman);
 	}
 
-	enum // moze zamiast enuma to ustawic   a moze enum ok?
+	enum
 	{
 		fftOrder = 11,
-		fftSize = 1 << fftOrder, // 2^ ??
+		fftSize = 1 << fftOrder, // 2048
+        numBins = fftSize / 2 // 1024
 	};
 
-	float fftData[2 * fftSize] = {0};
-	bool nextFFTBlockReady = false;
-	float fifo[fftSize];
-    juce::dsp::FFT forwardFFT;
-    juce::dsp::WindowingFunction<float> window;
-	int fifoIndex = 0;
+    float fftData[2 * fftSize] = {0};
+    bool nextFFTBlockReady = false;
 
 	void pushNextSampleIntoFifo(float sample) noexcept {
         if (fifoIndex == fftSize)
@@ -53,4 +50,8 @@ public:
 	}
 
 private:
+    float fifo[fftSize];
+    juce::dsp::FFT forwardFFT;
+    juce::dsp::WindowingFunction<float> window;
+    int fifoIndex = 0;
 };

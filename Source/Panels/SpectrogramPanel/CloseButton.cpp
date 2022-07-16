@@ -60,13 +60,3 @@ void CloseButton::mouseExit(const juce::MouseEvent &e)
 {
     isEntered = false;
 }
-
-void CloseButton::setMouseClickState(bool state)
-{
-    mouseClickState = state;
-}
-
-bool CloseButton::getMouseClickState()
-{
-    return mouseClickState;
-}

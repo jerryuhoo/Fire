@@ -16,44 +16,44 @@
 //==============================================================================
 /*
 */
-class GlobalPanel  : public juce::Component,
-                     public juce::Slider::Listener,
-                     public juce::ComboBox::Listener,
-                     public juce::Timer,
-                     public juce::Button::Listener
+class GlobalPanel : public juce::Component,
+                    public juce::Slider::Listener,
+                    public juce::ComboBox::Listener,
+                    public juce::Timer,
+                    public juce::Button::Listener
 {
 public:
-    GlobalPanel(juce::AudioProcessorValueTreeState& apvts);
+    GlobalPanel (juce::AudioProcessorValueTreeState& apvts);
     ~GlobalPanel() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
     void timerCallback() override;
-    
-    void setScale(float scale);
+
+    void setScale (float scale);
     juce::Slider& getLowcutFreqKnob();
     juce::Slider& getPeakFreqKnob();
     juce::Slider& getHighcutFreqKnob();
     juce::Slider& getLowcutGainKnob();
     juce::Slider& getPeakGainKnob();
     juce::Slider& getHighcutGainKnob();
-    
-    void setToggleButtonState(juce::String toggleButton);
-    
+
+    void setToggleButtonState (juce::String toggleButton);
+
 private:
     float scale = 1.0f;
     // override listener functions
     // linked
-    void sliderValueChanged(juce::Slider *slider) override;
+    void sliderValueChanged (juce::Slider* slider) override;
     // combobox changed and set knob enable/disable
-    void comboBoxChanged(juce::ComboBox *combobox) override;
-    void buttonClicked(juce::Button *clickedButton) override;
-    void setRotarySlider(juce::Slider& slider, juce::Colour colour);
-    void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void comboBoxChanged (juce::ComboBox* combobox) override;
+    void buttonClicked (juce::Button* clickedButton) override;
+    void setRotarySlider (juce::Slider& slider, juce::Colour colour);
+    void setRoundButton (juce::TextButton& button, juce::String paramId, juce::String buttonName);
     void updateToggleState();
-    void setBypassState(int index, bool state);
-    void updateBypassState(juce::ToggleButton &clickedButton, int index);
-    
+    void setBypassState (int index, bool state);
+    void updateBypassState (juce::ToggleButton& clickedButton, int index);
+
     enum RadioButtonIds
     {
         // filter state: off, pre, post
@@ -67,10 +67,10 @@ private:
         // switches global
         switchButtonsGlobal = 1005
     };
-    
+
     juce::Rectangle<int> globalEffectArea;
     juce::Rectangle<int> outputKnobArea;
-    
+
     // Sliders
     juce::Slider
         downSampleKnob,
@@ -85,7 +85,7 @@ private:
         peakGainKnob,
         mixKnob,
         outputKnob;
-    
+
     // Labels
     juce::Label
         downSampleLabel,
@@ -115,9 +115,9 @@ private:
         filterHighPassButton;
 
     juce::TextButton filterSwitch, otherSwitch;
-    
+
     std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
-    
+
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     RoundedButtonLnf roundedButtonLnf;
@@ -129,7 +129,7 @@ private:
     BandPassButtonLnf bandPassButtonLnf;
     HighPassButtonLnf highPassButtonLnf;
     FlatButtonLnf flatButtonLnf;
-    
+
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         outputAttachment,
@@ -153,7 +153,7 @@ private:
         filterLowAttachment,
         filterBandAttachment,
         filterHighAttachment;
-    
+
     // ComboBox attachment
 
     juce::ComboBox lowcutSlopeMode;
@@ -165,9 +165,9 @@ private:
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lowcutModeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> highcutModeAttachment;
-    
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> filterBypassAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> downsampleBypassAttachment;
-    
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalPanel)
 };

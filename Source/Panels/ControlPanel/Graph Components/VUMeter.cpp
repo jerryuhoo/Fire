@@ -20,8 +20,6 @@ VUMeter::VUMeter(FireAudioProcessor* inProcessor)
     mCh0Level(0),
     mCh1Level(0)
 {
-    // In your constructor, you should add any child components, and
-    // initialise any special settings that your component needs.
     setInterceptsMouseClicks(false, false);
 }
 

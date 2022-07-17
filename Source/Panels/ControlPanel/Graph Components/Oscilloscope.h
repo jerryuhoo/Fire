@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
 #include "GraphTemplate.h"
+#include <JuceHeader.h>
 
 //==============================================================================
 /*
@@ -20,15 +20,15 @@
 class Oscilloscope : public GraphTemplate, juce::Timer
 {
 public:
-    Oscilloscope(FireAudioProcessor &);
+    Oscilloscope (FireAudioProcessor&);
     ~Oscilloscope() override;
 
     void paint (juce::Graphics&) override;
     void timerCallback() override;
-    
+
 private:
-    FireAudioProcessor &processor;
-    
+    FireAudioProcessor& processor;
+
     juce::Array<float> historyL;
     juce::Array<float> historyR;
     juce::Image historyImage;

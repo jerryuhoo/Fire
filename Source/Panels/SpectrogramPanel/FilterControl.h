@@ -1,12 +1,12 @@
 /*
-  ==============================================================================
-
-    FilterControl.h
-    Created: 18 Sep 2021 9:54:04pm
-    Author:  羽翼深蓝Wings
-
-  ==============================================================================
-*/
+ ==============================================================================
+ 
+ FilterControl.h
+ Created: 18 Sep 2021 9:54:04pm
+ Author:  羽翼深蓝Wings
+ 
+ ==============================================================================
+ */
 
 #pragma once
 
@@ -17,31 +17,32 @@
 #include "../ControlPanel/GlobalPanel.h"
 //==============================================================================
 /*
-*/
-class FilterControl  : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
+ */
+class FilterControl : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
 {
 public:
-    FilterControl(FireAudioProcessor &, GlobalPanel &);
+    FilterControl (FireAudioProcessor&, GlobalPanel&);
     ~FilterControl() override;
-
+    
     void paint (juce::Graphics&) override;
     void resized() override;
-//    void setParams(float lowCut,
-//                   float highCut,
-//                   float cutRes,
-//                   float peak,
-//                   float peakRes);
+    //    void setParams(float lowCut,
+    //                   float highCut,
+    //                   float cutRes,
+    //                   float peak,
+    //                   float peakRes);
     void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
+    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override {}
     void timerCallback() override;
+    
 private:
-    FireAudioProcessor &processor;
-    GlobalPanel &globalPanel;
-//    float mLowCut;
-//    float mHighCut;
-//    float mCutRes;
-//    float mPeak;
-//    float mPeakRes;
+    FireAudioProcessor& processor;
+    GlobalPanel& globalPanel;
+    //    float mLowCut;
+    //    float mHighCut;
+    //    float mCutRes;
+    //    float mPeak;
+    //    float mPeakRes;
     juce::Path responseCurve;
     
     using Filter = juce::dsp::IIR::Filter<float>;
@@ -50,7 +51,7 @@ private:
     // lowcut, peak, highcut, lowcut Q, highcut Q
     MonoChain monoChain;
     
-    juce::Atomic<bool> parametersChanged {false};
+    juce::Atomic<bool> parametersChanged { false };
     void updateResponseCurve();
     void updateChain();
     void setDraggableButtonBounds();

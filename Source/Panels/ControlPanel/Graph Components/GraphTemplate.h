@@ -10,13 +10,13 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../GUI/InterfaceDefines.h"
+#include <JuceHeader.h>
 
 //==============================================================================
 /*
 */
-class GraphTemplate  : public juce::Component
+class GraphTemplate : public juce::Component
 {
 public:
     GraphTemplate();
@@ -24,17 +24,17 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setScale(float scale);
+    void setScale (float scale);
     float getScale();
     bool getZoomState();
-    void setZoomState(bool zoomState);
-    void mouseDown(const juce::MouseEvent &e) override;
-    void mouseEnter(const juce::MouseEvent &e) override;
-    void mouseExit(const juce::MouseEvent &e) override;
+    void setZoomState (bool zoomState);
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
 
 private:
     float scale = 1.0f;
-    
+
 protected:
     bool isMouseOn = false;
     bool mZoomState = false;

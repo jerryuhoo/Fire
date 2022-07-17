@@ -51,7 +51,6 @@ public:
     void setAddState(bool state);
     bool getMovingState();
     void setMovingState(bool state);
-    bool getDeleteState();
     void setDeleteState(bool state);
     int getSortedIndex(int index);
     void dragLines(float xPercent);
@@ -65,6 +64,7 @@ public:
     void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
     void setScale(float scale);
     void setBandBypassStates(int index, bool state);
+    state::StateComponent& getStateComponent();
     
 private:
     FireAudioProcessor &processor;

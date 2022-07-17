@@ -59,31 +59,7 @@ void StateAB::reset()
 }
 
 //==============================================================================
-//int createFileIfNonExistant(const File &file)
-//{
-//    // 1 saved a new file
-//    // 2 replaced a existing file
-//    // 3 do nothing
-//    if (!file.exists())
-//    {
-//        file.create();
-//        return 1;
-//    }
-//    else
-//    {
-//        bool choice = NativeMessageBox::showOkCancelBox(AlertWindow::NoIcon,
-//        "Warning", "Preset already exists, replace it?", nullptr, nullptr);
-//        if (choice)
-//        {
-//            file.replaceFileIn(file.getFullPathName());
-//            return 2;
-//        }
-//        else
-//        {
-//            return 3;
-//        }
-//    }
-//}
+
 
 void parseFileToXmlElement(const juce::File &file, juce::XmlElement &xml)
 {
@@ -260,7 +236,7 @@ bool StatePresets::savePreset(juce::File savePath)
     presetXmlSingle.removeAllAttributes();                  // clear all first
     presetXmlSingle.setAttribute("presetName", presetName); // set preset name
     saveStateToXml(pluginProcessor, presetXmlSingle);
-    //presetXmlSingle.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
+    //presetXmlSingle.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
     //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
     
     statePresetName = presetName;
@@ -269,6 +245,7 @@ bool StatePresets::savePreset(juce::File savePath)
     if (isSaved)
     {
         scanAllPresets();
+        //mPresetXml.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
         return true;
     }
     else
@@ -430,7 +407,7 @@ menuButton{"Menu"}
     {
         auto menu = presetBox.getRootMenu();
         auto id = presetBox.getSelectedId();
-                
+
         juce::PopupMenu::MenuItemIterator iterator (*menu);
 
         while (iterator.next())
@@ -592,13 +569,16 @@ void StateComponent::deletePresetAndRefresh()
     // if preset number > 0
     if (procStatePresets.getNumPresets() > 0)
     {
-        bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::NoIcon,
-                                                              "Warning", "Delete preset?", nullptr, nullptr);
-        if (choice)
-        {
-            procStatePresets.deletePreset();
-            refreshPresetBox();
-        }
+        const auto callback = juce::ModalCallbackFunction::create( [this](int choice) {
+            if (choice)
+            {
+                procStatePresets.deletePreset();
+                refreshPresetBox();
+            }
+        });
+        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::NoIcon,
+                                                              "Warning", "Delete preset?", nullptr, callback);
+        
     }
     else
     {

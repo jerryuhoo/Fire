@@ -90,11 +90,6 @@ void VerticalLine::setMoving(bool move)
     this->move = move;
 }
 
-bool VerticalLine::getDeleteState()
-{
-    return mDeleteState;
-}
-
 void VerticalLine::setDeleteState(bool deleteState)
 {
     mDeleteState = deleteState;

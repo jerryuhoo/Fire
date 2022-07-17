@@ -14,8 +14,6 @@
 //==============================================================================
 Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : processor(p), stateComponent(sc)
 {
-    // In your constructor, you should add any child components, and
-    // initialise any special settings that your component needs.
     const auto& params = processor.getParameters();
     for( auto param : params )
     {
@@ -24,6 +22,7 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
     
     startTimerHz(60);
     
+    // set vertical lines leftmost and rightmost percentage of the whole width
     limitLeft = 0.1f;
     limitRight = 1.0f - limitLeft;
     
@@ -38,8 +37,7 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
     // Init Vertical Lines
     for (int i = 0; i < 3; i++)
     {
-        freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor, i);
-//        freqDividerGroup[i]->setIndex(i);
+        freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor, i); // set index
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         (freqDividerGroup[i]->getCloseButton()).addListener(this);
@@ -56,6 +54,7 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
         addAndMakeVisible(*enableButton[i + 1]);
         enableButton[i + 1]->addListener(this);
     }
+    // TODO: sort lines by freq
     
     multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID1, *enableButton[0]);
     multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID2, *enableButton[1]);
@@ -909,30 +908,6 @@ void Multiband::setMovingState(bool state)
     isMoving = state;
 }
 
-bool Multiband::getDeleteState()
-{
-    for (int i = 0; i < 3; i++)
-    {
-        if (freqDividerGroup[i]->getDeleteState())
-        {
-            freqDividerGroup[i]->getVerticalLine().setValue(21); //why FreqDividerGroup.cpp line 56 doesn't work???
-            return true;
-        }
-    }
-    return false;
-}
-
-void Multiband::setDeleteState(bool state)
-{
-    for (int i = 0; i < 3; i++)
-    {
-        if (freqDividerGroup[i]->getDeleteState())
-        {
-            freqDividerGroup[i]->setDeleteState(state);
-        }
-    }
-}
-
 int Multiband::getSortedIndex(int index)
 {
     return sortedIndex[index];
@@ -1005,6 +980,10 @@ void Multiband::setScale(float scale)
 
 void Multiband::setBandBypassStates(int index, bool state)
 {
-    // TODO: check delete insert is right?
     enableButton[index]->setToggleState(state, juce::NotificationType::dontSendNotification);
+}
+
+state::StateComponent& Multiband::getStateComponent()
+{
+    return stateComponent;
 }

@@ -29,7 +29,6 @@ public:
     void setMoving(bool move);
     bool getState();
     void setState(bool state);
-    bool getDeleteState();
     void setDeleteState(bool deleteState);
     void setXPercent(float x);
     float getXPercent();

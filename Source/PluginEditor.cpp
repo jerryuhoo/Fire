@@ -460,7 +460,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button *clickedButton)
         if (clickedButton == &bandPanel.getCompButton(i) || clickedButton == &bandPanel.getWidthButton(i))
         {
             bool state = clickedButton->getToggleState();
-            if (state)
+            if (state && ! multiband.getStateComponent().getChangedState())
             {
                 multiband.setBandBypassStates(i, state);
                 bandPanel.setBandKnobsStates(i, state, true);
@@ -590,7 +590,16 @@ void FireAudioProcessorEditor::setMultiband()
     int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
     int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
     int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
-
+    
+    // sort
+    if (freq1 > freq2)
+    {
+        std::swap(freq1, freq2);
+    }
+    if (freq2 > freq3)
+    {
+        std::swap(freq2, freq3);
+    }
     multiband.setFrequency(freq1, freq2, freq3);
 //
 //    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1));

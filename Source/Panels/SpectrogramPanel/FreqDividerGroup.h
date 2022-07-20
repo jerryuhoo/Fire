@@ -30,16 +30,14 @@ public:
     void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[]);
     
     void setDeleteState (bool deleteState);
-    
-//    CloseButton& getCloseButton();
-//    void setCloseButtonValue (bool value);
+
     VerticalLine& getVerticalLine();
     
     void setFreq (float f);
     int getFreq ();
     void setScale (float scale);
-//    void setToggleState(bool state);
-//    bool getToggleState();
+
+    void clicked(const juce::ModifierKeys& modifiers) override;
 
 private:
     FireAudioProcessor& processor;
@@ -59,7 +57,7 @@ private:
     void mouseDoubleClick (const juce::MouseEvent& e) override;
     void sliderValueChanged (juce::Slider* slider) override;
     void buttonClicked (juce::Button* button) override;
-    void enablementChanged() override;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;

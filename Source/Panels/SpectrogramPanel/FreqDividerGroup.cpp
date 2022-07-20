@@ -20,8 +20,6 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
     margin = getHeight() / 20.0f;
 
     addAndMakeVisible (verticalLine);
-//    addAndMakeVisible (closeButton);
-//    closeButton.addListener (this);
 
     verticalLine.addListener (this);
 //    verticalLine.addMouseListener (this, true);
@@ -134,38 +132,14 @@ VerticalLine& FreqDividerGroup::getVerticalLine()
     return verticalLine;
 }
 
-//CloseButton& FreqDividerGroup::getCloseButton()
-//{
-//    return closeButton;
-//}
-
-//void FreqDividerGroup::setCloseButtonValue (bool value)
-//{
-//    closeButton.setToggleState (value, juce::NotificationType::sendNotification);
-//}
-
 void FreqDividerGroup::buttonClicked (juce::Button* button)
 {
-//    if (button == &closeButton)
-//    {
-//        if (closeButton.getToggleState())
-//        {
-//            setVisible (true);
-//            closeButton.setVisible (true);
-//        }
-//        else
-//        {
-//            verticalLine.setDeleteState (true);
-//            setVisible (false);
-//            closeButton.setVisible (false);
-//            freqTextLabel.setVisible (false);
-//        }
-//    }
 }
 
-void FreqDividerGroup::enablementChanged()
+void FreqDividerGroup::clicked(const juce::ModifierKeys& modifiers)
 {
-    if (isEnabled())
+    // called by changing toggle state
+    if (getToggleState())
         setVisible(true);
     else
         setVisible(false);
@@ -231,13 +205,3 @@ void FreqDividerGroup::setScale (float scale)
     otherLookAndFeel.scale = scale;
     freqTextLabel.setScale (scale);
 }
-
-//void FreqDividerGroup::setToggleState (bool state)
-//{
-//    closeButton.setToggleState (state, juce::dontSendNotification);
-//}
-//
-//bool FreqDividerGroup::getToggleState()
-//{
-//    return closeButton.getToggleState();
-//}

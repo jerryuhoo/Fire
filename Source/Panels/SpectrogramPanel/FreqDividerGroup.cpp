@@ -22,7 +22,6 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
     addAndMakeVisible (verticalLine);
 
     verticalLine.addListener (this);
-//    verticalLine.addMouseListener (this, true);
 
     if (index == 0)
     {
@@ -39,7 +38,7 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
         lineStatelId = LINE_STATE_ID3;
         sliderFreqId = FREQ_ID3;
     }
-    
+
     multiFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, sliderFreqId, verticalLine);
 
     addAndMakeVisible (freqTextLabel);
@@ -51,14 +50,12 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
 
 FreqDividerGroup::~FreqDividerGroup()
 {
-//    closeButton.removeListener (this);
     freqTextLabel.setLookAndFeel (nullptr);
 }
 
 void FreqDividerGroup::paint (juce::Graphics& g)
 {
-//    if (closeButton.getToggleState())
-    if (isEnabled())
+    if (getToggleState())
     {
         if (verticalLine.getMoveState() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
@@ -72,11 +69,11 @@ void FreqDividerGroup::paint (juce::Graphics& g)
     }
     else
     {
-        freqTextLabel.setFreq (21);
+        freqTextLabel.setFreq (-1);
         verticalLine.setXPercent (0);
     }
-    g.setColour(juce::Colours::green.withAlpha(0.2f));
-    g.fillAll();
+    //    g.setColour(juce::Colours::green.withAlpha(0.2f));
+    //    g.fillAll();
 }
 
 void FreqDividerGroup::resized()
@@ -85,16 +82,7 @@ void FreqDividerGroup::resized()
     size = getWidth() / 100.0f * 15;
     width = verticalLine.getWidth() / 2.0f;
     verticalLine.setBounds (0, 0, getWidth() / 10.0f, getHeight());
-//    closeButton.setBounds (width + margin, margin, size, size);
     freqTextLabel.setBounds (width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
-    
-//    DBG(getHeight());
-//    DBG(getWidth());
-//
-//
-//
-//    dragger.
-//    boundsConstrainer.setMinimumOnscreenAmounts (getHeight(), getWidth(), getHeight(), getWidth());
 }
 
 void FreqDividerGroup::setDeleteState (bool deleteState)
@@ -136,13 +124,13 @@ void FreqDividerGroup::buttonClicked (juce::Button* button)
 {
 }
 
-void FreqDividerGroup::clicked(const juce::ModifierKeys& modifiers)
+void FreqDividerGroup::clicked (const juce::ModifierKeys& modifiers)
 {
     // called by changing toggle state
     if (getToggleState())
-        setVisible(true);
+        setVisible (true);
     else
-        setVisible(false);
+        setVisible (false);
 }
 
 void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
@@ -175,30 +163,8 @@ int FreqDividerGroup::getFreq()
 void FreqDividerGroup::mouseUp (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseEnter (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseExit (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDown (const juce::MouseEvent& e)
-{
-    // call parent mousedown(Multiband)
-//    getParentComponent()->mouseDown(e.getEventRelativeTo(getParentComponent()));
-//    DBG("group down");
-//    dragger.startDraggingComponent (this, e);
-}
-
-void FreqDividerGroup::mouseDrag (const juce::MouseEvent& e)
-{
-//    DBG("group drag");
-//    float mouseX = getParentComponent()->getMouseXYRelative().getX();
-//    float xPercent = mouseX / static_cast<float>(getParentWidth());
-    
-//    if (xPercent >= 0.1f && xPercent <= 0.9f)
-//        dragger.dragComponent (this, e, &boundsConstrainer);
-//    else if (xPercent < 0.1f)
-//        xPercent = 0.1f;
-//    else if (xPercent > 0.9f)
-//        xPercent = 0.9f;
-//    dragger.dragComponent (this, e, &boundsConstrainer);
-//    verticalLine.setXPercent(xPercent);
-    
-}
+void FreqDividerGroup::mouseDown (const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseDrag (const juce::MouseEvent& e) {}
 
 void FreqDividerGroup::setScale (float scale)
 {

@@ -119,10 +119,11 @@ void Multiband::paint (juce::Graphics& g)
     }
 
     if (isVisible()) processor.setHistoryArray(focusIndex);
-    if (isMoving)
-        DBG("moving");
-    else
-        DBG("not moving");
+//    if (isMoving)
+//        DBG("moving");
+//    else
+//        DBG("not moving");
+    
     // set value only when line is deleted, added, moving
     if (/*getDeleteState() || getAddState() ||*/ getMovingState())
     {
@@ -843,7 +844,7 @@ void Multiband::dragLinesByFreq(int freq, int index)
     if (/* ! isMoving  && */ freqDividerGroup[index]->getToggleState())
     {
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
-//        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
+        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
         
         // keep distance limit between lines
         for (int i = 0; i < lineNum; i++)
@@ -854,7 +855,7 @@ void Multiband::dragLinesByFreq(int freq, int index)
                 xPercent = freqDividerGroup[i]->getVerticalLine().getXPercent();
 
                 freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-                freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 20.0f, getHeight());
+                freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 10.0f, getHeight());
                 
                 // get the correct freq if the line cannot move.
                 //freq = freqDividerGroup[sortedIndex[i]]->getFrequency();
@@ -1027,7 +1028,7 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
     {
         if (slider == &freqDividerGroup[i]->getVerticalLine())
         {
-//            dragLinesByFreq(freqDividerGroup[i]->getVerticalLine().getValue(), sortedIndex[i]);
+            dragLinesByFreq(freqDividerGroup[i]->getVerticalLine().getValue(), i);
         }
     }
 }

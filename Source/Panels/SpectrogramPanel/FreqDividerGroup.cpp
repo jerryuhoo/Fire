@@ -24,6 +24,7 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
     closeButton.addListener (this);
 
     verticalLine.addListener (this);
+//    verticalLine.addMouseListener (this, true);
 
     if (index == 0)
     {
@@ -60,7 +61,7 @@ void FreqDividerGroup::paint (juce::Graphics& g)
 {
     if (closeButton.getToggleState())
     {
-        if (verticalLine.isMoving() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
+        if (verticalLine.getMoveState() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
             freqTextLabel.setFade (true, true);
             freqTextLabel.setVisible (true);
@@ -75,16 +76,26 @@ void FreqDividerGroup::paint (juce::Graphics& g)
         freqTextLabel.setFreq (21);
         verticalLine.setXPercent (0);
     }
+    g.setColour(juce::Colours::green.withAlpha(0.2f));
+    g.fillAll();
 }
 
 void FreqDividerGroup::resized()
 {
     margin = getHeight() / 20.0f;
-    size = getWidth() / 1000.0f * 15;
+    size = getWidth() / 100.0f * 15;
     width = verticalLine.getWidth() / 2.0f;
-    verticalLine.setBounds (0, 0, getWidth() / 100.0f, getHeight());
+    verticalLine.setBounds (0, 0, getWidth() / 10.0f, getHeight());
     closeButton.setBounds (width + margin, margin, size, size);
     freqTextLabel.setBounds (width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
+    
+//    DBG(getHeight());
+//    DBG(getWidth());
+//
+//
+//
+//    dragger.
+//    boundsConstrainer.setMinimumOnscreenAmounts (getHeight(), getWidth(), getHeight(), getWidth());
 }
 
 void FreqDividerGroup::setDeleteState (bool deleteState)
@@ -92,7 +103,7 @@ void FreqDividerGroup::setDeleteState (bool deleteState)
     verticalLine.setDeleteState (deleteState);
 }
 
-void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[])
+void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
 {
     float leftLimit;
     float rightLimit;
@@ -105,15 +116,13 @@ void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, st
     if (newXPercent > rightLimit)
         newXPercent = rightLimit;
 
-    int idx = sortedIndex[verticalLine.getLeft()];
-
-    if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[idx]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
+    if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
-        freqDividerGroup[sortedIndex[verticalLine.getLeft()]]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup, sortedIndex);
+        freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
     }
-    if (verticalLine.getRight() < lineNum && freqDividerGroup[sortedIndex[verticalLine.getRight()]]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
+    if (verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
     {
-        freqDividerGroup[sortedIndex[verticalLine.getRight()]]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup, sortedIndex);
+        freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
     }
     verticalLine.setXPercent (newXPercent);
     verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent)); // * (44100 / 2.0)
@@ -172,17 +181,54 @@ void FreqDividerGroup::mouseDoubleClick (const juce::MouseEvent& e)
 void FreqDividerGroup::setFreq (float f)
 {
     verticalLine.setValue (f);
+    verticalLine.setXPercent (static_cast<float> (SpectrumComponent::transformToLog (f)));
     freqTextLabel.setFreq (f);
 }
 
+int FreqDividerGroup::getFreq()
+{
+    return verticalLine.getValue();
+}
 void FreqDividerGroup::mouseUp (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseEnter (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseExit (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDown (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDrag (const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseDown (const juce::MouseEvent& e)
+{
+    // call parent mousedown(Multiband)
+//    getParentComponent()->mouseDown(e.getEventRelativeTo(getParentComponent()));
+//    DBG("group down");
+//    dragger.startDraggingComponent (this, e);
+}
+
+void FreqDividerGroup::mouseDrag (const juce::MouseEvent& e)
+{
+//    DBG("group drag");
+//    float mouseX = getParentComponent()->getMouseXYRelative().getX();
+//    float xPercent = mouseX / static_cast<float>(getParentWidth());
+    
+//    if (xPercent >= 0.1f && xPercent <= 0.9f)
+//        dragger.dragComponent (this, e, &boundsConstrainer);
+//    else if (xPercent < 0.1f)
+//        xPercent = 0.1f;
+//    else if (xPercent > 0.9f)
+//        xPercent = 0.9f;
+//    dragger.dragComponent (this, e, &boundsConstrainer);
+//    verticalLine.setXPercent(xPercent);
+    
+}
 
 void FreqDividerGroup::setScale (float scale)
 {
     otherLookAndFeel.scale = scale;
     freqTextLabel.setScale (scale);
+}
+
+void FreqDividerGroup::setToggleState (bool state)
+{
+    closeButton.setToggleState (state, juce::dontSendNotification);
+}
+
+bool FreqDividerGroup::getToggleState()
+{
+    return closeButton.getToggleState();
 }

@@ -34,25 +34,23 @@ public:
     
     int getLineNum();
     void getFocusArray(bool (&input)[4]);
-    void setFrequency(int freq1, int freq2, int freq3);
+//    void setFrequency(int freq1, int freq2, int freq3);
     void setFocus(bool focus1, bool focus2, bool focus3, bool focus4);
-    void setLineState(bool state1, bool state2, bool state3);
-    void getLineState(bool (&input)[3]);
+
     void setEnableState(bool state1, bool state2, bool state3, bool state4);
     void getEnableArray(bool(&input)[4]);
 
     void reset();
-    void setLinePos(float pos1, float pos2, float pos3);
-    void getLinePos(float (&input)[3]);
-    
+
     void setCloseButtonState();
     void setFocus();
     bool getAddState();
     void setAddState(bool state);
     bool getMovingState();
     void setMovingState(bool state);
+
     void setDeleteState(bool state);
-    int getSortedIndex(int index);
+//    int getSortedIndex(int index);
     void dragLines(float xPercent);
     void dragLinesByFreq(int freq, int index);
     int getFocusBand();
@@ -66,6 +64,8 @@ public:
     void setBandBypassStates(int index, bool state);
     state::StateComponent& getStateComponent();
     
+    int sortLines();
+    void setLineRelatedBoundsByX();
 private:
     FireAudioProcessor &processor;
     state::StateComponent &stateComponent;
@@ -96,15 +96,16 @@ private:
     
     void updateLineLeftRightIndex();
     void updateLineNumAndSortedIndex(int option);
-    void setLineRelatedBoundsByX(int i);
-    void setLineRelatedBoundsByFreq(int i);
+    
+    void setLineRelatedBoundsByFreq(FreqDividerGroup& freqDividerGroup, int freq);
     
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
 
     bool shouldSetBlackMask(int index);
+    int countLines();
     
-    int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
+    //int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];

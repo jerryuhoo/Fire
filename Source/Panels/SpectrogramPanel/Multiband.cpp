@@ -40,10 +40,11 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
         freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor, i); // set index
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
+//        (freqDividerGroup[i]->getVerticalLine()).addMouseListener(this, true);
         (freqDividerGroup[i]->getCloseButton()).addListener(this);
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue));
-        freqDividerGroup[i]->setBounds(xPercent * getWidth(), 0, getWidth(), getHeight());
+//        freqDividerGroup[i]->setBounds(xPercent * getWidth(), 0, getWidth(), getHeight());
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
         
         soloButton[i + 1] = std::make_unique<SoloButton>();
@@ -102,7 +103,10 @@ void Multiband::paint (juce::Graphics& g)
     }
 
     if (isVisible()) processor.setHistoryArray(focusIndex);
-    
+    if (isMoving)
+        DBG("moving");
+    else
+        DBG("not moving");
     // set value only when line is deleted, added, moving
     if (/*getDeleteState() || getAddState() ||*/ getMovingState())
     {
@@ -118,8 +122,10 @@ void Multiband::paint (juce::Graphics& g)
 //        }
 //        if (getMovingState())
 //        {
-            updateLines(0);
-            setMovingState(false);
+//            updateLines(0);
+//        setLineRelatedBoundsByX(i);
+        setLineRelatedBoundsByX();
+        setMovingState(false);
 //        }
     }
     
@@ -167,29 +173,29 @@ void Multiband::paint (juce::Graphics& g)
         juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
                                   COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
         g.setGradientFill(grad);
-        g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
+        g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
     }
     
     int mouseX = getMouseXYRelative().getX();
     int mouseY = getMouseXYRelative().getY();
     
     // set mouse enter white
-    if (!multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[sortedIndex[0]]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
+    if (!multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[0]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
     {
         g.setColour(juce::Colours::white.withAlpha(0.05f));
-        g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
+        g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
     }
     
     if (lineNum > 0 && shouldSetBlackMask(0))
     {
         g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(0, 0, freqDividerGroup[sortedIndex[0]]->getX() + margin2, getHeight());
+        g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
     }
     
     for (int i = 1; i < lineNum; i++)
     {
-        int startX = freqDividerGroup[sortedIndex[i - 1]]->getX() + margin1;
-        int bandWidth = freqDividerGroup[sortedIndex[i]]->getX() - freqDividerGroup[sortedIndex[i - 1]]->getX();
+        int startX = freqDividerGroup[i - 1]->getX() + margin1;
+        int bandWidth = freqDividerGroup[i]->getX() - freqDividerGroup[i - 1]->getX();
         
         if (lineNum > 1 && multibandFocus[i])
         {
@@ -217,20 +223,20 @@ void Multiband::paint (juce::Graphics& g)
         juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
                                   COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
         g.setGradientFill(grad);
-        g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+        g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
     }
     
     // set mouse enter white
-    if (!multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
+    if (!multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[lineNum - 1]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
     {
         g.setColour(juce::Colours::white.withAlpha(0.05f));
-        g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+        g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
     }
     
     if (lineNum > 0 && shouldSetBlackMask(lineNum))
     {
         g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + margin1, 0, getWidth() - freqDividerGroup[sortedIndex[lineNum - 1]]->getX() - margin1, getHeight());
+        g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
     }
     
 //    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
@@ -240,7 +246,10 @@ void Multiband::paint (juce::Graphics& g)
     if (stateComponent.getChangedState())
     {
         stateComponent.setChangedState(false);
-        updateLines(1); // 1 means setBounds by setting frequency
+        sortLines();
+//        updateLines(1); // 1 means setBounds by setting frequency
+        setLineRelatedBoundsByX();
+        
         setSoloRelatedBounds();
         processor.setLineNum();
     }
@@ -264,7 +273,8 @@ void Multiband::resized()
         width = 5.0f;
     }
 
-    updateLines(0);
+//    updateLines(0);
+    setLineRelatedBoundsByX();
     setSoloRelatedBounds();
 }
 
@@ -490,118 +500,171 @@ void Multiband::setStatesWhenAddOrDelete(int changedIndex, juce::String option)
     setSoloRelatedBounds();
 }
 
-void Multiband::updateLines(int option)
-{
-    updateLineNumAndSortedIndex(option);
-    updateLineLeftRightIndex();
-}
+//void Multiband::updateLines(int option)
+//{
+//    updateLineNumAndSortedIndex(option);
+//    updateLineLeftRightIndex();
+//}
 
-void Multiband::updateLineNumAndSortedIndex(int option)
+int Multiband::countLines()
 {
     int count = 0;
-    
     for (int i = 0; i < 3; i++)
     {
         if (freqDividerGroup[i]->getCloseButton().getToggleState())
         {
-            if (option == 0)
-            {
-                setLineRelatedBoundsByX(i);
-            }
-            else
-            {
-                setLineRelatedBoundsByFreq(i);
-            }
-            sortedIndex[count] = i;
             count++;
         }
     }
-    
-    lineNum = count;
-    
-    // sort
-    for(int j = 1; j < lineNum; j++)
-    {
-        for(int k = 0; k < lineNum - j; k++)
-        {
-            if(freqDividerGroup[sortedIndex[k]]->getVerticalLine().getXPercent() > freqDividerGroup[sortedIndex[k + 1]]->getVerticalLine().getXPercent())
-            {
-                std::swap(sortedIndex[k], sortedIndex[k + 1]);
-            }
-        }
-    }
-
-    // clear sort index when vertical line state is false
-    for(int i = lineNum; i < 3; i++)
-    {
-        sortedIndex[i] = -1;
-    }
+    return count;
 }
 
+int Multiband::sortLines()
+{
+    // clear disabled lines and sort lines by frequency
+    int newFreq;
+    std::vector<int> freqVector;
+    for (int i = 0; i < 3; i++)
+    {
+        if (freqDividerGroup[i]->getToggleState())
+        {
+            newFreq = freqDividerGroup[i]->getFreq();
+            freqVector.push_back(newFreq);
+        }
+    }
+    std::sort(freqVector.begin(), freqVector.end());
+    int changeIndex = static_cast<int>(std::find(freqVector.begin(), freqVector.end(), newFreq) - freqVector.begin());
+    lineNum = static_cast<int>(freqVector.size());
+    
+    for (int i = 0; i < freqVector.size(); i++)
+    {
+            freqDividerGroup[i]->setFreq(freqVector[i]);
+            freqDividerGroup[i]->setToggleState(true);
+    }
+    for (auto i = freqVector.size(); i < 3; i++)
+    {
+            freqDividerGroup[i]->setFreq(-1);
+            freqDividerGroup[i]->setToggleState(false);
+    }
+    updateLineLeftRightIndex();
+    return changeIndex;
+}
+
+//void Multiband::updateLineNumAndSortedIndex(int option)
+//{
+//    int count = 0;
+//
+//    for (int i = 0; i < 3; i++)
+//    {
+//        if (freqDividerGroup[i]->getCloseButton().getToggleState())
+//        {
+//            if (option == 0)
+//            {
+//                setLineRelatedBoundsByX(i);
+//            }
+//            else
+//            {
+//                setLineRelatedBoundsByFreq(i);
+//            }
+//            sortedIndex[count] = i;
+//            count++;
+//        }
+//    }
+//
+//    lineNum = count;
+//
+//    // sort
+//    for(int j = 1; j < lineNum; j++)
+//    {
+//        for(int k = 0; k < lineNum - j; k++)
+//        {
+//            if(freqDividerGroup[sortedIndex[k]]->getVerticalLine().getXPercent() > freqDividerGroup[sortedIndex[k + 1]]->getVerticalLine().getXPercent())
+//            {
+//                std::swap(sortedIndex[k], sortedIndex[k + 1]);
+//            }
+//        }
+//    }
+//
+//    // clear sort index when vertical line state is false
+//    for(int i = lineNum; i < 3; i++)
+//    {
+//        sortedIndex[i] = -1;
+//    }
+//}
+//
 void Multiband::updateLineLeftRightIndex()
 {
     // should set self index first, then set left and right index
     for (int i = 0; i < lineNum; i++)
     {
-        freqDividerGroup[sortedIndex[i]]->getVerticalLine().setIndex(i); // this index is the No. you count the line from left to right
+        freqDividerGroup[i]->getVerticalLine().setIndex(i); // this index is the No. you count the line from left to right
     }
-    
+
     // set left right index
     for (int i = 0; i < lineNum; i++)
     {
         if (i == 0)
         {
-            freqDividerGroup[sortedIndex[i]]->getVerticalLine().setLeft(-1); // this left index is the index that in verticalLines array
+            freqDividerGroup[i]->getVerticalLine().setLeft(-1); // this left index is the index that in verticalLines array
         }
         else
         {
-            freqDividerGroup[sortedIndex[i]]->getVerticalLine().setLeft(freqDividerGroup[sortedIndex[i - 1]]->getVerticalLine().getIndex());
+            freqDividerGroup[i]->getVerticalLine().setLeft(freqDividerGroup[i - 1]->getVerticalLine().getIndex());
         }
         if (i == lineNum - 1)
         {
-            freqDividerGroup[sortedIndex[i]]->getVerticalLine().setRight(lineNum);
+            freqDividerGroup[i]->getVerticalLine().setRight(lineNum);
         }
         else
         {
-            freqDividerGroup[sortedIndex[i]]->getVerticalLine().setRight(freqDividerGroup[sortedIndex[i + 1]]->getVerticalLine().getIndex());
+            freqDividerGroup[i]->getVerticalLine().setRight(freqDividerGroup[i + 1]->getVerticalLine().getIndex());
         }
     }
     
-//    bool isMoving = false;
-//    for (int i = 0; i < lineNum; i++)
-//    {
-//        if (freqDividerGroup[sortedIndex[i]]->getVerticalLine().isMoving())
-//        {
-//            isMoving = true;
-//            break;
-//        }
-//    }
+    bool isMoving = false;
+    for (int i = 0; i < lineNum; i++)
+    {
+        if (freqDividerGroup[i]->getVerticalLine().getMoveState())
+        {
+            isMoving = true;
+            break;
+        }
+    }
 }
 
 void Multiband::mouseUp(const juce::MouseEvent &e)
 {
     for (int i = 0; i < 3; i++)
     {
-        freqDividerGroup[i]->getVerticalLine().setMoving(false);
+        freqDividerGroup[i]->getVerticalLine().setMoveState(false);
     }
 }
 
 void Multiband::mouseDrag(const juce::MouseEvent &e)
 {
-//    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-//    dragLines(targetXPercent);
+//    DBG("multiband drag");
+    
+//    // drag
+//    float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+//    for (int i = 0; i < lineNum; i++)
+//    {
+//        moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
+//    }
+//    setLineRelatedBoundsByX();
 }
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
 {
+    DBG("mousedown");
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
+        float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
         if (lineNum < 3)
         {
             bool canCreate = true;
-            float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
             
-            for (int i = 0; i < 3; i++)
+            int i = 0;
+            for (; i < lineNum; i++)
             {
                 // can't create near existed lines
                 if ((freqDividerGroup[i]->getCloseButton().getToggleState() && fabs(freqDividerGroup[i]->getVerticalLine().getXPercent() - xPercent) <= limitLeft) || xPercent < limitLeft || xPercent > limitRight)
@@ -612,22 +675,30 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             }
             if (canCreate)
             {
-                for (int i = 0; i < 3; i++)
+                for (; i < 3; i++)
                 {
                     // create lines and close buttons and then set state
                     if (!freqDividerGroup[i]->getCloseButton().getToggleState())
                     {
                         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-                        freqDividerGroup[i]->getVerticalLine().setMoving(true);
+                        int freq = static_cast<int>(SpectrumComponent::transformFromLog(xPercent));
+                        freqDividerGroup[i]->setFreq(freq);
                         freqDividerGroup[i]->setCloseButtonValue(true);
-                        updateLines(0);
+//                        freqDividerGroup[i]->getVerticalLine().setMoveState(true);
+//                        updateLines(0);
+                        int changeIndex = sortLines();
+                        freqDividerGroup[changeIndex]->getVerticalLine().setMoveState(true);
                         processor.setLineNum();
-                        setStatesWhenAddOrDelete(i, "add");
+                        setStatesWhenAddOrDelete(changeIndex, "add");
                         break;
                     }
                 }
+
+                setLineRelatedBoundsByX(); // TODO: dont use this, only set freq
+                setSoloRelatedBounds();
             }
         }
+        
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
@@ -645,7 +716,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
         }
         else
         {
-            if (e.x >= 0 && e.x < freqDividerGroup[sortedIndex[0]]->getX())
+            if (e.x >= 0 && e.x < freqDividerGroup[0]->getX())
             {
                 multibandFocus[0] = true;
                 return;
@@ -653,20 +724,24 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             
             for (int i = 1; i < num; i++)
             {
-                if (e.x >= freqDividerGroup[sortedIndex[i - 1]]->getX() && e.x < freqDividerGroup[sortedIndex[i]]->getX())
+                if (e.x >= freqDividerGroup[i - 1]->getX() && e.x < freqDividerGroup[i]->getX())
                 {
                     multibandFocus[i] = true;
                     return;
                 }
             }
             
-            if (e.x >= freqDividerGroup[sortedIndex[num - 1]]->getX() && e.x <= getWidth())
+            if (e.x >= freqDividerGroup[num - 1]->getX() && e.x <= getWidth())
             {
                 multibandFocus[num] = true;
                 return;
             }
         }
     }
+    
+    
+
+    
 }
 
 int Multiband::getLineNum()
@@ -694,7 +769,7 @@ void Multiband::reset()
     {
         freqDividerGroup[i]->getCloseButton().setToggleState(false, juce::NotificationType::dontSendNotification);
         multibandFocus[i + 1] = false;
-        sortedIndex[i] = 0;
+//        sortedIndex[i] = 0;
     }
     lineNum = 0;
 }
@@ -705,10 +780,10 @@ void Multiband::dragLines(float xPercent)
     // drag
     for (int i = 0; i < 3; i++)
     {
-        if (freqDividerGroup[i]->getVerticalLine().isMoving())
+        if (freqDividerGroup[i]->getVerticalLine().getMoveState())
 //        if (freqDividerGroup[i]->getVerticalLine().isMouseButtonDown())
         {
-            freqDividerGroup[i]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
+            freqDividerGroup[i]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
             isMoving = true;
         }
     }
@@ -723,21 +798,21 @@ void Multiband::dragLines(float xPercent)
 void Multiband::dragLinesByFreq(int freq, int index)
 {
     if (index < 0) return;
-    if (!isMoving && freqDividerGroup[index]->getCloseButton().getToggleState())
+    if (/* ! isMoving  && */ freqDividerGroup[index]->getCloseButton().getToggleState())
     {
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
-        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
+//        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup, sortedIndex);
         
         // keep distance limit between lines
         for (int i = 0; i < lineNum; i++)
         {
-            if (freqDividerGroup[sortedIndex[i]]->getCloseButton().getToggleState())
+            if (freqDividerGroup[i]->getCloseButton().getToggleState())
             {
                 // get the correct xPercent if the line cannot move.
-                xPercent = freqDividerGroup[sortedIndex[i]]->getVerticalLine().getXPercent();
+                xPercent = freqDividerGroup[i]->getVerticalLine().getXPercent();
 
-                freqDividerGroup[sortedIndex[i]]->getVerticalLine().setXPercent(xPercent);
-                freqDividerGroup[sortedIndex[i]]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
+                freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
+                freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 20.0f, getHeight());
                 
                 // get the correct freq if the line cannot move.
                 //freq = freqDividerGroup[sortedIndex[i]]->getFrequency();
@@ -754,22 +829,28 @@ void Multiband::dragLinesByFreq(int freq, int index)
     }
 }
 
-void Multiband::setLineRelatedBoundsByX(int i)
+void Multiband::setLineRelatedBoundsByX()
 {
-    if(freqDividerGroup[i]->getCloseButton().getToggleState())
+    // set line frequecny and position according to current x percentage of the width
+    for (int i = 0; i < lineNum; i++)
     {
-        freqDividerGroup[i]->setBounds(freqDividerGroup[i]->getVerticalLine().getXPercent() * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
-        int freq = static_cast<int>(SpectrumComponent::transformFromLog(freqDividerGroup[i]->getVerticalLine().getXPercent()));
-        freqDividerGroup[i]->getVerticalLine().setValue(freq);
+        if(freqDividerGroup[i]->getCloseButton().getToggleState())
+        {
+            float xPercent = freqDividerGroup[i]->getVerticalLine().getXPercent();
+            freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 10.0f, getHeight());
+            int freq = static_cast<int>(SpectrumComponent::transformFromLog(xPercent));
+            freqDividerGroup[i]->setFreq(freq);
+        }
     }
+    
 }
 
-void Multiband::setLineRelatedBoundsByFreq(int i)
+void Multiband::setLineRelatedBoundsByFreq(FreqDividerGroup& freqDividerGroup, int freq)
 {
-    int freq = freqDividerGroup[i]->getVerticalLine().getValue();
+//    int freq = freqDividerGroup[i]->getVerticalLine().getValue();
     float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
-    freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-    freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
+    freqDividerGroup.getVerticalLine().setXPercent(xPercent);
+    freqDividerGroup.setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth(), getHeight());
 }
 
 void Multiband::setSoloRelatedBounds()
@@ -790,15 +871,15 @@ void Multiband::setSoloRelatedBounds()
     // setBounds of soloButtons and enableButtons
     if (lineNum >= 1)
     {
-        enableButton[0]->setBounds(freqDividerGroup[sortedIndex[0]]->getX() / 2 - size, margin, size, size);
-        soloButton[0]->setBounds(freqDividerGroup[sortedIndex[0]]->getX() / 2 + size, margin, size, size);
+        enableButton[0]->setBounds(freqDividerGroup[0]->getX() / 2 - size, margin, size, size);
+        soloButton[0]->setBounds(freqDividerGroup[0]->getX() / 2 + size, margin, size, size);
         for (int i = 1; i < lineNum; i++)
         {
-            enableButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getX() + freqDividerGroup[sortedIndex[i - 1]]->getX()) / 2 - size, margin, size, size);
-            soloButton[i]->setBounds((freqDividerGroup[sortedIndex[i]]->getX() + freqDividerGroup[sortedIndex[i - 1]]->getX()) / 2 + size, margin, size, size);
+            enableButton[i]->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 - size, margin, size, size);
+            soloButton[i]->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 + size, margin, size, size);
         }
-        enableButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2 - size, margin, size, size);
-        soloButton[lineNum]->setBounds((freqDividerGroup[sortedIndex[lineNum - 1]]->getX() + getWidth()) / 2 + size, margin, size, size);
+        enableButton[lineNum]->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 - size, margin, size, size);
+        soloButton[lineNum]->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 + size, margin, size, size);
     }
     else if (lineNum == 0)
     {
@@ -815,61 +896,24 @@ void Multiband::setFocus(bool focus1, bool focus2, bool focus3, bool focus4)
     multibandFocus[3] = focus4;
 }
 
-void Multiband::setLineState(bool state1, bool state2, bool state3)
-{
-    freqDividerGroup[0]->getCloseButton().setToggleState(state1, juce::NotificationType::dontSendNotification);
-    freqDividerGroup[1]->getCloseButton().setToggleState(state2, juce::NotificationType::dontSendNotification);
-    freqDividerGroup[2]->getCloseButton().setToggleState(state3, juce::NotificationType::dontSendNotification);
-}
-
-void Multiband::getLineState(bool (&input)[3])
-{
-    for (int i = 0; i < 3; i++)
-    {
-        if (sortedIndex[i] < 0)
-        {
-            input[i] = false;
-        }
-        else
-        {
-            input[i] = freqDividerGroup[sortedIndex[i]]->getCloseButton().getToggleState();
-        }
-    }
-}
-
-void Multiband::setLinePos(float pos1, float pos2, float pos3)
-{
-    freqDividerGroup[0]->getVerticalLine().setXPercent(pos1);
-    freqDividerGroup[1]->getVerticalLine().setXPercent(pos2);
-    freqDividerGroup[2]->getVerticalLine().setXPercent(pos3);
-}
-
-void Multiband::getLinePos(float (&input)[3])
-{
-    for (int i = 0; i < 3; i++)
-    {
-        input[i] = freqDividerGroup[i]->getVerticalLine().getXPercent();
-    }
-}
-
-void Multiband::setFrequency(int freq1, int freq2, int freq3)
-{
-    if (freqDividerGroup[0]->getCloseButton().getToggleState())
-    {
-        //freqDividerGroup[0]->getVerticalLine().setValue(freq1);
-        freqDividerGroup[0]->setFreq(freq1);
-    }
-    if (freqDividerGroup[1]->getCloseButton().getToggleState())
-    {
-        //freqDividerGroup[1]->getVerticalLine().setValue(freq2);
-        freqDividerGroup[1]->setFreq(freq2);
-    }
-    if(freqDividerGroup[2]->getCloseButton().getToggleState())
-    {
-        //freqDividerGroup[2]->getVerticalLine().setValue(freq3);
-        freqDividerGroup[2]->setFreq(freq3);
-    }
-}
+//void Multiband::setFrequency(int freq1, int freq2, int freq3)
+//{
+//    if (freqDividerGroup[0]->getCloseButton().getToggleState())
+//    {
+//        //freqDividerGroup[0]->getVerticalLine().setValue(freq1);
+//        freqDividerGroup[0]->setFreq(freq1);
+//    }
+//    if (freqDividerGroup[1]->getCloseButton().getToggleState())
+//    {
+//        //freqDividerGroup[1]->getVerticalLine().setValue(freq2);
+//        freqDividerGroup[1]->setFreq(freq2);
+//    }
+//    if(freqDividerGroup[2]->getCloseButton().getToggleState())
+//    {
+//        //freqDividerGroup[2]->getVerticalLine().setValue(freq3);
+//        freqDividerGroup[2]->setFreq(freq3);
+//    }
+//}
 
 void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)
 {
@@ -908,11 +952,6 @@ void Multiband::setMovingState(bool state)
     isMoving = state;
 }
 
-int Multiband::getSortedIndex(int index)
-{
-    return sortedIndex[index];
-}
-
 void Multiband::timerCallback()
 {
     if( parametersChanged.compareAndSetBool(false, true) )
@@ -938,9 +977,9 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
 {
     for (int i = 0; i < 3; i++)
     {
-        if (slider == &freqDividerGroup[sortedIndex[i]]->getVerticalLine())
+        if (slider == &freqDividerGroup[i]->getVerticalLine())
         {
-            dragLinesByFreq(freqDividerGroup[sortedIndex[i]]->getVerticalLine().getValue(), sortedIndex[i]);
+//            dragLinesByFreq(freqDividerGroup[i]->getVerticalLine().getValue(), sortedIndex[i]);
         }
     }
 }
@@ -958,11 +997,14 @@ void Multiband::buttonClicked(juce::Button* button)
         if (button == &freqDividerGroup[i]->getCloseButton() && !freqDividerGroup[i]->getCloseButton().getToggleState())
         {
             setStatesWhenAddOrDelete(i, "delete");
-            updateLines(0);
+//            updateLines(0);
+            sortLines();
+            setLineRelatedBoundsByX();
             setSoloRelatedBounds();
             processor.setLineNum();
         }
     }
+    
 }
 
 EnableButton& Multiband::getEnableButton(const int index)

@@ -28,7 +28,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     
-    void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[]);
+    void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[]);
     
     void setDeleteState (bool deleteState);
     
@@ -37,8 +37,11 @@ public:
     VerticalLine& getVerticalLine();
     
     void setFreq (float f);
+    int getFreq ();
     void setScale (float scale);
-    
+    void setToggleState(bool state);
+    bool getToggleState();
+
 private:
     FireAudioProcessor& processor;
     VerticalLine verticalLine;
@@ -65,5 +68,9 @@ private:
     
     FreqTextLabel freqTextLabel;
     OtherLookAndFeel otherLookAndFeel;
+    
+//    juce::ComponentDragger dragger;
+//    juce::ComponentBoundsConstrainer boundsConstrainer;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)
 };

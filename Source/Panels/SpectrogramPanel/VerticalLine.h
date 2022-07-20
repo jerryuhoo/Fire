@@ -25,8 +25,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     
-    bool isMoving();
-    void setMoving(bool move);
+    bool getMoveState();
+    void setMoveState(bool moveState);
     bool getState();
     void setState(bool state);
     void setDeleteState(bool deleteState);
@@ -38,7 +38,7 @@ public:
     int getLeft();
     void setRight(int rightIndex);
     int getRight();
-    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[], int sortedIndex[]);
+    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[]);
     
 private:
     bool isEntered = false;
@@ -48,6 +48,8 @@ private:
     void mouseExit(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
     void mouseDoubleClick(const juce::MouseEvent &e) override;
+    void mouseDrag(const juce::MouseEvent &e) override;
+    
     
     bool move = false;
     bool mDeleteState = false;
@@ -55,5 +57,6 @@ private:
     int leftIndex = -1; // left index
     int rightIndex = -1; // right index
     int index = -1;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

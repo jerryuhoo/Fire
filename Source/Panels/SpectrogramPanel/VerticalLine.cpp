@@ -15,8 +15,7 @@
 //==============================================================================
 VerticalLine::VerticalLine()
 {
-    // In your constructor, you should add any child components, and
-    // initialise any special settings that your component needs.
+//    boundsConstrainer.setMinimumHeight(0);
 }
 
 VerticalLine::~VerticalLine()
@@ -44,8 +43,7 @@ void VerticalLine::paint (juce::Graphics& g)
 
 void VerticalLine::resized()
 {
-    // This method is where you should set the bounds of any child
-    // components that your component contains..
+    
 }
 
 void VerticalLine::mouseUp(const juce::MouseEvent &e)
@@ -68,8 +66,16 @@ void VerticalLine::mouseExit(const juce::MouseEvent &e)
     isEntered = false;
 }
 
+void VerticalLine::mouseDrag(const juce::MouseEvent &e)
+{
+//    DBG("vertical line drag");
+//    dragger.dragComponent (this, e, &boundsConstrainer);
+}
+
 void VerticalLine::mouseDown(const juce::MouseEvent &e)
 {
+    // call parent mousedown(FreqDividerGroup)
+//    getParentComponent()->mouseDown(e.getEventRelativeTo(getParentComponent()));
     if (e.mods.isLeftButtonDown())
     {
         move = true;
@@ -78,16 +84,18 @@ void VerticalLine::mouseDown(const juce::MouseEvent &e)
     {
         move = false;
     }
+    
+//    dragger.startDraggingComponent (this, e);
 }
 
-bool VerticalLine::isMoving()
+bool VerticalLine::getMoveState()
 {
     return move;
 }
 
-void VerticalLine::setMoving(bool move)
+void VerticalLine::setMoveState(bool moveState)
 {
-    this->move = move;
+    move = moveState;
 }
 
 void VerticalLine::setDeleteState(bool deleteState)
@@ -135,7 +143,7 @@ int VerticalLine::getRight()
     return rightIndex;
 }
 
-void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[], int sortedIndex[])
+void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[])
 {
     float leftLimit;
     float rightLimit;
@@ -147,15 +155,13 @@ void VerticalLine::moveToX(int lineNum, float newXPercent, float margin, std::un
     if (newXPercent < leftLimit) newXPercent = leftLimit;
     if (newXPercent > rightLimit) newXPercent = rightLimit;
 
-    int idx = sortedIndex[leftIndex];
-
-    if (leftIndex >= 0 && newXPercent - verticalLines[idx]->getXPercent() - margin < -0.00001f) // float is not accurate!!!!
+    if (leftIndex >= 0 && newXPercent - verticalLines[leftIndex]->getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
-        verticalLines[sortedIndex[leftIndex]]->moveToX(lineNum, newXPercent - margin, margin, verticalLines, sortedIndex);
+        verticalLines[leftIndex]->moveToX(lineNum, newXPercent - margin, margin, verticalLines);
     }
-    if (rightIndex < lineNum && verticalLines[sortedIndex[rightIndex]]->getXPercent() - newXPercent - margin < -0.00001f)
+    if (rightIndex < lineNum && verticalLines[rightIndex]->getXPercent() - newXPercent - margin < -0.00001f)
     {
-        verticalLines[sortedIndex[rightIndex]]->moveToX(lineNum, newXPercent + margin, margin, verticalLines, sortedIndex);
+        verticalLines[rightIndex]->moveToX(lineNum, newXPercent + margin, margin, verticalLines);
     }
     xPercent = newXPercent;
 }

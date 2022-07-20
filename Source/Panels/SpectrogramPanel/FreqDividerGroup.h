@@ -12,14 +12,13 @@
 
 #include <JuceHeader.h>
 #include "FreqTextLabel.h"
-#include "CloseButton.h"
 #include "VerticalLine.h"
 #include "SpectrumComponent.h"
 #include "../../PluginProcessor.h"
 //==============================================================================
 /*
  */
-class FreqDividerGroup : public juce::Component, juce::Slider::Listener, juce::Button::Listener
+class FreqDividerGroup : public juce::ToggleButton, juce::Slider::Listener, juce::Button::Listener
 {
 public:
     FreqDividerGroup (FireAudioProcessor&, int index);
@@ -32,15 +31,15 @@ public:
     
     void setDeleteState (bool deleteState);
     
-    CloseButton& getCloseButton();
-    void setCloseButtonValue (bool value);
+//    CloseButton& getCloseButton();
+//    void setCloseButtonValue (bool value);
     VerticalLine& getVerticalLine();
     
     void setFreq (float f);
     int getFreq ();
     void setScale (float scale);
-    void setToggleState(bool state);
-    bool getToggleState();
+//    void setToggleState(bool state);
+//    bool getToggleState();
 
 private:
     FireAudioProcessor& processor;
@@ -60,10 +59,7 @@ private:
     void mouseDoubleClick (const juce::MouseEvent& e) override;
     void sliderValueChanged (juce::Slider* slider) override;
     void buttonClicked (juce::Button* button) override;
-    
-    CloseButton closeButton;
-    
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> closeButtonAttachment;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;

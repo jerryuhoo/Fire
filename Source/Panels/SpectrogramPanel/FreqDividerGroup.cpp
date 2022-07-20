@@ -15,13 +15,13 @@
 /** FreqDividerGroup is a component that contains FreqTextLabel, VerticalLine, and CloseButton
  */
 //==============================================================================
-FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processor (p), closeButton (verticalLine), freqTextLabel (verticalLine)
+FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processor (p), freqTextLabel (verticalLine)
 {
     margin = getHeight() / 20.0f;
 
     addAndMakeVisible (verticalLine);
-    addAndMakeVisible (closeButton);
-    closeButton.addListener (this);
+//    addAndMakeVisible (closeButton);
+//    closeButton.addListener (this);
 
     verticalLine.addListener (this);
 //    verticalLine.addMouseListener (this, true);
@@ -41,7 +41,7 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
         lineStatelId = LINE_STATE_ID3;
         sliderFreqId = FREQ_ID3;
     }
-    closeButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, lineStatelId, closeButton);
+    
     multiFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, sliderFreqId, verticalLine);
 
     addAndMakeVisible (freqTextLabel);
@@ -53,13 +53,14 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
 
 FreqDividerGroup::~FreqDividerGroup()
 {
-    closeButton.removeListener (this);
+//    closeButton.removeListener (this);
     freqTextLabel.setLookAndFeel (nullptr);
 }
 
 void FreqDividerGroup::paint (juce::Graphics& g)
 {
-    if (closeButton.getToggleState())
+//    if (closeButton.getToggleState())
+    if (getToggleState())
     {
         if (verticalLine.getMoveState() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
@@ -86,7 +87,7 @@ void FreqDividerGroup::resized()
     size = getWidth() / 100.0f * 15;
     width = verticalLine.getWidth() / 2.0f;
     verticalLine.setBounds (0, 0, getWidth() / 10.0f, getHeight());
-    closeButton.setBounds (width + margin, margin, size, size);
+//    closeButton.setBounds (width + margin, margin, size, size);
     freqTextLabel.setBounds (width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
     
 //    DBG(getHeight());
@@ -133,39 +134,43 @@ VerticalLine& FreqDividerGroup::getVerticalLine()
     return verticalLine;
 }
 
-CloseButton& FreqDividerGroup::getCloseButton()
-{
-    return closeButton;
-}
+//CloseButton& FreqDividerGroup::getCloseButton()
+//{
+//    return closeButton;
+//}
 
-void FreqDividerGroup::setCloseButtonValue (bool value)
-{
-    closeButton.setToggleState (value, juce::NotificationType::sendNotification);
-}
+//void FreqDividerGroup::setCloseButtonValue (bool value)
+//{
+//    closeButton.setToggleState (value, juce::NotificationType::sendNotification);
+//}
 
 void FreqDividerGroup::buttonClicked (juce::Button* button)
 {
-    if (button == &closeButton)
-    {
-        if (closeButton.getToggleState())
-        {
-            setVisible (true);
-            closeButton.setVisible (true);
-        }
-        else
-        {
-            verticalLine.setDeleteState (true);
-            setVisible (false);
-            closeButton.setVisible (false);
-            freqTextLabel.setVisible (false);
-        }
-    }
+//    if (button == &closeButton)
+//    {
+//        if (closeButton.getToggleState())
+//        {
+//            setVisible (true);
+//            closeButton.setVisible (true);
+//        }
+//        else
+//        {
+//            verticalLine.setDeleteState (true);
+//            setVisible (false);
+//            closeButton.setVisible (false);
+//            freqTextLabel.setVisible (false);
+//        }
+//    }
+    if (getToggleState())
+        setVisible(true);
+    else
+        setVisible(false);
 }
 
 void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
 {
     // ableton move sliders
-    if (slider == &verticalLine && getCloseButton().getToggleState())
+    if (slider == &verticalLine && getToggleState())
     {
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();
@@ -223,12 +228,12 @@ void FreqDividerGroup::setScale (float scale)
     freqTextLabel.setScale (scale);
 }
 
-void FreqDividerGroup::setToggleState (bool state)
-{
-    closeButton.setToggleState (state, juce::dontSendNotification);
-}
-
-bool FreqDividerGroup::getToggleState()
-{
-    return closeButton.getToggleState();
-}
+//void FreqDividerGroup::setToggleState (bool state)
+//{
+//    closeButton.setToggleState (state, juce::dontSendNotification);
+//}
+//
+//bool FreqDividerGroup::getToggleState()
+//{
+//    return closeButton.getToggleState();
+//}

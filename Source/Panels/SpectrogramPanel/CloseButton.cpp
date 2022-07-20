@@ -12,7 +12,7 @@
 #include "CloseButton.h"
 
 //==============================================================================
-CloseButton::CloseButton (VerticalLine& v) : verticalLine (v)
+CloseButton::CloseButton ()
 {
 }
 

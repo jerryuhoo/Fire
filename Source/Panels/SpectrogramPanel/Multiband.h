@@ -14,6 +14,7 @@
 #include "SpectrumComponent.h"
 #include "SoloButton.h"
 #include "EnableButton.h"
+#include "CloseButton.h"
 #include <vector>
 #include "FreqDividerGroup.h"
 #include "../../PluginProcessor.h"
@@ -43,7 +44,8 @@ public:
     void reset();
 
     void setCloseButtonState();
-    void setFocus();
+    
+    void resetFocus();
     bool getAddState();
     void setAddState(bool state);
     bool getMovingState();
@@ -81,6 +83,7 @@ private:
     void mouseUp(const juce::MouseEvent &e) override;
     void mouseDrag(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
+    int getFocusIndex();
     int lineNum = 0;
     int changePresetLineCount = 0; // only for preset change count
     
@@ -92,7 +95,8 @@ private:
     bool isParamInArray(juce::String paramName, std::vector<juce::String> paramArray);
     void setParametersToAFromB(int toIndex, int fromIndex);
     void initParameters(int bandindex);
-    void setStatesWhenAddOrDelete(int changedIndex, juce::String option);
+    void setStatesWhenAdd(int changedIndex);
+    void setStatesWhenDelete(int changedIndex);
     
     void updateLineLeftRightIndex();
     void updateLineNumAndSortedIndex(int option);
@@ -110,12 +114,13 @@ private:
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];
     std::unique_ptr<EnableButton> enableButton[4];
+    std::unique_ptr<CloseButton> closeButton[4];
     
     bool multibandFocus[4] = { true, false, false, false };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiSoloAttachment1, multiSoloAttachment2, multiSoloAttachment3, multiSoloAttachment4;
-    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> freqDividerGroupAttachment1, freqDividerGroupAttachment2, freqDividerGroupAttachment3;
     juce::Atomic<bool> parametersChanged {false};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)

@@ -617,7 +617,7 @@ void FireAudioProcessorEditor::setMultiband()
     multiband.sortLines();
     multiband.setLineRelatedBoundsByX();
     multiband.setSoloRelatedBounds();
-//    multiband.setFocus();
+//    multiband.resetFocus();
 //    processor.setLineNum(multiband.getLineNum());
 }
 

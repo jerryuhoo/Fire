@@ -498,7 +498,7 @@ void Multiband::setStatesWhenDelete(int changedIndex)
     {
         freqDividerGroup[lineNum - 1]->setEnabled(false);
     }
-    closeButton[lineNum]->setVisible(false);
+//    closeButton[lineNum]->setVisible(false);
     
     /**
      When adding or deleting lines, this function is to keep enable and solo buttons in the right order and states.
@@ -719,11 +719,11 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         int freq = static_cast<int>(SpectrumComponent::transformFromLog(xPercent));
                         freqDividerGroup[i]->setFreq(freq);
                         freqDividerGroup[i]->setEnabled(true);
-                        closeButton[i + 1]->setVisible(true);
-                        if (i == 0)
-                        {
-                            closeButton[0]->setVisible(true);
-                        }
+//                        closeButton[i + 1]->setVisible(true);
+//                        if (i == 0)
+//                        {
+//                            closeButton[0]->setVisible(true);
+//                        }
 //                        freqDividerGroup[i]->getVerticalLine().setMoveState(true);
 //                        updateLines(0);
                         int changeIndex = sortLines();
@@ -901,11 +901,13 @@ void Multiband::setSoloRelatedBounds()
         {
             soloButton[i]->setVisible(true);
             enableButton[i]->setVisible(true);
+            closeButton[i]->setVisible(true);
         }
         else
         {
             soloButton[i]->setVisible(false);
             enableButton[i]->setVisible(false);
+            closeButton[i]->setVisible(false);
         }
     }
     // setBounds of soloButtons and enableButtons

@@ -59,7 +59,7 @@ private:
     void mouseDoubleClick (const juce::MouseEvent& e) override;
     void sliderValueChanged (juce::Slider* slider) override;
     void buttonClicked (juce::Button* button) override;
-
+    void enablementChanged() override;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;

@@ -60,7 +60,7 @@ FreqDividerGroup::~FreqDividerGroup()
 void FreqDividerGroup::paint (juce::Graphics& g)
 {
 //    if (closeButton.getToggleState())
-    if (getToggleState())
+    if (isEnabled())
     {
         if (verticalLine.getMoveState() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
         {
@@ -161,7 +161,11 @@ void FreqDividerGroup::buttonClicked (juce::Button* button)
 //            freqTextLabel.setVisible (false);
 //        }
 //    }
-    if (getToggleState())
+}
+
+void FreqDividerGroup::enablementChanged()
+{
+    if (isEnabled())
         setVisible(true);
     else
         setVisible(false);
@@ -170,7 +174,7 @@ void FreqDividerGroup::buttonClicked (juce::Button* button)
 void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
 {
     // ableton move sliders
-    if (slider == &verticalLine && getToggleState())
+    if (slider == &verticalLine && isEnabled())
     {
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();

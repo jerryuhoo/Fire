@@ -874,33 +874,37 @@ bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
 
 void FireAudioProcessor::setHistoryArray(int bandIndex)
 {
-    juce::AudioBuffer<float> buffer;
-
-    if (bandIndex == 0)
-    {
-        buffer = mBuffer1;
-    }
-    else if (bandIndex == 1)
-    {
-        buffer = mBuffer2;
-    }
-    else if (bandIndex == 2)
-    {
-        buffer = mBuffer3;
-    }
-    else if (bandIndex == 3)
-    {
-        buffer = mBuffer4;
-    }
-    else
-    {
-        buffer = mWetBuffer;
-    }
-    
     for (int channel = 0; channel < getTotalNumOutputChannels(); ++channel)
     {
-        auto *channelData = buffer.getWritePointer(channel);
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        int bufferSamples = 0;
+        float *channelData;
+        if (bandIndex == 0)
+        {
+            channelData = mBuffer1.getWritePointer(channel);
+            bufferSamples = mBuffer1.getNumSamples();
+        }
+        else if (bandIndex == 1)
+        {
+            channelData = mBuffer2.getWritePointer(channel);
+            bufferSamples = mBuffer2.getNumSamples();
+        }
+        else if (bandIndex == 2)
+        {
+            channelData = mBuffer3.getWritePointer(channel);
+            bufferSamples = mBuffer3.getNumSamples();
+        }
+        else if (bandIndex == 3)
+        {
+            channelData = mBuffer4.getWritePointer(channel);
+            bufferSamples = mBuffer4.getNumSamples();
+        }
+        else
+        {
+            channelData = mWetBuffer.getWritePointer(channel);
+            bufferSamples = mWetBuffer.getNumSamples();
+        }
+            
+        for (int sample = 0; sample < bufferSamples; ++sample)
         {
             // mDelay is delayed clean signal
             if (sample % 10 == 0)

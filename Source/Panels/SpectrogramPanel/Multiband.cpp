@@ -78,10 +78,6 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
     freqDividerGroupAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID1, *freqDividerGroup[0]);
     freqDividerGroupAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID2, *freqDividerGroup[1]);
     freqDividerGroupAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID3, *freqDividerGroup[2]);
-    
-    freqDividerGroup[0]->setToggleState(processor.treeState.getRawParameterValue(LINE_STATE_ID1), juce::sendNotificationSync);
-    freqDividerGroup[1]->setToggleState(processor.treeState.getRawParameterValue(LINE_STATE_ID2), juce::sendNotificationSync);
-    freqDividerGroup[2]->setToggleState(processor.treeState.getRawParameterValue(LINE_STATE_ID3), juce::sendNotificationSync);
 }
 
 Multiband::~Multiband()

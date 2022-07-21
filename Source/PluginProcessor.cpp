@@ -1231,7 +1231,7 @@ void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::Au
     float mixValue = static_cast<float>(*treeState.getRawParameterValue(mixID));
     auto dryBlock = juce::dsp::AudioBlock<float> (dryBuffer);
     auto wetBlock = juce::dsp::AudioBlock<float> (wetBuffer);
-    
+    dryWetMixer.reset();
     dryWetMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     dryWetMixer.pushDrySamples (dryBlock);
     if (*treeState.getRawParameterValue(HQ_ID))

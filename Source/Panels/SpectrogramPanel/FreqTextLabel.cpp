@@ -77,6 +77,8 @@ void FreqTextLabel::paint (juce::Graphics& g)
     {
         mFrequency = freqLabel.getText().getIntValue();
         verticalLine.setValue (mFrequency);
+        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(mFrequency));
+        verticalLine.setXPercent(xPercent); // set freq -> set X percent
         // trigger silderValueChanged in FreqDividerGroup?
     };
 }

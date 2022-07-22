@@ -106,18 +106,16 @@ void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, st
     {
         newXPercent = rightLimit;
     }
-    
-        if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
-        {
-            freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
-        }
-        if (verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
-        {
-            freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
-        }
-    
-    
-    verticalLine.setXPercent (newXPercent);
+
+    if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
+    {
+        freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
+    }
+    if (verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
+    {
+        freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
+    }
+    verticalLine.setXPercent(newXPercent);
     verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent), juce::sendNotificationSync); // * (44100 / 2.0)
 }
 

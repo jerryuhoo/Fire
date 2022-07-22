@@ -13,7 +13,7 @@
 #include <JuceHeader.h>
 #include "FreqTextLabel.h"
 #include "VerticalLine.h"
-#include "SpectrumComponent.h"
+
 #include "../../PluginProcessor.h"
 //==============================================================================
 /*

@@ -800,41 +800,6 @@ void Multiband::dragLines(float xPercent, int index)
     setSoloRelatedBounds();
 }
 
-// In Ableton, move the slider in the control bar, the lines should move.
-void Multiband::dragLinesByFreq(int freq, int index)
-{
-    if (index < 0) return;
-    if (/* ! isMoving  && */ freqDividerGroup[index]->getToggleState())
-    {
-        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
-        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
-        
-        // keep distance limit between lines
-        for (int i = 0; i < lineNum; i++)
-        {
-            if (freqDividerGroup[i]->getToggleState())
-            {
-                // get the correct xPercent if the line cannot move.
-                xPercent = freqDividerGroup[i]->getVerticalLine().getXPercent();
-
-                freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-                freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 10.0f, getHeight());
-                
-                // get the correct freq if the line cannot move.
-                //freq = freqDividerGroup[sortedIndex[i]]->getFrequency();
-            }
-        }
-        
-//        if (freqDividerGroup[index]->getToogleState())
-//        {
-//            freqDividerGroup[index]->setFrequency(freq);
-//            frequency[index] = freq;
-//        }
-
-        setSoloRelatedBounds();
-    }
-}
-
 void Multiband::setLineRelatedBoundsByX()
 {
     // set line frequecny and position according to current x percentage of the width
@@ -844,11 +809,8 @@ void Multiband::setLineRelatedBoundsByX()
         {
             float xPercent = freqDividerGroup[i]->getVerticalLine().getXPercent();
             freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 10.0f, getHeight());
-            int freq = static_cast<int>(SpectrumComponent::transformFromLog(xPercent));
-            freqDividerGroup[i]->setFreq(freq);
         }
     }
-    
 }
 
 void Multiband::setLineRelatedBoundsByFreq(FreqDividerGroup& freqDividerGroup, int freq)
@@ -977,29 +939,7 @@ int Multiband::getFocusBand()
 
 void Multiband::sliderValueChanged(juce::Slider *slider)
 {
-//    if (! stateComponent.getChangedState())
-//    {
-        for (int i = 0; i < lineNum; i++)
-        {
-            if (slider == &freqDividerGroup[i]->getVerticalLine())
-            {
-                lineNum = countLines();
-                sortLines();
-                updateLineLeftRightIndex();
-                dragLinesByFreq(freqDividerGroup[i]->getVerticalLine().getValue(), i);
-            }
-        }
-//    }
-//    if (stateComponent.getChangedState())
-//    {
-//        sortLines();
-////        updateLines(1); // 1 means setBounds by setting frequency
-//        setLineRelatedBoundsByX();
-//        
-//        setSoloRelatedBounds();
-//        processor.setLineNum();
-////        stateComponent.setChangedState(false);
-//    }
+    setLineRelatedBoundsByX();
 }
 
 void Multiband::parameterValueChanged(int parameterIndex, float newValue)

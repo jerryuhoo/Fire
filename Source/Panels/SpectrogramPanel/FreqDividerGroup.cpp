@@ -99,20 +99,26 @@ void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, st
     rightLimit = 1 - (lineNum - verticalLine.getIndex()) * margin;
 
     if (newXPercent < leftLimit)
+    {
         newXPercent = leftLimit;
-    if (newXPercent > rightLimit)
+    }
+    else if (newXPercent > rightLimit)
+    {
         newXPercent = rightLimit;
-
-    if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
-    {
-        freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
     }
-    if (verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
-    {
-        freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
-    }
+    
+        if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
+        {
+            freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
+        }
+        if (verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
+        {
+            freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
+        }
+    
+    
     verticalLine.setXPercent (newXPercent);
-    verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent)); // * (44100 / 2.0)
+    verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent), juce::sendNotificationSync); // * (44100 / 2.0)
 }
 
 VerticalLine& FreqDividerGroup::getVerticalLine()
@@ -141,6 +147,8 @@ void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();
         freqTextLabel.setFreq (freq);
+        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
+        verticalLine.setXPercent(xPercent); // set freq -> set X percent
     }
 }
 

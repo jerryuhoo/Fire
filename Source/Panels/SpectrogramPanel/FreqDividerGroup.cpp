@@ -107,6 +107,9 @@ void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, st
         newXPercent = rightLimit;
     }
 
+    verticalLine.setXPercent(newXPercent);
+    verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent)); // * (44100 / 2.0)
+    
     if (verticalLine.getLeft() >= 0 && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
         freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
@@ -115,8 +118,6 @@ void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, st
     {
         freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
     }
-    verticalLine.setXPercent(newXPercent);
-    verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent), juce::sendNotificationSync); // * (44100 / 2.0)
 }
 
 VerticalLine& FreqDividerGroup::getVerticalLine()
@@ -139,8 +140,9 @@ void FreqDividerGroup::clicked (const juce::ModifierKeys& modifiers)
 
 void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
 {
+    // TODO: maybe i don't need this
     // ableton move sliders
-    if (slider == &verticalLine && isEnabled())
+    if (slider == &verticalLine && getToggleState())
     {
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();

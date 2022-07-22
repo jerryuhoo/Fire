@@ -668,7 +668,7 @@ void Multiband::mouseDrag(const juce::MouseEvent &e)
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
 {
-    DBG("mousedown");
+//    DBG("mousedown");
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
@@ -756,10 +756,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             }
         }
     }
-    
-    
-
-    
 }
 
 int Multiband::getLineNum()
@@ -797,7 +793,6 @@ void Multiband::dragLines(float xPercent, int index)
 {
     // moving lines by dragging mouse
     freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
-    setSoloRelatedBounds();
 }
 
 void Multiband::setLineRelatedBoundsByX()
@@ -943,11 +938,13 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
     {
         if (slider == &freqDividerGroup[i]->getVerticalLine())
         {
+            int freq = slider->getValue();
+            freqDividerGroup[i]->setFreq(freq);
             freqDividerGroup[i]->moveToX(lineNum, freqDividerGroup[i]->getVerticalLine().getXPercent(), limitLeft, freqDividerGroup);
         }
     }
-    
     setLineRelatedBoundsByX();
+    setSoloRelatedBounds();
 }
 
 void Multiband::parameterValueChanged(int parameterIndex, float newValue)

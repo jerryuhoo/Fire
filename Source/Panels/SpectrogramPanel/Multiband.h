@@ -48,12 +48,10 @@ public:
     void resetFocus();
     bool getAddState();
     void setAddState(bool state);
-    bool getMovingState();
-    void setMovingState(bool state);
 
     void setDeleteState(bool state);
 //    int getSortedIndex(int index);
-    void dragLines(float xPercent);
+    void dragLines(float xPercent, int index);
     void dragLinesByFreq(int freq, int index);
     int getFocusBand();
     void updateLines(int option);

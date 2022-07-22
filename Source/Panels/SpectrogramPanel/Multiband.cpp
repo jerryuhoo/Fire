@@ -44,7 +44,7 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
         freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor, i); // set index
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
-//        (freqDividerGroup[i]->getVerticalLine()).addMouseListener(this, true);
+        (freqDividerGroup[i]->getVerticalLine()).addMouseListener(this, true);
 //        (freqDividerGroup[i]->getCloseButton()).addListener(this);
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue));
@@ -115,32 +115,6 @@ void Multiband::paint (juce::Graphics& g)
     }
 
     if (isVisible()) processor.setHistoryArray(focusIndex);
-//    if (isMoving)
-//        DBG("moving");
-//    else
-//        DBG("not moving");
-    
-    // set value only when line is deleted, added, moving
-    if (/*getDeleteState() || getAddState() ||*/ getMovingState())
-    {
-//        if (getDeleteState())
-//        {
-//            updateLines();
-//            setDeleteState(false);
-//        }
-//        else if (getAddState())
-//        {
-//            updateLines();
-//            setAddState(false);
-//        }
-//        if (getMovingState())
-//        {
-//            updateLines(0);
-//        setLineRelatedBoundsByX(i);
-        setLineRelatedBoundsByX();
-        setMovingState(false);
-//        }
-    }
     
     // draw line that will be added next
     g.setColour(COLOUR1.withAlpha(0.2f));
@@ -167,9 +141,6 @@ void Multiband::paint (juce::Graphics& g)
             g.drawLine(xPos, startY, xPos, endY, 2);
         }
     }
-
-    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-    dragLines(targetXPercent);
 
     // set black and focus masks
     int margin2 = getWidth() / 250; // 1/100 * 4 / 10
@@ -252,20 +223,17 @@ void Multiband::paint (juce::Graphics& g)
         g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
     }
     
-//    float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-//    dragLines(targetXPercent);
-    
     // if preset is changed
-    if (stateComponent.getChangedState())
-    {
-        stateComponent.setChangedState(false);
-        sortLines();
-//        updateLines(1); // 1 means setBounds by setting frequency
-        setLineRelatedBoundsByX();
-        
-        setSoloRelatedBounds();
-        processor.setLineNum();
-    }
+//    if (stateComponent.getChangedState())
+//    {
+//        stateComponent.setChangedState(false);
+//        sortLines();
+////        updateLines(1); // 1 means setBounds by setting frequency
+//        setLineRelatedBoundsByX();
+//
+//        setSoloRelatedBounds();
+//        processor.setLineNum();
+//    }
 }
 
 void Multiband::resized()
@@ -685,6 +653,17 @@ void Multiband::mouseDrag(const juce::MouseEvent &e)
 //        moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
 //    }
 //    setLineRelatedBoundsByX();
+    
+    // moving lines by dragging mouse
+    for (int i = 0; i < lineNum; i++)
+    {
+        if (e.eventComponent == &freqDividerGroup[i]->getVerticalLine())
+        {
+            float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+            dragLines(targetXPercent, i);
+        }
+    }
+    
 }
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
@@ -814,23 +793,11 @@ void Multiband::reset()
 }
 
 // 3 ways to change frequency: 1. change freqLabel; 2. drag; 3.change Ableton slider
-void Multiband::dragLines(float xPercent)
+void Multiband::dragLines(float xPercent, int index)
 {
-    // drag
-    for (int i = 0; i < 3; i++)
-    {
-        if (freqDividerGroup[i]->getVerticalLine().getMoveState())
-//        if (freqDividerGroup[i]->getVerticalLine().isMouseButtonDown())
-        {
-            freqDividerGroup[i]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
-            isMoving = true;
-        }
-    }
-
-    if (isMoving) // drag
-    {
-        setSoloRelatedBounds();
-    }
+    // moving lines by dragging mouse
+    freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
+    setSoloRelatedBounds();
 }
 
 // In Ableton, move the slider in the control bar, the lines should move.
@@ -987,16 +954,6 @@ void Multiband::setAddState(bool state)
     isAdded = state;
 }
 
-bool Multiband::getMovingState()
-{
-    return isMoving;
-}
-
-void Multiband::setMovingState(bool state)
-{
-    isMoving = state;
-}
-
 void Multiband::timerCallback()
 {
     if( parametersChanged.compareAndSetBool(false, true) )
@@ -1020,13 +977,29 @@ int Multiband::getFocusBand()
 
 void Multiband::sliderValueChanged(juce::Slider *slider)
 {
-    for (int i = 0; i < 3; i++)
-    {
-        if (slider == &freqDividerGroup[i]->getVerticalLine())
+//    if (! stateComponent.getChangedState())
+//    {
+        for (int i = 0; i < lineNum; i++)
         {
-            dragLinesByFreq(freqDividerGroup[i]->getVerticalLine().getValue(), i);
+            if (slider == &freqDividerGroup[i]->getVerticalLine())
+            {
+                lineNum = countLines();
+                sortLines();
+                updateLineLeftRightIndex();
+                dragLinesByFreq(freqDividerGroup[i]->getVerticalLine().getValue(), i);
+            }
         }
-    }
+//    }
+//    if (stateComponent.getChangedState())
+//    {
+//        sortLines();
+////        updateLines(1); // 1 means setBounds by setting frequency
+//        setLineRelatedBoundsByX();
+//        
+//        setSoloRelatedBounds();
+//        processor.setLineNum();
+////        stateComponent.setChangedState(false);
+//    }
 }
 
 void Multiband::parameterValueChanged(int parameterIndex, float newValue)

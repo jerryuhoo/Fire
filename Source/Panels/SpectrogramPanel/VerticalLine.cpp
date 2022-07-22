@@ -68,8 +68,7 @@ void VerticalLine::mouseExit(const juce::MouseEvent &e)
 
 void VerticalLine::mouseDrag(const juce::MouseEvent &e)
 {
-//    DBG("vertical line drag");
-//    dragger.dragComponent (this, e, &boundsConstrainer);
+    // this will call multiband mouseDrag
 }
 
 void VerticalLine::mouseDown(const juce::MouseEvent &e)

@@ -944,7 +944,6 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
             freqDividerGroup[i]->moveToX(lineNum, freqDividerGroup[i]->getVerticalLine().getXPercent(), limitLeft, freqDividerGroup);
         }
     }
-    sortLines();
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
 }

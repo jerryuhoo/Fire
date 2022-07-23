@@ -934,6 +934,7 @@ int Multiband::getFocusBand()
 
 void Multiband::sliderValueChanged(juce::Slider *slider)
 {
+    lineNum = countLines();
     for (int i = 0; i < lineNum; i++)
     {
         if (slider == &freqDividerGroup[i]->getVerticalLine())
@@ -943,6 +944,7 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
             freqDividerGroup[i]->moveToX(lineNum, freqDividerGroup[i]->getVerticalLine().getXPercent(), limitLeft, freqDividerGroup);
         }
     }
+    sortLines();
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
 }

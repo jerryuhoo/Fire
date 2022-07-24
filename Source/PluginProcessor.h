@@ -35,7 +35,7 @@ public:
     //==============================================================================
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
-
+    void reset() override;
 #ifndef JucePlugin_PreferredChannelConfigurations
     bool isBusesLayoutSupported(const BusesLayout &layouts) const override;
 #endif
@@ -135,9 +135,6 @@ private:
     juce::AudioBuffer<float> mDryBuffer;
     // wet audio buffer
     juce::AudioBuffer<float> mWetBuffer;
-    
-    // dsp::AudioBlock<float> blockOutput;
-    juce::dsp::ProcessSpec spec;
 
     // filter
     MonoChain leftChain;

@@ -89,9 +89,7 @@ Multiband::~Multiband()
 
 void Multiband::paint (juce::Graphics& g)
 {
-    // set graph buffer
-    int focusIndex = getFocusIndex();
-
+    // send band buffer to graphs
     if (isVisible()) processor.setHistoryArray(focusIndex);
     
     // draw line that will be added next
@@ -142,9 +140,9 @@ void Multiband::paint (juce::Graphics& g)
     int mouseY = getMouseXYRelative().getY();
     
     // set mouse enter white
-    if (!multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[0]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
+    if (!isMouseButtonDownAnywhere() && !multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[0]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
     {
-        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.setColour(COLOUR_MASK_WHITE);
         g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
     }
     
@@ -173,9 +171,9 @@ void Multiband::paint (juce::Graphics& g)
             g.fillRect(startX, 0, bandWidth, getHeight());
         }
         
-        if (!multibandFocus[i] && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
+        if (!isMouseButtonDownAnywhere() && !multibandFocus[i] && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
         {
-            g.setColour(juce::Colours::white.withAlpha(0.05f));
+            g.setColour(COLOUR_MASK_WHITE);
             g.fillRect(startX, 0, bandWidth, getHeight());
         }
     }
@@ -189,9 +187,9 @@ void Multiband::paint (juce::Graphics& g)
     }
     
     // set mouse enter white
-    if (!multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[lineNum - 1]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
+    if (!isMouseButtonDownAnywhere() && !multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[lineNum - 1]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
     {
-        g.setColour(juce::Colours::white.withAlpha(0.05f));
+        g.setColour(COLOUR_MASK_WHITE);
         g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
     }
     
@@ -398,6 +396,7 @@ void Multiband::setStatesWhenAdd(int changedIndex)
     }
     setSoloRelatedBounds();
 }
+
 void Multiband::setStatesWhenDelete(int changedIndex)
 {
     /**
@@ -608,12 +607,13 @@ void Multiband::mouseDrag(const juce::MouseEvent &e)
             dragLines(targetXPercent, i);
         }
     }
-    
 }
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
 {
-//    DBG("mousedown");
+    // update focus index
+    focusIndex = getFocusIndex();
+    
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
@@ -642,11 +642,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         int freq = static_cast<int>(SpectrumComponent::transformFromLog(xPercent));
                         freqDividerGroup[i]->setFreq(freq);
                         freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
-//                        closeButton[i + 1]->setVisible(true);
-//                        if (i == 0)
-//                        {
-//                            closeButton[0]->setVisible(true);
-//                        }
 //                        freqDividerGroup[i]->getVerticalLine().setMoveState(true);
 //                        updateLines(0);
                         int changeIndex = sortLines();
@@ -704,14 +699,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
 int Multiband::getLineNum()
 {
     return lineNum;
-}
-
-void Multiband::getEnableArray(bool (&input)[4])
-{
-    for (int i = 0; i < 4; i++)
-    {
-        input[i] = enableButton[i]->getToggleState();
-    }
 }
 
 void Multiband::reset()
@@ -799,41 +786,6 @@ void Multiband::setSoloRelatedBounds()
     }
 }
 
-void Multiband::setFocus(bool focus1, bool focus2, bool focus3, bool focus4)
-{
-    multibandFocus[0] = focus1;
-    multibandFocus[1] = focus2;
-    multibandFocus[2] = focus3;
-    multibandFocus[3] = focus4;
-}
-
-//void Multiband::setFrequency(int freq1, int freq2, int freq3)
-//{
-//    if (freqDividerGroup[0]->getToggleState())
-//    {
-//        //freqDividerGroup[0]->getVerticalLine().setValue(freq1);
-//        freqDividerGroup[0]->setFreq(freq1);
-//    }
-//    if (freqDividerGroup[1]->getToggleState())
-//    {
-//        //freqDividerGroup[1]->getVerticalLine().setValue(freq2);
-//        freqDividerGroup[1]->setFreq(freq2);
-//    }
-//    if(freqDividerGroup[2]->getToggleState())
-//    {
-//        //freqDividerGroup[2]->getVerticalLine().setValue(freq3);
-//        freqDividerGroup[2]->setFreq(freq3);
-//    }
-//}
-
-void Multiband::setEnableState(bool state1, bool state2, bool state3, bool state4)
-{
-    enableButton[0]->setToggleState(state1, juce::NotificationType::sendNotification);
-    enableButton[1]->setToggleState(state2, juce::NotificationType::sendNotification);
-    enableButton[2]->setToggleState(state3, juce::NotificationType::sendNotification);
-    enableButton[3]->setToggleState(state4, juce::NotificationType::sendNotification);
-}
-
 void Multiband::resetFocus()
 {
     multibandFocus[0] = true;
@@ -897,19 +849,7 @@ void Multiband::parameterValueChanged(int parameterIndex, float newValue)
 
 void Multiband::buttonClicked(juce::Button* button)
 {
-    // click closebutton, if the togglestate is false, means delete line.
-//    for (int i = 0; i < 3; i++)
-//    {
-//        if (button == &freqDividerGroup[i] && !freqDividerGroup[i]->getToggleState())
-//        {
-//            setStatesWhenAddOrDelete(i, "delete");
-////            updateLines(0);
-//            sortLines();
-//            setLineRelatedBoundsByX();
-//            setSoloRelatedBounds();
-//            processor.setLineNum();
-//        }
-//    }
+    // click closebutton and delete line.
     for (int i = 0; i < 4; i++)
     {
         if (button == &*closeButton[i])
@@ -921,7 +861,6 @@ void Multiband::buttonClicked(juce::Button* button)
             processor.setLineNum();
         }
     }
-    
 }
 
 EnableButton& Multiband::getEnableButton(const int index)

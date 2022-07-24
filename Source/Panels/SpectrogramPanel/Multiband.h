@@ -34,12 +34,6 @@ public:
     void timerCallback() override;
     
     int getLineNum();
-    void getFocusArray(bool (&input)[4]);
-//    void setFrequency(int freq1, int freq2, int freq3);
-    void setFocus(bool focus1, bool focus2, bool focus3, bool focus4);
-
-    void setEnableState(bool state1, bool state2, bool state3, bool state4);
-    void getEnableArray(bool(&input)[4]);
 
     void reset();
 
@@ -82,6 +76,7 @@ private:
     void mouseDown(const juce::MouseEvent &e) override;
     int getFocusIndex();
     int lineNum = 0;
+    int focusIndex = 0;
     int changePresetLineCount = 0; // only for preset change count
     
     

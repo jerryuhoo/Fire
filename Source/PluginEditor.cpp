@@ -582,37 +582,6 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 
 void FireAudioProcessorEditor::setMultiband()
 {
-//    bool lineState1 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID1));
-//    bool lineState2 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID2));
-//    bool lineState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(LINE_STATE_ID3));
-//    multiband.setLineState(lineState1, lineState2, lineState3);
-//
-//    int freq1 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID1));
-//    int freq2 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID2));
-//    int freq3 = static_cast<int>(*processor.treeState.getRawParameterValue(FREQ_ID3));
-    
-    // sort
-//    if (freq1 > freq2)
-//    {
-//        std::swap(freq1, freq2);
-//    }
-//    if (freq2 > freq3)
-//    {
-//        std::swap(freq2, freq3);
-//    }
-//    multiband.setFrequency(freq1, freq2, freq3);
-//
-//    float pos1 = static_cast<float>(SpectrumComponent::transformToLog(freq1));
-//    float pos2 = static_cast<float>(SpectrumComponent::transformToLog(freq2));
-//    float pos3 = static_cast<float>(SpectrumComponent::transformToLog(freq3));
-//    multiband.setLinePos(pos1, pos2, pos3);
-//
-//    bool enableState1 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID1));
-//    bool enableState2 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID2));
-//    bool enableState3 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID3));
-//    bool enableState4 = static_cast<bool>(*processor.treeState.getRawParameterValue(BAND_ENABLE_ID4));
-//    multiband.setEnableState(enableState1, enableState2, enableState3, enableState4);
-    
     //multiband.updateLines(1);
     multiband.sortLines();
     multiband.setLineRelatedBoundsByX();

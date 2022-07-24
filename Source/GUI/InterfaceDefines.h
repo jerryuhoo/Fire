@@ -341,6 +341,7 @@
 #define COLOUR_FONT         juce::Colour(100, 100, 100)
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
+#define COLOUR_MASK_WHITE   juce::Colours::white.withAlpha(0.05f)
 #define COLOUR_GROUP        juce::Colour(50, 50, 50)
 #define DRIVE_COLOUR        juce::Colours::red
 #define SHAPE_COLOUR        juce::Colours::yellow

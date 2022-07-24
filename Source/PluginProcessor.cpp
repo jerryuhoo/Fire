@@ -121,7 +121,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-    
+    auto channels = static_cast<juce::uint32> (juce::jmin (getMainBusNumInputChannels(), getMainBusNumOutputChannels()));
+    juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32> (samplesPerBlock), channels };
+
     // fix the artifacts (also called zipper noise)
     previousOutput1 = (float)*treeState.getRawParameterValue(OUTPUT_ID1);
     previousOutput1 = juce::Decibels::decibelsToGain(previousOutput1);
@@ -248,11 +250,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
     */
 
-    // spec.maximumBlockSize = samplesPerBlock;
-    spec.sampleRate = sampleRate;
-    spec.maximumBlockSize = /*newBlockSize;*/ samplesPerBlock;
-    spec.numChannels = getMainBusNumOutputChannels();
-
     // filter init
     updateFilter();
     leftChain.prepare(spec);
@@ -288,12 +285,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     highpass1.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
     highpass2.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
     highpass3.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
-    lowpass1.reset();
-    lowpass2.reset();
-    lowpass3.reset();
-    highpass1.reset();
-    highpass2.reset();
-    highpass3.reset();
+    
     lowpass1.prepare(spec);
     lowpass2.prepare(spec);
     lowpass3.prepare(spec);
@@ -309,22 +301,18 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessorGlobal.prepare(spec);
     
     // compressor
-    compressorProcessor1.reset();
     compressorProcessor1.prepare(spec);
     compressorProcessor1.setAttack(80.0f);
     compressorProcessor1.setRelease(200.0f);
     
-    compressorProcessor2.reset();
     compressorProcessor2.prepare(spec);
     compressorProcessor2.setAttack(80.0f);
     compressorProcessor2.setRelease(200.0f);
     
-    compressorProcessor3.reset();
     compressorProcessor3.prepare(spec);
     compressorProcessor3.setAttack(80.0f);
     compressorProcessor3.setRelease(200.0f);
     
-    compressorProcessor4.reset();
     compressorProcessor4.prepare(spec);
     compressorProcessor4.setAttack(80.0f);
     compressorProcessor4.setRelease(200.0f);
@@ -347,12 +335,33 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dryWetMixer2.prepare(spec);
     dryWetMixer3.prepare(spec);
     dryWetMixer4.prepare(spec);
+    reset();
+}
+
+void FireAudioProcessor::reset()
+{
+    lowpass1.reset();
+    lowpass2.reset();
+    lowpass3.reset();
+    highpass1.reset();
+    highpass2.reset();
+    highpass3.reset();
+    compressorProcessor1.reset();
+    compressorProcessor2.reset();
+    compressorProcessor3.reset();
+    compressorProcessor4.reset();
+    dryWetMixerGlobal.reset();
+    dryWetMixer1.reset();
+    dryWetMixer2.reset();
+    dryWetMixer3.reset();
+    dryWetMixer4.reset();
 }
 
 void FireAudioProcessor::releaseResources()
 {
     // When playback stops, you can use this as an opportunity to free up any
     // spare memory, etc.
+    reset();
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -485,9 +494,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mi
             lowpass1.setCutoffFrequency(freqValue1);
             lowpass1.process (context1);
         }
-        
-        mDryBuffer.addFrom(leftChannelId, 0, mBuffer1, leftChannelId, 0, numSamples);
-        mDryBuffer.addFrom(rightChannelId, 0, mBuffer1, rightChannelId, 0, numSamples);
+
+        mDryBuffer.makeCopyOf(mBuffer1);
         
         setLeftRightMeterRMSValues(mBuffer1, mInputLeftSmoothedBand1, mInputRightSmoothedBand1);
 
@@ -874,33 +882,37 @@ bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
 
 void FireAudioProcessor::setHistoryArray(int bandIndex)
 {
-    juce::AudioBuffer<float> buffer;
-
-    if (bandIndex == 0)
-    {
-        buffer = mBuffer1;
-    }
-    else if (bandIndex == 1)
-    {
-        buffer = mBuffer2;
-    }
-    else if (bandIndex == 2)
-    {
-        buffer = mBuffer3;
-    }
-    else if (bandIndex == 3)
-    {
-        buffer = mBuffer4;
-    }
-    else
-    {
-        buffer = mWetBuffer;
-    }
-    
     for (int channel = 0; channel < getTotalNumOutputChannels(); ++channel)
     {
-        auto *channelData = buffer.getWritePointer(channel);
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        int bufferSamples = 0;
+        float *channelData;
+        if (bandIndex == 0)
+        {
+            channelData = mBuffer1.getWritePointer(channel);
+            bufferSamples = mBuffer1.getNumSamples();
+        }
+        else if (bandIndex == 1)
+        {
+            channelData = mBuffer2.getWritePointer(channel);
+            bufferSamples = mBuffer2.getNumSamples();
+        }
+        else if (bandIndex == 2)
+        {
+            channelData = mBuffer3.getWritePointer(channel);
+            bufferSamples = mBuffer3.getNumSamples();
+        }
+        else if (bandIndex == 3)
+        {
+            channelData = mBuffer4.getWritePointer(channel);
+            bufferSamples = mBuffer4.getNumSamples();
+        }
+        else
+        {
+            channelData = mWetBuffer.getWritePointer(channel);
+            bufferSamples = mWetBuffer.getNumSamples();
+        }
+            
+        for (int sample = 0; sample < bufferSamples; ++sample)
         {
             // mDelay is delayed clean signal
             if (sample % 10 == 0)
@@ -1231,7 +1243,6 @@ void FireAudioProcessor::mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::Au
     float mixValue = static_cast<float>(*treeState.getRawParameterValue(mixID));
     auto dryBlock = juce::dsp::AudioBlock<float> (dryBuffer);
     auto wetBlock = juce::dsp::AudioBlock<float> (wetBuffer);
-    
     dryWetMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     dryWetMixer.pushDrySamples (dryBlock);
     if (*treeState.getRawParameterValue(HQ_ID))

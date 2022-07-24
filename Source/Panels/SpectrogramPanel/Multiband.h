@@ -14,6 +14,7 @@
 #include "SpectrumComponent.h"
 #include "SoloButton.h"
 #include "EnableButton.h"
+#include "CloseButton.h"
 #include <vector>
 #include "FreqDividerGroup.h"
 #include "../../PluginProcessor.h"
@@ -34,27 +35,24 @@ public:
     
     int getLineNum();
     void getFocusArray(bool (&input)[4]);
-    void setFrequency(int freq1, int freq2, int freq3);
+//    void setFrequency(int freq1, int freq2, int freq3);
     void setFocus(bool focus1, bool focus2, bool focus3, bool focus4);
-    void setLineState(bool state1, bool state2, bool state3);
-    void getLineState(bool (&input)[3]);
+
     void setEnableState(bool state1, bool state2, bool state3, bool state4);
     void getEnableArray(bool(&input)[4]);
 
     void reset();
-    void setLinePos(float pos1, float pos2, float pos3);
-    void getLinePos(float (&input)[3]);
-    
+
     void setCloseButtonState();
-    void setFocus();
+    
+    void resetFocus();
     bool getAddState();
     void setAddState(bool state);
-    bool getMovingState();
-    void setMovingState(bool state);
+
     void setDeleteState(bool state);
-    int getSortedIndex(int index);
-    void dragLines(float xPercent);
-    void dragLinesByFreq(int freq, int index);
+//    int getSortedIndex(int index);
+    void dragLines(float xPercent, int index);
+
     int getFocusBand();
     void updateLines(int option);
     void setSoloRelatedBounds();
@@ -66,6 +64,8 @@ public:
     void setBandBypassStates(int index, bool state);
     state::StateComponent& getStateComponent();
     
+    int sortLines();
+    void setLineRelatedBoundsByX();
 private:
     FireAudioProcessor &processor;
     state::StateComponent &stateComponent;
@@ -81,6 +81,7 @@ private:
     void mouseUp(const juce::MouseEvent &e) override;
     void mouseDrag(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
+    int getFocusIndex();
     int lineNum = 0;
     int changePresetLineCount = 0; // only for preset change count
     
@@ -92,29 +93,32 @@ private:
     bool isParamInArray(juce::String paramName, std::vector<juce::String> paramArray);
     void setParametersToAFromB(int toIndex, int fromIndex);
     void initParameters(int bandindex);
-    void setStatesWhenAddOrDelete(int changedIndex, juce::String option);
+    void setStatesWhenAdd(int changedIndex);
+    void setStatesWhenDelete(int changedIndex);
     
     void updateLineLeftRightIndex();
     void updateLineNumAndSortedIndex(int option);
-    void setLineRelatedBoundsByX(int i);
-    void setLineRelatedBoundsByFreq(int i);
+    
+    void setLineRelatedBoundsByFreq(FreqDividerGroup& freqDividerGroup, int freq);
     
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
 
     bool shouldSetBlackMask(int index);
+    int countLines();
     
-    int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
+    //int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];
     std::unique_ptr<EnableButton> enableButton[4];
+    std::unique_ptr<CloseButton> closeButton[4];
     
     bool multibandFocus[4] = { true, false, false, false };
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiSoloAttachment1, multiSoloAttachment2, multiSoloAttachment3, multiSoloAttachment4;
-    
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> freqDividerGroupAttachment1, freqDividerGroupAttachment2, freqDividerGroupAttachment3;
     juce::Atomic<bool> parametersChanged {false};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)

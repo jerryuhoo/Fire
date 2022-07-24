@@ -13,7 +13,7 @@
 #include <JuceHeader.h>
 #include "../../GUI/LookAndFeel.h"
 #include "VerticalLine.h"
-
+#include "SpectrumComponent.h"
 //==============================================================================
 /*
 */

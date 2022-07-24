@@ -45,10 +45,8 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         (freqDividerGroup[i]->getVerticalLine()).addMouseListener(this, true);
-//        (freqDividerGroup[i]->getCloseButton()).addListener(this);
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue));
-//        freqDividerGroup[i]->setBounds(xPercent * getWidth(), 0, getWidth(), getHeight());
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
         
         soloButton[i + 1] = std::make_unique<SoloButton>();
@@ -92,27 +90,7 @@ Multiband::~Multiband()
 void Multiband::paint (juce::Graphics& g)
 {
     // set graph buffer
-    int focusIndex = 0;
-    bool findFocus = false;
-    for (int i = 0; i < lineNum + 1; i++)
-    {
-        if (multibandFocus[i])
-        {
-            focusIndex = i;
-            findFocus = true;
-            break;
-        }
-    }
-    
-    if (!findFocus)
-    {
-        focusIndex = lineNum;
-        multibandFocus[lineNum] = true;
-        for (int i = lineNum + 1; i < 4; i++)
-        {
-            multibandFocus[i] = false;
-        }
-    }
+    int focusIndex = getFocusIndex();
 
     if (isVisible()) processor.setHistoryArray(focusIndex);
     
@@ -222,24 +200,10 @@ void Multiband::paint (juce::Graphics& g)
         g.setColour(COLOUR_MASK_BLACK);
         g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
     }
-    
-    // if preset is changed
-//    if (stateComponent.getChangedState())
-//    {
-//        stateComponent.setChangedState(false);
-//        sortLines();
-////        updateLines(1); // 1 means setBounds by setting frequency
-//        setLineRelatedBoundsByX();
-//
-//        setSoloRelatedBounds();
-//        processor.setLineNum();
-//    }
 }
 
 void Multiband::resized()
 {
-    // This method is where you should set the bounds of any child
-    // components that your component contains..
     margin = getHeight() / 20.0f;
     size = getWidth() / 1000.0f * 15.0f;
     width = freqDividerGroup[0]->getVerticalLine().getWidth() / 2.0f;
@@ -254,7 +218,6 @@ void Multiband::resized()
         width = 5.0f;
     }
 
-//    updateLines(0);
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
 }
@@ -276,7 +239,6 @@ bool Multiband::shouldSetBlackMask(int index)
 
 void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
 {
-    
     //if (toIndex == 0)
     std::unique_ptr<std::vector<juce::String>> fromArray;
     std::unique_ptr<std::vector<juce::String>> toArray;
@@ -343,6 +305,7 @@ bool Multiband::isParamInArray(juce::String paramName, std::vector<juce::String>
 void Multiband::initParameters(int bandindex)
 {
     for (const auto &param : processor.getParameters())
+    {
         if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
         {
             if (bandindex == 0 && isParamInArray(p->name, paramsArray1))
@@ -362,6 +325,7 @@ void Multiband::initParameters(int bandindex)
                 p->setValueNotifyingHost(p->getDefaultValue());
             }
         }
+    }
 }
 
 int Multiband::getFocusIndex()
@@ -395,7 +359,6 @@ void Multiband::setStatesWhenAdd(int changedIndex)
 {
     int focusIndex = getFocusIndex();
     
-
     // change focus index when line is added
     if (changedIndex < focusIndex || (changedIndex == focusIndex && getMouseXYRelative().getX() < (enableButton[focusIndex]->getX() + soloButton[focusIndex]->getX()) / 2.0f ))
     {
@@ -433,9 +396,7 @@ void Multiband::setStatesWhenAdd(int changedIndex)
             }
         }
     }
-    
     setSoloRelatedBounds();
-    
 }
 void Multiband::setStatesWhenDelete(int changedIndex)
 {
@@ -501,12 +462,6 @@ void Multiband::setStatesWhenDelete(int changedIndex)
     
     setSoloRelatedBounds();
 }
-
-//void Multiband::updateLines(int option)
-//{
-//    updateLineNumAndSortedIndex(option);
-//    updateLineLeftRightIndex();
-//}
 
 int Multiband::countLines()
 {
@@ -622,16 +577,6 @@ void Multiband::updateLineLeftRightIndex()
             freqDividerGroup[i]->getVerticalLine().setRight(freqDividerGroup[i + 1]->getVerticalLine().getIndex());
         }
     }
-    
-    bool isMoving = false;
-    for (int i = 0; i < lineNum; i++)
-    {
-        if (freqDividerGroup[i]->getVerticalLine().getMoveState())
-        {
-            isMoving = true;
-            break;
-        }
-    }
 }
 
 void Multiband::mouseUp(const juce::MouseEvent &e)
@@ -711,12 +656,10 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         break;
                     }
                 }
-
                 setLineRelatedBoundsByX(); // TODO: dont use this, only set freq
                 setSoloRelatedBounds();
             }
         }
-        
     }
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
@@ -783,7 +726,6 @@ void Multiband::reset()
     {
         freqDividerGroup[i]->setToggleState(false, juce::sendNotificationSync);
         multibandFocus[i + 1] = false;
-//        sortedIndex[i] = 0;
     }
     lineNum = 0;
 }

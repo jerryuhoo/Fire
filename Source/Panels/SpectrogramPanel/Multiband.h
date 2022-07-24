@@ -50,7 +50,6 @@ public:
     void setAddState(bool state);
 
     void setDeleteState(bool state);
-//    int getSortedIndex(int index);
     void dragLines(float xPercent, int index);
 
     int getFocusBand();
@@ -106,8 +105,6 @@ private:
 
     bool shouldSetBlackMask(int index);
     int countLines();
-    
-    //int sortedIndex[3] = { -1, -1, -1 }; // input pos output line index
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];

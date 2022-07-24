@@ -611,9 +611,6 @@ void Multiband::mouseDrag(const juce::MouseEvent &e)
 
 void Multiband::mouseDown(const juce::MouseEvent &e)
 {
-    // update focus index
-    focusIndex = getFocusIndex();
-    
     if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
@@ -643,7 +640,6 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                         freqDividerGroup[i]->setFreq(freq);
                         freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
 //                        freqDividerGroup[i]->getVerticalLine().setMoveState(true);
-//                        updateLines(0);
                         int changeIndex = sortLines();
                         freqDividerGroup[changeIndex]->getVerticalLine().setMoveState(true);
                         processor.setLineNum();
@@ -675,6 +671,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             if (e.x >= 0 && e.x < freqDividerGroup[0]->getX())
             {
                 multibandFocus[0] = true;
+                focusIndex = getFocusIndex();
                 return;
             }
             
@@ -683,6 +680,7 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
                 if (e.x >= freqDividerGroup[i - 1]->getX() && e.x < freqDividerGroup[i]->getX())
                 {
                     multibandFocus[i] = true;
+                    focusIndex = getFocusIndex();
                     return;
                 }
             }
@@ -690,15 +688,11 @@ void Multiband::mouseDown(const juce::MouseEvent &e)
             if (e.x >= freqDividerGroup[num - 1]->getX() && e.x <= getWidth())
             {
                 multibandFocus[num] = true;
+                focusIndex = getFocusIndex();
                 return;
             }
         }
     }
-}
-
-int Multiband::getLineNum()
-{
-    return lineNum;
 }
 
 void Multiband::reset()
@@ -795,16 +789,6 @@ void Multiband::resetFocus()
     }
 }
 
-bool Multiband::getAddState()
-{
-    return isAdded;
-}
-
-void Multiband::setAddState(bool state)
-{
-    isAdded = state;
-}
-
 void Multiband::timerCallback()
 {
     if( parametersChanged.compareAndSetBool(false, true) )
@@ -836,6 +820,16 @@ void Multiband::sliderValueChanged(juce::Slider *slider)
             int freq = slider->getValue();
             freqDividerGroup[i]->setFreq(freq);
             freqDividerGroup[i]->moveToX(lineNum, freqDividerGroup[i]->getVerticalLine().getXPercent(), limitLeft, freqDividerGroup);
+        }
+    }
+    // set focus index if focus is larger than max line num
+    if (focusIndex >= lineNum)
+    {
+        focusIndex = lineNum;
+        multibandFocus[focusIndex] = true;
+        for (int i = focusIndex + 1; i < 4; i++)
+        {
+            multibandFocus[i] = false;
         }
     }
     setLineRelatedBoundsByX();

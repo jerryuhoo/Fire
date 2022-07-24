@@ -33,21 +33,12 @@ public:
     void resized() override;
     void timerCallback() override;
     
-    int getLineNum();
-
     void reset();
-
     void setCloseButtonState();
-    
     void resetFocus();
-    bool getAddState();
-    void setAddState(bool state);
-
-    void setDeleteState(bool state);
     void dragLines(float xPercent, int index);
 
     int getFocusBand();
-    void updateLines(int option);
     void setSoloRelatedBounds();
     EnableButton& getEnableButton(int index);
     
@@ -67,7 +58,6 @@ private:
     float width = 5.0f;
     float limitLeft;
     float limitRight;
-    bool isAdded = false;
     bool isMoving = false;
     
     // multi-band
@@ -77,9 +67,7 @@ private:
     int getFocusIndex();
     int lineNum = 0;
     int focusIndex = 0;
-    int changePresetLineCount = 0; // only for preset change count
-    
-    
+
     std::vector<juce::String> paramsArray1 = {MODE_NAME1, LINKED_NAME1, SAFE_NAME1, DRIVE_NAME1, COMP_RATIO_NAME1, COMP_THRESH_NAME1, WIDTH_NAME1, OUTPUT_NAME1, MIX_NAME1, BIAS_NAME1, REC_NAME1, COMP_BYPASS_NAME1, WIDTH_BYPASS_NAME1};
     std::vector<juce::String> paramsArray2 = {MODE_NAME2, LINKED_NAME2, SAFE_NAME2, DRIVE_NAME2, COMP_RATIO_NAME2, COMP_THRESH_NAME2, WIDTH_NAME2, OUTPUT_NAME2, MIX_NAME2, BIAS_NAME2, REC_NAME2, COMP_BYPASS_NAME2, WIDTH_BYPASS_NAME2};
     std::vector<juce::String> paramsArray3 = {MODE_NAME3, LINKED_NAME3, SAFE_NAME3, DRIVE_NAME3, COMP_RATIO_NAME3, COMP_THRESH_NAME3, WIDTH_NAME3, OUTPUT_NAME3, MIX_NAME3, BIAS_NAME3, REC_NAME3, COMP_BYPASS_NAME3, WIDTH_BYPASS_NAME3};

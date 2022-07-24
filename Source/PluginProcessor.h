@@ -100,7 +100,6 @@ public:
     bool getBypassedState();
     
     // get number of activated lines
-    // int getLineNum();
     void setLineNum();
     
     // VU meters

@@ -1337,11 +1337,6 @@ bool FireAudioProcessor::getBypassedState()
     return isBypassed;
 }
 
-//int FireAudioProcessor::getLineNum()
-//{
-//    return lineNum;
-//}
-
 void FireAudioProcessor::setLineNum()
 {
     // maybe this method is useless, or delete "lineNum = count" in processBlock

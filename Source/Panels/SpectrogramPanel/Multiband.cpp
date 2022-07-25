@@ -576,6 +576,7 @@ int Multiband::getFocusIndex()
 void Multiband::sliderValueChanged (juce::Slider* slider)
 {
     lineNum = countLines();
+    setLineIndex();
     for (int i = 0; i < lineNum; i++)
     {
         if (slider == &freqDividerGroup[i]->getVerticalLine())

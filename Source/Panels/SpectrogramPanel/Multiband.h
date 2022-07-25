@@ -56,8 +56,9 @@ private:
     float margin;
     float size = 15.0f;
     float width = 5.0f;
-    float limitLeft;
-    float limitRight;
+    // set vertical lines leftmost and rightmost percentage of the whole width
+    const float limitLeft = 0.1f;
+    const float limitRight = 1.0f - limitLeft;
     bool isMoving = false;
     
     // multi-band

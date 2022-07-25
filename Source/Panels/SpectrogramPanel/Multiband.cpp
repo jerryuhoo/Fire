@@ -21,11 +21,7 @@ Multiband::Multiband(FireAudioProcessor &p, state::StateComponent &sc) : process
     }
     
     startTimerHz(60);
-    
-    // set vertical lines leftmost and rightmost percentage of the whole width
-    limitLeft = 0.1f;
-    limitRight = 1.0f - limitLeft;
-    
+
     soloButton[0] = std::make_unique<SoloButton>();
     addAndMakeVisible(*soloButton[0]);
     soloButton[0]->addListener(this);
@@ -139,11 +135,30 @@ void Multiband::paint (juce::Graphics& g)
     int mouseX = getMouseXYRelative().getX();
     int mouseY = getMouseXYRelative().getY();
     
-    // set mouse enter white
-    if (!isMouseButtonDownAnywhere() && !multibandFocus[0] && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[0]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
+    for (int i = 0; i < lineNum + 1; i++)
     {
-        g.setColour(COLOUR_MASK_WHITE);
-        g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
+        closeButton[i]->setVisible(false);
+    }
+    
+    bool isDragging = false;
+    for (int i = 0; i < lineNum; i++)
+    {
+        if (freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging())
+        {
+            isDragging = true;
+            break;
+        }
+    }
+
+    // set mouse enter white
+    if (!isDragging && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[0]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
+    {
+        if (!multibandFocus[0])
+        {
+            g.setColour(COLOUR_MASK_WHITE);
+            g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
+        }
+        closeButton[0]->setVisible(true);
     }
     
     if (lineNum > 0 && shouldSetBlackMask(0))
@@ -171,10 +186,14 @@ void Multiband::paint (juce::Graphics& g)
             g.fillRect(startX, 0, bandWidth, getHeight());
         }
         
-        if (!isMouseButtonDownAnywhere() && !multibandFocus[i] && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
+        if (!isDragging && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
         {
-            g.setColour(COLOUR_MASK_WHITE);
-            g.fillRect(startX, 0, bandWidth, getHeight());
+            if (!multibandFocus[i])
+            {
+                g.setColour(COLOUR_MASK_WHITE);
+                g.fillRect(startX, 0, bandWidth, getHeight());
+            }
+            closeButton[i]->setVisible(true);
         }
     }
 
@@ -187,10 +206,14 @@ void Multiband::paint (juce::Graphics& g)
     }
     
     // set mouse enter white
-    if (!isMouseButtonDownAnywhere() && !multibandFocus[lineNum] && lineNum > 0 && mouseX > freqDividerGroup[lineNum - 1]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
+    if (!isDragging && lineNum > 0 && mouseX > freqDividerGroup[lineNum - 1]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
     {
-        g.setColour(COLOUR_MASK_WHITE);
-        g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
+        if (!multibandFocus[lineNum])
+        {
+            g.setColour(COLOUR_MASK_WHITE);
+            g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
+        }
+        closeButton[lineNum]->setVisible(true);
     }
     
     if (lineNum > 0 && shouldSetBlackMask(lineNum))

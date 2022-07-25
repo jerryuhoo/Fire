@@ -195,7 +195,8 @@ void FireAudioProcessorEditor::paint(juce::Graphics &g)
     int part2 = part1 * 3;
     
     // background
-    g.fillAll(COLOUR7);
+    g.setColour(COLOUR7);
+    g.fillRect(0.0f, getHeight() * 3 / 10.0f, static_cast<float>(getWidth()), getHeight() * 7 / 10.0f);
 
     // title
     g.setColour(COLOUR5);

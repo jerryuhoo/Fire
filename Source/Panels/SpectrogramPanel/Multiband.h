@@ -64,6 +64,7 @@ private:
     void mouseDown (const juce::MouseEvent& e) override;
     int lineNum = 0;
     int focusIndex = 0;
+    bool isDragging = false;
 
     std::vector<juce::String> paramsArray1 = { MODE_NAME1, LINKED_NAME1, SAFE_NAME1, DRIVE_NAME1, COMP_RATIO_NAME1, COMP_THRESH_NAME1, WIDTH_NAME1, OUTPUT_NAME1, MIX_NAME1, BIAS_NAME1, REC_NAME1, COMP_BYPASS_NAME1, WIDTH_BYPASS_NAME1 };
     std::vector<juce::String> paramsArray2 = { MODE_NAME2, LINKED_NAME2, SAFE_NAME2, DRIVE_NAME2, COMP_RATIO_NAME2, COMP_THRESH_NAME2, WIDTH_NAME2, OUTPUT_NAME2, MIX_NAME2, BIAS_NAME2, REC_NAME2, COMP_BYPASS_NAME2, WIDTH_BYPASS_NAME2 };
@@ -83,7 +84,7 @@ private:
 
     bool shouldSetBlackMask (int index);
     int countLines();
-    void setMasks (juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, bool isDragging, int mouseX, int mouseY);
+    void setMasks (juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, int mouseX, int mouseY);
 
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];

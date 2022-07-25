@@ -116,7 +116,7 @@ void Multiband::paint (juce::Graphics& g)
     }
 
     // set dragging state
-    bool isDragging = false;
+    isDragging = false;
     for (int i = 0; i < lineNum; i++)
     {
         if (freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging())
@@ -127,18 +127,18 @@ void Multiband::paint (juce::Graphics& g)
     }
 
     // set leftmost mask
-    setMasks (g, 0, 0, 0, 0, freqDividerGroup[0]->getX() + margin2, getHeight(), isDragging, mouseX, mouseY);
+    setMasks (g, 0, 0, 0, 0, freqDividerGroup[0]->getX() + margin2, getHeight(), mouseX, mouseY);
 
     // set middle masks
     for (int i = 1; i < lineNum; i++)
     {
         int startX = freqDividerGroup[i - 1]->getX() + margin1;
         int bandWidth = freqDividerGroup[i]->getX() - freqDividerGroup[i - 1]->getX();
-        setMasks (g, i, 1, startX, 0, bandWidth, getHeight(), isDragging, mouseX, mouseY);
+        setMasks (g, i, 1, startX, 0, bandWidth, getHeight(), mouseX, mouseY);
     }
 
     // set rightmost mask
-    setMasks (g, lineNum, 0, freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight(), isDragging, mouseX, mouseY);
+    setMasks (g, lineNum, 0, freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight(), mouseX, mouseY);
 }
 
 void Multiband::resized()
@@ -450,7 +450,7 @@ void Multiband::mouseDrag (const juce::MouseEvent& e)
 
 void Multiband::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
+    if (! isDragging && e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         float xPercent = getMouseXYRelative().getX() / static_cast<float> (getWidth());
         if (lineNum < 3)
@@ -489,7 +489,7 @@ void Multiband::mouseDown (const juce::MouseEvent& e)
             }
         }
     }
-    else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
+    else if (! isDragging && e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
         int num = lineNum;
         if (lineNum == 0)
@@ -654,7 +654,7 @@ state::StateComponent& Multiband::getStateComponent()
     return stateComponent;
 }
 
-void Multiband::setMasks (juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, bool isDragging, int mouseX, int mouseY)
+void Multiband::setMasks (juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, int mouseX, int mouseY)
 {
     // set focus mask
     if (lineNum > lineNumLimit && focusIndex == index)

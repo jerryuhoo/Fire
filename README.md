@@ -105,8 +105,8 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 1. Refactor the code of frequency lines and close buttons.
 2. Fix a crash in Fl Studio of v0.9.9.
-3. Fix audiobuffer pointer bug when set history array.
-4. Fix the bug of changing presets might causes wrong frequency line positions.
+3. Fix audiobuffer pointer bug when setting history array.
+4. Fix the bug of changing presets that might cause wrong frequency line positions.
 5. New close buttons for each band.
 6. Other GUI improvements.
 
@@ -197,5 +197,5 @@ From v.0.9.4, I changed the license to AGPL-3.0.
 
 * Do not use the name "Fire", "Wings", or "羽翼深蓝Wings" for marketing or to name any distribution of binaries built with this source. This source code does not give you rights to infringe on trademarks. If you wanna use it for commercial, please send me an email. Otherwise, your software has to be open-source.
 
-# 8. Acknowledgement
-@IcyLeaves
+## 8. Acknowledgement
+@[IcyLeaves](https://github.com/IcyLeaves)

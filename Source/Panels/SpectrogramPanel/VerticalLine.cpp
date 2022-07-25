@@ -104,24 +104,14 @@ int VerticalLine::getIndex()
     return index;
 }
 
-void VerticalLine::setLeft (int leftIndex)
-{
-    this->leftIndex = leftIndex;
-}
-
 int VerticalLine::getLeft()
 {
-    return leftIndex;
-}
-
-void VerticalLine::setRight (int rightIndex)
-{
-    this->rightIndex = rightIndex;
+    return index - 1;
 }
 
 int VerticalLine::getRight()
 {
-    return rightIndex;
+    return index + 1;
 }
 
 void VerticalLine::moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[])

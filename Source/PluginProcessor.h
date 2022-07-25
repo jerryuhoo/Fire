@@ -283,11 +283,6 @@ private:
     bool multibandSolo2 = false;
     bool multibandSolo3 = false;
     bool multibandSolo4 = false;
-    
-//    bool multibandFocus1 = true;
-//    bool multibandFocus2 = false;
-//    bool multibandFocus3 = false;
-//    bool multibandFocus4 = false;
 
     bool shouldSetBlackMask(int index);
     bool getSoloStateFromIndex(int index);

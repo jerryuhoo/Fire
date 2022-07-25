@@ -394,37 +394,16 @@ int Multiband::sortLines()
         freqDividerGroup[i]->setFreq (-1);
         freqDividerGroup[i]->setToggleState (false, juce::sendNotificationSync);
     }
-    updateLineLeftRightIndex();
+    setLineIndex();
     return changeIndex;
 }
 
-void Multiband::updateLineLeftRightIndex()
+void Multiband::setLineIndex()
 {
-    // should set self index first, then set left and right index
+    // set position index, used in moveToX
     for (int i = 0; i < lineNum; i++)
     {
-        freqDividerGroup[i]->getVerticalLine().setIndex (i); // this index is the No. you count the line from left to right
-    }
-
-    // set left right index
-    for (int i = 0; i < lineNum; i++)
-    {
-        if (i == 0)
-        {
-            freqDividerGroup[i]->getVerticalLine().setLeft (-1); // this left index is the index that in verticalLines array
-        }
-        else
-        {
-            freqDividerGroup[i]->getVerticalLine().setLeft (freqDividerGroup[i - 1]->getVerticalLine().getIndex());
-        }
-        if (i == lineNum - 1)
-        {
-            freqDividerGroup[i]->getVerticalLine().setRight (lineNum);
-        }
-        else
-        {
-            freqDividerGroup[i]->getVerticalLine().setRight (freqDividerGroup[i + 1]->getVerticalLine().getIndex());
-        }
+        freqDividerGroup[i]->getVerticalLine().setIndex (i);
     }
 }
 

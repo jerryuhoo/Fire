@@ -76,7 +76,7 @@ private:
     void setStatesWhenAdd (int changedIndex);
     void setStatesWhenDelete (int changedIndex);
 
-    void updateLineLeftRightIndex();
+    void setLineIndex();
     void updateLineNumAndSortedIndex (int option);
 
     void sliderValueChanged (juce::Slider* slider) override;

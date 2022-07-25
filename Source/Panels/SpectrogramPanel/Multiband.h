@@ -89,6 +89,7 @@ private:
 
     bool shouldSetBlackMask(int index);
     int countLines();
+    void setMasks(juce::Graphics &g, int index, int lineNumLimit, int x, int y, int width, int height, bool isDragging,  int mouseX, int mouseY);
     
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
     std::unique_ptr<SoloButton> soloButton[4];

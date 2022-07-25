@@ -89,7 +89,6 @@ void Multiband::paint (juce::Graphics& g)
     if (isVisible()) processor.setHistoryArray(focusIndex);
     
     // draw line that will be added next
-    g.setColour(COLOUR1.withAlpha(0.2f));
     float startY = 0;
     float endY = getHeight();
     auto mousePos = getMouseXYRelative();
@@ -110,36 +109,24 @@ void Multiband::paint (juce::Graphics& g)
         }
         if (canCreate)
         {
+            g.setColour(COLOUR1.withAlpha(0.2f));
             g.drawLine(xPos, startY, xPos, endY, 2);
         }
     }
 
     // set black and focus masks
-    int margin2 = getWidth() / 250; // 1/100 * 4 / 10
-    int margin1 = getWidth() * 6 / 1000; // 1/100 * 6 / 10
-
-    if (lineNum == 0 && shouldSetBlackMask(0))
-    {
-        g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(0, 0, getWidth() + margin2, getHeight());
-    }
-    
-    if (lineNum > 0 && multibandFocus[0])
-    {
-        juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
-                                  COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
-        g.setGradientFill(grad);
-        g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
-    }
-    
+    int margin2 = getWidth() / 250; // leftside of line: 1/100(line width) * 4 / 10
+    int margin1 = getWidth() * 6 / 1000; // rightside of line: 1/100(line width) * 6 / 10
     int mouseX = getMouseXYRelative().getX();
     int mouseY = getMouseXYRelative().getY();
     
+    // set closebuttons visibility to false
     for (int i = 0; i < lineNum + 1; i++)
     {
         closeButton[i]->setVisible(false);
     }
     
+    // set dragging state
     bool isDragging = false;
     for (int i = 0; i < lineNum; i++)
     {
@@ -149,78 +136,20 @@ void Multiband::paint (juce::Graphics& g)
             break;
         }
     }
+    
+    // set leftmost mask
+    setMasks(g, 0, 0, 0, 0, freqDividerGroup[0]->getX() + margin2, getHeight(), isDragging, mouseX, mouseY);
 
-    // set mouse enter white
-    if (!isDragging && lineNum > 0 && mouseX > 0 && mouseX < freqDividerGroup[0]->getX() + margin2 && mouseY > 0 && mouseY < getHeight())
-    {
-        if (!multibandFocus[0])
-        {
-            g.setColour(COLOUR_MASK_WHITE);
-            g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
-        }
-        closeButton[0]->setVisible(true);
-    }
-    
-    if (lineNum > 0 && shouldSetBlackMask(0))
-    {
-        g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(0, 0, freqDividerGroup[0]->getX() + margin2, getHeight());
-    }
-    
+    // set middle masks
     for (int i = 1; i < lineNum; i++)
     {
         int startX = freqDividerGroup[i - 1]->getX() + margin1;
         int bandWidth = freqDividerGroup[i]->getX() - freqDividerGroup[i - 1]->getX();
-        
-        if (lineNum > 1 && multibandFocus[i])
-        {
-            juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
-                                      COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
-            g.setGradientFill(grad);
-            g.fillRect(startX, 0, bandWidth, getHeight());
-        }
-        
-        if (lineNum > 1 && shouldSetBlackMask(i))
-        {
-            g.setColour(COLOUR_MASK_BLACK);
-            g.fillRect(startX, 0, bandWidth, getHeight());
-        }
-        
-        if (!isDragging && lineNum > 1 && mouseX > startX && mouseX < startX + bandWidth && mouseY > 0 && mouseY < getHeight())
-        {
-            if (!multibandFocus[i])
-            {
-                g.setColour(COLOUR_MASK_WHITE);
-                g.fillRect(startX, 0, bandWidth, getHeight());
-            }
-            closeButton[i]->setVisible(true);
-        }
-    }
-
-    if (lineNum > 0 && multibandFocus[lineNum])
-    {
-        juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
-                                  COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
-        g.setGradientFill(grad);
-        g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
+        setMasks(g, i, 1, startX, 0, bandWidth, getHeight(), isDragging, mouseX, mouseY);
     }
     
-    // set mouse enter white
-    if (!isDragging && lineNum > 0 && mouseX > freqDividerGroup[lineNum - 1]->getX() + margin1 && mouseX < getWidth() && mouseY > 0 && mouseY < getHeight())
-    {
-        if (!multibandFocus[lineNum])
-        {
-            g.setColour(COLOUR_MASK_WHITE);
-            g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
-        }
-        closeButton[lineNum]->setVisible(true);
-    }
-    
-    if (lineNum > 0 && shouldSetBlackMask(lineNum))
-    {
-        g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight());
-    }
+    // set rightmost mask
+    setMasks(g, lineNum, 0, freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight(), isDragging, mouseX, mouseY);
 }
 
 void Multiband::resized()
@@ -901,4 +830,35 @@ void Multiband::setBandBypassStates(int index, bool state)
 state::StateComponent& Multiband::getStateComponent()
 {
     return stateComponent;
+}
+
+void Multiband::setMasks(juce::Graphics &g, int index, int lineNumLimit, int x, int y, int width, int height, bool isDragging, int mouseX, int mouseY)
+{
+    // set focus mask
+    if (lineNum > lineNumLimit && multibandFocus[index])
+    {
+        juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, 0,
+                                  COLOUR1.withAlpha(0.2f), getLocalBounds().getWidth(), 0, false);
+        g.setGradientFill(grad);
+        g.fillRect(x, y, width, height);
+    }
+
+    // set mouse enter white mask
+    if (!isDragging && lineNum > lineNumLimit && mouseX > x && mouseX < x + width && mouseY > y && mouseY < height)
+    {
+        if (!multibandFocus[index])
+        {
+            g.setColour(COLOUR_MASK_WHITE);
+            g.fillRect(x, y, width, height);
+        }
+        closeButton[index]->setVisible(true);
+    }
+    
+    // set solo black mask
+    if (lineNum > lineNumLimit && shouldSetBlackMask(index))
+    {
+        g.setColour(COLOUR_MASK_BLACK);
+        g.fillRect(x, y, width, height);
+    }
+
 }

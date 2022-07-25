@@ -265,42 +265,12 @@ void Multiband::initParameters (int bandindex)
     }
 }
 
-int Multiband::findFocusIndex()
-{
-    // get current focus index
-    int focusIndex = 0;
-    bool findFocus = false;
-    for (int i = 0; i < lineNum + 1; i++)
-    {
-        if (multibandFocus[i])
-        {
-            focusIndex = i;
-            findFocus = true;
-            break;
-        }
-    }
-
-    if (! findFocus)
-    {
-        focusIndex = lineNum;
-        multibandFocus[lineNum] = true;
-        for (int i = lineNum + 1; i < 4; i++)
-        {
-            multibandFocus[i] = false;
-        }
-    }
-    return focusIndex;
-}
-
 void Multiband::setStatesWhenAdd (int changedIndex)
 {
-    int focusIndex = findFocusIndex();
-
     // change focus index when line is added
     if (changedIndex < focusIndex || (changedIndex == focusIndex && getMouseXYRelative().getX() < (enableButton[focusIndex]->getX() + soloButton[focusIndex]->getX()) / 2.0f))
     {
-        multibandFocus[focusIndex] = false;
-        multibandFocus[focusIndex + 1] = true;
+        focusIndex += 1;
     }
 
     // change enable/solo index when line is added
@@ -341,8 +311,6 @@ void Multiband::setStatesWhenDelete (int changedIndex)
      set enable buttons states, solo button states, focus band, and parameters for band processing
      */
 
-    int focusIndex = findFocusIndex();
-
     // delete band (not the last one), delete lines and closebuttons
     if (changedIndex != lineNum)
     {
@@ -362,8 +330,7 @@ void Multiband::setStatesWhenDelete (int changedIndex)
     // change focus index when line is deleted
     if (changedIndex < focusIndex)
     {
-        multibandFocus[focusIndex] = false;
-        multibandFocus[focusIndex - 1] = true;
+        focusIndex -= 1;
     }
 
     // change enable/solo index when line is deleted
@@ -525,23 +492,16 @@ void Multiband::mouseDown (const juce::MouseEvent& e)
     else if (e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
     {
         int num = lineNum;
-
-        for (int i = 0; i < 4; i++)
-        {
-            multibandFocus[i] = false;
-        }
-
         if (lineNum == 0)
         {
-            multibandFocus[0] = true;
+            focusIndex = 0;
             return;
         }
         else
         {
             if (e.x >= 0 && e.x < freqDividerGroup[0]->getX())
             {
-                multibandFocus[0] = true;
-                focusIndex = findFocusIndex();
+                focusIndex = 0;
                 return;
             }
 
@@ -549,16 +509,14 @@ void Multiband::mouseDown (const juce::MouseEvent& e)
             {
                 if (e.x >= freqDividerGroup[i - 1]->getX() && e.x < freqDividerGroup[i]->getX())
                 {
-                    multibandFocus[i] = true;
-                    focusIndex = findFocusIndex();
+                    focusIndex = i;
                     return;
                 }
             }
 
             if (e.x >= freqDividerGroup[num - 1]->getX() && e.x <= getWidth())
             {
-                multibandFocus[num] = true;
-                focusIndex = findFocusIndex();
+                focusIndex = num;
                 return;
             }
         }
@@ -649,14 +607,9 @@ void Multiband::sliderValueChanged (juce::Slider* slider)
         }
     }
     // set focus index if focus is larger than max line num
-    if (focusIndex >= lineNum)
+    if (focusIndex > lineNum)
     {
         focusIndex = lineNum;
-        multibandFocus[focusIndex] = true;
-        for (int i = focusIndex + 1; i < 4; i++)
-        {
-            multibandFocus[i] = false;
-        }
     }
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
@@ -704,7 +657,7 @@ state::StateComponent& Multiband::getStateComponent()
 void Multiband::setMasks (juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, bool isDragging, int mouseX, int mouseY)
 {
     // set focus mask
-    if (lineNum > lineNumLimit && multibandFocus[index])
+    if (lineNum > lineNumLimit && focusIndex == index)
     {
         juce::ColourGradient grad (COLOUR5.withAlpha (0.2f), 0, 0, COLOUR1.withAlpha (0.2f), getLocalBounds().getWidth(), 0, false);
         g.setGradientFill (grad);
@@ -714,7 +667,7 @@ void Multiband::setMasks (juce::Graphics& g, int index, int lineNumLimit, int x,
     // set mouse enter white mask
     if (! isDragging && lineNum > lineNumLimit && mouseX > x && mouseX < x + width && mouseY > y && mouseY < height)
     {
-        if (! multibandFocus[index])
+        if (focusIndex != index)
         {
             g.setColour (COLOUR_MASK_WHITE);
             g.fillRect (x, y, width, height);

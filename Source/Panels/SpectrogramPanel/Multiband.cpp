@@ -51,7 +51,6 @@ Multiband::Multiband (FireAudioProcessor& p, state::StateComponent& sc) : proces
         addAndMakeVisible (*closeButton[i + 1]);
         closeButton[i + 1]->addListener (this);
     }
-    // TODO: sort lines by freq
 
     multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, BAND_ENABLE_ID1, *enableButton[0]);
     multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, BAND_ENABLE_ID2, *enableButton[1]);

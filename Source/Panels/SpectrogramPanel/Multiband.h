@@ -23,7 +23,7 @@
 /*
 */
 
-class Multiband  : public juce::Component, juce::Timer, juce::Slider::Listener, juce::AudioProcessorParameter::Listener, juce::Button::Listener
+class Multiband  : public juce::Component, juce::Timer, juce::Slider::Listener, juce::Button::Listener
 {
 public:
     Multiband(FireAudioProcessor &, state::StateComponent &);
@@ -33,17 +33,13 @@ public:
     void resized() override;
     void timerCallback() override;
     
-    void reset();
     void setCloseButtonState();
-    void resetFocus();
     void dragLines(float xPercent, int index);
 
-    int getFocusBand();
+    int getFocusIndex();
     void setSoloRelatedBounds();
     EnableButton& getEnableButton(int index);
-    
-    void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
+
     void setScale(float scale);
     void setBandBypassStates(int index, bool state);
     state::StateComponent& getStateComponent();
@@ -65,7 +61,7 @@ private:
     void mouseUp(const juce::MouseEvent &e) override;
     void mouseDrag(const juce::MouseEvent &e) override;
     void mouseDown(const juce::MouseEvent &e) override;
-    int getFocusIndex();
+    int findFocusIndex();
     int lineNum = 0;
     int focusIndex = 0;
 
@@ -81,8 +77,6 @@ private:
     
     void updateLineLeftRightIndex();
     void updateLineNumAndSortedIndex(int option);
-    
-    void setLineRelatedBoundsByFreq(FreqDividerGroup& freqDividerGroup, int freq);
     
     void sliderValueChanged(juce::Slider *slider) override;
     void buttonClicked (juce::Button* button) override;
@@ -101,7 +95,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiSoloAttachment1, multiSoloAttachment2, multiSoloAttachment3, multiSoloAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> freqDividerGroupAttachment1, freqDividerGroupAttachment2, freqDividerGroupAttachment3;
-    juce::Atomic<bool> parametersChanged {false};
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Multiband)
 };

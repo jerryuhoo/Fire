@@ -50,14 +50,14 @@ juce::Colour DraggableButton::getColour()
         if (mState)
             return juce::Colours::hotpink.withAlpha (0.8f);
         else
-            return juce::Colours::dimgrey.withAlpha (0.8f);
+            return juce::Colours::lightgrey.withAlpha (0.8f);
     }
     else
     {
         if (mState)
             return juce::Colours::hotpink;
         else
-            return juce::Colours::lightgrey;
+            return juce::Colours::dimgrey;
     }
 }
 

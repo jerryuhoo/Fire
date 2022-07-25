@@ -62,10 +62,10 @@ void FilterControl::paint (juce::Graphics& g)
         draggablePeakButton.setState (false);
         draggableHighButton.setState (false);
         
-        g.setColour (juce::Colours::dimgrey.withBrightness (0.8f));
+        g.setColour (juce::Colours::dimgrey.withAlpha (0.8f));
         g.strokePath (responseCurve, juce::PathStrokeType (2.0f));
         
-        g.setColour (juce::Colours::dimgrey.withBrightness (0.8f).withAlpha (0.2f));
+        g.setColour (juce::Colours::dimgrey.withAlpha (0.8f).withAlpha (0.2f));
         g.fillPath (responseCurve);
     }
     

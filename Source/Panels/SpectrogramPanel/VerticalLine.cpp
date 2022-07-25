@@ -95,7 +95,6 @@ float VerticalLine::getXPercent()
 
 void VerticalLine::setIndex (int index)
 {
-    // TODO: maybe I don't need index
     this->index = index;
 }
 

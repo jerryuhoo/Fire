@@ -57,7 +57,7 @@ void FreqDividerGroup::paint (juce::Graphics& g)
 {
     if (getToggleState())
     {
-        if (verticalLine.getMoveState() || verticalLine.isMouseOver() || freqTextLabel.isMouseOverCustom())
+        if (verticalLine.isMouseOverOrDragging() || freqTextLabel.isMouseOverCustom())
         {
             freqTextLabel.setFade (true, true);
             freqTextLabel.setVisible (true);

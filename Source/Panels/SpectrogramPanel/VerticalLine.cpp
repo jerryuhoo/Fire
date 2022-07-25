@@ -48,7 +48,7 @@ void VerticalLine::resized()
 
 void VerticalLine::mouseUp(const juce::MouseEvent &e)
 {
-    move = false;
+//    move = false;
 }
 
 void VerticalLine::mouseDoubleClick(const juce::MouseEvent &e)
@@ -75,27 +75,9 @@ void VerticalLine::mouseDown(const juce::MouseEvent &e)
 {
     // call parent mousedown(FreqDividerGroup)
 //    getParentComponent()->mouseDown(e.getEventRelativeTo(getParentComponent()));
-    if (e.mods.isLeftButtonDown())
-    {
-        move = true;
-    }
-    else if (e.mods.isRightButtonDown())
-    {
-        move = false;
-    }
-    
 //    dragger.startDraggingComponent (this, e);
 }
 
-bool VerticalLine::getMoveState()
-{
-    return move;
-}
-
-void VerticalLine::setMoveState(bool moveState)
-{
-    move = moveState;
-}
 
 void VerticalLine::setDeleteState(bool deleteState)
 {

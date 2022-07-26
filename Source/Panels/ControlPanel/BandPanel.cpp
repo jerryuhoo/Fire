@@ -164,54 +164,44 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
 
     // switches
     addAndMakeVisible (oscSwitch);
-    oscSwitch.setClickingTogglesState (true);
     oscSwitch.setRadioGroupId (switchButtons);
     oscSwitch.setButtonText ("");
     oscSwitch.setToggleState (true, juce::dontSendNotification);
-    oscSwitch.setColour (juce::TextButton::buttonColourId, DRIVE_COLOUR.withBrightness (0.5f));
-    oscSwitch.setColour (juce::TextButton::buttonOnColourId, DRIVE_COLOUR.withBrightness (0.9f));
+    oscSwitch.setColour (juce::ToggleButton::tickDisabledColourId, DRIVE_COLOUR.withBrightness (0.5f));
+    oscSwitch.setColour (juce::ToggleButton::tickColourId, DRIVE_COLOUR.withBrightness (0.9f));
     oscSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    oscSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    oscSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     oscSwitch.setLookAndFeel (&flatButtonLnf);
     oscSwitch.addListener (this);
 
     addAndMakeVisible (shapeSwitch);
-    shapeSwitch.setClickingTogglesState (true);
     shapeSwitch.setRadioGroupId (switchButtons);
     shapeSwitch.setButtonText ("");
     shapeSwitch.setToggleState (false, juce::dontSendNotification);
-    shapeSwitch.setColour (juce::TextButton::buttonColourId, SHAPE_COLOUR.withBrightness (0.5f));
-    shapeSwitch.setColour (juce::TextButton::buttonOnColourId, SHAPE_COLOUR.withBrightness (0.9f));
+    shapeSwitch.setColour (juce::ToggleButton::tickDisabledColourId, SHAPE_COLOUR.withBrightness (0.5f));
+    shapeSwitch.setColour (juce::ToggleButton::tickColourId, SHAPE_COLOUR.withBrightness (0.9f));
     shapeSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    shapeSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    shapeSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     shapeSwitch.setLookAndFeel (&flatButtonLnf);
     shapeSwitch.addListener (this);
 
     addAndMakeVisible (compressorSwitch);
-    compressorSwitch.setClickingTogglesState (true);
     compressorSwitch.setRadioGroupId (switchButtons);
     compressorSwitch.setButtonText ("");
     compressorSwitch.setToggleState (false, juce::dontSendNotification);
-    compressorSwitch.setColour (juce::TextButton::buttonColourId, COMP_COLOUR.withBrightness (0.5f));
-    compressorSwitch.setColour (juce::TextButton::buttonOnColourId, COMP_COLOUR.withBrightness (0.9f));
+    compressorSwitch.setColour (juce::ToggleButton::tickDisabledColourId, COMP_COLOUR.withBrightness (0.5f));
+    compressorSwitch.setColour (juce::ToggleButton::tickColourId, COMP_COLOUR.withBrightness (0.9f));
     compressorSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    compressorSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    compressorSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     compressorSwitch.setLookAndFeel (&flatButtonLnf);
     compressorSwitch.addListener (this);
 
     addAndMakeVisible (widthSwitch);
-    widthSwitch.setClickingTogglesState (true);
     widthSwitch.setRadioGroupId (switchButtons);
     widthSwitch.setButtonText ("");
     widthSwitch.setToggleState (false, juce::dontSendNotification);
-    widthSwitch.setColour (juce::TextButton::buttonColourId, WIDTH_COLOUR.withBrightness (0.5f));
-    widthSwitch.setColour (juce::TextButton::buttonOnColourId, WIDTH_COLOUR.withBrightness (0.9f));
+    widthSwitch.setColour (juce::ToggleButton::tickDisabledColourId, WIDTH_COLOUR.withBrightness (0.5f));
+    widthSwitch.setColour (juce::ToggleButton::tickColourId, WIDTH_COLOUR.withBrightness (0.9f));
     widthSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    widthSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    widthSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
+//    widthSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
+//    widthSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     widthSwitch.setLookAndFeel (&flatButtonLnf);
     widthSwitch.addListener (this);
 
@@ -224,6 +214,10 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     initBypassButton (*widthBypassButton2, WIDTH_COLOUR, 5);
     initBypassButton (*widthBypassButton3, WIDTH_COLOUR, 6);
     initBypassButton (*widthBypassButton4, WIDTH_COLOUR, 7);
+    
+    setVisibility (shapeVector, false);
+    setVisibility (compressorVector, false);
+    setVisibility (widthVector, false);
 
     // Attachment
     driveAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, DRIVE_ID1, driveKnob1);
@@ -325,84 +319,14 @@ BandPanel::~BandPanel()
 
 void BandPanel::paint (juce::Graphics& g)
 {
-    bool isOscSwitchOn = oscSwitch.getToggleState();
-    bool isWidthSwitchOn = widthSwitch.getToggleState();
-    bool isShapeSwitchOn = shapeSwitch.getToggleState();
-    bool isCompressorSwitchOn = compressorSwitch.getToggleState();
-
     setFourComponentsVisibility (driveKnob1, driveKnob2, driveKnob3, driveKnob4, focusBandNum);
-
-    if (isOscSwitchOn)
-    {
-        setVisibility (shapeVector, false);
-        setVisibility (compressorVector, false);
-        setVisibility (widthVector, false);
-        recLabel.setVisible (false);
-        biasLabel.setVisible (false);
-        widthLabel.setVisible (false);
-        CompRatioLabel.setVisible (false);
-        CompThreshLabel.setVisible (false);
-    }
-    if (isCompressorSwitchOn)
-    {
-        setVisibility (compressorVector, true);
-        setFourComponentsVisibility (compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
-        setFourComponentsVisibility (compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
-        setFourComponentsVisibility (*compressorBypassButton1, *compressorBypassButton2, *compressorBypassButton3, *compressorBypassButton4, focusBandNum);
-        setVisibility (shapeVector, false);
-        setVisibility (widthVector, false);
-        CompRatioLabel.setVisible (true);
-        CompThreshLabel.setVisible (true);
-        recLabel.setVisible (false);
-        biasLabel.setVisible (false);
-        widthLabel.setVisible (false);
-        //            graphPanel.getVuPanel()->setZoomState(true);
-        //            graphPanel.getOscilloscope()->setZoomState(false);
-        //            graphPanel.getDistortionGraph()->setZoomState(false);
-        //            graphPanel.getWidthGraph()->setZoomState(false);
-    }
-    if (isShapeSwitchOn)
-    {
-        setFourComponentsVisibility (recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
-        setFourComponentsVisibility (biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
-        setVisibility (compressorVector, false);
-        setVisibility (widthVector, false);
-        CompRatioLabel.setVisible (false);
-        CompThreshLabel.setVisible (false);
-        recLabel.setVisible (true);
-        biasLabel.setVisible (true);
-        widthLabel.setVisible (false);
-        //            graphPanel.getVuPanel()->setZoomState(false);
-        //            graphPanel.getOscilloscope()->setZoomState(false);
-        //            graphPanel.getDistortionGraph()->setZoomState(true);
-        //            graphPanel.getWidthGraph()->setZoomState(false);
-    }
-    if (isWidthSwitchOn)
-    {
-        setVisibility (widthVector, true);
-        setFourComponentsVisibility (widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
-        setFourComponentsVisibility (*widthBypassButton1, *widthBypassButton2, *widthBypassButton3, *widthBypassButton4, focusBandNum);
-        setVisibility (shapeVector, false);
-        setVisibility (compressorVector, false);
-        CompRatioLabel.setVisible (false);
-        CompThreshLabel.setVisible (false);
-        recLabel.setVisible (false);
-        biasLabel.setVisible (false);
-        widthLabel.setVisible (true);
-        //            graphPanel.getVuPanel()->setZoomState(false);
-        //            graphPanel.getOscilloscope()->setZoomState(false);
-        //            graphPanel.getDistortionGraph()->setZoomState(false);
-        //            graphPanel.getWidthGraph()->setZoomState(true);
-    }
-
     setFourComponentsVisibility (outputKnob1, outputKnob2, outputKnob3, outputKnob4, focusBandNum);
     setFourComponentsVisibility (mixKnob1, mixKnob2, mixKnob3, mixKnob4, focusBandNum);
-
     setFourComponentsVisibility (linkedButton1, linkedButton2, linkedButton3, linkedButton4, focusBandNum);
     setFourComponentsVisibility (safeButton1, safeButton2, safeButton3, safeButton4, focusBandNum);
 
     g.setColour (COLOUR6);
-    if (! isOscSwitchOn)
+    if (! oscSwitch.getToggleState())
     {
         g.drawRect (bandKnobArea);
         g.drawRect (driveKnobArea);
@@ -583,6 +507,14 @@ void BandPanel::buttonClicked (juce::Button* clickedButton)
             driveKnob2.setBounds (bigDriveArea);
             driveKnob3.setBounds (bigDriveArea);
             driveKnob4.setBounds (bigDriveArea);
+            setVisibility (shapeVector, false);
+            setVisibility (compressorVector, false);
+            setVisibility (widthVector, false);
+            recLabel.setVisible (false);
+            biasLabel.setVisible (false);
+            widthLabel.setVisible (false);
+            CompRatioLabel.setVisible (false);
+            CompThreshLabel.setVisible (false);
         }
         else
         {
@@ -591,6 +523,45 @@ void BandPanel::buttonClicked (juce::Button* clickedButton)
             driveKnob3.setBounds (driveKnobArea.reduced (0, bandKnobArea.getHeight() / 5));
             driveKnob4.setBounds (driveKnobArea.reduced (0, bandKnobArea.getHeight() / 5));
         }
+    }
+    if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
+    {
+        setFourComponentsVisibility (recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
+        setFourComponentsVisibility (biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
+        setVisibility (compressorVector, false);
+        setVisibility (widthVector, false);
+        CompRatioLabel.setVisible (false);
+        CompThreshLabel.setVisible (false);
+        recLabel.setVisible (true);
+        biasLabel.setVisible (true);
+        widthLabel.setVisible (false);
+    }
+    if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
+    {
+        setVisibility (compressorVector, true);
+        setFourComponentsVisibility (compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
+        setFourComponentsVisibility (compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
+        setFourComponentsVisibility (*compressorBypassButton1, *compressorBypassButton2, *compressorBypassButton3, *compressorBypassButton4, focusBandNum);
+        setVisibility (shapeVector, false);
+        setVisibility (widthVector, false);
+        CompRatioLabel.setVisible (true);
+        CompThreshLabel.setVisible (true);
+        recLabel.setVisible (false);
+        biasLabel.setVisible (false);
+        widthLabel.setVisible (false);
+    }
+    if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
+    {
+        setVisibility (widthVector, true);
+        setFourComponentsVisibility (widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
+        setFourComponentsVisibility (*widthBypassButton1, *widthBypassButton2, *widthBypassButton3, *widthBypassButton4, focusBandNum);
+        setVisibility (shapeVector, false);
+        setVisibility (compressorVector, false);
+        CompRatioLabel.setVisible (false);
+        CompThreshLabel.setVisible (false);
+        recLabel.setVisible (false);
+        biasLabel.setVisible (false);
+        widthLabel.setVisible (true);
     }
     repaint();
 }
@@ -880,4 +851,16 @@ juce::ToggleButton& BandPanel::getWidthButton (const int index)
     else
         jassertfalse;
     return *compressorBypassButton1;
+}
+
+void BandPanel::setSwitch(const int index, bool state)
+{
+    if (index == 0)
+        oscSwitch.setToggleState(state, juce::sendNotificationSync);
+    else if (index == 1)
+        shapeSwitch.setToggleState(state, juce::sendNotificationSync);
+    else if (index == 2)
+        compressorSwitch.setToggleState(state, juce::sendNotificationSync);
+    else if (index == 3)
+        widthSwitch.setToggleState(state, juce::sendNotificationSync);
 }

@@ -36,7 +36,7 @@ public:
     void setBandKnobsStates (int index, bool state, bool callFromSubBypass);
     juce::ToggleButton& getCompButton (const int index);
     juce::ToggleButton& getWidthButton (const int index);
-
+    void setSwitch(const int index, bool state);
 private:
     FireAudioProcessor& processor;
     juce::Rectangle<int> bandKnobArea;
@@ -151,7 +151,7 @@ private:
     bool widthBypassTemp[4] = { false };
 
     // switches
-    juce::TextButton
+    juce::ToggleButton
         oscSwitch,
         shapeSwitch,
         widthSwitch,

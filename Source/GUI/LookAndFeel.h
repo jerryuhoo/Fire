@@ -1493,6 +1493,52 @@ public:
     {
         return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
     }
+    
+    // draw flat tickbox (toggle button)
+    void drawTickBox(juce::Graphics &g, juce::Component &component,
+                     float x, float y, float w, float h,
+                     const bool ticked,
+                     const bool isEnabled,
+                     const bool shouldDrawButtonAsHighlighted,
+                     const bool shouldDrawButtonAsDown) override
+    {
+        juce::ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+//        juce::Rectangle<float> tickBounds(x, y, w, h);
+        juce::Rectangle<float> tickBounds(component.getLocalBounds().toFloat().reduced(2));
+
+        juce::Colour tickColour;
+        if (ticked)
+        {
+            tickColour = component.findColour(juce::ToggleButton::tickColourId);
+        }
+        else
+        {
+            tickColour = component.findColour(juce::ToggleButton::tickDisabledColourId);
+        }
+        if (component.isMouseButtonDown())
+        {
+            tickColour = tickColour.contrasting(0.05f);
+        }
+        else if (component.isMouseOver())
+        {
+            tickColour = tickColour.contrasting(0.2f);
+        }
+        g.setColour(tickColour);
+        g.fillRect(tickBounds);
+    }
+
+    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
+                                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+        g.setColour(COLOUR6);
+        g.fillRect(button.getLocalBounds());
+        drawTickBox (g, button, button.getWidth() / 4.0f, button.getHeight() / 4.0f,
+                     button.getWidth() / 2.0f, button.getHeight() / 2.0f,
+                     button.getToggleState(),
+                     button.isEnabled(),
+                     shouldDrawButtonAsHighlighted,
+                     shouldDrawButtonAsDown);
+    }
 };
 
 class ZoomLookAndFeel : public juce::LookAndFeel_V4

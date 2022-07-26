@@ -31,6 +31,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor &p)
     
     // Graph
     addAndMakeVisible(graphPanel);
+    graphPanel.addMouseListener(this, true);
     
     addAndMakeVisible(bandPanel);
     addAndMakeVisible(globalPanel);
@@ -652,3 +653,23 @@ void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& comp
 //        bandPanel.changeSliderState(3, stateComponent.getChangedState());
 //    }
 //}
+
+void FireAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
+{
+    if (e.eventComponent == graphPanel.getOscilloscope())
+    {
+        bandPanel.setSwitch(0, true);
+    }
+    if (e.eventComponent == graphPanel.getDistortionGraph())
+    {
+        bandPanel.setSwitch(1, true);
+    }
+    if (e.eventComponent == graphPanel.getVuPanel())
+    {
+        bandPanel.setSwitch(2, true);
+    }
+    if (e.eventComponent == graphPanel.getWidthGraph())
+    {
+        bandPanel.setSwitch(3, true);
+    }
+}

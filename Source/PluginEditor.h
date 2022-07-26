@@ -49,7 +49,8 @@ private:
     state::StateComponent stateComponent;
     
     void buttonClicked(juce::Button *clickedButton) override;
-    
+    void mouseDown (const juce::MouseEvent& e) override;
+
     // init editor
     void initEditor();
     

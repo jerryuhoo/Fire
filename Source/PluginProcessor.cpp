@@ -1502,128 +1502,131 @@ void FireAudioProcessor::setSampleMaxValue(juce::String safeId, float sampleMaxV
 juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createParameters()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> parameters;
+    int versionNum = 1;
+    using PBool = juce::AudioParameterBool;
+    using PInt = juce::AudioParameterInt;
+    using PFloat = juce::AudioParameterFloat;
+    parameters.push_back (std::make_unique<PBool>(juce::ParameterID { HQ_ID, versionNum }, HQ_NAME, false));
+    
+    parameters.push_back(std::make_unique<PInt>(juce::ParameterID { MODE_ID1, versionNum }, MODE_NAME1, 0, 11, 0));
+    parameters.push_back(std::make_unique<PInt>(juce::ParameterID { MODE_ID2, versionNum }, MODE_NAME2, 0, 11, 0));
+    parameters.push_back(std::make_unique<PInt>(juce::ParameterID { MODE_ID3, versionNum }, MODE_NAME3, 0, 11, 0));
+    parameters.push_back(std::make_unique<PInt>(juce::ParameterID { MODE_ID4, versionNum }, MODE_NAME4, 0, 11, 0));
+    
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINKED_ID1, versionNum }, LINKED_NAME1, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINKED_ID2, versionNum }, LINKED_NAME2, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINKED_ID3, versionNum }, LINKED_NAME3, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINKED_ID4, versionNum }, LINKED_NAME4, true));
 
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(HQ_ID, HQ_NAME, false));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID1, MODE_NAME1, 0, 11, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID2, MODE_NAME2, 0, 11, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID3, MODE_NAME3, 0, 11, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(MODE_ID4, MODE_NAME4, 0, 11, 0));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID1, LINKED_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID2, LINKED_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID3, LINKED_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINKED_ID4, LINKED_NAME4, true));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID1, SAFE_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID2, SAFE_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID3, SAFE_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(SAFE_ID4, SAFE_NAME4, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { SAFE_ID1, versionNum }, SAFE_NAME1, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { SAFE_ID2, versionNum }, SAFE_NAME2, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { SAFE_ID3, versionNum }, SAFE_NAME3, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { SAFE_ID4, versionNum }, SAFE_NAME4, true));
 
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID1, DRIVE_NAME1, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID2, DRIVE_NAME2, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID3, DRIVE_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DRIVE_ID4, DRIVE_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { DRIVE_ID1, versionNum }, DRIVE_NAME1, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { DRIVE_ID2, versionNum }, DRIVE_NAME2, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { DRIVE_ID3, versionNum }, DRIVE_NAME3, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { DRIVE_ID4, versionNum }, DRIVE_NAME4, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID1, COMP_RATIO_NAME1, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID2, COMP_RATIO_NAME2, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID3, COMP_RATIO_NAME3, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_RATIO_ID4, COMP_RATIO_NAME4, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID1, COMP_THRESH_NAME1, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID2, COMP_THRESH_NAME2, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID3, COMP_THRESH_NAME3, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(COMP_THRESH_ID4, COMP_THRESH_NAME4, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID1, WIDTH_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID2, WIDTH_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID3, WIDTH_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(WIDTH_ID4, WIDTH_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID1, OUTPUT_NAME1, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID2, OUTPUT_NAME2, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID3, OUTPUT_NAME3, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID4, OUTPUT_NAME4, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(OUTPUT_ID, OUTPUT_NAME, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID1, MIX_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID2, MIX_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID3, MIX_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID4, MIX_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(MIX_ID, MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID1, BIAS_NAME1, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID2, BIAS_NAME2, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID3, BIAS_NAME3, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(BIAS_ID4, BIAS_NAME4, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
-    
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID1, REC_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID2, REC_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID3, REC_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(REC_ID4, REC_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(DOWNSAMPLE_ID, DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_RATIO_ID1, versionNum }, COMP_RATIO_NAME1, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_RATIO_ID2, versionNum }, COMP_RATIO_NAME2, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_RATIO_ID3, versionNum }, COMP_RATIO_NAME3, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_RATIO_ID4, versionNum }, COMP_RATIO_NAME4, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_THRESH_ID1, versionNum }, COMP_THRESH_NAME1, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_THRESH_ID2, versionNum }, COMP_THRESH_NAME2, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_THRESH_ID3, versionNum }, COMP_THRESH_NAME3, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { COMP_THRESH_ID4, versionNum }, COMP_THRESH_NAME4, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { WIDTH_ID1, versionNum }, WIDTH_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { WIDTH_ID2, versionNum }, WIDTH_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { WIDTH_ID3, versionNum }, WIDTH_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { WIDTH_ID4, versionNum }, WIDTH_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { OUTPUT_ID1, versionNum }, OUTPUT_NAME1, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { OUTPUT_ID2, versionNum }, OUTPUT_NAME2, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { OUTPUT_ID3, versionNum }, OUTPUT_NAME3, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { OUTPUT_ID4, versionNum }, OUTPUT_NAME4, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { OUTPUT_ID, versionNum }, OUTPUT_NAME, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+ 
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { MIX_ID1, versionNum }, MIX_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { MIX_ID2, versionNum }, MIX_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { MIX_ID3, versionNum }, MIX_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { MIX_ID4, versionNum }, MIX_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { MIX_ID, versionNum }, MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+ 
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { BIAS_ID1, versionNum }, BIAS_NAME1, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { BIAS_ID2, versionNum }, BIAS_NAME2, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { BIAS_ID3, versionNum }, BIAS_NAME3, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { BIAS_ID4, versionNum }, BIAS_NAME4, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
+
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { REC_ID1, versionNum }, REC_NAME1, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { REC_ID2, versionNum }, REC_NAME2, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { REC_ID3, versionNum }, REC_NAME3, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { REC_ID4, versionNum }, REC_NAME4, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { DOWNSAMPLE_ID, versionNum }, DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
     
     
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.0f);
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_FREQ_ID, LOWCUT_FREQ_NAME, cutoffRange, 20.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_Q_ID, LOWCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { LOWCUT_FREQ_ID, versionNum }, LOWCUT_FREQ_NAME, cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { LOWCUT_Q_ID, versionNum }, LOWCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_FREQ_ID, HIGHCUT_FREQ_NAME, cutoffRange, 20000.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_Q_ID, HIGHCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(LOWCUT_GAIN_ID, LOWCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(HIGHCUT_GAIN_ID, HIGHCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_FREQ_ID, versionNum }, HIGHCUT_FREQ_NAME, cutoffRange, 20000.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_Q_ID, versionNum }, HIGHCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { LOWCUT_GAIN_ID, versionNum }, LOWCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_GAIN_ID, versionNum }, HIGHCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_FREQ_ID, PEAK_FREQ_NAME, cutoffRange, 1000.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_Q_ID, PEAK_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(PEAK_GAIN_ID, PEAK_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_FREQ_ID, versionNum }, PEAK_FREQ_NAME, cutoffRange, 1000.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_Q_ID, versionNum }, PEAK_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_GAIN_ID, versionNum }, PEAK_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
 
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(LOWCUT_SLOPE_ID, LOWCUT_SLOPE_NAME, 0, 3, 0));
-    parameters.push_back(std::make_unique<juce::AudioParameterInt>(HIGHCUT_SLOPE_ID, HIGHCUT_SLOPE_NAME, 0, 3, 0));
+    parameters.push_back(std::make_unique<PInt>(juce::ParameterID { LOWCUT_SLOPE_ID, versionNum }, LOWCUT_SLOPE_NAME, 0, 3, 0));
+    parameters.push_back(std::make_unique<PInt>(juce::ParameterID { HIGHCUT_SLOPE_ID, versionNum }, HIGHCUT_SLOPE_NAME, 0, 3, 0));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LOWCUT_BYPASSED_ID, LOWCUT_BYPASSED_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(PEAK_BYPASSED_ID, PEAK_BYPASSED_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGHCUT_BYPASSED_ID, HIGHCUT_BYPASSED_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LOWCUT_BYPASSED_ID, versionNum }, LOWCUT_BYPASSED_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { PEAK_BYPASSED_ID, versionNum }, PEAK_BYPASSED_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { HIGHCUT_BYPASSED_ID, versionNum }, HIGHCUT_BYPASSED_NAME, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(OFF_ID, OFF_NAME, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(PRE_ID, PRE_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(POST_ID, POST_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LOW_ID, LOW_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ID, BAND_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(HIGH_ID, HIGH_NAME, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { OFF_ID, versionNum }, OFF_NAME, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { PRE_ID, versionNum }, PRE_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { POST_ID, versionNum }, POST_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LOW_ID, versionNum }, LOW_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_ID, versionNum }, BAND_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { HIGH_ID, versionNum }, HIGH_NAME, true));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID1, LINE_STATE_NAME1, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID2, LINE_STATE_NAME2, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(LINE_STATE_ID3, LINE_STATE_NAME3, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINE_STATE_ID1, versionNum }, LINE_STATE_NAME1, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINE_STATE_ID2, versionNum }, LINE_STATE_NAME2, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { LINE_STATE_ID3, versionNum }, LINE_STATE_NAME3, false));
     
     juce::NormalisableRange<float> freq(40.0f, 10024.0f, 1.0f);
     freq.setSkewForCentre(651.0f);
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(FREQ_ID1, FREQ_NAME1, freq, 21));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(FREQ_ID2, FREQ_NAME2, freq, 21));
-    parameters.push_back(std::make_unique<juce::AudioParameterFloat>(FREQ_ID3, FREQ_NAME3, freq, 21));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { FREQ_ID1, versionNum }, FREQ_NAME1, freq, 21));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { FREQ_ID2, versionNum }, FREQ_NAME2, freq, 21));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { FREQ_ID3, versionNum }, FREQ_NAME3, freq, 21));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID1, BAND_ENABLE_NAME1, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID2, BAND_ENABLE_NAME2, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID3, BAND_ENABLE_NAME3, true));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_ENABLE_ID4, BAND_ENABLE_NAME4, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_ENABLE_ID1, versionNum }, BAND_ENABLE_NAME1, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_ENABLE_ID2, versionNum }, BAND_ENABLE_NAME2, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_ENABLE_ID3, versionNum }, BAND_ENABLE_NAME3, true));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_ENABLE_ID4, versionNum }, BAND_ENABLE_NAME4, true));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID1, BAND_SOLO_NAME1, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID2, BAND_SOLO_NAME2, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID3, BAND_SOLO_NAME3, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(BAND_SOLO_ID4, BAND_SOLO_NAME4, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_SOLO_ID1, versionNum }, BAND_SOLO_NAME1, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_SOLO_ID2, versionNum }, BAND_SOLO_NAME2, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_SOLO_ID3, versionNum }, BAND_SOLO_NAME3, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { BAND_SOLO_ID4, versionNum }, BAND_SOLO_NAME4, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID1, COMP_BYPASS_NAME1, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID2, COMP_BYPASS_NAME2, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID3, COMP_BYPASS_NAME3, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(COMP_BYPASS_ID4, COMP_BYPASS_NAME4, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { COMP_BYPASS_ID1, versionNum }, COMP_BYPASS_NAME1, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { COMP_BYPASS_ID2, versionNum }, COMP_BYPASS_NAME2, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { COMP_BYPASS_ID3, versionNum }, COMP_BYPASS_NAME3, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { COMP_BYPASS_ID4, versionNum }, COMP_BYPASS_NAME4, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID1, WIDTH_BYPASS_NAME1, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID2, WIDTH_BYPASS_NAME2, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID3, WIDTH_BYPASS_NAME3, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(WIDTH_BYPASS_ID4, WIDTH_BYPASS_NAME4, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { WIDTH_BYPASS_ID1, versionNum }, WIDTH_BYPASS_NAME1, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { WIDTH_BYPASS_ID2, versionNum }, WIDTH_BYPASS_NAME2, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { WIDTH_BYPASS_ID3, versionNum }, WIDTH_BYPASS_NAME3, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { WIDTH_BYPASS_ID4, versionNum }, WIDTH_BYPASS_NAME4, false));
     
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(FILTER_BYPASS_ID, FILTER_BYPASS_NAME, false));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(DOWNSAMPLE_BYPASS_ID, DOWNSAMPLE_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { FILTER_BYPASS_ID, versionNum }, FILTER_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(juce::ParameterID { DOWNSAMPLE_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
     
     return {parameters.begin(), parameters.end()};
 }

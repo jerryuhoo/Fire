@@ -33,11 +33,11 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::Button::Listener
 {
 public:
-    FireAudioProcessorEditor(FireAudioProcessor &);
+    FireAudioProcessorEditor (FireAudioProcessor&);
     ~FireAudioProcessorEditor();
 
     //==============================================================================
-    void paint(juce::Graphics &g) override;
+    void paint (juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
     void setMultiband();
@@ -45,29 +45,29 @@ public:
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
-    FireAudioProcessor &processor;
+    FireAudioProcessor& processor;
     state::StateComponent stateComponent;
-    
-    void buttonClicked(juce::Button *clickedButton) override;
+
+    void buttonClicked (juce::Button* clickedButton) override;
     void mouseDown (const juce::MouseEvent& e) override;
 
     // init editor
     void initEditor();
-    
+
     // Graph panel
-    GraphPanel graphPanel {processor};
-    
+    GraphPanel graphPanel { processor };
+
     // Multiband
-    Multiband multiband {processor, stateComponent};
-    
+    Multiband multiband { processor, stateComponent };
+
     // Band
-    BandPanel bandPanel {processor};
-    
+    BandPanel bandPanel { processor };
+
     // Global
     GlobalPanel globalPanel;
-    
+
     // Filter Control
-    FilterControl filterControl {processor, globalPanel};
+    FilterControl filterControl { processor, globalPanel };
 
     // Spectrum
     SpectrumComponent spectrum;
@@ -81,7 +81,7 @@ private:
         windowLeftButton,
         windowRightButton,
         zoomButton;
-    
+
     // group toggle buttons
     enum RadioButtonIds
     {
@@ -97,25 +97,24 @@ private:
         switchButtonsGlobal = 1005
     };
 
-    void setMenu(juce::ComboBox* combobox);
+    void setMenu (juce::ComboBox* combobox);
 
-    void setLinearSlider(juce::Slider& slider);
- 
-    void setDistortionGraph(juce::String modeId, juce::String driveId,
-        juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
+    void setLinearSlider (juce::Slider& slider);
 
-    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void setDistortionGraph (juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
+
+    void setFourComponentsVisibility (juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
     // override listener functions
 
-    void sliderValueChanged(juce::Slider *slider) override;
+    void sliderValueChanged (juce::Slider* slider) override;
     // combobox changed and set knob enable/disable
-    void comboBoxChanged(juce::ComboBox *combobox) override;
+    void comboBoxChanged (juce::ComboBox* combobox) override;
     // hide and show labels
-//    void sliderDragStarted (juce::Slider*) override;
-//    void sliderDragEnded (juce::Slider*) override;
-//    void changeSliderState(juce::ComboBox *combobox);
-    
+    //    void sliderDragStarted (juce::Slider*) override;
+    //    void sliderDragEnded (juce::Slider*) override;
+    //    void changeSliderState(juce::ComboBox *combobox);
+
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment;
@@ -134,6 +133,6 @@ private:
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     ZoomLookAndFeel zoomLookAndFeel;
-    
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FireAudioProcessorEditor)
 };

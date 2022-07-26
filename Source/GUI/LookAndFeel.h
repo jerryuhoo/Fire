@@ -137,7 +137,15 @@ public:
 //        juce::ColourGradient grad(juce::Colours::black.withBrightness(0.4f), centerX, centerY,
 //                                  juce::Colours::black.withBrightness(slider.isEnabled() ? 1.0f : 0.5f), radiusInner, radiusInner, true);
 //        g.setGradientFill(grad);
-        g.setColour(KNOB_INNER_COLOUR);
+        
+        juce::Colour innerColor = KNOB_INNER_COLOUR;
+
+        if (slider.isMouseOverOrDragging() && slider.isEnabled())
+        {
+            innerColor = innerColor.brighter();
+        }
+        
+        g.setColour(innerColor);
         g.fillEllipse(dialArea);
         
         // draw tick
@@ -318,6 +326,14 @@ public:
         juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
         
+        if (component.isMouseButtonDown())
+        {
+            tickColour = tickColour.darker();
+        }
+        else if (component.isMouseOver())
+        {
+            tickColour = tickColour.brighter();
+        }
         
         g.setColour(tickColour.darker().darker());
         g.fillEllipse(tickBounds);
@@ -878,8 +894,15 @@ public:
         
         // draw small circle
         juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
-//        g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
-        g.setColour(KNOB_INNER_COLOUR);
+
+        juce::Colour innerColor = KNOB_INNER_COLOUR;
+        
+        if (slider.isMouseOverOrDragging() && slider.isEnabled())
+        {
+            innerColor = innerColor.brighter();
+        }
+        
+        g.setColour(innerColor);
         g.fillEllipse(smallDialArea);
         
         // draw colorful inner circle

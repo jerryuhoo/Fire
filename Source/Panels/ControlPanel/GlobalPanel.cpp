@@ -204,17 +204,17 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     filterSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterSwitch.setLookAndFeel (&flatButtonLnf);
 
-    addAndMakeVisible (otherSwitch);
-    otherSwitch.setClickingTogglesState (true);
-    otherSwitch.setRadioGroupId (switchButtonsGlobal);
-    otherSwitch.setButtonText ("");
-    otherSwitch.setToggleState (false, juce::dontSendNotification);
-    otherSwitch.setColour (juce::TextButton::buttonColourId, DOWNSAMPLE_COLOUR.withBrightness (0.5f));
-    otherSwitch.setColour (juce::TextButton::buttonOnColourId, DOWNSAMPLE_COLOUR.withBrightness (0.9f));
-    otherSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    otherSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    otherSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
-    otherSwitch.setLookAndFeel (&flatButtonLnf);
+    addAndMakeVisible (downsampleSwitch);
+    downsampleSwitch.setClickingTogglesState (true);
+    downsampleSwitch.setRadioGroupId (switchButtonsGlobal);
+    downsampleSwitch.setButtonText ("");
+    downsampleSwitch.setToggleState (false, juce::dontSendNotification);
+    downsampleSwitch.setColour (juce::TextButton::buttonColourId, DOWNSAMPLE_COLOUR.withBrightness (0.5f));
+    downsampleSwitch.setColour (juce::TextButton::buttonOnColourId, DOWNSAMPLE_COLOUR.withBrightness (0.9f));
+    downsampleSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
+    downsampleSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
+    downsampleSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
+    downsampleSwitch.setLookAndFeel (&flatButtonLnf);
 
     // init state
     setBypassState (0, filterBypassButton->getToggleState());
@@ -286,13 +286,13 @@ GlobalPanel::~GlobalPanel()
     filterPeakButton.setLookAndFeel (nullptr);
     filterHighPassButton.setLookAndFeel (nullptr);
     filterSwitch.setLookAndFeel (nullptr);
-    otherSwitch.setLookAndFeel (nullptr);
+    downsampleSwitch.setLookAndFeel (nullptr);
 }
 
 void GlobalPanel::paint (juce::Graphics& g)
 {
     bool isFilterSwitchOn = filterSwitch.getToggleState();
-    bool isOtherSwitchOn = otherSwitch.getToggleState();
+    bool isOtherSwitchOn = downsampleSwitch.getToggleState();
 
     if (isFilterSwitchOn)
     {
@@ -381,7 +381,7 @@ void GlobalPanel::resized()
 
     juce::Rectangle<int> switchArea = globalEffectArea.removeFromLeft (getWidth() / 50);
     filterSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 2));
-    otherSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 2));
+    downsampleSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 2));
 
     juce::Rectangle<int> filterKnobArea = globalEffectArea;
     juce::Rectangle<int> filterTypeArea = filterKnobArea.removeFromLeft (globalEffectArea.getWidth() / 4);

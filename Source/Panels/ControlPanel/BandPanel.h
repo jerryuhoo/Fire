@@ -62,16 +62,8 @@ private:
 
     enum RadioButtonIds
     {
-        // filter state: off, pre, post
-        filterStateButtons = 1001,
-        // filter mode: low, band, high
-        filterModeButtons = 1002,
-        // window selection: left, right
-        windowButtons = 1003,
         // switches band
         switchButtons = 1004,
-        // switches global
-        switchButtonsGlobal = 1005
     };
 
     juce::Slider
@@ -88,32 +80,32 @@ private:
         mixKnob1,
         mixKnob2,
         mixKnob3,
-        mixKnob4;
+        mixKnob4,
 
-    juce::Slider recKnob1;
-    juce::Slider recKnob2;
-    juce::Slider recKnob3;
-    juce::Slider recKnob4;
+        recKnob1,
+        recKnob2,
+        recKnob3,
+        recKnob4,
 
-    juce::Slider biasKnob1;
-    juce::Slider biasKnob2;
-    juce::Slider biasKnob3;
-    juce::Slider biasKnob4;
+        biasKnob1,
+        biasKnob2,
+        biasKnob3,
+        biasKnob4,
 
-    juce::Slider compRatioKnob1;
-    juce::Slider compRatioKnob2;
-    juce::Slider compRatioKnob3;
-    juce::Slider compRatioKnob4;
+        compRatioKnob1,
+        compRatioKnob2,
+        compRatioKnob3,
+        compRatioKnob4,
 
-    juce::Slider compThreshKnob1;
-    juce::Slider compThreshKnob2;
-    juce::Slider compThreshKnob3;
-    juce::Slider compThreshKnob4;
+        compThreshKnob1,
+        compThreshKnob2,
+        compThreshKnob3,
+        compThreshKnob4,
 
-    juce::Slider widthKnob1;
-    juce::Slider widthKnob2;
-    juce::Slider widthKnob3;
-    juce::Slider widthKnob4;
+        widthKnob1,
+        widthKnob2,
+        widthKnob3,
+        widthKnob4;
 
     juce::Label
         driveLabel,
@@ -162,19 +154,20 @@ private:
         compressorSwitch;
 
     // vectors for sliders
-    juce::Array<juce::Component*> shapeVector;
-    juce::Array<juce::Component*> widthVector;
-    juce::Array<juce::Component*> compressorVector;
-    juce::Array<juce::Component*> oscVector;
+    juce::Array<juce::Component*>
+        shapeVector,
+        widthVector,
+        compressorVector,
+        oscVector,
 
-    juce::Array<juce::Component*> componentArray1;
-    juce::Array<juce::Component*> componentArray2;
-    juce::Array<juce::Component*> componentArray3;
-    juce::Array<juce::Component*> componentArray4;
-    juce::Array<juce::Component*> componentArray5;
-    juce::Array<juce::Component*> componentArray6;
-    juce::Array<juce::Component*> componentArray7;
-    juce::Array<juce::Component*> componentArray8;
+        componentArray1,
+        componentArray2,
+        componentArray3,
+        componentArray4,
+        componentArray5,
+        componentArray6,
+        componentArray7,
+        componentArray8;
 
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
@@ -233,8 +226,15 @@ private:
         extremeAttachment3,
         extremeAttachment4;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorBypassAttachment1, compressorBypassAttachment2, compressorBypassAttachment3, compressorBypassAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> widthBypassAttachment1, widthBypassAttachment2, widthBypassAttachment3, widthBypassAttachment4;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
+        compressorBypassAttachment1,
+        compressorBypassAttachment2,
+        compressorBypassAttachment3,
+        compressorBypassAttachment4,
+        widthBypassAttachment1,
+        widthBypassAttachment2,
+        widthBypassAttachment3,
+        widthBypassAttachment4;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;

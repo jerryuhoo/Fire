@@ -85,16 +85,8 @@ private:
     // group toggle buttons
     enum RadioButtonIds
     {
-        // filter state: off, pre, post
-        filterStateButtons = 1001,
-        // filter mode: low, band, high
-        filterModeButtons = 1002,
         // window selection: left, right
         windowButtons = 1003,
-        // switches band
-        switchButtons = 1004,
-        // switches global
-        switchButtonsGlobal = 1005
     };
 
     void setMenu (juce::ComboBox* combobox);

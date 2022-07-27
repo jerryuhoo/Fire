@@ -60,10 +60,6 @@ private:
         filterStateButtons = 1001,
         // filter mode: low, band, high
         filterModeButtons = 1002,
-        // window selection: left, right
-        windowButtons = 1003,
-        // switches band
-        switchButtons = 1004,
         // switches global
         switchButtonsGlobal = 1005
     };
@@ -114,9 +110,13 @@ private:
         filterPeakButton,
         filterHighPassButton;
 
-    juce::TextButton filterSwitch, otherSwitch;
+    juce::TextButton
+        filterSwitch,
+        downsampleSwitch;
 
-    std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
+    std::unique_ptr<juce::ToggleButton>
+        filterBypassButton,
+        downsampleBypassButton;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
@@ -152,22 +152,23 @@ private:
         filterPostAttachment,
         filterLowAttachment,
         filterBandAttachment,
-        filterHighAttachment;
-
-    // ComboBox attachment
-
-    juce::ComboBox lowcutSlopeMode;
-    juce::ComboBox highcutSlopeMode;
+        filterHighAttachment,
+    
+        filterBypassAttachment,
+        downsampleBypassAttachment;
+    // ComboBox
+    juce::ComboBox
+        lowcutSlopeMode,
+        highcutSlopeMode;
 
     // filter and downsample
-    juce::Array<juce::Component*> componentArray1;
-    juce::Array<juce::Component*> componentArray2;
+    juce::Array<juce::Component*>
+        componentArray1,
+        componentArray2;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lowcutModeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> highcutModeAttachment;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> filterBypassAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> downsampleBypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
+        lowcutModeAttachment,
+        highcutModeAttachment;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalPanel)
 };

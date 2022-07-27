@@ -154,6 +154,12 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     initFlatButton (safeButton2, SAFE_ID2, "S");
     initFlatButton (safeButton3, SAFE_ID3, "S");
     initFlatButton (safeButton4, SAFE_ID4, "S");
+    
+    // extreme Button
+    initFlatButton (extremeButton1, EXTREME_ID1, "E");
+    initFlatButton (extremeButton2, EXTREME_ID2, "E");
+    initFlatButton (extremeButton3, EXTREME_ID3, "E");
+    initFlatButton (extremeButton4, EXTREME_ID4, "E");
 
     addAndMakeVisible (mixLabel);
     mixLabel.setText ("Mix", juce::dontSendNotification);
@@ -220,64 +226,71 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     setVisibility (widthVector, false);
 
     // Attachment
-    driveAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, DRIVE_ID1, driveKnob1);
-    driveAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, DRIVE_ID2, driveKnob2);
-    driveAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, DRIVE_ID3, driveKnob3);
-    driveAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, DRIVE_ID4, driveKnob4);
+    using SliderAttach = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ButtonAttach = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    driveAttachment1 = std::make_unique<SliderAttach> (processor.treeState, DRIVE_ID1, driveKnob1);
+    driveAttachment2 = std::make_unique<SliderAttach> (processor.treeState, DRIVE_ID2, driveKnob2);
+    driveAttachment3 = std::make_unique<SliderAttach> (processor.treeState, DRIVE_ID3, driveKnob3);
+    driveAttachment4 = std::make_unique<SliderAttach> (processor.treeState, DRIVE_ID4, driveKnob4);
 
-    compRatioAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_RATIO_ID1, compRatioKnob1);
-    compRatioAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_RATIO_ID2, compRatioKnob2);
-    compRatioAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_RATIO_ID3, compRatioKnob3);
-    compRatioAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_RATIO_ID4, compRatioKnob4);
+    compRatioAttachment1 = std::make_unique<SliderAttach> (processor.treeState, COMP_RATIO_ID1, compRatioKnob1);
+    compRatioAttachment2 = std::make_unique<SliderAttach> (processor.treeState, COMP_RATIO_ID2, compRatioKnob2);
+    compRatioAttachment3 = std::make_unique<SliderAttach> (processor.treeState, COMP_RATIO_ID3, compRatioKnob3);
+    compRatioAttachment4 = std::make_unique<SliderAttach> (processor.treeState, COMP_RATIO_ID4, compRatioKnob4);
 
-    compThreshAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_THRESH_ID1, compThreshKnob1);
-    compThreshAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_THRESH_ID2, compThreshKnob2);
-    compThreshAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_THRESH_ID3, compThreshKnob3);
-    compThreshAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, COMP_THRESH_ID4, compThreshKnob4);
+    compThreshAttachment1 = std::make_unique<SliderAttach> (processor.treeState, COMP_THRESH_ID1, compThreshKnob1);
+    compThreshAttachment2 = std::make_unique<SliderAttach> (processor.treeState, COMP_THRESH_ID2, compThreshKnob2);
+    compThreshAttachment3 = std::make_unique<SliderAttach> (processor.treeState, COMP_THRESH_ID3, compThreshKnob3);
+    compThreshAttachment4 = std::make_unique<SliderAttach> (processor.treeState, COMP_THRESH_ID4, compThreshKnob4);
 
-    outputAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, OUTPUT_ID1, outputKnob1);
-    outputAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, OUTPUT_ID2, outputKnob2);
-    outputAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, OUTPUT_ID3, outputKnob3);
-    outputAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, OUTPUT_ID4, outputKnob4);
+    outputAttachment1 = std::make_unique<SliderAttach> (processor.treeState, OUTPUT_ID1, outputKnob1);
+    outputAttachment2 = std::make_unique<SliderAttach> (processor.treeState, OUTPUT_ID2, outputKnob2);
+    outputAttachment3 = std::make_unique<SliderAttach> (processor.treeState, OUTPUT_ID3, outputKnob3);
+    outputAttachment4 = std::make_unique<SliderAttach> (processor.treeState, OUTPUT_ID4, outputKnob4);
 
-    mixAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, MIX_ID1, mixKnob1);
-    mixAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, MIX_ID2, mixKnob2);
-    mixAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, MIX_ID3, mixKnob3);
-    mixAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, MIX_ID4, mixKnob4);
+    mixAttachment1 = std::make_unique<SliderAttach> (processor.treeState, MIX_ID1, mixKnob1);
+    mixAttachment2 = std::make_unique<SliderAttach> (processor.treeState, MIX_ID2, mixKnob2);
+    mixAttachment3 = std::make_unique<SliderAttach> (processor.treeState, MIX_ID3, mixKnob3);
+    mixAttachment4 = std::make_unique<SliderAttach> (processor.treeState, MIX_ID4, mixKnob4);
 
-    biasAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, BIAS_ID1, biasKnob1);
-    biasAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, BIAS_ID2, biasKnob2);
-    biasAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, BIAS_ID3, biasKnob3);
-    biasAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, BIAS_ID4, biasKnob4);
+    biasAttachment1 = std::make_unique<SliderAttach> (processor.treeState, BIAS_ID1, biasKnob1);
+    biasAttachment2 = std::make_unique<SliderAttach> (processor.treeState, BIAS_ID2, biasKnob2);
+    biasAttachment3 = std::make_unique<SliderAttach> (processor.treeState, BIAS_ID3, biasKnob3);
+    biasAttachment4 = std::make_unique<SliderAttach> (processor.treeState, BIAS_ID4, biasKnob4);
 
-    recAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, REC_ID1, recKnob1);
-    recAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, REC_ID2, recKnob2);
-    recAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, REC_ID3, recKnob3);
-    recAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, REC_ID4, recKnob4);
+    recAttachment1 = std::make_unique<SliderAttach> (processor.treeState, REC_ID1, recKnob1);
+    recAttachment2 = std::make_unique<SliderAttach> (processor.treeState, REC_ID2, recKnob2);
+    recAttachment3 = std::make_unique<SliderAttach> (processor.treeState, REC_ID3, recKnob3);
+    recAttachment4 = std::make_unique<SliderAttach> (processor.treeState, REC_ID4, recKnob4);
 
-    linkedAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, LINKED_ID1, linkedButton1);
-    linkedAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, LINKED_ID2, linkedButton2);
-    linkedAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, LINKED_ID3, linkedButton3);
-    linkedAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, LINKED_ID4, linkedButton4);
+    linkedAttachment1 = std::make_unique<ButtonAttach> (processor.treeState, LINKED_ID1, linkedButton1);
+    linkedAttachment2 = std::make_unique<ButtonAttach> (processor.treeState, LINKED_ID2, linkedButton2);
+    linkedAttachment3 = std::make_unique<ButtonAttach> (processor.treeState, LINKED_ID3, linkedButton3);
+    linkedAttachment4 = std::make_unique<ButtonAttach> (processor.treeState, LINKED_ID4, linkedButton4);
 
-    safeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, SAFE_ID1, safeButton1);
-    safeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, SAFE_ID2, safeButton2);
-    safeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, SAFE_ID3, safeButton3);
-    safeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, SAFE_ID4, safeButton4);
+    safeAttachment1 = std::make_unique<ButtonAttach> (processor.treeState, SAFE_ID1, safeButton1);
+    safeAttachment2 = std::make_unique<ButtonAttach> (processor.treeState, SAFE_ID2, safeButton2);
+    safeAttachment3 = std::make_unique<ButtonAttach> (processor.treeState, SAFE_ID3, safeButton3);
+    safeAttachment4 = std::make_unique<ButtonAttach> (processor.treeState, SAFE_ID4, safeButton4);
+    
+    extremeAttachment1 = std::make_unique<ButtonAttach> (processor.treeState, EXTREME_ID1, extremeButton1);
+    extremeAttachment2 = std::make_unique<ButtonAttach> (processor.treeState, EXTREME_ID2, extremeButton2);
+    extremeAttachment3 = std::make_unique<ButtonAttach> (processor.treeState, EXTREME_ID3, extremeButton3);
+    extremeAttachment4 = std::make_unique<ButtonAttach> (processor.treeState, EXTREME_ID4, extremeButton4);
 
-    widthAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, WIDTH_ID1, widthKnob1);
-    widthAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, WIDTH_ID2, widthKnob2);
-    widthAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, WIDTH_ID3, widthKnob3);
-    widthAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, WIDTH_ID4, widthKnob4);
+    widthAttachment1 = std::make_unique<SliderAttach> (processor.treeState, WIDTH_ID1, widthKnob1);
+    widthAttachment2 = std::make_unique<SliderAttach> (processor.treeState, WIDTH_ID2, widthKnob2);
+    widthAttachment3 = std::make_unique<SliderAttach> (processor.treeState, WIDTH_ID3, widthKnob3);
+    widthAttachment4 = std::make_unique<SliderAttach> (processor.treeState, WIDTH_ID4, widthKnob4);
 
-    compressorBypassAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, COMP_BYPASS_ID1, *compressorBypassButton1);
-    compressorBypassAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, COMP_BYPASS_ID2, *compressorBypassButton2);
-    compressorBypassAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, COMP_BYPASS_ID3, *compressorBypassButton3);
-    compressorBypassAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, COMP_BYPASS_ID4, *compressorBypassButton4);
-    widthBypassAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, WIDTH_BYPASS_ID1, *widthBypassButton1);
-    widthBypassAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, WIDTH_BYPASS_ID2, *widthBypassButton2);
-    widthBypassAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, WIDTH_BYPASS_ID3, *widthBypassButton3);
-    widthBypassAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (processor.treeState, WIDTH_BYPASS_ID4, *widthBypassButton4);
+    compressorBypassAttachment1 = std::make_unique<ButtonAttach> (processor.treeState, COMP_BYPASS_ID1, *compressorBypassButton1);
+    compressorBypassAttachment2 = std::make_unique<ButtonAttach> (processor.treeState, COMP_BYPASS_ID2, *compressorBypassButton2);
+    compressorBypassAttachment3 = std::make_unique<ButtonAttach> (processor.treeState, COMP_BYPASS_ID3, *compressorBypassButton3);
+    compressorBypassAttachment4 = std::make_unique<ButtonAttach> (processor.treeState, COMP_BYPASS_ID4, *compressorBypassButton4);
+    widthBypassAttachment1 = std::make_unique<ButtonAttach> (processor.treeState, WIDTH_BYPASS_ID1, *widthBypassButton1);
+    widthBypassAttachment2 = std::make_unique<ButtonAttach> (processor.treeState, WIDTH_BYPASS_ID2, *widthBypassButton2);
+    widthBypassAttachment3 = std::make_unique<ButtonAttach> (processor.treeState, WIDTH_BYPASS_ID3, *widthBypassButton3);
+    widthBypassAttachment4 = std::make_unique<ButtonAttach> (processor.treeState, WIDTH_BYPASS_ID4, *widthBypassButton4);
 
     // save xml state to temp
     compBypassTemp[0] = *processor.treeState.getRawParameterValue (COMP_BYPASS_ID1);
@@ -311,6 +324,10 @@ BandPanel::~BandPanel()
     safeButton2.setLookAndFeel (nullptr);
     safeButton3.setLookAndFeel (nullptr);
     safeButton4.setLookAndFeel (nullptr);
+    extremeButton1.setLookAndFeel (nullptr);
+    extremeButton2.setLookAndFeel (nullptr);
+    extremeButton3.setLookAndFeel (nullptr);
+    extremeButton4.setLookAndFeel (nullptr);
     oscSwitch.setLookAndFeel (nullptr);
     shapeSwitch.setLookAndFeel (nullptr);
     widthSwitch.setLookAndFeel (nullptr);
@@ -324,6 +341,7 @@ void BandPanel::paint (juce::Graphics& g)
     setFourComponentsVisibility (mixKnob1, mixKnob2, mixKnob3, mixKnob4, focusBandNum);
     setFourComponentsVisibility (linkedButton1, linkedButton2, linkedButton3, linkedButton4, focusBandNum);
     setFourComponentsVisibility (safeButton1, safeButton2, safeButton3, safeButton4, focusBandNum);
+    setFourComponentsVisibility (extremeButton1, extremeButton2, extremeButton3, extremeButton4, focusBandNum);
 
     g.setColour (COLOUR6);
     if (! oscSwitch.getToggleState())
@@ -441,17 +459,23 @@ void BandPanel::resized()
     // buttons
     juce::Rectangle<int> outputButtonArea = outputKnobArea;
     outputButtonArea = outputButtonArea.removeFromLeft (getWidth() / 25);
-    juce::Rectangle<int> outputButtonAreaUp = outputButtonArea;
-    juce::Rectangle<int> outputButtonAreaDown = outputButtonAreaUp.removeFromBottom (outputButtonArea.getHeight() / 2);
-    linkedButton1.setBounds (outputButtonAreaUp);
-    linkedButton2.setBounds (outputButtonAreaUp);
-    linkedButton3.setBounds (outputButtonAreaUp);
-    linkedButton4.setBounds (outputButtonAreaUp);
+    juce::Rectangle<int> outputButtonArea1 = outputButtonArea;
+    juce::Rectangle<int> outputButtonArea2 = outputButtonArea1.removeFromBottom (outputButtonArea.getHeight() / 3 * 2);
+    juce::Rectangle<int> outputButtonArea3 = outputButtonArea2.removeFromBottom (outputButtonArea.getHeight() / 3);
+    linkedButton1.setBounds (outputButtonArea1);
+    linkedButton2.setBounds (outputButtonArea1);
+    linkedButton3.setBounds (outputButtonArea1);
+    linkedButton4.setBounds (outputButtonArea1);
 
-    safeButton1.setBounds (outputButtonAreaDown);
-    safeButton2.setBounds (outputButtonAreaDown);
-    safeButton3.setBounds (outputButtonAreaDown);
-    safeButton4.setBounds (outputButtonAreaDown);
+    safeButton1.setBounds (outputButtonArea2);
+    safeButton2.setBounds (outputButtonArea2);
+    safeButton3.setBounds (outputButtonArea2);
+    safeButton4.setBounds (outputButtonArea2);
+    
+    extremeButton1.setBounds (outputButtonArea3);
+    extremeButton2.setBounds (outputButtonArea3);
+    extremeButton3.setBounds (outputButtonArea3);
+    extremeButton4.setBounds (outputButtonArea3);
 
     // set look and feel scale
     driveLookAndFeel1.scale = scale;
@@ -717,10 +741,10 @@ void BandPanel::setBypassState (int index, bool state)
 
 void BandPanel::setBandKnobsStates (int index, bool state, bool callFromSubBypass)
 {
-    componentArray1 = { &driveKnob1, &outputKnob1, &mixKnob1, &recKnob1, &biasKnob1, &compThreshKnob1, &compRatioKnob1, &widthKnob1, &linkedButton1, &safeButton1 };
-    componentArray2 = { &driveKnob2, &outputKnob2, &mixKnob2, &recKnob2, &biasKnob2, &compThreshKnob2, &compRatioKnob2, &widthKnob2, &linkedButton2, &safeButton2 };
-    componentArray3 = { &driveKnob3, &outputKnob3, &mixKnob3, &recKnob3, &biasKnob3, &compThreshKnob3, &compRatioKnob3, &widthKnob3, &linkedButton3, &safeButton3 };
-    componentArray4 = { &driveKnob4, &outputKnob4, &mixKnob4, &recKnob4, &biasKnob4, &compThreshKnob4, &compRatioKnob4, &widthKnob4, &linkedButton4, &safeButton4 };
+    componentArray1 = { &driveKnob1, &outputKnob1, &mixKnob1, &recKnob1, &biasKnob1, &compThreshKnob1, &compRatioKnob1, &widthKnob1, &linkedButton1, &safeButton1, &extremeButton1 };
+    componentArray2 = { &driveKnob2, &outputKnob2, &mixKnob2, &recKnob2, &biasKnob2, &compThreshKnob2, &compRatioKnob2, &widthKnob2, &linkedButton2, &safeButton2, &extremeButton2 };
+    componentArray3 = { &driveKnob3, &outputKnob3, &mixKnob3, &recKnob3, &biasKnob3, &compThreshKnob3, &compRatioKnob3, &widthKnob3, &linkedButton3, &safeButton3, &extremeButton3 };
+    componentArray4 = { &driveKnob4, &outputKnob4, &mixKnob4, &recKnob4, &biasKnob4, &compThreshKnob4, &compRatioKnob4, &widthKnob4, &linkedButton4, &safeButton4, &extremeButton4 };
 
     bool widthBypassState, compBypassState;
     // turn off bypassbuttons, subbypass buttons will also turn off

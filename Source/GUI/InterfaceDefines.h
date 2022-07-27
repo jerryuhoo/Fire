@@ -57,6 +57,15 @@
 #define SAFE_ID4            "safe4"
 #define SAFE_NAME4          "Safe4"
 
+#define EXTREME_ID1         "extreme1"
+#define EXTREME_NAME1       "Extreme1"
+#define EXTREME_ID2         "extreme2"
+#define EXTREME_NAME2       "Extreme2"
+#define EXTREME_ID3         "extreme3"
+#define EXTREME_NAME3       "Extreme3"
+#define EXTREME_ID4         "extreme4"
+#define EXTREME_NAME4       "Extreme4"
+
 #define COMP_RATIO_ID1      "compRatio1"
 #define COMP_RATIO_NAME1    "CompRatio1"
 #define COMP_RATIO_ID2      "compRatio2"

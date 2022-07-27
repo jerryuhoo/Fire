@@ -135,7 +135,11 @@ private:
         safeButton1,
         safeButton2,
         safeButton3,
-        safeButton4;
+        safeButton4,
+        extremeButton1,
+        extremeButton2,
+        extremeButton3,
+        extremeButton4;
 
     std::unique_ptr<juce::ToggleButton>
         compressorBypassButton1,
@@ -216,7 +220,6 @@ private:
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-
         linkedAttachment1,
         linkedAttachment2,
         linkedAttachment3,
@@ -224,7 +227,11 @@ private:
         safeAttachment1,
         safeAttachment2,
         safeAttachment3,
-        safeAttachment4;
+        safeAttachment4,
+        extremeAttachment1,
+        extremeAttachment2,
+        extremeAttachment3,
+        extremeAttachment4;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorBypassAttachment1, compressorBypassAttachment2, compressorBypassAttachment3, compressorBypassAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> widthBypassAttachment1, widthBypassAttachment2, widthBypassAttachment3, widthBypassAttachment4;

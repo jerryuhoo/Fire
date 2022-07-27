@@ -1,4 +1,4 @@
-# Fire (Version 1.0.0 Beta 1) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
+# Fire (Version 1.0.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -101,7 +101,7 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
-### 2022-7 (version 1.0.0 Beta 1)
+### 2022-7-27 (version 1.0.0)
 
 1. Refactor the code of frequency lines and close buttons.
 2. Fix a crash in Fl Studio of v0.9.9.
@@ -109,6 +109,9 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 4. Fix the bug of changing presets that might cause wrong frequency line positions.
 5. New close buttons for each band.
 6. Other GUI improvements.
+7. Add Extreme button for more distortion.
+8. Check update when opening the plugin.
+9. Support JUCE 7.
 
 ### 2022-7-13 (version 0.9.9)
 

@@ -43,8 +43,8 @@ void FilterControl::paint (juce::Graphics& g)
     if (isVisible())
         processor.setHistoryArray (5); // 5 means global
     
-    bool isFilterBypassed = *processor.treeState.getRawParameterValue (FILTER_BYPASS_ID);
-    if (isFilterBypassed)
+    bool isFilterEnabled = *processor.treeState.getRawParameterValue (FILTER_BYPASS_ID);
+    if (isFilterEnabled)
     {
         draggableLowButton.setState (true);
         draggablePeakButton.setState (true);
@@ -82,21 +82,21 @@ void FilterControl::paint (juce::Graphics& g)
     if (buttonY > getHeight() / 48.0f * (24 + 15) - size / 2.0f)
         buttonY = getHeight() / 48.0f * (24 + 15) - size / 2.0f;
     
-    if (draggableLowButton.isMouseButtonDown())
+    if (draggableLowButton.isMouseButtonDown() && isFilterEnabled)
     {
         globalPanel.setToggleButtonState ("lowcut");
         draggableLowButton.setBounds (buttonX, buttonY, size, size);
         globalPanel.getLowcutFreqKnob().setValue (juce::mapToLog10 (static_cast<double> (getMouseXYRelative().getX() / static_cast<double> (getWidth())), 20.0, 20000.0));
         globalPanel.getLowcutGainKnob().setValue (15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
     }
-    if (draggablePeakButton.isMouseButtonDown())
+    if (draggablePeakButton.isMouseButtonDown() && isFilterEnabled)
     {
         globalPanel.setToggleButtonState ("peak");
         draggablePeakButton.setBounds (buttonX, buttonY, size, size);
         globalPanel.getPeakFreqKnob().setValue (juce::mapToLog10 (static_cast<double> (getMouseXYRelative().getX() / static_cast<double> (getWidth())), 20.0, 20000.0));
         globalPanel.getPeakGainKnob().setValue (15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
     }
-    if (draggableHighButton.isMouseButtonDown())
+    if (draggableHighButton.isMouseButtonDown() && isFilterEnabled)
     {
         globalPanel.setToggleButtonState ("highcut");
         draggableHighButton.setBounds (buttonX, buttonY, size, size);

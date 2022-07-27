@@ -45,20 +45,12 @@ void DraggableButton::mouseExit (const juce::MouseEvent& e)
 
 juce::Colour DraggableButton::getColour()
 {
-    if (isEntered)
-    {
-        if (mState)
-            return juce::Colours::hotpink.withAlpha (0.8f);
-        else
-            return juce::Colours::lightgrey.withAlpha (0.8f);
-    }
-    else
-    {
-        if (mState)
-            return juce::Colours::hotpink;
-        else
-            return juce::Colours::dimgrey;
-    }
+    if (mState && isEntered)
+        return juce::Colours::hotpink.brighter();
+    else if (mState && ! isEntered)
+        return juce::Colours::hotpink;
+
+    return juce::Colours::dimgrey;
 }
 
 void DraggableButton::setState (const bool state)

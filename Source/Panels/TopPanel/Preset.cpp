@@ -530,7 +530,7 @@ menuButton{"Menu"}
     
     // check update
     versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-    if(!versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
+    if (versionInfo!= nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
     {
         version = versionInfo->versionString;
         const auto callback = juce::ModalCallbackFunction::create ([this](int result) {

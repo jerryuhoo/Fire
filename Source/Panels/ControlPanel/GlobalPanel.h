@@ -53,6 +53,7 @@ private:
     void updateToggleState();
     void setBypassState (int index, bool state);
     void updateBypassState (juce::ToggleButton& clickedButton, int index);
+    void setVisibility (juce::Array<juce::Component*>& array, bool isVisible);
 
     enum RadioButtonIds
     {
@@ -103,16 +104,24 @@ private:
 
     // Buttons
     juce::TextButton
-        filterOffButton,
-        filterPreButton,
-        filterPostButton,
+//        filterOffButton,
+//        filterPreButton,
+//        filterPostButton,
         filterLowPassButton,
         filterPeakButton,
         filterHighPassButton;
-
-    juce::TextButton
+    
+    // switches
+    juce::ToggleButton
         filterSwitch,
-        downsampleSwitch;
+        downsampleSwitch,
+        limiterSwitch;
+    
+    // vectors for sliders
+    juce::Array<juce::Component*>
+        filterVector,
+        downsampleVector,
+        limiterVector;
 
     std::unique_ptr<juce::ToggleButton>
         filterBypassButton,
@@ -147,24 +156,20 @@ private:
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-        filterOffAttachment,
-        filterPreAttachment,
-        filterPostAttachment,
+//        filterOffAttachment,
+//        filterPreAttachment,
+//        filterPostAttachment,
         filterLowAttachment,
         filterBandAttachment,
         filterHighAttachment,
     
         filterBypassAttachment,
         downsampleBypassAttachment;
+
     // ComboBox
     juce::ComboBox
         lowcutSlopeMode,
         highcutSlopeMode;
-
-    // filter and downsample
-    juce::Array<juce::Component*>
-        componentArray1,
-        componentArray2;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
         lowcutModeAttachment,

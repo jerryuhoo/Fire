@@ -14,6 +14,11 @@
 //==============================================================================
 GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 {
+    // init vec
+    filterVector = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode, &peakGainKnob, &peakQKnob };
+    downsampleVector = { &downSampleKnob };
+    limiterVector = { };
+    
     setRotarySlider (mixKnob, COLOUR1);
     setRotarySlider (outputKnob, COLOUR1);
 
@@ -144,28 +149,28 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     peakGainLabel.setJustificationType (juce::Justification::centred);
 
     // Filter State Buttons
-    setRoundButton (filterOffButton, OFF_ID, "OFF");
-    setRoundButton (filterPreButton, PRE_ID, "PRE");
-    setRoundButton (filterPostButton, POST_ID, "POST");
+//    setRoundButton (filterOffButton, OFF_ID, "OFF");
+//    setRoundButton (filterPreButton, PRE_ID, "PRE");
+//    setRoundButton (filterPostButton, POST_ID, "POST");
 
-    filterOffButton.setRadioGroupId (filterStateButtons);
-    filterOffButton.onClick = [this]
-    { updateToggleState(); };
+//    filterOffButton.setRadioGroupId (filterStateButtons);
+//    filterOffButton.onClick = [this]
+//    { updateToggleState(); };
+//
+//    filterPreButton.setRadioGroupId (filterStateButtons);
+//    filterPreButton.onClick = [this]
+//    { updateToggleState(); };
+//
+//    filterPostButton.setRadioGroupId (filterStateButtons);
+//    filterPostButton.onClick = [this]
+//    { updateToggleState(); };
 
-    filterPreButton.setRadioGroupId (filterStateButtons);
-    filterPreButton.onClick = [this]
-    { updateToggleState(); };
-
-    filterPostButton.setRadioGroupId (filterStateButtons);
-    filterPostButton.onClick = [this]
-    { updateToggleState(); };
-
-    addAndMakeVisible (filterStateLabel);
-    filterStateLabel.setText ("Filter", juce::dontSendNotification);
-    filterStateLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    filterStateLabel.setColour (juce::Label::textColourId, KNOB_FONT_COLOUR);
-    filterStateLabel.attachToComponent (&filterOffButton, false);
-    filterStateLabel.setJustificationType (juce::Justification::centred);
+//    addAndMakeVisible (filterStateLabel);
+//    filterStateLabel.setText ("Filter", juce::dontSendNotification);
+//    filterStateLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+//    filterStateLabel.setColour (juce::Label::textColourId, KNOB_FONT_COLOUR);
+//    filterStateLabel.attachToComponent (&filterOffButton, false);
+//    filterStateLabel.setJustificationType (juce::Justification::centred);
 
     // Filter Type Toggle Buttons
     setRoundButton (filterLowPassButton, LOW_ID, "LP");
@@ -195,30 +200,41 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     addAndMakeVisible (filterSwitch);
     filterSwitch.setClickingTogglesState (true);
     filterSwitch.setRadioGroupId (switchButtonsGlobal);
-    filterSwitch.setButtonText ("");
     filterSwitch.setToggleState (true, juce::dontSendNotification);
-    filterSwitch.setColour (juce::TextButton::buttonColourId, FILTER_COLOUR.withBrightness (0.5f));
-    filterSwitch.setColour (juce::TextButton::buttonOnColourId, FILTER_COLOUR.withBrightness (0.9f));
+    filterSwitch.setColour (juce::ToggleButton::tickDisabledColourId, FILTER_COLOUR.withBrightness (0.5f));
+    filterSwitch.setColour (juce::ToggleButton::tickColourId, FILTER_COLOUR.withBrightness (0.9f));
     filterSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    filterSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    filterSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     filterSwitch.setLookAndFeel (&flatButtonLnf);
+    filterSwitch.addListener (this);
 
     addAndMakeVisible (downsampleSwitch);
     downsampleSwitch.setClickingTogglesState (true);
     downsampleSwitch.setRadioGroupId (switchButtonsGlobal);
-    downsampleSwitch.setButtonText ("");
     downsampleSwitch.setToggleState (false, juce::dontSendNotification);
-    downsampleSwitch.setColour (juce::TextButton::buttonColourId, DOWNSAMPLE_COLOUR.withBrightness (0.5f));
-    downsampleSwitch.setColour (juce::TextButton::buttonOnColourId, DOWNSAMPLE_COLOUR.withBrightness (0.9f));
+    downsampleSwitch.setColour (juce::ToggleButton::tickDisabledColourId, DOWNSAMPLE_COLOUR.withBrightness (0.5f));
+    downsampleSwitch.setColour (juce::ToggleButton::tickColourId, DOWNSAMPLE_COLOUR.withBrightness (0.9f));
     downsampleSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    downsampleSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-    downsampleSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     downsampleSwitch.setLookAndFeel (&flatButtonLnf);
+    downsampleSwitch.addListener (this);
+    
+    addAndMakeVisible (limiterSwitch);
+    limiterSwitch.setClickingTogglesState (true);
+    limiterSwitch.setRadioGroupId (switchButtonsGlobal);
+    limiterSwitch.setToggleState (false, juce::dontSendNotification);
+    limiterSwitch.setColour (juce::ToggleButton::tickDisabledColourId, LIMITER_COLOUR.withBrightness (0.5f));
+    limiterSwitch.setColour (juce::ToggleButton::tickColourId, LIMITER_COLOUR.withBrightness (0.9f));
+    limiterSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
+    limiterSwitch.setLookAndFeel (&flatButtonLnf);
+    limiterSwitch.addListener (this);
 
     // init state
     setBypassState (0, filterBypassButton->getToggleState());
     setBypassState (1, downsampleBypassButton->getToggleState());
+    
+    // init visibility
+    setVisibility (downsampleVector, false);
+    setVisibility (limiterVector, false);
+    downsampleBypassButton->setVisible(false);
 
     // Attachment
     outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, OUTPUT_ID, outputKnob);
@@ -236,9 +252,9 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     peakQAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, PEAK_Q_ID, peakQKnob);
     peakGainAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (apvts, PEAK_GAIN_ID, peakGainKnob);
 
-    filterOffAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, OFF_ID, filterOffButton);
-    filterPreAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, PRE_ID, filterPreButton);
-    filterPostAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, POST_ID, filterPostButton);
+//    filterOffAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, OFF_ID, filterOffButton);
+//    filterPreAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, PRE_ID, filterPreButton);
+//    filterPostAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, POST_ID, filterPostButton);
     filterLowAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, LOW_ID, filterLowPassButton);
     filterBandAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, BAND_ID, filterPeakButton);
     filterHighAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, HIGH_ID, filterHighPassButton);
@@ -279,93 +295,20 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
 GlobalPanel::~GlobalPanel()
 {
-    filterOffButton.setLookAndFeel (nullptr);
-    filterPreButton.setLookAndFeel (nullptr);
-    filterPostButton.setLookAndFeel (nullptr);
+//    filterOffButton.setLookAndFeel (nullptr);
+//    filterPreButton.setLookAndFeel (nullptr);
+//    filterPostButton.setLookAndFeel (nullptr);
     filterLowPassButton.setLookAndFeel (nullptr);
     filterPeakButton.setLookAndFeel (nullptr);
     filterHighPassButton.setLookAndFeel (nullptr);
     filterSwitch.setLookAndFeel (nullptr);
     downsampleSwitch.setLookAndFeel (nullptr);
+    limiterSwitch.setLookAndFeel (nullptr);
 }
 
 void GlobalPanel::paint (juce::Graphics& g)
 {
-    bool isFilterSwitchOn = filterSwitch.getToggleState();
-    bool isOtherSwitchOn = downsampleSwitch.getToggleState();
-
-    if (isFilterSwitchOn)
-    {
-        filterBypassButton->setVisible (true);
-        filterHighPassButton.setVisible (true);
-        filterPeakButton.setVisible (true);
-        filterLowPassButton.setVisible (true);
-        if (filterLowPassButton.getToggleState())
-        {
-            lowcutFreqKnob.setVisible (false);
-            lowcutQKnob.setVisible (false);
-            lowcutGainKnob.setVisible (false);
-            highcutFreqKnob.setVisible (true);
-            highcutQKnob.setVisible (true);
-            highcutGainKnob.setVisible (true);
-            peakFreqKnob.setVisible (false);
-            peakQKnob.setVisible (false);
-            peakGainKnob.setVisible (false);
-            lowcutSlopeMode.setVisible (false);
-            highcutSlopeMode.setVisible (true);
-        }
-        if (filterHighPassButton.getToggleState())
-        {
-            lowcutFreqKnob.setVisible (true);
-            lowcutQKnob.setVisible (true);
-            lowcutGainKnob.setVisible (true);
-            highcutFreqKnob.setVisible (false);
-            highcutQKnob.setVisible (false);
-            highcutGainKnob.setVisible (false);
-            peakFreqKnob.setVisible (false);
-            peakQKnob.setVisible (false);
-            peakGainKnob.setVisible (false);
-            lowcutSlopeMode.setVisible (true);
-            highcutSlopeMode.setVisible (false);
-        }
-        if (filterPeakButton.getToggleState())
-        {
-            lowcutFreqKnob.setVisible (false);
-            lowcutQKnob.setVisible (false);
-            lowcutGainKnob.setVisible (false);
-            highcutFreqKnob.setVisible (false);
-            highcutQKnob.setVisible (false);
-            highcutGainKnob.setVisible (false);
-            peakFreqKnob.setVisible (true);
-            peakQKnob.setVisible (true);
-            peakGainKnob.setVisible (true);
-            lowcutSlopeMode.setVisible (false);
-            highcutSlopeMode.setVisible (false);
-        }
-        downSampleKnob.setVisible (false);
-        downsampleBypassButton->setVisible (false);
-    }
-    if (isOtherSwitchOn)
-    {
-        filterBypassButton->setVisible (false);
-        filterHighPassButton.setVisible (false);
-        filterPeakButton.setVisible (false);
-        filterLowPassButton.setVisible (false);
-
-        downsampleBypassButton->setVisible (true);
-        downSampleKnob.setVisible (true);
-        lowcutFreqKnob.setVisible (false);
-        lowcutQKnob.setVisible (false);
-        lowcutGainKnob.setVisible (false);
-        highcutFreqKnob.setVisible (false);
-        highcutQKnob.setVisible (false);
-        highcutGainKnob.setVisible (false);
-        peakFreqKnob.setVisible (false);
-        peakQKnob.setVisible (false);
-        peakGainKnob.setVisible (false);
-        lowcutSlopeMode.setVisible (false);
-        highcutSlopeMode.setVisible (false);
-    }
+    
 
     g.setColour (COLOUR6);
     g.drawRect (globalEffectArea);
@@ -380,8 +323,9 @@ void GlobalPanel::resized()
     outputKnobArea = controlArea;
 
     juce::Rectangle<int> switchArea = globalEffectArea.removeFromLeft (getWidth() / 50);
-    filterSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 2));
-    downsampleSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 2));
+    filterSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 3));
+    downsampleSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 3));
+    limiterSwitch.setBounds (switchArea.removeFromTop (globalEffectArea.getHeight() / 3));
 
     juce::Rectangle<int> filterKnobArea = globalEffectArea;
     juce::Rectangle<int> filterTypeArea = filterKnobArea.removeFromLeft (globalEffectArea.getWidth() / 4);
@@ -459,6 +403,89 @@ void GlobalPanel::timerCallback()
 
 void GlobalPanel::buttonClicked (juce::Button* clickedButton)
 {
+    if (filterSwitch.getToggleState())
+    {
+        filterBypassButton->setVisible (true);
+        filterHighPassButton.setVisible (true);
+        filterPeakButton.setVisible (true);
+        filterLowPassButton.setVisible (true);
+        if (filterLowPassButton.getToggleState())
+        {
+            lowcutFreqKnob.setVisible (false);
+            lowcutQKnob.setVisible (false);
+            lowcutGainKnob.setVisible (false);
+            highcutFreqKnob.setVisible (true);
+            highcutQKnob.setVisible (true);
+            highcutGainKnob.setVisible (true);
+            peakFreqKnob.setVisible (false);
+            peakQKnob.setVisible (false);
+            peakGainKnob.setVisible (false);
+            lowcutSlopeMode.setVisible (false);
+            highcutSlopeMode.setVisible (true);
+        }
+        if (filterHighPassButton.getToggleState())
+        {
+            lowcutFreqKnob.setVisible (true);
+            lowcutQKnob.setVisible (true);
+            lowcutGainKnob.setVisible (true);
+            highcutFreqKnob.setVisible (false);
+            highcutQKnob.setVisible (false);
+            highcutGainKnob.setVisible (false);
+            peakFreqKnob.setVisible (false);
+            peakQKnob.setVisible (false);
+            peakGainKnob.setVisible (false);
+            lowcutSlopeMode.setVisible (true);
+            highcutSlopeMode.setVisible (false);
+        }
+        if (filterPeakButton.getToggleState())
+        {
+            lowcutFreqKnob.setVisible (false);
+            lowcutQKnob.setVisible (false);
+            lowcutGainKnob.setVisible (false);
+            highcutFreqKnob.setVisible (false);
+            highcutQKnob.setVisible (false);
+            highcutGainKnob.setVisible (false);
+            peakFreqKnob.setVisible (true);
+            peakQKnob.setVisible (true);
+            peakGainKnob.setVisible (true);
+            lowcutSlopeMode.setVisible (false);
+            highcutSlopeMode.setVisible (false);
+        }
+        setVisibility (downsampleVector, false);
+        downsampleBypassButton->setVisible (false);
+        setVisibility (limiterVector, false);
+    }
+    if (downsampleSwitch.getToggleState())
+    {
+        setVisibility (downsampleVector, true);
+        downsampleBypassButton->setVisible (true);
+        setVisibility (filterVector, false);
+        filterBypassButton->setVisible (false);
+        setVisibility (limiterVector, false);
+    }
+    if (limiterSwitch.getToggleState())
+    {
+        setVisibility (limiterVector, true);
+        setVisibility (filterVector, false);
+        filterBypassButton->setVisible (false);
+        setVisibility (downsampleVector, false);
+        downsampleBypassButton->setVisible (false);
+    }
+}
+
+void GlobalPanel::setVisibility (juce::Array<juce::Component*>& array, bool isVisible)
+{
+    for (int i = 0; i < array.size(); ++i)
+    {
+        if (isVisible)
+        {
+            array[i]->setVisible (true);
+        }
+        else
+        {
+            array[i]->setVisible (false);
+        }
+    }
 }
 
 void GlobalPanel::setRotarySlider (juce::Slider& slider, juce::Colour colour)
@@ -492,6 +519,7 @@ void GlobalPanel::setRoundButton (juce::TextButton& button, juce::String paramId
         button.setButtonText (buttonName);
         button.setLookAndFeel (&roundedButtonLnf);
     }
+    button.addListener(this);
 }
 
 void GlobalPanel::setScale (float scale)
@@ -564,23 +592,20 @@ void GlobalPanel::updateBypassState (juce::ToggleButton& clickedButton, int inde
 void GlobalPanel::setToggleButtonState (juce::String toggleButton)
 {
     if (toggleButton == "lowcut")
-        filterHighPassButton.setToggleState (true, juce::NotificationType::dontSendNotification);
+        filterHighPassButton.setToggleState (true, juce::NotificationType::sendNotification);
     if (toggleButton == "peak")
-        filterPeakButton.setToggleState (true, juce::NotificationType::dontSendNotification);
+        filterPeakButton.setToggleState (true, juce::NotificationType::sendNotification);
     if (toggleButton == "highcut")
-        filterLowPassButton.setToggleState (true, juce::NotificationType::dontSendNotification);
+        filterLowPassButton.setToggleState (true, juce::NotificationType::sendNotification);
 }
 
 void GlobalPanel::setBypassState (int index, bool state)
 {
-    componentArray1 = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode, &peakGainKnob, &peakQKnob };
-    componentArray2 = { &downSampleKnob };
-
     juce::Array<juce::Component*>* componentArray;
     if (index == 0)
-        componentArray = &componentArray1;
+        componentArray = &filterVector;
     if (index == 1)
-        componentArray = &componentArray2;
+        componentArray = &downsampleVector;
 
     if (state)
     {

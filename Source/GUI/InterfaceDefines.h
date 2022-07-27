@@ -357,7 +357,8 @@
 #define WIDTH_COLOUR        juce::Colours::skyblue
 #define COMP_COLOUR         juce::Colours::yellowgreen
 #define FILTER_COLOUR       juce::Colours::hotpink
-#define DOWNSAMPLE_COLOUR   juce::Colours::purple
-    
+#define DOWNSAMPLE_COLOUR   juce::Colours::pink
+#define LIMITER_COLOUR      juce::Colours::purple
+
 // VU meters
 #define SMOOTH_COEFF        0.2

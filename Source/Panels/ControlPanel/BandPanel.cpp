@@ -171,7 +171,6 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     // switches
     addAndMakeVisible (oscSwitch);
     oscSwitch.setRadioGroupId (switchButtons);
-    oscSwitch.setButtonText ("");
     oscSwitch.setToggleState (true, juce::dontSendNotification);
     oscSwitch.setColour (juce::ToggleButton::tickDisabledColourId, DRIVE_COLOUR.withBrightness (0.5f));
     oscSwitch.setColour (juce::ToggleButton::tickColourId, DRIVE_COLOUR.withBrightness (0.9f));
@@ -181,7 +180,6 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
 
     addAndMakeVisible (shapeSwitch);
     shapeSwitch.setRadioGroupId (switchButtons);
-    shapeSwitch.setButtonText ("");
     shapeSwitch.setToggleState (false, juce::dontSendNotification);
     shapeSwitch.setColour (juce::ToggleButton::tickDisabledColourId, SHAPE_COLOUR.withBrightness (0.5f));
     shapeSwitch.setColour (juce::ToggleButton::tickColourId, SHAPE_COLOUR.withBrightness (0.9f));
@@ -191,7 +189,6 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
 
     addAndMakeVisible (compressorSwitch);
     compressorSwitch.setRadioGroupId (switchButtons);
-    compressorSwitch.setButtonText ("");
     compressorSwitch.setToggleState (false, juce::dontSendNotification);
     compressorSwitch.setColour (juce::ToggleButton::tickDisabledColourId, COMP_COLOUR.withBrightness (0.5f));
     compressorSwitch.setColour (juce::ToggleButton::tickColourId, COMP_COLOUR.withBrightness (0.9f));
@@ -201,13 +198,10 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
 
     addAndMakeVisible (widthSwitch);
     widthSwitch.setRadioGroupId (switchButtons);
-    widthSwitch.setButtonText ("");
     widthSwitch.setToggleState (false, juce::dontSendNotification);
     widthSwitch.setColour (juce::ToggleButton::tickDisabledColourId, WIDTH_COLOUR.withBrightness (0.5f));
     widthSwitch.setColour (juce::ToggleButton::tickColourId, WIDTH_COLOUR.withBrightness (0.9f));
     widthSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-//    widthSwitch.setColour (juce::TextButton::textColourOnId, KNOB_FONT_COLOUR);
-//    widthSwitch.setColour (juce::TextButton::textColourOffId, KNOB_FONT_COLOUR);
     widthSwitch.setLookAndFeel (&flatButtonLnf);
     widthSwitch.addListener (this);
 

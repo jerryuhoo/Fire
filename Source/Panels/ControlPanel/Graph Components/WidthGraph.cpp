@@ -78,7 +78,7 @@ void WidthGraph::paint (juce::Graphics& g)
 
     if (isMouseOn && ! mZoomState)
     {
-        g.setColour (juce::Colours::skyblue.withAlpha (0.05f));
+        g.setColour (WIDTH_COLOUR.withAlpha (0.05f));
         g.fillAll();
     }
 }

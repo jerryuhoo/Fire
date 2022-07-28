@@ -23,11 +23,30 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
                                                widthBypassButton4 (std::make_unique<juce::ToggleButton>())
 {
     // init vec
-    shapeVector = { &recKnob1, &recKnob2, &recKnob3, &recKnob4, &biasKnob1, &biasKnob2, &biasKnob3, &biasKnob4 };
-    widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4, &*widthBypassButton1, &*widthBypassButton2, &*widthBypassButton3, &*widthBypassButton4 };
+    shapeVector = { &recKnob1, &recKnob2, &recKnob3, &recKnob4, &biasKnob1, &biasKnob2, &biasKnob3, &biasKnob4, &shapePanelLabel };
+    widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4, &*widthBypassButton1, &*widthBypassButton2, &*widthBypassButton3, &*widthBypassButton4, &widthPanelLabel };
 
-    compressorVector = { &compThreshKnob1, &compThreshKnob2, &compThreshKnob3, &compThreshKnob4, &compRatioKnob1, &compRatioKnob2, &compRatioKnob3, &compRatioKnob4, &*compressorBypassButton1, &*compressorBypassButton2, &*compressorBypassButton3, &*compressorBypassButton4 };
+    compressorVector = { &compThreshKnob1, &compThreshKnob2, &compThreshKnob3, &compThreshKnob4, &compRatioKnob1, &compRatioKnob2, &compRatioKnob3, &compRatioKnob4, &*compressorBypassButton1, &*compressorBypassButton2, &*compressorBypassButton3, &*compressorBypassButton4, &compressorPanelLabel };
 
+    // init panel labels
+    addAndMakeVisible (shapePanelLabel);
+    shapePanelLabel.setLookAndFeel(&flatLnf);
+    shapePanelLabel.setText ("Shape", juce::dontSendNotification);
+    shapePanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    shapePanelLabel.setColour (juce::Label::textColourId, SHAPE_COLOUR);
+    
+    addAndMakeVisible (compressorPanelLabel);
+    compressorPanelLabel.setLookAndFeel(&flatLnf);
+    compressorPanelLabel.setText ("Compressor", juce::dontSendNotification);
+    compressorPanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    compressorPanelLabel.setColour (juce::Label::textColourId, COMP_COLOUR);
+    
+    addAndMakeVisible (widthPanelLabel);
+    widthPanelLabel.setLookAndFeel(&flatLnf);
+    widthPanelLabel.setText ("Stereo", juce::dontSendNotification);
+    widthPanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    widthPanelLabel.setColour (juce::Label::textColourId, WIDTH_COLOUR);
+    
     // drive knobs
     driveKnob1.setLookAndFeel (&driveLookAndFeel1);
     driveKnob2.setLookAndFeel (&driveLookAndFeel2);
@@ -118,28 +137,28 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     widthLabel.setJustificationType (juce::Justification::centred);
 
     // bias knobs
-    initRotarySlider (biasKnob1, COLOUR1);
-    initRotarySlider (biasKnob2, COLOUR1);
-    initRotarySlider (biasKnob3, COLOUR1);
-    initRotarySlider (biasKnob4, COLOUR1);
+    initRotarySlider (biasKnob1, SHAPE_COLOUR);
+    initRotarySlider (biasKnob2, SHAPE_COLOUR);
+    initRotarySlider (biasKnob3, SHAPE_COLOUR);
+    initRotarySlider (biasKnob4, SHAPE_COLOUR);
 
     addAndMakeVisible (biasLabel);
     biasLabel.setText ("Bias", juce::dontSendNotification);
     biasLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    biasLabel.setColour (juce::Label::textColourId, KNOB_FONT_COLOUR);
+    biasLabel.setColour (juce::Label::textColourId, SHAPE_COLOUR);
     biasLabel.attachToComponent (&biasKnob1, false);
     biasLabel.setJustificationType (juce::Justification::centred);
 
     // rec knobs
-    initRotarySlider (recKnob1, COLOUR1);
-    initRotarySlider (recKnob2, COLOUR1);
-    initRotarySlider (recKnob3, COLOUR1);
-    initRotarySlider (recKnob4, COLOUR1);
+    initRotarySlider (recKnob1, SHAPE_COLOUR);
+    initRotarySlider (recKnob2, SHAPE_COLOUR);
+    initRotarySlider (recKnob3, SHAPE_COLOUR);
+    initRotarySlider (recKnob4, SHAPE_COLOUR);
 
     addAndMakeVisible (recLabel);
     recLabel.setText ("Rectification", juce::dontSendNotification);
     recLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
-    recLabel.setColour (juce::Label::textColourId, KNOB_FONT_COLOUR);
+    recLabel.setColour (juce::Label::textColourId, SHAPE_COLOUR);
     recLabel.attachToComponent (&recKnob1, false);
     recLabel.setJustificationType (juce::Justification::centred);
 
@@ -175,7 +194,7 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     oscSwitch.setColour (juce::ToggleButton::tickDisabledColourId, DRIVE_COLOUR.withBrightness (0.5f));
     oscSwitch.setColour (juce::ToggleButton::tickColourId, DRIVE_COLOUR.withBrightness (0.9f));
     oscSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    oscSwitch.setLookAndFeel (&flatButtonLnf);
+    oscSwitch.setLookAndFeel (&flatLnf);
     oscSwitch.addListener (this);
 
     addAndMakeVisible (shapeSwitch);
@@ -184,7 +203,7 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     shapeSwitch.setColour (juce::ToggleButton::tickDisabledColourId, SHAPE_COLOUR.withBrightness (0.5f));
     shapeSwitch.setColour (juce::ToggleButton::tickColourId, SHAPE_COLOUR.withBrightness (0.9f));
     shapeSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    shapeSwitch.setLookAndFeel (&flatButtonLnf);
+    shapeSwitch.setLookAndFeel (&flatLnf);
     shapeSwitch.addListener (this);
 
     addAndMakeVisible (compressorSwitch);
@@ -193,7 +212,7 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     compressorSwitch.setColour (juce::ToggleButton::tickDisabledColourId, COMP_COLOUR.withBrightness (0.5f));
     compressorSwitch.setColour (juce::ToggleButton::tickColourId, COMP_COLOUR.withBrightness (0.9f));
     compressorSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    compressorSwitch.setLookAndFeel (&flatButtonLnf);
+    compressorSwitch.setLookAndFeel (&flatLnf);
     compressorSwitch.addListener (this);
 
     addAndMakeVisible (widthSwitch);
@@ -202,7 +221,7 @@ BandPanel::BandPanel (FireAudioProcessor& p) : processor (p),
     widthSwitch.setColour (juce::ToggleButton::tickDisabledColourId, WIDTH_COLOUR.withBrightness (0.5f));
     widthSwitch.setColour (juce::ToggleButton::tickColourId, WIDTH_COLOUR.withBrightness (0.9f));
     widthSwitch.setColour (juce::ComboBox::outlineColourId, COLOUR6);
-    widthSwitch.setLookAndFeel (&flatButtonLnf);
+    widthSwitch.setLookAndFeel (&flatLnf);
     widthSwitch.addListener (this);
 
     initBypassButton (*compressorBypassButton1, COMP_COLOUR, 0);
@@ -326,6 +345,9 @@ BandPanel::~BandPanel()
     shapeSwitch.setLookAndFeel (nullptr);
     widthSwitch.setLookAndFeel (nullptr);
     compressorSwitch.setLookAndFeel (nullptr);
+    shapePanelLabel.setLookAndFeel (nullptr);
+    compressorPanelLabel.setLookAndFeel (nullptr);
+    widthPanelLabel.setLookAndFeel (nullptr);
 }
 
 void BandPanel::paint (juce::Graphics& g)
@@ -434,6 +456,14 @@ void BandPanel::resized()
     compRatioKnob2.setBounds (bandKnobAreaRight);
     compRatioKnob3.setBounds (bandKnobAreaRight);
     compRatioKnob4.setBounds (bandKnobAreaRight);
+    
+    // labels
+    juce::Rectangle<int> panelLabelArea = bandKnobArea;
+    panelLabelArea = panelLabelArea.removeFromLeft (bandKnobArea.getWidth() / 3);
+    panelLabelArea = panelLabelArea.removeFromBottom (bandKnobArea.getHeight() / 5);
+    shapePanelLabel.setBounds(panelLabelArea);
+    compressorPanelLabel.setBounds(panelLabelArea);
+    widthPanelLabel.setBounds(panelLabelArea);
 
     juce::Rectangle<int> outputKnobAreaLeft = outputKnobArea;
     juce::Rectangle<int> outputKnobAreaRight = outputKnobAreaLeft.removeFromRight (bandKnobArea.getWidth() / 2);
@@ -476,7 +506,7 @@ void BandPanel::resized()
     driveLookAndFeel2.scale = scale;
     driveLookAndFeel3.scale = scale;
     driveLookAndFeel4.scale = scale;
-    flatButtonLnf.scale = scale;
+    flatLnf.scale = scale;
 }
 
 void BandPanel::sliderValueChanged (juce::Slider* slider)
@@ -544,6 +574,7 @@ void BandPanel::buttonClicked (juce::Button* clickedButton)
     }
     if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
     {
+        setVisibility(shapeVector, true);
         setFourComponentsVisibility (recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
         setFourComponentsVisibility (biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
         setVisibility (compressorVector, false);
@@ -613,7 +644,7 @@ void BandPanel::initFlatButton (juce::TextButton& button, juce::String paramId, 
     button.setColour (juce::TextButton::textColourOnId, COLOUR1);
     button.setColour (juce::TextButton::textColourOffId, COLOUR7.withBrightness (0.8f));
     button.setButtonText (buttonName);
-    button.setLookAndFeel (&flatButtonLnf);
+    button.setLookAndFeel (&flatLnf);
 }
 
 void BandPanel::initBypassButton (juce::ToggleButton& bypassButton, juce::Colour colour, int index)

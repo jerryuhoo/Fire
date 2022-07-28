@@ -42,6 +42,6 @@ private:
     const int maxStep = 5;
 
     juce::Label freqLabel;
-    FlatButtonLnf flatButtonLnf;
+    FlatLnf flatButtonLnf;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqTextLabel)
 };

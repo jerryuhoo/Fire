@@ -1462,7 +1462,7 @@ public:
 };
 
 
-class FlatButtonLnf : public juce::LookAndFeel_V4
+class FlatLnf : public juce::LookAndFeel_V4
 {
 public:
     float scale = 1.f;

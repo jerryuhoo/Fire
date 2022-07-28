@@ -117,7 +117,10 @@ private:
         mixLabel,
         linkedLabel,
         safeLabel,
-        biasLabel;
+        biasLabel,
+        shapePanelLabel,
+        compressorPanelLabel,
+        widthPanelLabel;
 
     juce::TextButton
         linkedButton1,
@@ -246,7 +249,7 @@ private:
     LowPassButtonLnf lowPassButtonLnf;
     BandPassButtonLnf bandPassButtonLnf;
     HighPassButtonLnf highPassButtonLnf;
-    FlatButtonLnf flatButtonLnf;
+    FlatLnf flatLnf;
 
     int focusBandNum;
     float scale = 1.0f;

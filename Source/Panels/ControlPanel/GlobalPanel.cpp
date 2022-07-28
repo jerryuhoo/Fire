@@ -15,9 +15,28 @@
 GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 {
     // init vec
-    filterVector = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode, &peakGainKnob, &peakQKnob };
-    downsampleVector = { &downSampleKnob };
-    limiterVector = { &limiterThreshKnob, &limiterReleaseKnob };
+    filterVector = { &filterLowPassButton, &filterPeakButton, &filterHighPassButton, &highcutFreqKnob, &peakFreqKnob, &lowcutFreqKnob, &highcutQKnob, &highcutGainKnob, &lowcutQKnob, &lowcutGainKnob, &highcutSlopeMode, &lowcutSlopeMode, &peakGainKnob, &peakQKnob, &postFilterPanelLabel };
+    downsampleVector = { &downSampleKnob, &downSamplePanelLabel };
+    limiterVector = { &limiterThreshKnob, &limiterReleaseKnob, &limiterPanelLabel };
+    
+    // init panel labels
+    addAndMakeVisible (postFilterPanelLabel);
+    postFilterPanelLabel.setLookAndFeel(&flatLnf);
+    postFilterPanelLabel.setText ("Post Filter", juce::dontSendNotification);
+    postFilterPanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    postFilterPanelLabel.setColour (juce::Label::textColourId, FILTER_COLOUR);
+    
+    addAndMakeVisible (downSamplePanelLabel);
+    downSamplePanelLabel.setLookAndFeel(&flatLnf);
+    downSamplePanelLabel.setText ("DownSample", juce::dontSendNotification);
+    downSamplePanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    downSamplePanelLabel.setColour (juce::Label::textColourId, DOWNSAMPLE_COLOUR);
+    
+    addAndMakeVisible (limiterPanelLabel);
+    limiterPanelLabel.setLookAndFeel(&flatLnf);
+    limiterPanelLabel.setText ("Limiter", juce::dontSendNotification);
+    limiterPanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    limiterPanelLabel.setColour (juce::Label::textColourId, LIMITER_COLOUR);
     
     setRotarySlider (mixKnob, COLOUR1);
     setRotarySlider (outputKnob, COLOUR1);
@@ -327,6 +346,9 @@ GlobalPanel::~GlobalPanel()
     filterSwitch.setLookAndFeel (nullptr);
     downsampleSwitch.setLookAndFeel (nullptr);
     limiterSwitch.setLookAndFeel (nullptr);
+    postFilterPanelLabel.setLookAndFeel(nullptr);
+    downSamplePanelLabel.setLookAndFeel(nullptr);
+    limiterPanelLabel.setLookAndFeel(nullptr);
 }
 
 void GlobalPanel::paint (juce::Graphics& g)
@@ -382,6 +404,13 @@ void GlobalPanel::resized()
     limiterThreshKnob.setBounds(knobAreaLeft);
     limiterReleaseKnob.setBounds(knobAreaRight);
     
+    juce::Rectangle<int> panelLabelArea = globalEffectArea;
+    panelLabelArea = panelLabelArea.removeFromLeft (globalEffectArea.getWidth() / 4);
+    panelLabelArea = panelLabelArea.removeFromBottom (globalEffectArea.getHeight() / 5);
+    postFilterPanelLabel.setBounds(panelLabelArea);
+    downSamplePanelLabel.setBounds(panelLabelArea);
+    limiterPanelLabel.setBounds(panelLabelArea);
+    
     downSampleKnob.setBounds (globalEffectArea.reduced (getHeight() / 15, getHeight() / 5));
     
     lowcutFreqKnob.setBounds (filterKnobAreaLeft);
@@ -435,36 +464,28 @@ void GlobalPanel::buttonClicked (juce::Button* clickedButton)
 {
     if (filterSwitch.getToggleState())
     {
+        setVisibility (filterVector, true);
         filterBypassButton->setVisible (true);
-        filterHighPassButton.setVisible (true);
-        filterPeakButton.setVisible (true);
-        filterLowPassButton.setVisible (true);
+
         if (filterLowPassButton.getToggleState())
         {
             lowcutFreqKnob.setVisible (false);
             lowcutQKnob.setVisible (false);
             lowcutGainKnob.setVisible (false);
-            highcutFreqKnob.setVisible (true);
-            highcutQKnob.setVisible (true);
-            highcutGainKnob.setVisible (true);
             peakFreqKnob.setVisible (false);
             peakQKnob.setVisible (false);
             peakGainKnob.setVisible (false);
             lowcutSlopeMode.setVisible (false);
-            highcutSlopeMode.setVisible (true);
         }
         if (filterHighPassButton.getToggleState())
         {
-            lowcutFreqKnob.setVisible (true);
-            lowcutQKnob.setVisible (true);
-            lowcutGainKnob.setVisible (true);
+
             highcutFreqKnob.setVisible (false);
             highcutQKnob.setVisible (false);
             highcutGainKnob.setVisible (false);
             peakFreqKnob.setVisible (false);
             peakQKnob.setVisible (false);
             peakGainKnob.setVisible (false);
-            lowcutSlopeMode.setVisible (true);
             highcutSlopeMode.setVisible (false);
         }
         if (filterPeakButton.getToggleState())
@@ -475,9 +496,6 @@ void GlobalPanel::buttonClicked (juce::Button* clickedButton)
             highcutFreqKnob.setVisible (false);
             highcutQKnob.setVisible (false);
             highcutGainKnob.setVisible (false);
-            peakFreqKnob.setVisible (true);
-            peakQKnob.setVisible (true);
-            peakGainKnob.setVisible (true);
             lowcutSlopeMode.setVisible (false);
             highcutSlopeMode.setVisible (false);
         }

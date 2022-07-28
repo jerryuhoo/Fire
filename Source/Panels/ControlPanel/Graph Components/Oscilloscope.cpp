@@ -106,7 +106,7 @@ void Oscilloscope::paint (juce::Graphics& g)
     // set color when mouse on
     if (isMouseOn && ! mZoomState)
     {
-        g.setColour (juce::Colours::red.withAlpha (0.05f));
+        g.setColour (DRIVE_COLOUR.withAlpha (0.05f));
         g.fillAll();
     }
 }

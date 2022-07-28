@@ -698,7 +698,7 @@ void FireAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     mixDryWet (mDryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
 
     // Spectrum
-    mWetBuffer.makeCopyOf (buffer);
+    mWetBuffer.makeCopyOf (buffer); 
     pushDataToFFT();
 
     // VU output meter

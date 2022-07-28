@@ -102,7 +102,11 @@ private:
         lowcutSlopeLabel,
         highcutSlopeLabel,
         limiterThreshLabel,
-        limiterReleaseLabel;
+        limiterReleaseLabel,
+    
+        postFilterPanelLabel,
+        downSamplePanelLabel,
+        limiterPanelLabel;
 
     // Buttons
     juce::TextButton
@@ -140,7 +144,7 @@ private:
     LowPassButtonLnf lowPassButtonLnf;
     BandPassButtonLnf bandPassButtonLnf;
     HighPassButtonLnf highPassButtonLnf;
-    FlatButtonLnf flatButtonLnf;
+    FlatLnf flatButtonLnf;
 
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
@@ -180,6 +184,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
         lowcutModeAttachment,
         highcutModeAttachment;
+    
+    FlatLnf flatLnf;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalPanel)
 };

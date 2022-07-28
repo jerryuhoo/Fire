@@ -342,7 +342,7 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
         {
             return juce::String(value, 2) + "ms";
         }
-        else if (value >= 10 && value < 100)
+        else if (value < 100)
         {
             return juce::String(value, 1) + "ms";
         }

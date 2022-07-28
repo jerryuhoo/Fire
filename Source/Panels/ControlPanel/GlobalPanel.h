@@ -50,9 +50,7 @@ private:
     void buttonClicked (juce::Button* clickedButton) override;
     void setRotarySlider (juce::Slider& slider, juce::Colour colour);
     void setRoundButton (juce::TextButton& button, juce::String paramId, juce::String buttonName);
-    void updateToggleState();
     void setBypassState (int index, bool state);
-    void updateBypassState (juce::ToggleButton& clickedButton, int index);
     void setVisibility (juce::Array<juce::Component*>& array, bool isVisible);
 
     enum RadioButtonIds
@@ -80,6 +78,8 @@ private:
         peakFreqKnob,
         peakQKnob,
         peakGainKnob,
+        limiterThreshKnob,
+        limiterReleaseKnob,
         mixKnob,
         outputKnob;
 
@@ -100,7 +100,9 @@ private:
         filterStateLabel,
         filterTypeLabel,
         lowcutSlopeLabel,
-        highcutSlopeLabel;
+        highcutSlopeLabel,
+        limiterThreshLabel,
+        limiterReleaseLabel;
 
     // Buttons
     juce::TextButton
@@ -125,7 +127,8 @@ private:
 
     std::unique_ptr<juce::ToggleButton>
         filterBypassButton,
-        downsampleBypassButton;
+        downsampleBypassButton,
+        limiterBypassButton;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
@@ -152,7 +155,9 @@ private:
         highcutGainAttachment,
         peakFreqAttachment,
         peakQAttachment,
-        peakGainAttachment;
+        peakGainAttachment,
+        limiterThreshAttachment,
+        limiterReleaseAttachment;
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -164,7 +169,8 @@ private:
         filterHighAttachment,
     
         filterBypassAttachment,
-        downsampleBypassAttachment;
+        downsampleBypassAttachment,
+        limiterBypassAttachment;
 
     // ComboBox
     juce::ComboBox

@@ -1611,7 +1611,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { REC_ID2, versionNum }, REC_NAME2, juce::NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { REC_ID3, versionNum }, REC_NAME3, juce::NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f));
     parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { REC_ID4, versionNum }, REC_NAME4, juce::NormalisableRange<float> (0.0f, 1.0f, 0.01f), 0.0f));
-    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { DOWNSAMPLE_ID, versionNum }, DOWNSAMPLE_NAME, juce::NormalisableRange<float> (1.0f, 64.0f, 0.01f), 1.0f));
 
     juce::NormalisableRange<float> cutoffRange (20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre (1000.0f);
@@ -1640,6 +1639,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LOW_ID, versionNum }, LOW_NAME, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { BAND_ID, versionNum }, BAND_NAME, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { HIGH_ID, versionNum }, HIGH_NAME, true));
+    
+    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { DOWNSAMPLE_ID, versionNum }, DOWNSAMPLE_NAME, juce::NormalisableRange<float> (1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_THRESH_ID, versionNum }, LIMITER_THRESH_NAME, juce::NormalisableRange<float> (-24.0f, 0.0f, 0.1f), 0.0f));
+    juce::NormalisableRange<float> limiterReleaseRange (0.01f, 3000.0f, 0.01f);
+    limiterReleaseRange.setSkewForCentre (6.0f);
+    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_RELEASE_ID, versionNum }, LIMITER_RELEASE_NAME, limiterReleaseRange, 1.0f));
 
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINE_STATE_ID1, versionNum }, LINE_STATE_NAME1, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINE_STATE_ID2, versionNum }, LINE_STATE_NAME2, false));
@@ -1673,6 +1678,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { FILTER_BYPASS_ID, versionNum }, FILTER_BYPASS_NAME, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { DOWNSAMPLE_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
-
+    parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LIMITER_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
+    
     return { parameters.begin(), parameters.end() };
 }

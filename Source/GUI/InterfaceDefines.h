@@ -182,6 +182,12 @@
 #define HIGH_ID             "high"
 #define HIGH_NAME           "High"
 
+// limiter
+#define LIMITER_THRESH_ID       "limiterThresh"
+#define LIMITER_THRESH_NAME     "LimiterThresh"
+#define LIMITER_RELEASE_ID      "limiterRelease"
+#define LIMITER_RELEASE_NAME    "LimiterRelease"
+
 // multiband
 #define FREQ_ID1            "freq1"
 #define FREQ_NAME1          "Freq1"
@@ -244,7 +250,8 @@
 #define FILTER_BYPASS_NAME      "FilterBypass"
 #define DOWNSAMPLE_BYPASS_ID    "downsampleBypass"
 #define DOWNSAMPLE_BYPASS_NAME  "DownsampleBypass"
-
+#define LIMITER_BYPASS_ID       "limiterBypass"
+#define LIMITER_BYPASS_NAME     "LimiterBypass"
 
 // Define Font
 #define KNOB_FONT           "Futura"

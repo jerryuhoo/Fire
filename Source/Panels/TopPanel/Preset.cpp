@@ -33,7 +33,7 @@ void loadStateFromXml (const juce::XmlElement& xml, juce::AudioProcessor& proc)
     std::vector<std::pair<float, bool>> freqAndStateVector (lineNum);
     std::vector<juce::AudioProcessorParameter*> freqParamPointers (lineNum);
     std::vector<juce::AudioProcessorParameter*> stateParamPointers (lineNum);
-    
+
     for (const auto& param : proc.getParameters())
     {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*> (param))
@@ -58,8 +58,15 @@ void loadStateFromXml (const juce::XmlElement& xml, juce::AudioProcessor& proc)
                 // DBG ((float) xml.getDoubleAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
                 continue;
             }
-            // Set param value. If param not in xml, set current value
-            p->setValueNotifyingHost ((float) xml.getDoubleAttribute (p->paramID, p->getValue()));
+            // Set param value. If param not in xml, set default value
+            if (xml.hasAttribute(p->paramID))
+            {
+                p->setValueNotifyingHost ((float) xml.getDoubleAttribute (p->paramID, p->getValue()));
+            }
+            else
+            {
+                p->setValueNotifyingHost(p->getDefaultValue());
+            }
         }
     }
 

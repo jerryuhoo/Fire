@@ -24,6 +24,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor (FireAudioProcessor& p)
     // however, AU plugin calls constructor after setStateInformation/
     // So I set delay of 1 ms to reset size and other stuff.
     // call function after 1 ms
+
     //    std::function<void()> initFunction = [this]() { initEditor(); };
     //    juce::Timer::callAfterDelay(1, initFunction);
     //initEditor();
@@ -182,6 +183,7 @@ void FireAudioProcessorEditor::initEditor()
 {
     //    setSize(processor.getSavedWidth(), processor.getSavedHeight());
     //    processor.setLineNum(multiband.getLineNum());
+
     //processor.setPresetId(processor.getPresetId());
     //lastPresetName = stateComponent.getPresetName();
     //multiband.updateLines(1);
@@ -578,12 +580,14 @@ void FireAudioProcessorEditor::setDistortionGraph (juce::String modeId, juce::St
 
 void FireAudioProcessorEditor::setMultiband()
 {
+
     //multiband.updateLines(1);
     multiband.sortLines();
     multiband.setLineRelatedBoundsByX();
     multiband.setSoloRelatedBounds();
     //    multiband.resetFocus();
     //    processor.setLineNum(multiband.getLineNum());
+
 }
 
 void FireAudioProcessorEditor::setFourComponentsVisibility (juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)

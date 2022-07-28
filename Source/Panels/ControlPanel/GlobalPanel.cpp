@@ -60,7 +60,7 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     limiterThreshLabel.setJustificationType (juce::Justification::centred);
     
     addAndMakeVisible (limiterReleaseLabel);
-    limiterReleaseLabel.setText ("Threshold", juce::dontSendNotification);
+    limiterReleaseLabel.setText ("Release", juce::dontSendNotification);
     limiterReleaseLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
     limiterReleaseLabel.setColour (juce::Label::textColourId, LIMITER_COLOUR.withBrightness (0.8f));
     limiterReleaseLabel.attachToComponent (&limiterReleaseKnob, false);

@@ -211,6 +211,7 @@ private:
     using DriveProcessor = juce::dsp::WaveShaper<float>;
     using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
+    using LimiterProcessor = juce::dsp::Limiter<float>;
     using DryWetMixer = juce::dsp::DryWetMixer<float>;
 
     CompressorProcessor compressorProcessor1;
@@ -233,6 +234,8 @@ private:
     GainProcessor gainProcessor3;
     GainProcessor gainProcessor4;
     GainProcessor gainProcessorGlobal;
+    
+    LimiterProcessor limiterProcessorGlobal;
 
     DryWetMixer dryWetMixer1 { 100 };
     DryWetMixer dryWetMixer2 { 100 };
@@ -292,6 +295,7 @@ private:
 
     void processDistortion (juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String extremeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, DCFilter& dcFilter);
 
+    void processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor);
     void processGain (juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor);
 
     void processCompressor (juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, CompressorProcessor& compressor);

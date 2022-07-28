@@ -303,6 +303,9 @@ void FireAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     highpass2.prepare (spec);
     highpass3.prepare (spec);
 
+    // limiter
+    limiterProcessorGlobal.prepare(spec);
+    
     // gain
     gainProcessor1.prepare (spec);
     gainProcessor2.prepare (spec);
@@ -365,6 +368,7 @@ void FireAudioProcessor::reset()
     dryWetMixer2.reset();
     dryWetMixer3.reset();
     dryWetMixer4.reset();
+    limiterProcessorGlobal.reset();
 }
 
 void FireAudioProcessor::releaseResources()
@@ -679,9 +683,15 @@ void FireAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     //    float output = juce::Decibels::decibelsToGain((float)*treeState.getRawParameterValue(OUTPUT_ID));
     //    outputSmootherGlobal.setTargetValue(output);
 
-    // global gain
+    // global process
     auto globalBlock = juce::dsp::AudioBlock<float> (buffer);
     auto contextGlobal = juce::dsp::ProcessContextReplacing<float> (globalBlock);
+    
+    if (*treeState.getRawParameterValue (LIMITER_BYPASS_ID))
+    {
+        processLimiter (contextGlobal, LIMITER_THRESH_ID, LIMITER_RELEASE_ID, limiterProcessorGlobal);
+    }
+    
     processGain (contextGlobal, OUTPUT_ID, gainProcessorGlobal);
 
     // mix dry wet
@@ -1250,6 +1260,16 @@ void FireAudioProcessor::processCompressor (juce::dsp::ProcessContextReplacing<f
     compressor.setThreshold (thresh);
     compressor.setRatio (ratio);
     compressor.process (context);
+}
+
+void FireAudioProcessor::processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor)
+{
+    float limiterThreshValue = *treeState.getRawParameterValue (limiterThreshID);
+    float limiterReleaseValue = *treeState.getRawParameterValue (limiterReleaseID);
+
+    limiterProcessor.setThreshold(-limiterThreshValue);
+    limiterProcessor.setRelease(limiterReleaseValue);
+    limiterProcessor.process (context);
 }
 
 void FireAudioProcessor::processGain (juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor)

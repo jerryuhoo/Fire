@@ -1,4 +1,4 @@
-# Fire (Version 0.9.5) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
+# Fire (Version 1.0.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://www.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jerryuhoo/Fire&amp;utm_campaign=Badge_Grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/fire.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -59,7 +59,10 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 * You can click four switches on the right side of graphs.
 
-* Drive:『Fire』 has several distortion functions. There are two buttons "L" and "S" related to drive knob, and each means "Link" and "Safe". "Link" means when your turn up drive knob, the output knob value will automatically reduce. "Safe" means if your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
+* Drive:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme". 
+    * "L" (Link): When your turn up drive knob, the output knob value will automatically reduce. 
+    * "S" (Safe): If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
+    * "E" (Extreme): It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
 
 * Retification and bias: Change your distortion shape.
 
@@ -74,6 +77,8 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 * Filter: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
 
 * Downsample: downsample your audio.
+
+* Limiter: add a limiter after distortion.
 
 * Output and mix: for global control.
 
@@ -101,45 +106,88 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 
 ## 6. Update Notes
 
-### 2022-1 (version 0.9.5)
+### 2022-7-28 (version 1.0.0)
+
+1. Refactor the code of frequency lines and close buttons.
+2. Fix a crash in Fl Studio of v0.9.9.
+3. Fix audiobuffer pointer bug when setting history array.
+4. Fix the bug of changing presets that might cause wrong frequency line positions.
+5. New close buttons for each band.
+6. Other GUI improvements.
+7. Add Extreme button for more distortion.
+8. Check update when opening the plugin.
+9. Support JUCE 7.
+10. Fix a bug that changing presets doesn't reset new params.
+11. Add a Limiter in the global mode.
+
+### 2022-7-13 (version 0.9.9)
+
+1. Fix the bug of freezing distortion graph before playing the audio. (in Logic Pro)
+2. Fix the bug of global mix button phasing issue.
+3. New function! When you move your mouse to the spectrogram, the peak frequency and decibel will be calculated.
+4. New separate bypass buttons for each band.
+5. Improve width graph, reduce CPU usage.
+6. Fix the bug that close button sometimes doesn't work.
+
+### 2022-6-29 (version 0.9.8)
+
+1. Fix phasing issue in HQ mode.
+2. Fix low frequency drop in HQ mode.
+
+* v0.9.3 - v0.9.7 has those bugs
+
+### 2022-6-22 (version 0.9.7)
+
+1. Fix HQ not working bug in v0.9.6.
+2. Add fade in/out of frequency text labels.
+
+### 2022-5-28 (version 0.9.6)
+
+1. Fix a crash when turn on HQ mode in mono channel mode in Logic Pro.
+2. Improve graphs in mono channel mode.
+3. Fix an issue where graphs are not refreshed before playing in Logic Pro.
+
+### 2022-2-5 (version 0.9.5)
 
 1. Smoothed the graph of spectrogram.
 2. Fix Logic Pro crash.
 3. Add GitHub CI.
+4. Fix vst3 bug.
+5. Fix A/B mode bug.
 
 ### 2021-11-18 (version 0.9.4)
 
 Warning: Previous presets won't work, you have to resave your preset!
 
 1. For VU meters and width graph, each represents to each band instead of global.
-2. Added more details to VU meters.
-3. Added "solo" buttons, change "enable" buttons to "bypass" buttons.
-4. Removed "None" option in the distortion functions, because it causes bug(in version 0.9.3) and you can bypass the band now.
-5. Added bypass buttons for compressor, width, filter, downsample.
-6. Added 4 new distortion functions.
+2. Add more details to VU meters.
+3. Add "solo" buttons, change "enable" buttons to "bypass" buttons.
+4. Remove "None" option in the distortion functions, because it causes bug(in version 0.9.3) and you can bypass the band now.
+5. Add bypass buttons for compressor, width, filter, downsample.
+6. Add 4 new distortion functions.
 
 ### 2021-10-2 (version 0.9.3)
 
 Warning: Previous presets won't work, you have to resave your preset!
 
 1. Redesign GUI.
-2. Fixed multiple bugs of multiband control(enable buttons, focus band, vertical lines, etc.), redesigned the code structure.
-3. Added new filter control and filter graph.
-4. Fixed other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
+2. Fix multiple bugs of multiband control(enable buttons, focus band, vertical lines, etc.), redesigned the code structure.
+3. Add new filter control and filter graph.
+4. Fix other bugs such as preset box selection, A/B mode, bypass repaint issue, etc.
 5. Now you can click graph to zoom in and out.
 
 ### 2021-9-7 (version 0.9.2)
 
 1. GUI improvement.
-2. Added shape, width, and compressor groups.
+2. Add shape, width, and compressor groups.
 3. Spectrogram display bug fixed.
-4. Added VU meter and width graph.
-5. Added frequency label, and frequency automation bug fixed.
+4. Add VU meter and width graph.
+5. Add frequency label, and frequency automation bug fixed.
 
 ### 2021-1-24 (version 0.9.1)
 
 1. Drive knob reduction and GUI improvement
-Fixed a bug that in global mode menu won't change when selecting different bands.
+Fix a bug that in global mode menu won't change when selecting different bands.
 
 ### 2021-1-23 (version 0.9.0)
 
@@ -158,3 +206,6 @@ From v.0.9.4, I changed the license to AGPL-3.0.
 * Do not create an app and distribute it on the iOS app store.
 
 * Do not use the name "Fire", "Wings", or "羽翼深蓝Wings" for marketing or to name any distribution of binaries built with this source. This source code does not give you rights to infringe on trademarks. If you wanna use it for commercial, please send me an email. Otherwise, your software has to be open-source.
+
+## 8. Acknowledgement
+@[IcyLeaves](https://github.com/IcyLeaves)

@@ -16,7 +16,7 @@
 //==============================================================================
 /*
 */
-class VerticalLine  : public juce::Slider
+class VerticalLine : public juce::Slider
 {
 public:
     VerticalLine();
@@ -24,37 +24,33 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    
-    bool isMoving();
-    void setMoving(bool move);
+
     bool getState();
-    void setState(bool state);
-    bool getDeleteState();
-    void setDeleteState(bool deleteState);
-    void setXPercent(float x);
+    void setState (bool state);
+    void setDeleteState (bool deleteState);
+    void setXPercent (float x);
     float getXPercent();
-    void setIndex(int index);
+    void setIndex (int index);
     int getIndex();
-    void setLeft(int leftIndex);
     int getLeft();
-    void setRight(int rightIndex);
     int getRight();
-    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[], int sortedIndex[]);
-    
+    void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[]);
+
 private:
     bool isEntered = false;
-    
-    void mouseUp(const juce::MouseEvent &e) override;
-    void mouseEnter(const juce::MouseEvent &e) override;
-    void mouseExit(const juce::MouseEvent &e) override;
-    void mouseDown(const juce::MouseEvent &e) override;
-    void mouseDoubleClick(const juce::MouseEvent &e) override;
-    
-    bool move = false;
+
+    void mouseUp (const juce::MouseEvent& e) override;
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
+
     bool mDeleteState = false;
     float xPercent = 0.0f;
     int leftIndex = -1; // left index
     int rightIndex = -1; // right index
     int index = -1;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

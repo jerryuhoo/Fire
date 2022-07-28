@@ -10,47 +10,46 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
-#include "VUPanel.h"
 #include "DistortionGraph.h"
 #include "Oscilloscope.h"
+#include "VUPanel.h"
 #include "WidthGraph.h"
+#include <JuceHeader.h>
 
 //==============================================================================
 /*
 */
-class GraphPanel  : public juce::Component
+class GraphPanel : public juce::Component
 {
 public:
-    GraphPanel(FireAudioProcessor &);
+    GraphPanel (FireAudioProcessor&);
     ~GraphPanel() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setDistortionState(int mode, float rec, float mix,
-                            float bias, float drive, float rateDivide);
-    void setFocusBandNum(int num);
-    
+    void setDistortionState (int mode, float rec, float mix, float bias, float drive, float rateDivide);
+    void setFocusBandNum (int num);
+
     Oscilloscope* getOscilloscope();
     VUPanel* getVuPanel();
     DistortionGraph* getDistortionGraph();
     WidthGraph* getWidthGraph();
-    
+
 private:
-    FireAudioProcessor &processor;
-    
+    FireAudioProcessor& processor;
+
     // Oscilloscope
-    Oscilloscope oscilloscope {processor};
-    
+    Oscilloscope oscilloscope { processor };
+
     // VU Meters
-    VUPanel vuPanel {processor};
-    
+    VUPanel vuPanel { processor };
+
     // Distortion Graph
-    DistortionGraph distortionGraph {processor};
-    
+    DistortionGraph distortionGraph { processor };
+
     // Width Graph
-    WidthGraph widthGraph {processor};
-    
+    WidthGraph widthGraph { processor };
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GraphPanel)
 };

@@ -15,7 +15,7 @@
 //==============================================================================
 /*
 */
-class DraggableButton  : public juce::Component
+class DraggableButton : public juce::Component
 {
 public:
     DraggableButton();
@@ -23,11 +23,11 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    
-    void mouseEnter(const juce::MouseEvent &e) override;
-    void mouseExit(const juce::MouseEvent &e) override;
-    void setState(const bool state);
-    
+
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
+    void setState (const bool state);
+
 private:
     bool isEntered = false;
     juce::Colour getColour();

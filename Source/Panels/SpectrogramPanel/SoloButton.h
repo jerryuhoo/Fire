@@ -16,7 +16,7 @@
 //==============================================================================
 /*
 */
-class SoloButton  : public juce::ToggleButton
+class SoloButton : public juce::ToggleButton
 {
 public:
     SoloButton();
@@ -25,9 +25,9 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    void mouseEnter(const juce::MouseEvent &e) override;
-    void mouseExit(const juce::MouseEvent &e) override;
-    
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
+
 private:
     bool isEntered = false;
     juce::Colour getColour();

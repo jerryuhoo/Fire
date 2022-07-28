@@ -1664,7 +1664,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_THRESH_ID, versionNum }, LIMITER_THRESH_NAME, juce::NormalisableRange<float> (-24.0f, 0.0f, 0.1f), 0.0f));
     juce::NormalisableRange<float> limiterReleaseRange (0.01f, 3000.0f, 0.01f);
     limiterReleaseRange.setSkewForCentre (6.0f);
-    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_RELEASE_ID, versionNum }, LIMITER_RELEASE_NAME, limiterReleaseRange, 1.0f));
+    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_RELEASE_ID, versionNum }, LIMITER_RELEASE_NAME, limiterReleaseRange, 300.0f));
 
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINE_STATE_ID1, versionNum }, LINE_STATE_NAME1, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINE_STATE_ID2, versionNum }, LINE_STATE_NAME2, false));

@@ -68,8 +68,10 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     downSampleLabel.setJustificationType (juce::Justification::centred);
     
     // limiter knobs
+    
     setRotarySlider (limiterThreshKnob, LIMITER_COLOUR.withBrightness (0.8f));
     setRotarySlider (limiterReleaseKnob, LIMITER_COLOUR.withBrightness (0.8f));
+    limiterThreshKnob.setTextValueSuffix("db");
 
     addAndMakeVisible (limiterThreshLabel);
     limiterThreshLabel.setText ("Threshold", juce::dontSendNotification);
@@ -333,6 +335,33 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     filterBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, FILTER_BYPASS_ID, *filterBypassButton);
     downsampleBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, DOWNSAMPLE_BYPASS_ID, *downsampleBypassButton);
     limiterBypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (apvts, LIMITER_BYPASS_ID, *limiterBypassButton);
+    
+    limiterReleaseKnob.textFromValueFunction = [](double value)
+    {
+        if (value < 10)
+        {
+            return juce::String(value, 2) + "ms";
+        }
+        else if (value >= 10 && value < 100)
+        {
+            return juce::String(value, 1) + "ms";
+        }
+        return juce::String(value / 1000.0, 2) + " s";
+    };
+    
+    limiterReleaseKnob.valueFromTextFunction = [](const juce::String& text)
+    {
+        double amount = 0;
+        if (text.contains("ms"))
+        {
+            amount = text.removeCharacters("ms").getDoubleValue();
+        }
+        else
+        {
+            amount = text.removeCharacters("s").getDoubleValue() * 1000;
+        }
+        return amount;
+    };
 }
 
 GlobalPanel::~GlobalPanel()

@@ -17,21 +17,21 @@
 //==============================================================================
 /*
 */
-class CloseButton : public juce::ToggleButton//juce::Component
+class CloseButton : public juce::ToggleButton
 {
 public:
-    CloseButton(VerticalLine &v);
+    CloseButton ();
     ~CloseButton() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
 
 private:
-    VerticalLine &verticalLine;
+//    VerticalLine& verticalLine;
     bool isEntered = false;
-    void mouseDown(const juce::MouseEvent &e) override;
-    void mouseEnter(const juce::MouseEvent &e) override;
-    void mouseExit(const juce::MouseEvent &e) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloseButton)
 };

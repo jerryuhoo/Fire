@@ -25,12 +25,77 @@ void saveStateToXml(const juce::AudioProcessor &proc, juce::XmlElement &xml)
         }
 }
 
-void loadStateFromXml(const juce::XmlElement &xml, juce::AudioProcessor &proc)
+void loadStateFromXml (const juce::XmlElement& xml, juce::AudioProcessor& proc)
 {
-    for (const auto &param : proc.getParameters())
-        if (auto *p = dynamic_cast<juce::AudioProcessorParameterWithID *>(param))
-            // if not in xml set current
-            p->setValueNotifyingHost((float)xml.getDoubleAttribute(p->paramID, p->getValue()));
+    const int lineNum = 3;
+    int freqIndex = 0;
+    int stateIndex = 0;
+    std::vector<std::pair<float, bool>> freqAndStateVector (lineNum);
+    std::vector<juce::AudioProcessorParameter*> freqParamPointers (lineNum);
+    std::vector<juce::AudioProcessorParameter*> stateParamPointers (lineNum);
+
+    for (const auto& param : proc.getParameters())
+    {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*> (param))
+        {
+            if (p->paramID == "lineState1" || p->paramID == "lineState2" || p->paramID == "lineState3")
+            {
+                bool stateValue = xml.getIntAttribute (p->paramID, p->getValue());
+                jassert (freqIndex < 3);
+                freqAndStateVector[freqIndex].second = stateValue;
+                stateParamPointers[freqIndex] = p;
+                freqIndex++;
+                // DBG (xml.getIntAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
+                continue;
+            }
+            if (p->paramID == "freq1" || p->paramID == "freq2" || p->paramID == "freq3")
+            {
+                float freqValue = xml.getDoubleAttribute (p->paramID, p->getValue());
+                jassert (stateIndex < 3);
+                freqAndStateVector[stateIndex].first = freqValue;
+                freqParamPointers[stateIndex] = p;
+                stateIndex++;
+                // DBG ((float) xml.getDoubleAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
+                continue;
+            }
+            // Set param value. If param not in xml, set default value
+            if (xml.hasAttribute(p->paramID))
+            {
+                p->setValueNotifyingHost ((float) xml.getDoubleAttribute (p->paramID, p->getValue()));
+            }
+            else
+            {
+                p->setValueNotifyingHost(p->getDefaultValue());
+            }
+        }
+    }
+
+    // sort activated lines
+    std::sort (freqAndStateVector.begin(), freqAndStateVector.end(), [] (auto& a, auto& b)
+    {
+        if (! a.second && ! b.second)
+            return a.first < b.first;
+        else if (a.second && ! b.second) // only a is available
+            return true; // move b after a, a < b
+        else if (! a.second && b.second) // only b is available
+            return false; // move a after b, b < a
+        else
+            return a.first < b.first;
+    });
+    
+    // DBG("after freq1:"<<freqAndStateVector[0].first<<"freq2:"<<freqAndStateVector[1].first<<"freq3:"<<freqAndStateVector[2].first);
+    
+    // reassign freq and linestate
+    for (int i = 0; i < lineNum; i++)
+    {
+        if (freqAndStateVector[i].second == false)
+        {
+            freqAndStateVector[i].first = 0;
+        }
+        // set lineState first, so that sliderValueChanged in multiband.cpp will be triggered after line state updated.
+        stateParamPointers[i]->setValueNotifyingHost (freqAndStateVector[i].second);
+        freqParamPointers[i]->setValueNotifyingHost (freqAndStateVector[i].first);
+    }
 }
 
 //==============================================================================
@@ -59,31 +124,7 @@ void StateAB::reset()
 }
 
 //==============================================================================
-//int createFileIfNonExistant(const File &file)
-//{
-//    // 1 saved a new file
-//    // 2 replaced a existing file
-//    // 3 do nothing
-//    if (!file.exists())
-//    {
-//        file.create();
-//        return 1;
-//    }
-//    else
-//    {
-//        bool choice = NativeMessageBox::showOkCancelBox(AlertWindow::NoIcon,
-//        "Warning", "Preset already exists, replace it?", nullptr, nullptr);
-//        if (choice)
-//        {
-//            file.replaceFileIn(file.getFullPathName());
-//            return 2;
-//        }
-//        else
-//        {
-//            return 3;
-//        }
-//    }
-//}
+
 
 void parseFileToXmlElement(const juce::File &file, juce::XmlElement &xml)
 {
@@ -260,7 +301,7 @@ bool StatePresets::savePreset(juce::File savePath)
     presetXmlSingle.removeAllAttributes();                  // clear all first
     presetXmlSingle.setAttribute("presetName", presetName); // set preset name
     saveStateToXml(pluginProcessor, presetXmlSingle);
-    //presetXmlSingle.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
+    //presetXmlSingle.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
     //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
     
     statePresetName = presetName;
@@ -269,6 +310,7 @@ bool StatePresets::savePreset(juce::File savePath)
     if (isSaved)
     {
         scanAllPresets();
+        //mPresetXml.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
         return true;
     }
     else
@@ -430,7 +472,7 @@ menuButton{"Menu"}
     {
         auto menu = presetBox.getRootMenu();
         auto id = presetBox.getSelectedId();
-                
+
         juce::PopupMenu::MenuItemIterator iterator (*menu);
 
         while (iterator.next())
@@ -450,7 +492,6 @@ menuButton{"Menu"}
     
     refreshPresetBox();
     ifPresetActiveShowInBox();
-    presetBox.addListener(this);
     
     addAndMakeVisible(savePresetButton);
     savePresetButton.addListener(this);
@@ -565,6 +606,7 @@ void StateComponent::updatePresetBox(int selectedId) // when preset is changed
     const juce::String presetId{ "preset" + (juce::String)selectedId };
     procStatePresets.setCurrentPresetId(selectedId);
     procStatePresets.loadPreset(presetId);
+    isChanged = false;
 }
 
 void StateComponent::refreshPresetBox() // rescan, init, save, or delete
@@ -592,13 +634,16 @@ void StateComponent::deletePresetAndRefresh()
     // if preset number > 0
     if (procStatePresets.getNumPresets() > 0)
     {
-        bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::NoIcon,
-                                                              "Warning", "Delete preset?", nullptr, nullptr);
-        if (choice)
-        {
-            procStatePresets.deletePreset();
-            refreshPresetBox();
-        }
+        const auto callback = juce::ModalCallbackFunction::create( [this](int choice) {
+            if (choice)
+            {
+                procStatePresets.deletePreset();
+                refreshPresetBox();
+            }
+        });
+        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::NoIcon,
+                                                              "Warning", "Delete preset?", nullptr, callback);
+        
     }
     else
     {
@@ -718,7 +763,7 @@ void StateComponent::popPresetMenu()
             {
                 juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Error", "No release found or disconnected from the network!");
             }
-            else if(!versionInfo->versionString.contains(VERSION))
+            else if(!versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
             {
                 version = versionInfo->versionString;
                 const auto callback = juce::ModalCallbackFunction::create ([this](int result) {

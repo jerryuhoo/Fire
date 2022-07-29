@@ -137,7 +137,15 @@ public:
 //        juce::ColourGradient grad(juce::Colours::black.withBrightness(0.4f), centerX, centerY,
 //                                  juce::Colours::black.withBrightness(slider.isEnabled() ? 1.0f : 0.5f), radiusInner, radiusInner, true);
 //        g.setGradientFill(grad);
-        g.setColour(KNOB_INNER_COLOUR);
+        
+        juce::Colour innerColor = KNOB_INNER_COLOUR;
+
+        if (slider.isMouseOverOrDragging() && slider.isEnabled())
+        {
+            innerColor = innerColor.brighter();
+        }
+        
+        g.setColour(innerColor);
         g.fillEllipse(dialArea);
         
         // draw tick
@@ -318,6 +326,14 @@ public:
         juce::Rectangle<float> tickInnerBounds(x + 3, y + 3, w - 6, h - 6);
         g.fillEllipse(tickInnerBounds);
         
+        if (component.isMouseButtonDown())
+        {
+            tickColour = tickColour.darker();
+        }
+        else if (component.isMouseOver())
+        {
+            tickColour = tickColour.brighter();
+        }
         
         g.setColour(tickColour.darker().darker());
         g.fillEllipse(tickBounds);
@@ -878,8 +894,15 @@ public:
         
         // draw small circle
         juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
-//        g.setColour(juce::Colours::black.withBrightness(slider.isEnabled() ? 0.3f : 0.2f));
-        g.setColour(KNOB_INNER_COLOUR);
+
+        juce::Colour innerColor = KNOB_INNER_COLOUR;
+        
+        if (slider.isMouseOverOrDragging() && slider.isEnabled())
+        {
+            innerColor = innerColor.brighter();
+        }
+        
+        g.setColour(innerColor);
         g.fillEllipse(smallDialArea);
         
         // draw colorful inner circle
@@ -1439,7 +1462,7 @@ public:
 };
 
 
-class FlatButtonLnf : public juce::LookAndFeel_V4
+class FlatLnf : public juce::LookAndFeel_V4
 {
 public:
     float scale = 1.f;
@@ -1492,6 +1515,52 @@ public:
     juce::Font getTextButtonFont(juce::TextButton &, int buttonHeight) override
     {
         return juce::Font(KNOB_FONT, "Regular", KNOB_FONT_SIZE * scale);
+    }
+    
+    // draw flat tickbox (toggle button)
+    void drawTickBox(juce::Graphics &g, juce::Component &component,
+                     float x, float y, float w, float h,
+                     const bool ticked,
+                     const bool isEnabled,
+                     const bool shouldDrawButtonAsHighlighted,
+                     const bool shouldDrawButtonAsDown) override
+    {
+        juce::ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+//        juce::Rectangle<float> tickBounds(x, y, w, h);
+        juce::Rectangle<float> tickBounds(component.getLocalBounds().toFloat().reduced(2));
+
+        juce::Colour tickColour;
+        if (ticked)
+        {
+            tickColour = component.findColour(juce::ToggleButton::tickColourId);
+        }
+        else
+        {
+            tickColour = component.findColour(juce::ToggleButton::tickDisabledColourId);
+        }
+        if (component.isMouseButtonDown())
+        {
+            tickColour = tickColour.contrasting(0.05f);
+        }
+        else if (component.isMouseOver())
+        {
+            tickColour = tickColour.contrasting(0.2f);
+        }
+        g.setColour(tickColour);
+        g.fillRect(tickBounds);
+    }
+
+    void drawToggleButton (juce::Graphics& g, juce::ToggleButton& button,
+                                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+        g.setColour(COLOUR6);
+        g.fillRect(button.getLocalBounds());
+        drawTickBox (g, button, button.getWidth() / 4.0f, button.getHeight() / 4.0f,
+                     button.getWidth() / 2.0f, button.getHeight() / 2.0f,
+                     button.getToggleState(),
+                     button.isEnabled(),
+                     shouldDrawButtonAsHighlighted,
+                     shouldDrawButtonAsDown);
     }
 };
 

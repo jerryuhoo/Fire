@@ -10,25 +10,25 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
+#include <JuceHeader.h>
 
 //==============================================================================
 /*
 */
-class VUMeter  : public juce::Component, juce::Timer
+class VUMeter : public juce::Component, juce::Timer
 {
 public:
-    VUMeter(FireAudioProcessor* inProcessor);
+    VUMeter (FireAudioProcessor* inProcessor);
     ~VUMeter() override;
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setParameters(bool isInput, juce::String meterName);
+    void setParameters (bool isInput, juce::String meterName);
     void timerCallback() override;
     float getLeftChannelLevel();
     float getRightChannelLevel();
-    
+
 private:
     FireAudioProcessor* mProcessor;
     bool mIsInput;

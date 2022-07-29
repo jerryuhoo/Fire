@@ -57,6 +57,15 @@
 #define SAFE_ID4            "safe4"
 #define SAFE_NAME4          "Safe4"
 
+#define EXTREME_ID1         "extreme1"
+#define EXTREME_NAME1       "Extreme1"
+#define EXTREME_ID2         "extreme2"
+#define EXTREME_NAME2       "Extreme2"
+#define EXTREME_ID3         "extreme3"
+#define EXTREME_NAME3       "Extreme3"
+#define EXTREME_ID4         "extreme4"
+#define EXTREME_NAME4       "Extreme4"
+
 #define COMP_RATIO_ID1      "compRatio1"
 #define COMP_RATIO_NAME1    "CompRatio1"
 #define COMP_RATIO_ID2      "compRatio2"
@@ -173,6 +182,12 @@
 #define HIGH_ID             "high"
 #define HIGH_NAME           "High"
 
+// limiter
+#define LIMITER_THRESH_ID       "limiterThresh"
+#define LIMITER_THRESH_NAME     "LimiterThresh"
+#define LIMITER_RELEASE_ID      "limiterRelease"
+#define LIMITER_RELEASE_NAME    "LimiterRelease"
+
 // multiband
 #define FREQ_ID1            "freq1"
 #define FREQ_NAME1          "Freq1"
@@ -235,7 +250,8 @@
 #define FILTER_BYPASS_NAME      "FilterBypass"
 #define DOWNSAMPLE_BYPASS_ID    "downsampleBypass"
 #define DOWNSAMPLE_BYPASS_NAME  "DownsampleBypass"
-
+#define LIMITER_BYPASS_ID       "limiterBypass"
+#define LIMITER_BYPASS_NAME     "LimiterBypass"
 
 // Define Font
 #define KNOB_FONT           "Futura"
@@ -341,13 +357,15 @@
 #define COLOUR_FONT         juce::Colour(100, 100, 100)
 #define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
 #define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
+#define COLOUR_MASK_WHITE   juce::Colours::white.withAlpha(0.05f)
 #define COLOUR_GROUP        juce::Colour(50, 50, 50)
 #define DRIVE_COLOUR        juce::Colours::red
 #define SHAPE_COLOUR        juce::Colours::yellow
 #define WIDTH_COLOUR        juce::Colours::skyblue
 #define COMP_COLOUR         juce::Colours::yellowgreen
 #define FILTER_COLOUR       juce::Colours::hotpink
-#define DOWNSAMPLE_COLOUR   juce::Colours::purple
-    
+#define DOWNSAMPLE_COLOUR   juce::Colours::violet
+#define LIMITER_COLOUR      juce::Colours::mediumpurple
+
 // VU meters
 #define SMOOTH_COEFF        0.2

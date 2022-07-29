@@ -12,35 +12,35 @@
 
 #include <JuceHeader.h>
 #include "FreqTextLabel.h"
-#include "CloseButton.h"
 #include "VerticalLine.h"
-#include "SpectrumComponent.h"
+
 #include "../../PluginProcessor.h"
 //==============================================================================
 /*
-*/
-class FreqDividerGroup  : public juce::Component, juce::Slider::Listener, juce::Button::Listener
+ */
+class FreqDividerGroup : public juce::ToggleButton, juce::Slider::Listener, juce::Button::Listener
 {
 public:
-    FreqDividerGroup(FireAudioProcessor &, int index);
+    FreqDividerGroup (FireAudioProcessor&, int index);
     ~FreqDividerGroup() override;
-
+    
     void paint (juce::Graphics&) override;
     void resized() override;
     
-    void moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[], int sortedIndex[]);
+    void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[]);
     
-    bool getDeleteState();
-    void setDeleteState(bool deleteState);
-    
-    CloseButton& getCloseButton();
-    void setCloseButtonValue(bool value);
-    VerticalLine& getVerticalLine();
+    void setDeleteState (bool deleteState);
 
-    void setFreq(float f);
-    void setScale(float scale);
+    VerticalLine& getVerticalLine();
+    
+    void setFreq (float f);
+    int getFreq ();
+    void setScale (float scale);
+
+    void clicked(const juce::ModifierKeys& modifiers) override;
+
 private:
-    FireAudioProcessor &processor;
+    FireAudioProcessor& processor;
     VerticalLine verticalLine;
     float margin = 7.5f;
     float size = 15.0f;
@@ -48,22 +48,23 @@ private:
     juce::String lineStatelId = "";
     juce::String sliderFreqId = "";
     
-    void mouseUp(const juce::MouseEvent &e) override;
-    void mouseEnter(const juce::MouseEvent &e) override;
-    void mouseExit(const juce::MouseEvent &e) override;
-    void mouseDown(const juce::MouseEvent &e) override;
-    void mouseDrag(const juce::MouseEvent &e) override;
+    void mouseUp (const juce::MouseEvent& e) override;
+    void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseExit (const juce::MouseEvent& e) override;
+    void mouseDown (const juce::MouseEvent& e) override;
+    void mouseDrag (const juce::MouseEvent& e) override;
     
-    void mouseDoubleClick(const juce::MouseEvent &e) override;
-    void sliderValueChanged(juce::Slider *slider) override;
+    void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void sliderValueChanged (juce::Slider* slider) override;
     void buttonClicked (juce::Button* button) override;
-    void updateCloseButtonState();
-    CloseButton closeButton;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> closeButtonAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;
     OtherLookAndFeel otherLookAndFeel;
+    
+//    juce::ComponentDragger dragger;
+//    juce::ComponentBoundsConstrainer boundsConstrainer;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqDividerGroup)
 };

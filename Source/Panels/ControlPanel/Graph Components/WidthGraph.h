@@ -10,27 +10,27 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
 #include "GraphTemplate.h"
+#include <JuceHeader.h>
 
 //==============================================================================
 /*
 */
-class WidthGraph  : public GraphTemplate, juce::Timer
+class WidthGraph : public GraphTemplate, juce::Timer
 {
 public:
-    WidthGraph(FireAudioProcessor &);
+    WidthGraph (FireAudioProcessor&);
     ~WidthGraph() override;
 
     void paint (juce::Graphics&) override;
     void timerCallback() override;
     void resized() override;
-    
+
 private:
-    FireAudioProcessor &processor;
+    FireAudioProcessor& processor;
     juce::Array<float> historyL;
     juce::Array<float> historyR;
-    
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
 };

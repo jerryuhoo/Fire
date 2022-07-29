@@ -8,13 +8,12 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
 #include "GraphTemplate.h"
+#include <JuceHeader.h>
 
 //==============================================================================
 GraphTemplate::GraphTemplate()
 {
-
 }
 
 GraphTemplate::~GraphTemplate()
@@ -30,10 +29,9 @@ void GraphTemplate::paint (juce::Graphics& g)
 
 void GraphTemplate::resized()
 {
-
 }
 
-void GraphTemplate::setScale(float scale)
+void GraphTemplate::setScale (float scale)
 {
     this->scale = scale;
 }
@@ -48,12 +46,12 @@ bool GraphTemplate::getZoomState()
     return mZoomState;
 }
 
-void GraphTemplate::setZoomState(bool zoomState)
+void GraphTemplate::setZoomState (bool zoomState)
 {
     mZoomState = zoomState;
 }
 
-void GraphTemplate::mouseDown(const juce::MouseEvent &e)
+void GraphTemplate::mouseDown (const juce::MouseEvent& e)
 {
     if (mZoomState)
     {
@@ -67,12 +65,12 @@ void GraphTemplate::mouseDown(const juce::MouseEvent &e)
     }
 }
 
-void GraphTemplate::mouseEnter(const juce::MouseEvent &e)
+void GraphTemplate::mouseEnter (const juce::MouseEvent& e)
 {
     isMouseOn = true;
 }
 
-void GraphTemplate::mouseExit(const juce::MouseEvent &e)
+void GraphTemplate::mouseExit (const juce::MouseEvent& e)
 {
     isMouseOn = false;
 }

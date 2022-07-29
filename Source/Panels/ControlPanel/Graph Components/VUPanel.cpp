@@ -128,7 +128,7 @@ void VUPanel::paint (juce::Graphics& g)
     
     if (isMouseOn && !mZoomState)
     {
-        g.setColour(juce::Colours::yellowgreen.withAlpha(0.05f));
+        g.setColour(COMP_COLOUR.withAlpha(0.05f));
         g.fillAll();
     }
 }

@@ -2,8 +2,6 @@
 
 - Bug
 
-(except can't repaint distortion graph when bypassed, and won't be fixed because cannot get sample max value when bypassed)
-
 - Feature
 
 1. auto-update check when open
@@ -17,4 +15,4 @@
 - Improvement
 
 1. test CPU usage
-2. add CI
+2. Add CI test cases

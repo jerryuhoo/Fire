@@ -1164,11 +1164,12 @@ void FireAudioProcessor::processDistortion (juce::AudioBuffer<float>& bandBuffer
     float biasValue = static_cast<float> (*treeState.getRawParameterValue (biasID));
     float recValue = static_cast<float> (*treeState.getRawParameterValue (recID));
 
-    float newDrive = safeMode (driveValue, bandBuffer, safeID);
     if (static_cast<bool>(*treeState.getRawParameterValue (extremeID)))
     {
-        newDrive = 10 * newDrive;
+        driveValue = log2 (10.0f) * driveValue;
     }
+    float newDrive = safeMode (driveValue, bandBuffer, safeID);
+
     if (driveID == DRIVE_ID1)
         newDrive1 = newDrive;
     else if (driveID == DRIVE_ID2)

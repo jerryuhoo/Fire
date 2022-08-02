@@ -47,6 +47,9 @@ private:
     // access the processor object that created it.
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
+    
+    int focusIndex = 0;
+    void updateWhenChangingFocus();
 
     void buttonClicked (juce::Button* clickedButton) override;
     void mouseDown (const juce::MouseEvent& e) override;

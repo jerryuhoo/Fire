@@ -61,20 +61,20 @@ FireAudioProcessor::FireAudioProcessor()
     }
     
     // check update
-    std::unique_ptr<VersionInfo>versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-    if (versionInfo!= nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
-    {
-        juce::String version = versionInfo->versionString;
-        const auto callback = juce::ModalCallbackFunction::create ([version](int result) {
-            if (result == 1) // result == 1 means user clicks OK
-            {
-                juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
-                gitHubWebsite.launchInDefaultBrowser();
-            }
-        });
-        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-    }
+//    std::unique_ptr<VersionInfo>versionInfo = VersionInfo::fetchLatestFromUpdateServer();
+//    if (versionInfo!= nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
+//    {
+//        juce::String version = versionInfo->versionString;
+//        const auto callback = juce::ModalCallbackFunction::create ([version](int result) {
+//            if (result == 1) // result == 1 means user clicks OK
+//            {
+//                juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
+//                gitHubWebsite.launchInDefaultBrowser();
+//            }
+//        });
+//        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+//            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
+//    }
 }
 
 FireAudioProcessor::~FireAudioProcessor()

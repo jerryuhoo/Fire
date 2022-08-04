@@ -61,20 +61,20 @@ FireAudioProcessor::FireAudioProcessor()
     }
     
     // check update
-    std::unique_ptr<VersionInfo>versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-    if (versionInfo!= nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
-    {
-        juce::String version = versionInfo->versionString;
-        const auto callback = juce::ModalCallbackFunction::create ([version](int result) {
-            if (result == 1) // result == 1 means user clicks OK
-            {
-                juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
-                gitHubWebsite.launchInDefaultBrowser();
-            }
-        });
-        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-    }
+//    std::unique_ptr<VersionInfo>versionInfo = VersionInfo::fetchLatestFromUpdateServer();
+//    if (versionInfo!= nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
+//    {
+//        juce::String version = versionInfo->versionString;
+//        const auto callback = juce::ModalCallbackFunction::create ([version](int result) {
+//            if (result == 1) // result == 1 means user clicks OK
+//            {
+//                juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
+//                gitHubWebsite.launchInDefaultBrowser();
+//            }
+//        });
+//        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+//            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
+//    }
 }
 
 FireAudioProcessor::~FireAudioProcessor()
@@ -1164,11 +1164,12 @@ void FireAudioProcessor::processDistortion (juce::AudioBuffer<float>& bandBuffer
     float biasValue = static_cast<float> (*treeState.getRawParameterValue (biasID));
     float recValue = static_cast<float> (*treeState.getRawParameterValue (recID));
 
-    float newDrive = safeMode (driveValue, bandBuffer, safeID);
     if (static_cast<bool>(*treeState.getRawParameterValue (extremeID)))
     {
-        newDrive = 10 * newDrive;
+        driveValue = log2 (10.0f) * driveValue;
     }
+    float newDrive = safeMode (driveValue, bandBuffer, safeID);
+
     if (driveID == DRIVE_ID1)
         newDrive1 = newDrive;
     else if (driveID == DRIVE_ID2)

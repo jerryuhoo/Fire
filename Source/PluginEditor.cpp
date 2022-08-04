@@ -36,9 +36,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor (FireAudioProcessor& p)
     addAndMakeVisible (globalPanel);
 
     // Spectrum
-    addAndMakeVisible (spectrum);
-    addAndMakeVisible (multiband);
-    addAndMakeVisible (filterControl);
+    addAndMakeVisible(spectrum);
+    addAndMakeVisible(multiband);
+    multiband.addMouseListener(this, false);
+    updateWhenChangingFocus();
+    addAndMakeVisible(filterControl);
 
     for (int i = 0; i < 4; i++)
     {
@@ -666,4 +668,49 @@ void FireAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
     {
         bandPanel.setSwitch (3, true);
     }
+    if (e.eventComponent == &multiband)
+    {
+        updateWhenChangingFocus();
+    }
 }
+
+void FireAudioProcessorEditor::updateWhenChangingFocus()
+{
+    focusIndex = multiband.getFocusIndex();
+    
+//    if (focusIndex == 0)
+//    {
+//        setDistortionGraph(MODE_ID1, DRIVE_ID1,
+//            REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1);
+//    }
+//    else if (focusIndex == 1)
+//    {
+//        setDistortionGraph(MODE_ID2, DRIVE_ID2,
+//            REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2);
+//    }
+//    else if (focusIndex == 2)
+//    {
+//        setDistortionGraph(MODE_ID3, DRIVE_ID3,
+//            REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3);
+//    }
+//    else if (focusIndex == 3)
+//    {
+//        setDistortionGraph(MODE_ID4, DRIVE_ID4,
+//            REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
+//    }
+    
+    bool left = windowLeftButton.getToggleState();
+    bool right = windowRightButton.getToggleState();
+    if (left)
+    { // if you select the left window, you will see audio wave and distortion function graphs.
+        bandPanel.setFocusBandNum(focusIndex);
+        graphPanel.setFocusBandNum(focusIndex);
+    }
+    else if (right)
+    {
+        graphPanel.setFocusBandNum(-1); // -1 means global
+    }
+    bandPanel.updateWhenChangingFocus();
+    repaint();
+}
+

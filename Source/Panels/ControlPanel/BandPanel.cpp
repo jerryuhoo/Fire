@@ -913,3 +913,62 @@ void BandPanel::setSwitch(const int index, bool state)
     else if (index == 3)
         widthSwitch.setToggleState(state, juce::sendNotificationSync);
 }
+
+void BandPanel::updateWhenChangingFocus()
+{
+
+    if (oscSwitch.getToggleState())
+    {
+        setVisibility (shapeVector, false);
+        setVisibility (compressorVector, false);
+        setVisibility (widthVector, false);
+        recLabel.setVisible (false);
+        biasLabel.setVisible (false);
+        widthLabel.setVisible (false);
+        CompRatioLabel.setVisible (false);
+        CompThreshLabel.setVisible (false);
+    }
+
+    if (shapeSwitch.getToggleState())
+    {
+        setFourComponentsVisibility (recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
+        setFourComponentsVisibility (biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
+        setVisibility (compressorVector, false);
+        setVisibility (widthVector, false);
+        CompRatioLabel.setVisible (false);
+        CompThreshLabel.setVisible (false);
+        recLabel.setVisible (true);
+        biasLabel.setVisible (true);
+        widthLabel.setVisible (false);
+    }
+
+    if (compressorSwitch.getToggleState())
+    {
+        setVisibility (compressorVector, true);
+        setFourComponentsVisibility (compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
+        setFourComponentsVisibility (compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
+        setFourComponentsVisibility (*compressorBypassButton1, *compressorBypassButton2, *compressorBypassButton3, *compressorBypassButton4, focusBandNum);
+        setVisibility (shapeVector, false);
+        setVisibility (widthVector, false);
+        CompRatioLabel.setVisible (true);
+        CompThreshLabel.setVisible (true);
+        recLabel.setVisible (false);
+        biasLabel.setVisible (false);
+        widthLabel.setVisible (false);
+    }
+
+    if (widthSwitch.getToggleState())
+    {
+        setVisibility (widthVector, true);
+        setFourComponentsVisibility (widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
+        setFourComponentsVisibility (*widthBypassButton1, *widthBypassButton2, *widthBypassButton3, *widthBypassButton4, focusBandNum);
+        setVisibility (shapeVector, false);
+        setVisibility (compressorVector, false);
+        CompRatioLabel.setVisible (false);
+        CompThreshLabel.setVisible (false);
+        recLabel.setVisible (false);
+        biasLabel.setVisible (false);
+        widthLabel.setVisible (true);
+    }
+    repaint();
+}

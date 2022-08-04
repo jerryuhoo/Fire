@@ -37,6 +37,7 @@ public:
     juce::ToggleButton& getCompButton (const int index);
     juce::ToggleButton& getWidthButton (const int index);
     void setSwitch(const int index, bool state);
+    void updateWhenChangingFocus();
 private:
     FireAudioProcessor& processor;
     juce::Rectangle<int> bandKnobArea;

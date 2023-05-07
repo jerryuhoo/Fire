@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include "GUI/LookAndFeel.h"
 #include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
 #include "Panels/ControlPanel/Graph Components/DistortionGraph.h"

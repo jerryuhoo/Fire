@@ -12,7 +12,8 @@
 #ifndef STATE_H_INCLUDED
 #define STATE_H_INCLUDED
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_core/juce_core.h>
 #include "../../GUI/LookAndFeel.h"
 
 #include "../../Utility/VersionInfo.h"

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html class="no-js ss-preload" lang="en">
+
+<head>
+
+    <!--- basic page needs
+    ================================================== -->
+    <meta charset="utf-8">
+    <title>WingsMusic</title>
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <!-- mobile specific metas
+    ================================================== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CSS
+    ================================================== -->
+    <link rel="stylesheet" href="css/vendor.css">
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- favicons
+    ================================================== -->
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+    <link rel="manifest" href="site.webmanifest">
+
+</head>
+
+<body id="top">
+
+
+    <!-- # preloader
+    ================================================== -->
+    <div id="preloader">
+        <div id="loader">
+        </div>
+    </div>
+
+
+    <!-- # page wrap
+    ================================================== -->
+    <div class="s-pagewrap">
+
+        <div class="circles">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+
+
+        <!-- ## site header
+        ================================================== -->
+        <header class="s-header">
+
+            <div class="header-mobile">
+                <span class="mobile-home-link"><a href="index.html">羽翼深蓝Wings.</a></span>
+                <a class="mobile-menu-toggle" href="#0"><span>菜单</span></a>
+            </div>
+
+            <div class="row wide main-nav-wrap">
+                <nav class="column lg-12 main-nav">
+                    <ul>
+                        <li><a href="index.html" class="home-link">Switch to English</a></li>
+                        <li class="current"><a href="#intro" class="smoothscroll">介绍</a></li>
+                        <li><a href="#about" class="smoothscroll">插件</a></li>
+                        <li><a href="#works" class="smoothscroll">音乐</a></li>
+                        <li><a href="#contact" class="smoothscroll">联系</a></li>
+                    </ul>
+                </nav>
+            </div>
+
+        </header> <!-- end s-header -->
+
+
+        <!-- ## main content
+        ==================================================- -->
+        <main class="s-content">
+
+
+            <!-- ### intro
+            ================================================== -->
+            <section id="intro" class="s-intro target-section">
+
+                <div class="row intro-content wide">
+
+                    <div class="column">
+                        <div class="text-pretitle with-line">
+                            关于我
+                        </div>
+
+                        <h1 class="text-huge-title">
+                            羽翼深蓝 Wings<br>
+                            插件开发 <br>
+                            音乐制作人.
+                        </h1>
+                    </div>
+
+                    <ul class="intro-social">
+                        <li><a href="https://music.163.com/#/artist?id=12118139">NetEase</a></li>
+                        <li><a href="https://soundcloud.com/jerry-876742699">SoundCloud</a></li>
+                        <li><a href="https://space.bilibili.com/6456016">Bilibili</a></li>
+                        <li><a href="https://github.com/jerryuhoo">Github</a></li>
+                    </ul>
+
+                </div> <!-- end intro content -->
+
+                <a href="#about" class="intro-scrolldown smoothscroll">
+                    <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
+                        fill-rule="evenodd" clip-rule="evenodd">
+                        <path
+                            d="M11 21.883l-6.235-7.527-.765.644 7.521 9 7.479-9-.764-.645-6.236 7.529v-21.884h-1v21.883z" />
+                    </svg>
+                </a>
+
+            </section> <!-- end s-intro -->
+
+
+            <!-- ### about
+            ================================================== -->
+            <section id="about" class="s-about target-section">
+
+
+                <div class="row about-info wide" data-animate-block>
+
+                    <div class="column lg-6 md-12 about-info__pic-block">
+                        <img src="images/Fire1.png" srcset="images/Fire1.png 1x, images/Fire1.png 2x" alt=""
+                            class="about-info__pic" data-animate-el>
+                    </div>
+
+                    <div class="column lg-6 md-12">
+                        <div class="about-info__text">
+
+                            <h2 class="text-pretitle with-line" data-animate-el>
+                                "火" 插件
+                            </h2>
+                            <p class="attention-getter" data-animate-el>
+                                "火" 是一个多段失真插件。支持预置保存、多段失真、压缩、降采样等功能.
+                            </p>
+                            <a href="https://github.com/jerryuhoo/Fire/releases/latest"
+                                class="btn btn--medium u-fullwidth" data-animate-el>免费下载</a>
+
+                        </div>
+                    </div>
+                </div> <!-- about-info -->
+
+
+                <div class="row about-expertise" data-animate-block>
+                    <div class="column lg-12">
+
+                        <h2 class="text-pretitle" data-animate-el>功能</h2>
+
+                        <ul class="skills-list h1" data-animate-el>
+                            <li>演示视频</li>
+                        </ul>
+
+                        <!-- <iframe src="//player.bilibili.com/player.html?aid=928861104&bvid=BV1uT4y1P7CX&cid=287639008&page=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" width="100%" height="100%"> </iframe> -->
+                        <iframe id="spkj"
+                            src="https://player.bilibili.com/player.html?aid=379284831&bvid=BV17f4y1M7Hm&cid=446435057&page=1"
+                            scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"
+                            width=100%> </iframe>
+                        <script type="text/javascript">
+                            document.getElementById("spkj").style.height = document.getElementById("spkj").scrollWidth * 0.76 + "px";
+                        </script>
+                    </div>
+                </div> <!-- end about-expertise -->
+
+                <div class="row about-timelines" data-animate-block>
+
+                    <div class="column lg-6 tab-12">
+
+                        <h2 class="text-pretitle" data-animate-el>
+                            分段效果
+                        </h2>
+
+                        <div class="timeline" data-animate-el>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">失真</h3>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>多种失真函数，偏移、倒置塑造你的声音。</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">压缩</h4>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>使用多段压缩来控制每个频段的动态。</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">立体声</h4>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>使用立体声扩展来控制每个频段的宽度。</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">自动匹配音量</h4>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>拉高失真，自动降低音量。</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">过载保护</h4>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>如同Sausage Fattener一样，自动降低过大的失真。</p>
+                                </div>
+                            </div>
+
+                        </div> <!-- end timeline -->
+
+                    </div> <!-- end column -->
+
+                    <div class="column lg-6 tab-12">
+
+                        <h2 class="text-pretitle" data-animate-el>
+                            全局效果
+                        </h2>
+
+                        <div class="timeline" data-animate-el>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">过采样</h3>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>使用4x的过采样来提高音质。</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">EQ</h3>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>三段EQ，可手动拖动调整，包含Q值和4个梯度</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">降采样</h3>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>如同Serum中的降采样音效</p>
+                                </div>
+                            </div>
+
+                        </div> <!-- end timeline -->
+
+                        <h2 class="text-pretitle" data-animate-el>
+                            其他功能
+                        </h2>
+
+                        <div class="timeline" data-animate-el>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">预置保存</h3>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>支持预置文件的保存和读取，可手动扫描。</p>
+                                </div>
+                            </div>
+
+                            <div class="timeline__block">
+                                <div class="timeline__bullet"></div>
+                                <div class="timeline__header">
+                                    <h4 class="timeline__title">A/B 模式切换</h3>
+                                </div>
+                                <div class="timeline__desc">
+                                    <p>在A/B模式中切换，以对比效果。</p>
+                                </div>
+                            </div>
+
+                        </div> <!-- end timeline -->
+
+                    </div> <!-- end column -->
+
+
+                </div> <!-- end about-timelines -->
+
+            </section> <!-- end s-about -->
+
+
+            <!-- ### works
+            ================================================== -->
+            <section id="works" class="s-works target-section">
+
+
+                <div class="row works-portfolio">
+
+                    <div class="column lg-12" data-animate-block>
+                        <h2 class="text-pretitle with-line" data-animate-el>
+                            单曲和EP
+                        </h2>
+                        <p class="h1" data-animate-el>
+                            已发布音乐作品
+                        </p>
+
+                        <ul class="folio-list row block-lg-one-half block-stack-on-1000">
+                            <li class="folio-list__item column" data-animate-el>
+                                <a class="folio-list__item-link" href="https://music.163.com/#/song?id=1843064022">
+                                    <div class="folio-list__item-pic">
+                                        <img src="escape_from_the_earth.JPG"
+                                            srcset="images/portfolio/escape_from_the_earth.JPG 1x, images/portfolio/escape_from_the_earth.JPG 2x"
+                                            alt="">
+                                    </div>
+
+                                    <div class="folio-list__item-text">
+                                        <div class="folio-list__item-cat">
+                                            2021-05
+                                        </div>
+                                        <div class="folio-list__item-title">
+                                            Escape from the earth
+                                        </div>
+                                        <div class="folio-list__item-cat">
+                                            《Escape from the earth》是专辑《The end of the
+                                            world》的续集，讲述的是世界末日之后地球上仅存最后的人工智能逃离地球，飞向宇宙，孤独漂流的故事。
+                                        </div>
+                                    </div>
+                                </a>
+                                <!-- <a class="folio-list__proj-link" href="#" title="project link">
+                                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                                </a> -->
+                            </li> <!--end folio-list__item -->
+
+                            <li class="folio-list__item column" data-animate-el>
+                                <a class="folio-list__item-link" href="https://music.163.com/#/album?id=85096272">
+                                    <div class="folio-list__item-pic">
+                                        <img src="images/portfolio/the_end_of_the_world.JPG"
+                                            srcset="images/portfolio/the_end_of_the_world.JPG 1x, images/portfolio/the_end_of_the_world.JPG 2x"
+                                            alt="">
+                                    </div>
+
+                                    <div class="folio-list__item-text">
+                                        <div class="folio-list__item-cat">
+                                            2020-01
+                                        </div>
+                                        <div class="folio-list__item-title">
+                                            The end of the world
+                                        </div>
+                                        <div class="folio-list__item-cat">
+                                            由羽翼深蓝Wings制作的《The end of the
+                                            world》描绘了一场世界末日级的灾难。灾难中人们虽然流离颠沛，但依然没有失去信仰。本专辑一共有四首歌曲，包含管弦乐，实验，glitch hop,
+                                            drum and bass, 摇滚等各种音乐风格。这是一次全新的实验性专辑，制作时长耗时半年。
+                                        </div>
+                                    </div>
+                                </a>
+                                <!-- <a class="folio-list__proj-link" href="#" title="project link">
+                                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                                </a> -->
+                            </li> <!--end folio-list__item -->
+
+                            <li class="folio-list__item column" data-animate-el>
+                                <a class="folio-list__item-link" href="https://music.163.com/#/album?id=85094660">
+                                    <div class="folio-list__item-pic">
+                                        <img src="images/portfolio/remix.JPG"
+                                            srcset="images/portfolio/remix.JPG 1x, images/portfolio/remix.JPG 2x"
+                                            alt="">
+                                    </div>
+
+                                    <div class="folio-list__item-text">
+                                        <div class="folio-list__item-cat">
+                                            2020-01
+                                        </div>
+                                        <div class="folio-list__item-title">
+                                            美波 - カワキヲアメク (Remix)
+                                        </div>
+                                        <div class="folio-list__item-cat">
+                                            Remix美波的《カワキヲアメク》，其中纯音乐为《>ω<》，Vocal是符白牙。 </div>
+                                        </div>
+                                </a>
+                                <!-- <a class="folio-list__proj-link" href="#" title="project link">
+                                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                                </a> -->
+                            </li> <!--end folio-list__item -->
+
+                            <li class="folio-list__item column" data-animate-el>
+                                <a class="folio-list__item-link" href="https://music.163.com/#/song?id=1390255967">
+                                    <div class="folio-list__item-pic">
+                                        <img src="images/portfolio/without_your_love.JPG"
+                                            srcset="images/portfolio/without_your_love.JPG 1x, images/portfolio/without_your_love.JPG 2x"
+                                            alt="">
+                                    </div>
+
+                                    <div class="folio-list__item-text">
+                                        <div class="folio-list__item-cat">
+                                            2019-09
+                                        </div>
+                                        <div class="folio-list__item-title">
+                                            Without your love
+                                        </div>
+                                        <div class="folio-list__item-cat">
+                                            这首歌与Todor（Tgmusic）共同完成，Todor负责了人声和歌词的部分。
+                                        </div>
+                                    </div>
+                                </a>
+                                <!-- <a class="folio-list__proj-link" href="#" title="project link">
+                                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                                </a> -->
+                            </li> <!--end folio-list__item -->
+
+                            <li class="folio-list__item column" data-animate-el>
+                                <a class="folio-list__item-link" href="https://music.163.com/#/song?id=1354237215">
+                                    <div class="folio-list__item-pic">
+                                        <img src="images/portfolio/brave.JPG"
+                                            srcset="images/portfolio/brave.JPG 1x, images/portfolio/brave.JPG 2x"
+                                            alt="">
+                                    </div>
+
+                                    <div class="folio-list__item-text">
+                                        <div class="folio-list__item-cat">
+                                            2019-03
+                                        </div>
+                                        <div class="folio-list__item-title">
+                                            Brave
+                                        </div>
+                                        <div class="folio-list__item-cat">
+                                            我用Ableton Live做的第一首歌。
+                                        </div>
+                                    </div>
+                                </a>
+                                <!-- <a class="folio-list__proj-link" href="#" title="project link">
+                                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                                </a> -->
+                            </li> <!--end folio-list__item -->
+
+                            <li class="folio-list__item column" data-animate-el>
+                                <a class="folio-list__item-link" href="https://music.163.com/#/song?id=556717614">
+                                    <div class="folio-list__item-pic">
+                                        <img src="images/portfolio/town.JPG"
+                                            srcset="images/portfolio/town.JPG 1x, images/portfolio/town.JPG 2x" alt="">
+                                    </div>
+
+                                    <div class="folio-list__item-text">
+                                        <div class="folio-list__item-cat">
+                                            2018-04
+                                        </div>
+                                        <div class="folio-list__item-title">
+                                            梦寻古镇
+                                        </div>
+                                        <div class="folio-list__item-cat">
+                                            网易云播放量最高的一首歌= =，评论1w+。
+                                        </div>
+                                    </div>
+                                </a>
+                                <!-- <a class="folio-list__proj-link" href="#" title="project link">
+                                    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+                                </a> -->
+                            </li> <!--end folio-list__item -->
+
+                        </ul> <!-- end folio-list -->
+
+                    </div> <!-- end column -->
+
+
+                    <!-- Modal Templates Popup
+                    -------------------------------------------- -->
+
+                    <!-- <div id="modal-01" hidden>
+                        <div class="modal-popup">
+                            <img src="images/portfolio/gallery/g-fuji.jpg" alt="">
+
+                            <div class="modal-popup__desc">
+                                <h5>Retro Camera</h5>
+                                <p>Odio soluta enim quos sit asperiores rerum rerum repudiandae cum. Vel voluptatem alias qui assumenda iure et expedita voluptatem. Ratione officiis quae.</p>
+                                <ul class="modal-popup__cat">
+                                    <li>Branding</li>
+                                    <li>Product Design</li>
+                                </ul>
+                            </div>
+
+                            <a href="https://www.behance.net/" class="modal-popup__details">Project link</a>
+                        </div>
+                    </div> -->
+
+                    <!-- end modal -->
+
+
+                    <!-- <div id="modal-02" hidden>
+                        <div class="modal-popup">
+                            <img src="images/portfolio/gallery/g-lamp.jpg" alt="">
+
+                            <div class="modal-popup__desc">
+                                <h5>The White Lamp</h5>
+                                <p>Proin gravida nibh vel velit auctor aliquet. Aenean sollicitudin, lorem quis bibendum auctor, nisi elit consequat ipsum, nec sagittis sem nibh id elit.</p>
+                                <ul class="modal-popup__cat">
+                                    <li>Branding</li>
+                                </ul>
+                            </div>
+
+                            <a href="https://www.behance.net/" class="modal-popup__details">Project link</a>
+                        </div>
+                    </div> -->
+
+                    <!-- end modal -->
+
+                    <!-- <div id="modal-03" hidden>
+                        <div class="modal-popup">
+                            <img src="images/portfolio/gallery/g-rucksack.jpg" alt="">
+
+                            <div class="modal-popup__desc">
+                                <h5>Rucksuck</h5>
+                                <p>Exercitationem reprehenderit quod explicabo consequatur aliquid ut magni ut. Deleniti quo corrupti illum velit eveniet ratione necessitatibus ipsam mollitia.</p>
+                                <ul class="modal-popup__cat">
+                                    <li>Product Design</li>
+                                </ul>
+                            </div>
+
+                            <a href="https://www.behance.net/" class="modal-popup__details">Project link</a>
+                        </div>
+                    </div> -->
+                    <!-- end modal -->
+
+                    <!-- <div id="modal-04" hidden>
+                        <div class="modal-popup">
+                            <img src="images/portfolio/gallery/g-skaterboy.jpg" alt="">
+
+                            <div class="modal-popup__desc">
+                                <h5>Since Day One</h5>
+                                <p>Dolores velit qui quos nobis. Aliquam delectus voluptas quos possimus non voluptatem voluptas voluptas. Est doloribus eligendi porro doloribus voluptatum.</p>
+                                <ul class="modal-popup__cat">
+                                    <li>Website</li>
+                                </ul>
+                            </div>
+
+                            <a href="https://www.behance.net/" class="modal-popup__details">Project link</a>
+                        </div>
+                    </div> -->
+                    <!-- end modal -->
+
+                    <!-- <div id="modal-05" hidden>
+                        <div class="modal-popup">
+
+                            <img src="images/portfolio/gallery/g-sanddunes.jpg" alt="">
+
+                            <div class="modal-popup__desc">
+                                <h5>Sand Dunes</h5>
+                                <p>Proin gravida nibh vel velit auctor aliquet. Aenean sollicitudin, lorem quis bibendum auctor, nisi elit consequat ipsum, nec sagittis sem nibh id elit.</p>
+                                <ul class="modal-popup__cat">
+                                    <li>Illustration</li>
+                                </ul>
+                            </div>
+
+                            <a href="https://www.behance.net/" class="modal-popup__details">Project link</a>
+                        </div>
+                    </div> -->
+                    <!-- end modal -->
+
+                    <!-- <div id="modal-06" hidden>
+                        <div class="modal-popup">
+                            <img src="images/portfolio/gallery/g-minimalismo.jpg" alt="">
+
+                            <div class="modal-popup__desc">
+                                <h5>Minimalismo</h5>
+                                <p>Quisquam vel libero consequuntur autem voluptas. Qui aut vero. Omnis fugit mollitia cupiditate voluptas. Aenean sollicitudin, lorem quis bibendum auctor.</p>
+                                <ul class="modal-popup__cat">
+                                    <li>Branding</li>
+                                    <li>Product Design</li>
+                                </ul>
+                            </div>
+
+                            <a href="https://www.behance.net/" class="modal-popup__details">Project link</a>
+                        </div>
+                    </div> -->
+                    <!-- end modal -->
+
+                </div> <!-- end works-portfolio -->
+
+
+
+            </section> <!-- end s-works -->
+
+
+            <!-- ### contact
+            ================================================== -->
+            <section id="contact" class="s-contact target-section">
+
+                <div class="row contact-top">
+                    <div class="column lg-12">
+                        <h2 class="text-pretitle">
+                            联系方式
+                        </h2>
+
+                        <p class="h1">
+                            商业合作（编曲、混音、母带）请发送邮件。 <br>
+                        </p>
+                        <p class="h2">
+
+                        </p>
+                    </div>
+                </div> <!-- end contact-top -->
+
+                <div class="row contact-bottom">
+                    <div class="column lg-3 md-5 tab-6 stack-on-550 contact-block">
+                        <h3 class="text-pretitle">邮件：</h3>
+                        <p class="contact-links">
+                            <a href="mailto:jerryuhoo@gmail.com" class="mailtoui">jerryuhoo@gmail.com</a> <br>
+                        </p>
+                    </div>
+                    <div class="column lg-4 md-5 tab-6 stack-on-550 contact-block">
+                        <h3 class="text-pretitle">社交账号</h3>
+                        <ul class="contact-social">
+                            <li><a href="https://music.163.com/#/artist?id=12118139">网易云</a></li>
+                            <li><a href="https://soundcloud.com/jerry-876742699">SoundCloud</a></li>
+                            <li><a href="https://space.bilibili.com/6456016">Bilibili</a></li>
+                            <li><a href="https://github.com/jerryuhoo">Github</a></li>
+                        </ul>
+                    </div>
+                    <div class="column lg-4 md-12 contact-block">
+                        <a href="mailto:jerryuhoo@gmail.com"
+                            class="mailtoui btn btn--medium u-fullwidth contact-btn">Say Hello.</a>
+                    </div>
+                </div> <!-- end contact-bottom -->
+
+            </section> <!-- end contact -->
+
+        </main> <!-- end s-content -->
+
+
+        <!-- ## footer
+        ================================================== -->
+        <footer class="s-footer">
+
+            <div class="row">
+                <div class="column ss-copyright">
+                    <span>Template from <a href="https://www.styleshout.com/">StyleShout</a></span>
+                </div>
+
+                <div class="ss-go-top">
+                    <a class="smoothscroll" title="Back to Top" href="#top">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill-rule="evenodd"
+                            clip-rule="evenodd">
+                            <path
+                                d="M11 2.206l-6.235 7.528-.765-.645 7.521-9 7.479 9-.764.646-6.236-7.53v21.884h-1v-21.883z" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+
+        </footer> <!-- end s-footer -->
+
+    </div> <!-- end -s-pagewrap -->
+
+
+    <!-- Java Script
+    ================================================== -->
+    <script src="js/plugins.js"></script>
+    <script src="js/main.js"></script>
+
+</body>
+
+</html>

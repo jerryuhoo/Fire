@@ -21,6 +21,7 @@ VUMeter::VUMeter(FireAudioProcessor* inProcessor)
     mCh1Level(0)
 {
     setInterceptsMouseClicks(false, false);
+    startTimerHz(60);
 }
 
 VUMeter::~VUMeter()
@@ -79,7 +80,6 @@ void VUMeter::setParameters(bool isInput, juce::String meterName)
 {
     mIsInput = isInput;
     mMeterName = meterName;
-    startTimerHz(30);
 }
 
 void VUMeter::timerCallback()

@@ -39,5 +39,7 @@ private:
     int updateCounter = 0;
     float displayInputValue = 0.0f;
     float displayOutputValue = 0.0f;
+    juce::String threshID = "";
+    juce::String compBypassID = "";
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUPanel)
 };

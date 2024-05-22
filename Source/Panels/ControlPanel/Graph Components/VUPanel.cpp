@@ -37,33 +37,35 @@ void VUPanel::paint (juce::Graphics& g)
     
     // draw compressor threshold line
     g.setColour(KNOB_SUBFONT_COLOUR);
-    
-    juce::String threshID = "";
-    
+
     bool isGlobal = false;
     if (focusBandNum == 0)
     {
         vuMeterIn.setParameters(true, "Band1");
         vuMeterOut.setParameters(false, "Band1");
         threshID = COMP_THRESH_ID1;
+        compBypassID = COMP_BYPASS_ID1;
     }
     else if (focusBandNum == 1)
     {
         vuMeterIn.setParameters(true, "Band2");
         vuMeterOut.setParameters(false, "Band2");
         threshID = COMP_THRESH_ID2;
+        compBypassID = COMP_BYPASS_ID2;
     }
     else if (focusBandNum == 2)
     {
         vuMeterIn.setParameters(true, "Band3");
         vuMeterOut.setParameters(false, "Band3");
         threshID = COMP_THRESH_ID3;
+        compBypassID = COMP_BYPASS_ID3;
     }
     else if (focusBandNum == 3)
     {
         vuMeterIn.setParameters(true, "Band4");
         vuMeterOut.setParameters(false, "Band4");
         threshID = COMP_THRESH_ID4;
+        compBypassID = COMP_BYPASS_ID4;
     }
     else if (focusBandNum == -1)
     {
@@ -87,9 +89,13 @@ void VUPanel::paint (juce::Graphics& g)
         {
             pointerX = VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
         }
-
-        g.setColour(juce::Colours::yellowgreen);
-        g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f, compressorLineY, pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f, compressorLineY, 1);
+        
+        bool compBypassState = *(processor.treeState.getRawParameterValue(compBypassID));
+        if (compBypassState) 
+        {
+            g.setColour(juce::Colours::yellowgreen);
+            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f, compressorLineY, pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f, compressorLineY, 1.0f);
+        }
     }
     
     if (mZoomState)

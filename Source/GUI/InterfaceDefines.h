@@ -368,4 +368,4 @@
 #define LIMITER_COLOUR      juce::Colours::mediumpurple
 
 // VU meters
-#define SMOOTH_COEFF        0.2
+#define SMOOTH_COEFF        0.5

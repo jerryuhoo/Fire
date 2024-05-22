@@ -36,7 +36,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor (FireAudioProcessor& p)
     addAndMakeVisible (globalPanel);
 
     // Spectrum
-    addAndMakeVisible(spectrum);
+    addAndMakeVisible(specBackground);
+    addAndMakeVisible(processedSpectrum);
+    addAndMakeVisible(originalSpectrum);
     addAndMakeVisible(multiband);
     multiband.addMouseListener(this, false);
     updateWhenChangingFocus();
@@ -49,8 +51,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor (FireAudioProcessor& p)
         bandPanel.getWidthButton (i).addListener (this);
     }
 
-    spectrum.setInterceptsMouseClicks (false, false);
-    spectrum.prepareToPaintSpectrum (processor.getNumBins(), processor.getFFTData(), processor.getSampleRate() / (float) processor.getFFTSize());
+    processedSpectrum.setInterceptsMouseClicks (false, false);
+    processedSpectrum.prepareToPaintSpectrum (processor.getNumBins(), processor.getFFTData(1), processor.getSampleRate() / (float) processor.getFFTSize());
+    originalSpectrum.prepareToPaintSpectrum (processor.getNumBins(), processor.getFFTData(0), processor.getSampleRate() / (float) processor.getFFTSize());
 
     // presets
     addAndMakeVisible (stateComponent);
@@ -283,14 +286,18 @@ void FireAudioProcessorEditor::resized()
     if (zoomButton.getToggleState())
     {
         juce::Rectangle<int> spectrumArea = area;
-        spectrum.setBounds (spectrumArea);
+        specBackground.setBounds (spectrumArea);
+        processedSpectrum.setBounds (spectrumArea);
+        originalSpectrum.setBounds (spectrumArea);
         multiband.setBounds (spectrumArea);
         filterControl.setBounds (spectrumArea);
     }
     else
     {
         juce::Rectangle<int> spectrumArea = area.removeFromTop (SPEC_HEIGHT);
-        spectrum.setBounds (spectrumArea);
+        specBackground.setBounds (spectrumArea);
+        processedSpectrum.setBounds (spectrumArea);
+        originalSpectrum.setBounds (spectrumArea);
         multiband.setBounds (spectrumArea);
         filterControl.setBounds (spectrumArea);
 
@@ -360,15 +367,24 @@ void FireAudioProcessorEditor::timerCallback()
         //(1<<11)
         // create a temp ddtData because sometimes pushNextSampleIntoFifo will replace the original
         // fftData after doingProcess and before painting.
-        float tempFFTData[2 * 2048] = { 0 };
-        memmove (tempFFTData, processor.getFFTData(), sizeof (tempFFTData));
-        // doing process, fifo data to fft data
-        processor.processFFT (tempFFTData);
+        
+        float tempFFTDataProcessed[2 * 2048] = { 0 };
+        memmove(tempFFTDataProcessed, processor.getFFTData(1), sizeof(tempFFTDataProcessed));
+        processor.processFFT(tempFFTDataProcessed, 1);
+        float tempFFTDataOriginal[2 * 2048] = { 0 };
+        memmove(tempFFTDataOriginal, processor.getFFTData(0), sizeof(tempFFTDataOriginal));
+        processor.processFFT(tempFFTDataOriginal, 0);
+        
         // prepare to paint the spectrum
-        spectrum.prepareToPaintSpectrum (processor.getNumBins(), tempFFTData, processor.getSampleRate() / (float) processor.getFFTSize());
+        float specAlpha = static_cast<float> (*processor.treeState.getRawParameterValue (MIX_ID));
+        processedSpectrum.setSpecAlpha(specAlpha);
+        originalSpectrum.setSpecAlpha(specAlpha);
+        processedSpectrum.prepareToPaintSpectrum (processor.getNumBins(), tempFFTDataProcessed, processor.getSampleRate() / (float) processor.getFFTSize());
+        originalSpectrum.prepareToPaintSpectrum (processor.getNumBins(), tempFFTDataOriginal, processor.getSampleRate() / (float) processor.getFFTSize());
 
         graphPanel.repaint();
-        spectrum.repaint();
+        processedSpectrum.repaint();
+        originalSpectrum.repaint();
         multiband.repaint();
         bandPanel.repaint();
         globalPanel.repaint();

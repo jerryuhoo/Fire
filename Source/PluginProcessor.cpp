@@ -715,7 +715,8 @@ void FireAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
 
     // Spectrum
     mWetBuffer.makeCopyOf (buffer); 
-    pushDataToFFT();
+    pushDataToFFT(mWetBuffer, processedSpecProcessor);
+    pushDataToFFT(mDryBuffer, originalSpecProcessor);
 
     // VU output meter
     setLeftRightMeterRMSValues (buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
@@ -983,41 +984,49 @@ juce::Array<float> FireAudioProcessor::getHistoryArrayR()
     return historyArrayR;
 }
 
-float* FireAudioProcessor::getFFTData()
+float* FireAudioProcessor::getFFTData(int dataIndex)
 {
-    return spectrum_processor.fftData;
+    if (dataIndex == 0)
+    {
+        return originalSpecProcessor.fftData;
+    }
+    else
+    {
+        return processedSpecProcessor.fftData;
+    }
 }
 
 int FireAudioProcessor::getNumBins()
 {
-    return spectrum_processor.numBins;
+    return processedSpecProcessor.numBins;
 }
 
 int FireAudioProcessor::getFFTSize()
 {
-    return spectrum_processor.fftSize;
+    return processedSpecProcessor.fftSize;
 }
 
 bool FireAudioProcessor::isFFTBlockReady()
 {
-    return spectrum_processor.nextFFTBlockReady;
+    return processedSpecProcessor.nextFFTBlockReady;
 }
 
-void FireAudioProcessor::pushDataToFFT()
+void FireAudioProcessor::pushDataToFFT(juce::AudioBuffer<float>& buffer, SpectrumProcessor& specProcessor)
 {
-    if (mWetBuffer.getNumChannels() > 0)
+    if (buffer.getNumChannels() > 0)
     {
-        auto* channelData = mWetBuffer.getReadPointer (0);
+        auto* channelData = buffer.getReadPointer(0);
 
-        for (auto i = 0; i < mWetBuffer.getNumSamples(); ++i)
-            spectrum_processor.pushNextSampleIntoFifo (channelData[i]);
+        for (auto i = 0; i < buffer.getNumSamples(); ++i)
+            specProcessor.pushNextSampleIntoFifo(channelData[i]);
     }
 }
 
-void FireAudioProcessor::processFFT (float* tempFFTData)
+void FireAudioProcessor::processFFT(float* tempFFTData, int dataIndex)
 {
-    spectrum_processor.doProcessing (tempFFTData);
-    spectrum_processor.nextFFTBlockReady = false;
+    SpectrumProcessor& specProcessor = (dataIndex == 0) ? originalSpecProcessor : processedSpecProcessor;
+    specProcessor.doProcessing(tempFFTData);
+    specProcessor.nextFFTBlockReady = false;
 }
 
 float FireAudioProcessor::safeMode (float drive, juce::AudioBuffer<float>& buffer, juce::String safeID)

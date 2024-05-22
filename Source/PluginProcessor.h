@@ -83,12 +83,12 @@ public:
     state::StatePresets statePresets;
 
     // FFT
-    float* getFFTData();
+    float* getFFTData(int dataIndex);
     int getNumBins();
     int getFFTSize();
     bool isFFTBlockReady();
-    void pushDataToFFT();
-    void processFFT (float* tempFFTData);
+    void pushDataToFFT(juce::AudioBuffer<float>& buffer, SpectrumProcessor& specProcessor);
+    void processFFT (float* tempFFTData, int dataIndex);
 
     // save size
     void setSavedWidth (const int width);
@@ -129,7 +129,8 @@ private:
     int historyLength = 400;
 
     // Spectrum
-    SpectrumProcessor spectrum_processor;
+    SpectrumProcessor processedSpecProcessor;
+    SpectrumProcessor originalSpecProcessor;
 
     // dry audio buffer
     juce::AudioBuffer<float> mDryBuffer;

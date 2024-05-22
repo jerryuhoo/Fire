@@ -22,6 +22,7 @@
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/FilterControl.h"
 #include "GUI/InterfaceDefines.h"
+#include "Panels/SpectrogramPanel/SpectrumBackground.h"
 
 //==============================================================================
 /**
@@ -73,7 +74,9 @@ private:
     FilterControl filterControl { processor, globalPanel };
 
     // Spectrum
-    SpectrumComponent spectrum;
+    SpectrumComponent processedSpectrum{1, true};
+    SpectrumComponent originalSpectrum{0, false};
+    SpectrumBackground specBackground;
 
     // Labels
     juce::Label hqLabel;

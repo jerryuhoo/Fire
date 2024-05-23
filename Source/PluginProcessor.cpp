@@ -1595,10 +1595,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     using PFloat = juce::AudioParameterFloat;
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { HQ_ID, versionNum }, HQ_NAME, false));
 
-    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID1, versionNum }, MODE_NAME1, 0, 11, 0));
-    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID2, versionNum }, MODE_NAME2, 0, 11, 0));
-    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID3, versionNum }, MODE_NAME3, 0, 11, 0));
-    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID4, versionNum }, MODE_NAME4, 0, 11, 0));
+    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID1, versionNum }, MODE_NAME1, 0, 11, 3));
+    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID2, versionNum }, MODE_NAME2, 0, 11, 3));
+    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID3, versionNum }, MODE_NAME3, 0, 11, 3));
+    parameters.push_back (std::make_unique<PInt> (juce::ParameterID { MODE_ID4, versionNum }, MODE_NAME4, 0, 11, 3));
 
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINKED_ID1, versionNum }, LINKED_NAME1, true));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINKED_ID2, versionNum }, LINKED_NAME2, true));

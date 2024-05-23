@@ -275,11 +275,11 @@ void FireAudioProcessorEditor::resized()
     float scaleMax = juce::jmax (getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
 
     // top bar
-    hqButton.setBounds (getHeight() / 10, 0, getHeight() / 10, getHeight() / 10);
+    hqButton.setBounds (getHeight() / 10.0f, 0, getHeight() / 10.0f, getHeight() / 10.0f);
     juce::Rectangle<int> area (getLocalBounds());
-    juce::Rectangle<int> topBar = area.removeFromTop (50 * getHeight() / INIT_HEIGHT);
-    topBar.removeFromLeft (100 * scaleMax);
-    topBar.removeFromRight (50 * scaleMax);
+    juce::Rectangle<int> topBar = area.removeFromTop (50.0f * getHeight() / INIT_HEIGHT);
+    topBar.removeFromLeft (100.0f * scaleMax);
+    topBar.removeFromRight (50.0f * scaleMax);
     stateComponent.setBounds (topBar);
 
     // spectrum and filter
@@ -302,49 +302,49 @@ void FireAudioProcessorEditor::resized()
         filterControl.setBounds (spectrumArea);
 
         // left and right window buttons
-        float windowHeight = getHeight() / 20;
+        float windowHeight = getHeight() / 20.0f;
         juce::Rectangle<int> leftWindowButtonArea = area.removeFromTop (windowHeight);
-        juce::Rectangle<int> rightWindowButtonArea = leftWindowButtonArea.removeFromRight (getWidth() / 2);
+        juce::Rectangle<int> rightWindowButtonArea = leftWindowButtonArea.removeFromRight (getWidth() / 2.0f);
         windowLeftButton.setBounds (leftWindowButtonArea);
         windowRightButton.setBounds (rightWindowButtonArea);
 
-        area.removeFromLeft (getWidth() / 20);
-        area.removeFromRight (getWidth() / 20);
+        area.removeFromLeft (getWidth() / 20.0f);
+        area.removeFromRight (getWidth() / 20.0f);
 
         juce::Rectangle<int> controlArea = area;
-        juce::Rectangle<int> controlAreaTop = area.removeFromTop (area.getHeight() / 5);
-        juce::Rectangle<int> controlAreaMid = area.removeFromTop (area.getHeight() / 4 * 3); // 3/4
+        juce::Rectangle<int> controlAreaTop = area.removeFromTop (area.getHeight() / 5.0f);
+        juce::Rectangle<int> controlAreaMid = area.removeFromTop (area.getHeight() / 4.0f * 3.0f); // 3/4
 
         // distortion menu
         //    controlAreaTop.removeFromLeft(getWidth() / 20); // x position
         juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft (OSC_WIDTH); // width
-        distortionModeArea.removeFromTop (controlAreaTop.getHeight() / 4);
-        distortionModeArea.removeFromBottom (controlAreaTop.getHeight() / 4);
+        distortionModeArea.removeFromTop (controlAreaTop.getHeight() / 4.0f);
+        distortionModeArea.removeFromBottom (controlAreaTop.getHeight() / 4.0f);
         distortionMode1.setBounds (distortionModeArea);
         distortionMode2.setBounds (distortionModeArea);
         distortionMode3.setBounds (distortionModeArea);
         distortionMode4.setBounds (distortionModeArea);
 
-        juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft (getWidth() / 7 * 2);
+        juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft (getWidth() / 7.0f * 2.0f);
 
         // Graph Panel
         graphPanel.setBounds (graphArea);
 
-        controlArea.removeFromLeft (getWidth() / 7 * 2);
+        controlArea.removeFromLeft (getWidth() / 7.0f * 2.0f);
         bandPanel.setBounds (controlArea);
         globalPanel.setBounds (controlAreaMid);
 
-        juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft (getWidth() / 7 * 2);
-        juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight (getWidth() / 7);
+        juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft (getWidth() / 7.0f * 2.0f);
+        juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight (getWidth() / 7.0f);
 
-        controlLeftKnobLeftArea.removeFromTop (controlLeftKnobLeftArea.getHeight() / 4);
-        controlLeftKnobLeftArea.removeFromBottom (controlLeftKnobLeftArea.getHeight() / 5);
+        controlLeftKnobLeftArea.removeFromTop (controlLeftKnobLeftArea.getHeight() / 4.0f);
+        controlLeftKnobLeftArea.removeFromBottom (controlLeftKnobLeftArea.getHeight() / 5.0f);
 
-        controlLeftKnobRightArea.removeFromTop (controlLeftKnobRightArea.getHeight() / 4);
-        controlLeftKnobRightArea.removeFromBottom (controlLeftKnobRightArea.getHeight() / 5);
+        controlLeftKnobRightArea.removeFromTop (controlLeftKnobRightArea.getHeight() / 4.0f);
+        controlLeftKnobRightArea.removeFromBottom (controlLeftKnobRightArea.getHeight() / 5.0f);
     }
     // Zoom button
-    zoomButton.setBounds (getWidth() - 30, multiband.getY() + multiband.getHeight() - 30, getHeight() / 25, getHeight() / 25);
+    zoomButton.setBounds (getWidth() - 30.0f * scale, multiband.getY() + multiband.getHeight() -  30.0f * scale, getHeight() / 25.0f, getHeight() / 25.0f);
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;

@@ -320,7 +320,7 @@ void FireAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     highpass3.prepare (spec);
 
     // limiter
-    limiterProcessorGlobal.prepare(spec);
+//    limiterProcessorGlobal.prepare(spec);
     
     // gain
     gainProcessor1.prepare (spec);
@@ -384,7 +384,7 @@ void FireAudioProcessor::reset()
     dryWetMixer2.reset();
     dryWetMixer3.reset();
     dryWetMixer4.reset();
-    limiterProcessorGlobal.reset();
+//    limiterProcessorGlobal.reset();
 }
 
 void FireAudioProcessor::releaseResources()
@@ -703,10 +703,10 @@ void FireAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
     auto globalBlock = juce::dsp::AudioBlock<float> (buffer);
     auto contextGlobal = juce::dsp::ProcessContextReplacing<float> (globalBlock);
     
-    if (*treeState.getRawParameterValue (LIMITER_BYPASS_ID))
-    {
-        processLimiter (contextGlobal, LIMITER_THRESH_ID, LIMITER_RELEASE_ID, limiterProcessorGlobal);
-    }
+//    if (*treeState.getRawParameterValue (LIMITER_BYPASS_ID))
+//    {
+//        processLimiter (contextGlobal, LIMITER_THRESH_ID, LIMITER_RELEASE_ID, limiterProcessorGlobal);
+//    }
     
     processGain (contextGlobal, OUTPUT_ID, gainProcessorGlobal);
 
@@ -1288,15 +1288,14 @@ void FireAudioProcessor::processCompressor (juce::dsp::ProcessContextReplacing<f
     compressor.process (context);
 }
 
-void FireAudioProcessor::processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor)
-{
-    float limiterThreshValue = *treeState.getRawParameterValue (limiterThreshID);
-    float limiterReleaseValue = *treeState.getRawParameterValue (limiterReleaseID);
-
-    limiterProcessor.setThreshold(-limiterThreshValue);
-    limiterProcessor.setRelease(limiterReleaseValue);
-    limiterProcessor.process (context);
-}
+//void FireAudioProcessor::processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor)
+//{
+//    float limiterThreshValue = *treeState.getRawParameterValue (limiterThreshID);
+//    float limiterReleaseValue = *treeState.getRawParameterValue (limiterReleaseID);
+//    limiterProcessor.setThreshold(-limiterThreshValue);
+//    limiterProcessor.setRelease(limiterReleaseValue);
+//    limiterProcessor.process (context);
+//}
 
 void FireAudioProcessor::processGain (juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor)
 {
@@ -1687,10 +1686,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { HIGH_ID, versionNum }, HIGH_NAME, true));
     
     parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { DOWNSAMPLE_ID, versionNum }, DOWNSAMPLE_NAME, juce::NormalisableRange<float> (1.0f, 64.0f, 0.01f), 1.0f));
-    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_THRESH_ID, versionNum }, LIMITER_THRESH_NAME, juce::NormalisableRange<float> (-24.0f, 0.0f, 0.1f), 0.0f));
-    juce::NormalisableRange<float> limiterReleaseRange (0.01f, 3000.0f, 0.01f);
-    limiterReleaseRange.setSkewForCentre (6.0f);
-    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_RELEASE_ID, versionNum }, LIMITER_RELEASE_NAME, limiterReleaseRange, 300.0f));
+//    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_THRESH_ID, versionNum }, LIMITER_THRESH_NAME, juce::NormalisableRange<float> (-24.0f, 0.0f, 0.1f), 0.0f));
+//    juce::NormalisableRange<float> limiterReleaseRange (0.01f, 3000.0f, 0.01f);
+//    limiterReleaseRange.setSkewForCentre (6.0f);
+//    parameters.push_back (std::make_unique<PFloat> (juce::ParameterID { LIMITER_RELEASE_ID, versionNum }, LIMITER_RELEASE_NAME, limiterReleaseRange, 300.0f));
 
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINE_STATE_ID1, versionNum }, LINE_STATE_NAME1, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LINE_STATE_ID2, versionNum }, LINE_STATE_NAME2, false));
@@ -1724,7 +1723,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { FILTER_BYPASS_ID, versionNum }, FILTER_BYPASS_NAME, false));
     parameters.push_back (std::make_unique<PBool> (juce::ParameterID { DOWNSAMPLE_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
-    parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LIMITER_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
+//    parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LIMITER_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
     
     return { parameters.begin(), parameters.end() };
 }

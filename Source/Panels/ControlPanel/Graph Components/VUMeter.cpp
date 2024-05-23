@@ -18,9 +18,13 @@ VUMeter::VUMeter(FireAudioProcessor* inProcessor)
 :   mProcessor(inProcessor),
     mIsInput(true),
     mCh0Level(0),
-    mCh1Level(0)
+    mCh1Level(0),
+    mMaxCh0Level(-96.0f),
+    mMaxCh1Level(-96.0f),
+    mMaxValueDecayCounter(0)
 {
     setInterceptsMouseClicks(false, false);
+    startTimerHz(60);
 }
 
 VUMeter::~VUMeter()
@@ -57,6 +61,7 @@ void VUMeter::paint (juce::Graphics& g)
         ch1fill = 0;
     }
     
+    // draw VU meter values
     g.setColour(juce::Colours::yellowgreen.withBrightness(0.9));
     
     if (mProcessor->getTotalNumInputChannels() == 2)
@@ -69,6 +74,21 @@ void VUMeter::paint (juce::Graphics& g)
         g.fillRect(meterWidth, ch0fill, meterWidth, getHeight());
     }
     
+    // draw max VU meter values
+    g.setColour(juce::Colours::yellowgreen.withBrightness(0.5));
+    int maxCh0fill = getHeight() - (getHeight() * mMaxCh0Level);
+    int maxCh1fill = getHeight() - (getHeight() * mMaxCh1Level);
+    
+    if (mProcessor->getTotalNumInputChannels() == 2)
+    {
+        g.drawLine(0, maxCh0fill, meterWidth, maxCh0fill, 2.0f);
+        g.drawLine(meterWidth * 2, maxCh1fill, meterWidth * 3, maxCh1fill, 2.0f);
+    }
+    else
+    {
+        g.drawLine(meterWidth, maxCh0fill, meterWidth * 2, maxCh0fill, 2.0f);
+    }
+    
 }
 
 void VUMeter::resized()
@@ -79,7 +99,6 @@ void VUMeter::setParameters(bool isInput, juce::String meterName)
 {
     mIsInput = isInput;
     mMeterName = meterName;
-    startTimerHz(30);
 }
 
 void VUMeter::timerCallback()
@@ -97,6 +116,10 @@ void VUMeter::timerCallback()
         updatedCh0Level = mProcessor->getOutputMeterRMSLevel(0, mMeterName);
         updatedCh1Level = mProcessor->getOutputMeterRMSLevel(1, mMeterName);
     }
+    
+    // update max values
+    mMaxCh0Level = juce::jmax(mMaxCh0Level, updatedCh0Level);
+    mMaxCh1Level = juce::jmax(mMaxCh1Level, updatedCh1Level);
     
     if (updatedCh0Level > mCh0Level)
     {
@@ -119,11 +142,26 @@ void VUMeter::timerCallback()
     mCh0Level = helper_denormalize(mCh0Level);
     mCh1Level = helper_denormalize(mCh1Level);
     
-    // repaint if not equal to 0
-    if (mCh0Level && mCh1Level)
+    // decay max values
+    if (mMaxCh0Level > mCh0Level || mMaxCh1Level > mCh1Level)
     {
-        repaint();
+        if (mMaxValueDecayCounter < MAX_VALUE_HOLD_FRAMES)
+        {
+            ++mMaxValueDecayCounter;
+        }
+        else
+        {
+            mMaxCh0Level -= 0.01f;
+            mMaxCh1Level -= 0.01f;
+        }
     }
+    else
+    {
+        mMaxValueDecayCounter = 0;
+    }
+    
+    repaint();
+    
 }
 
 float VUMeter::getLeftChannelLevel()

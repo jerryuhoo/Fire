@@ -78,8 +78,8 @@ private:
         peakFreqKnob,
         peakQKnob,
         peakGainKnob,
-        limiterThreshKnob,
-        limiterReleaseKnob,
+//        limiterThreshKnob,
+//        limiterReleaseKnob,
         mixKnob,
         outputKnob;
 
@@ -101,12 +101,12 @@ private:
         filterTypeLabel,
         lowcutSlopeLabel,
         highcutSlopeLabel,
-        limiterThreshLabel,
-        limiterReleaseLabel,
+//        limiterThreshLabel,
+//        limiterReleaseLabel,
     
         postFilterPanelLabel,
-        downSamplePanelLabel,
-        limiterPanelLabel;
+        downSamplePanelLabel;
+//        limiterPanelLabel;
 
     // Buttons
     juce::TextButton
@@ -120,19 +120,19 @@ private:
     // switches
     juce::ToggleButton
         filterSwitch,
-        downsampleSwitch,
-        limiterSwitch;
+        downsampleSwitch;
+//        limiterSwitch;
     
     // vectors for sliders
     juce::Array<juce::Component*>
         filterVector,
-        downsampleVector,
-        limiterVector;
+        downsampleVector;
+//        limiterVector;
 
     std::unique_ptr<juce::ToggleButton>
         filterBypassButton,
-        downsampleBypassButton,
-        limiterBypassButton;
+        downsampleBypassButton;
+//        limiterBypassButton;
 
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
@@ -159,9 +159,9 @@ private:
         highcutGainAttachment,
         peakFreqAttachment,
         peakQAttachment,
-        peakGainAttachment,
-        limiterThreshAttachment,
-        limiterReleaseAttachment;
+        peakGainAttachment;
+//        limiterThreshAttachment,
+//        limiterReleaseAttachment;
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
@@ -173,8 +173,8 @@ private:
         filterHighAttachment,
     
         filterBypassAttachment,
-        downsampleBypassAttachment,
-        limiterBypassAttachment;
+        downsampleBypassAttachment;
+//        limiterBypassAttachment;
 
     // ComboBox
     juce::ComboBox

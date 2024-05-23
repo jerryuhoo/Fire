@@ -37,33 +37,35 @@ void VUPanel::paint (juce::Graphics& g)
     
     // draw compressor threshold line
     g.setColour(KNOB_SUBFONT_COLOUR);
-    
-    juce::String threshID = "";
-    
+
     bool isGlobal = false;
     if (focusBandNum == 0)
     {
         vuMeterIn.setParameters(true, "Band1");
         vuMeterOut.setParameters(false, "Band1");
         threshID = COMP_THRESH_ID1;
+        compBypassID = COMP_BYPASS_ID1;
     }
     else if (focusBandNum == 1)
     {
         vuMeterIn.setParameters(true, "Band2");
         vuMeterOut.setParameters(false, "Band2");
         threshID = COMP_THRESH_ID2;
+        compBypassID = COMP_BYPASS_ID2;
     }
     else if (focusBandNum == 2)
     {
         vuMeterIn.setParameters(true, "Band3");
         vuMeterOut.setParameters(false, "Band3");
         threshID = COMP_THRESH_ID3;
+        compBypassID = COMP_BYPASS_ID3;
     }
     else if (focusBandNum == 3)
     {
         vuMeterIn.setParameters(true, "Band4");
         vuMeterOut.setParameters(false, "Band4");
         threshID = COMP_THRESH_ID4;
+        compBypassID = COMP_BYPASS_ID4;
     }
     else if (focusBandNum == -1)
     {
@@ -77,7 +79,7 @@ void VUPanel::paint (juce::Graphics& g)
     if (!isGlobal)
     {
         float threshValue = *(processor.treeState.getRawParameterValue(threshID));
-        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / 96.0f; // 96 is VU meter range
+        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / VU_METER_RANGE;
         float pointerX;
         if (processor.getTotalNumInputChannels() == 2)
         {
@@ -87,19 +89,23 @@ void VUPanel::paint (juce::Graphics& g)
         {
             pointerX = VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
         }
-        g.drawLine(pointerX, compressorLineY, pointerX - getWidth() / 20, compressorLineY - getHeight() / 20, 1);
-        g.drawLine(pointerX - getWidth() / 20, compressorLineY - getHeight() / 20, pointerX - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
-        g.drawLine(pointerX, compressorLineY, pointerX - getWidth() / 20, compressorLineY + getHeight() / 20, 1);
+        
+        bool compBypassState = *(processor.treeState.getRawParameterValue(compBypassID));
+        if (compBypassState) 
+        {
+            g.setColour(juce::Colours::yellowgreen);
+            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f, compressorLineY, pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f, compressorLineY, 1.0f);
+        }
     }
     
     if (mZoomState)
     {
         // show db meter scale text
         float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
-        float text20Y = VU_METER_Y + 20.0f / 96.0f * VU_METER_HEIGHT;
-        float text40Y = VU_METER_Y + 40.0f / 96.0f * VU_METER_HEIGHT;
-        float text60Y = VU_METER_Y + 60.0f / 96.0f * VU_METER_HEIGHT;
-        float text80Y = VU_METER_Y + 80.0f / 96.0f * VU_METER_HEIGHT;
+        float text20Y = VU_METER_Y + 20.0f / VU_METER_RANGE * VU_METER_HEIGHT;
+        float text40Y = VU_METER_Y + 40.0f / VU_METER_RANGE * VU_METER_HEIGHT;
+        float text60Y = VU_METER_Y + 60.0f / VU_METER_RANGE * VU_METER_HEIGHT;
+        float text80Y = VU_METER_Y + 80.0f / VU_METER_RANGE * VU_METER_HEIGHT;
         float textWidth = getWidth() / 5;
         float textHeight = getHeight() / 10;
 //        g.drawText("  0", textX, VU_METER_Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
@@ -111,14 +117,26 @@ void VUPanel::paint (juce::Graphics& g)
         
         // show input/output db
         g.setColour(juce::Colours::yellowgreen);
-        float inputValue = ((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) / 2.0f) * 96.0f - 96.0f;
-        float outputValue = ((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) / 2.0f) * 96.0f - 96.0f;
+        float inputValue = ((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) / 2.0f) * VU_METER_RANGE - VU_METER_RANGE;
+        float outputValue = ((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) / 2.0f) * VU_METER_RANGE - VU_METER_RANGE;
+        
+        if (updateCounter == 5)
+        {
+            displayInputValue = inputValue;
+            displayOutputValue = outputValue;
+            updateCounter = 0;
+        }
+        else
+        {
+            updateCounter++;
+        }
+        
         juce::Rectangle<int> localBounds = getLocalBounds();
         juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
         juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
         g.setFont(juce::Font(KNOB_FONT, 20.0f * getHeight() / 150.0f, juce::Font::bold));
-        g.drawText(juce::String(inputValue, 1), leftArea, juce::Justification::centred);
-        g.drawText(juce::String(outputValue, 1), rightArea, juce::Justification::centred);
+        g.drawText(juce::String(displayInputValue, 1), leftArea, juce::Justification::centred);
+        g.drawText(juce::String(displayOutputValue, 1), rightArea, juce::Justification::centred);
         
         g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
         g.setFont(juce::Font(KNOB_FONT, 14.0f * getHeight() / 150.0f, juce::Font::plain));

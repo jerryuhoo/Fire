@@ -83,12 +83,12 @@ public:
     state::StatePresets statePresets;
 
     // FFT
-    float* getFFTData();
+    float* getFFTData(int dataIndex);
     int getNumBins();
     int getFFTSize();
     bool isFFTBlockReady();
-    void pushDataToFFT();
-    void processFFT (float* tempFFTData);
+    void pushDataToFFT(juce::AudioBuffer<float>& buffer, SpectrumProcessor& specProcessor);
+    void processFFT (float* tempFFTData, int dataIndex);
 
     // save size
     void setSavedWidth (const int width);
@@ -129,7 +129,8 @@ private:
     int historyLength = 400;
 
     // Spectrum
-    SpectrumProcessor spectrum_processor;
+    SpectrumProcessor processedSpecProcessor;
+    SpectrumProcessor originalSpecProcessor;
 
     // dry audio buffer
     juce::AudioBuffer<float> mDryBuffer;
@@ -211,7 +212,7 @@ private:
     using DriveProcessor = juce::dsp::WaveShaper<float>;
     using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
-    using LimiterProcessor = juce::dsp::Limiter<float>;
+//    using LimiterProcessor = juce::dsp::Limiter<float>;
     using DryWetMixer = juce::dsp::DryWetMixer<float>;
 
     CompressorProcessor compressorProcessor1;
@@ -235,7 +236,7 @@ private:
     GainProcessor gainProcessor4;
     GainProcessor gainProcessorGlobal;
     
-    LimiterProcessor limiterProcessorGlobal;
+//    LimiterProcessor limiterProcessorGlobal;
 
     DryWetMixer dryWetMixer1 { 100 };
     DryWetMixer dryWetMixer2 { 100 };
@@ -295,7 +296,8 @@ private:
 
     void processDistortion (juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String extremeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, DCFilter& dcFilter);
 
-    void processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor);
+//    void processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor);
+
     void processGain (juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor);
 
     void processCompressor (juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, CompressorProcessor& compressor);

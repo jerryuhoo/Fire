@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="1.0.0.3" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="1.0.1" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1">
   <MAINGROUP id="X9e8F0" name="Fire">
@@ -33,6 +33,10 @@
           <FILE id="Cv5kLm" name="Multiband.h" compile="0" resource="0" file="Source/Panels/SpectrogramPanel/Multiband.h"/>
           <FILE id="n4qez7" name="SoloButton.cpp" compile="1" resource="0" file="Source/Panels/SpectrogramPanel/SoloButton.cpp"/>
           <FILE id="Pb8jAz" name="SoloButton.h" compile="0" resource="0" file="Source/Panels/SpectrogramPanel/SoloButton.h"/>
+          <FILE id="CeM277" name="SpectrumBackground.cpp" compile="1" resource="0"
+                file="Source/Panels/SpectrogramPanel/SpectrumBackground.cpp"/>
+          <FILE id="tuW7Zm" name="SpectrumBackground.h" compile="0" resource="0"
+                file="Source/Panels/SpectrogramPanel/SpectrumBackground.h"/>
           <FILE id="hDi6B8" name="SpectrumComponent.cpp" compile="1" resource="0"
                 file="Source/Panels/SpectrogramPanel/SpectrumComponent.cpp"/>
           <FILE id="DBAh4o" name="SpectrumComponent.h" compile="0" resource="0"

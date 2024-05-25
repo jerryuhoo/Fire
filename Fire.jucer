@@ -4,8 +4,16 @@
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
               version="1.0.1" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
-              addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1">
+              addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
+              pluginManufacturerCode="Wing" pluginCode="Fire">
   <MAINGROUP id="X9e8F0" name="Fire">
+    <GROUP id="{1F2CD48B-B61D-AF36-6422-79EF5DB875FF}" name="assets">
+      <GROUP id="{C0F63D30-4000-ACDE-A34A-16D94E9E277B}" name="images">
+        <FILE id="IePV5S" name="firelogo.png" compile="0" resource="1" file="assets/images/firelogo.png"/>
+        <FILE id="DLHWyX" name="firewingslogo.png" compile="0" resource="1"
+              file="assets/images/firewingslogo.png"/>
+      </GROUP>
+    </GROUP>
     <GROUP id="{F8056AAA-6B52-67D3-66EB-F3C43B781008}" name="Source">
       <GROUP id="{67559B1C-145F-DD2D-9DA6-CB95F2E0FD4E}" name="Panels">
         <GROUP id="{43790AD2-FCF5-17E2-2CA5-275101E55D0C}" name="SpectrogramPanel">
@@ -104,11 +112,6 @@
       <FILE id="MNKrsG" name="PluginEditor.cpp" compile="1" resource="0"
             file="Source/PluginEditor.cpp"/>
       <FILE id="O1QEz8" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
-    </GROUP>
-    <GROUP id="{4D5C8DFF-C673-563C-6FBC-4675C99EB0D9}" name="Resource">
-      <FILE id="PKaoeP" name="firelogo.png" compile="0" resource="1" file="resource/firelogo.png"/>
-      <FILE id="jlLL06" name="firewingslogo.png" compile="0" resource="1"
-            file="resource/firewingslogo.png"/>
     </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>

@@ -8,7 +8,6 @@
   ==============================================================================
 */
 
-
 #include "WidthProcessor.h"
 
 WidthProcessor::WidthProcessor()

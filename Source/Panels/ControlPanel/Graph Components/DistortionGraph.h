@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
 #include "../../../GUI/LookAndFeel.h"
 #include "../../../DSP/ClippingFunctions.h"

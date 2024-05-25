@@ -8,7 +8,6 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
 #include "FilterControl.h"
 #include "../../GUI/InterfaceDefines.h"
 

@@ -12,7 +12,6 @@
 
 #include "../../../PluginProcessor.h"
 #include "GraphTemplate.h"
-#include <JuceHeader.h>
 
 //==============================================================================
 /*

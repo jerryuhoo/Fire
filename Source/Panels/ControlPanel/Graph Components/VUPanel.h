@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "../../../PluginProcessor.h"
 #include "VUMeter.h"
 #include "GraphTemplate.h"

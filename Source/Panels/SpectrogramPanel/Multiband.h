@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "SpectrumComponent.h"
 #include "SoloButton.h"
 #include "EnableButton.h"

@@ -5,7 +5,7 @@
               version="1.0.1" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
-              pluginManufacturerCode="Wing" pluginCode="Fire">
+              pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0">
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{1F2CD48B-B61D-AF36-6422-79EF5DB875FF}" name="assets">
       <GROUP id="{C0F63D30-4000-ACDE-A34A-16D94E9E277B}" name="images">

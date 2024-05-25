@@ -9,7 +9,6 @@
 */
 
 #include "Oscilloscope.h"
-#include <JuceHeader.h>
 
 //==============================================================================
 Oscilloscope::Oscilloscope (FireAudioProcessor& p) : processor (p)

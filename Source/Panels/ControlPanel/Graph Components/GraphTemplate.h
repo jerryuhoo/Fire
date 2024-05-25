@@ -11,7 +11,7 @@
 #pragma once
 
 #include "../../../GUI/InterfaceDefines.h"
-#include <JuceHeader.h>
+#include "juce_gui_basics/juce_gui_basics.h"
 
 //==============================================================================
 /*

@@ -10,10 +10,8 @@
 
 #pragma once
 
-#include <JuceHeader.h>
 #include "FreqTextLabel.h"
 #include "VerticalLine.h"
-
 #include "../../PluginProcessor.h"
 //==============================================================================
 /*

@@ -10,6 +10,8 @@
 #pragma once
 
 #include "InterfaceDefines.h"
+#include "juce_graphics/juce_graphics.h"
+#include "juce_gui_basics/juce_gui_basics.h"
 
 #if ! JUCE_MAC
     #define M_PI 3.1415926

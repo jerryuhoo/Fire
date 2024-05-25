@@ -9,7 +9,6 @@
 */
 
 #include "DistortionGraph.h"
-#include <JuceHeader.h>
 
 //==============================================================================
 DistortionGraph::DistortionGraph (FireAudioProcessor& p) : processor (p)

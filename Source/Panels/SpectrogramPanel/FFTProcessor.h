@@ -7,8 +7,9 @@
 
   ==============================================================================
 */
-#include <JuceHeader.h>
+
 #pragma once
+#include "juce_dsp/juce_dsp.h"
 
 class SpectrumProcessor
 {

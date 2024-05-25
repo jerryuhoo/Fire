@@ -8,7 +8,6 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
 #include "VUMeter.h"
 #include "../../../GUI/InterfaceDefines.h"
 #include "../../../Utility/AudioHelpers.h"

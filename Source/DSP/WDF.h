@@ -2,7 +2,7 @@
 #ifndef __WDF_H_974CDD6D__
 #define __WDF_H_974CDD6D__
 //==============================================================================
-#include <JuceHeader.h>
+
 //==============================================================================
 // reference from https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227
 class WDF

@@ -15,7 +15,6 @@
 #include "Oscilloscope.h"
 #include "VUPanel.h"
 #include "WidthGraph.h"
-#include <JuceHeader.h>
 
 //==============================================================================
 /*

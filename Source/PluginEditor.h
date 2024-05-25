@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include <JuceHeader.h>
+#include "BinaryData.h"
 #include "GUI/LookAndFeel.h"
 #include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
 #include "Panels/ControlPanel/Graph Components/DistortionGraph.h"

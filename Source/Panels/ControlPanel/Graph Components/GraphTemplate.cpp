@@ -9,7 +9,6 @@
 */
 
 #include "GraphTemplate.h"
-#include <JuceHeader.h>
 
 //==============================================================================
 GraphTemplate::GraphTemplate()

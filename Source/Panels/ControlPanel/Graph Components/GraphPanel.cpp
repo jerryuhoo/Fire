@@ -9,7 +9,6 @@
 */
 
 #include "GraphPanel.h"
-#include <JuceHeader.h>
 
 //==============================================================================
 GraphPanel::GraphPanel (FireAudioProcessor& p) : processor (p)

@@ -8,7 +8,6 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
 #include "VerticalLine.h"
 #include "Multiband.h"
 

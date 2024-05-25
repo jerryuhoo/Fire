@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+    branches:
+      - main
+      - next
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 3 # Use up to 3 cpus to build juceaide, etc
+
+concurrency:
+  group: ${{ github.workflow }}.${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+
+  BuildAndTest:
+    name: ${{ matrix.os }} ${{ matrix.app }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [ member_enabled, member_disabled, unique_ptr_enabled, unique_ptr_disabled ]
+        os: [ macos-latest, windows-latest, ubuntu-latest ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Install Linux Deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt install libasound2-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev libfreetype6-dev libglu1-mesa-dev libjack-jackd2-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 9
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 9
+
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+
+      - name: Configure
+        run: cmake -B Builds -DTARGET_NAME:STRING=${{ matrix.app }}
+
+      - name: Build
+        run: cmake --build Builds --parallel 4
+
+      - name: Run
+        if: ${{ matrix.os == 'macos-latest' }}
+        working-directory: Builds/${{ matrix.app }}_artefacts
+        timeout-minutes: 2
+        run: |
+          ls -ahl
+          ${{ matrix.app }}.app/Contents/MacOS/${{ matrix.app }} &
+
+      - name: Run
+        if: ${{ matrix.os == 'windows-latest' }}
+        working-directory: Builds/${{ matrix.app }}_artefacts
+        timeout-minutes: 2
+        run: |
+          ls -ahl
+          ./Debug/${{ matrix.app }}.exe &
+
+      - uses: OrbitalOwen/desktop-screenshot-action@0.1
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          file-name: ${{ matrix.os }}-${{matrix.app}}.jpg

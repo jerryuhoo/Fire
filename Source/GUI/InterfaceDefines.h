@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include "../../JuceLibraryCode/JucePluginDefines.h"
+//#include "../../JuceLibraryCode/JucePluginDefines.h"
 
-#define VERSION             JucePlugin_VersionString
+#define VERSION             "1.0.1"
 #define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION   ".fire"

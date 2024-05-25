@@ -25,7 +25,7 @@
 
 #pragma once
 #include "juce_core/juce_core.h"
-#include "JuceHeader.h"
+#include "../GUI/InterfaceDefines.h"
 
 //==============================================================================
 class VersionInfo

@@ -13,6 +13,7 @@
 #define STATE_H_INCLUDED
 
 #include "juce_gui_basics/juce_gui_basics.h"
+#include "juce_audio_processors/juce_audio_processors.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../../Utility/VersionInfo.h"
 #include "../../GUI/InterfaceDefines.h"

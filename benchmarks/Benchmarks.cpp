@@ -8,7 +8,7 @@ TEST_CASE ("Boot performance")
     (Catch::Benchmark::Chronometer meter)
     {
         auto gui = juce::ScopedJuceInitialiser_GUI {};
-        std::vector<Catch::Benchmark::storage_for<PluginProcessor>> storage (size_t (meter.runs()));
+        std::vector<Catch::Benchmark::storage_for<FireAudioProcessor>> storage (size_t (meter.runs()));
         meter.measure ([&] (int i) { storage[(size_t) i].construct(); });
     };
 
@@ -16,7 +16,7 @@ TEST_CASE ("Boot performance")
     (Catch::Benchmark::Chronometer meter)
     {
         auto gui = juce::ScopedJuceInitialiser_GUI {};
-        std::vector<Catch::Benchmark::destructable_object<PluginProcessor>> storage (size_t (meter.runs()));
+        std::vector<Catch::Benchmark::destructable_object<FireAudioProcessor>> storage (size_t (meter.runs()));
         for (auto& s : storage)
             s.construct();
         meter.measure ([&] (int i) { storage[(size_t) i].destruct(); });
@@ -27,7 +27,7 @@ TEST_CASE ("Boot performance")
     {
         auto gui = juce::ScopedJuceInitialiser_GUI {};
 
-        PluginProcessor plugin;
+        FireAudioProcessor plugin;
 
         // due to complex construction logic of the editor, let's measure open/close together
         meter.measure ([&] (int /* i */) {

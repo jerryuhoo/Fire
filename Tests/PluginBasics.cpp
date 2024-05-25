@@ -10,7 +10,7 @@ TEST_CASE ("one is equal to one", "[dummy]")
 
 TEST_CASE ("Plugin instance", "[instance]")
 {
-    PluginProcessor testPlugin;
+    FireAudioProcessor testPlugin;
 
     // This lets us use JUCE's MessageManager without leaking.
     // PluginProcessor might need this if you use the APVTS for example.
@@ -20,7 +20,7 @@ TEST_CASE ("Plugin instance", "[instance]")
     SECTION ("name")
     {
         CHECK_THAT (testPlugin.getName().toStdString(),
-            Catch::Matchers::Equals ("Pamplejuce Demo"));
+            Catch::Matchers::Equals ("Fire"));
     }
 }
 

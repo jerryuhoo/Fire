@@ -19,9 +19,9 @@
    });
 
  */
-[[maybe_unused]] void runWithinPluginEditor (const std::function<void (PluginProcessor& plugin)>& testCode)
+[[maybe_unused]] void runWithinPluginEditor (const std::function<void (FireAudioProcessor& plugin)>& testCode)
 {
-    PluginProcessor plugin;
+    FireAudioProcessor plugin;
     auto gui = juce::ScopedJuceInitialiser_GUI {};
     auto editor = plugin.createEditorIfNeeded();
 

@@ -31,7 +31,7 @@ set(BUNDLE_ID "com.WingsDSP.Fire")
 
 # Change me! Set the plugin formats you want built
 # Valid choices: AAX Unity VST VST3 AU AUv3 Standalone
-set(FORMATS Standalone AU VST3 AUv3)
+set(FORMATS Standalone AU VST3 AUv3 LV2)
 
 # For simplicity, the name of the CMake project is also the name of the target
 project(${PROJECT_NAME} VERSION ${CURRENT_VERSION})
@@ -73,6 +73,8 @@ juce_add_plugin("${PROJECT_NAME}"
     # Note: this must have at least one upper-case character
     PLUGIN_CODE Fire
     FORMATS "${FORMATS}"
+
+    LV2URI "https://jerryuhoo.github.io/Fire"
 
     # The name of your final executable
     # This is how it's listed in the DAW

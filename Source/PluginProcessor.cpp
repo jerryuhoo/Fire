@@ -56,8 +56,7 @@ FireAudioProcessor::FireAudioProcessor()
     // factor = 2 means 2^2 = 4, 4x oversampling
     for (size_t i = 0; i < 4; i++)
     {
-        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels());
-        oversamplingHQ[i].reset(new juce::dsp::Oversampling<float>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false));
+        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     }
 
     // check update
@@ -319,6 +318,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     highpass2.prepare(spec);
     highpass3.prepare(spec);
 
+    compensatorLP.prepare(spec);
+    compensatorHP.prepare(spec);
+
     // limiter
     //    limiterProcessorGlobal.prepare(spec);
 
@@ -375,6 +377,8 @@ void FireAudioProcessor::reset()
     highpass1.reset();
     highpass2.reset();
     highpass3.reset();
+    compensatorLP.reset();
+    compensatorHP.reset();
     compressorProcessor1.reset();
     compressorProcessor2.reset();
     compressorProcessor3.reset();
@@ -447,214 +451,199 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
 
-    // VU input meter
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
+    mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
 
-    juce::dsp::AudioBlock<float> block(buffer);
-    // pre-filter
-    //    bool preButton = static_cast<bool>(*treeState.getRawParameterValue(PRE_ID));
-    //    if (preButton)
-    //    {
-    //filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
-    //        updateFilter();
-    //    }
+    // ======================== FINAL TREE-BASED ARCHITECTURE ========================
 
-    // multiband process
-    int freqValue1 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID1));
-    int freqValue2 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID2));
-    int freqValue3 = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID3));
-
-    // Get the number of BANDS from our new parameter (thread-safe).
+    // 1. GET PARAMETERS & SORT FREQUENCIES
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
-    // Derive the number of LINES for the processing logic below.
     int lineNum = numBands - 1;
 
-    // sort freq
     std::array<int, 3> freqArray = { 0, 0, 0 };
     int activeLineCount = 0;
     if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID1)))
-        freqArray[activeLineCount++] = freqValue1;
+        freqArray[activeLineCount++] = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID1));
     if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID2)))
-        freqArray[activeLineCount++] = freqValue2;
+        freqArray[activeLineCount++] = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID2));
     if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID3)))
-        freqArray[activeLineCount++] = freqValue3;
-
-    // We still sort the frequencies to pass the correct ones to the filters.
+        freqArray[activeLineCount++] = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID3));
     std::sort(freqArray.begin(), freqArray.begin() + activeLineCount);
 
-    freqValue1 = freqArray[0];
-    freqValue2 = freqArray[1];
-    freqValue3 = freqArray[2];
+    int freqValue1 = freqArray[0];
+    int freqValue2 = freqArray[1];
+    int freqValue3 = freqArray[2];
 
+    // 2. SET UP FILTERS
+    lowpass1.setCutoffFrequency(freqValue1);
+    highpass1.setCutoffFrequency(freqValue1);
+    lowpass2.setCutoffFrequency(freqValue2);
+    highpass2.setCutoffFrequency(freqValue2);
+    lowpass3.setCutoffFrequency(freqValue3);
+    highpass3.setCutoffFrequency(freqValue3);
+
+    // Set up the all-pass coefficients for 3-band compensation
+    if (lineNum == 2)
+    {
+        compensatorLP.setCutoffFrequency(freqValue1);
+        compensatorHP.setCutoffFrequency(freqValue1);
+    }
+
+    // 3. PREPARE BUFFERS
     auto numSamples = buffer.getNumSamples();
-    mBuffer1.makeCopyOf(buffer);
-    mBuffer2.makeCopyOf(buffer);
-    mBuffer3.makeCopyOf(buffer);
-    mBuffer4.makeCopyOf(buffer);
+    mBuffer1.setSize(totalNumOutputChannels, numSamples, false, false, true);
+    mBuffer2.setSize(totalNumOutputChannels, numSamples, false, false, true);
+    mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
+    mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
+    // 4. TREE-BASED SIGNAL SPLITTING
+    if (lineNum == 0)
+    { // 1 Band: No splitting
+        mBuffer1.makeCopyOf(buffer);
+    }
+    else if (lineNum == 1)
+    { // 2 Bands: One split
+        mBuffer1.makeCopyOf(buffer);
+        mBuffer2.makeCopyOf(buffer);
+
+        auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
+        auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
+        lowpass1.process(context1);
+
+        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+        highpass1.process(context2);
+    }
+    else if (lineNum == 2)
+    { // 3 Bands: Asymmetric tree with Dummy Filter compensation
+        juce::AudioBuffer<float> highPassBuffer(totalNumOutputChannels, numSamples);
+        juce::AudioBuffer<float> compensatorHighBuffer(totalNumOutputChannels, numSamples);
+
+        mBuffer1.makeCopyOf(buffer);
+        highPassBuffer.makeCopyOf(buffer);
+
+        // Compensator Path for Band 1 to match group delay
+        compensatorHighBuffer.makeCopyOf(mBuffer1);
+
+        auto compLpBlock = juce::dsp::AudioBlock<float>(mBuffer1);
+        auto compLpContext = juce::dsp::ProcessContextReplacing<float>(compLpBlock);
+        compensatorLP.process(compLpContext);
+
+        auto compHpBlock = juce::dsp::AudioBlock<float>(compensatorHighBuffer);
+        auto compHpContext = juce::dsp::ProcessContextReplacing<float>(compHpBlock);
+        compensatorHP.process(compHpContext);
+
+        // Real Split Path for Band 2 and 3
+        auto highPassBlock = juce::dsp::AudioBlock<float>(highPassBuffer);
+        auto highPassContext = juce::dsp::ProcessContextReplacing<float>(highPassBlock);
+        highpass1.process(highPassContext);
+
+        mBuffer2.makeCopyOf(highPassBuffer);
+        mBuffer3.makeCopyOf(highPassBuffer);
+
+        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+        lowpass2.process(context2);
+
+        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+        highpass2.process(context3);
+    }
+    else if (lineNum == 3)
+    { // 4 Bands: Symmetric tree
+        juce::AudioBuffer<float> lowMidBuffer(totalNumOutputChannels, numSamples);
+        juce::AudioBuffer<float> highMidBuffer(totalNumOutputChannels, numSamples);
+        lowMidBuffer.makeCopyOf(buffer);
+        highMidBuffer.makeCopyOf(buffer);
+
+        auto lowMidBlock = juce::dsp::AudioBlock<float>(lowMidBuffer);
+        auto highMidBlock = juce::dsp::AudioBlock<float>(highMidBuffer);
+        auto lowMidContext = juce::dsp::ProcessContextReplacing<float>(lowMidBlock);
+        auto highMidContext = juce::dsp::ProcessContextReplacing<float>(highMidBlock);
+
+        lowpass2.setCutoffFrequency(freqValue2); // Use middle frequency for first split
+        highpass2.setCutoffFrequency(freqValue2);
+        lowpass2.process(lowMidContext);
+        highpass2.process(highMidContext);
+
+        mBuffer1.makeCopyOf(lowMidBuffer);
+        mBuffer2.makeCopyOf(lowMidBuffer);
+        auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
+        auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
+        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+        lowpass1.process(context1);
+        highpass1.process(context2);
+
+        mBuffer3.makeCopyOf(highMidBuffer);
+        mBuffer4.makeCopyOf(highMidBuffer);
+        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+        auto block4 = juce::dsp::AudioBlock<float>(mBuffer4);
+        auto context4 = juce::dsp::ProcessContextReplacing<float>(block4);
+        lowpass3.process(context3);
+        highpass3.process(context4);
+    }
+
+    // 5. PROCESS INDIVIDUAL BANDS
     multibandEnable1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
     multibandEnable2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
     multibandEnable3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
     multibandEnable4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
 
+    if (multibandEnable1)
+    {
+        auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
+        auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
+        processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, EXTREME_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, totalNumInputChannels, recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1, dcFilter1, WIDTH_BYPASS_ID1, COMP_BYPASS_ID1);
+    }
+    if (lineNum >= 1 && multibandEnable2)
+    {
+        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+        processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, EXTREME_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, totalNumInputChannels, recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2, dcFilter2, WIDTH_BYPASS_ID2, COMP_BYPASS_ID2);
+    }
+    if (lineNum >= 2 && multibandEnable3)
+    {
+        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+        processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, EXTREME_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, totalNumInputChannels, recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3, dcFilter3, WIDTH_BYPASS_ID3, COMP_BYPASS_ID3);
+    }
+    if (lineNum >= 3 && multibandEnable4)
+    {
+        auto block4 = juce::dsp::AudioBlock<float>(mBuffer4);
+        auto context4 = juce::dsp::ProcessContextReplacing<float>(block4);
+        processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, EXTREME_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4, dcFilter4, WIDTH_BYPASS_ID4, COMP_BYPASS_ID4);
+    }
+
+    // 6. SUM THE PROCESSED BANDS
+    buffer.clear();
     multibandSolo1 = *treeState.getRawParameterValue(BAND_SOLO_ID1);
     multibandSolo2 = *treeState.getRawParameterValue(BAND_SOLO_ID2);
     multibandSolo3 = *treeState.getRawParameterValue(BAND_SOLO_ID3);
     multibandSolo4 = *treeState.getRawParameterValue(BAND_SOLO_ID4);
 
-    // set channels
-    int leftChannelId;
-    int rightChannelId;
-    if (totalNumInputChannels == 2)
+    for (int i = 0; i < numBands; ++i)
     {
-        leftChannelId = 0;
-        rightChannelId = 1;
-    }
-    else
-    {
-        leftChannelId = 0;
-        rightChannelId = 0;
-    }
-
-    if (lineNum >= 0)
-    {
-        auto multibandBlock1 = juce::dsp::AudioBlock<float>(mBuffer1);
-        auto context1 = juce::dsp::ProcessContextReplacing<float>(multibandBlock1);
-
-        if (lineNum > 0)
+        if (! shouldSetBlackMask(i))
         {
-            lowpass1.setCutoffFrequency(freqValue1);
-            lowpass1.process(context1);
+            juce::AudioBuffer<float>* bandBuffer = nullptr;
+            if (i == 0)
+                bandBuffer = &mBuffer1;
+            else if (i == 1)
+                bandBuffer = &mBuffer2;
+            else if (i == 2)
+                bandBuffer = &mBuffer3;
+            else if (i == 3)
+                bandBuffer = &mBuffer4;
+
+            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                buffer.addFrom(channel, 0, *bandBuffer, channel, 0, numSamples);
         }
-
-        mDryBuffer.makeCopyOf(mBuffer1);
-
-        setLeftRightMeterRMSValues(mBuffer1, mInputLeftSmoothedBand1, mInputRightSmoothedBand1);
-
-        if (multibandEnable1)
-        {
-            processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, EXTREME_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, totalNumInputChannels, recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1, dcFilter1, WIDTH_BYPASS_ID1, COMP_BYPASS_ID1);
-        }
-
-        setLeftRightMeterRMSValues(mBuffer1, mOutputLeftSmoothedBand1, mOutputRightSmoothedBand1);
     }
 
-    if (lineNum >= 1)
-    {
-        auto multibandBlock2 = juce::dsp::AudioBlock<float>(mBuffer2);
-        auto context2 = juce::dsp::ProcessContextReplacing<float>(multibandBlock2);
-        highpass1.setCutoffFrequency(freqValue1);
-        highpass1.process(context2);
-
-        if (lineNum > 1)
-        {
-            lowpass2.setCutoffFrequency(freqValue2);
-            lowpass2.process(context2);
-        }
-
-        mDryBuffer.addFrom(leftChannelId, 0, mBuffer2, leftChannelId, 0, numSamples);
-        mDryBuffer.addFrom(rightChannelId, 0, mBuffer2, rightChannelId, 0, numSamples);
-
-        setLeftRightMeterRMSValues(mBuffer2, mInputLeftSmoothedBand2, mInputRightSmoothedBand2);
-
-        if (multibandEnable2)
-        {
-            processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, EXTREME_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, totalNumInputChannels, recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2, dcFilter2, WIDTH_BYPASS_ID2, COMP_BYPASS_ID2);
-        }
-
-        setLeftRightMeterRMSValues(mBuffer2, mOutputLeftSmoothedBand2, mOutputRightSmoothedBand2);
-    }
-
-    if (lineNum >= 2)
-    {
-        auto multibandBlock3 = juce::dsp::AudioBlock<float>(mBuffer3);
-        auto context3 = juce::dsp::ProcessContextReplacing<float>(multibandBlock3);
-        highpass2.setCutoffFrequency(freqValue2);
-        highpass2.process(context3);
-
-        if (lineNum > 2)
-        {
-            lowpass3.setCutoffFrequency(freqValue3);
-            lowpass3.process(context3);
-        }
-
-        mDryBuffer.addFrom(leftChannelId, 0, mBuffer3, leftChannelId, 0, numSamples);
-        mDryBuffer.addFrom(rightChannelId, 0, mBuffer3, rightChannelId, 0, numSamples);
-
-        setLeftRightMeterRMSValues(mBuffer3, mInputLeftSmoothedBand3, mInputRightSmoothedBand3);
-
-        if (multibandEnable3)
-        {
-            processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, EXTREME_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, totalNumInputChannels, recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3, dcFilter3, WIDTH_BYPASS_ID3, COMP_BYPASS_ID3);
-        }
-
-        setLeftRightMeterRMSValues(mBuffer3, mOutputLeftSmoothedBand3, mOutputRightSmoothedBand3);
-    }
-
-    if (lineNum == 3)
-    {
-        auto multibandBlock4 = juce::dsp::AudioBlock<float>(mBuffer4);
-        auto context4 = juce::dsp::ProcessContextReplacing<float>(multibandBlock4);
-        highpass3.setCutoffFrequency(freqValue3);
-        highpass3.process(context4);
-
-        setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
-
-        mDryBuffer.addFrom(leftChannelId, 0, mBuffer4, leftChannelId, 0, numSamples);
-        mDryBuffer.addFrom(rightChannelId, 0, mBuffer4, rightChannelId, 0, numSamples);
-
-        if (multibandEnable4)
-        {
-            processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, EXTREME_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4, dcFilter4, WIDTH_BYPASS_ID4, COMP_BYPASS_ID4);
-        }
-
-        setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
-    }
-
-    // set latency if all enable buttons are on, else set to 0
-    if (lineNum == 0 && ! multibandEnable1)
-    {
-        mLatency = 0;
-        setLatencySamples(mLatency);
-    }
-    if (lineNum == 1 && ! multibandEnable1 && ! multibandEnable2)
-    {
-        mLatency = 0;
-        setLatencySamples(mLatency);
-    }
-    if (lineNum == 2 && ! multibandEnable1 && ! multibandEnable2 && ! multibandEnable3)
-    {
-        mLatency = 0;
-        setLatencySamples(mLatency);
-    }
-    if (lineNum == 3 && ! multibandEnable1 && ! multibandEnable2 && ! multibandEnable3 && ! multibandEnable4)
-    {
-        mLatency = 0;
-        setLatencySamples(mLatency);
-    }
-
-    buffer.clear();
-
-    if (! shouldSetBlackMask(0))
-    {
-        buffer.addFrom(leftChannelId, 0, mBuffer1, leftChannelId, 0, numSamples);
-        buffer.addFrom(rightChannelId, 0, mBuffer1, rightChannelId, 0, numSamples);
-    }
-    if (! shouldSetBlackMask(1) && lineNum >= 1)
-    {
-        buffer.addFrom(leftChannelId, 0, mBuffer2, leftChannelId, 0, numSamples);
-        buffer.addFrom(rightChannelId, 0, mBuffer2, rightChannelId, 0, numSamples);
-    }
-    if (! shouldSetBlackMask(2) && lineNum >= 2)
-    {
-        buffer.addFrom(leftChannelId, 0, mBuffer3, leftChannelId, 0, numSamples);
-        buffer.addFrom(rightChannelId, 0, mBuffer3, rightChannelId, 0, numSamples);
-    }
-    if (! shouldSetBlackMask(3) && lineNum == 3)
-    {
-        buffer.addFrom(leftChannelId, 0, mBuffer4, leftChannelId, 0, numSamples);
-        buffer.addFrom(rightChannelId, 0, mBuffer4, rightChannelId, 0, numSamples);
-    }
+    // 7. GLOBAL PROCESSING (Your existing logic, unchanged)
+    juce::dsp::AudioBlock<float> globalBlock(buffer);
 
     // downsample
     if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
@@ -665,7 +654,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             auto* channelData = buffer.getWritePointer(channel);
             for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
             {
-                //int rateDivide = (distortionProcessor.controls.drive - 1) / 63.f * 99.f + 1; //range(1,100)
                 if (rateDivide > 1)
                 {
                     if (sample % rateDivide != 0)
@@ -675,43 +663,23 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
     }
 
+    // global filter
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
     {
         updateFilter();
-        auto leftBlock = block.getSingleChannelBlock(leftChannelId);
-        auto rightBlock = block.getSingleChannelBlock(rightChannelId);
+        auto leftBlock = globalBlock.getSingleChannelBlock(0);
+        auto rightBlock = globalBlock.getSingleChannelBlock(totalNumOutputChannels > 1 ? 1 : 0);
         leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
         rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
     }
-    //post-filter
-    //    bool postButton = *treeState.getRawParameterValue(POST_ID);
-    //    if (postButton)
-    //    {
-    //filterIIR.process(juce::dsp::ProcessContextReplacing<float>(block));
-    //        mainChain.process(juce::dsp::ProcessContextReplacing<float>(block));
-    //        updateFilter();
-    //    }
 
-    //    float mix = *treeState.getRawParameterValue(MIX_ID);
-    //    mixSmootherGlobal.setTargetValue(mix);
-    //
-    //    float output = juce::Decibels::decibelsToGain((float)*treeState.getRawParameterValue(OUTPUT_ID));
-    //    outputSmootherGlobal.setTargetValue(output);
+    // global gain
+    processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
 
-    // global process
-    auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
-    auto contextGlobal = juce::dsp::ProcessContextReplacing<float>(globalBlock);
-
-    //    if (*treeState.getRawParameterValue (LIMITER_BYPASS_ID))
-    //    {
-    //        processLimiter (contextGlobal, LIMITER_THRESH_ID, LIMITER_RELEASE_ID, limiterProcessorGlobal);
-    //    }
-
-    processGain(contextGlobal, OUTPUT_ID, gainProcessorGlobal);
-
-    // mix dry wet
+    // global mix dry wet
     mixDryWet(mDryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
 
+    // 8. FINAL OUTPUT STAGES
     // Spectrum
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);

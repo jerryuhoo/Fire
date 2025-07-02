@@ -33,16 +33,16 @@ public:
     ~FireAudioProcessor();
 
     //==============================================================================
-    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     void reset() override;
 #ifndef JucePlugin_PreferredChannelConfigurations
-    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+    bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
 #endif
 
-    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
-    void processBlockBypassed (juce::AudioBuffer<float>& buffer,
-                               juce::MidiBuffer& midiMessages) override;
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed(juce::AudioBuffer<float>& buffer,
+                              juce::MidiBuffer& midiMessages) override;
     //==============================================================================
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;
@@ -58,23 +58,23 @@ public:
     //==============================================================================
     int getNumPrograms() override;
     int getCurrentProgram() override;
-    void setCurrentProgram (int index) override;
-    const juce::String getProgramName (int index) override;
-    void changeProgramName (int index, const juce::String& newName) override;
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
+    void changeProgramName(int index, const juce::String& newName) override;
 
     //==============================================================================
-    void getStateInformation (juce::MemoryBlock& destData) override;
-    void setStateInformation (const void* data, int sizeInBytes) override;
+    void getStateInformation(juce::MemoryBlock& destData) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
 
     // filter
     void updateFilter();
 
-    bool isSlient (juce::AudioBuffer<float> buffer);
+    bool isSlient(juce::AudioBuffer<float> buffer);
 
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
-    void setHistoryArray (int bandIndex);
+    void setHistoryArray(int bandIndex);
     juce::Array<float> getHistoryArrayL();
     juce::Array<float> getHistoryArrayR();
 
@@ -88,11 +88,11 @@ public:
     int getFFTSize();
     bool isFFTBlockReady();
     void pushDataToFFT(juce::AudioBuffer<float>& buffer, SpectrumProcessor& specProcessor);
-    void processFFT (float* tempFFTData, int dataIndex);
+    void processFFT(float* tempFFTData, int dataIndex);
 
     // save size
-    void setSavedWidth (const int width);
-    void setSavedHeight (const int height);
+    void setSavedWidth(const int width);
+    void setSavedHeight(const int height);
     int getSavedWidth() const;
     int getSavedHeight() const;
 
@@ -100,16 +100,16 @@ public:
     bool getBypassedState();
 
     // VU meters
-    float getInputMeterRMSLevel (int channel, juce::String bandName);
-    float getOutputMeterRMSLevel (int channel, juce::String bandName);
+    float getInputMeterRMSLevel(int channel, juce::String bandName);
+    float getOutputMeterRMSLevel(int channel, juce::String bandName);
 
     // drive lookandfeel
-    float getReductionPrecent (juce::String safeId);
-    void setReductionPrecent (juce::String safeId, float reductionPrecent);
-    float getSampleMaxValue (juce::String safeId);
-    void setSampleMaxValue (juce::String safeId, float sampleMaxValue);
+    float getReductionPrecent(juce::String safeId);
+    void setReductionPrecent(juce::String safeId, float reductionPrecent);
+    float getSampleMaxValue(juce::String safeId);
+    void setSampleMaxValue(juce::String safeId, float sampleMaxValue);
 
-    float safeMode (float drive, juce::AudioBuffer<float>& buffer, juce::String safeID);
+    float safeMode(float drive, juce::AudioBuffer<float>& buffer, juce::String safeID);
 
 private:
     //==============================================================================
@@ -135,9 +135,9 @@ private:
     MonoChain leftChain;
     MonoChain rightChain;
 
-    void updateLowCutFilters (const ChainSettings& chainSettings);
-    void updateHighCutFilters (const ChainSettings& chainSettings);
-    void updatePeakFilter (const ChainSettings& chainSettings);
+    void updateLowCutFilters(const ChainSettings& chainSettings);
+    void updateHighCutFilters(const ChainSettings& chainSettings);
+    void updatePeakFilter(const ChainSettings& chainSettings);
 
     //    juce::dsp::ProcessorDuplicator<Filter, Coefficients> filterIIR;
 
@@ -206,7 +206,7 @@ private:
     using DriveProcessor = juce::dsp::WaveShaper<float>;
     using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
-//    using LimiterProcessor = juce::dsp::Limiter<float>;
+    //    using LimiterProcessor = juce::dsp::Limiter<float>;
     using DryWetMixer = juce::dsp::DryWetMixer<float>;
 
     CompressorProcessor compressorProcessor1;
@@ -219,18 +219,18 @@ private:
     DCFilter dcFilter3;
     DCFilter dcFilter4;
 
-    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor> overdrive1;
-    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor> overdrive2;
-    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor> overdrive3;
-    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor> overdrive4;
+    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor> overdrive1;
+    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor> overdrive2;
+    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor> overdrive3;
+    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor> overdrive4;
 
     GainProcessor gainProcessor1;
     GainProcessor gainProcessor2;
     GainProcessor gainProcessor3;
     GainProcessor gainProcessor4;
     GainProcessor gainProcessorGlobal;
-    
-//    LimiterProcessor limiterProcessorGlobal;
+
+    //    LimiterProcessor limiterProcessorGlobal;
 
     DryWetMixer dryWetMixer1 { 100 };
     DryWetMixer dryWetMixer2 { 100 };
@@ -271,6 +271,8 @@ private:
         lowpass2, highpass2,
         lowpass3, highpass3;
 
+    juce::dsp::LinkwitzRileyFilter<float> compensatorLP, compensatorHP;
+
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
 
     bool multibandEnable1 = true;
@@ -283,24 +285,24 @@ private:
     bool multibandSolo3 = false;
     bool multibandSolo4 = false;
 
-    bool shouldSetBlackMask (int index);
-    bool getSoloStateFromIndex (int index);
+    bool shouldSetBlackMask(int index);
+    bool getSoloStateFromIndex(int index);
 
-    void processOneBand (juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String extremeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter& dcFilter, juce::String widthBypassID, juce::String compBypassID);
+    void processOneBand(juce::AudioBuffer<float>& bandBuffer, juce::dsp::ProcessContextReplacing<float> context, juce::String modeID, juce::String driveID, juce::String safeID, juce::String extremeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor>& overdrive, juce::String outputID, GainProcessor& gainProcessor, juce::String threshID, juce::String ratioID, CompressorProcessor& compressorProcessor, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, juce::String widthID, WidthProcessor widthProcessor, DCFilter& dcFilter, juce::String widthBypassID, juce::String compBypassID);
 
-    void processDistortion (juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String extremeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float (float)>>, BiasProcessor>& overdrive, DCFilter& dcFilter);
+    void processDistortion(juce::AudioBuffer<float>& bandBuffer, juce::String modeID, juce::String driveID, juce::String safeID, juce::String extremeID, juce::String biasID, juce::String recID, juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor>& overdrive, DCFilter& dcFilter);
 
-//    void processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor);
+    //    void processLimiter (juce::dsp::ProcessContextReplacing<float> context, juce::String limiterThreshID, juce::String limiterReleaseID, LimiterProcessor& limiterProcessor);
 
-    void processGain (juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor);
+    void processGain(juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor);
 
-    void processCompressor (juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, CompressorProcessor& compressor);
+    void processCompressor(juce::dsp::ProcessContextReplacing<float> context, juce::String threshID, juce::String ratioID, CompressorProcessor& compressor);
 
-    void normalize (juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother);
+    void normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother);
 
     // void compressorProcessor(float ratio, float thresh, juce::dsp::Compressor<float> compressorProcessor, juce::dsp::ProcessContextReplacing<float> &context);
 
-    void mixDryWet (juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, float latency);
+    void mixDryWet(juce::AudioBuffer<float>& dryBuffer, juce::AudioBuffer<float>& wetBuffer, juce::String mixID, juce::dsp::DryWetMixer<float>& dryWetMixer, float latency);
 
     float mLatency = 0.0f;
 
@@ -313,7 +315,7 @@ private:
 
     // VU meters
 
-    void setLeftRightMeterRMSValues (juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue);
+    void setLeftRightMeterRMSValues(juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue);
     float mInputLeftSmoothedGlobal = 0;
     float mInputRightSmoothedGlobal = 0;
     float mOutputLeftSmoothedGlobal = 0;
@@ -348,5 +350,5 @@ private:
     float mSampleMaxValue2 = 0;
     float mSampleMaxValue3 = 0;
     float mSampleMaxValue4 = 0;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FireAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

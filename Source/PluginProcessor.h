@@ -99,9 +99,6 @@ public:
     // bypass
     bool getBypassedState();
 
-    // get number of activated lines
-    void setLineNum();
-
     // VU meters
     float getInputMeterRMSLevel (int channel, juce::String bandName);
     float getOutputMeterRMSLevel (int channel, juce::String bandName);
@@ -119,9 +116,6 @@ private:
 
     // preset id
     int presetId = 0;
-
-    // line number
-    int lineNum = 0;
 
     // Oscilloscope
     juce::Array<float> historyArrayL;

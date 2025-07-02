@@ -252,6 +252,8 @@
 #define DOWNSAMPLE_BYPASS_NAME  "DownsampleBypass"
 #define LIMITER_BYPASS_ID       "limiterBypass"
 #define LIMITER_BYPASS_NAME     "LimiterBypass"
+#define NUM_BANDS_ID            "numBands"
+#define NUM_BANDS_NAME          "NumBands"
 
 // Define Font
 #define KNOB_FONT           "Futura"

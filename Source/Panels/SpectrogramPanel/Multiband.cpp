@@ -258,93 +258,86 @@ void Multiband::initParameters(int bandindex)
     }
 }
 
-void Multiband::setStatesWhenAdd(int changedIndex)
+void Multiband::setStatesWhenAdd(int insertionIndex)
 {
-    // change focus index when line is added
-    if (changedIndex < focusIndex || (changedIndex == focusIndex && getMouseXYRelative().getX() < (bandUIs[focusIndex].enableButton->getX() + bandUIs[focusIndex].soloButton->getX()) / 2.0f)) // <--- MODIFIED
+    // 1. Update the visual focus.
+    // If a band is inserted at or before the current focus,
+    // the focus index must be shifted to the right.
+    if (insertionIndex <= focusIndex)
     {
         focusIndex += 1;
     }
 
-    // change enable/solo index when line is added
-    for (int i = lineNum - 1; i >= 0; --i)
+    // 2. Determine if the user clicked on the left or right side of the band being split.
+    // We use the center point between the enable and solo buttons as the reference.
+    float bandCenterline = (bandUIs[insertionIndex].enableButton->getRight() + bandUIs[insertionIndex].soloButton->getX()) / 2.0f;
+    bool clickedOnTheLeft = getMouseXYRelative().getX() < bandCenterline;
+
+    // 3. Make space by shifting all bands from the insertion point onwards one step to the right.
+    // We loop backwards from the end to avoid overwriting the data we need to copy.
+    // After this loop, the settings of the original band at `insertionIndex` are now temporarily stored at `insertionIndex + 1`.
+    for (int i = 2; i >= insertionIndex; --i)
     {
-        // add new line, move the olds to the right
-        if (i >= changedIndex)
-        {
-            // add when mouse click is on the left side of buttons, move i to i + 1
-            if (getMouseXYRelative().getX() < (bandUIs[i].enableButton->getX() + bandUIs[i].soloButton->getX()) / 2.0f) // <--- MODIFIED
-            {
-                // old button
-                bandUIs[i + 1].enableButton->setToggleState(bandUIs[i].enableButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
-                // new added button
-                bandUIs[i].enableButton->setToggleState(true, juce::NotificationType::sendNotification); // <--- MODIFIED
-
-                bandUIs[i + 1].soloButton->setToggleState(bandUIs[i].soloButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
-                bandUIs[i].soloButton->setToggleState(false, juce::NotificationType::sendNotification); // <--- MODIFIED
-
-                // move parameters
-                setParametersToAFromB(i + 1, i);
-                initParameters(i);
-            }
-            else // mouse click is on the right side of buttons, keep i not change, i + 1 is new
-            {
-                bandUIs[i + 1].enableButton->setToggleState(true, juce::NotificationType::sendNotification); // <--- MODIFIED
-                bandUIs[i + 1].soloButton->setToggleState(false, juce::NotificationType::sendNotification); // <--- MODIFIED
-                initParameters(i + 1);
-            }
-        }
+        copyBandSettings(i + 1, i);
     }
-    setSoloRelatedBounds();
+
+    // 4. Place the old and new bands correctly based on the exact user-defined logic.
+    if (clickedOnTheLeft)
+    {
+        // USER ACTION: Clicked on the LEFT side of the band.
+        // EXPECTED RESULT: The NEW band appears on the LEFT, OLD band is shifted to the RIGHT.
+
+        // The "Make Space" step has already moved the OLD band's settings to insertionIndex + 1. This is perfect.
+        // We just need to reset the band at the original insertionIndex to its default state, creating the NEW band on the LEFT.
+        resetBandToDefault(insertionIndex);
+    }
+    else // Clicked on the RIGHT side
+    {
+        // USER ACTION: Clicked on the RIGHT side of the band.
+        // EXPECTED RESULT: The OLD band stays on the LEFT, NEW band appears on the RIGHT.
+
+        // The "Make Space" step moved the OLD settings to insertionIndex + 1. We need them back.
+        // So, we copy the temporarily stored settings from (insertionIndex + 1) back to the original position.
+        copyBandSettings(insertionIndex, insertionIndex + 1);
+
+        // Now, we reset the band to the right to be a new, default band.
+        resetBandToDefault(insertionIndex + 1);
+    }
 }
 
-void Multiband::setStatesWhenDelete(int changedIndex)
+void Multiband::setStatesWhenDelete(int deletedIndex)
 {
-    /**
-     set enable buttons states, solo button states, focus band, and parameters for band processing
-     */
-
-    // delete band (not the last one), delete lines and closebuttons
-    if (changedIndex != lineNum)
+    // 1. Based on the deleted band's index, update the state of the divider line.
+    // If the last band is deleted (e.g., Band 4), the line to its left (Line 3) must be disabled.
+    if (deletedIndex == lineNum)
     {
-        freqDividerGroup[changedIndex]->setToggleState(false, juce::sendNotificationSync);
+        if (lineNum > 0)
+            freqDividerGroup[lineNum - 1]->setToggleState(false, juce::sendNotificationSync);
     }
-    else // delete last band
+    else // Otherwise, just disable the divider line corresponding to the index.
     {
-        freqDividerGroup[lineNum - 1]->setToggleState(false, juce::sendNotificationSync);
+        freqDividerGroup[deletedIndex]->setToggleState(false, juce::sendNotificationSync);
     }
 
-    /**
-     When adding or deleting lines, this function is to keep enable and solo buttons in the right order and states.
-     For example, you have [e1 | e2 | e3 | e4], If you delete line1 [e1 | e2 | <---- delete here!   e3 | e4]  we should only change e2/e3 state(in the middle),
-     not affecting e1 and e4.
-     */
-
-    // change focus index when line is deleted
-    if (changedIndex < focusIndex)
+    // 2. Update the visual focus.
+    if (deletedIndex < focusIndex)
     {
         focusIndex -= 1;
     }
 
-    // change enable/solo index when line is deleted
-    for (int i = 1; i <= lineNum + 1; ++i) // line is already deleted so +1
+    // 3. Shift all bands that came after the deleted one forward.
+    // e.g., if index 1 is deleted, copy settings from 2 to 1, and from 3 to 2.
+    for (int i = deletedIndex; i < 3; ++i)
     {
-        // for safety
-        if (i > 3)
-        {
-            break;
-        }
-
-        // move the right side of the deleted line to the left
-        if (i > changedIndex)
-        {
-            bandUIs[i - 1].enableButton->setToggleState(bandUIs[i].enableButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
-            bandUIs[i - 1].soloButton->setToggleState(bandUIs[i].soloButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
-            setParametersToAFromB(i - 1, i);
-        }
+        copyBandSettings(i, i + 1);
     }
 
-    setSoloRelatedBounds();
+    // 4. Clean up the state of the last band, as it is now redundant.
+    setBandState(3, { true, false }, juce::NotificationType::dontSendNotification);
+
+    // NOTE: We no longer need to call setSoloRelatedBounds() manually here,
+    // as it will be handled automatically later in the call chain
+    // (sortLines() -> sliderValueChanged() -> resized()).
 }
 
 int Multiband::countLines()
@@ -660,4 +653,48 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
         g.setColour(COLOUR_MASK_BLACK);
         g.fillRect(x, y, width, height);
     }
+}
+
+// Gets the enable and solo state for a specific band.
+Multiband::BandState Multiband::getBandState(int bandIndex)
+{
+    // Ensure the index is valid.
+    jassert(bandIndex >= 0 && bandIndex < bandUIs.size());
+    return { bandUIs[bandIndex].enableButton->getToggleState(), bandUIs[bandIndex].soloButton->getToggleState() };
+}
+
+// Sets the enable and solo state for a specific band.
+void Multiband::setBandState(int bandIndex, BandState state, juce::NotificationType notification)
+{
+    // Ensure the index is valid.
+    jassert(bandIndex >= 0 && bandIndex < bandUIs.size());
+    bandUIs[bandIndex].enableButton->setToggleState(state.isEnabled, notification);
+    bandUIs[bandIndex].soloButton->setToggleState(state.isSoloed, notification);
+}
+
+// Copies the complete settings (state and parameters) from one band to another.
+void Multiband::copyBandSettings(int targetIndex, int sourceIndex)
+{
+    // Ensure indices are valid.
+    jassert(targetIndex >= 0 && targetIndex < 4);
+    jassert(sourceIndex >= 0 && sourceIndex < 4);
+
+    // 1. Copy the button states.
+    setBandState(targetIndex, getBandState(sourceIndex));
+
+    // 2. Copy all related audio parameters.
+    setParametersToAFromB(targetIndex, sourceIndex);
+}
+
+// Resets a specific band to its default settings.
+void Multiband::resetBandToDefault(int bandIndex)
+{
+    // Ensure the index is valid.
+    jassert(bandIndex >= 0 && bandIndex < 4);
+
+    // 1. Set button states to default (enabled, not soloed).
+    setBandState(bandIndex, { true, false });
+
+    // 2. Reset all related audio parameters to their default values.
+    initParameters(bandIndex);
 }

@@ -99,5 +99,15 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiSoloAttachment1, multiSoloAttachment2, multiSoloAttachment3, multiSoloAttachment4;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> freqDividerGroupAttachment1, freqDividerGroupAttachment2, freqDividerGroupAttachment3;
 
+    struct BandState
+    {
+        bool isEnabled;
+        bool isSoloed;
+    };
+    BandState getBandState(int bandIndex);
+    void setBandState(int bandIndex, BandState state, juce::NotificationType notification = juce::NotificationType::sendNotification);
+    void copyBandSettings(int targetIndex, int sourceIndex);
+    void resetBandToDefault(int bandIndex);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Multiband)
 };

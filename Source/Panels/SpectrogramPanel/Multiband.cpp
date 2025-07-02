@@ -15,17 +15,23 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
 {
     startTimerHz(60);
 
-    soloButton[0] = std::make_unique<SoloButton>();
-    addAndMakeVisible(*soloButton[0]);
-    soloButton[0]->addListener(this);
+    bandUIs.resize(4);
+    for (int i = 0; i < 4; ++i)
+    {
+        bandUIs[i].id = i;
 
-    enableButton[0] = std::make_unique<EnableButton>();
-    addAndMakeVisible(*enableButton[0]);
-    enableButton[0]->addListener(this);
+        bandUIs[i].soloButton = std::make_unique<SoloButton>();
+        addAndMakeVisible(*bandUIs[i].soloButton);
+        bandUIs[i].soloButton->addListener(this);
 
-    closeButton[0] = std::make_unique<CloseButton>();
-    addAndMakeVisible(*closeButton[0]);
-    closeButton[0]->addListener(this);
+        bandUIs[i].enableButton = std::make_unique<EnableButton>();
+        addAndMakeVisible(*bandUIs[i].enableButton);
+        bandUIs[i].enableButton->addListener(this);
+
+        bandUIs[i].closeButton = std::make_unique<CloseButton>();
+        addAndMakeVisible(*bandUIs[i].closeButton);
+        bandUIs[i].closeButton->addListener(this);
+    }
 
     // Init Vertical Lines
     for (int i = 0; i < 3; i++)
@@ -37,29 +43,17 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue));
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-
-        soloButton[i + 1] = std::make_unique<SoloButton>();
-        addAndMakeVisible(*soloButton[i + 1]);
-        soloButton[i + 1]->addListener(this);
-
-        enableButton[i + 1] = std::make_unique<EnableButton>();
-        addAndMakeVisible(*enableButton[i + 1]);
-        enableButton[i + 1]->addListener(this);
-
-        closeButton[i + 1] = std::make_unique<CloseButton>();
-        addAndMakeVisible(*closeButton[i + 1]);
-        closeButton[i + 1]->addListener(this);
     }
 
-    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID1, *enableButton[0]);
-    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID2, *enableButton[1]);
-    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID3, *enableButton[2]);
-    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID4, *enableButton[3]);
+    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID1, *bandUIs[0].enableButton);
+    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID2, *bandUIs[1].enableButton);
+    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID3, *bandUIs[2].enableButton);
+    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID4, *bandUIs[3].enableButton);
 
-    multiSoloAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID1, *soloButton[0]);
-    multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID2, *soloButton[1]);
-    multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID3, *soloButton[2]);
-    multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID4, *soloButton[3]);
+    multiSoloAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID1, *bandUIs[0].soloButton);
+    multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID2, *bandUIs[1].soloButton);
+    multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID3, *bandUIs[2].soloButton);
+    multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID4, *bandUIs[3].soloButton);
 
     freqDividerGroupAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID1, *freqDividerGroup[0]);
     freqDividerGroupAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID2, *freqDividerGroup[1]);
@@ -111,7 +105,7 @@ void Multiband::paint(juce::Graphics& g)
     // set closebuttons visibility to false
     for (int i = 0; i < lineNum + 1; i++)
     {
-        closeButton[i]->setVisible(false);
+        bandUIs[i].closeButton->setVisible(false); // <--- MODIFIED
     }
 
     // set dragging state
@@ -156,13 +150,13 @@ bool Multiband::shouldSetBlackMask(int index)
     {
         if (i == index)
             continue;
-        if (soloButton[i]->getToggleState())
+        if (bandUIs[i].soloButton->getToggleState()) // <--- MODIFIED
         {
             otherBandSoloIsOn = true;
             break;
         }
     }
-    return (! soloButton[index]->getToggleState() && otherBandSoloIsOn);
+    return (! bandUIs[index].soloButton->getToggleState() && otherBandSoloIsOn); // <--- MODIFIED
 }
 
 void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
@@ -267,7 +261,7 @@ void Multiband::initParameters(int bandindex)
 void Multiband::setStatesWhenAdd(int changedIndex)
 {
     // change focus index when line is added
-    if (changedIndex < focusIndex || (changedIndex == focusIndex && getMouseXYRelative().getX() < (enableButton[focusIndex]->getX() + soloButton[focusIndex]->getX()) / 2.0f))
+    if (changedIndex < focusIndex || (changedIndex == focusIndex && getMouseXYRelative().getX() < (bandUIs[focusIndex].enableButton->getX() + bandUIs[focusIndex].soloButton->getX()) / 2.0f)) // <--- MODIFIED
     {
         focusIndex += 1;
     }
@@ -279,15 +273,15 @@ void Multiband::setStatesWhenAdd(int changedIndex)
         if (i >= changedIndex)
         {
             // add when mouse click is on the left side of buttons, move i to i + 1
-            if (getMouseXYRelative().getX() < (enableButton[i]->getX() + soloButton[i]->getX()) / 2.0f)
+            if (getMouseXYRelative().getX() < (bandUIs[i].enableButton->getX() + bandUIs[i].soloButton->getX()) / 2.0f) // <--- MODIFIED
             {
                 // old button
-                enableButton[i + 1]->setToggleState(enableButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+                bandUIs[i + 1].enableButton->setToggleState(bandUIs[i].enableButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
                 // new added button
-                enableButton[i]->setToggleState(true, juce::NotificationType::sendNotification);
+                bandUIs[i].enableButton->setToggleState(true, juce::NotificationType::sendNotification); // <--- MODIFIED
 
-                soloButton[i + 1]->setToggleState(soloButton[i]->getToggleState(), juce::NotificationType::sendNotification);
-                soloButton[i]->setToggleState(false, juce::NotificationType::sendNotification);
+                bandUIs[i + 1].soloButton->setToggleState(bandUIs[i].soloButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
+                bandUIs[i].soloButton->setToggleState(false, juce::NotificationType::sendNotification); // <--- MODIFIED
 
                 // move parameters
                 setParametersToAFromB(i + 1, i);
@@ -295,8 +289,8 @@ void Multiband::setStatesWhenAdd(int changedIndex)
             }
             else // mouse click is on the right side of buttons, keep i not change, i + 1 is new
             {
-                enableButton[i + 1]->setToggleState(true, juce::NotificationType::sendNotification);
-                soloButton[i + 1]->setToggleState(false, juce::NotificationType::sendNotification);
+                bandUIs[i + 1].enableButton->setToggleState(true, juce::NotificationType::sendNotification); // <--- MODIFIED
+                bandUIs[i + 1].soloButton->setToggleState(false, juce::NotificationType::sendNotification); // <--- MODIFIED
                 initParameters(i + 1);
             }
         }
@@ -344,8 +338,8 @@ void Multiband::setStatesWhenDelete(int changedIndex)
         // move the right side of the deleted line to the left
         if (i > changedIndex)
         {
-            enableButton[i - 1]->setToggleState(enableButton[i]->getToggleState(), juce::NotificationType::sendNotification);
-            soloButton[i - 1]->setToggleState(soloButton[i]->getToggleState(), juce::NotificationType::sendNotification);
+            bandUIs[i - 1].enableButton->setToggleState(bandUIs[i].enableButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
+            bandUIs[i - 1].soloButton->setToggleState(bandUIs[i].soloButton->getToggleState(), juce::NotificationType::sendNotification); // <--- MODIFIED
             setParametersToAFromB(i - 1, i);
         }
     }
@@ -530,38 +524,38 @@ void Multiband::setSoloRelatedBounds()
     {
         if (i <= lineNum)
         {
-            soloButton[i]->setVisible(true);
-            enableButton[i]->setVisible(true);
-            closeButton[i]->setVisible(true);
+            bandUIs[i].soloButton->setVisible(true); // <--- MODIFIED
+            bandUIs[i].enableButton->setVisible(true); // <--- MODIFIED
+            bandUIs[i].closeButton->setVisible(true); // <--- MODIFIED
         }
         else
         {
-            soloButton[i]->setVisible(false);
-            enableButton[i]->setVisible(false);
-            closeButton[i]->setVisible(false);
+            bandUIs[i].soloButton->setVisible(false); // <--- MODIFIED
+            bandUIs[i].enableButton->setVisible(false); // <--- MODIFIED
+            bandUIs[i].closeButton->setVisible(false); // <--- MODIFIED
         }
     }
     // setBounds of soloButtons and enableButtons
     if (lineNum >= 1)
     {
-        enableButton[0]->setBounds(freqDividerGroup[0]->getX() / 2 - size, margin, size, size);
-        soloButton[0]->setBounds(freqDividerGroup[0]->getX() / 2 + size, margin, size, size);
-        closeButton[0]->setBounds(freqDividerGroup[0]->getX() / 2, getHeight() - size * 2, size, size);
+        bandUIs[0].enableButton->setBounds(freqDividerGroup[0]->getX() / 2 - size, margin, size, size); // <--- MODIFIED
+        bandUIs[0].soloButton->setBounds(freqDividerGroup[0]->getX() / 2 + size, margin, size, size); // <--- MODIFIED
+        bandUIs[0].closeButton->setBounds(freqDividerGroup[0]->getX() / 2, getHeight() - size * 2, size, size); // <--- MODIFIED
         for (int i = 1; i < lineNum; i++)
         {
-            enableButton[i]->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 - size, margin, size, size);
-            soloButton[i]->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 + size, margin, size, size);
-            closeButton[i]->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2, getHeight() - size * 2, size, size);
+            bandUIs[i].enableButton->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 - size, margin, size, size); // <--- MODIFIED
+            bandUIs[i].soloButton->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 + size, margin, size, size); // <--- MODIFIED
+            bandUIs[i].closeButton->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2, getHeight() - size * 2, size, size); // <--- MODIFIED
         }
-        enableButton[lineNum]->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 - size, margin, size, size);
-        soloButton[lineNum]->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 + size, margin, size, size);
-        closeButton[lineNum]->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2, getHeight() - size * 2, size, size);
+        bandUIs[lineNum].enableButton->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 - size, margin, size, size); // <--- MODIFIED
+        bandUIs[lineNum].soloButton->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 + size, margin, size, size); // <--- MODIFIED
+        bandUIs[lineNum].closeButton->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2, getHeight() - size * 2, size, size); // <--- MODIFIED
     }
     else if (lineNum == 0)
     {
-        enableButton[0]->setBounds(getWidth() / 2 - size, margin, size, size);
-        soloButton[0]->setBounds(getWidth() / 2 + size, margin, size, size);
-        closeButton[0]->setVisible(false);
+        bandUIs[0].enableButton->setBounds(getWidth() / 2 - size, margin, size, size); // <--- MODIFIED
+        bandUIs[0].soloButton->setBounds(getWidth() / 2 + size, margin, size, size); // <--- MODIFIED
+        bandUIs[0].closeButton->setVisible(false); // <--- MODIFIED
     }
 }
 
@@ -602,7 +596,7 @@ void Multiband::buttonClicked(juce::Button* button)
     // click closebutton and delete line.
     for (int i = 0; i < 4; i++)
     {
-        if (button == &*closeButton[i])
+        if (button == bandUIs[i].closeButton.get()) // <--- MODIFIED
         {
             setStatesWhenDelete(i);
             sortLines();
@@ -618,7 +612,7 @@ void Multiband::buttonClicked(juce::Button* button)
 
 EnableButton& Multiband::getEnableButton(const int index)
 {
-    return *enableButton[index];
+    return *bandUIs[index].enableButton; // <--- MODIFIED
 }
 
 void Multiband::setScale(float scale)
@@ -631,7 +625,7 @@ void Multiband::setScale(float scale)
 
 void Multiband::setBandBypassStates(int index, bool state)
 {
-    enableButton[index]->setToggleState(state, juce::NotificationType::dontSendNotification);
+    bandUIs[index].enableButton->setToggleState(state, juce::NotificationType::dontSendNotification); // <--- MODIFIED
 }
 
 state::StateComponent& Multiband::getStateComponent()
@@ -657,7 +651,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
             g.setColour(COLOUR_MASK_WHITE);
             g.fillRect(x, y, width, height);
         }
-        closeButton[index]->setVisible(true);
+        bandUIs[index].closeButton->setVisible(true); // <--- MODIFIED
     }
 
     // set solo black mask

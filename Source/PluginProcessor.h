@@ -272,6 +272,15 @@ private:
         lowpass3, highpass3;
 
     juce::dsp::LinkwitzRileyFilter<float> compensatorLP, compensatorHP;
+    
+    // 1. Define the basic building block: a single-channel peak filter
+    using PeakFilter = juce::dsp::IIR::Filter<float>;
+    
+    // 2. Use ProcessorDuplicator to create a stereo version of the peak filter
+    using StereoPeakFilter = juce::dsp::ProcessorDuplicator<PeakFilter, juce::dsp::IIR::Coefficients<float>>;
+
+    // 3. Create two instances for Band 2 and Band 3
+    StereoPeakFilter compensatorEQ1, compensatorEQ2;
 
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
 

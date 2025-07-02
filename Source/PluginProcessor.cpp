@@ -321,6 +321,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     compensatorLP.prepare(spec);
     compensatorHP.prepare(spec);
 
+    compensatorEQ1.prepare(spec);
+    compensatorEQ2.prepare(spec);
+
     // limiter
     //    limiterProcessorGlobal.prepare(spec);
 
@@ -379,6 +382,8 @@ void FireAudioProcessor::reset()
     highpass3.reset();
     compensatorLP.reset();
     compensatorHP.reset();
+    compensatorEQ1.reset();
+    compensatorEQ2.reset();
     compressorProcessor1.reset();
     compressorProcessor2.reset();
     compressorProcessor3.reset();
@@ -441,6 +446,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
+    auto sampleRate = getSampleRate();
 
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
@@ -585,7 +591,45 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         highpass3.process(context4);
     }
 
-    // 5. PROCESS INDIVIDUAL BANDS
+    // 5. ======== CALCULATE AND APPLY DYNAMIC COMPENSATION (THE FIX) ========
+    const float ratioThreshold = 6.0f;
+
+    // For Band 2
+    if (lineNum > 1)
+    {
+        float f1 = freqValue1, f2 = freqValue2;
+        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
+        {
+            float k = f2 / f1;
+            float centerFreq = std::sqrt(f1 * f2);
+            float Q = std::sqrt(k) / (k - 1.0f);
+            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+
+            *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+            auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+            auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+            compensatorEQ1.process(context2);
+        }
+    }
+    // For Band 3
+    if (lineNum > 2)
+    {
+        float f1 = freqValue2, f2 = freqValue3;
+        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
+        {
+            float k = f2 / f1;
+            float centerFreq = std::sqrt(f1 * f2);
+            float Q = std::sqrt(k) / (k - 1.0f);
+            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+
+            *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+            auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+            auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+            compensatorEQ2.process(context3);
+        }
+    }
+
+    // 6. PROCESS INDIVIDUAL BANDS
     multibandEnable1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
     multibandEnable2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
     multibandEnable3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);

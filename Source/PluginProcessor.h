@@ -66,6 +66,8 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
+    bool hasUpdateCheckBeenPerformed = false;
+
     // filter
     void updateFilter();
 
@@ -272,10 +274,10 @@ private:
         lowpass3, highpass3;
 
     juce::dsp::LinkwitzRileyFilter<float> compensatorLP, compensatorHP;
-    
+
     // 1. Define the basic building block: a single-channel peak filter
     using PeakFilter = juce::dsp::IIR::Filter<float>;
-    
+
     // 2. Use ProcessorDuplicator to create a stereo version of the peak filter
     using StereoPeakFilter = juce::dsp::ProcessorDuplicator<PeakFilter, juce::dsp::IIR::Coefficients<float>>;
 

@@ -12,10 +12,12 @@
 
 //#include "../../JuceLibraryCode/JucePluginDefines.h"
 
-#define VERSION             "1.0.1"
+#define VERSION             "1.0.2"
 #define GITHUB_LINK         "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK     "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION   ".fire"
+#define AUTO_UPDATE_ID      "autoUpdate"
+#define AUTO_UPDATE_NAME    "Auto Check For Updates"
 
 // paramID paramName
 #define DRIVE_ID1           "drive1"

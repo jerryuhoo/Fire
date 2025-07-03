@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Wings"
               aaxIdentifier="com.WingsDSP.Fire" bundleIdentifier="com.WingsDSP.Fire"
-              version="1.0.1" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
+              version="1.0.2" displaySplashScreen="1" pluginFormats="buildAU,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0">
@@ -93,6 +93,8 @@
         <FILE id="rznrv4" name="InterfaceDefines.h" compile="0" resource="0"
               file="Source/GUI/InterfaceDefines.h"/>
         <FILE id="NKA4fO" name="LookAndFeel.h" compile="0" resource="0" file="Source/GUI/LookAndFeel.h"/>
+        <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
+              file="Source/GUI/SettingsComponent.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
         <FILE id="kfZ8qg" name="ClippingFunctions.h" compile="0" resource="0"

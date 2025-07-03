@@ -58,22 +58,6 @@ FireAudioProcessor::FireAudioProcessor()
     {
         oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     }
-
-    // check update
-    //    std::unique_ptr<VersionInfo>versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-    //    if (versionInfo!= nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
-    //    {
-    //        juce::String version = versionInfo->versionString;
-    //        const auto callback = juce::ModalCallbackFunction::create ([version](int result) {
-    //            if (result == 1) // result == 1 means user clicks OK
-    //            {
-    //                juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
-    //                gitHubWebsite.launchInDefaultBrowser();
-    //            }
-    //        });
-    //        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-    //            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-    //    }
 }
 
 FireAudioProcessor::~FireAudioProcessor()
@@ -1778,6 +1762,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     //    parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LIMITER_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
 
     parameters.push_back(std::make_unique<PInt>(juce::ParameterID { NUM_BANDS_ID, versionNum }, NUM_BANDS_NAME, 1, 4, 1));
+    parameters.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { AUTO_UPDATE_ID, versionNum }, AUTO_UPDATE_NAME, true));
 
     return { parameters.begin(), parameters.end() };
 }

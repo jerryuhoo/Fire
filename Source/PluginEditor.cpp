@@ -31,8 +31,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // 1. Check if this plugin instance has ALREADY performed an update check.
     if (! processor.hasUpdateCheckBeenPerformed)
     {
+        bool shouldCheckForUpdate = processor.getAppSettings().getBoolValue(AUTO_UPDATE_ID, true);
         // 2. If not, check the user's preference from the now-loaded state.
-        if (*processor.treeState.getRawParameterValue(AUTO_UPDATE_ID))
+        if (shouldCheckForUpdate)
         {
             // 3. If enabled, schedule the check on a background thread.
             juce::Timer::callAfterDelay(1000, [this]()

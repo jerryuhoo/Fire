@@ -58,6 +58,17 @@ FireAudioProcessor::FireAudioProcessor()
     {
         oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     }
+
+    // Set up the properties file options.
+    juce::PropertiesFile::Options options;
+    options.applicationName = JucePlugin_Name;
+    options.filenameSuffix = ".settings";
+    options.folderName = "Wings"; // Or your company name
+    options.osxLibrarySubFolder = "Application Support";
+    options.commonToAllUsers = false;
+
+    // Create the properties file object.
+    appProperties = std::make_unique<juce::PropertiesFile>(options);
 }
 
 FireAudioProcessor::~FireAudioProcessor()
@@ -1762,7 +1773,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     //    parameters.push_back (std::make_unique<PBool> (juce::ParameterID { LIMITER_BYPASS_ID, versionNum }, DOWNSAMPLE_BYPASS_NAME, false));
 
     parameters.push_back(std::make_unique<PInt>(juce::ParameterID { NUM_BANDS_ID, versionNum }, NUM_BANDS_NAME, 1, 4, 1));
-    parameters.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID { AUTO_UPDATE_ID, versionNum }, AUTO_UPDATE_NAME, true));
 
     return { parameters.begin(), parameters.end() };
 }

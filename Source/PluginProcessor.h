@@ -32,6 +32,8 @@ public:
     FireAudioProcessor();
     ~FireAudioProcessor();
 
+    juce::PropertiesFile& getAppSettings() { return *appProperties; }
+
     //==============================================================================
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -118,6 +120,8 @@ private:
 
     // preset id
     int presetId = 0;
+
+    std::unique_ptr<juce::PropertiesFile> appProperties;
 
     // Oscilloscope
     juce::Array<float> historyArrayL;

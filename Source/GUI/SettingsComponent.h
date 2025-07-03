@@ -9,20 +9,31 @@
 */
 
 #pragma once
-#include <JuceHeader.h>
 #include "InterfaceDefines.h"
+#include <JuceHeader.h>
 
 // A dedicated component for all settings.
 class SettingsComponent : public juce::Component
 {
 public:
-    SettingsComponent(juce::AudioProcessorValueTreeState& apvts)
+    SettingsComponent(juce::PropertiesFile& props)
+        : appProperties(props)
     {
         addAndMakeVisible(autoUpdateToggle);
         autoUpdateToggle.setButtonText("Auto-check for updates on startup");
 
-        // Attach the toggle button to our parameter in the processor.
-        attachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(apvts, AUTO_UPDATE_ID, autoUpdateToggle);
+        // Read the initial state of the toggle from the properties file.
+        // If the setting doesn't exist yet, default to `true`.
+        bool shouldAutoUpdate = appProperties.getBoolValue(AUTO_UPDATE_ID, true);
+        autoUpdateToggle.setToggleState(shouldAutoUpdate, juce::dontSendNotification);
+
+        // When the button is clicked, immediately save the new value.
+        autoUpdateToggle.onClick = [this]
+        {
+            bool newValue = autoUpdateToggle.getToggleState();
+            // setValue() will automatically save the file to disk.
+            appProperties.setValue(AUTO_UPDATE_ID, newValue);
+        };
     }
 
     void resized() override
@@ -33,6 +44,7 @@ public:
     }
 
 private:
+    juce::PropertiesFile& appProperties;
     juce::ToggleButton autoUpdateToggle;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> attachment;
 };

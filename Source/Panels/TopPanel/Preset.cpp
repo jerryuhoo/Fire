@@ -792,7 +792,7 @@ namespace state
             
             // 2. Create the settings panel on the heap using `new`. 
             // We use a raw pointer because the DialogWindow will take ownership and delete it.
-            auto* settingsPanel = new SettingsComponent(ourProcessor.treeState);
+            auto* settingsPanel = new SettingsComponent(ourProcessor.getAppSettings());
 
             // 3. Use a DialogWindow to show it, but instead of launching asynchronously,
             //    we will run it modally. This blocks the main editor until the user closes the dialog.

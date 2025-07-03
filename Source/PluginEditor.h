@@ -49,6 +49,10 @@ private:
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
     
+    // create own knob style
+    OtherLookAndFeel otherLookAndFeel;
+    ZoomLookAndFeel zoomLookAndFeel;
+    
     int focusIndex = 0;
     void updateWhenChangingFocus();
 
@@ -127,10 +131,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
-
-    // create own knob style
-    OtherLookAndFeel otherLookAndFeel;
-    ZoomLookAndFeel zoomLookAndFeel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FireAudioProcessorEditor)
 };

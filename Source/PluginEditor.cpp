@@ -171,16 +171,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor (FireAudioProcessor& p)
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
     stopTimer();
-
-    setLookAndFeel (nullptr); // if this is missing - YOU WILL HIT THE ASSERT 2020/6/28
-    windowRightButton.setLookAndFeel (nullptr);
-    windowLeftButton.setLookAndFeel (nullptr);
-    zoomButton.setLookAndFeel (nullptr);
-    //    distortionMode1.setLookAndFeel(nullptr);
-    //    distortionMode2.setLookAndFeel(nullptr);
-    //    distortionMode3.setLookAndFeel(nullptr);
-    //    distortionMode4.setLookAndFeel(nullptr);
-    //    stateComponent.setLookAndFeel(nullptr);
+    setLookAndFeel (nullptr);
 }
 
 void FireAudioProcessorEditor::initEditor()

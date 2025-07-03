@@ -645,9 +645,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         float blendFactor = t * t * (3.0f - 2.0f * t);
         float finalGain = (1.0f - blendFactor) * baseGain + blendFactor * enhancedGain;
 
-        DBG("Q: " << Q << ", Gain: " << finalGain << ", Center Frequency: " << centerFreq);
-        DBG("blendFactor: " << blendFactor << ", k: " << k);
-
         *compensatorEQ3.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, finalGain);
 
         // Apply the same +3dB peak to both Band 2 and Band 3

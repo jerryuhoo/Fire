@@ -323,6 +323,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     compensatorEQ1.prepare(spec);
     compensatorEQ2.prepare(spec);
+    compensatorEQ3.prepare(spec);
 
     // limiter
     //    limiterProcessorGlobal.prepare(spec);
@@ -384,6 +385,7 @@ void FireAudioProcessor::reset()
     compensatorHP.reset();
     compensatorEQ1.reset();
     compensatorEQ2.reset();
+    compensatorEQ3.reset();
     compressorProcessor1.reset();
     compressorProcessor2.reset();
     compressorProcessor3.reset();
@@ -628,6 +630,57 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             compensatorEQ2.process(context3);
         }
     }
+    if (lineNum == 3)
+    {
+        // This compensator is only for the problematic crossover at freqValue2.
+        float centerFreq = freqValue2;
+        float k = freqValue3 / freqValue1;
+        float Q = std::sqrt(k) / (k - 1.0f) * 3.0f;
+        float baseGain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+        const float enhancedGain = 3.0f;
+        float blendRangeStart = 11.0f;
+        float blendRangeEnd = 1.0f;
+        float t = (k - blendRangeStart) / (blendRangeEnd - blendRangeStart);
+        t = juce::jlimit(0.0f, 1.0f, t);
+        float blendFactor = t * t * (3.0f - 2.0f * t);
+        float finalGain = (1.0f - blendFactor) * baseGain + blendFactor * enhancedGain;
+
+        DBG("Q: " << Q << ", Gain: " << finalGain << ", Center Frequency: " << centerFreq);
+        DBG("blendFactor: " << blendFactor << ", k: " << k);
+
+        *compensatorEQ3.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, finalGain);
+
+        // Apply the same +3dB peak to both Band 2 and Band 3
+        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+        compensatorEQ3.process(context2);
+
+        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+        compensatorEQ3.process(context3);
+    }
+
+    // ======== 6. CREATE THE DELAY-COMPENSATED DRY SIGNAL (YOUR SOLUTION) ========
+    // Before applying any processing (distortion, etc.), we sum the clean, split bands
+    // to create a dry signal that has the exact same group delay as the wet path.
+    juce::AudioBuffer<float> delayMatchedDryBuffer(totalNumOutputChannels, numSamples);
+    delayMatchedDryBuffer.clear();
+
+    for (int i = 0; i < numBands; ++i)
+    {
+        juce::AudioBuffer<float>* bandBuffer = nullptr;
+        if (i == 0)
+            bandBuffer = &mBuffer1;
+        else if (i == 1)
+            bandBuffer = &mBuffer2;
+        else if (i == 2)
+            bandBuffer = &mBuffer3;
+        else if (i == 3)
+            bandBuffer = &mBuffer4;
+
+        for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+            delayMatchedDryBuffer.addFrom(channel, 0, *bandBuffer, channel, 0, numSamples);
+    }
 
     // 6. PROCESS INDIVIDUAL BANDS
     multibandEnable1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
@@ -720,8 +773,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // global gain
     processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
 
-    // global mix dry wet
-    mixDryWet(mDryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
+    // Use the new, delay-matched dry buffer for the mix, NOT the original mDryBuffer.
+    mixDryWet(delayMatchedDryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
 
     // 8. FINAL OUTPUT STAGES
     // Spectrum

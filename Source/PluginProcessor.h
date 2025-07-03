@@ -280,7 +280,7 @@ private:
     using StereoPeakFilter = juce::dsp::ProcessorDuplicator<PeakFilter, juce::dsp::IIR::Coefficients<float>>;
 
     // 3. Create two instances for Band 2 and Band 3
-    StereoPeakFilter compensatorEQ1, compensatorEQ2;
+    StereoPeakFilter compensatorEQ1, compensatorEQ2, compensatorEQ3;
 
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
 

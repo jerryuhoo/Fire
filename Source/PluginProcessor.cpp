@@ -588,6 +588,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         highpass3.process(context4);
     }
 
+    setLeftRightMeterRMSValues(mBuffer1, mInputLeftSmoothedBand1, mInputRightSmoothedBand1);
+
+    // 如果是多于 1 条带，也对 mBuffer2…mBuffer4 做同样操作
+    if (lineNum >= 1)
+        setLeftRightMeterRMSValues(mBuffer2, mInputLeftSmoothedBand2, mInputRightSmoothedBand2);
+    if (lineNum >= 2)
+        setLeftRightMeterRMSValues(mBuffer3, mInputLeftSmoothedBand3, mInputRightSmoothedBand3);
+    if (lineNum >= 3)
+        setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
+
     // 5. ======== CALCULATE AND APPLY DYNAMIC COMPENSATION (THE FIX) ========
     const float ratioThreshold = 6.0f;
 
@@ -685,24 +695,28 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
         auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
         processOneBand(mBuffer1, context1, MODE_ID1, DRIVE_ID1, SAFE_ID1, EXTREME_ID1, BIAS_ID1, REC_ID1, overdrive1, OUTPUT_ID1, gainProcessor1, COMP_THRESH_ID1, COMP_RATIO_ID1, compressorProcessor1, totalNumInputChannels, recSmoother1, outputSmoother1, MIX_ID1, dryWetMixer1, WIDTH_ID1, widthProcessor1, dcFilter1, WIDTH_BYPASS_ID1, COMP_BYPASS_ID1);
+        setLeftRightMeterRMSValues(mBuffer1, mOutputLeftSmoothedBand1, mOutputRightSmoothedBand1);
     }
     if (lineNum >= 1 && multibandEnable2)
     {
         auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
         auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
         processOneBand(mBuffer2, context2, MODE_ID2, DRIVE_ID2, SAFE_ID2, EXTREME_ID2, BIAS_ID2, REC_ID2, overdrive2, OUTPUT_ID2, gainProcessor2, COMP_THRESH_ID2, COMP_RATIO_ID2, compressorProcessor2, totalNumInputChannels, recSmoother2, outputSmoother2, MIX_ID2, dryWetMixer2, WIDTH_ID2, widthProcessor2, dcFilter2, WIDTH_BYPASS_ID2, COMP_BYPASS_ID2);
+        setLeftRightMeterRMSValues(mBuffer2, mOutputLeftSmoothedBand2, mOutputRightSmoothedBand2);
     }
     if (lineNum >= 2 && multibandEnable3)
     {
         auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
         auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
         processOneBand(mBuffer3, context3, MODE_ID3, DRIVE_ID3, SAFE_ID3, EXTREME_ID3, BIAS_ID3, REC_ID3, overdrive3, OUTPUT_ID3, gainProcessor3, COMP_THRESH_ID3, COMP_RATIO_ID3, compressorProcessor3, totalNumInputChannels, recSmoother3, outputSmoother3, MIX_ID3, dryWetMixer3, WIDTH_ID3, widthProcessor3, dcFilter3, WIDTH_BYPASS_ID3, COMP_BYPASS_ID3);
+        setLeftRightMeterRMSValues(mBuffer3, mOutputLeftSmoothedBand3, mOutputRightSmoothedBand3);
     }
     if (lineNum >= 3 && multibandEnable4)
     {
         auto block4 = juce::dsp::AudioBlock<float>(mBuffer4);
         auto context4 = juce::dsp::ProcessContextReplacing<float>(block4);
         processOneBand(mBuffer4, context4, MODE_ID4, DRIVE_ID4, SAFE_ID4, EXTREME_ID4, BIAS_ID4, REC_ID4, overdrive4, OUTPUT_ID4, gainProcessor4, COMP_THRESH_ID4, COMP_RATIO_ID4, compressorProcessor4, totalNumInputChannels, recSmoother4, outputSmoother4, MIX_ID4, dryWetMixer4, WIDTH_ID4, widthProcessor4, dcFilter4, WIDTH_BYPASS_ID4, COMP_BYPASS_ID4);
+        setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
     }
 
     // 6. SUM THE PROCESSED BANDS

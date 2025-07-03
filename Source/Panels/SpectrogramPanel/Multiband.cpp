@@ -13,8 +13,6 @@
 //==============================================================================
 Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : processor(p), stateComponent(sc)
 {
-    startTimerHz(60);
-
     bandUIs.resize(4);
     for (int i = 0; i < 4; ++i)
     {
@@ -552,11 +550,6 @@ void Multiband::setSoloRelatedBounds()
     }
 }
 
-void Multiband::timerCallback()
-{
-    repaint();
-}
-
 int Multiband::getFocusIndex()
 {
     return focusIndex;
@@ -697,4 +690,18 @@ void Multiband::resetBandToDefault(int bandIndex)
 
     // 2. Reset all related audio parameters to their default values.
     initParameters(bandIndex);
+}
+
+void Multiband::mouseMove(const juce::MouseEvent& event)
+{
+    // This function is called continuously ONLY when the mouse is moving over this component.
+    // It's perfect for updating hover-dependent graphics like your preview line and masks.
+    repaint();
+}
+
+void Multiband::mouseExit(const juce::MouseEvent& event)
+{
+    // This function is called once when the mouse leaves the component's bounds.
+    // This ensures that any lingering hover effects (like the preview line) are erased.
+    repaint();
 }

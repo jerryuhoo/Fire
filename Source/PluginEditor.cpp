@@ -199,11 +199,30 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     getConstrainer()->setFixedAspectRatio(2); // set fixed resize rate
 
     setMultiband();
+
+    auto& params = processor.getParameters();
+    for (auto param : params)
+    {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+        {
+            processor.treeState.addParameterListener(p->paramID, this);
+        }
+    }
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
     stopTimer();
+
+    auto& params = processor.getParameters();
+    for (auto param : params)
+    {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+        {
+            processor.treeState.removeParameterListener(p->paramID, this);
+        }
+    }
+
     setLookAndFeel(nullptr);
 }
 
@@ -412,7 +431,6 @@ void FireAudioProcessorEditor::timerCallback()
         multiband.repaint();
         bandPanel.repaint();
         globalPanel.repaint();
-        repaint();
     }
 }
 
@@ -751,5 +769,16 @@ void FireAudioProcessorEditor::updateWhenChangingFocus()
         graphPanel.setFocusBandNum(-1); // -1 means global
     }
     bandPanel.updateWhenChangingFocus();
+    repaint();
+}
+
+void FireAudioProcessorEditor::parameterChanged(const juce::String& parameterID, float newValue)
+{
+    // This is our new event-driven update function.
+    // It is called ONLY when a parameter changes (e.g., a knob is turned).
+
+    // A single repaint() here is a massive performance improvement over a 60Hz timer.
+    // It ensures that any part of the UI that depends on this parameter will be updated,
+    // including the main background, knob positions, text labels, and the filter control curve.
     repaint();
 }

@@ -11,17 +11,17 @@
 #pragma once
 
 #include "BinaryData.h"
+#include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
-#include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
-#include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
-#include "Panels/ControlPanel/Graph Components/WidthGraph.h"
-#include "Panels/ControlPanel/Graph Components/VUPanel.h"
-#include "Panels/ControlPanel/Graph Components/GraphPanel.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
-#include "Panels/SpectrogramPanel/Multiband.h"
+#include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
+#include "Panels/ControlPanel/Graph Components/GraphPanel.h"
+#include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
+#include "Panels/ControlPanel/Graph Components/VUPanel.h"
+#include "Panels/ControlPanel/Graph Components/WidthGraph.h"
 #include "Panels/SpectrogramPanel/FilterControl.h"
-#include "GUI/InterfaceDefines.h"
+#include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
 
 //==============================================================================
@@ -31,33 +31,35 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::Slider::Listener,
                                  public juce::ComboBox::Listener,
                                  public juce::Timer,
-                                 public juce::Button::Listener
+                                 public juce::Button::Listener,
+                                 public juce::AudioProcessorValueTreeState::Listener
 {
 public:
-    FireAudioProcessorEditor (FireAudioProcessor&);
+    FireAudioProcessorEditor(FireAudioProcessor&);
     ~FireAudioProcessorEditor();
 
     //==============================================================================
-    void paint (juce::Graphics& g) override;
+    void paint(juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
     void setMultiband();
+    void parameterChanged(const juce::String& parameterID, float newValue) override;
 
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
-    
+
     // create own knob style
     OtherLookAndFeel otherLookAndFeel;
     ZoomLookAndFeel zoomLookAndFeel;
-    
+
     int focusIndex = 0;
     void updateWhenChangingFocus();
 
-    void buttonClicked (juce::Button* clickedButton) override;
-    void mouseDown (const juce::MouseEvent& e) override;
+    void buttonClicked(juce::Button* clickedButton) override;
+    void mouseDown(const juce::MouseEvent& e) override;
 
     // init editor
     void initEditor();
@@ -78,8 +80,8 @@ private:
     FilterControl filterControl { processor, globalPanel };
 
     // Spectrum
-    SpectrumComponent processedSpectrum{1, true};
-    SpectrumComponent originalSpectrum{0, false};
+    SpectrumComponent processedSpectrum { 1, true };
+    SpectrumComponent originalSpectrum { 0, false };
     SpectrumBackground specBackground;
 
     // Labels
@@ -99,19 +101,19 @@ private:
         windowButtons = 1003,
     };
 
-    void setMenu (juce::ComboBox* combobox);
+    void setMenu(juce::ComboBox* combobox);
 
-    void setLinearSlider (juce::Slider& slider);
+    void setLinearSlider(juce::Slider& slider);
 
-    void setDistortionGraph (juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
+    void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
 
-    void setFourComponentsVisibility (juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
 
     // override listener functions
 
-    void sliderValueChanged (juce::Slider* slider) override;
+    void sliderValueChanged(juce::Slider* slider) override;
     // combobox changed and set knob enable/disable
-    void comboBoxChanged (juce::ComboBox* combobox) override;
+    void comboBoxChanged(juce::ComboBox* combobox) override;
     // hide and show labels
     //    void sliderDragStarted (juce::Slider*) override;
     //    void sliderDragEnded (juce::Slider*) override;
@@ -132,5 +134,5 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FireAudioProcessorEditor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

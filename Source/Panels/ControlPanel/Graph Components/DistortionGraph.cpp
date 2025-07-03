@@ -11,14 +11,14 @@
 #include "DistortionGraph.h"
 
 //==============================================================================
-DistortionGraph::DistortionGraph (FireAudioProcessor& p) : processor (p)
+DistortionGraph::DistortionGraph(FireAudioProcessor& p) : processor(p)
 {
     const auto& params = processor.getParameters();
     for (auto param : params)
     {
-        param->addListener (this);
+        param->addListener(this);
     }
-    startTimerHz (60);
+    updateDistortionCurve();
 }
 
 DistortionGraph::~DistortionGraph()
@@ -26,41 +26,71 @@ DistortionGraph::~DistortionGraph()
     const auto& params = processor.getParameters();
     for (auto param : params)
     {
-        param->removeListener (this);
+        param->removeListener(this);
     }
 }
 
-void DistortionGraph::paint (juce::Graphics& g)
+void DistortionGraph::paint(juce::Graphics& g)
 {
-    // paint distortion function
+    // The paint function is now very lightweight. It only draws the pre-calculated path.
+    auto frameRight = getLocalBounds();
+
+    g.setColour(COLOUR6);
+    g.drawRect(getLocalBounds(), 1);
+
+    // Create the gradient and draw the stored path
+    juce::ColourGradient grad(SHAPE_COLOUR.withBrightness(0.9), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2, juce::Colours::yellow.withBrightness(0.9).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
+    g.setGradientFill(grad);
+    g.strokePath(distortionCurve, juce::PathStrokeType(2.0f));
+
+    if (isMouseOn && ! mZoomState)
+    {
+        g.setColour(juce::Colours::yellow.withAlpha(0.05f));
+        g.fillAll();
+    }
+}
+
+void DistortionGraph::setState(int mode, float rec, float mix, float bias, float drive, float rateDivide)
+{
+    this->mode = mode;
+    this->rec = rec;
+    this->mix = mix;
+    this->bias = bias;
+    this->drive = drive;
+    this->rateDivide = rateDivide;
+    updateDistortionCurve();
+}
+
+void DistortionGraph::parameterValueChanged(int parameterIndex, float newValue)
+{
+    // Whenever a relevant parameter changes, we simply recalculate the curve.
+    // The repaint is handled inside updateDistortionCurve().
+    updateDistortionCurve();
+}
+
+void DistortionGraph::updateDistortionCurve()
+{
+    // Clear the old path before calculating the new one.
+    distortionCurve.clear();
 
     auto frameRight = getLocalBounds();
 
-    // draw outline
-    g.setColour (COLOUR6);
-    g.drawRect (getLocalBounds(), 1);
-
-    // symmetrical distortion
+    // Symmetrical distortion drawing logic, migrated from your original paint() function.
     if (mode <= 15)
     {
         float functionValue = 0.0f;
         float mixValue;
 
-        const int numPix = frameRight.getWidth(); // you might experiment here, if you want less steps to speed up
-
+        const int numPix = frameRight.getWidth();
         float driveScale = 1.0f;
         float maxValue = 2.0f * driveScale * mix + 2.0f * (1.0f - mix);
-        float value = -maxValue; // minimum (leftmost)  value for your graph
+        float value = -maxValue;
         float valInc = (maxValue - value) / numPix;
         float xPos = frameRight.getX();
-        const float posInc = frameRight.getWidth() / numPix;
-
-        juce::Path p;
+        const float posInc = (float) frameRight.getWidth() / (float) numPix;
 
         bool edgePointL = false;
         bool edgePointR = false;
-
-        // step = 0.5f, maybe high cpu but more accurate graph
         float step = 0.5f;
 
         for (float i = 1; i < numPix; i += step)
@@ -73,7 +103,7 @@ void DistortionGraph::paint (juce::Graphics& g)
             // downsample
             if (rateDivide > 1.0f)
             {
-                valueAfterDrive = ceilf (valueAfterDrive / (rateDivide / 256.0f)) * (rateDivide / 256.0f);
+                valueAfterDrive = ceilf(valueAfterDrive / (rateDivide / 256.0f)) * (rateDivide / 256.0f);
             }
 
             valueAfterDrive = valueAfterDrive * drive + bias;
@@ -81,52 +111,48 @@ void DistortionGraph::paint (juce::Graphics& g)
             switch (mode)
             {
                 case 0:
-                    functionValue = waveshaping::arctanSoftClipping (valueAfterDrive);
+                    functionValue = waveshaping::arctanSoftClipping(valueAfterDrive);
                     break;
                 case 1:
-                    functionValue = waveshaping::expSoftClipping (valueAfterDrive);
+                    functionValue = waveshaping::expSoftClipping(valueAfterDrive);
                     break;
                 case 2:
-                    functionValue = waveshaping::tanhSoftClipping (valueAfterDrive);
+                    functionValue = waveshaping::tanhSoftClipping(valueAfterDrive);
                     break;
                 case 3:
-                    functionValue = waveshaping::cubicSoftClipping (valueAfterDrive);
+                    functionValue = waveshaping::cubicSoftClipping(valueAfterDrive);
                     break;
                 case 4:
-                    functionValue = waveshaping::hardClipping (valueAfterDrive);
+                    functionValue = waveshaping::hardClipping(valueAfterDrive);
                     break;
                 case 5:
-                    functionValue = waveshaping::sausageFattener (valueAfterDrive);
+                    functionValue = waveshaping::sausageFattener(valueAfterDrive);
                     break;
                 case 6:
-                    functionValue = waveshaping::sinFoldback (valueAfterDrive);
+                    functionValue = waveshaping::sinFoldback(valueAfterDrive);
                     break;
                 case 7:
-                    functionValue = waveshaping::linFoldback (valueAfterDrive);
+                    functionValue = waveshaping::linFoldback(valueAfterDrive);
                     break;
                 case 8:
-                    functionValue = waveshaping::limitClip (valueAfterDrive);
+                    functionValue = waveshaping::limitClip(valueAfterDrive);
                     break;
                 case 9:
-                    functionValue = waveshaping::singleSinClip (valueAfterDrive);
+                    functionValue = waveshaping::singleSinClip(valueAfterDrive);
                     break;
                 case 10:
-                    functionValue = waveshaping::logicClip (valueAfterDrive);
+                    functionValue = waveshaping::logicClip(valueAfterDrive);
                     break;
                 case 11:
-                    functionValue = waveshaping::tanclip (valueAfterDrive);
+                    functionValue = waveshaping::tanclip(valueAfterDrive);
                     break;
             }
 
-            // retification
-            functionValue = waveshaping::rectificationProcess (functionValue, rec);
-
-            // mix
+            functionValue = waveshaping::rectificationProcess(functionValue, rec);
             functionValue = (1.0f - mix) * value + mix * functionValue;
             mixValue = (2.0f / 3.0f) * functionValue;
             float yPos = frameRight.getCentreY() - frameRight.getHeight() * mixValue / 2.0f;
 
-            // draw points
             if (yPos < frameRight.getY())
             {
                 if (edgePointR == false)
@@ -155,50 +181,16 @@ void DistortionGraph::paint (juce::Graphics& g)
             {
                 if (mode == 0)
                 {
-                    p.startNewSubPath (xPos, frameRight.getBottom());
-                    p.lineTo (xPos, yPos);
+                    distortionCurve.startNewSubPath(xPos, frameRight.getBottom());
+                    distortionCurve.lineTo(xPos, yPos);
                 }
                 else
                 {
-                    p.startNewSubPath (xPos, yPos);
+                    distortionCurve.startNewSubPath(xPos, yPos);
                 }
                 edgePointL = true;
             }
-            p.lineTo (xPos, yPos);
+            distortionCurve.lineTo(xPos, yPos);
         }
-
-        juce::ColourGradient grad (SHAPE_COLOUR.withBrightness (0.9), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2, juce::Colours::yellow.withBrightness (0.9).withAlpha (0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
-        g.setGradientFill (grad);
-        g.strokePath (p, juce::PathStrokeType (2.0f));
     }
-
-    if (isMouseOn && ! mZoomState)
-    {
-        g.setColour (juce::Colours::yellow.withAlpha (0.05f));
-        g.fillAll();
-    }
-}
-
-void DistortionGraph::setState (int mode, float rec, float mix, float bias, float drive, float rateDivide)
-{
-    this->mode = mode;
-    this->rec = rec;
-    this->mix = mix;
-    this->bias = bias;
-    this->drive = drive;
-    this->rateDivide = rateDivide;
-}
-
-void DistortionGraph::parameterValueChanged (int parameterIndex, float newValue)
-{
-    parametersChanged.set (true);
-}
-
-void DistortionGraph::timerCallback()
-{
-    if (parametersChanged.compareAndSetBool (false, true))
-    {
-    }
-
-    repaint();
 }

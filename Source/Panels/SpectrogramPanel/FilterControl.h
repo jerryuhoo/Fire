@@ -12,27 +12,26 @@
 
 #include "../../PluginProcessor.h"
 #include "../../Utility/AudioHelpers.h"
-#include "DraggableButton.h"
 #include "../ControlPanel/GlobalPanel.h"
+#include "DraggableButton.h"
 //==============================================================================
 /*
  */
-class FilterControl : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
+class FilterControl : public juce::Component, juce::AudioProcessorParameter::Listener
 {
 public:
-    FilterControl (FireAudioProcessor&, GlobalPanel&);
+    FilterControl(FireAudioProcessor&, GlobalPanel&);
     ~FilterControl() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
     //    void setParams(float lowCut,
     //                   float highCut,
     //                   float cutRes,
     //                   float peak,
     //                   float peakRes);
-    void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override {}
-    void timerCallback() override;
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override {}
 
 private:
     FireAudioProcessor& processor;
@@ -50,11 +49,10 @@ private:
     // lowcut, peak, highcut, lowcut Q, highcut Q
     MonoChain monoChain;
 
-    juce::Atomic<bool> parametersChanged { false };
     void updateResponseCurve();
     void updateChain();
     void setDraggableButtonBounds();
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FilterControl)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterControl)
 };

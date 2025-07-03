@@ -22,7 +22,7 @@
 /*
 */
 
-class Multiband : public juce::Component, juce::Timer, juce::Slider::Listener, juce::Button::Listener
+class Multiband : public juce::Component, juce::Slider::Listener, juce::Button::Listener
 {
 public:
     Multiband(FireAudioProcessor&, state::StateComponent&);
@@ -30,7 +30,8 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
 
     void setCloseButtonState();
     void dragLines(float xPercent, int index);

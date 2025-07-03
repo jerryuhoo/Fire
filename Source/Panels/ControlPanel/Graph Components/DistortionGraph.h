@@ -18,20 +18,20 @@
 //==============================================================================
 /*
 */
-class DistortionGraph  : public GraphTemplate, juce::AudioProcessorParameter::Listener, juce::Timer
+class DistortionGraph : public GraphTemplate, juce::AudioProcessorParameter::Listener
 {
 public:
-    DistortionGraph(FireAudioProcessor &);
+    DistortionGraph(FireAudioProcessor&);
     ~DistortionGraph() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void setState(int mode, float rec, float mix, float bias, float drive, float rateDivide);
 
-    void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int parameterIndex, bool gestureIsStarting) override { }
-    void timerCallback() override;
+    void parameterValueChanged(int parameterIndex, float newValue) override;
+    void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override {}
+
 private:
-    FireAudioProcessor &processor;
+    FireAudioProcessor& processor;
     int mode = -1;
     float color = -1.0f;
     float rec = -1.0f;
@@ -40,6 +40,7 @@ private:
     float rateDivide = -1.0f;
     float drive = -1.0f;
     float scale = 1.0f;
-    juce::Atomic<bool> parametersChanged {false};
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DistortionGraph)
+    juce::Path distortionCurve;
+    void updateDistortionCurve();
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DistortionGraph)
 };

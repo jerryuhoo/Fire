@@ -50,7 +50,10 @@ add_subdirectory(libs/clap-juce-extensions EXCLUDE_FROM_ALL)
 # juce_add_module(modules/my_module)
 
 # This adds the melatonin inspector module
-add_subdirectory (modules/melatonin_inspector)
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+    message(STATUS "Melatonin Inspector enabled for Debug build")
+    add_subdirectory(modules/melatonin_inspector)
+endif()
 
 # See `docs/CMake API.md` in the JUCE repo for all config options
 juce_add_plugin("${PROJECT_NAME}"

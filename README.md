@@ -6,7 +6,7 @@
 
 ## 1. Introduce
 
-This is a multi-band distortion plugin 『Fire』. It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
+This is a multi-band distortion plugin [『Fire』](https://www.bluewingsmusic.com/fire.html). It can be used in DAWs which supports AU and Vst3 plugins such as Ableton Live, Fl Studio, etc.
 
 Demo video:
 
@@ -14,7 +14,7 @@ Demo video:
 
 (Bilibili) <https://www.bilibili.com/video/BV17f4y1M7Hm>
 
-:musical_note: Home Page for Wings Music: [Wings Music](https://jerryuhoo.github.io/)
+:musical_note: Home Page for Wings Music: [Blue Wings Music](https://www.bluewingsmusic.com/)
 
 Hope you like it!
 
@@ -84,15 +84,22 @@ Note: You should choose Release mode rather than Debug mode(or disable Debug mod
 
 ## 4. Support the author
 
-我也是一个音乐制作人，欢迎关注网易云音乐：[羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
+我也是一个音乐制作人，欢迎关注网易云音乐：[羽翼深蓝](https://music.163.com/#/artist?id=12118139)
 
-I am also a music producer.
-Netease channel: [羽翼深蓝Wings](https://music.163.com/#/artist?id=12118139)
-SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
+[我的个人主页](https://www.bluewingsmusic.com/)（之后会推出其他的音频软件）
 
-<div align=center>
-    <img src="support.png" width = "50%"/>
-</div>
+I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my music here:
+
+[Netease Music](https://music.163.com/#/artist?id=12118139)
+
+[Apple Music](https://music.apple.com/us/artist/%E7%BE%BD%E7%BF%BC%E6%B7%B1%E8%93%9D/1696577755)
+
+[Spotify](https://open.spotify.com/artist/0xi1eMyrrSXdZMX8n7Ilmt)
+
+[YouTube](https://www.youtube.com/@bluewings-music)
+
+[Other Softwares by Blue Wings Music](https://www.bluewingsmusic.com/)
+
 
 ## 5. References
 
@@ -105,6 +112,18 @@ SoundCloud: [Wings](https://soundcloud.com/jerry-876742699)
 5.4. [SimpleEQ](https://github.com/matkatmusic/SimpleEQ) by matkatmusic
 
 ## 6. Update Notes
+
+### 2025-7-3 (version 1.0.2)
+
+1. Refactor internal code structure to improve GUI rendering performance.
+2. Fix a bug where VU meters were not visible in multiband (Band) mode.
+3. Add a new setting to disable auto-update.
+4. Fix phase issues in multiband mode:
+
+   * Frequency response is now flatter and more phase-coherent across bands.
+   * Fix phase shift issues when the Mix value is less than 1.
+
+   > ⚠️ **Note:** These improvements may slightly alter the sound of older sessions. Please **freeze your audio** if you are using a previous version of the plugin.
 
 ### 2024-5-22 (version 1.0.1)
 

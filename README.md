@@ -125,6 +125,15 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
    > ⚠️ **Note:** These improvements may slightly alter the sound of older sessions. Please **freeze your audio** if you are using a previous version of the plugin.
 
+5. For long-term product consistency, the manufacturer name has been changed to **Blue Wings Music**.
+
+   * The new plugin will **not** appear under the old "Wings" manufacturer in your DAW.
+   * You may need to **manually remove** the old version.
+   * Whether the new version automatically replaces the old one **has not been fully tested**.
+   * If it fails to replace the old plugin, please **save your presets** and re-import them in the new version.
+
+
+
 ### 2024-5-22 (version 1.0.1)
 
 1. Add a button for more Drive gain (E-Extreme).

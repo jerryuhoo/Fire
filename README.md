@@ -135,6 +135,10 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
    * Whether the new version automatically replaces the old one **has not been fully tested**.
    * If it fails to replace the old plugin, please **save your presets** and re-import them in the new version.
 
+7. Global Filter EQ gain range expanded from ±15 dB to ±24 dB. Add smoother to prevent noise when moving the global filter.
+   > ⚠️ **Note:** Important: This is a breaking change.
+Due to how DAWs store normalized parameter values, old presets and projects will sound different after the update if you used the global filter. I'm sorry about that 😭.
+
 
 
 ### 2024-5-22 (version 1.0.1)

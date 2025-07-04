@@ -69,6 +69,21 @@ FireAudioProcessor::FireAudioProcessor()
 
     // Create the properties file object.
     appProperties = std::make_unique<juce::PropertiesFile>(options);
+
+    // Initialize all 9 smoothers with default parameter values
+    auto chainSettings = getChainSettings(treeState);
+
+    lowcutFreqSmoother.setCurrentAndTargetValue(chainSettings.lowCutFreq);
+    lowcutGainSmoother.setCurrentAndTargetValue(chainSettings.lowCutGainInDecibels);
+    lowcutQualitySmoother.setCurrentAndTargetValue(chainSettings.lowCutQuality);
+
+    peakFreqSmoother.setCurrentAndTargetValue(chainSettings.peakFreq);
+    peakGainSmoother.setCurrentAndTargetValue(chainSettings.peakGainInDecibels);
+    peakQualitySmoother.setCurrentAndTargetValue(chainSettings.peakQuality);
+
+    highcutFreqSmoother.setCurrentAndTargetValue(chainSettings.highCutFreq);
+    highcutGainSmoother.setCurrentAndTargetValue(chainSettings.highCutGainInDecibels);
+    highcutQualitySmoother.setCurrentAndTargetValue(chainSettings.highCutQuality);
 }
 
 FireAudioProcessor::~FireAudioProcessor()
@@ -171,7 +186,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     previousHighcutFreq = (float) *treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
     previousPeakFreq = (float) *treeState.getRawParameterValue(PEAK_FREQ_ID);
 
-    driveSmoother1.reset(sampleRate, 0.05); //0.05 second is rampLength, which means increasing to targetvalue needs 0.05s.
+    const float rampTimeSeconds = 0.0005f;
+    driveSmoother1.reset(sampleRate, 0.05);
     driveSmoother1.setCurrentAndTargetValue(previousDrive1);
     driveSmoother2.reset(sampleRate, 0.05);
     driveSmoother2.setCurrentAndTargetValue(previousDrive2);
@@ -191,12 +207,21 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     outputSmootherGlobal.reset(sampleRate, 0.05);
     outputSmootherGlobal.setCurrentAndTargetValue(previousOutput);
 
-    lowcutFreqSmoother.reset(sampleRate, 0.001);
+    lowcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
     lowcutFreqSmoother.setCurrentAndTargetValue(previousLowcutFreq);
-    highcutFreqSmoother.reset(sampleRate, 0.001);
+    highcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
     highcutFreqSmoother.setCurrentAndTargetValue(previousHighcutFreq);
-    peakFreqSmoother.reset(sampleRate, 0.001);
+    peakFreqSmoother.reset(sampleRate, rampTimeSeconds);
     peakFreqSmoother.setCurrentAndTargetValue(previousPeakFreq);
+
+    lowcutGainSmoother.reset(sampleRate, rampTimeSeconds);
+    lowcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
+
+    peakGainSmoother.reset(sampleRate, rampTimeSeconds);
+    peakQualitySmoother.reset(sampleRate, rampTimeSeconds);
+
+    highcutGainSmoother.reset(sampleRate, rampTimeSeconds);
+    highcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
 
     recSmoother1.reset(sampleRate, 0.05);
     recSmoother1.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID1));
@@ -207,13 +232,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     recSmoother4.reset(sampleRate, 0.05);
     recSmoother4.setCurrentAndTargetValue(*treeState.getRawParameterValue(REC_ID4));
 
-    biasSmoother1.reset(sampleRate, 0.001);
+    biasSmoother1.reset(sampleRate, rampTimeSeconds);
     biasSmoother1.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID1));
-    biasSmoother2.reset(sampleRate, 0.001);
+    biasSmoother2.reset(sampleRate, rampTimeSeconds);
     biasSmoother2.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID2));
-    biasSmoother3.reset(sampleRate, 0.001);
+    biasSmoother3.reset(sampleRate, rampTimeSeconds);
     biasSmoother3.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID3));
-    biasSmoother4.reset(sampleRate, 0.001);
+    biasSmoother4.reset(sampleRate, rampTimeSeconds);
     biasSmoother4.setCurrentAndTargetValue(*treeState.getRawParameterValue(BIAS_ID4));
 
     mixSmoother1.reset(sampleRate, 0.05);
@@ -233,10 +258,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     normalSmoother.reset(sampleRate, 0.5);
     normalSmoother.setCurrentAndTargetValue(1);
 
-    const float rampTimeSeconds = 0.05f;
-    smoothedFreq1.reset(sampleRate, rampTimeSeconds);
-    smoothedFreq2.reset(sampleRate, rampTimeSeconds);
-    smoothedFreq3.reset(sampleRate, rampTimeSeconds);
+    smoothedFreq1.reset(sampleRate, rampTimeSeconds * 2);
+    smoothedFreq2.reset(sampleRate, rampTimeSeconds * 2);
+    smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
 
     // historyArray init
     for (int i = 0; i < samplesPerBlock; i++)
@@ -992,9 +1016,45 @@ void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings
 void FireAudioProcessor::updateFilter()
 {
     auto chainSettings = getChainSettings(treeState);
-    updateLowCutFilters(chainSettings);
-    updatePeakFilter(chainSettings);
-    updateHighCutFilters(chainSettings);
+
+    // Set the target values for all 9 smoothers
+    lowcutFreqSmoother.setTargetValue(chainSettings.lowCutFreq);
+    lowcutGainSmoother.setTargetValue(chainSettings.lowCutGainInDecibels);
+    lowcutQualitySmoother.setTargetValue(chainSettings.lowCutQuality);
+
+    peakFreqSmoother.setTargetValue(chainSettings.peakFreq);
+    peakGainSmoother.setTargetValue(chainSettings.peakGainInDecibels);
+    peakQualitySmoother.setTargetValue(chainSettings.peakQuality);
+
+    highcutFreqSmoother.setTargetValue(chainSettings.highCutFreq);
+    highcutGainSmoother.setTargetValue(chainSettings.highCutGainInDecibels);
+    highcutQualitySmoother.setTargetValue(chainSettings.highCutQuality);
+
+    // Create a new settings object with the smoothed values for this audio block
+    ChainSettings smoothedSettings;
+    smoothedSettings.lowCutFreq = lowcutFreqSmoother.getNextValue();
+    smoothedSettings.lowCutGainInDecibels = lowcutGainSmoother.getNextValue();
+    smoothedSettings.lowCutQuality = lowcutQualitySmoother.getNextValue();
+
+    smoothedSettings.peakFreq = peakFreqSmoother.getNextValue();
+    smoothedSettings.peakGainInDecibels = peakGainSmoother.getNextValue();
+    smoothedSettings.peakQuality = peakQualitySmoother.getNextValue();
+
+    smoothedSettings.highCutFreq = highcutFreqSmoother.getNextValue();
+    smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
+    smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
+
+    // Slopes and bypass states don't need smoothing, use them directly
+    smoothedSettings.lowCutSlope = chainSettings.lowCutSlope;
+    smoothedSettings.highCutSlope = chainSettings.highCutSlope;
+    smoothedSettings.lowCutBypassed = chainSettings.lowCutBypassed;
+    smoothedSettings.peakBypassed = chainSettings.peakBypassed;
+    smoothedSettings.highCutBypassed = chainSettings.highCutBypassed;
+
+    // Call the modular update functions
+    updateLowCutFilters(smoothedSettings);
+    updatePeakFilter(smoothedSettings);
+    updateHighCutFilters(smoothedSettings);
 }
 
 bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
@@ -1739,12 +1799,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 
     parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_FREQ_ID, versionNum }, HIGHCUT_FREQ_NAME, cutoffRange, 20000.0f));
     parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_Q_ID, versionNum }, HIGHCUT_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { LOWCUT_GAIN_ID, versionNum }, LOWCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_GAIN_ID, versionNum }, HIGHCUT_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { LOWCUT_GAIN_ID, versionNum }, LOWCUT_GAIN_NAME, juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { HIGHCUT_GAIN_ID, versionNum }, HIGHCUT_GAIN_NAME, juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
 
     parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_FREQ_ID, versionNum }, PEAK_FREQ_NAME, cutoffRange, 1000.0f));
     parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_Q_ID, versionNum }, PEAK_Q_NAME, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_GAIN_ID, versionNum }, PEAK_GAIN_NAME, juce::NormalisableRange<float>(-15.0f, 15.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(juce::ParameterID { PEAK_GAIN_ID, versionNum }, PEAK_GAIN_NAME, juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
 
     parameters.push_back(std::make_unique<PInt>(juce::ParameterID { LOWCUT_SLOPE_ID, versionNum }, LOWCUT_SLOPE_NAME, 0, 3, 0));
     parameters.push_back(std::make_unique<PInt>(juce::ParameterID { HIGHCUT_SLOPE_ID, versionNum }, HIGHCUT_SLOPE_NAME, 0, 3, 0));

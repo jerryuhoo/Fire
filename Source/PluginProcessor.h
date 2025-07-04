@@ -194,9 +194,21 @@ private:
     juce::SmoothedValue<float> mixSmoother3;
     juce::SmoothedValue<float> mixSmoother4;
     juce::SmoothedValue<float> mixSmootherGlobal;
+
+    // Low-Cut / Low-Shelf Filter
     juce::SmoothedValue<float> lowcutFreqSmoother;
-    juce::SmoothedValue<float> highcutFreqSmoother;
+    juce::SmoothedValue<float> lowcutGainSmoother;
+    juce::SmoothedValue<float> lowcutQualitySmoother;
+
+    // Peak Filter
     juce::SmoothedValue<float> peakFreqSmoother;
+    juce::SmoothedValue<float> peakGainSmoother;
+    juce::SmoothedValue<float> peakQualitySmoother;
+
+    // High-Cut / High-Shelf Filter
+    juce::SmoothedValue<float> highcutFreqSmoother;
+    juce::SmoothedValue<float> highcutGainSmoother;
+    juce::SmoothedValue<float> highcutQualitySmoother;
 
     juce::SmoothedValue<float> centralSmoother;
     juce::SmoothedValue<float> normalSmoother;

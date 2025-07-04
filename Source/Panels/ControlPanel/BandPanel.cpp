@@ -31,19 +31,34 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     addAndMakeVisible(shapePanelLabel);
     shapePanelLabel.setLookAndFeel(&flatLnf);
     shapePanelLabel.setText("Shape", juce::dontSendNotification);
-    shapePanelLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    shapePanelLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     shapePanelLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
 
     addAndMakeVisible(compressorPanelLabel);
     compressorPanelLabel.setLookAndFeel(&flatLnf);
     compressorPanelLabel.setText("Compressor", juce::dontSendNotification);
-    compressorPanelLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    compressorPanelLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     compressorPanelLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
 
     addAndMakeVisible(widthPanelLabel);
     widthPanelLabel.setLookAndFeel(&flatLnf);
     widthPanelLabel.setText("Stereo", juce::dontSendNotification);
-    widthPanelLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    widthPanelLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     widthPanelLabel.setColour(juce::Label::textColourId, WIDTH_COLOUR);
 
     // drive knobs
@@ -58,7 +73,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", juce::dontSendNotification);
-    driveLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    driveLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     driveLabel.setColour(juce::Label::textColourId, DRIVE_COLOUR.withBrightness(0.9f));
     driveLabel.attachToComponent(&driveKnob1, false);
     driveLabel.setJustificationType(juce::Justification::centred);
@@ -75,7 +95,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", juce::dontSendNotification);
-    outputLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    outputLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     outputLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
     outputLabel.attachToComponent(&outputKnob1, false);
     outputLabel.setJustificationType(juce::Justification::centred);
@@ -99,7 +124,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(CompRatioLabel);
     CompRatioLabel.setText("Ratio", juce::dontSendNotification);
-    CompRatioLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    CompRatioLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     CompRatioLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
     CompRatioLabel.attachToComponent(&compRatioKnob1, false);
     CompRatioLabel.setJustificationType(juce::Justification::centred);
@@ -117,7 +147,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(CompThreshLabel);
     CompThreshLabel.setText("Threshold", juce::dontSendNotification);
-    CompThreshLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    CompThreshLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     CompThreshLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
     CompThreshLabel.attachToComponent(&compThreshKnob1, false);
     CompThreshLabel.setJustificationType(juce::Justification::centred);
@@ -130,7 +165,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
-    widthLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    widthLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     widthLabel.setColour(juce::Label::textColourId, WIDTH_COLOUR);
     widthLabel.attachToComponent(&widthKnob1, false);
     widthLabel.setJustificationType(juce::Justification::centred);
@@ -143,7 +183,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
-    biasLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    biasLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     biasLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
     biasLabel.attachToComponent(&biasKnob1, false);
     biasLabel.setJustificationType(juce::Justification::centred);
@@ -156,7 +201,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
-    recLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    recLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     recLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
     recLabel.attachToComponent(&recKnob1, false);
     recLabel.setJustificationType(juce::Justification::centred);
@@ -181,7 +231,12 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", juce::dontSendNotification);
-    mixLabel.setFont(juce::Font(KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    mixLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     mixLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
     mixLabel.attachToComponent(&mixKnob1, false);
     mixLabel.setJustificationType(juce::Justification::centred);

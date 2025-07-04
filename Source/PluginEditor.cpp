@@ -252,7 +252,12 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
     // draw version
     g.setColour(COLOUR5);
-    g.setFont(juce::Font("Times New Roman", 18.0f, juce::Font::bold));
+    g.setFont(juce::Font{
+        juce::FontOptions()
+            .withName("Times New Roman")
+            .withHeight(18.0f)
+            .withStyle("Bold")
+    });
     juce::String version = (juce::String) VERSION;
     juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, juce::Justification::topLeft, 1);

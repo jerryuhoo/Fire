@@ -22,13 +22,23 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
     addAndMakeVisible (postFilterPanelLabel);
     postFilterPanelLabel.setLookAndFeel(&flatLnf);
     postFilterPanelLabel.setText ("Post Filter", juce::dontSendNotification);
-    postFilterPanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    postFilterPanelLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     postFilterPanelLabel.setColour (juce::Label::textColourId, FILTER_COLOUR);
     
     addAndMakeVisible (downSamplePanelLabel);
     downSamplePanelLabel.setLookAndFeel(&flatLnf);
     downSamplePanelLabel.setText ("DownSample", juce::dontSendNotification);
-    downSamplePanelLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    downSamplePanelLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     downSamplePanelLabel.setColour (juce::Label::textColourId, DOWNSAMPLE_COLOUR);
     
 //    addAndMakeVisible (limiterPanelLabel);
@@ -42,7 +52,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (outputLabelGlobal);
     outputLabelGlobal.setText ("Output", juce::dontSendNotification);
-    outputLabelGlobal.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    outputLabelGlobal.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     outputLabelGlobal.setColour (juce::Label::textColourId, KNOB_FONT_COLOUR);
     outputLabelGlobal.attachToComponent (&outputKnob, false);
     outputLabelGlobal.setJustificationType (juce::Justification::centred);
@@ -51,7 +66,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (mixLabelGlobal);
     mixLabelGlobal.setText ("Mix", juce::dontSendNotification);
-    mixLabelGlobal.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    mixLabelGlobal.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     mixLabelGlobal.setColour (juce::Label::textColourId, KNOB_FONT_COLOUR);
     mixLabelGlobal.attachToComponent (&mixKnob, false);
     mixLabelGlobal.setJustificationType (juce::Justification::centred);
@@ -61,7 +81,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (downSampleLabel);
     downSampleLabel.setText ("Downsample", juce::dontSendNotification);
-    downSampleLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    downSampleLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     downSampleLabel.setColour (juce::Label::textColourId, DOWNSAMPLE_COLOUR.withBrightness (0.8f));
     downSampleLabel.attachToComponent (&downSampleKnob, false);
     downSampleLabel.setJustificationType (juce::Justification::centred);
@@ -110,7 +135,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (lowcutFreqLabel);
     lowcutFreqLabel.setText ("Frequency", juce::dontSendNotification);
-    lowcutFreqLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    lowcutFreqLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     lowcutFreqLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     lowcutFreqLabel.attachToComponent (&lowcutFreqKnob, false);
     lowcutFreqLabel.setJustificationType (juce::Justification::centred);
@@ -120,7 +150,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (lowcutGainLabel);
     lowcutGainLabel.setText ("Gain", juce::dontSendNotification);
-    lowcutGainLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    lowcutGainLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     lowcutGainLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     lowcutGainLabel.attachToComponent (&lowcutGainKnob, false);
     lowcutGainLabel.setJustificationType (juce::Justification::centred);
@@ -130,7 +165,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (lowcutQLabel);
     lowcutQLabel.setText ("Q", juce::dontSendNotification); // Resonance
-    lowcutQLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    lowcutQLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     lowcutQLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     lowcutQLabel.attachToComponent (&lowcutQKnob, false);
     lowcutQLabel.setJustificationType (juce::Justification::centred);
@@ -140,7 +180,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (highcutFreqLabel);
     highcutFreqLabel.setText ("Frequency", juce::dontSendNotification);
-    highcutFreqLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    highcutFreqLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     highcutFreqLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     highcutFreqLabel.attachToComponent (&highcutFreqKnob, false);
     highcutFreqLabel.setJustificationType (juce::Justification::centred);
@@ -150,7 +195,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (highcutGainLabel);
     highcutGainLabel.setText ("Gain", juce::dontSendNotification);
-    highcutGainLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    highcutGainLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     highcutGainLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     highcutGainLabel.attachToComponent (&highcutGainKnob, false);
     highcutGainLabel.setJustificationType (juce::Justification::centred);
@@ -160,7 +210,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (highcutQLabel);
     highcutQLabel.setText ("Q", juce::dontSendNotification);
-    highcutQLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    highcutQLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     highcutQLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     highcutQLabel.attachToComponent (&highcutQKnob, false);
     highcutQLabel.setJustificationType (juce::Justification::centred);
@@ -170,7 +225,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (peakFreqLabel);
     peakFreqLabel.setText ("Frequency", juce::dontSendNotification);
-    peakFreqLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    peakFreqLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     peakFreqLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     peakFreqLabel.attachToComponent (&peakFreqKnob, false);
     peakFreqLabel.setJustificationType (juce::Justification::centred);
@@ -179,7 +239,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (peakQLabel);
     peakQLabel.setText ("Q", juce::dontSendNotification);
-    peakQLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    peakQLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     peakQLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     peakQLabel.attachToComponent (&peakQKnob, false);
     peakQLabel.setJustificationType (juce::Justification::centred);
@@ -188,7 +253,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (peakGainLabel);
     peakGainLabel.setText ("Gain", juce::dontSendNotification);
-    peakGainLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    peakGainLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     peakGainLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     peakGainLabel.attachToComponent (&peakGainKnob, false);
     peakGainLabel.setJustificationType (juce::Justification::centred);
@@ -228,7 +298,12 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (filterTypeLabel);
     filterTypeLabel.setText ("Type", juce::dontSendNotification);
-    filterTypeLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    filterTypeLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     filterTypeLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     filterTypeLabel.attachToComponent (&filterHighPassButton, false);
     filterTypeLabel.setJustificationType (juce::Justification::centred);
@@ -238,14 +313,24 @@ GlobalPanel::GlobalPanel (juce::AudioProcessorValueTreeState& apvts)
 
     addAndMakeVisible (lowcutSlopeLabel);
     lowcutSlopeLabel.setText ("Slope", juce::dontSendNotification);
-    lowcutSlopeLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    lowcutSlopeLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     lowcutSlopeLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     lowcutSlopeLabel.attachToComponent (&lowcutSlopeMode, true);
     lowcutSlopeLabel.setJustificationType (juce::Justification::left);
 
     addAndMakeVisible (highcutSlopeLabel);
     highcutSlopeLabel.setText ("Slope", juce::dontSendNotification);
-    highcutSlopeLabel.setFont (juce::Font (KNOB_FONT, KNOB_FONT_SIZE, juce::Font::plain));
+    highcutSlopeLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain")
+    });
     highcutSlopeLabel.setColour (juce::Label::textColourId, FILTER_COLOUR.withBrightness (0.8f));
     highcutSlopeLabel.attachToComponent (&highcutSlopeMode, true);
     highcutSlopeLabel.setJustificationType (juce::Justification::left);

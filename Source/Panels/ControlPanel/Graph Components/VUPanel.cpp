@@ -108,7 +108,12 @@ void VUPanel::paint (juce::Graphics& g)
         float textWidth = getWidth() / 5;
         float textHeight = getHeight() / 10;
 //        g.drawText("  0", textX, VU_METER_Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.setFont(juce::Font(KNOB_FONT, 14.0f * getHeight() / 150.0f, juce::Font::plain));
+        g.setFont(juce::Font{
+            juce::FontOptions()
+                .withName(KNOB_FONT)  // 指定 Futura 字体
+                .withHeight(14.0f * getHeight() / 150.0f)
+                .withStyle("Plain")
+        });
         g.drawText("-20", textX, text20Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
         g.drawText("-40", textX, text40Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
         g.drawText("-60", textX, text60Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
@@ -133,12 +138,22 @@ void VUPanel::paint (juce::Graphics& g)
         juce::Rectangle<int> localBounds = getLocalBounds();
         juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
         juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
-        g.setFont(juce::Font(KNOB_FONT, 20.0f * getHeight() / 150.0f, juce::Font::bold));
+        g.setFont(juce::Font{
+            juce::FontOptions()
+                .withName(KNOB_FONT)
+                .withHeight(20.0f * getHeight() / 150.0f)
+                .withStyle("Bold")
+        });
         g.drawText(juce::String(displayInputValue, 1), leftArea, juce::Justification::centred);
         g.drawText(juce::String(displayOutputValue, 1), rightArea, juce::Justification::centred);
         
         g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-        g.setFont(juce::Font(KNOB_FONT, 14.0f * getHeight() / 150.0f, juce::Font::plain));
+        g.setFont(juce::Font{
+            juce::FontOptions()
+                .withName(KNOB_FONT)
+                .withHeight(14.0f * getHeight() / 150.0f)
+                .withStyle("Plain")
+        });
         g.drawText("RMS Input", leftArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
         g.drawText("RMS Output", rightArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
     }

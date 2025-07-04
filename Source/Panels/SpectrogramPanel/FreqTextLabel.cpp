@@ -63,7 +63,11 @@ void FreqTextLabel::paint(juce::Graphics& g)
     freqLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
     freqLabel.setJustificationType(juce::Justification::centred);
-    freqLabel.setFont(juce::Font(14.0f * mScale, juce::Font::plain));
+    freqLabel.setFont(juce::Font{
+        juce::FontOptions()
+            .withHeight(14.0f * mScale)
+            .withStyle("Plain")
+    });
     juce::String freqText;
     freqText = static_cast<juce::String>(mFrequency) + " Hz";
     if (! freqLabel.isBeingEdited())

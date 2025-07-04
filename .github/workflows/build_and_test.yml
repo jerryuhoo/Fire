@@ -149,57 +149,26 @@ jobs:
           SetFile -a C "${{ env.AU_PATH }}"
           SetFile -a C "${{ env.CLAP_PATH }}"
 
-      - name: Create DMG (macOS)
+      - name: Zip (Windows)
+        if: ${{ matrix.name == 'Windows' }}
+        working-directory: ${{ env.ARTIFACTS_PATH }}
+        run: 7z a -tzip "${{ env.ARTIFACT_NAME }}.zip" VST3/ CLAP/
+
+      - name: Zip (macOS)
         if: ${{ matrix.name == 'macOS' }}
-        run: |
-          # Removed risky --break-system-packages. If appdmg fails, consider
-          # setting up a dedicated python environment using the setup-python action.
-          npm install -g appdmg
-          mkdir -p packaging/dmg
+        working-directory: ${{ env.ARTIFACTS_PATH }}
+        run: 7z a -tzip "${{ env.ARTIFACT_NAME }}.zip" VST3/ AU/ CLAP/
 
-          # Create directories for the dmg symlinks
-          sudo mkdir -m 755 -p /Library/Audio/Plug-Ins/Components && sudo mkdir -m 755 -p /Library/Audio/Plug-Ins/VST3
-          ln -s /Library/Audio/Plug-Ins/Components "packaging/dmg/Your Mac's Component folder"
-          ln -s /Library/Audio/Plug-Ins/VST3 "packaging/dmg/Your Mac's VST3 folder"
-          mv "${{ env.VST3_PATH }}" packaging/dmg
-          mv "${{ env.AU_PATH }}" packaging/dmg
-          mv "${{ env.STANDALONE_PATH }}" packaging/dmg
-
-          # Run appdmg to create the .dmg
-          cd packaging && appdmg dmg.json "${{ env.ARTIFACT_NAME}}.dmg"
-
-      - name: Zip
+      - name: Zip (Linux)
         if: ${{ matrix.name == 'Linux' }}
         working-directory: ${{ env.ARTIFACTS_PATH }}
         run: 7z a -tzip "${{ env.ARTIFACT_NAME }}.zip" "-xr!lib${{ env.PRODUCT_NAME }}_SharedCode.a" .
 
-      - name: Generate Installer
-        if: ${{ matrix.name == 'Windows' }}
-        shell: bash
-        run: |
-          iscc "packaging\installer.iss"
-          mv "packaging/Output/${{ env.ARTIFACT_NAME }}.exe" "${{ env.ARTIFACTS_PATH }}/"
-
-      - name: Upload Exe (Windows)
-        if: ${{ matrix.name == 'Windows' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}.exe
-          path: "${{ env.ARTIFACTS_PATH }}/${{ env.ARTIFACT_NAME }}.exe"
-
-      - name: Upload Zip (Linux)
-        if: ${{ matrix.name == 'Linux' }}
+      - name: Upload Zip
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT_NAME }}.zip
           path: "${{ env.ARTIFACTS_PATH }}/${{ env.ARTIFACT_NAME }}.zip"
-
-      - name: Upload DMG (macOS)
-        if: ${{ matrix.name == 'macOS' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}.dmg
-          path: packaging/${{ env.ARTIFACT_NAME }}.dmg
 
   release:
     if: contains(github.ref, 'tags/v')

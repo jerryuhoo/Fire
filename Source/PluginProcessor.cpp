@@ -459,7 +459,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
     mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
 
-    // ======================== GET PARAMETERS & SMOOTH FREQUENCIES ========================
+    // 1. GET PARAMETERS & SMOOTH FREQUENCIES
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
     int lineNum = numBands - 1;
 
@@ -618,8 +618,43 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (lineNum >= 3)
         setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
 
-    // 5. ======== DYNAMIC COMPENSATION (Temporarily disabled) ========
-    // ... your compensation code remains commented out for now ...
+    // 5. ======== DYNAMIC COMPENSATION ========
+    const float ratioThreshold = 6.0f;
+
+    // For Band 2
+    if (lineNum > 1)
+    {
+        float f1 = freqValue1, f2 = freqValue2;
+        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
+        {
+            float k = f2 / f1;
+            float centerFreq = std::sqrt(f1 * f2);
+            float Q = std::sqrt(k) / (k - 1.0f);
+            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+
+            *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+            auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+            auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+            compensatorEQ1.process(context2);
+        }
+    }
+    // For Band 3
+    if (lineNum > 2)
+    {
+        float f1 = freqValue2, f2 = freqValue3;
+        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
+        {
+            float k = f2 / f1;
+            float centerFreq = std::sqrt(f1 * f2);
+            float Q = std::sqrt(k) / (k - 1.0f);
+            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+
+            *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+            auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+            auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+            compensatorEQ2.process(context3);
+        }
+    }
 
     // ======== 6. CREATE THE DELAY-COMPENSATED DRY SIGNAL ========
     juce::AudioBuffer<float> delayMatchedDryBuffer(totalNumOutputChannels, numSamples);
@@ -644,7 +679,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
     }
 
-    // 6. PROCESS INDIVIDUAL BANDS
+    // 7. PROCESS INDIVIDUAL BANDS
     if (multibandEnable1)
     {
         auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
@@ -674,10 +709,13 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         setLeftRightMeterRMSValues(mBuffer4, mOutputLeftSmoothedBand4, mOutputRightSmoothedBand4);
     }
 
-    // 6. SUM THE PROCESSED BANDS
+    // 8. SUM THE PROCESSED BANDS
     buffer.clear();
 
-    bool anySoloActive = multibandSolo1 || multibandSolo2 || multibandSolo3 || multibandSolo4;
+    bool anySoloActive = (multibandSolo1 && numBands >= 1)
+                         || (multibandSolo2 && numBands >= 2)
+                         || (multibandSolo3 && numBands >= 3)
+                         || (multibandSolo4 && numBands >= 4);
 
     if (anySoloActive)
     {
@@ -726,7 +764,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
     }
 
-    // 7. GLOBAL PROCESSING
+    // 9. GLOBAL PROCESSING
     juce::dsp::AudioBlock<float> globalBlock(buffer);
 
     // downsample
@@ -763,7 +801,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // Use the new, delay-matched dry buffer for the mix, NOT the original mDryBuffer.
     mixDryWet(delayMatchedDryBuffer, buffer, MIX_ID, dryWetMixerGlobal, mLatency);
 
-    // 8. FINAL OUTPUT STAGES
+    // 10. FINAL OUTPUT STAGES
     // Spectrum
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);

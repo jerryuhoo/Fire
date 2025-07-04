@@ -9,3 +9,6 @@
 [submodule "modules/clap-juce-extensions"]
 	path = modules/clap-juce-extensions
 	url = https://github.com/free-audio/clap-juce-extensions.git
+[submodule "cmake"]
+	path = cmake
+	url = https://github.com/jerryuhoo/cmake-includes.git

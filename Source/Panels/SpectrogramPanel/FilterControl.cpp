@@ -24,12 +24,10 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel) : proces
     addAndMakeVisible(draggableLowButton);
     addAndMakeVisible(draggablePeakButton);
     addAndMakeVisible(draggableHighButton);
-    startTimerHz(60);
 }
 
 FilterControl::~FilterControl()
 {
-    stopTimer();
     const auto& params = processor.getParameters();
     for (auto param : params)
     {
@@ -286,21 +284,20 @@ void FilterControl::updateResponseCurve()
 
 void FilterControl::parameterValueChanged(int parameterIndex, float newValue)
 {
-    parametersChanged.set(true);
+    // When a parameter changes (on ANY thread), we simply trigger an async update.
+    // This is a very lightweight, non-blocking, and thread-safe call.
+    // It posts a message to the message queue, ensuring handleAsyncUpdate()
+    // will be called safely on the message thread.
+    triggerAsyncUpdate();
 }
 
-void FilterControl::timerCallback()
+void FilterControl::handleAsyncUpdate()
 {
-    // The timer callback is GUARANTEED to run on the message thread.
-    // We check if the flag was set...
-    if (parametersChanged.compareAndSetBool(false, true))
-    {
-        // ...and if it was, we can now safely perform all our UI updates.
-        updateChain();
-        updateResponseCurve();
-        setDraggableButtonBounds();
-    }
-
-    // We can also repaint here if needed, still on the message thread.
+    // This function is guaranteed to be called on the message thread after
+    // triggerAsyncUpdate() has been called.
+    // All UI updates are now safely and efficiently handled here.
+    updateChain();
+    updateResponseCurve();
+    setDraggableButtonBounds();
     repaint();
 }

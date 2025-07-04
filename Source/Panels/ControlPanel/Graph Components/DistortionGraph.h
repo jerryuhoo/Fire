@@ -18,7 +18,7 @@
 //==============================================================================
 /*
 */
-class DistortionGraph : public GraphTemplate, juce::AudioProcessorParameter::Listener
+class DistortionGraph : public GraphTemplate, juce::AudioProcessorParameter::Listener, juce::AsyncUpdater
 {
 public:
     DistortionGraph(FireAudioProcessor&);
@@ -26,6 +26,8 @@ public:
 
     void paint(juce::Graphics&) override;
     void setState(int mode, float rec, float mix, float bias, float drive, float rateDivide);
+
+    void handleAsyncUpdate() override;
 
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override {}

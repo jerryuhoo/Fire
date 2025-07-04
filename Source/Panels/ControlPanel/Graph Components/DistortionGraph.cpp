@@ -63,8 +63,15 @@ void DistortionGraph::setState(int mode, float rec, float mix, float bias, float
 
 void DistortionGraph::parameterValueChanged(int parameterIndex, float newValue)
 {
-    // Whenever a relevant parameter changes, we simply recalculate the curve.
-    // The repaint is handled inside updateDistortionCurve().
+    // When a parameter changes (on ANY thread), we simply trigger an async update.
+    // This is a very lightweight, non-blocking, and thread-safe call.
+    triggerAsyncUpdate();
+}
+
+void DistortionGraph::handleAsyncUpdate()
+{
+    // This function is guaranteed to be called on the message thread.
+    // All UI updates are now safely and efficiently handled here.
     updateDistortionCurve();
 }
 
@@ -193,4 +200,5 @@ void DistortionGraph::updateDistortionCurve()
             distortionCurve.lineTo(xPos, yPos);
         }
     }
+    repaint();
 }

@@ -17,7 +17,7 @@
 //==============================================================================
 /*
  */
-class FilterControl : public juce::Component, juce::AudioProcessorParameter::Listener, juce::Timer
+class FilterControl : public juce::Component, juce::AudioProcessorParameter::Listener, juce::AsyncUpdater
 {
 public:
     FilterControl(FireAudioProcessor&, GlobalPanel&);
@@ -25,7 +25,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
+    void handleAsyncUpdate() override;
     //    void setParams(float lowCut,
     //                   float highCut,
     //                   float cutRes,
@@ -53,7 +53,7 @@ private:
     void updateResponseCurve();
     void updateChain();
     void setDraggableButtonBounds();
-    juce::Atomic<bool> parametersChanged { false };
+
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FilterControl)

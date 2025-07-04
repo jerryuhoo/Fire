@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "JUCE",
+            "compilerPath": "/usr/bin/clang++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64",
+            "includePath": [
+                "${workspaceFolder}/Source",
+                "${workspaceFolder}/JuceLibraryCode/**",
+                // Edit the path to your JUCE modules and user modules here.
+                // I added them just in case one wants to include other headers than those initially selected with Projucer
+                "/Applications/JUCE/modules/**"
+            ]
+        }
+    ],
+    "version": 4
+}

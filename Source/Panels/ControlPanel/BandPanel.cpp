@@ -21,6 +21,16 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
                                               widthBypassButton3(std::make_unique<juce::ToggleButton>()),
                                               widthBypassButton4(std::make_unique<juce::ToggleButton>())
 {
+    // We listen directly to the parameters that affect our "link" logic.
+    const juce::String driveIDs[] = { DRIVE_ID1, DRIVE_ID2, DRIVE_ID3, DRIVE_ID4 };
+    const juce::String linkIDs[] = { LINKED_ID1, LINKED_ID2, LINKED_ID3, LINKED_ID4 };
+
+    for (int i = 0; i < 4; ++i)
+    {
+        processor.treeState.addParameterListener(driveIDs[i], this);
+        processor.treeState.addParameterListener(linkIDs[i], this);
+    }
+
     // init vec
     shapeVector = { &recKnob1, &recKnob2, &recKnob3, &recKnob4, &biasKnob1, &biasKnob2, &biasKnob3, &biasKnob4, &shapePanelLabel };
     widthVector = { &widthKnob1, &widthKnob2, &widthKnob3, &widthKnob4, &*widthBypassButton1, &*widthBypassButton2, &*widthBypassButton3, &*widthBypassButton4, &widthPanelLabel };
@@ -31,34 +41,31 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     addAndMakeVisible(shapePanelLabel);
     shapePanelLabel.setLookAndFeel(&flatLnf);
     shapePanelLabel.setText("Shape", juce::dontSendNotification);
-    shapePanelLabel.setFont(juce::Font{
+    shapePanelLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     shapePanelLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
 
     addAndMakeVisible(compressorPanelLabel);
     compressorPanelLabel.setLookAndFeel(&flatLnf);
     compressorPanelLabel.setText("Compressor", juce::dontSendNotification);
-    compressorPanelLabel.setFont(juce::Font{
+    compressorPanelLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     compressorPanelLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
 
     addAndMakeVisible(widthPanelLabel);
     widthPanelLabel.setLookAndFeel(&flatLnf);
     widthPanelLabel.setText("Stereo", juce::dontSendNotification);
-    widthPanelLabel.setFont(juce::Font{
+    widthPanelLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     widthPanelLabel.setColour(juce::Label::textColourId, WIDTH_COLOUR);
 
     // drive knobs
@@ -66,28 +73,27 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     driveKnob2.setLookAndFeel(&driveLookAndFeel2);
     driveKnob3.setLookAndFeel(&driveLookAndFeel3);
     driveKnob4.setLookAndFeel(&driveLookAndFeel4);
-    initListenerKnob(driveKnob1);
-    initListenerKnob(driveKnob2);
-    initListenerKnob(driveKnob3);
-    initListenerKnob(driveKnob4);
+    initRotarySlider(driveKnob1, DRIVE_COLOUR); 
+    initRotarySlider(driveKnob2, DRIVE_COLOUR);
+    initRotarySlider(driveKnob3, DRIVE_COLOUR);
+    initRotarySlider(driveKnob4, DRIVE_COLOUR);
 
     addAndMakeVisible(driveLabel);
     driveLabel.setText("Drive", juce::dontSendNotification);
-    driveLabel.setFont(juce::Font{
+    driveLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     driveLabel.setColour(juce::Label::textColourId, DRIVE_COLOUR.withBrightness(0.9f));
     driveLabel.attachToComponent(&driveKnob1, false);
     driveLabel.setJustificationType(juce::Justification::centred);
 
     // output knobs
-    initListenerKnob(outputKnob1);
-    initListenerKnob(outputKnob2);
-    initListenerKnob(outputKnob3);
-    initListenerKnob(outputKnob4);
+    initRotarySlider(outputKnob1, COLOUR1);
+    initRotarySlider(outputKnob2, COLOUR1);
+    initRotarySlider(outputKnob3, COLOUR1);
+    initRotarySlider(outputKnob4, COLOUR1);
     outputKnob1.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
     outputKnob2.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
     outputKnob3.setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
@@ -95,12 +101,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(outputLabel);
     outputLabel.setText("Output", juce::dontSendNotification);
-    outputLabel.setFont(juce::Font{
+    outputLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     outputLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
     outputLabel.attachToComponent(&outputKnob1, false);
     outputLabel.setJustificationType(juce::Justification::centred);
@@ -124,12 +129,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(CompRatioLabel);
     CompRatioLabel.setText("Ratio", juce::dontSendNotification);
-    CompRatioLabel.setFont(juce::Font{
+    CompRatioLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     CompRatioLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
     CompRatioLabel.attachToComponent(&compRatioKnob1, false);
     CompRatioLabel.setJustificationType(juce::Justification::centred);
@@ -147,12 +151,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(CompThreshLabel);
     CompThreshLabel.setText("Threshold", juce::dontSendNotification);
-    CompThreshLabel.setFont(juce::Font{
+    CompThreshLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     CompThreshLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
     CompThreshLabel.attachToComponent(&compThreshKnob1, false);
     CompThreshLabel.setJustificationType(juce::Justification::centred);
@@ -165,12 +168,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(widthLabel);
     widthLabel.setText("Width", juce::dontSendNotification);
-    widthLabel.setFont(juce::Font{
+    widthLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     widthLabel.setColour(juce::Label::textColourId, WIDTH_COLOUR);
     widthLabel.attachToComponent(&widthKnob1, false);
     widthLabel.setJustificationType(juce::Justification::centred);
@@ -183,12 +185,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(biasLabel);
     biasLabel.setText("Bias", juce::dontSendNotification);
-    biasLabel.setFont(juce::Font{
+    biasLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     biasLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
     biasLabel.attachToComponent(&biasKnob1, false);
     biasLabel.setJustificationType(juce::Justification::centred);
@@ -201,12 +202,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(recLabel);
     recLabel.setText("Rectification", juce::dontSendNotification);
-    recLabel.setFont(juce::Font{
+    recLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     recLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
     recLabel.attachToComponent(&recKnob1, false);
     recLabel.setJustificationType(juce::Justification::centred);
@@ -231,12 +231,11 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     addAndMakeVisible(mixLabel);
     mixLabel.setText("Mix", juce::dontSendNotification);
-    mixLabel.setFont(juce::Font{
+    mixLabel.setFont(juce::Font {
         juce::FontOptions()
             .withName(KNOB_FONT)
             .withHeight(KNOB_FONT_SIZE)
-            .withStyle("Plain")
-    });
+            .withStyle("Plain") });
     mixLabel.setColour(juce::Label::textColourId, KNOB_FONT_COLOUR);
     mixLabel.attachToComponent(&mixKnob1, false);
     mixLabel.setJustificationType(juce::Justification::centred);
@@ -379,46 +378,15 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
 BandPanel::~BandPanel()
 {
-    // Remove listeners from all sliders
-    driveKnob1.removeListener(this);
-    driveKnob2.removeListener(this);
-    driveKnob3.removeListener(this);
-    driveKnob4.removeListener(this);
+    // Remove all parameter listeners that were added in the constructor.
+    const juce::String driveIDs[] = { DRIVE_ID1, DRIVE_ID2, DRIVE_ID3, DRIVE_ID4 };
+    const juce::String linkIDs[] = { LINKED_ID1, LINKED_ID2, LINKED_ID3, LINKED_ID4 };
 
-    outputKnob1.removeListener(this);
-    outputKnob2.removeListener(this);
-    outputKnob3.removeListener(this);
-    outputKnob4.removeListener(this);
-
-    mixKnob1.removeListener(this);
-    mixKnob2.removeListener(this);
-    mixKnob3.removeListener(this);
-    mixKnob4.removeListener(this);
-
-    recKnob1.removeListener(this);
-    recKnob2.removeListener(this);
-    recKnob3.removeListener(this);
-    recKnob4.removeListener(this);
-
-    biasKnob1.removeListener(this);
-    biasKnob2.removeListener(this);
-    biasKnob3.removeListener(this);
-    biasKnob4.removeListener(this);
-
-    compRatioKnob1.removeListener(this);
-    compRatioKnob2.removeListener(this);
-    compRatioKnob3.removeListener(this);
-    compRatioKnob4.removeListener(this);
-
-    compThreshKnob1.removeListener(this);
-    compThreshKnob2.removeListener(this);
-    compThreshKnob3.removeListener(this);
-    compThreshKnob4.removeListener(this);
-
-    widthKnob1.removeListener(this);
-    widthKnob2.removeListener(this);
-    widthKnob3.removeListener(this);
-    widthKnob4.removeListener(this);
+    for (int i = 0; i < 4; ++i)
+    {
+        processor.treeState.removeParameterListener(driveIDs[i], this);
+        processor.treeState.removeParameterListener(linkIDs[i], this);
+    }
 
     // Remove listeners from all buttons
     linkedButton1.removeListener(this);
@@ -644,32 +612,40 @@ void BandPanel::resized()
     flatLnf.scale = scale;
 }
 
-void BandPanel::sliderValueChanged(juce::Slider* slider)
-{
-    linkValue(*slider, driveKnob1, outputKnob1, linkedButton1);
-    linkValue(*slider, driveKnob2, outputKnob2, linkedButton2);
-    linkValue(*slider, driveKnob3, outputKnob3, linkedButton3);
-    linkValue(*slider, driveKnob4, outputKnob4, linkedButton4);
-}
-
-void BandPanel::linkValue(juce::Slider& xSlider, juce::Slider& driveSlider, juce::Slider& outputSlider, juce::TextButton& linkedButton)
-{
-    // x changes, then y will change
-    if (linkedButton.getToggleState() == true)
-    {
-        if (&xSlider == &driveSlider)
-        {
-            outputSlider.setValue(-xSlider.getValue() * 0.1f); // use defalut notification type
-        }
-    }
-}
-
 void BandPanel::comboBoxChanged(juce::ComboBox* combobox)
 {
 }
 
-void BandPanel::timerCallback()
+void BandPanel::updateLinkedValue(int bandIndex)
 {
+    juce::Slider* driveKnob = nullptr;
+    juce::Slider* outputKnob = nullptr;
+    juce::TextButton* linkedButton = nullptr;
+
+    switch (bandIndex)
+    {
+        case 0: driveKnob = &driveKnob1; outputKnob = &outputKnob1; linkedButton = &linkedButton1; break;
+        case 1: driveKnob = &driveKnob2; outputKnob = &outputKnob2; linkedButton = &linkedButton2; break;
+        case 2: driveKnob = &driveKnob3; outputKnob = &outputKnob3; linkedButton = &linkedButton3; break;
+        case 3: driveKnob = &driveKnob4; outputKnob = &outputKnob4; linkedButton = &linkedButton4; break;
+        default: return;
+    }
+
+    if (linkedButton->getToggleState())
+    {
+        // SliderAttachment already updated the drive knob's visual position.
+        // We just need to calculate and set the output knob's value.
+        float newOutputValue = -driveKnob->getValue() * 0.1f;
+        
+        // To prevent feedback loops, only set the value if it has changed.
+        if (std::abs(outputKnob->getValue() - newOutputValue) > 0.001)
+        {
+            // IMPORTANT: We set the value without sending a notification,
+            // because this change was initiated by another parameter, not the user.
+            // This prevents this setValue call from triggering another parameterChanged callback.
+            outputKnob->setValue(newOutputValue, juce::dontSendNotification);
+        }
+    }
 }
 
 void BandPanel::updateBypassState(juce::ToggleButton& clickedButton, int index)
@@ -748,14 +724,6 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
         widthLabel.setVisible(true);
     }
     repaint();
-}
-
-void BandPanel::initListenerKnob(juce::Slider& slider)
-{
-    addAndMakeVisible(slider);
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    slider.addListener(this);
 }
 
 void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
@@ -1105,4 +1073,21 @@ void BandPanel::updateWhenChangingFocus()
         widthLabel.setVisible(true);
     }
     repaint();
+}
+
+void BandPanel::parameterChanged(const juce::String& parameterID, float newValue)
+{
+    // When a relevant parameter changes (on any thread), trigger an async update.
+    // This is lightweight and thread-safe.
+    triggerAsyncUpdate();
+}
+
+void BandPanel::handleAsyncUpdate()
+{
+    // This is called safely on the message thread.
+    // We can now update all our linked values.
+    updateLinkedValue(0);
+    updateLinkedValue(1);
+    updateLinkedValue(2);
+    updateLinkedValue(3);
 }

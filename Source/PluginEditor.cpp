@@ -252,12 +252,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
     // draw version
     g.setColour(COLOUR5);
-    g.setFont(juce::Font{
+    g.setFont(juce::Font {
         juce::FontOptions()
             .withName("Times New Roman")
             .withHeight(18.0f)
-            .withStyle("Bold")
-    });
+            .withStyle("Bold") });
     juce::String version = (juce::String) VERSION;
     juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
     g.drawFittedText(version, area, juce::Justification::topLeft, 1);
@@ -779,11 +778,12 @@ void FireAudioProcessorEditor::updateWhenChangingFocus()
 
 void FireAudioProcessorEditor::parameterChanged(const juce::String& parameterID, float newValue)
 {
-    // This is our new event-driven update function.
-    // It is called ONLY when a parameter changes (e.g., a knob is turned).
+    triggerAsyncUpdate();
+}
 
-    // A single repaint() here is a massive performance improvement over a 60Hz timer.
-    // It ensures that any part of the UI that depends on this parameter will be updated,
-    // including the main background, knob positions, text labels, and the filter control curve.
+void FireAudioProcessorEditor::handleAsyncUpdate()
+{
+    // safe to call repaint() here
+    // because this function is called on the message thread.
     repaint();
 }

@@ -32,7 +32,8 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::ComboBox::Listener,
                                  public juce::Timer,
                                  public juce::Button::Listener,
-                                 public juce::AudioProcessorValueTreeState::Listener
+                                 public juce::AudioProcessorValueTreeState::Listener,
+                                 public juce::AsyncUpdater
 {
 public:
     FireAudioProcessorEditor(FireAudioProcessor&);
@@ -44,6 +45,7 @@ public:
     void timerCallback() override;
     void setMultiband();
     void parameterChanged(const juce::String& parameterID, float newValue) override;
+    void handleAsyncUpdate() override;
 
 private:
     // This reference is provided as a quick way for your editor to

@@ -10,56 +10,59 @@
 
 #pragma once
 
-#include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../../PluginProcessor.h"
+#include "juce_gui_basics/juce_gui_basics.h"
 
 //==============================================================================
 /*
 */
 class BandPanel : public juce::Component,
-                  public juce::Slider::Listener,
+                  public juce::AudioProcessorValueTreeState::Listener,
                   public juce::ComboBox::Listener,
-                  public juce::Timer,
+                  public juce::AsyncUpdater,
                   public juce::Button::Listener
 {
 public:
-    BandPanel (FireAudioProcessor&);
+    BandPanel(FireAudioProcessor&);
     ~BandPanel() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
-    void setFocusBandNum (int num);
-    void setScale (float scale);
+    void setFocusBandNum(int num);
+    void setScale(float scale);
+
+    void handleAsyncUpdate() override;
+    void parameterChanged(const juce::String& parameterID, float newValue) override;
+    
     //    void changeSliderState(int bandNum, bool isPresetChanged);
-    void setBandKnobsStates (int index, bool state, bool callFromSubBypass);
-    juce::ToggleButton& getCompButton (const int index);
-    juce::ToggleButton& getWidthButton (const int index);
+    void setBandKnobsStates(int index, bool state, bool callFromSubBypass);
+    juce::ToggleButton& getCompButton(const int index);
+    juce::ToggleButton& getWidthButton(const int index);
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
+
 private:
     FireAudioProcessor& processor;
     juce::Rectangle<int> bandKnobArea;
     juce::Rectangle<int> driveKnobArea;
     juce::Rectangle<int> outputKnobArea;
 
-    // override listener functions
-    // linked
-    void sliderValueChanged (juce::Slider* slider) override;
+    void updateLinkedValue(int bandIndex);
+
     // combobox changed and set knob enable/disable
-    void comboBoxChanged (juce::ComboBox* combobox) override;
-    void buttonClicked (juce::Button* clickedButton) override;
-    void initListenerKnob (juce::Slider& slider);
-    void initRotarySlider (juce::Slider& slider, juce::Colour colour);
-    void initFlatButton (juce::TextButton& button, juce::String paramId, juce::String buttonName);
-    void initBypassButton (juce::ToggleButton& bypassButton, juce::Colour colour, int index);
-    void setFourComponentsVisibility (juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
-    void linkValue (juce::Slider& xSlider, juce::Slider& driveSlider, juce::Slider& outputSlider, juce::TextButton& linkedButton);
-    void setVisibility (juce::Array<juce::Component*>& array, bool isVisible);
-    void updateBypassState (juce::ToggleButton& clickedButton, int index);
-    void setBypassState (int index, bool state);
-    bool canEnableSubKnobs (juce::Component& component);
+    void comboBoxChanged(juce::ComboBox* combobox) override;
+    void buttonClicked(juce::Button* clickedButton) override;
+    // void initListenerKnob(juce::Slider& slider);
+    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
+    void initFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour, int index);
+    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void linkValue(juce::Slider& xSlider, juce::Slider& driveSlider, juce::Slider& outputSlider, juce::TextButton& linkedButton);
+    void setVisibility(juce::Array<juce::Component*>& array, bool isVisible);
+    void updateBypassState(juce::ToggleButton& clickedButton, int index);
+    void setBypassState(int index, bool state);
+    bool canEnableSubKnobs(juce::Component& component);
 
     enum RadioButtonIds
     {
@@ -258,5 +261,5 @@ private:
     float tempDriveValue[4] = { 1, 1, 1, 1 };
     float tempBiasValue[4] = { 0, 0, 0, 0 };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BandPanel)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

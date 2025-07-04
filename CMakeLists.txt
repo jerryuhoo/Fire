@@ -1,13 +1,17 @@
-# 3.24.1 is bundled in Visual Studio 2022 v17.4
-# 3.24.1 is also bundled in CLion as of 2023
-cmake_minimum_required(VERSION 3.24.1)
+cmake_minimum_required(VERSION 3.25)
 
 # This tells cmake we have goodies in the /cmake folder
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include (PamplejuceVersion)
 
+# Modern concise way to add dependencies to your project
+include (CPM)
+
 # Configures universal binaries and decides which version of macOS to support
 include(PamplejuceMacOS)
+
+# Couple tweaks that IMO should be JUCE defaults
+include(JUCEDefaults)
 
 # Change me!
 # This is the internal name of the project and the name of JUCE's shared code target
@@ -24,36 +28,32 @@ set(PROJECT_NAME "Fire")
 set(PRODUCT_NAME "Fire")
 
 # Change me! Used for the MacOS bundle name and Installers
-set(COMPANY_NAME "Wings")
+set(COMPANY_NAME "Blue Wings Music")
 
 # Change me! Used for the MacOS bundle identifier (and signing)
-set(BUNDLE_ID "com.WingsDSP.Fire")
+set(BUNDLE_ID "com.bluewingsmusic.Fire")
 
 # Change me! Set the plugin formats you want built
 # Valid choices: AAX Unity VST VST3 AU AUv3 Standalone
-set(FORMATS Standalone AU VST3 AUv3 LV2)
+set(FORMATS AU VST3)
 
 # For simplicity, the name of the CMake project is also the name of the target
 project(${PROJECT_NAME} VERSION ${CURRENT_VERSION})
-
-# Couple tweaks that IMO should be JUCE defaults
-include(JUCEDefaults)
 
 # JUCE is setup as a submodule in the /JUCE folder
 # Locally, you must run `git submodule update --init --recursive` once
 # and later `git submodule update --remote --merge` to keep it up to date
 # On Github Actions, this is done as a part of actions/checkout
 add_subdirectory(JUCE)
-add_subdirectory(libs/clap-juce-extensions EXCLUDE_FROM_ALL)
+
+# Add CLAP format
+add_subdirectory(modules/clap-juce-extensions EXCLUDE_FROM_ALL)
 
 # Add any other modules you want modules here, before the juce_add_plugin call
 # juce_add_module(modules/my_module)
 
 # This adds the melatonin inspector module
-if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    message(STATUS "Melatonin Inspector enabled for Debug build")
-    add_subdirectory(modules/melatonin_inspector)
-endif()
+add_subdirectory (modules/melatonin_inspector)
 
 # See `docs/CMake API.md` in the JUCE repo for all config options
 juce_add_plugin("${PROJECT_NAME}"
@@ -64,7 +64,7 @@ juce_add_plugin("${PROJECT_NAME}"
     COMPANY_NAME "${COMPANY_NAME}"
     BUNDLE_ID "${BUNDLE_ID}"
 
-    # On MacOS, plugin is copied to ~/Users/yourname/Library/Audio/Plug-Ins/
+    # On MacOS, plugin is copied to /Users/yourname/Library/Audio/Plug-Ins/
     COPY_PLUGIN_AFTER_BUILD TRUE
 
     # Change me!
@@ -78,25 +78,23 @@ juce_add_plugin("${PROJECT_NAME}"
     PLUGIN_CODE Fire
     FORMATS "${FORMATS}"
 
-    LV2URI "https://jerryuhoo.github.io/Fire"
-
     # The name of your final executable
     # This is how it's listed in the DAW
     # This can be different from PROJECT_NAME and can have spaces!
     # You might want to use v${MAJOR_VERSION} here once you go to v2...
     PRODUCT_NAME "${PRODUCT_NAME}")
 
-clap_juce_extensions_plugin(TARGET "${PROJECT_NAME}"
-  CLAP_ID "com.jerryuhoo.Fire"
-  CLAP_FEATURES "audio-effect")
-
 # This lets us use our code in both the JUCE targets and our Test target
 # Without running into ODR violations
 add_library(SharedCode INTERFACE)
 
-# C++20, please
-# Use cxx_std_23 for C++23 (as of CMake v 3.20)
-target_compile_features(SharedCode INTERFACE cxx_std_20)
+clap_juce_extensions_plugin(TARGET "${PROJECT_NAME}"
+    CLAP_ID "${BUNDLE_ID}"
+    CLAP_FEATURES audio-effect)
+
+# Enable fast math, C++20 and a few other target defaults
+include(SharedCodeDefaults)
+
 
 # Manually list all .h and .cpp files for the plugin
 # If you are like me, you'll use globs for your sanity.
@@ -135,7 +133,7 @@ target_compile_definitions(SharedCode
 # Link to any other modules you added (with juce_add_module) here!
 # Usually JUCE modules must have PRIVATE visibility
 # See https://github.com/juce-framework/JUCE/blob/master/docs/CMake%20API.md#juce_add_module
-# However, with Fire, you'll link modules to SharedCode with INTERFACE visibility
+# However, with Pamplejuce, you'll link modules to SharedCode with INTERFACE visibility
 # This allows the JUCE plugin targets and the Tests target to link against it
 target_link_libraries(SharedCode
     INTERFACE
@@ -159,8 +157,8 @@ include(PamplejuceIPP)
 # Everything related to the tests target
 include(Tests)
 
-# A separate target keeps the Tests target fast!
+# A separate target for Benchmarks (keeps the Tests target fast)
 include(Benchmarks)
 
-# Pass some config to GA (like our PRODUCT_NAME)
+# Output some config for CI (like our PRODUCT_NAME)
 include(GitHubENV)

@@ -101,9 +101,9 @@ jobs:
         shell: bash
         run: cmake --build ${{ env.BUILD_DIR }} --config ${{ env.BUILD_TYPE }} --parallel 4
 
-      - name: Test
+      - name: Test & Benchmarks
         working-directory: ${{ env.BUILD_DIR }}
-        run: ctest --output-on-failure -j4 -VV
+        run: ctest --verbose --output-on-failure
 
       - name: Read in .env from CMake # see GitHubENV.cmake
         shell: bash

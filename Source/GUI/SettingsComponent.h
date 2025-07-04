@@ -10,7 +10,11 @@
 
 #pragma once
 #include "InterfaceDefines.h"
-#include <JuceHeader.h>
+#include "juce_gui_basics/juce_gui_basics.h"
+#include "juce_audio_processors/juce_audio_processors.h"
+
+class FireAudioProcessor;
+
 
 // A dedicated component for all settings.
 class SettingsComponent : public juce::Component

@@ -787,17 +787,15 @@ namespace state
         {
             // ======== THE FINAL, SAFEST METHOD USING A MODAL DIALOG WINDOW ========
 
-            // 1. Get a reference to our processor safely.
+            // 1. Get a reference to the processor
             auto& ourProcessor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
-            
-            // 2. Create the settings panel on the heap using `new`. 
-            // We use a raw pointer because the DialogWindow will take ownership and delete it.
+
+            // 2. Create the settings panel on the heap
             auto* settingsPanel = new SettingsComponent(ourProcessor.getAppSettings());
 
-            // 3. Use a DialogWindow to show it, but instead of launching asynchronously,
-            //    we will run it modally. This blocks the main editor until the user closes the dialog.
+            // 3. Configure DialogWindow launch options
             juce::DialogWindow::LaunchOptions options;
-            options.content.setOwned(settingsPanel); // The DialogWindow will delete the component when it closes.
+            options.content.setOwned(settingsPanel);
             options.content->setSize(300, 200);
             options.dialogTitle = "Settings";
             options.dialogBackgroundColour = COLOUR6;
@@ -805,10 +803,14 @@ namespace state
             options.useNativeTitleBar = true;
             options.resizable = true;
 
-            // 4. CRITICAL CHANGE: Run the window modally.
-            // This call will not return until the user has closed the settings window.
-            // This guarantees a safe destruction order and prevents the memory leak.
-            options.runModal();
+            // 4. Launch dialog asynchronously
+            auto* dialog = options.launchAsync();
+
+            // 5. (Optional) Make it behave modally by entering modal state
+            if (dialog != nullptr)
+            {
+                dialog->enterModalState(true, nullptr, true); // block until closed
+            }
         } });
     }
 

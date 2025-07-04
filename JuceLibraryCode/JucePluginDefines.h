@@ -32,7 +32,7 @@
  #define JucePlugin_Build_Unity            0
 #endif
 #ifndef  JucePlugin_Build_LV2
- #define JucePlugin_Build_LV2              0
+ #define JucePlugin_Build_LV2              1
 #endif
 #ifndef  JucePlugin_Enable_IAA
  #define JucePlugin_Enable_IAA             0
@@ -152,10 +152,10 @@
  #define JucePlugin_ARATransformationFlags  0
 #endif
 #ifndef  JucePlugin_ARAFactoryID
- #define JucePlugin_ARAFactoryID           "com.yourcompany.Fire.factory"
+ #define JucePlugin_ARAFactoryID           "com.BlueWingsMusic.Fire.factory"
 #endif
 #ifndef  JucePlugin_ARADocumentArchiveID
- #define JucePlugin_ARADocumentArchiveID   "com.yourcompany.Fire.aradocumentarchive.1.0.1"
+ #define JucePlugin_ARADocumentArchiveID   "com.BlueWingsMusic.Fire.aradocumentarchive.1.0.2"
 #endif
 #ifndef  JucePlugin_ARACompatibleArchiveIDs
  #define JucePlugin_ARACompatibleArchiveIDs  ""

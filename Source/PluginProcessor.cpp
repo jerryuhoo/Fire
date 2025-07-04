@@ -233,6 +233,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     normalSmoother.reset(sampleRate, 0.5);
     normalSmoother.setCurrentAndTargetValue(1);
 
+    const float rampTimeSeconds = 0.05f;
+    smoothedFreq1.reset(sampleRate, rampTimeSeconds);
+    smoothedFreq2.reset(sampleRate, rampTimeSeconds);
+    smoothedFreq3.reset(sampleRate, rampTimeSeconds);
+
     // historyArray init
     for (int i = 0; i < samplesPerBlock; i++)
     {
@@ -432,11 +437,8 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    // set bypass to false
-
     if (isBypassed)
     {
-        //        buffer.clear();
         isBypassed = false;
     }
 
@@ -457,27 +459,45 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
     mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
 
-    // ======================== FINAL TREE-BASED ARCHITECTURE ========================
-
-    // 1. GET PARAMETERS & SORT FREQUENCIES
+    // ======================== GET PARAMETERS & SMOOTH FREQUENCIES ========================
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
     int lineNum = numBands - 1;
 
-    std::array<int, 3> freqArray = { 0, 0, 0 };
+    // Set target values for smoothers from APVTS
+    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(FREQ_ID1));
+    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
+    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
+
+    // Get the smoothed frequency values for this block
+    // And also handle sorting based on active lines
+    std::array<float, 3> freqArray = { 0.0f, 0.0f, 0.0f };
     int activeLineCount = 0;
     if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID1)))
-        freqArray[activeLineCount++] = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID1));
+        freqArray[activeLineCount++] = smoothedFreq1.getNextValue();
     if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID2)))
-        freqArray[activeLineCount++] = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID2));
+        freqArray[activeLineCount++] = smoothedFreq2.getNextValue();
     if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID3)))
-        freqArray[activeLineCount++] = static_cast<int>(*treeState.getRawParameterValue(FREQ_ID3));
-    std::sort(freqArray.begin(), freqArray.begin() + activeLineCount);
+        freqArray[activeLineCount++] = smoothedFreq3.getNextValue();
 
-    int freqValue1 = freqArray[0];
-    int freqValue2 = freqArray[1];
-    int freqValue3 = freqArray[2];
+    if (activeLineCount > 1)
+        std::sort(freqArray.begin(), freqArray.begin() + activeLineCount);
 
-    // 2. SET UP FILTERS
+    float freqValue1 = freqArray[0];
+    float freqValue2 = freqArray[1];
+    float freqValue3 = freqArray[2];
+
+    // Get solo and enable states
+    multibandEnable1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
+    multibandEnable2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
+    multibandEnable3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
+    multibandEnable4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
+
+    multibandSolo1 = *treeState.getRawParameterValue(BAND_SOLO_ID1);
+    multibandSolo2 = *treeState.getRawParameterValue(BAND_SOLO_ID2);
+    multibandSolo3 = *treeState.getRawParameterValue(BAND_SOLO_ID3);
+    multibandSolo4 = *treeState.getRawParameterValue(BAND_SOLO_ID4);
+
+    // 2. SET UP FILTERS WITH SMOOTHED VALUES
     lowpass1.setCutoffFrequency(freqValue1);
     highpass1.setCutoffFrequency(freqValue1);
     lowpass2.setCutoffFrequency(freqValue2);
@@ -588,9 +608,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         highpass3.process(context4);
     }
 
+    // Set input meters for all bands
     setLeftRightMeterRMSValues(mBuffer1, mInputLeftSmoothedBand1, mInputRightSmoothedBand1);
 
-    // 如果是多于 1 条带，也对 mBuffer2…mBuffer4 做同样操作
     if (lineNum >= 1)
         setLeftRightMeterRMSValues(mBuffer2, mInputLeftSmoothedBand2, mInputRightSmoothedBand2);
     if (lineNum >= 2)
@@ -598,73 +618,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (lineNum >= 3)
         setLeftRightMeterRMSValues(mBuffer4, mInputLeftSmoothedBand4, mInputRightSmoothedBand4);
 
-    // 5. ======== CALCULATE AND APPLY DYNAMIC COMPENSATION (THE FIX) ========
-    const float ratioThreshold = 6.0f;
+    // 5. ======== DYNAMIC COMPENSATION (Temporarily disabled) ========
+    // ... your compensation code remains commented out for now ...
 
-    // For Band 2
-    if (lineNum > 1)
-    {
-        float f1 = freqValue1, f2 = freqValue2;
-        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
-        {
-            float k = f2 / f1;
-            float centerFreq = std::sqrt(f1 * f2);
-            float Q = std::sqrt(k) / (k - 1.0f);
-            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
-
-            *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
-            auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-            auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-            compensatorEQ1.process(context2);
-        }
-    }
-    // For Band 3
-    if (lineNum > 2)
-    {
-        float f1 = freqValue2, f2 = freqValue3;
-        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
-        {
-            float k = f2 / f1;
-            float centerFreq = std::sqrt(f1 * f2);
-            float Q = std::sqrt(k) / (k - 1.0f);
-            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
-
-            *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
-            auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
-            auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
-            compensatorEQ2.process(context3);
-        }
-    }
-    if (lineNum == 3)
-    {
-        // This compensator is only for the problematic crossover at freqValue2.
-        float centerFreq = freqValue2;
-        float k = freqValue3 / freqValue1;
-        float Q = std::sqrt(k) / (k - 1.0f) * 3.0f;
-        float baseGain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
-        const float enhancedGain = 3.0f;
-        float blendRangeStart = 11.0f;
-        float blendRangeEnd = 1.0f;
-        float t = (k - blendRangeStart) / (blendRangeEnd - blendRangeStart);
-        t = juce::jlimit(0.0f, 1.0f, t);
-        float blendFactor = t * t * (3.0f - 2.0f * t);
-        float finalGain = (1.0f - blendFactor) * baseGain + blendFactor * enhancedGain;
-
-        *compensatorEQ3.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, finalGain);
-
-        // Apply the same +3dB peak to both Band 2 and Band 3
-        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-        compensatorEQ3.process(context2);
-
-        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
-        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
-        compensatorEQ3.process(context3);
-    }
-
-    // ======== 6. CREATE THE DELAY-COMPENSATED DRY SIGNAL (YOUR SOLUTION) ========
-    // Before applying any processing (distortion, etc.), we sum the clean, split bands
-    // to create a dry signal that has the exact same group delay as the wet path.
+    // ======== 6. CREATE THE DELAY-COMPENSATED DRY SIGNAL ========
     juce::AudioBuffer<float> delayMatchedDryBuffer(totalNumOutputChannels, numSamples);
     delayMatchedDryBuffer.clear();
 
@@ -680,16 +637,14 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         else if (i == 3)
             bandBuffer = &mBuffer4;
 
-        for (int channel = 0; channel < totalNumOutputChannels; ++channel)
-            delayMatchedDryBuffer.addFrom(channel, 0, *bandBuffer, channel, 0, numSamples);
+        if (bandBuffer != nullptr)
+        {
+            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                delayMatchedDryBuffer.addFrom(channel, 0, *bandBuffer, channel, 0, numSamples);
+        }
     }
 
     // 6. PROCESS INDIVIDUAL BANDS
-    multibandEnable1 = *treeState.getRawParameterValue(BAND_ENABLE_ID1);
-    multibandEnable2 = *treeState.getRawParameterValue(BAND_ENABLE_ID2);
-    multibandEnable3 = *treeState.getRawParameterValue(BAND_ENABLE_ID3);
-    multibandEnable4 = *treeState.getRawParameterValue(BAND_ENABLE_ID4);
-
     if (multibandEnable1)
     {
         auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
@@ -721,14 +676,37 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     // 6. SUM THE PROCESSED BANDS
     buffer.clear();
-    multibandSolo1 = *treeState.getRawParameterValue(BAND_SOLO_ID1);
-    multibandSolo2 = *treeState.getRawParameterValue(BAND_SOLO_ID2);
-    multibandSolo3 = *treeState.getRawParameterValue(BAND_SOLO_ID3);
-    multibandSolo4 = *treeState.getRawParameterValue(BAND_SOLO_ID4);
 
-    for (int i = 0; i < numBands; ++i)
+    bool anySoloActive = multibandSolo1 || multibandSolo2 || multibandSolo3 || multibandSolo4;
+
+    if (anySoloActive)
     {
-        if (! shouldSetBlackMask(i))
+        // If any solo is active, only add the soloed bands
+        if (multibandSolo1)
+        {
+            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                buffer.addFrom(channel, 0, mBuffer1, channel, 0, numSamples);
+        }
+        if (multibandSolo2 && lineNum >= 1)
+        {
+            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                buffer.addFrom(channel, 0, mBuffer2, channel, 0, numSamples);
+        }
+        if (multibandSolo3 && lineNum >= 2)
+        {
+            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                buffer.addFrom(channel, 0, mBuffer3, channel, 0, numSamples);
+        }
+        if (multibandSolo4 && lineNum >= 3)
+        {
+            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                buffer.addFrom(channel, 0, mBuffer4, channel, 0, numSamples);
+        }
+    }
+    else
+    {
+        // If no solos are active, add all available bands
+        for (int i = 0; i < numBands; ++i)
         {
             juce::AudioBuffer<float>* bandBuffer = nullptr;
             if (i == 0)
@@ -740,24 +718,27 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             else if (i == 3)
                 bandBuffer = &mBuffer4;
 
-            for (int channel = 0; channel < totalNumOutputChannels; ++channel)
-                buffer.addFrom(channel, 0, *bandBuffer, channel, 0, numSamples);
+            if (bandBuffer != nullptr)
+            {
+                for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+                    buffer.addFrom(channel, 0, *bandBuffer, channel, 0, numSamples);
+            }
         }
     }
 
-    // 7. GLOBAL PROCESSING (Your existing logic, unchanged)
+    // 7. GLOBAL PROCESSING
     juce::dsp::AudioBlock<float> globalBlock(buffer);
 
     // downsample
     if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
     {
         int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
-        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        if (rateDivide > 1)
         {
-            auto* channelData = buffer.getWritePointer(channel);
-            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            for (int channel = 0; channel < totalNumInputChannels; ++channel)
             {
-                if (rateDivide > 1)
+                auto* channelData = buffer.getWritePointer(channel);
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
                 {
                     if (sample % rateDivide != 0)
                         channelData[sample] = channelData[sample - sample % rateDivide];

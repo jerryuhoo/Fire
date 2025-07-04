@@ -300,6 +300,10 @@ private:
     bool multibandSolo3 = false;
     bool multibandSolo4 = false;
 
+    juce::SmoothedValue<float> smoothedFreq1 = 200.0f;
+    juce::SmoothedValue<float> smoothedFreq2 = 1000.0f;
+    juce::SmoothedValue<float> smoothedFreq3 = 5000.0f;
+
     bool shouldSetBlackMask(int index);
     bool getSoloStateFromIndex(int index);
 

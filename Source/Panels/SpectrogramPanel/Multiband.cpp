@@ -60,6 +60,30 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
 
 Multiband::~Multiband()
 {
+    // 从所有子组件中注销 this 作为监听器
+    for (int i = 0; i < 4; ++i)
+    {
+        if (bandUIs[i].soloButton)
+            bandUIs[i].soloButton->removeListener(this);
+
+        if (bandUIs[i].enableButton)
+            bandUIs[i].enableButton->removeListener(this);
+
+        if (bandUIs[i].closeButton)
+            bandUIs[i].closeButton->removeListener(this);
+    }
+
+    for (int i = 0; i < 3; ++i)
+    {
+        if (freqDividerGroup[i])
+        {
+            // FreqDividerGroup 自身也是一个 Button (Toggle)
+            // freqDividerGroup[i]->removeListener(this); // 如果它也加了监听器，也需要移除
+
+            // 它内部的 VerticalLine 滑块
+            freqDividerGroup[i]->getVerticalLine().removeListener(this);
+        }
+    }
 }
 
 void Multiband::paint(juce::Graphics& g)
@@ -624,7 +648,14 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
     // set focus mask
     if (lineNum > lineNumLimit && focusIndex == index)
     {
-        juce::ColourGradient grad(COLOUR5.withAlpha(0.2f), 0, getLocalBounds().getHeight(), COLOUR1.withAlpha(0.0f), 0, getLocalBounds().getHeight() / 10.0f * 9.0f, false);
+        // MODIFIED: Changed gradient to be top-down and relative to the band's rectangle.
+        juce::ColourGradient grad(COLOUR1.withAlpha(0.5f),
+                                  (float) x,
+                                  (float) y,
+                                  COLOUR1.withAlpha(0.0f),
+                                  (float) x,
+                                  (float) (y + height * 0.1f),
+                                  false);
         g.setGradientFill(grad);
         g.fillRect(x, y, width, height);
     }
@@ -637,7 +668,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
             g.setColour(COLOUR_MASK_WHITE);
             g.fillRect(x, y, width, height);
         }
-        bandUIs[index].closeButton->setVisible(true); // <--- MODIFIED
+        bandUIs[index].closeButton->setVisible(true);
     }
 
     // set solo black mask

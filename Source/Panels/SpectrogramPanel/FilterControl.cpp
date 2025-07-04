@@ -68,37 +68,89 @@ void FilterControl::paint(juce::Graphics& g)
 
     float size = getWidth() / 1000.0f * 15;
 
-    float buttonX = getMouseXYRelative().getX() - size / 2.0f;
-    float buttonY = getMouseXYRelative().getY() - size / 2.0f;
-    if (buttonX < 0)
-        buttonX = 0;
-    if (buttonX > getWidth())
-        buttonX = getWidth() - size;
-    if (buttonY < getHeight() / 48.0f * (24 - 15) - size / 2.0f)
-        buttonY = getHeight() / 48.0f * (24 - 15) - size / 2.0f;
-    if (buttonY > getHeight() / 48.0f * (24 + 15) - size / 2.0f)
-        buttonY = getHeight() / 48.0f * (24 + 15) - size / 2.0f;
+    // ======================== DRAG LOGIC & VALUE DISPLAY ========================
+    bool isDragging = false;
+    double currentFreq = 0;
+    double currentGain = 0;
+
+    auto mousePos = getMouseXYRelative();
+
+    // Clamp mouse position to stay within the component bounds for calculations
+    mousePos.x = juce::jlimit(0, getWidth(), mousePos.x);
+    mousePos.y = juce::jlimit(0, getHeight(), mousePos.y);
+
+    float buttonX = mousePos.x - size / 2.0f;
+    float buttonY = mousePos.y - size / 2.0f;
 
     if (draggableLowButton.isMouseButtonDown() && isFilterEnabled)
     {
+        isDragging = true;
         globalPanel.setToggleButtonState("lowcut");
         draggableLowButton.setBounds(buttonX, buttonY, size, size);
-        globalPanel.getLowcutFreqKnob().setValue(juce::mapToLog10(static_cast<double>(getMouseXYRelative().getX() / static_cast<double>(getWidth())), 20.0, 20000.0));
-        globalPanel.getLowcutGainKnob().setValue(15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
+
+        currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
+        currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
+
+        globalPanel.getLowcutFreqKnob().setValue(currentFreq);
+        globalPanel.getLowcutGainKnob().setValue(currentGain);
     }
     if (draggablePeakButton.isMouseButtonDown() && isFilterEnabled)
     {
+        isDragging = true;
         globalPanel.setToggleButtonState("peak");
         draggablePeakButton.setBounds(buttonX, buttonY, size, size);
-        globalPanel.getPeakFreqKnob().setValue(juce::mapToLog10(static_cast<double>(getMouseXYRelative().getX() / static_cast<double>(getWidth())), 20.0, 20000.0));
-        globalPanel.getPeakGainKnob().setValue(15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
+
+        currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
+        currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
+
+        globalPanel.getPeakFreqKnob().setValue(currentFreq);
+        globalPanel.getPeakGainKnob().setValue(currentGain);
     }
     if (draggableHighButton.isMouseButtonDown() && isFilterEnabled)
     {
+        isDragging = true;
         globalPanel.setToggleButtonState("highcut");
         draggableHighButton.setBounds(buttonX, buttonY, size, size);
-        globalPanel.getHighcutFreqKnob().setValue(juce::mapToLog10(static_cast<double>(getMouseXYRelative().getX() / static_cast<double>(getWidth())), 20.0, 20000.0));
-        globalPanel.getHighcutGainKnob().setValue(15.0f * (getHeight() / 2.0f - getMouseXYRelative().getY()) / (getHeight() / 48.0f * 15.0f));
+
+        currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
+        currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
+
+        globalPanel.getHighcutFreqKnob().setValue(currentFreq);
+        globalPanel.getHighcutGainKnob().setValue(currentGain);
+    }
+
+    if (isDragging)
+    {
+        // Format the text to display
+        juce::String freqString = (currentFreq < 1000.0) ? juce::String(currentFreq, 1) + " Hz" : juce::String(currentFreq / 1000.0, 2) + " kHz";
+
+        juce::String gainString = juce::String(currentGain, 1) + " dB";
+
+        // Use juce::newLine for cross-platform compatibility
+        juce::String textToShow = freqString + juce::newLine + gainString;
+
+        // Define text box properties
+        int boxWidth = 100;
+        int boxHeight = 40;
+        int xOffset = 20;
+        int yOffset = -20;
+
+        // Calculate initial position
+        juce::Rectangle<int> textBox(mousePos.x + xOffset, mousePos.y + yOffset - boxHeight, boxWidth, boxHeight);
+
+        // Adjust position to keep the box within component bounds
+        if (textBox.getRight() > getWidth())
+            textBox.setX(mousePos.x - xOffset - boxWidth);
+        if (textBox.getY() < 0)
+            textBox.setY(mousePos.y + 10);
+
+        // Draw the text box
+        g.setColour(juce::Colours::black.withAlpha(0.7f));
+        g.fillRoundedRectangle(textBox.toFloat(), 5.0f);
+
+        g.setColour(juce::Colours::white);
+        g.setFont(14.0f);
+        g.drawFittedText(textToShow, textBox, juce::Justification::centred, 2);
     }
 }
 
@@ -123,18 +175,6 @@ void FilterControl::setDraggableButtonBounds()
     draggablePeakButton.setBounds(peakX - size / 2.0f, getHeight() / 2.0f - peakY - size / 2.0f, size, size);
     draggableHighButton.setBounds(highcutX - size / 2.0f, getHeight() / 2.0f - highcutY - size / 2.0f, size, size);
 }
-//void FilterControl::setParams(float lowCut,
-//                              float highCut,
-//                              float cutRes,
-//                              float peak,
-//                              float peakRes)
-//{
-//    mLowCut = lowCut;
-//    mHighCut = highCut;
-//    mCutRes = cutRes;
-//    mPeak = peak;
-//    mPeakRes = peakRes;
-//}
 
 void FilterControl::updateChain()
 {

@@ -1324,13 +1324,8 @@ void FireAudioProcessor::processDistortion(juce::AudioBuffer<float>& bandBuffer,
     bias2.setBias(-biasValue); // -1,1
     bias2.setRampDurationSeconds(0.05f);
 
-    // ======================== THE FIX ========================
-    // Only process the overdrive chain if distortion is actually being applied.
-    // This avoids phase coloration when controls are at their neutral/zero state.
-    if (driveValue > 0.0f || std::abs(biasValue) > 0.000001f || recValue > 0.0f)
-    {
-        overdrive.process(context);
-    }
+    overdrive.process(context);
+
     // =========================================================
 
     // oversampling

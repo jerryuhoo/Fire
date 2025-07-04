@@ -115,17 +115,20 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ### 2025-7-3 (version 1.0.2)
 
-1. Refactor internal code structure to improve GUI rendering performance.
-2. Fix a bug where VU meters were not visible in multiband (Band) mode.
-3. Add a new setting to disable auto-update.
-4. Fix phase issues in multiband mode:
+1. Add real-time value display on the global filter.
+2. Refactor internal code structure to improve GUI rendering performance.
+3. Fix a bug where VU meters were not visible in multiband (Band) mode.
+4. Add a new setting to disable auto-update.
+5. Fix phase issues in multiband mode:
 
    * Frequency response is now flatter and more phase-coherent across bands.
    * Fix phase shift issues when the Mix value is less than 1.
 
    > ⚠️ **Note:** These improvements may slightly alter the sound of older sessions. Please **freeze your audio** if you are using a previous version of the plugin.
 
-5. For long-term product consistency, the manufacturer name has been changed to **Blue Wings Music**.
+   > ⚠️ **Note:** In the default mode, the algorithm is set to "Cubic." This is a nonlinear distortion algorithm, so even when the drive is set to 0, the algorithm still affects the sound. If you want to output a completely dry signal that is not affected by the algorithm, you can set the mix (in band mode) to 0. In that case, it will output a flat response.
+
+6. For long-term product consistency, the manufacturer name has been changed to **Blue Wings Music**.
 
    * The new plugin will **not** appear under the old "Wings" manufacturer in your DAW.
    * You may need to **manually remove** the old version.

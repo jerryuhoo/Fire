@@ -1,4 +1,4 @@
-# Fire (Version 1.0.1) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 1.0.2) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -20,15 +20,127 @@ Hope you like it!
 
 ## 2. How to install
 
-### Download from Release Page
+### OPTION 1 - Download from Release Page
 
 [Download here](https://github.com/jerryuhoo/Fire/releases/latest)
 
-### Build by JUCE
 
-Open .jucer file by Projucer then select your IDE to build 『Fire』. If you don't have projucer, you can go to JUCE/extras/Projucer/Builds/... and build it, or download from the [latest JUCE release](https://www.juce.com)
+### macOS Installation Guide for Fire Plugin
 
-Note: You should choose Release mode rather than Debug mode(or disable Debug mode) in .fire Exporters page. Build with debug mode will cause high CPU usage.
+Thank you for downloading the **Fire** plugin!
+
+#### ❗️Why macOS Blocks This Plugin
+
+When you try to load the plugin in your DAW on macOS, you may see an error like:
+
+> "Fire.vst3" cannot be opened because the developer cannot be verified.
+
+This **does not mean** the plugin contains any virus or malicious code.
+
+Instead, this is due to **Apple’s security policy**, which requires developers to:
+
+- Enroll in the Apple Developer Program
+- Pay **$99/year**
+- Notarize and sign each build with an Apple-issued certificate
+
+As an independent developer releasing **free** software, I currently do not have the budget to enroll in the paid program. Therefore, macOS treats this unsigned plugin as “unverified.”
+
+---
+
+#### ✅ How to Install and Use the Plugin
+
+To use the Fire plugin on macOS, follow these steps to manually allow it.
+
+##### 🔧 Step 1: Move the Plugin to the Correct Location
+
+Copy the plugin files to the standard plugin folders:
+
+```bash
+# VST3
+~/Library/Audio/Plug-Ins/VST3/
+
+# Audio Unit (.component)
+~/Library/Audio/Plug-Ins/Components/
+
+# CLAP (if applicable)
+~/Library/Audio/Plug-Ins/CLAP/
+````
+
+##### 🛡 Step 2: Remove Quarantine Attribute
+
+macOS adds a quarantine flag to files downloaded from the internet. Remove it using Terminal:
+
+```bash
+xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Fire.vst3
+xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/Fire.component
+```
+
+If you're using the CLAP version:
+
+```bash
+xattr -rd com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/Fire.clap
+```
+
+##### 📝 Step 3: Ad-Hoc Code Sign (Optional but Recommended)
+
+Some DAWs still require the plugin to be signed, even if it’s local. You can apply an ad-hoc (self) signature:
+
+```bash
+codesign --deep --force --sign - ~/Library/Audio/Plug-Ins/VST3/Fire.vst3
+codesign --deep --force --sign - ~/Library/Audio/Plug-Ins/Components/Fire.component
+```
+
+##### 🚀 Step 4: Launch Your DAW
+
+Now open your DAW. The plugin should scan and load without issues.
+
+---
+
+#### ❤️ Support Independent Developers
+
+If you appreciate this plugin and would like to support development, you can consider donating via PayPal or sharing the plugin with others.
+
+Thank you for your understanding!
+
+[![PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?business=9NTZ9PADW6LYN&no_recurring=0&item_name=Thank+you+for+supporting+this+open-source+plugin%21+With+your+support%2C+I%E2%80%99ll+continue+improving+and+updating+it%21&currency_code=USD)
+
+---
+
+### ✅ OPTION 2 – Build with JUCE or CMake
+
+#### 🔧 Using Projucer (JUCE GUI)
+
+1. Open the `.jucer` file using **Projucer**.
+2. Select your preferred IDE (Xcode, Visual Studio, etc.) in the *Exporters* tab.
+3. Open the generated project and build the target named **Fire**.
+
+> **Note:** You should choose **Release mode** rather than **Debug mode**.
+> Debug builds may cause significantly higher CPU usage during audio processing.
+
+If you don't have Projucer:
+
+* You can build it from source at:
+  `JUCE/extras/Projucer/Builds/...`
+* Or download it from the [JUCE latest release](https://www.juce.com)
+
+---
+
+#### ⚙️ Using CMake (Recommended for CI and Advanced Users)
+
+If you have CMake and Ninja installed:
+
+```bash
+cmake -S . -B Builds -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+cmake --build Builds --config Release
+```
+
+This will generate the builds in the `Builds/` folder. You can then find the built plugin under:
+
+```
+Builds/Fire_artefacts/Release/
+```
+
+> **Tip:** Use `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` on macOS if you want to build for universal binaries.
 
 ## 3. User Manual
 

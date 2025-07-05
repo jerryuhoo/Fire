@@ -218,6 +218,9 @@ void FilterControl::updateResponseCurve()
 
     auto sampleRate = processor.getSampleRate();
 
+    if (sampleRate <= 0)
+        return;
+
     std::vector<float> mags;
     mags.resize(w);
 

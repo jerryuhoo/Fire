@@ -386,6 +386,8 @@ void FireAudioProcessorEditor::resized()
         // 分割出顶部区域，用于放置失真模式菜单
         auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
         
+        auto lfoArea = mainControlsArea;
+        
         // 失真模式菜单定位
         auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
         distortionModeArea.reduce(0, topSection.getHeight() / 4); // 上下留出1/4的空白
@@ -405,7 +407,7 @@ void FireAudioProcessorEditor::resized()
         
         bandPanel.setBounds(mainControlsAreaForBand);
         globalPanel.setBounds(rightHandPanelsArea);
-        lfoPanel.setBounds(rightHandPanelsArea);
+        lfoPanel.setBounds(lfoArea);
     }
     
     // Zoom button

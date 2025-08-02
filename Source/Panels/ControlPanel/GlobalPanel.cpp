@@ -550,8 +550,8 @@ void GlobalPanel::resized()
 
     juce::Rectangle<int> outputKnobAreaLeft = outputKnobArea;
     juce::Rectangle<int> outputKnobAreaRight = outputKnobAreaLeft.removeFromRight (outputKnobArea.getWidth() / 2);
-    outputKnobAreaLeft = outputKnobAreaLeft.reduced (getHeight() / 15, getHeight() / 5).reduced (outputKnobArea.getWidth() / 15, 0);
-    outputKnobAreaRight = outputKnobAreaRight.reduced (getHeight() / 15, getHeight() / 5).reduced (outputKnobArea.getWidth() / 15, 0);
+    outputKnobAreaLeft = outputKnobAreaLeft.reduced(0, outputKnobAreaLeft.getHeight() / 5);
+    outputKnobAreaRight = outputKnobAreaRight.reduced(0, outputKnobAreaRight.getHeight() / 5);
 
     outputKnob.setBounds (outputKnobAreaLeft);
     mixKnob.setBounds (outputKnobAreaRight);

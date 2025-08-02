@@ -489,12 +489,12 @@ void BandPanel::resized()
     driveKnobArea = controlArea.removeFromLeft(getWidth() / 5);
 
     outputKnobArea = controlArea;
-    driveKnobArea.removeFromTop(getHeight() / 5);
-    driveKnobArea.removeFromBottom(getHeight() / 5);
-    outputKnobArea.removeFromTop(getHeight() / 5);
-    outputKnobArea.removeFromBottom(getHeight() / 5);
-    bandKnobArea.removeFromTop(getHeight() / 5);
-    bandKnobArea.removeFromBottom(getHeight() / 5);
+    driveKnobArea.removeFromTop(getHeight() / 6);
+    driveKnobArea.removeFromBottom(getHeight() / 6);
+    outputKnobArea.removeFromTop(getHeight() / 6);
+    outputKnobArea.removeFromBottom(getHeight() / 6);
+    bandKnobArea.removeFromTop(getHeight() / 6);
+    bandKnobArea.removeFromBottom(getHeight() / 6);
 
     juce::Rectangle<int> switchArea = bandKnobArea.removeFromLeft(getWidth() / 50);
     oscSwitch.setBounds(switchArea.removeFromTop(bandKnobArea.getHeight() / 4));

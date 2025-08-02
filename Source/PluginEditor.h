@@ -14,6 +14,7 @@
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
 #include "Panels/ControlPanel/BandPanel.h"
+#include "Panels/ControlPanel/LfoPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
 #include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
 #include "Panels/ControlPanel/Graph Components/GraphPanel.h"
@@ -77,6 +78,9 @@ private:
 
     // Global
     GlobalPanel globalPanel;
+    
+    // LFO
+    LfoPanel lfoPanel;
 
     // Filter Control
     FilterControl filterControl { processor, globalPanel };
@@ -94,6 +98,7 @@ private:
         hqButton,
         windowLeftButton,
         windowRightButton,
+        windowLfoButton,
         zoomButton;
 
     // group toggle buttons
@@ -109,7 +114,7 @@ private:
 
     void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
 
-    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible);
 
     // override listener functions
 

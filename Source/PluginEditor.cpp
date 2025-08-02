@@ -14,7 +14,7 @@
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets }, globalPanel(processor.treeState)
+    : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets }, globalPanel(processor.treeState), lfoPanel(p)
 {
     // timer
     juce::Timer::startTimerHz(60.0f);
@@ -67,6 +67,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     addAndMakeVisible(bandPanel);
     addAndMakeVisible(globalPanel);
+    addAndMakeVisible(lfoPanel);
 
     // Spectrum
     addAndMakeVisible(specBackground);
@@ -137,22 +138,32 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowRightButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
     windowRightButton.setLookAndFeel(&otherLookAndFeel);
     windowRightButton.addListener(this);
+        
+    // (*** NEW ***) Setup for the new LFO button
+    addAndMakeVisible(windowLfoButton);
+    windowLfoButton.setClickingTogglesState(true);
+    windowLfoButton.setRadioGroupId(windowButtons);
+    windowLfoButton.setButtonText("LFO");
+    windowLfoButton.setToggleState(false, juce::NotificationType::dontSendNotification);
+    windowLfoButton.setColour(juce::TextButton::buttonColourId, COLOUR6.withAlpha(0.5f));
+    windowLfoButton.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
+    windowLfoButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
+    windowLfoButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    windowLfoButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
+    windowLfoButton.setLookAndFeel(&otherLookAndFeel);
+    windowLfoButton.addListener(this);
 
-    if (windowLeftButton.getToggleState())
-    {
-        multiband.setVisible(true);
-        bandPanel.setVisible(true);
-        filterControl.setVisible(false);
-        globalPanel.setVisible(false);
-    }
+    const bool isBandView = windowLeftButton.getToggleState();
+    const bool isGlobalView = windowRightButton.getToggleState();
+    const bool isLfoView = windowLfoButton.getToggleState();
 
-    if (windowRightButton.getToggleState())
-    {
-        multiband.setVisible(false);
-        bandPanel.setVisible(false);
-        filterControl.setVisible(true);
-        globalPanel.setVisible(true);
-    }
+    multiband.setVisible(isBandView || isLfoView);
+    bandPanel.setVisible(isBandView);
+    globalPanel.setVisible(isGlobalView);
+    lfoPanel.setVisible(isLfoView);
+    filterControl.setVisible(isGlobalView);
+    graphPanel.setVisible(isBandView || isGlobalView);
+        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 
@@ -291,8 +302,9 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
     {
         setDistortionGraph(MODE_ID4, DRIVE_ID4, REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
     }
-
-    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex);
+    
+    // TODO: change it to mouse click
+    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
 
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
@@ -318,80 +330,89 @@ void FireAudioProcessorEditor::resized()
     processor.setSavedWidth(getWidth());
 
     // knobs
-    float scale = juce::jmin(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
-    float scaleMax = juce::jmax(getHeight() / INIT_HEIGHT, getWidth() / INIT_WIDTH);
+    const float scale = juce::jmin(getHeight() / (float)INIT_HEIGHT, getWidth() / (float)INIT_WIDTH);
+    
+    // 创建一个可供操作的总矩形区域
+    juce::Rectangle<int> bounds(getLocalBounds());
 
-    // top bar
-    hqButton.setBounds(getHeight() / 10.0f, 0, getHeight() / 10.0f, getHeight() / 10.0f);
-    juce::Rectangle<int> area(getLocalBounds());
-    juce::Rectangle<int> topBar = area.removeFromTop(50.0f * getHeight() / INIT_HEIGHT);
-    topBar.removeFromLeft(100.0f * scaleMax);
-    topBar.removeFromRight(50.0f * scaleMax);
+    // top bar - 还原原始计算方式
+    const auto topBarHeight = juce::roundToInt(50.0f * getHeight() / (float)INIT_HEIGHT);
+    auto topBar = bounds.removeFromTop(topBarHeight);
+    hqButton.setBounds(topBar.removeFromLeft(topBar.getHeight())); // hqButton是个正方形
+    topBar.removeFromRight(topBar.getHeight()); // 右侧也留出等宽距离
     stateComponent.setBounds(topBar);
 
     // spectrum and filter
     if (zoomButton.getToggleState())
     {
-        juce::Rectangle<int> spectrumArea = area;
-        specBackground.setBounds(spectrumArea);
-        processedSpectrum.setBounds(spectrumArea);
-        originalSpectrum.setBounds(spectrumArea);
-        multiband.setBounds(spectrumArea);
-        filterControl.setBounds(spectrumArea);
+        // 全屏模式下，所有面板占据剩余空间
+        specBackground.setBounds(bounds);
+        processedSpectrum.setBounds(bounds);
+        originalSpectrum.setBounds(bounds);
+        multiband.setBounds(bounds);
+        filterControl.setBounds(bounds);
     }
     else
     {
-        juce::Rectangle<int> spectrumArea = area.removeFromTop(SPEC_HEIGHT);
+        // --- 正常布局模式 ---
+        
+        // 1. 频谱区域
+        auto spectrumArea = bounds.removeFromTop(SPEC_HEIGHT);
         specBackground.setBounds(spectrumArea);
         processedSpectrum.setBounds(spectrumArea);
         originalSpectrum.setBounds(spectrumArea);
         multiband.setBounds(spectrumArea);
         filterControl.setBounds(spectrumArea);
 
-        // left and right window buttons
-        float windowHeight = getHeight() / 20.0f;
-        juce::Rectangle<int> leftWindowButtonArea = area.removeFromTop(windowHeight);
-        juce::Rectangle<int> rightWindowButtonArea = leftWindowButtonArea.removeFromRight(getWidth() / 2.0f);
-        windowLeftButton.setBounds(leftWindowButtonArea);
-        windowRightButton.setBounds(rightWindowButtonArea);
+        // 2. 窗口切换按钮区域 (*** 已修改为三按钮 ***)
+        const auto windowButtonHeight = juce::roundToInt(getHeight() / 20.0f);
+        auto windowButtonsArea = bounds.removeFromTop(windowButtonHeight);
+        
+        // 将按钮区域三等分
+        const int buttonWidth = windowButtonsArea.getWidth() / 3;
+        windowLeftButton.setBounds(windowButtonsArea.removeFromLeft(buttonWidth));
+        windowLfoButton.setBounds(windowButtonsArea.removeFromLeft(buttonWidth));
+        windowRightButton.setBounds(windowButtonsArea); // 最后一个按钮占据剩余部分
 
-        area.removeFromLeft(getWidth() / 20.0f);
-        area.removeFromRight(getWidth() / 20.0f);
-
-        juce::Rectangle<int> controlArea = area;
-        juce::Rectangle<int> controlAreaTop = area.removeFromTop(area.getHeight() / 5.0f);
-        juce::Rectangle<int> controlAreaMid = area.removeFromTop(area.getHeight() / 4.0f * 3.0f); // 3/4
-
-        // distortion menu
-        //    controlAreaTop.removeFromLeft(getWidth() / 20); // x position
-        juce::Rectangle<int> distortionModeArea = controlAreaTop.removeFromLeft(OSC_WIDTH); // width
-        distortionModeArea.removeFromTop(controlAreaTop.getHeight() / 4.0f);
-        distortionModeArea.removeFromBottom(controlAreaTop.getHeight() / 4.0f);
+        // 3. 应用左右边距
+        bounds.removeFromLeft(juce::roundToInt(getWidth() / 20.0f));
+        bounds.removeFromRight(juce::roundToInt(getWidth() / 20.0f));
+        
+        // 4. 主控制区域 (完全还原原始的区域分割逻辑)
+        auto mainControlsAreaForBand = bounds;
+        auto mainControlsArea = bounds; // 这是所有下面板的总区域
+        mainControlsArea.removeFromBottom(mainControlsArea.getHeight() / 6);
+        
+        // 分割出顶部区域，用于放置失真模式菜单
+        auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
+        
+        // 失真模式菜单定位
+        auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
+        distortionModeArea.reduce(0, topSection.getHeight() / 4); // 上下留出1/4的空白
         distortionMode1.setBounds(distortionModeArea);
         distortionMode2.setBounds(distortionModeArea);
         distortionMode3.setBounds(distortionModeArea);
         distortionMode4.setBounds(distortionModeArea);
 
-        juce::Rectangle<int> graphArea = controlAreaMid.removeFromLeft(getWidth() / 7.0f * 2.0f);
-
-        // Graph Panel
+        // 从主区域分割出左侧的GraphPanel区域
+        const int graphPanelWidth = juce::roundToInt(getWidth() / 7.0f * 2.0f);
+        auto graphArea = mainControlsArea.removeFromLeft(graphPanelWidth);
+        mainControlsAreaForBand.removeFromLeft(graphPanelWidth);
         graphPanel.setBounds(graphArea);
-
-        controlArea.removeFromLeft(getWidth() / 7.0f * 2.0f);
-        bandPanel.setBounds(controlArea);
-        globalPanel.setBounds(controlAreaMid);
-
-        juce::Rectangle<int> controlLeftKnobLeftArea = controlAreaMid.removeFromLeft(getWidth() / 7.0f * 2.0f);
-        juce::Rectangle<int> controlLeftKnobRightArea = controlLeftKnobLeftArea.removeFromRight(getWidth() / 7.0f);
-
-        controlLeftKnobLeftArea.removeFromTop(controlLeftKnobLeftArea.getHeight() / 4.0f);
-        controlLeftKnobLeftArea.removeFromBottom(controlLeftKnobLeftArea.getHeight() / 5.0f);
-
-        controlLeftKnobRightArea.removeFromTop(controlLeftKnobRightArea.getHeight() / 4.0f);
-        controlLeftKnobRightArea.removeFromBottom(controlLeftKnobRightArea.getHeight() / 5.0f);
+        
+        // 剩余的右侧区域用于放置所有可切换的控制面板
+        auto rightHandPanelsArea = mainControlsArea;
+        
+        bandPanel.setBounds(mainControlsAreaForBand);
+        globalPanel.setBounds(rightHandPanelsArea);
+        lfoPanel.setBounds(rightHandPanelsArea);
     }
+    
     // Zoom button
-    zoomButton.setBounds(getWidth() - 30.0f * scale, multiband.getY() + multiband.getHeight() - 30.0f * scale, getHeight() / 25.0f, getHeight() / 25.0f);
+    zoomButton.setBounds(getWidth() - 30.0f * scale,
+                         multiband.getY() + multiband.getHeight() - 30.0f * scale,
+                         getHeight() / 25.0f,
+                         getHeight() / 25.0f);
 
     // set look and feel scale
     otherLookAndFeel.scale = scale;
@@ -435,6 +456,7 @@ void FireAudioProcessorEditor::timerCallback()
         multiband.repaint();
         bandPanel.repaint();
         globalPanel.repaint();
+        lfoPanel.repaint();
     }
 }
 
@@ -482,6 +504,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         {
             windowLeftButton.setVisible(false);
             windowRightButton.setVisible(false);
+            windowLfoButton.setVisible(false);
             distortionMode1.setVisible(false);
             distortionMode2.setVisible(false);
             distortionMode3.setVisible(false);
@@ -493,22 +516,18 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         }
         resized();
     }
-    if (clickedButton == &windowLeftButton)
+    if (clickedButton == &windowLeftButton || clickedButton == &windowRightButton || clickedButton == &windowLfoButton)
     {
-        if (windowLeftButton.getToggleState())
-        {
-            multiband.setVisible(true);
-            bandPanel.setVisible(true);
-            filterControl.setVisible(false);
-            globalPanel.setVisible(false);
-        }
-        else
-        {
-            multiband.setVisible(false);
-            bandPanel.setVisible(false);
-            filterControl.setVisible(true);
-            globalPanel.setVisible(true);
-        }
+        // When any window button is clicked, determine visibility for all panels
+        multiband.setVisible(windowLeftButton.getToggleState());
+        bandPanel.setVisible(windowLeftButton.getToggleState());
+        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
+        graphPanel.setVisible(!windowLfoButton.getToggleState());
+        
+        filterControl.setVisible(windowRightButton.getToggleState());
+        globalPanel.setVisible(windowRightButton.getToggleState());
+
+        lfoPanel.setVisible(windowLfoButton.getToggleState());
     }
     for (int i = 0; i < 4; i++)
     {
@@ -650,46 +669,16 @@ void FireAudioProcessorEditor::setMultiband()
     //    processor.setLineNum(multiband.getLineNum());
 }
 
-void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum)
+void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible)
 {
-    if (zoomButton.getToggleState())
-    {
-        component1.setVisible(false);
-        component2.setVisible(false);
-        component3.setVisible(false);
-        component4.setVisible(false);
-    }
-    else
-    {
-        if (bandNum == 0)
-        {
-            component1.setVisible(true);
-            component2.setVisible(false);
-            component3.setVisible(false);
-            component4.setVisible(false);
-        }
-        else if (bandNum == 1)
-        {
-            component1.setVisible(false);
-            component2.setVisible(true);
-            component3.setVisible(false);
-            component4.setVisible(false);
-        }
-        else if (bandNum == 2)
-        {
-            component1.setVisible(false);
-            component2.setVisible(false);
-            component3.setVisible(true);
-            component4.setVisible(false);
-        }
-        else if (bandNum == 3)
-        {
-            component1.setVisible(false);
-            component2.setVisible(false);
-            component3.setVisible(false);
-            component4.setVisible(true);
-        }
-    }
+    // 首先确定一个总的可见性开关
+    const bool shouldShowAny = !zoomButton.getToggleState() && isComboboxVisible;
+
+    // 直接根据 bandNum 和总开关来设置每个组件的可见性
+    component1.setVisible(shouldShowAny && (bandNum == 0));
+    component2.setVisible(shouldShowAny && (bandNum == 1));
+    component3.setVisible(shouldShowAny && (bandNum == 2));
+    component4.setVisible(shouldShowAny && (bandNum == 3));
 }
 
 //void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)

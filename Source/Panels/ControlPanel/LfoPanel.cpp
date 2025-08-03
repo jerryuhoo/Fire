@@ -325,6 +325,13 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
         lfoSelectButtons[i]->addListener(this);
+        lfoSelectButtons[i]->setLookAndFeel(&flatLnf);
+        lfoSelectButtons[i]->setColour(juce::TextButton::buttonColourId, COLOUR7);
+        lfoSelectButtons[i]->setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
+        lfoSelectButtons[i]->setColour(juce::ComboBox::outlineColourId, COLOUR6);
+        lfoSelectButtons[i]->setColour(juce::TextButton::textColourOnId, COLOUR1);
+        lfoSelectButtons[i]->setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+        lfoSelectButtons[i]->setToggleState(false, juce::dontSendNotification);
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
 
@@ -334,7 +341,14 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     parameterMenu.setSelectedId(1);
     
     addAndMakeVisible(syncButton);
-    syncButton.setButtonText("BPM Sync");
+    syncButton.setClickingTogglesState(true);
+    syncButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
+    syncButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
+    syncButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    syncButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    syncButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+    syncButton.setButtonText("BPM");
+    syncButton.setLookAndFeel(&flatLnf);
     
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -343,13 +357,21 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
+    rateLabel.setFont(juce::Font {
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain") });
     rateLabel.attachToComponent(&rateSlider, false);
+    rateLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
+    rateLabel.setJustificationType(juce::Justification::centred);
     
     addAndMakeVisible(gridXSlider);
     gridXSlider.setSliderStyle(juce::Slider::IncDecButtons);
     gridXSlider.setRange(2, 16, 1);
     gridXSlider.setValue(4);
     gridXSlider.addListener(this);
+    gridXSlider.setLookAndFeel(&flatLnf);
     
     addAndMakeVisible(gridXLabel);
     gridXLabel.setText("Grid X", juce::dontSendNotification);
@@ -359,6 +381,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridYSlider.setRange(2, 16, 1);
     gridYSlider.setValue(4);
     gridYSlider.addListener(this);
+    gridYSlider.setLookAndFeel(&flatLnf);
 
     addAndMakeVisible(gridYLabel);
     gridYLabel.setText("Grid Y", juce::dontSendNotification);
@@ -366,7 +389,15 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     startTimerHz(60);
 }
 
-LfoPanel::~LfoPanel() { stopTimer(); }
+LfoPanel::~LfoPanel()
+{
+    stopTimer();
+    syncButton.setLookAndFeel(nullptr);
+    gridXSlider.setLookAndFeel(nullptr);
+    gridYSlider.setLookAndFeel(nullptr);
+    for (auto& button : lfoSelectButtons)
+        button->setLookAndFeel(nullptr);
+}
 
 void LfoPanel::paint(juce::Graphics& g)
 {
@@ -381,25 +412,36 @@ void LfoPanel::resized()
     
     auto leftColumn = bounds.removeFromLeft(60);
     auto rightColumn = bounds.removeFromRight(120);
-    auto topRow = bounds.removeFromTop(30);
     
+    // (*** NEW ***) New top row layout logic
+    auto topRow = bounds.removeFromTop(30);
+    {
+        auto comboBoxArea = topRow.removeFromLeft(150);
+        parameterMenu.setBounds(comboBoxArea.reduced(0, 4)); // Add some vertical margin
+
+        auto syncButtonArea = topRow.removeFromRight(100);
+        syncButton.setBounds(syncButtonArea.reduced(10, 4));
+
+        auto gridControlsArea = topRow; // The remaining area in the middle
+        auto gridXArea = gridControlsArea.removeFromLeft(gridControlsArea.getWidth() / 2);
+        auto gridYArea = gridControlsArea;
+        
+        gridXLabel.setBounds(gridXArea.removeFromLeft(50).reduced(2));
+        gridXSlider.setBounds(gridXArea);
+        
+        gridYLabel.setBounds(gridYArea.removeFromLeft(50).reduced(2));
+        gridYSlider.setBounds(gridYArea);
+    }
+
+    // Layout for the main columns
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
     for (const auto& button : lfoSelectButtons)
         lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(2));
     lfoSelectBox.performLayout(leftColumn);
     
-    juce::FlexBox rightControlsBox;
-    rightControlsBox.flexDirection = juce::FlexBox::Direction::column;
-    rightControlsBox.items.add(juce::FlexItem(rateSlider).withFlex(3.0f));
-    rightControlsBox.items.add(juce::FlexItem(gridXLabel).withFlex(0.5f));
-    rightControlsBox.items.add(juce::FlexItem(gridXSlider).withFlex(1.0f));
-    rightControlsBox.items.add(juce::FlexItem(gridYLabel).withFlex(0.5f));
-    rightControlsBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
-    rightControlsBox.performLayout(rightColumn);
-    
-    syncButton.setBounds(topRow.removeFromRight(100));
-    parameterMenu.setBounds(topRow);
+    const int sliderSize = juce::jmin(rightColumn.getWidth(), rightColumn.getHeight());
+    rateSlider.setBounds(rightColumn.withSizeKeepingCentre(sliderSize, sliderSize));
     
     lfoEditor.setBounds(bounds);
 }
@@ -469,18 +511,41 @@ void LfoPanel::buttonClicked(juce::Button* button)
         // Handle BPM sync logic here
     }
     else
-    {
-        for (int i = 0; i < 4; ++i)
         {
-            if (button == lfoSelectButtons[i].get())
+            // --- NEW LOGIC ---
+            // Variable to hold the index of the button that was clicked.
+            int clickedIndex = -1;
+
+            // First, find which of our LFO buttons was the one that was clicked.
+            for (int i = 0; i < lfoSelectButtons.size(); ++i)
             {
-                currentLfoIndex = i;
+                if (button == lfoSelectButtons[i].get())
+                {
+                    clickedIndex = i;
+                    break;
+                }
+            }
+
+            // If one of the LFO select buttons was clicked...
+            if (clickedIndex != -1)
+            {
+                // ...update the current LFO index and tell the editor to display the new data.
+                currentLfoIndex = clickedIndex;
                 lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
-                break;
+
+                // Explicitly set the toggle state for all buttons in the group.
+                // This is the most robust way to manage radio button states.
+                for (int i = 0; i < lfoSelectButtons.size(); ++i)
+                {
+                    // If the button's index matches the one we just clicked, set its state to true.
+                    // Otherwise, set it to false.
+                    // The 'dontSendNotification' flag is crucial to prevent this action from triggering
+                    // another call to buttonClicked, which would cause an infinite loop.
+                    lfoSelectButtons[i]->setToggleState(i == clickedIndex, juce::dontSendNotification);
+                }
             }
         }
     }
-}
 
 void LfoPanel::comboBoxChanged(juce::ComboBox* comboBox)
 {

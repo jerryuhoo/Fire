@@ -12,6 +12,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../PluginProcessor.h"
+#include "../../GUI/LookAndFeel.h"
 
 //
 //  Represents the data model for a single LFO shape.
@@ -119,7 +120,7 @@ private:
     std::array<std::unique_ptr<juce::TextButton>, 4> lfoSelectButtons;
     
     juce::ComboBox parameterMenu;
-    juce::ToggleButton syncButton;
+    juce::TextButton syncButton;
 
     juce::Slider rateSlider;
     juce::Label  rateLabel;
@@ -128,6 +129,8 @@ private:
     juce::Label  gridXLabel;
     juce::Slider gridYSlider;
     juce::Label  gridYLabel;
+    
+    FlatLnf flatLnf;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LfoPanel)
 };

@@ -13,78 +13,121 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../PluginProcessor.h"
 
-//==============================================================================
-/*
-    一个可交互的LFO波形编辑器组件 (已升级)
-*/
+//
+//  Represents the data model for a single LFO shape.
+//  This ensures that every LFO always starts with a valid default state.
+//
+struct LfoData
+{
+    std::vector<juce::Point<float>> points;
+    std::vector<float> curvatures;
+
+    // Default constructor to initialize a valid shape
+    LfoData()
+    {
+        points.push_back({ 0.0f, 0.5f });
+        points.push_back({ 1.0f, 0.5f });
+        curvatures.push_back(0.0f);
+    }
+};
+
+
+//
+//  The LfoEditor is now a pure "View" component.
+//  It holds a pointer to the data it should display and modify.
+//
 class LfoEditor : public juce::Component
 {
 public:
     LfoEditor();
     ~LfoEditor() override;
+    
+    // Sets the data model for the editor to point to. This is the safe way to switch LFOs.
+    void setDataToDisplay(LfoData* dataToDisplay);
 
+    //==============================================================================
     void paint(juce::Graphics& g) override;
+    void resized() override;
 
-    // --- 鼠标交互 ---
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
-    
-    // --- 获取LFO点数据，用于DSP处理 ---
-    const std::vector<juce::Point<float>>& getPoints() const { return points; }
-    const std::vector<float>& getCurvatures() const { return curvatures; }
+
+    void setGridDivisions(int horizontal, int vertical);
+    void setPlayheadPosition(float position);
 
 private:
-    // 将组件内的坐标转换为归一化的[0, 1]坐标
-    juce::Point<float> toNormalized(juce::Point<int> localPoint);
-    // 将归一化的[0, 1]坐标转换为组件内的浮点坐标
-    juce::Point<float> fromNormalized(juce::Point<float> normalizedPoint);
-    
-    // 更新并排序点，确保X轴坐标递增
-    void updateAndSortPoints();
-    
-    // (*** 新增 ***) 在添加或删除点时，同步更新弧度数组
+    // This pointer holds the currently active LFO data. It does not own the data.
+    LfoData* activeLfoData = nullptr;
+
+    // Internal helper methods that now operate on the activeLfoData pointer.
     void addPoint(juce::Point<float> newPoint);
     void removePoint(int index);
+    void updateAndSortPoints();
+    
+    juce::Point<float> toNormalized(juce::Point<int> localPoint);
+    juce::Point<float> fromNormalized(juce::Point<float> normalizedPoint);
 
-    std::vector<juce::Point<float>> points; // 使用归一化的[0, 1]坐标存储点
-    std::vector<float> curvatures;          // (*** 新增 ***) 存储每条线段的弧度, 值域[-1, 1]
-
-    int draggingPointIndex = -1;            // 被拖动的点的索引, -1表示没有
-    int editingCurveIndex = -1;             // (*** 新增 ***) 被右键编辑的曲线的索引, -1表示没有
+    // State variables for interaction
+    int draggingPointIndex = -1;
+    int editingCurveIndex = -1;
+    
+    int hGridDivs = 4;
+    int vGridDivs = 4;
+    float playheadPos = -1.0f;
 
     const int maxPoints = 16;
-    const float pointRadius = 6.0f;         // 点的可视半径
-    const int gridDivisions = 4;            // (*** 新增 ***) 网格的分割数
+    const float pointRadius = 6.0f;
 };
 
 
-//==============================================================================
-/*
-    包含LFO编辑器和相关控制旋钮的主面板
-*/
-class LfoPanel : public juce::Component
+//
+//  The LfoPanel is the main "Controller" component.
+//  It owns all the LFO data and all the UI controls.
+//
+class LfoPanel  : public juce::Component,
+                  public juce::Button::Listener,
+                  public juce::ComboBox::Listener,
+                  public juce::Slider::Listener,
+                  public juce::Timer
 {
 public:
-    LfoPanel(FireAudioProcessor& p); // 传入Processor引用
+    LfoPanel(FireAudioProcessor& p);
     ~LfoPanel() override;
 
-    void paint(juce::Graphics& g) override;
+    void paint (juce::Graphics& g) override;
     void resized() override;
     
-    // 获取LfoEditor的引用，以便Processor可以获取点数据
-    LfoEditor& getLfoEditor() { return lfoEditor; }
+    void timerCallback() override;
 
 private:
-    FireAudioProcessor& processor;
+    void buttonClicked(juce::Button* button) override;
+    void comboBoxChanged(juce::ComboBox* comboBox) override;
+    void sliderValueChanged(juce::Slider* slider) override;
     
+    FireAudioProcessor& processor;
+
+    // --- Data Model ---
+    // The LfoPanel owns the data for all 4 LFOs.
+    std::vector<LfoData> lfoData;
+    int currentLfoIndex = 0;
+
+    // --- UI Components ---
     LfoEditor lfoEditor;
+
+    std::array<std::unique_ptr<juce::TextButton>, 4> lfoSelectButtons;
+    
+    juce::ComboBox parameterMenu;
+    juce::ToggleButton syncButton;
 
     juce::Slider rateSlider;
     juce::Label  rateLabel;
     
-    // std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateAttachment;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoPanel)
+    juce::Slider gridXSlider;
+    juce::Label  gridXLabel;
+    juce::Slider gridYSlider;
+    juce::Label  gridYLabel;
+    
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LfoPanel)
 };

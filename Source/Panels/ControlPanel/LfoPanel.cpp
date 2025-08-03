@@ -1,67 +1,80 @@
 #include "LfoPanel.h"
 
 //==============================================================================
-// LfoEditor 实现
+// LfoEditor Implementation
 //==============================================================================
 
-LfoEditor::LfoEditor()
-{
-    // 初始化时创建两个点和它们之间的一段直线
-    points.push_back({ 0.0f, 0.5f });
-    points.push_back({ 1.0f, 0.5f });
-    curvatures.push_back(0.0f); // 初始弧度为0（直线）
-}
+LfoEditor::LfoEditor() {} // Constructor is now simple.
+LfoEditor::~LfoEditor() {}
 
-LfoEditor::~LfoEditor() { }
+void LfoEditor::setDataToDisplay(LfoData* dataToDisplay)
+{
+    // Safely switch the data source.
+    activeLfoData = dataToDisplay;
+    repaint();
+}
 
 void LfoEditor::paint(juce::Graphics& g)
 {
-    // (paint 函数与上一版完全相同，无需修改)
-    // 1. 绘制背景和网格
+    // Paint background
     g.fillAll(juce::Colours::black.brighter(0.1f));
     g.setColour(juce::Colours::darkgrey);
     g.drawRect(getLocalBounds(), 1.0f);
     
+    // Paint grid
     g.setColour(juce::Colours::white.withAlpha(0.2f));
-    for (int i = 1; i < gridDivisions; ++i)
-    {
-        float x = getWidth() * i / (float)gridDivisions;
-        float y = getHeight() * i / (float)gridDivisions;
-        g.drawVerticalLine(juce::roundToInt(x), 0.0f, getHeight());
-        g.drawHorizontalLine(juce::roundToInt(y), 0.0f, getWidth());
-    }
+    for (int i = 1; i < hGridDivs; ++i)
+        g.drawVerticalLine(juce::roundToInt(getWidth() * i / (float)hGridDivs), 0.0f, getHeight());
+    for (int i = 1; i < vGridDivs; ++i)
+        g.drawHorizontalLine(juce::roundToInt(getHeight() * i / (float)vGridDivs), 0.0f, getWidth());
 
-    // 2. 绘制LFO路径
-    if (points.size() < 2) return;
+    // Defensive check: ensure data is valid before drawing.
+    if (activeLfoData == nullptr || activeLfoData->points.size() < 2)
+        return;
 
+    // Draw LFO Path
     juce::Path lfoPath;
-    lfoPath.startNewSubPath(fromNormalized(points.front()));
+    lfoPath.startNewSubPath(fromNormalized(activeLfoData->points.front()));
 
-    for (size_t i = 0; i < points.size() - 1; ++i)
+    for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
     {
-        auto p1_screen = fromNormalized(points[i]);
-        auto p2_screen = fromNormalized(points[i+1]);
+        auto p1_screen = fromNormalized(activeLfoData->points[i]);
+        auto p2_screen = fromNormalized(activeLfoData->points[i+1]);
         
-        if (juce::approximatelyEqual(p1_screen.x, p2_screen.x) || juce::approximatelyEqual(curvatures[i], 0.0f))
+        // Safety check to prevent array out of bounds.
+        bool isCurved = (i < activeLfoData->curvatures.size() && !juce::approximatelyEqual(activeLfoData->curvatures[i], 0.0f));
+
+        if (juce::approximatelyEqual(p1_screen.x, p2_screen.x) || !isCurved)
         {
             lfoPath.lineTo(p2_screen);
         }
         else
         {
             const int numSegments = 30;
+            const float curvature = activeLfoData->curvatures[i];
             
             for (int j = 1; j <= numSegments; ++j)
             {
                 float tx = (float)j / (float)numSegments;
-                const float absExp = std::pow(4.0f, std::abs(curvatures[i]));
+                const float absExp = std::pow(4.0f, std::abs(curvature));
                 float ty;
-                if (curvatures[i] >= 0.0f)
+
+                if (curvature >= 0.0f)
+                {
                     ty = std::pow(tx, absExp);
+                }
                 else
-                    ty = 1.0f - std::pow(1.0f - tx, absExp);
+                {
+                    const float base = juce::jmax(0.0f, 1.0f - tx); // Prevents NaN
+                    ty = 1.0f - std::pow(base, absExp);
+                }
 
                 float currentX = p1_screen.x + (p2_screen.x - p1_screen.x) * tx;
                 float currentY = p1_screen.y + (p2_screen.y - p1_screen.y) * ty;
+                
+                if (std::isnan(currentX) || std::isnan(currentY))
+                    continue;
+                
                 lfoPath.lineTo({ currentX, currentY });
             }
         }
@@ -70,51 +83,73 @@ void LfoEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colours::orange);
     g.strokePath(lfoPath, juce::PathStrokeType(2.0f));
 
-    // 3. 绘制控制点
+    // Draw control points
     g.setColour(juce::Colours::yellow);
-    for (const auto& point : points)
+    for (const auto& point : activeLfoData->points)
     {
         auto localPoint = fromNormalized(point);
         g.fillEllipse(localPoint.x - pointRadius, localPoint.y - pointRadius, pointRadius * 2, pointRadius * 2);
     }
+    
+    // Draw playhead
+    if (playheadPos >= 0.0f)
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.7f));
+        g.drawVerticalLine(juce::roundToInt(getWidth() * playheadPos), 0.0f, (float)getHeight());
+    }
+}
+
+void LfoEditor::resized() {} // No layout logic needed in the editor itself.
+
+void LfoEditor::setGridDivisions(int horizontal, int vertical)
+{
+    hGridDivs = juce::jmax(1, horizontal);
+    vGridDivs = juce::jmax(1, vertical);
+    repaint();
+}
+
+void LfoEditor::setPlayheadPosition(float position)
+{
+//    if (! juce::approximatelyEqual(playheadPos, position))
+//    {
+//        playheadPos = position;
+//        repaint();
+//    }
 }
 
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
-    // (mouseDown 函数与上一版完全相同，无需修改)
-    // 左键点击：拖动或添加点
+    if (activeLfoData == nullptr) return; // Safety check
+
     if (event.mods.isLeftButtonDown())
     {
         draggingPointIndex = -1;
-        for (size_t i = 0; i < points.size(); ++i)
+        for (size_t i = 0; i < activeLfoData->points.size(); ++i)
         {
-            if (fromNormalized(points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
+            if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
             {
                 draggingPointIndex = static_cast<int>(i);
                 return;
             }
         }
         
-        if (points.size() < maxPoints)
+        if (activeLfoData->points.size() < maxPoints)
         {
             addPoint(toNormalized(event.getPosition()));
-            auto it = std::find(points.begin(), points.end(), toNormalized(event.getPosition()));
-            if (it != points.end())
-                draggingPointIndex = static_cast<int>(std::distance(points.begin(), it));
+            auto it = std::find(activeLfoData->points.begin(), activeLfoData->points.end(), toNormalized(event.getPosition()));
+            if (it != activeLfoData->points.end())
+                draggingPointIndex = static_cast<int>(std::distance(activeLfoData->points.begin(), it));
         }
     }
-    // 右键点击：准备编辑曲线
     else if (event.mods.isRightButtonDown())
     {
         editingCurveIndex = -1;
-        for (int i = (int)points.size() - 2; i >= 0; --i)
+        for (int i = (int)activeLfoData->points.size() - 2; i >= 0; --i)
         {
-            auto p1 = fromNormalized(points[i]);
-            auto p2 = fromNormalized(points[i + 1]);
-
+            auto p1 = fromNormalized(activeLfoData->points[i]);
+            auto p2 = fromNormalized(activeLfoData->points[i + 1]);
             auto segmentBounds = juce::Rectangle<float>(std::min(p1.x, p2.x), std::min(p1.y, p2.y), std::abs(p1.x - p2.x), std::abs(p1.y - p2.y));
             segmentBounds = segmentBounds.expanded(0, 15.0f);
-
             if (segmentBounds.contains(event.position.toFloat()))
             {
                 editingCurveIndex = i;
@@ -126,84 +161,54 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 {
-    // (*** 已修改 ***) 左键拖拽逻辑
+    if (activeLfoData == nullptr) return; // Safety check
+    
     if (event.mods.isLeftButtonDown() && draggingPointIndex != -1)
     {
         auto currentPos = event.getPosition();
-        
-        // 网格吸附逻辑
         if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
-            float snappedX = std::round(currentPos.x * gridDivisions / getWidth()) * (getWidth() / (float)gridDivisions);
-            float snappedY = std::round(currentPos.y * gridDivisions / getHeight()) * (getHeight() / (float)gridDivisions);
-            currentPos = { (int)snappedX, (int)snappedY };
+            float snappedX = std::round((float)currentPos.x * (float)hGridDivs / (float)getWidth()) * ((float)getWidth() / (float)hGridDivs);
+            float snappedY = std::round((float)currentPos.y * (float)vGridDivs / (float)getHeight()) * ((float)getHeight() / (float)vGridDivs);
+            currentPos = { juce::roundToInt(snappedX), juce::roundToInt(snappedY) };
         }
         
-        // (*** 新增 ***) 拖拽约束逻辑
         float minX = 0.0f;
         float maxX = (float)getWidth();
-
-        // 如果拖动的不是第一个点，则其最小X由左邻居决定
         if (draggingPointIndex > 0)
-            minX = fromNormalized(points[draggingPointIndex - 1]).x;
-
-        // 如果拖动的不是最后一个点，则其最大X由右邻居决定
-        if (draggingPointIndex < points.size() - 1)
-            maxX = fromNormalized(points[draggingPointIndex + 1]).x;
+            minX = fromNormalized(activeLfoData->points[draggingPointIndex - 1]).x;
+        if (draggingPointIndex < activeLfoData->points.size() - 1)
+            maxX = fromNormalized(activeLfoData->points[draggingPointIndex + 1]).x;
         
-        // 应用X轴约束
         currentPos.setX(juce::jlimit(minX, maxX, (float)currentPos.x));
-
-        // 应用组件边界的Y轴约束
         auto constrainedPos = getLocalBounds().getConstrainedPoint(currentPos);
+        activeLfoData->points[draggingPointIndex] = toNormalized(constrainedPos);
         
-        // 更新点的位置
-        points[draggingPointIndex] = toNormalized(constrainedPos);
-        
-        // 因为X坐标被约束，点的顺序不会改变，所以不再需要排序
         repaint();
     }
-    // 右键拖拽改变弧度
     else if (event.mods.isRightButtonDown() && editingCurveIndex != -1)
     {
-        // 拿到这一段的两个端点（屏幕坐标）
-        auto p1_screen = fromNormalized(points[editingCurveIndex]);
-        auto p2_screen = fromNormalized(points[editingCurveIndex + 1]);
-
-        // 计算斜率
+        auto p1_screen = fromNormalized(activeLfoData->points[editingCurveIndex]);
+        auto p2_screen = fromNormalized(activeLfoData->points[editingCurveIndex + 1]);
         float dx = p2_screen.x - p1_screen.x;
         float dy = p2_screen.y - p1_screen.y;
         float slope = (dx != 0.0f) ? (dy / dx) : std::numeric_limits<float>::infinity();
-
-        // 拖动距离：向下为正，向上为负
         float dragDistY = event.getDistanceFromDragStartY();
-
-        // sensitivity 越大形变越灵敏
-        const float divisor    = 100.0f;
+        const float divisor = 100.0f;
         const float sensitivity = 1.0f;
-
-        // 根据斜率决定正负： slope<0 时反向，否则正常
-        float rawCurv = (slope < 0.0f
-                         ?  dragDistY / divisor
-                         : -dragDistY / divisor)
-                        * sensitivity;
-
-        // 限制在 [-1,1]
-        curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, rawCurv);
-
+        float rawCurv = (slope < 0.0f ? dragDistY / divisor : -dragDistY / divisor) * sensitivity;
+        activeLfoData->curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, rawCurv);
         repaint();
     }
 }
 
-// ... (mouseUp, mouseDoubleClick, addPoint, removePoint 等函数与上一版完全相同，无需修改) ...
-
 void LfoEditor::mouseUp(const juce::MouseEvent& event)
 {
-    if (!points.empty())
-    {
-        points.front().x = 0.0f;
-        points.back().x = 1.0f;
-    }
+    if (activeLfoData == nullptr || activeLfoData->points.empty()) return;
+
+    activeLfoData->points.front().x = 0.0f;
+    activeLfoData->points.back().x = 1.0f;
+    
     draggingPointIndex = -1;
     editingCurveIndex = -1;
     repaint();
@@ -211,14 +216,15 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    // 右键双击重置曲率
+    if (activeLfoData == nullptr) return;
+    
     if (event.mods.isRightButtonDown())
     {
         int curveToReset = -1;
-        for (int i = (int)points.size() - 2; i >= 0; --i)
+        for (int i = (int)activeLfoData->points.size() - 2; i >= 0; --i)
         {
-            auto p1 = fromNormalized(points[i]);
-            auto p2 = fromNormalized(points[i + 1]);
+            auto p1 = fromNormalized(activeLfoData->points[i]);
+            auto p2 = fromNormalized(activeLfoData->points[i + 1]);
             auto segmentBounds = juce::Rectangle<float>(std::min(p1.x, p2.x), std::min(p1.y, p2.y), std::abs(p1.x - p2.x), std::abs(p1.y - p2.y));
             if (segmentBounds.expanded(0, 15.0f).contains(event.position.toFloat()))
             {
@@ -226,20 +232,18 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
                 break;
             }
         }
-        
         if (curveToReset != -1)
         {
-            curvatures[curveToReset] = 0.0f;
+            activeLfoData->curvatures[curveToReset] = 0.0f;
             repaint();
         }
         return;
     }
     
-    // 左键双击删除点
-    if (points.size() <= 2) return;
-    for (size_t i = points.size() - 1; i > 0; --i)
+    if (activeLfoData->points.size() <= 2) return;
+    for (size_t i = activeLfoData->points.size() - 1; i > 0; --i)
     {
-        if (fromNormalized(points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
+        if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
         {
             removePoint(static_cast<int>(i));
             return;
@@ -249,31 +253,36 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 
 void LfoEditor::addPoint(juce::Point<float> newPoint)
 {
-    if (points.size() >= maxPoints) return;
+    if (activeLfoData == nullptr || activeLfoData->points.size() >= maxPoints) return;
     
-    points.push_back(newPoint);
+    activeLfoData->points.push_back(newPoint);
     updateAndSortPoints();
     
-    auto it = std::find(points.begin(), points.end(), newPoint);
-    int insertIndex = static_cast<int>(std::distance(points.begin(), it));
+    auto it = std::find(activeLfoData->points.begin(), activeLfoData->points.end(), newPoint);
+    int insertIndex = static_cast<int>(std::distance(activeLfoData->points.begin(), it));
     
     if (insertIndex > 0)
     {
-        curvatures[insertIndex - 1] = 0.0f;
-        curvatures.insert(curvatures.begin() + insertIndex, 0.0f);
+        activeLfoData->curvatures.insert(activeLfoData->curvatures.begin() + insertIndex - 1, 0.0f);
+        if (insertIndex < activeLfoData->curvatures.size())
+            activeLfoData->curvatures[insertIndex] = 0.0f;
+    }
+    else
+    {
+        activeLfoData->curvatures.insert(activeLfoData->curvatures.begin(), 0.0f);
     }
     repaint();
 }
 
 void LfoEditor::removePoint(int index)
 {
-    if (index <= 0 || index >= points.size() - 1) return;
+    if (activeLfoData == nullptr || index <= 0 || index >= activeLfoData->points.size() - 1) return;
     
-    points.erase(points.begin() + index);
+    activeLfoData->points.erase(activeLfoData->points.begin() + index);
     
-    curvatures.erase(curvatures.begin() + index - 1);
-    if (index - 1 < curvatures.size())
-        curvatures[index - 1] = 0.0f;
+    activeLfoData->curvatures.erase(activeLfoData->curvatures.begin() + index - 1);
+    if (index - 1 < activeLfoData->curvatures.size())
+        activeLfoData->curvatures[index - 1] = 0.0f;
 
     repaint();
 }
@@ -285,58 +294,204 @@ juce::Point<float> LfoEditor::toNormalized(juce::Point<int> localPoint)
 
 juce::Point<float> LfoEditor::fromNormalized(juce::Point<float> normalizedPoint)
 {
+    // Ensure the calculation is done with floats and returns a float point
     return { normalizedPoint.x * (float)getWidth(), normalizedPoint.y * (float)getHeight() };
 }
 
 void LfoEditor::updateAndSortPoints()
 {
-    std::sort(points.begin(), points.end(), [](const auto& a, const auto& b) {
+    if (activeLfoData == nullptr) return;
+    std::sort(activeLfoData->points.begin(), activeLfoData->points.end(), [](const auto& a, const auto& b) {
         return a.x < b.x;
     });
 }
 
-
 //==============================================================================
-// LfoPanel 实现 (保持不变)
+// LfoPanel Implementation
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
+    // First, create and initialize all data models.
+    lfoData.resize(4);
+
+    // Then, set the editor to point to the first LFO's data.
+    lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
     addAndMakeVisible(lfoEditor);
+    
+    // Create UI Components
+    for (int i = 0; i < 4; ++i)
+    {
+        lfoSelectButtons[i] = std::make_unique<juce::TextButton>("LFO " + juce::String(i + 1));
+        addAndMakeVisible(lfoSelectButtons[i].get());
+        lfoSelectButtons[i]->setRadioGroupId(1);
+        lfoSelectButtons[i]->addListener(this);
+    }
+    lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
+
+    addAndMakeVisible(parameterMenu);
+    parameterMenu.addItem("Drive (Band 1)", 1);
+    parameterMenu.addItem("Mix (Band 1)", 2);
+    parameterMenu.setSelectedId(1);
+    
+    addAndMakeVisible(syncButton);
+    syncButton.setButtonText("BPM Sync");
     
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    rateSlider.setRange(0.1, 20.0, 0.01);
     
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
     rateLabel.attachToComponent(&rateSlider, false);
-    rateLabel.setJustificationType(juce::Justification::centred);
+    
+    addAndMakeVisible(gridXSlider);
+    gridXSlider.setSliderStyle(juce::Slider::IncDecButtons);
+    gridXSlider.setRange(2, 16, 1);
+    gridXSlider.setValue(4);
+    gridXSlider.addListener(this);
+    
+    addAndMakeVisible(gridXLabel);
+    gridXLabel.setText("Grid X", juce::dontSendNotification);
+    
+    addAndMakeVisible(gridYSlider);
+    gridYSlider.setSliderStyle(juce::Slider::IncDecButtons);
+    gridYSlider.setRange(2, 16, 1);
+    gridYSlider.setValue(4);
+    gridYSlider.addListener(this);
 
-    // rateAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, "LFO_RATE", rateSlider);
+    addAndMakeVisible(gridYLabel);
+    gridYLabel.setText("Grid Y", juce::dontSendNotification);
+
+    startTimerHz(60);
 }
 
-LfoPanel::~LfoPanel() {}
+LfoPanel::~LfoPanel() { stopTimer(); }
 
 void LfoPanel::paint(juce::Graphics& g)
 {
-    g.setColour(juce::Colours::white);
-    g.setFont(15.0f);
-    g.drawText("LFO 1", getLocalBounds().withTrimmedTop(10), juce::Justification::centredTop, true);
     g.setColour(juce::Colour(0xff303030));
-    g.drawRect(getLocalBounds());
+    g.drawRect(getLocalBounds(), 1);
 }
 
 void LfoPanel::resized()
 {
-    auto bounds = getLocalBounds();
+    juce::Rectangle<int> bounds = getLocalBounds();
     bounds.reduce(10, 10);
     
-    bounds.removeFromTop(20);
-
-    auto controlsBounds = bounds.removeFromRight(100);
+    auto leftColumn = bounds.removeFromLeft(60);
+    auto rightColumn = bounds.removeFromRight(120);
+    auto topRow = bounds.removeFromTop(30);
+    
+    juce::FlexBox lfoSelectBox;
+    lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
+    for (const auto& button : lfoSelectButtons)
+        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(2));
+    lfoSelectBox.performLayout(leftColumn);
+    
+    juce::FlexBox rightControlsBox;
+    rightControlsBox.flexDirection = juce::FlexBox::Direction::column;
+    rightControlsBox.items.add(juce::FlexItem(rateSlider).withFlex(3.0f));
+    rightControlsBox.items.add(juce::FlexItem(gridXLabel).withFlex(0.5f));
+    rightControlsBox.items.add(juce::FlexItem(gridXSlider).withFlex(1.0f));
+    rightControlsBox.items.add(juce::FlexItem(gridYLabel).withFlex(0.5f));
+    rightControlsBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
+    rightControlsBox.performLayout(rightColumn);
+    
+    syncButton.setBounds(topRow.removeFromRight(100));
+    parameterMenu.setBounds(topRow);
     
     lfoEditor.setBounds(bounds);
-    
-    controlsBounds.removeFromTop(40);
-    rateSlider.setBounds(controlsBounds.removeFromTop(80));
+}
+
+void LfoPanel::timerCallback()
+{
+//    // This is the most robust way to handle potentially buggy hosts.
+//    try
+//    {
+//        // 1. Safely get the playhead pointer.
+//        if (auto* playHead = processor.getPlayHead())
+//        {
+//            // 2. Get the position information optional. This is the call that can crash.
+//            auto positionInfoOpt = playHead->getPosition();
+//
+//            // 3. Check if the optional contains a valid object.
+//            if (positionInfoOpt)
+//            {
+//                const auto& positionInfo = *positionInfoOpt;
+//
+//                if (positionInfo.getIsPlaying())
+//                {
+//                    if (auto ppq = positionInfo.getPpqPosition())
+//                    {
+//                        // This is a basic example. A real implementation would use the Rate slider and Sync button.
+//                        double beatsPerBar = 4.0;
+//                        double currentBeat = std::fmod(*ppq, beatsPerBar);
+//                        float normalizedPosition = static_cast<float>(currentBeat / beatsPerBar);
+//                        lfoEditor.setPlayheadPosition(normalizedPosition);
+//                    }
+//                    else
+//                    {
+//                        // Host is playing but not providing PPQ.
+//                        lfoEditor.setPlayheadPosition(-1.0f);
+//                    }
+//                }
+//                else
+//                {
+//                    // Host is not playing.
+//                    lfoEditor.setPlayheadPosition(-1.0f);
+//                }
+//            }
+//            else // positionInfoOpt is empty (juce::nullopt)
+//            {
+//                lfoEditor.setPlayheadPosition(-1.0f);
+//            }
+//        }
+//        else // playHead is a nullptr
+//        {
+//            lfoEditor.setPlayheadPosition(-1.0f);
+//        }
+//    }
+//    catch (...)
+//    {
+//        // If any part of the above code causes a severe error (like the host bug),
+//        // this block will catch it and prevent the plugin UI from crashing.
+//        // We can simply do nothing and wait for the next timer callback,
+//        // hoping the host has sorted itself out.
+//        lfoEditor.setPlayheadPosition(-1.0f);
+//    }
+}
+
+void LfoPanel::buttonClicked(juce::Button* button)
+{
+    if (button == &syncButton)
+    {
+        // Handle BPM sync logic here
+    }
+    else
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            if (button == lfoSelectButtons[i].get())
+            {
+                currentLfoIndex = i;
+                lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
+                break;
+            }
+        }
+    }
+}
+
+void LfoPanel::comboBoxChanged(juce::ComboBox* comboBox)
+{
+    if (comboBox == &parameterMenu)
+    {
+        // Handle parameter mapping logic here
+    }
+}
+
+void LfoPanel::sliderValueChanged(juce::Slider* slider)
+{
+    if (slider == &gridXSlider || slider == &gridYSlider)
+        lfoEditor.setGridDivisions((int)gridXSlider.getValue(), (int)gridYSlider.getValue());
 }

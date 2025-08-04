@@ -22,6 +22,94 @@
 #include "DSP/LfoEngine.h"
 
 //==============================================================================
+// A namespace for all parameter IDs, built from pre-defined macros.
+//==============================================================================
+namespace ParameterID
+{
+    // Define the parameter version number in one central place.
+    const int versionNum = 1;
+
+    // --- Arrays of Macros for Per-Band Parameters ---
+    // This allows us to access parameters like DRIVE_ID1, DRIVE_ID2 etc. via an index.
+    const char* const modeIds[]        = { MODE_ID1, MODE_ID2, MODE_ID3, MODE_ID4 };
+    const char* const linkedIds[]      = { LINKED_ID1, LINKED_ID2, LINKED_ID3, LINKED_ID4 };
+    const char* const safeIds[]        = { SAFE_ID1, SAFE_ID2, SAFE_ID3, SAFE_ID4 };
+    const char* const extremeIds[]     = { EXTREME_ID1, EXTREME_ID2, EXTREME_ID3, EXTREME_ID4 };
+    const char* const driveIds[]       = { DRIVE_ID1, DRIVE_ID2, DRIVE_ID3, DRIVE_ID4 };
+    const char* const compRatioIds[]   = { COMP_RATIO_ID1, COMP_RATIO_ID2, COMP_RATIO_ID3, COMP_RATIO_ID4 };
+    const char* const compThreshIds[]  = { COMP_THRESH_ID1, COMP_THRESH_ID2, COMP_THRESH_ID3, COMP_THRESH_ID4 };
+    const char* const widthIds[]       = { WIDTH_ID1, WIDTH_ID2, WIDTH_ID3, WIDTH_ID4 };
+    const char* const outputIds[]      = { OUTPUT_ID1, OUTPUT_ID2, OUTPUT_ID3, OUTPUT_ID4 };
+    const char* const mixIds[]         = { MIX_ID1, MIX_ID2, MIX_ID3, MIX_ID4 };
+    const char* const biasIds[]        = { BIAS_ID1, BIAS_ID2, BIAS_ID3, BIAS_ID4 };
+    const char* const recIds[]         = { REC_ID1, REC_ID2, REC_ID3, REC_ID4 };
+    const char* const bandEnableIds[]  = { BAND_ENABLE_ID1, BAND_ENABLE_ID2, BAND_ENABLE_ID3, BAND_ENABLE_ID4 };
+    const char* const bandSoloIds[]    = { BAND_SOLO_ID1, BAND_SOLO_ID2, BAND_SOLO_ID3, BAND_SOLO_ID4 };
+    const char* const compBypassIds[]  = { COMP_BYPASS_ID1, COMP_BYPASS_ID2, COMP_BYPASS_ID3, COMP_BYPASS_ID4 };
+    const char* const widthBypassIds[] = { WIDTH_BYPASS_ID1, WIDTH_BYPASS_ID2, WIDTH_BYPASS_ID3, WIDTH_BYPASS_ID4 };
+    
+    // --- Helper functions that return a complete juce::ParameterID object ---
+    inline juce::ParameterID mode (int i)        { return { modeIds[i], versionNum }; }
+    inline juce::ParameterID linked (int i)      { return { linkedIds[i], versionNum }; }
+    inline juce::ParameterID safe (int i)        { return { safeIds[i], versionNum }; }
+    inline juce::ParameterID extreme (int i)     { return { extremeIds[i], versionNum }; }
+    inline juce::ParameterID drive (int i)       { return { driveIds[i], versionNum }; }
+    inline juce::ParameterID compRatio (int i)   { return { compRatioIds[i], versionNum }; }
+    inline juce::ParameterID compThresh (int i)  { return { compThreshIds[i], versionNum }; }
+    inline juce::ParameterID width (int i)       { return { widthIds[i], versionNum }; }
+    inline juce::ParameterID output (int i)      { return { outputIds[i], versionNum }; }
+    inline juce::ParameterID mix (int i)         { return { mixIds[i], versionNum }; }
+    inline juce::ParameterID bias (int i)        { return { biasIds[i], versionNum }; }
+    inline juce::ParameterID rec (int i)         { return { recIds[i], versionNum }; }
+    inline juce::ParameterID bandEnable (int i)  { return { bandEnableIds[i], versionNum }; }
+    inline juce::ParameterID bandSolo (int i)    { return { bandSoloIds[i], versionNum }; }
+    inline juce::ParameterID compBypass (int i)  { return { compBypassIds[i], versionNum }; }
+    inline juce::ParameterID widthBypass (int i) { return { widthBypassIds[i], versionNum }; }
+
+    // --- Global Parameters built from macros ---
+    const juce::ParameterID hq = { HQ_ID, versionNum };
+    const juce::ParameterID globalOutput = { OUTPUT_ID, versionNum };
+    const juce::ParameterID globalMix = { MIX_ID, versionNum };
+    const juce::ParameterID numBands = { NUM_BANDS_ID, versionNum };
+    
+    // --- Crossover Parameters ---
+    const juce::ParameterID lineState1 = { LINE_STATE_ID1, versionNum };
+    const juce::ParameterID lineState2 = { LINE_STATE_ID2, versionNum };
+    const juce::ParameterID lineState3 = { LINE_STATE_ID3, versionNum };
+    const juce::ParameterID freq1 = { FREQ_ID1, versionNum };
+    const juce::ParameterID freq2 = { FREQ_ID2, versionNum };
+    const juce::ParameterID freq3 = { FREQ_ID3, versionNum };
+
+    // --- Global Filter Parameters ---
+    const juce::ParameterID lowCutFreq = { LOWCUT_FREQ_ID, versionNum };
+    const juce::ParameterID lowCutQ = { LOWCUT_Q_ID, versionNum };
+    const juce::ParameterID lowCutGain = { LOWCUT_GAIN_ID, versionNum };
+    const juce::ParameterID highCutFreq = { HIGHCUT_FREQ_ID, versionNum };
+    const juce::ParameterID highCutQ = { HIGHCUT_Q_ID, versionNum };
+    const juce::ParameterID highCutGain = { HIGHCUT_GAIN_ID, versionNum };
+    const juce::ParameterID peakFreq = { PEAK_FREQ_ID, versionNum };
+    const juce::ParameterID peakQ = { PEAK_Q_ID, versionNum };
+    const juce::ParameterID peakGain = { PEAK_GAIN_ID, versionNum };
+    const juce::ParameterID lowCutSlope = { LOWCUT_SLOPE_ID, versionNum };
+    const juce::ParameterID highCutSlope = { HIGHCUT_SLOPE_ID, versionNum };
+    const juce::ParameterID lowCutBypassed = { LOWCUT_BYPASSED_ID, versionNum };
+    const juce::ParameterID peakBypassed = { PEAK_BYPASSED_ID, versionNum };
+    const juce::ParameterID highCutBypassed = { HIGHCUT_BYPASSED_ID, versionNum };
+    const juce::ParameterID filterBypass = { FILTER_BYPASS_ID, versionNum };
+
+    const juce::ParameterID off = { OFF_ID, versionNum };
+    const juce::ParameterID pre = { PRE_ID, versionNum };
+    const juce::ParameterID post = { POST_ID, versionNum };
+    const juce::ParameterID low = { LOW_ID, versionNum };
+    const juce::ParameterID band = { BAND_ID, versionNum };
+    const juce::ParameterID high = { HIGH_ID, versionNum };
+
+    // --- Other Global Parameters ---
+    const juce::ParameterID downsample = { DOWNSAMPLE_ID, versionNum };
+    const juce::ParameterID downsampleBypass = { DOWNSAMPLE_BYPASS_ID, versionNum };
+}
+
+//==============================================================================
 // Describes a single connection from a source (LFO) to a target (Parameter)
 struct ModulationRouting
 {

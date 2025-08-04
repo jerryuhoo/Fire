@@ -109,6 +109,7 @@
               file="Source/DSP/ClippingFunctions.h"/>
         <FILE id="fGPNaV" name="Delay.h" compile="0" resource="0" file="Source/DSP/Delay.h"/>
         <FILE id="TPnhKC" name="DiodeWDF.h" compile="0" resource="0" file="Source/DSP/DiodeWDF.h"/>
+        <FILE id="IEdaZX" name="LfoEngine.h" compile="0" resource="0" file="Source/DSP/LfoEngine.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>
         <FILE id="K65kzc" name="WidthProcessor.cpp" compile="1" resource="0"
               file="Source/DSP/WidthProcessor.cpp"/>

@@ -19,6 +19,7 @@
 #include "Utility/AudioHelpers.h"
 #include "DSP/ClippingFunctions.h"
 #include "DSP/DiodeWDF.h"
+#include "DSP/LfoEngine.h"
 
 //==============================================================================
 // Describes a single connection from a source (LFO) to a target (Parameter)
@@ -142,6 +143,7 @@ public:
 
 private:
     //==============================================================================
+    std::array<LfoEngine, 4> lfoEngines;
 
     // preset id
     int presetId = 0;

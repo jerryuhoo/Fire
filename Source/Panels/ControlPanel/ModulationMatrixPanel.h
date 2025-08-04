@@ -14,29 +14,48 @@
 #include "../../PluginProcessor.h"
 
 //
+//  A header component to display titles for the matrix columns.
+//
+class ModulationMatrixHeader : public juce::Component
+{
+public:
+    ModulationMatrixHeader();
+    void resized() override;
+
+private:
+    juce::Label sourceLabel;
+    juce::Label amountLabel;
+    juce::Label destinationLabel;
+};
+
+//
 //  A single row in our modulation matrix UI.
-//  It contains controls for source, amount, and destination.
 //
 class ModulationMatrixRow : public juce::Component,
+                            public juce::Button::Listener,
                             public juce::Slider::Listener,
                             public juce::ComboBox::Listener
 {
 public:
-    ModulationMatrixRow (FireAudioProcessor& p, int routingIndex);
+    // The constructor now accepts a callback function to handle its deletion.
+    ModulationMatrixRow (FireAudioProcessor& p, int routingIndex, std::function<void()> onDelete);
     ~ModulationMatrixRow() override;
     
     void resized() override;
     
 private:
+    void buttonClicked (juce::Button* button) override;
     void sliderValueChanged (juce::Slider* slider) override;
     void comboBoxChanged (juce::ComboBox* comboBox) override;
     
     FireAudioProcessor& processor;
     int index; // The index of the routing this row represents in the processor's array
+    std::function<void()> onDeleteCallback; // The function to call when the delete button is pressed.
     
     juce::ComboBox sourceMenu;
     juce::Slider amountSlider;
     juce::ComboBox destinationMenu;
+    juce::TextButton removeButton { "X" };
 };
 
 //
@@ -60,6 +79,7 @@ private:
     
     FireAudioProcessor& processor;
     
+    ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
     juce::TextButton addButton { "Add New" };
     juce::TextButton closeButton { "Close" };

@@ -159,6 +159,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // initialisation that you need..
     auto channels = static_cast<juce::uint32>(juce::jmin(getMainBusNumInputChannels(), getMainBusNumOutputChannels()));
     juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32>(samplesPerBlock), channels };
+    
+    for (auto& engine : lfoEngines)
+    {
+        engine.prepare(spec);
+    }
 
     // fix the artifacts (also called zipper noise)
     previousOutput1 = (float) *treeState.getRawParameterValue(OUTPUT_ID1);
@@ -482,6 +487,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
     mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
+    
+    // At the start of the block, get the LFO values. For now, let's just get one value
+    // for the whole block for simplicity. A more advanced implementation would
+    // process this per-sample.
+    float lfo1Value = lfoEngines[0].getNextSample(); // This gets the CURRENT LFO value
+    // float lfo2Value = lfoEngines[1].getNextSample();
+    // etc.
+    
+    // (This is a placeholder for the modulation system we will build next)
+    // DBG("LFO 1 Value: " + juce::String(lfo1Value));
 
     // 1. GET PARAMETERS & SMOOTH FREQUENCIES
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));

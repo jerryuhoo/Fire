@@ -13,6 +13,7 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../PluginProcessor.h"
 #include "../../GUI/LookAndFeel.h"
+#include "ModulationMatrixPanel.h"
 
 //
 //  Represents the data model for a single LFO shape.
@@ -89,7 +90,6 @@ private:
 //
 class LfoPanel  : public juce::Component,
                   public juce::Button::Listener,
-                  public juce::ComboBox::Listener,
                   public juce::Slider::Listener,
                   public juce::Timer
 {
@@ -106,7 +106,6 @@ public:
 
 private:
     void buttonClicked(juce::Button* button) override;
-    void comboBoxChanged(juce::ComboBox* comboBox) override;
     void sliderValueChanged(juce::Slider* slider) override;
     
     FireAudioProcessor& processor;
@@ -123,7 +122,7 @@ private:
 
     std::array<std::unique_ptr<juce::TextButton>, 4> lfoSelectButtons;
     
-    juce::ComboBox parameterMenu;
+    juce::TextButton matrixButton { "Matrix" };
     juce::TextButton syncButton;
 
     juce::Slider rateSlider;

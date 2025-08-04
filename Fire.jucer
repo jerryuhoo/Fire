@@ -82,6 +82,10 @@
           <FILE id="gY3gqe" name="GlobalPanel.h" compile="0" resource="0" file="Source/Panels/ControlPanel/GlobalPanel.h"/>
           <FILE id="VXARUu" name="LfoPanel.cpp" compile="1" resource="0" file="Source/Panels/ControlPanel/LfoPanel.cpp"/>
           <FILE id="dyKJOr" name="LfoPanel.h" compile="0" resource="0" file="Source/Panels/ControlPanel/LfoPanel.h"/>
+          <FILE id="sxp0YQ" name="ModulationMatrixPanel.cpp" compile="1" resource="0"
+                file="Source/Panels/ControlPanel/ModulationMatrixPanel.cpp"/>
+          <FILE id="bPv4s8" name="ModulationMatrixPanel.h" compile="0" resource="0"
+                file="Source/Panels/ControlPanel/ModulationMatrixPanel.h"/>
         </GROUP>
         <GROUP id="{995D5DE9-21F2-8C23-FD7F-A46997F360E4}" name="TopPanel">
           <FILE id="By9zs9" name="Preset.cpp" compile="1" resource="0" file="Source/Panels/TopPanel/Preset.cpp"/>

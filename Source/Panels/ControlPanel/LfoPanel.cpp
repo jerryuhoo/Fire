@@ -335,10 +335,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
 
-    addAndMakeVisible(parameterMenu);
-    parameterMenu.addItem("Drive (Band 1)", 1);
-    parameterMenu.addItem("Mix (Band 1)", 2);
-    parameterMenu.setSelectedId(1);
+    addAndMakeVisible(matrixButton);
+    matrixButton.addListener(this);
+    matrixButton.setLookAndFeel(&flatLnf);
     
     addAndMakeVisible(syncButton);
     syncButton.setClickingTogglesState(true);
@@ -395,6 +394,7 @@ LfoPanel::~LfoPanel()
     syncButton.setLookAndFeel(nullptr);
     gridXSlider.setLookAndFeel(nullptr);
     gridYSlider.setLookAndFeel(nullptr);
+    matrixButton.setLookAndFeel(nullptr);
     for (auto& button : lfoSelectButtons)
         button->setLookAndFeel(nullptr);
 }
@@ -412,7 +412,7 @@ void LfoPanel::resized()
     constexpr int initialLeftColWidth = 60;
     constexpr int initialRightColWidth = 120;
     constexpr int initialTopRowHeight = 30;
-    constexpr int initialComboWidth = 150;
+    constexpr int initialMatrixWidth = 150;
     constexpr int initialSyncWidth = 100;
     constexpr int initialGridLabelWidth = 50;
     
@@ -427,8 +427,8 @@ void LfoPanel::resized()
     
     // Layout the top row with scaled dimensions.
     {
-        auto comboBoxArea = topRow.removeFromLeft(juce::roundToInt(initialComboWidth * scale));
-        parameterMenu.setBounds(comboBoxArea.reduced(0, juce::roundToInt(4 * scale)));
+        auto matrixButtonArea = topRow.removeFromLeft(juce::roundToInt(initialMatrixWidth * scale));
+        matrixButton.setBounds(matrixButtonArea.reduced(0, juce::roundToInt(4 * scale)));
 
         auto syncButtonArea = topRow.removeFromRight(juce::roundToInt(initialSyncWidth * scale));
         syncButton.setBounds(syncButtonArea.reduced(juce::roundToInt(10 * scale), juce::roundToInt(4 * scale)));
@@ -519,7 +519,15 @@ void LfoPanel::timerCallback()
 
 void LfoPanel::buttonClicked(juce::Button* button)
 {
-    if (button == &syncButton)
+    if (button == &matrixButton)
+    {
+        // This opens our new panel in a non-modal dialog window.
+        juce::DialogWindow::LaunchOptions launchOptions;
+        launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
+        launchOptions.content->setSize(500, 300);
+        launchOptions.launchAsync();
+    }
+    else if (button == &syncButton)
     {
         // Handle BPM sync logic here
     }
@@ -559,14 +567,6 @@ void LfoPanel::buttonClicked(juce::Button* button)
             }
         }
     }
-
-void LfoPanel::comboBoxChanged(juce::ComboBox* comboBox)
-{
-    if (comboBox == &parameterMenu)
-    {
-        // Handle parameter mapping logic here
-    }
-}
 
 void LfoPanel::sliderValueChanged(juce::Slider* slider)
 {

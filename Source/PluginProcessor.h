@@ -20,9 +20,31 @@
 #include "DSP/ClippingFunctions.h"
 #include "DSP/DiodeWDF.h"
 
-//#include "GUI/LookAndFeel.h"
-//#define COLOUR1 Colour(244, 208, 63)
-//#define COLOUR6 Colour(45, 40, 40)
+//==============================================================================
+// Describes a single connection from a source (LFO) to a target (Parameter)
+struct ModulationRouting
+{
+    int sourceLfoIndex = 0;
+    juce::String targetParameterID;
+    
+    // Depth can be bipolar (-1.0 to 1.0), representing -100% to +100%
+    float depth = 0.5f;
+    
+    // Helper for saving/loading state
+    void writeToXml (juce::XmlElement& xml) const
+    {
+        xml.setAttribute ("source", sourceLfoIndex);
+        xml.setAttribute ("target", targetParameterID);
+        xml.setAttribute ("depth", depth);
+    }
+    
+    static ModulationRouting readFromXml (const juce::XmlElement& xml)
+    {
+        return { xml.getIntAttribute    ("source", 0),
+                 xml.getStringAttribute ("target"),
+                 (float) xml.getDoubleAttribute ("depth", 0.5) };
+    }
+};
 //==============================================================================
 
 class FireAudioProcessor : public juce::AudioProcessor
@@ -74,6 +96,9 @@ public:
     void updateFilter();
 
     bool isSlient(juce::AudioBuffer<float> buffer);
+    
+    // The central list of all modulation connections in the plugin.
+    juce::Array<ModulationRouting> modulationRoutings;
 
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();

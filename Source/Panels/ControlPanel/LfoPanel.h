@@ -101,6 +101,8 @@ public:
     void resized() override;
     
     void timerCallback() override;
+    
+    void setScale(float newScale);
 
 private:
     void buttonClicked(juce::Button* button) override;
@@ -108,6 +110,8 @@ private:
     void sliderValueChanged(juce::Slider* slider) override;
     
     FireAudioProcessor& processor;
+    
+    float scale = 1.0f;
 
     // --- Data Model ---
     // The LfoPanel owns the data for all 4 LFOs.

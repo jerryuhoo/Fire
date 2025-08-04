@@ -407,42 +407,55 @@ void LfoPanel::paint(juce::Graphics& g)
 
 void LfoPanel::resized()
 {
+    // Define layout constants based on an initial design size.
+    constexpr int initialMargin = 10;
+    constexpr int initialLeftColWidth = 60;
+    constexpr int initialRightColWidth = 120;
+    constexpr int initialTopRowHeight = 30;
+    constexpr int initialComboWidth = 150;
+    constexpr int initialSyncWidth = 100;
+    constexpr int initialGridLabelWidth = 50;
+    
+    // Create a working area, scaled from the initial margin.
     juce::Rectangle<int> bounds = getLocalBounds();
-    bounds.reduce(10, 10);
+    bounds.reduce(juce::roundToInt(initialMargin * scale), juce::roundToInt(initialMargin * scale));
     
-    auto leftColumn = bounds.removeFromLeft(60);
-    auto rightColumn = bounds.removeFromRight(120);
+    // Calculate scaled dimensions for the main columns and rows.
+    auto leftColumn = bounds.removeFromLeft(juce::roundToInt(initialLeftColWidth * scale));
+    auto rightColumn = bounds.removeFromRight(juce::roundToInt(initialRightColWidth * scale));
+    auto topRow = bounds.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
     
-    // (*** NEW ***) New top row layout logic
-    auto topRow = bounds.removeFromTop(30);
+    // Layout the top row with scaled dimensions.
     {
-        auto comboBoxArea = topRow.removeFromLeft(150);
-        parameterMenu.setBounds(comboBoxArea.reduced(0, 4)); // Add some vertical margin
+        auto comboBoxArea = topRow.removeFromLeft(juce::roundToInt(initialComboWidth * scale));
+        parameterMenu.setBounds(comboBoxArea.reduced(0, juce::roundToInt(4 * scale)));
 
-        auto syncButtonArea = topRow.removeFromRight(100);
-        syncButton.setBounds(syncButtonArea.reduced(10, 4));
+        auto syncButtonArea = topRow.removeFromRight(juce::roundToInt(initialSyncWidth * scale));
+        syncButton.setBounds(syncButtonArea.reduced(juce::roundToInt(10 * scale), juce::roundToInt(4 * scale)));
 
-        auto gridControlsArea = topRow; // The remaining area in the middle
+        auto gridControlsArea = topRow;
         auto gridXArea = gridControlsArea.removeFromLeft(gridControlsArea.getWidth() / 2);
         auto gridYArea = gridControlsArea;
         
-        gridXLabel.setBounds(gridXArea.removeFromLeft(50).reduced(2));
+        gridXLabel.setBounds(gridXArea.removeFromLeft(juce::roundToInt(initialGridLabelWidth * scale)).reduced(juce::roundToInt(2 * scale)));
         gridXSlider.setBounds(gridXArea);
         
-        gridYLabel.setBounds(gridYArea.removeFromLeft(50).reduced(2));
+        gridYLabel.setBounds(gridYArea.removeFromLeft(juce::roundToInt(initialGridLabelWidth * scale)).reduced(juce::roundToInt(2 * scale)));
         gridYSlider.setBounds(gridYArea);
     }
 
-    // Layout for the main columns
+    // Layout for the main columns using FlexBox (FlexBox handles scaling internally).
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
     for (const auto& button : lfoSelectButtons)
         lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(2));
     lfoSelectBox.performLayout(leftColumn);
     
-    const int sliderSize = juce::jmin(rightColumn.getWidth(), rightColumn.getHeight());
+    // Center the rate slider in the right column with a scaled size.
+    const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.8f); // 80% of the smallest dimension
     rateSlider.setBounds(rightColumn.withSizeKeepingCentre(sliderSize, sliderSize));
     
+    // The LFO editor takes the remaining central space.
     lfoEditor.setBounds(bounds);
 }
 
@@ -559,4 +572,10 @@ void LfoPanel::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == &gridXSlider || slider == &gridYSlider)
         lfoEditor.setGridDivisions((int)gridXSlider.getValue(), (int)gridYSlider.getValue());
+}
+
+void LfoPanel::setScale(float newScale)
+{
+    scale = newScale;
+//    flatLnf.scale = newScale; // Pass the scale to the LookAndFeel if it needs it.
 }

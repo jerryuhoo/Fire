@@ -60,6 +60,7 @@ private:
 
     int focusIndex = 0;
     void updateWhenChangingFocus();
+    void updateMainPanelVisibility();
 
     void buttonClicked(juce::Button* clickedButton) override;
     void mouseDown(const juce::MouseEvent& e) override;

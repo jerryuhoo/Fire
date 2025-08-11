@@ -62,80 +62,84 @@ void BandProcessor::reset()
 void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor& processor, int bandIndex)
 {
     auto& treeState = processor.treeState;
-    
-    // Get parameters that are constant for the whole block.
+
+    // === 1. Get Parameters and Prepare ===
     const int   mode      = *treeState.getRawParameterValue(ParameterID::modeIds[bandIndex]);
     const bool  isHQ      = *treeState.getRawParameterValue(HQ_ID);
+    float       outputVal = this->output.getTargetValue();
+    float       mixVal    = this->mix.getTargetValue();
+
+    // Calculate mSampleMaxValue once per block for the Safe Mode logic
+    this->mSampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
     
-    // Set waveshaper function based on mode. This is done once per block.
+    // Create a copy of the clean signal for the final dry/wet mix
+    juce::AudioBuffer<float> dryBuffer;
+    dryBuffer.makeCopyOf(buffer);
+
+    // Set the waveshaper function based on the current mode
     auto& waveShaper = this->overdrive.get<2>();
     switch (mode)
     {
-        case 0:
-            waveShaper.functionToUse = waveshaping::arctanSoftClipping;
-            break;
-        case 1:
-            waveShaper.functionToUse = waveshaping::expSoftClipping;
-            break;
-        case 2:
-            waveShaper.functionToUse = waveshaping::tanhSoftClipping;
-            break;
-        case 3:
-            waveShaper.functionToUse = waveshaping::cubicSoftClipping;
-            break;
-        case 4:
-            waveShaper.functionToUse = waveshaping::hardClipping;
-            break;
-        case 5:
-            waveShaper.functionToUse = waveshaping::sausageFattener;
-            break;
-        case 6:
-            waveShaper.functionToUse = waveshaping::sinFoldback;
-            break;
-        case 7:
-            waveShaper.functionToUse = waveshaping::linFoldback;
-            break;
-        case 8:
-            waveShaper.functionToUse = waveshaping::limitClip;
-            break;
-        case 9:
-            waveShaper.functionToUse = waveshaping::singleSinClip;
-            break;
-        case 10:
-            waveShaper.functionToUse = waveshaping::logicClip;
-            break;
-        case 11:
-            waveShaper.functionToUse = waveshaping::tanclip;
-            break;
+        case 0:  waveShaper.functionToUse = waveshaping::arctanSoftClipping; break;
+        case 1:  waveShaper.functionToUse = waveshaping::expSoftClipping;    break;
+        case 2:  waveShaper.functionToUse = waveshaping::tanhSoftClipping;   break;
+        case 3:  waveShaper.functionToUse = waveshaping::cubicSoftClipping;  break;
+        case 4:  waveShaper.functionToUse = waveshaping::hardClipping;      break;
+        case 5:  waveShaper.functionToUse = waveshaping::sausageFattener;   break;
+        case 6:  waveShaper.functionToUse = waveshaping::sinFoldback;       break;
+        case 7:  waveShaper.functionToUse = waveshaping::linFoldback;       break;
+        case 8:  waveShaper.functionToUse = waveshaping::limitClip;         break;
+        case 9:  waveShaper.functionToUse = waveshaping::singleSinClip;     break;
+        case 10: waveShaper.functionToUse = waveshaping::logicClip;         break;
+        case 11: waveShaper.functionToUse = waveshaping::tanclip;           break;
     }
+    
+    // === 2. Core Processing (with correct Oversampling) ===
+    auto block = juce::dsp::AudioBlock<float>(buffer);
 
-    //==============================================================================
-    // 1. OVERSAMPLING & PER-SAMPLE PROCESSING (Now without duplication)
-    //==============================================================================
-    juce::AudioBuffer<float> dryBuffer;
-    dryBuffer.makeCopyOf(buffer);
-    
-    juce::dsp::AudioBlock<float> block(buffer);
-    
     if (isHQ)
     {
         auto oversampledBlock = oversampling->processSamplesUp(block);
         
-        // The dry buffer needs to be upsampled too for a correct mix.
-        juce::AudioBuffer<float> dryOversampledBuffer(static_cast<int>(oversampledBlock.getNumChannels()), static_cast<int>(oversampledBlock.getNumSamples()));
-        dryOversampledBuffer.makeCopyOf(dryBuffer);
-        juce::dsp::AudioBlock<float> dryOversampledBlock(dryOversampledBuffer);
-        oversampling->processSamplesUp(dryOversampledBlock);
-        
-        // Call our helper function on the high-resolution blocks.
-        processSampleLoop(oversampledBlock, dryOversampledBuffer, processor, bandIndex);
+        // Call the loop to process the upsampled signal in-place
+        processSampleLoop(oversampledBlock, processor, bandIndex);
         
         oversampling->processSamplesDown(block);
     }
-    else // If HQ is off, process at the original sample rate.
+    else
     {
-        // Call our helper function on the original blocks.
-        processSampleLoop(block, dryBuffer, processor, bandIndex);
+        // Call the loop to process the signal at the original sample rate
+        processSampleLoop(block, processor, bandIndex);
+    }
+
+    // === 3. Final Gain and Dry/Wet Mix at block level ===
+    auto finalContext = juce::dsp::ProcessContextReplacing<float>(block);
+    
+    // Apply the final output gain to the wet signal
+    gain.setGainDecibels(outputVal);
+    gain.process(finalContext);
+    
+    if (isHQ)
+    {
+        dryWetMixer.setWetLatency(oversampling->getLatencyInSamples());
+    }
+    else
+    {
+        dryWetMixer.setWetLatency(0.0f);
+    }
+
+    // Apply the dry/wet mix
+    // This robust approach avoids issues when mix is exactly 0 or 1
+    if (mixVal <= 0.0f)
+    {
+        buffer.makeCopyOf(dryBuffer); // If 0% wet, just use the clean dry signal
+    }
+    else if (mixVal < 1.0f)
+    {
+        // Only perform the mix operation if it's between 0 and 1
+        dryWetMixer.setWetMixProportion(mixVal);
+        dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
+        dryWetMixer.mixWetSamples(block);
     }
     
     //==============================================================================
@@ -159,44 +163,41 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
 }
 
 void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProcess,
-                                      const juce::AudioBuffer<float>& dryBuffer,
                                       FireAudioProcessor& processor,
                                       int bandIndex)
 {
     auto& treeState = processor.treeState;
-    auto& waveShaper = this->overdrive.get<2>();
-    
-    // Get parameters that are constant for the block.
-    const bool isSafeModeOn = *treeState.getRawParameterValue(ParameterID::safeIds[bandIndex]) > 0.5f;
-    const bool isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[bandIndex]) > 0.5f;
-    
-    this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
+    auto& waveShaper = this->overdrive.get<2>(); // Use the WaveShaper from the ProcessorChain
 
+    // --- Get parameters that are constant for the block ---
+    const bool isSafeModeOn    = *treeState.getRawParameterValue(ParameterID::safeIds[bandIndex]) > 0.5f;
+    const bool isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[bandIndex]) > 0.5f;
+
+    // --- Start per-sample processing loop ---
     for (int sample = 0; sample < blockToProcess.getNumSamples(); ++sample)
     {
-        // Get the SMOOTHED parameter values for THIS specific sample.
+        // Get smoothed parameter values for this specific sample
         float driveVal  = this->drive.getNextValue();
         float biasVal   = this->bias.getNextValue();
         float recVal    = this->rec.getNextValue();
-        float outputVal = this->output.getNextValue();
-        float mixVal    = this->mix.getNextValue();
-        
-        // Apply the "Extreme" mode modification to the smoothed drive value.
+
         if (isExtremeModeOn)
         {
-            driveVal = log2(10.0f) * driveVal;
+            driveVal = log2f(10.0f) * driveVal;
         }
         
         // --- Safe Mode logic ---
         const float driveForCalc = driveVal * 6.5f / 100.0f;
         float powerDrive = std::pow(2.0f, driveForCalc);
+        float newDrive;
         
+        // mSampleMaxValue is now calculated once per block in the main process() function
         if (isSafeModeOn && this->mSampleMaxValue * powerDrive > 2.0f)
-            this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
+            newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
         else
-            this->newDrive = powerDrive;
+            newDrive = powerDrive;
         
-        // Update the reduction percent for the UI to read.
+        // Update the reduction percent for the UI to read
         if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
             this->mReductionPercent = 1.0f;
         else
@@ -208,17 +209,15 @@ void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProce
             auto* channelData = blockToProcess.getChannelPointer(channel);
             float currentSample = channelData[sample];
 
-            // --- Manually process the overdrive chain sample-by-sample ---
+            // --- Manually process the overdrive chain ---
             currentSample *= newDrive;
             currentSample += biasVal;
             currentSample = waveShaper.functionToUse(currentSample);
-            if (currentSample < 0.0f) currentSample *= (0.5f - recVal) * 2.0f;
+            currentSample = waveshaping::rectificationProcess(currentSample, recVal); // Assuming you have this helper
             currentSample -= biasVal;
             
-            float wetSample = currentSample * juce::Decibels::decibelsToGain(outputVal);
-            float drySample = dryBuffer.getSample(channel, sample);
-            
-            channelData[sample] = drySample + (wetSample - drySample) * mixVal;
+            // Write the calculated pure wet signal back to the buffer
+            channelData[sample] = currentSample;
         }
     }
 }
@@ -583,6 +582,14 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     {
         isBypassed = false;
     }
+    
+    // report latency
+    float totalLatency = 0.0f;
+    if (*treeState.getRawParameterValue(HQ_ID))
+    {
+        totalLatency = bands[0]->oversampling->getLatencyInSamples();
+    }
+    setLatencySamples(juce::roundToInt(totalLatency));
 
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels = getTotalNumInputChannels();

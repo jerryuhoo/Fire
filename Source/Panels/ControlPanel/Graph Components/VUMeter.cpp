@@ -94,10 +94,10 @@ void VUMeter::resized()
 {
 }
 
-void VUMeter::setParameters(bool isInput, juce::String meterName)
+void VUMeter::setParameters(bool isInput, int bandIndex)
 {
     mIsInput = isInput;
-    mMeterName = meterName;
+    mBandIndex = bandIndex;
 }
 
 void VUMeter::timerCallback()
@@ -107,13 +107,13 @@ void VUMeter::timerCallback()
 
     if(mIsInput) // input
     {
-        updatedCh0Level = mProcessor->getInputMeterRMSLevel(0, mMeterName);
-        updatedCh1Level = mProcessor->getInputMeterRMSLevel(1, mMeterName);
+        updatedCh0Level = mProcessor->getMeterRMSLevel(true, 0, mBandIndex);
+        updatedCh1Level = mProcessor->getMeterRMSLevel(true, 1, mBandIndex);
     }
     else // output
     {
-        updatedCh0Level = mProcessor->getOutputMeterRMSLevel(0, mMeterName);
-        updatedCh1Level = mProcessor->getOutputMeterRMSLevel(1, mMeterName);
+        updatedCh0Level = mProcessor->getMeterRMSLevel(false, 0, mBandIndex);
+        updatedCh1Level = mProcessor->getMeterRMSLevel(false, 1, mBandIndex);
     }
     
     // update max values

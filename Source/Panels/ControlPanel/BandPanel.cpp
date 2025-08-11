@@ -471,14 +471,14 @@ void BandPanel::paint(juce::Graphics& g)
     g.drawRect(outputKnobArea);
 
     // drive reduction
-    driveLookAndFeel1.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID1);
-    driveLookAndFeel1.reductionPrecent = processor.getReductionPrecent(SAFE_ID1);
-    driveLookAndFeel2.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID2);
-    driveLookAndFeel2.reductionPrecent = processor.getReductionPrecent(SAFE_ID2);
-    driveLookAndFeel3.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID3);
-    driveLookAndFeel3.reductionPrecent = processor.getReductionPrecent(SAFE_ID3);
-    driveLookAndFeel4.sampleMaxValue = processor.getSampleMaxValue(SAFE_ID4);
-    driveLookAndFeel4.reductionPrecent = processor.getReductionPrecent(SAFE_ID4);
+    driveLookAndFeel1.sampleMaxValue = processor.getSampleMaxValue(0);
+    driveLookAndFeel1.reductionPrecent = processor.getReductionPrecent(0);
+    driveLookAndFeel2.sampleMaxValue = processor.getSampleMaxValue(1);
+    driveLookAndFeel2.reductionPrecent = processor.getReductionPrecent(1);
+    driveLookAndFeel3.sampleMaxValue = processor.getSampleMaxValue(2);
+    driveLookAndFeel3.reductionPrecent = processor.getReductionPrecent(2);
+    driveLookAndFeel4.sampleMaxValue = processor.getSampleMaxValue(3);
+    driveLookAndFeel4.reductionPrecent = processor.getReductionPrecent(3);
 }
 
 void BandPanel::resized()

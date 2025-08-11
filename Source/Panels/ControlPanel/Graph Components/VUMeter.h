@@ -23,7 +23,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
-    void setParameters (bool isInput, juce::String meterName);
+    void setParameters (bool isInput, int bandIndex);
     void timerCallback() override;
     float getLeftChannelLevel();
     float getRightChannelLevel();
@@ -31,7 +31,7 @@ public:
 private:
     FireAudioProcessor* mProcessor;
     bool mIsInput;
-    juce::String mMeterName;
+    int mBandIndex;
     float mCh0Level;
     float mCh1Level;
     float mMaxCh0Level;

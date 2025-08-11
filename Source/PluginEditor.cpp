@@ -288,19 +288,19 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
     if (focusIndex == 0)
     {
-        setDistortionGraph(MODE_ID1, DRIVE_ID1, REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1);
+        setDistortionGraph(MODE_ID1, DRIVE_ID1, REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1, focusIndex);
     }
     else if (focusIndex == 1)
     {
-        setDistortionGraph(MODE_ID2, DRIVE_ID2, REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2);
+        setDistortionGraph(MODE_ID2, DRIVE_ID2, REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2, focusIndex);
     }
     else if (focusIndex == 2)
     {
-        setDistortionGraph(MODE_ID3, DRIVE_ID3, REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3);
+        setDistortionGraph(MODE_ID3, DRIVE_ID3, REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3, focusIndex);
     }
     else if (focusIndex == 3)
     {
-        setDistortionGraph(MODE_ID4, DRIVE_ID4, REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
+        setDistortionGraph(MODE_ID4, DRIVE_ID4, REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4, focusIndex);
     }
     
     // TODO: change it to mouse click
@@ -632,7 +632,7 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
     slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
-void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId)
+void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex)
 {
     // paint distortion function
     int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
@@ -642,7 +642,7 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
     drive = drive * 6.5f / 100.0f;
     float powerDrive = powf(2, drive);
 
-    float sampleMaxValue = processor.getSampleMaxValue(safeId);
+    float sampleMaxValue = processor.getSampleMaxValue(bandIndex);
     bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
 
     if (isSafeModeOn && sampleMaxValue * powerDrive > 2.0f)

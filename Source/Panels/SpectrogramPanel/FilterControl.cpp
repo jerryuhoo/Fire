@@ -179,6 +179,12 @@ void FilterControl::setDraggableButtonBounds()
 void FilterControl::updateChain()
 {
     auto chainSettings = getChainSettings(processor.treeState);
+    const auto sampleRate = processor.getSampleRate();
+    const float nyquist = sampleRate / 2.0f;
+    
+    chainSettings.lowCutFreq = juce::jmin(chainSettings.lowCutFreq, nyquist);
+    chainSettings.peakFreq   = juce::jmin(chainSettings.peakFreq, nyquist);
+    chainSettings.highCutFreq = juce::jmin(chainSettings.highCutFreq, nyquist);
 
     monoChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     monoChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
@@ -221,13 +227,17 @@ void FilterControl::updateResponseCurve()
     if (sampleRate <= 0)
         return;
 
+    const auto nyquist = sampleRate / 2.0;
+    const auto maxDisplayFreq = std::min(20000.0, nyquist);
+
     std::vector<float> mags;
     mags.resize(w);
 
     for (int i = 0; i < w; ++i)
     {
         double mag = 1.0f;
-        auto freq = juce::mapToLog10(double(i) / double(w), 20.0, 20000.0);
+        
+        auto freq = juce::mapToLog10(double(i) / double(w), 20.0, maxDisplayFreq);
 
         if (! monoChain.isBypassed<ChainPositions::Peak>())
             mag *= peak.coefficients->getMagnitudeForFrequency(freq, sampleRate);
@@ -281,7 +291,6 @@ void FilterControl::updateResponseCurve()
     }
 
     responseCurve.lineTo(endPoint);
-
     responseCurve.closeSubPath();
 }
 

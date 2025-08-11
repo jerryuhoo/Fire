@@ -16,8 +16,8 @@ VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), focusBandNum(0), vuMeter
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
     
-    vuMeterIn.setParameters(true, "Band1");
-    vuMeterOut.setParameters(false, "Band1");
+    vuMeterIn.setParameters(true, 0);
+    vuMeterOut.setParameters(false, 0);
     
     addAndMakeVisible(vuMeterIn);
     addAndMakeVisible(vuMeterOut);
@@ -38,41 +38,33 @@ void VUPanel::paint (juce::Graphics& g)
     g.setColour(KNOB_SUBFONT_COLOUR);
 
     bool isGlobal = false;
-    if (focusBandNum == 0)
+    // This call is the same for all cases, so we can do it once at the start.
+    vuMeterIn.setParameters(true, focusBandNum);
+    vuMeterOut.setParameters(false, focusBandNum);
+
+    // Check if the focusBandNum corresponds to a valid band (0, 1, 2, or 3).
+    if (juce::isPositiveAndBelow(focusBandNum, 4))
     {
-        vuMeterIn.setParameters(true, "Band1");
-        vuMeterOut.setParameters(false, "Band1");
-        threshID = COMP_THRESH_ID1;
-        compBypassID = COMP_BYPASS_ID1;
-    }
-    else if (focusBandNum == 1)
-    {
-        vuMeterIn.setParameters(true, "Band2");
-        vuMeterOut.setParameters(false, "Band2");
-        threshID = COMP_THRESH_ID2;
-        compBypassID = COMP_BYPASS_ID2;
-    }
-    else if (focusBandNum == 2)
-    {
-        vuMeterIn.setParameters(true, "Band3");
-        vuMeterOut.setParameters(false, "Band3");
-        threshID = COMP_THRESH_ID3;
-        compBypassID = COMP_BYPASS_ID3;
-    }
-    else if (focusBandNum == 3)
-    {
-        vuMeterIn.setParameters(true, "Band4");
-        vuMeterOut.setParameters(false, "Band4");
-        threshID = COMP_THRESH_ID4;
-        compBypassID = COMP_BYPASS_ID4;
+        // Use arrays to look up the correct parameter IDs based on the index.
+        // This replaces the long if-else chain.
+        const char* const threshIDs[] = { COMP_THRESH_ID1, COMP_THRESH_ID2, COMP_THRESH_ID3, COMP_THRESH_ID4 };
+        const char* const bypassIDs[] = { COMP_BYPASS_ID1, COMP_BYPASS_ID2, COMP_BYPASS_ID3, COMP_BYPASS_ID4 };
+
+        threshID = threshIDs[focusBandNum];
+        compBypassID = bypassIDs[focusBandNum];
     }
     else if (focusBandNum == -1)
     {
-        vuMeterIn.setParameters(true, "Global");
-        vuMeterOut.setParameters(false, "Global");
+        // Handle the special case for the global view.
         isGlobal = true;
+        // The original code didn't set threshID or compBypassID in this case,
+        // so we can leave them as they are or assign a default if needed.
     }
-    else jassertfalse;
+    else
+    {
+        // Assert if the focusBandNum is an unexpected value (e.g., 4, 5, -2).
+        jassertfalse;
+    }
     
     // draw threshold pointer
     if (!isGlobal)

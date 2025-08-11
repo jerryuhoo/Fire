@@ -1467,6 +1467,7 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer)
     
     const int totalNumOutputChannels = getTotalNumOutputChannels();
     const int numSamples = inputBuffer.getNumSamples();
+    const auto sampleRate = getSampleRate();
     const int lineNum = activeCrossovers; // Use the member variable updated in updateParameters()
 
     // Get the latest smoothed frequency values for the crossovers
@@ -1576,6 +1577,47 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer)
         auto context4 = juce::dsp::ProcessContextReplacing<float>(block4);
         lowpass3.process(context3);
         highpass3.process(context4);
+    }
+    
+    //==============================================================================
+    // DYNAMIC COMPENSATION
+    // This logic is now part of the splitting process, applied after the crossovers.
+    //==============================================================================
+    const float ratioThreshold = 6.0f;
+
+    // For Band 2
+    if (lineNum > 1)
+    {
+        float f1 = freqValue1, f2 = freqValue2;
+        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
+        {
+            float k = f2 / f1;
+            float centerFreq = std::sqrt(f1 * f2);
+            float Q = std::sqrt(k) / (k - 1.0f);
+            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+
+            *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+            auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+            auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+            compensatorEQ1.process(context2);
+        }
+    }
+    // For Band 3
+    if (lineNum > 2)
+    {
+        float f1 = freqValue2, f2 = freqValue3;
+        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
+        {
+            float k = f2 / f1;
+            float centerFreq = std::sqrt(f1 * f2);
+            float Q = std::sqrt(k) / (k - 1.0f);
+            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+
+            *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+            auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+            auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+            compensatorEQ2.process(context3);
+        }
     }
 }
 

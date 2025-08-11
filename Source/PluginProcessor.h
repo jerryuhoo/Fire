@@ -129,6 +129,10 @@ struct BandProcessor
     juce::dsp::DryWetMixer<float> dryWetMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     
+    BandProcessor() : dryWetMixer(2048)
+    {
+    }
+    
     // And its own set of smoothed parameter values.
     juce::SmoothedValue<float> drive, rec, bias, mix, output;
 

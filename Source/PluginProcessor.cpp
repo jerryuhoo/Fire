@@ -671,10 +671,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     splitBands(buffer);
 
-    //==============================================================================
-    // 7. PROCESS INDIVIDUAL BANDS
-    //==============================================================================
-
+    // 4. PROCESS INDIVIDUAL BANDS
     std::array<juce::AudioBuffer<float>*, 4> bandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
 
     for (int i = 0; i < numBands; ++i)
@@ -700,28 +697,23 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     sumBands(buffer);
 
-    
+    // 5. PROCESS GLOBAL BAND
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
     {
         updateGlobalFilters();
-        // 1. 先为整个buffer创建一个AudioBlock
         auto block = juce::dsp::AudioBlock<float>(buffer);
         
-        // 2. 为左声道创建一个独立的、有名字的AudioBlock
         auto leftBlock = block.getSingleChannelBlock(0);
-        // 3. 然后用这个有名字的block来创建context
         leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
         
         if (buffer.getNumChannels() > 1)
         {
-            // 对右声道做同样的操作
             auto rightBlock = block.getSingleChannelBlock(1);
             rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
         }
     }
     
     auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
-    // 2. 然后用这个有名字的block来创建context
     processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
     
     dryWetMixerGlobal.setWetMixProportion(mixSmootherGlobal.getNextValue());
@@ -1065,44 +1057,6 @@ void FireAudioProcessor::processFFT(float* tempFFTData, int dataIndex)
     SpectrumProcessor& specProcessor = (dataIndex == 0) ? originalSpecProcessor : processedSpecProcessor;
     specProcessor.doProcessing(tempFFTData);
     specProcessor.nextFFTBlockReady = false;
-}
-
-bool FireAudioProcessor::shouldSetBlackMask(int index)
-{
-    // Get the total number of active BANDS directly from the treeState.
-    int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
-
-    bool selfBandIsOn = getSoloStateFromIndex(index);
-    bool otherBandSoloIsOn = false;
-
-    // The loop should iterate up to the number of active BANDS.
-    for (int i = 0; i < numBands; i++)
-    {
-        if (i == index)
-            continue;
-
-        if (getSoloStateFromIndex(i))
-        {
-            otherBandSoloIsOn = true;
-            break;
-        }
-    }
-    return (! selfBandIsOn && otherBandSoloIsOn);
-}
-
-bool FireAudioProcessor::getSoloStateFromIndex(int index)
-{
-    if (index == 0)
-        return *treeState.getRawParameterValue(BAND_SOLO_ID1);
-    else if (index == 1)
-        return *treeState.getRawParameterValue(BAND_SOLO_ID2);
-    else if (index == 2)
-        return *treeState.getRawParameterValue(BAND_SOLO_ID3);
-    else if (index == 3)
-        return *treeState.getRawParameterValue(BAND_SOLO_ID4);
-    else
-        jassertfalse;
-    return false;
 }
 
 void FireAudioProcessor::processGain(juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor)

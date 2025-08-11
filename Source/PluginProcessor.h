@@ -390,9 +390,6 @@ private:
     juce::SmoothedValue<float> smoothedFreq2 = 1000.0f;
     juce::SmoothedValue<float> smoothedFreq3 = 5000.0f;
 
-    bool shouldSetBlackMask(int index);
-    bool getSoloStateFromIndex(int index);
-
     void processGain(juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor);
 
     void normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother);

@@ -289,6 +289,19 @@ FireAudioProcessor::FireAudioProcessor()
     // Initialize all 9 smoothers with default parameter values
     auto chainSettings = getChainSettings(treeState);
 
+    const auto sampleRate = getSampleRate(); // Get the current sample rate
+    const float minFreq = 20.0f;
+    float maxFreq = sampleRate / 2.0f;
+
+    if (maxFreq < minFreq)
+    {
+        maxFreq = minFreq;
+    }
+    
+    chainSettings.lowCutFreq  = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    chainSettings.peakFreq    = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
+
     lowcutFreqSmoother.setCurrentAndTargetValue(chainSettings.lowCutFreq);
     lowcutGainSmoother.setCurrentAndTargetValue(chainSettings.lowCutGainInDecibels);
     lowcutQualitySmoother.setCurrentAndTargetValue(chainSettings.lowCutQuality);
@@ -647,19 +660,31 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     float freqValue2 = freqArray[1];
     float freqValue3 = freqArray[2];
 
+    const float minFreq = 20.0f;
+    float maxFreq = sampleRate / 2.0f;
+
+    if (maxFreq < minFreq)
+    {
+        maxFreq = minFreq;
+    }
+
+    float safeFreqValue1 = juce::jlimit(minFreq, maxFreq, freqValue1);
+    float safeFreqValue2 = juce::jlimit(minFreq, maxFreq, freqValue2);
+    float safeFreqValue3 = juce::jlimit(minFreq, maxFreq, freqValue3);
+
     // 2. SET UP FILTERS WITH SMOOTHED VALUES
-    lowpass1.setCutoffFrequency(freqValue1);
-    highpass1.setCutoffFrequency(freqValue1);
-    lowpass2.setCutoffFrequency(freqValue2);
-    highpass2.setCutoffFrequency(freqValue2);
-    lowpass3.setCutoffFrequency(freqValue3);
-    highpass3.setCutoffFrequency(freqValue3);
+    lowpass1.setCutoffFrequency(safeFreqValue1);
+    highpass1.setCutoffFrequency(safeFreqValue1);
+    lowpass2.setCutoffFrequency(safeFreqValue2);
+    highpass2.setCutoffFrequency(safeFreqValue2);
+    lowpass3.setCutoffFrequency(safeFreqValue3);
+    highpass3.setCutoffFrequency(safeFreqValue3);
 
     // Set up the all-pass coefficients for 3-band compensation
     if (lineNum == 2)
     {
-        compensatorLP.setCutoffFrequency(freqValue1);
-        compensatorHP.setCutoffFrequency(freqValue1);
+        compensatorLP.setCutoffFrequency(safeFreqValue1);
+        compensatorHP.setCutoffFrequency(safeFreqValue1);
     }
 
     // 3. PREPARE BUFFERS
@@ -906,6 +931,20 @@ void FireAudioProcessor::updateFilter()
 {
     auto chainSettings = getChainSettings(treeState);
     const auto sampleRate = getSampleRate(); // Get the current sample rate
+    const float minFreq = 20.0f;
+    if (sampleRate <= 0)
+        return;
+
+    float maxFreq = sampleRate / 2.0f;
+
+    if (maxFreq < minFreq)
+    {
+        maxFreq = minFreq;
+    }
+    
+    chainSettings.lowCutFreq  = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    chainSettings.peakFreq    = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
 
     // Set the target values for all 9 smoothers
     lowcutFreqSmoother.setTargetValue(chainSettings.lowCutFreq);
@@ -1422,12 +1461,26 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer)
     const int totalNumOutputChannels = getTotalNumOutputChannels();
     const int numSamples = inputBuffer.getNumSamples();
     const auto sampleRate = getSampleRate();
+    if (sampleRate <= 0)
+        return;
     const int lineNum = activeCrossovers; // Use the member variable updated in updateParameters()
 
     // Get the latest smoothed frequency values for the crossovers
     float freqValue1 = smoothedFreq1.getNextValue();
     float freqValue2 = smoothedFreq2.getNextValue();
     float freqValue3 = smoothedFreq3.getNextValue();
+
+    const float minFreq = 20.0f;
+    float maxFreq = sampleRate / 2.0f;
+
+    if (maxFreq < minFreq)
+    {
+        maxFreq = minFreq;
+    }
+
+    freqValue1 = juce::jlimit(minFreq, maxFreq, freqValue1);
+    freqValue2 = juce::jlimit(minFreq, maxFreq, freqValue2);
+    freqValue3 = juce::jlimit(minFreq, maxFreq, freqValue3);
 
     // Set up crossover filters with these frequencies
     lowpass1.setCutoffFrequency(freqValue1);
@@ -1580,6 +1633,19 @@ void FireAudioProcessor::updateGlobalFilters()
     // This is your old `updateFilter` function.
     auto chainSettings = getChainSettings(treeState);
     const auto sampleRate = getSampleRate(); // Get the current sample rate
+    const float minFreq = 20.0f;
+    float maxFreq = sampleRate / 2.0f;
+    if (sampleRate <= 0)
+        return;
+
+    if (maxFreq < minFreq)
+    {
+        maxFreq = minFreq;
+    }
+    
+    chainSettings.lowCutFreq  = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    chainSettings.peakFreq    = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
     
     // Create a new settings object with the smoothed values for this audio block
     ChainSettings smoothedSettings;

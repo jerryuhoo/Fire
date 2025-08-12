@@ -180,11 +180,21 @@ void FilterControl::updateChain()
 {
     auto chainSettings = getChainSettings(processor.treeState);
     const auto sampleRate = processor.getSampleRate();
-    const float nyquist = sampleRate / 2.0f;
+
+    if (sampleRate <= 0)
+        return;
+
+    const float minFreq = 20.0f;
+    float maxFreq = sampleRate / 2.0f;
+
+    if (maxFreq < minFreq)
+    {
+        maxFreq = minFreq;
+    }
     
-    chainSettings.lowCutFreq = juce::jmin(chainSettings.lowCutFreq, nyquist);
-    chainSettings.peakFreq   = juce::jmin(chainSettings.peakFreq, nyquist);
-    chainSettings.highCutFreq = juce::jmin(chainSettings.highCutFreq, nyquist);
+    chainSettings.lowCutFreq  = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    chainSettings.peakFreq    = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
 
     monoChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     monoChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);

@@ -475,7 +475,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     */
 
     // filter init
-    updateFilter();
+    updateFilter(sampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
     // mode diode================
@@ -609,6 +609,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     auto totalNumOutputChannels = getTotalNumOutputChannels();
     auto sampleRate = getSampleRate();
 
+    if (sampleRate <= 0)
+    {
+        sampleRate = 48000;
+    }
+
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
     // guaranteed to be empty - they may contain garbage).
@@ -694,7 +699,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
     mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
-    splitBands(buffer);
+    splitBands(buffer, sampleRate);
 
     // 4. PROCESS INDIVIDUAL BANDS
     std::array<juce::AudioBuffer<float>*, 4> bandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
@@ -725,7 +730,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // 5. PROCESS GLOBAL BAND
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
     {
-        updateGlobalFilters();
+        updateGlobalFilters(sampleRate);
         auto block = juce::dsp::AudioBlock<float>(buffer);
         
         auto leftBlock = block.getSingleChannelBlock(0);
@@ -879,9 +884,9 @@ CoefficientsPtr makeHighcutQFilter(const ChainSettings& chainSettings, double sa
                                                                juce::Decibels::decibelsToGain(chainSettings.highCutGainInDecibels));
 }
 
-void FireAudioProcessor::updatePeakFilter(const ChainSettings& chainSettings)
+void FireAudioProcessor::updatePeakFilter(const ChainSettings& chainSettings, double sampleRate)
 {
-    auto peakCoefficients = makePeakFilter(chainSettings, getSampleRate());
+    auto peakCoefficients = makePeakFilter(chainSettings, sampleRate);
 
     leftChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
     rightChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
@@ -889,13 +894,13 @@ void FireAudioProcessor::updatePeakFilter(const ChainSettings& chainSettings)
     updateCoefficients(rightChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
 }
 
-void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings)
+void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings, double sampleRate)
 {
-    auto cutCoefficients = makeLowCutFilter(chainSettings, getSampleRate());
+    auto cutCoefficients = makeLowCutFilter(chainSettings, sampleRate);
     auto& leftLowCut = leftChain.get<ChainPositions::LowCut>();
     auto& rightLowCut = rightChain.get<ChainPositions::LowCut>();
 
-    auto lowcutQCoefficients = makeLowcutQFilter(chainSettings, getSampleRate());
+    auto lowcutQCoefficients = makeLowcutQFilter(chainSettings, sampleRate);
 
     leftChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     rightChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
@@ -909,13 +914,13 @@ void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings)
     updateCoefficients(rightChain.get<ChainPositions::LowCutQ>().coefficients, lowcutQCoefficients);
 }
 
-void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings)
+void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate)
 {
-    auto highCutCoefficients = makeHighCutFilter(chainSettings, getSampleRate());
+    auto highCutCoefficients = makeHighCutFilter(chainSettings, sampleRate);
     auto& leftHighCut = leftChain.get<ChainPositions::HighCut>();
     auto& rightHighCut = rightChain.get<ChainPositions::HighCut>();
 
-    auto highcutQCoefficients = makeHighcutQFilter(chainSettings, getSampleRate());
+    auto highcutQCoefficients = makeHighcutQFilter(chainSettings, sampleRate);
 
     leftChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
     rightChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
@@ -927,10 +932,9 @@ void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings
     updateCoefficients(rightChain.get<ChainPositions::HighCutQ>().coefficients, highcutQCoefficients);
 }
 
-void FireAudioProcessor::updateFilter()
+void FireAudioProcessor::updateFilter(double sampleRate)
 {
     auto chainSettings = getChainSettings(treeState);
-    const auto sampleRate = getSampleRate(); // Get the current sample rate
     const float minFreq = 20.0f;
     if (sampleRate <= 0)
         return;
@@ -987,9 +991,9 @@ void FireAudioProcessor::updateFilter()
     smoothedSettings.highCutBypassed = chainSettings.highCutBypassed;
 
     // Call the modular update functions
-    updateLowCutFilters(smoothedSettings);
-    updatePeakFilter(smoothedSettings);
-    updateHighCutFilters(smoothedSettings);
+    updateLowCutFilters(smoothedSettings, sampleRate);
+    updatePeakFilter(smoothedSettings, sampleRate);
+    updateHighCutFilters(smoothedSettings, sampleRate);
 }
 
 bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
@@ -1442,7 +1446,6 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer)
         // If no solo is active, add all bands.
         const bool isThisBandSoloed = *treeState.getRawParameterValue(ParameterID::bandSoloIds[i]) > 0.5f;
         const bool shouldAddBand = anySoloActive ? isThisBandSoloed : true;
-
         if (shouldAddBand)
         {
             for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
@@ -1453,18 +1456,18 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer)
     }
 }
 
-void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer)
+void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate)
 {
     // This function encapsulates the entire multiband crossover logic.
     // The code is moved directly from your original processBlock.
     
     const int totalNumOutputChannels = getTotalNumOutputChannels();
     const int numSamples = inputBuffer.getNumSamples();
-    const auto sampleRate = getSampleRate();
+
     if (sampleRate <= 0)
         return;
     const int lineNum = activeCrossovers; // Use the member variable updated in updateParameters()
-
+    
     // Get the latest smoothed frequency values for the crossovers
     float freqValue1 = smoothedFreq1.getNextValue();
     float freqValue2 = smoothedFreq2.getNextValue();
@@ -1477,7 +1480,7 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer)
     {
         maxFreq = minFreq;
     }
-
+ 
     freqValue1 = juce::jlimit(minFreq, maxFreq, freqValue1);
     freqValue2 = juce::jlimit(minFreq, maxFreq, freqValue2);
     freqValue3 = juce::jlimit(minFreq, maxFreq, freqValue3);
@@ -1628,11 +1631,10 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer)
     }
 }
 
-void FireAudioProcessor::updateGlobalFilters()
+void FireAudioProcessor::updateGlobalFilters(double sampleRate)
 {
     // This is your old `updateFilter` function.
     auto chainSettings = getChainSettings(treeState);
-    const auto sampleRate = getSampleRate(); // Get the current sample rate
     const float minFreq = 20.0f;
     float maxFreq = sampleRate / 2.0f;
     if (sampleRate <= 0)
@@ -1672,7 +1674,7 @@ void FireAudioProcessor::updateGlobalFilters()
     smoothedSettings.highCutBypassed = chainSettings.highCutBypassed;
 
     // Call the modular update functions
-    updateLowCutFilters(smoothedSettings);
-    updatePeakFilter(smoothedSettings);
-    updateHighCutFilters(smoothedSettings);
+    updateLowCutFilters(smoothedSettings, sampleRate);
+    updatePeakFilter(smoothedSettings, sampleRate);
+    updateHighCutFilters(smoothedSettings, sampleRate);
 }

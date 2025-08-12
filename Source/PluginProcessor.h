@@ -227,10 +227,6 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     bool hasUpdateCheckBeenPerformed = false;
-
-    // filter
-    void updateFilter();
-
     bool isSlient(juce::AudioBuffer<float> buffer);
     
     // The central list of all modulation connections in the plugin.
@@ -277,9 +273,10 @@ private:
     std::vector<std::unique_ptr<BandProcessor>> bands;
     
     void updateParameters();
-    void splitBands(const juce::AudioBuffer<float>& inputBuffer);
+    void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer);
-    void updateGlobalFilters();
+    void updateFilter(double sampleRate);
+    void updateGlobalFilters(double sampleRate);
 
     // preset id
     int presetId = 0;
@@ -306,9 +303,9 @@ private:
     MonoChain leftChain;
     MonoChain rightChain;
 
-    void updateLowCutFilters(const ChainSettings& chainSettings);
-    void updateHighCutFilters(const ChainSettings& chainSettings);
-    void updatePeakFilter(const ChainSettings& chainSettings);
+    void updateLowCutFilters(const ChainSettings& chainSettings, double sampleRate);
+    void updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate);
+    void updatePeakFilter(const ChainSettings& chainSettings, double sampleRate);
 
     float previousOutput = 0.0f;
     float previousMix = 0.0f;

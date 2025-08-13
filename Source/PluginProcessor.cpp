@@ -69,9 +69,6 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
     float       outputVal = this->output.getTargetValue();
     float       mixVal    = this->mix.getTargetValue();
 
-    // Calculate mSampleMaxValue once per block for the Safe Mode logic
-    this->mSampleMaxValue = buffer.getMagnitude(0, buffer.getNumSamples());
-    
     // Create a copy of the clean signal for the final dry/wet mix
     juce::AudioBuffer<float> dryBuffer;
     dryBuffer.makeCopyOf(buffer);
@@ -102,14 +99,14 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
         auto oversampledBlock = oversampling->processSamplesUp(block);
         
         // Call the loop to process the upsampled signal in-place
-        processSampleLoop(oversampledBlock, processor, bandIndex);
+        processSampleLoop(oversampledBlock, dryBuffer, processor, bandIndex);
         
         oversampling->processSamplesDown(block);
     }
     else
     {
         // Call the loop to process the signal at the original sample rate
-        processSampleLoop(block, processor, bandIndex);
+        processSampleLoop(block, dryBuffer, processor, bandIndex);
     }
 
     // === 3. Final Gain and Dry/Wet Mix at block level ===
@@ -163,6 +160,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
 }
 
 void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProcess,
+                                      const juce::AudioBuffer<float>& dryBuffer,
                                       FireAudioProcessor& processor,
                                       int bandIndex)
 {
@@ -172,6 +170,11 @@ void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProce
     // --- Get parameters that are constant for the block ---
     const bool isSafeModeOn    = *treeState.getRawParameterValue(ParameterID::safeIds[bandIndex]) > 0.5f;
     const bool isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[bandIndex]) > 0.5f;
+
+    // We calculate the max value from the 'dryBuffer' which represents the
+    // clean, per-band signal right before it enters the distortion loop.
+    // This ensures each band's Safe Mode reacts only to its own signal level.
+    this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
 
     // --- Start per-sample processing loop ---
     for (int sample = 0; sample < blockToProcess.getNumSamples(); ++sample)
@@ -189,19 +192,23 @@ void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProce
         // --- Safe Mode logic ---
         const float driveForCalc = driveVal * 6.5f / 100.0f;
         float powerDrive = std::pow(2.0f, driveForCalc);
-        float newDrive;
         
         // mSampleMaxValue is now calculated once per block in the main process() function
         if (isSafeModeOn && this->mSampleMaxValue * powerDrive > 2.0f)
-            newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
+            this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
         else
-            newDrive = powerDrive;
+            this->newDrive = powerDrive;
         
         // Update the reduction percent for the UI to read
         if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
+        {
             this->mReductionPercent = 1.0f;
+        }
         else
+        {
             this->mReductionPercent = std::log2(this->newDrive) / driveForCalc;
+        }
+            
 
         // --- Process each channel individually ---
         for (int channel = 0; channel < blockToProcess.getNumChannels(); ++channel)
@@ -210,7 +217,7 @@ void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProce
             float currentSample = channelData[sample];
 
             // --- Manually process the overdrive chain ---
-            currentSample *= newDrive;
+            currentSample *= this->newDrive;
             currentSample += biasVal;
             currentSample = waveShaper.functionToUse(currentSample);
             currentSample = waveshaping::rectificationProcess(currentSample, recVal); // Assuming you have this helper

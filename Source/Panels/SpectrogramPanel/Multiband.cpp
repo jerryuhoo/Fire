@@ -579,6 +579,11 @@ int Multiband::getFocusIndex()
     return focusIndex;
 }
 
+void Multiband::setFocusIndex(int index)
+{
+    focusIndex = index;
+}
+
 void Multiband::sliderValueChanged(juce::Slider* slider)
 {
     lineNum = countLines();

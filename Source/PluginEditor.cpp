@@ -491,6 +491,11 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         //        initState();
         setMultiband();
     }
+    if (multiband.getStateComponent().getChangedState())
+    {
+        multiband.setFocusIndex(0);
+        multiband.getStateComponent().setChangedState(false);
+    }
     if (clickedButton == &zoomButton)
     {
         // Since setClickingTogglesState is false, we manually toggle the state.
@@ -553,6 +558,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             {
                 multiband.setBandBypassStates(i, state);
                 bandPanel.setBandKnobsStates(i, state, true);
+                multiband.getStateComponent().setChangedState(false);
             }
         }
     }

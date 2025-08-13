@@ -37,6 +37,7 @@ public:
     void dragLines(float xPercent, int index);
 
     int getFocusIndex();
+    void setFocusIndex(int index);
     void setSoloRelatedBounds();
     EnableButton& getEnableButton(int index);
 

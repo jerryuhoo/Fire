@@ -690,8 +690,6 @@ namespace state
                 jassertfalse; // 调试时中断
             }
         }
-
-        isChanged = false;
     }
 
     void StateComponent::refreshPresetBox() // rescan, init, save, or delete

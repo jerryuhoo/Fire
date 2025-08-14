@@ -404,16 +404,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         engine.prepare(spec);
     }
 
-    previousOutput = juce::Decibels::decibelsToGain((float) *treeState.getRawParameterValue(OUTPUT_ID));
-    previousMix = (float) *treeState.getRawParameterValue(MIX_ID);
-
     previousLowcutFreq = (float) *treeState.getRawParameterValue(LOWCUT_FREQ_ID);
     previousHighcutFreq = (float) *treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
     previousPeakFreq = (float) *treeState.getRawParameterValue(PEAK_FREQ_ID);
 
     const float rampTimeSeconds = 0.0005f;
-    outputSmootherGlobal.reset(sampleRate, 0.05);
-    outputSmootherGlobal.setCurrentAndTargetValue(previousOutput);
 
     lowcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
     lowcutFreqSmoother.setCurrentAndTargetValue(previousLowcutFreq);
@@ -430,9 +425,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     highcutGainSmoother.reset(sampleRate, rampTimeSeconds);
     highcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
-
-    mixSmootherGlobal.reset(sampleRate, 0.05);
-    mixSmootherGlobal.setCurrentAndTargetValue(previousMix);
 
     centralSmoother.reset(sampleRate, 0.1);
     centralSmoother.setCurrentAndTargetValue(0);
@@ -452,8 +444,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
 
     // dry wet buffer init
-    mDryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
-    mDryBuffer.clear();
+//    mDryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+//    mDryBuffer.clear();
+    delayMatchedDryBuffer.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    delayMatchedDryBuffer.clear();
 
     mWetBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
     mWetBuffer.clear();
@@ -633,7 +627,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     updateParameters();
 
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
-    mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
+//    mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
     
     // At the start of the block, get the LFO values. For now, let's just get one value
     // for the whole block for simplicity. A more advanced implementation would
@@ -708,8 +702,19 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     splitBands(buffer, sampleRate);
 
+    delayMatchedDryBuffer.clear();
+
     // 4. PROCESS INDIVIDUAL BANDS
-    std::array<juce::AudioBuffer<float>*, 4> bandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
+    
+    // Create an array of pointers to the clean, split buffers.
+    std::array<juce::AudioBuffer<float>*, 4> dryBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
+    // Create an array of pointers to the wet, split buffers.
+    std::array<juce::AudioBuffer<float>*, 4> wetBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
+    
+    // Call sumBands to sum the clean signals into our new dry buffer.
+    // Note: We might want a version of sumBands that ignores solo for this,
+    // but for now this works.
+    sumBands(delayMatchedDryBuffer, dryBandBuffers, true);
 
     for (int i = 0; i < numBands; ++i)
     {
@@ -717,22 +722,22 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         if (auto* band = bands[i].get())
         {
             // First, set the input meter values for this band.
-            setLeftRightMeterRMSValues(*bandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
+            setLeftRightMeterRMSValues(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
 
             // Check if the current band is enabled before processing.
             if (*treeState.getRawParameterValue(ParameterID::bandEnableIds[i]))
             {
                 // Directly call the process method on the BandProcessor instance.
                 // It handles all its own logic internally.
-                band->process(*bandBuffers[i], *this, i);
+                band->process(*wetBandBuffers[i], *this, i);
             }
 
             // After processing, set the output meter values for this band.
-            setLeftRightMeterRMSValues(*bandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
+            setLeftRightMeterRMSValues(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
         }
     }
 
-    sumBands(buffer);
+    sumBands(buffer, wetBandBuffers, false);
 
     // 5. PROCESS GLOBAL BAND
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
@@ -753,13 +758,43 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
     processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
     
-    dryWetMixerGlobal.setWetMixProportion(mixSmootherGlobal.getNextValue());
-    dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(mDryBuffer));
+    float mixValue;
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        mixValue = mixSmootherGlobal.getNextValue();
+    }
+    dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+    if (*treeState.getRawParameterValue(HQ_ID))
+    {
+        dryWetMixerGlobal.setWetLatency(totalLatency);
+    }
+    else
+    {
+        dryWetMixerGlobal.setWetLatency(0);
+    }
+    dryWetMixerGlobal.setWetMixProportion(mixValue);
+    dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
     dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
+    
+//    auto* wetBufferPtr = &buffer;
+//    auto* dryBufferPtr = &delayMatchedDryBuffer;
+//    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+//    {
+//        float mixValue = mixSmootherGlobal.getNextValue();
+//
+//        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+//        {
+//            const float wetSample = wetBufferPtr->getSample(channel, sample);
+//            const float drySample = dryBufferPtr->getSample(channel, sample);
+//            const float mixedSample = drySample + (wetSample - drySample) * mixValue;
+//
+//            wetBufferPtr->setSample(channel, sample, mixedSample);
+//        }
+//    }
 
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
-    pushDataToFFT(mDryBuffer, originalSpecProcessor);
+    pushDataToFFT(delayMatchedDryBuffer, originalSpecProcessor);
     setLeftRightMeterRMSValues(buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
 }
 
@@ -1387,7 +1422,6 @@ void FireAudioProcessor::updateParameters()
     smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
     
     // Update global output and mix smoothers.
-    outputSmootherGlobal.setTargetValue(*treeState.getRawParameterValue(OUTPUT_ID));
     mixSmootherGlobal.setTargetValue(*treeState.getRawParameterValue(MIX_ID));
     
     //==============================================================================
@@ -1428,36 +1462,46 @@ void FireAudioProcessor::updateParameters()
     highcutQualitySmoother.setTargetValue(chainSettings.highCutQuality);
 }
 
-void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer)
+void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
+                                  const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
+                                  bool ignoreSoloLogic = false)
 {
-    // This function encapsulates the band summing logic, including solo.
-    // The code is moved directly from your original processBlock.
-    
     outputBuffer.clear();
     
     bool anySoloActive = false;
-    for (int i = 0; i < numBands; ++i)
+    // Only check for solo state if we are NOT ignoring the solo logic.
+    if (!ignoreSoloLogic)
     {
-        if (*treeState.getRawParameterValue(ParameterID::bandSoloIds[i]))
+        for (int i = 0; i < numBands; ++i)
         {
-            anySoloActive = true;
-            break;
+            if (*treeState.getRawParameterValue(ParameterID::bandSoloIds[i]))
+            {
+                anySoloActive = true;
+                break;
+            }
         }
     }
     
-    std::array<juce::AudioBuffer<float>*, 4> bandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
-
+    // The main summing loop now operates on the provided sourceBandBuffers.
     for (int i = 0; i < numBands; ++i)
     {
-        // If solo is active, only add this band if its solo button is on.
-        // If no solo is active, add all bands.
+        // Get a pointer to the current source buffer for this band.
+        auto* currentBandBuffer = sourceBandBuffers[i];
+
+        // Skip if the buffer pointer is invalid for any reason.
+        if (currentBandBuffer == nullptr)
+            continue;
+
         const bool isThisBandSoloed = *treeState.getRawParameterValue(ParameterID::bandSoloIds[i]) > 0.5f;
+
+        // Determine if this band should be added to the mix.
         const bool shouldAddBand = anySoloActive ? isThisBandSoloed : true;
-        if (shouldAddBand)
+
+        if (shouldAddBand || ignoreSoloLogic)
         {
             for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
             {
-                outputBuffer.addFrom(channel, 0, *bandBuffers[i], channel, 0, outputBuffer.getNumSamples());
+                outputBuffer.addFrom(channel, 0, *currentBandBuffer, channel, 0, outputBuffer.getNumSamples());
             }
         }
     }

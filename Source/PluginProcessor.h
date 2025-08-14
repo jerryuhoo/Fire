@@ -275,7 +275,9 @@ private:
     
     void updateParameters();
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
-    void sumBands(juce::AudioBuffer<float>& outputBuffer);
+    void sumBands(juce::AudioBuffer<float>& outputBuffer,
+                  const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
+                  bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
     void updateGlobalFilters(double sampleRate);
 
@@ -296,7 +298,8 @@ private:
     SpectrumProcessor originalSpecProcessor;
 
     // dry audio buffer
-    juce::AudioBuffer<float> mDryBuffer;
+//    juce::AudioBuffer<float> mDryBuffer;
+    juce::AudioBuffer<float> delayMatchedDryBuffer;
     // wet audio buffer
     juce::AudioBuffer<float> mWetBuffer;
 
@@ -308,13 +311,10 @@ private:
     void updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate);
     void updatePeakFilter(const ChainSettings& chainSettings, double sampleRate);
 
-    float previousOutput = 0.0f;
-    float previousMix = 0.0f;
     float previousLowcutFreq = 0.0f;
     float previousHighcutFreq = 0.0f;
     float previousPeakFreq = 0.0f;
 
-    juce::SmoothedValue<float> outputSmootherGlobal;
     juce::SmoothedValue<float> mixSmootherGlobal;
 
     // Low-Cut / Low-Shelf Filter

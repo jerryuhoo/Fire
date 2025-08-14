@@ -28,7 +28,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressor.setRelease(200.0f);
     
     // The DC filter needs its coefficients to be calculated.
-    dcFilter.state = juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
+    dcFilter.prepare(spec);
+    *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
     
     // The oversampling object also needs to be prepared.
     oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
@@ -108,6 +109,9 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
         // Call the loop to process the signal at the original sample rate
         processSampleLoop(block, dryBuffer, processor, bandIndex);
     }
+    
+    auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
+    dcFilter.process(dcFilterContext);
 
     // === 3. Final Gain and Dry/Wet Mix at block level ===
     auto finalContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -1150,54 +1154,6 @@ void FireAudioProcessor::processGain(juce::dsp::ProcessContextReplacing<float> c
     gainProcessor.setGainDecibels(outputValue);
     gainProcessor.setRampDurationSeconds(0.05f);
     gainProcessor.process(context);
-}
-
-void FireAudioProcessor::normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother)
-{
-    //    int mode = static_cast<int>(*treeState.getRawParameterValue(modeID));
-
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer(channel);
-
-        juce::Range<float> range = buffer.findMinMax(channel, 0, buffer.getNumSamples());
-        float min = range.getStart();
-        float max = range.getEnd();
-
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            // centralization
-            if (/*mode == diodemode  || */ recSmoother.getNextValue() > 0)
-            {
-                centralSmoother.setTargetValue((max + min) / 2.0f);
-                channelData[sample] = channelData[sample] - centralSmoother.getNextValue();
-            }
-
-            //            // normalization
-            //            if (mode == diode mode)
-            //            {
-            //                float magnitude = range.getLength() / 2.0f;
-            //                normalSmoother.setTargetValue(magnitude);
-            //                if (normalSmoother.getNextValue() != 0 && channelData[sample] != 0)
-            //                {
-            //                    channelData[sample] = channelData[sample] / normalSmoother.getNextValue();
-            //                }
-            //
-            //                // final protection
-            //                if (channelData[sample] > 1)
-            //                {
-            //                    channelData[sample] = 1;
-            //                }
-            //                else if (channelData[sample] < -1)
-            //                {
-            //                    channelData[sample] = -1;
-            //                }
-            //            }
-
-            // output control
-            channelData[sample] *= outputSmoother.getNextValue();
-        }
-    }
 }
 
 int FireAudioProcessor::getSavedWidth() const

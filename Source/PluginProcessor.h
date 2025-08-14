@@ -390,8 +390,6 @@ private:
 
     void processGain(juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor);
 
-    void normalize(juce::String modeID, juce::AudioBuffer<float>& buffer, int totalNumInputChannels, juce::SmoothedValue<float>& recSmoother, juce::SmoothedValue<float>& outputSmoother);
-
     // Save size
     int editorWidth = INIT_WIDTH;
     int editorHeight = INIT_HEIGHT;

@@ -765,25 +765,36 @@ namespace state
             juce::File(userFile).startAsProcess();
         }
     }
-
+    
     void StateComponent::rescanPresetFolder()
     {
-        int presetId = procStatePresets.getCurrentPresetId();
-        int currentPresetNum;
-        int previousPresetNum = procStatePresets.getNumPresets();
+        juce::String previouslySelectedName;
+        if (presetBox.getSelectedId() > 0)
+        {
+            previouslySelectedName = presetBox.getText();
+            if (previouslySelectedName.endsWith("*"))
+                previouslySelectedName = previouslySelectedName.dropLastCharacters(1);
+        }
+
         procStatePresets.scanAllPresets();
         refreshPresetBox();
-        currentPresetNum = procStatePresets.getNumPresets();
-        // if some presets are deleted, set presetId to 0
-        if (currentPresetNum < previousPresetNum)
+
+        int newPresetIdToSelect = 0;
+
+        if (previouslySelectedName.isNotEmpty())
         {
-            procStatePresets.setCurrentPresetId(presetId - 1);
+            for (int i = 0; i < presetBox.getNumItems(); ++i)
+            {
+                if (presetBox.getItemId(i) > 0 && presetBox.getItemText(i) == previouslySelectedName)
+                {
+                    newPresetIdToSelect = presetBox.getItemId(i);
+                    break;
+                }
+            }
         }
-        else
-        {
-            procStatePresets.setCurrentPresetId(presetId);
-        }
-        presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+
+        procStatePresets.setCurrentPresetId(newPresetIdToSelect);
+        presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
     }
 
     void StateComponent::creatFolderIfNotExist(juce::File userFile)

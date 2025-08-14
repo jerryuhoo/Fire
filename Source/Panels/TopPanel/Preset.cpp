@@ -302,11 +302,15 @@ namespace state
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
     }
 
-    bool StatePresets::savePreset(juce::File savePath)
+    juce::String StatePresets::savePreset(juce::File savePath)
     {
         juce::File userPresetFile;
         bool hasExtension = false;
         juce::String presetName = savePath.getFileNameWithoutExtension();
+
+        // If the filename is empty (e.g., user cancelled the dialog), return an empty string.
+        if (presetName.isEmpty())
+            return juce::String();
 
         if (! savePath.hasFileExtension(PRESET_EXETENSION))
         {
@@ -318,25 +322,25 @@ namespace state
             hasExtension = true;
         }
 
-        // save single to real file
-        presetXmlSingle.removeAllAttributes(); // clear all first
-        presetXmlSingle.setAttribute("presetName", presetName); // set preset name
+        // Save the single preset to a real file.
+        presetXmlSingle.removeAllAttributes(); // Clear all first.
+        presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
         saveStateToXml(pluginProcessor, presetXmlSingle);
-        //presetXmlSingle.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
-        //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
 
-        statePresetName = presetName;
         bool isSaved = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
 
         if (isSaved)
         {
-            scanAllPresets();
-            //mPresetXml.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
-            return true;
+            statePresetName = presetName; // Also update the internal state.
+            scanAllPresets(); // Rescan and sort all presets.
+            
+            // Key change: Return the preset name on success.
+            return presetName;
         }
         else
         {
-            return false;
+            // Key change: Return an empty string on failure or cancellation.
+            return juce::String();
         }
     }
 
@@ -745,14 +749,38 @@ namespace state
         auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
 
         fileChooser->launchAsync(folderChooserFlags, [this](const juce::FileChooser& chooser)
-                                 {
-        juce::File inputName = chooser.getResult();
-        bool isSaved = procStatePresets.savePreset(inputName);
-        if (isSaved)
         {
-            refreshPresetBox();
-            presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
-        } });
+            juce::File inputName = chooser.getResult();
+
+            // 1. Call the modified savePreset and get the returned name.
+            juce::String savedPresetName = procStatePresets.savePreset(inputName);
+
+            // 2. Check if the name is valid (i.e., save was successful and not cancelled).
+            if (savedPresetName.isNotEmpty())
+            {
+                // 3. Refresh the UI to load the new preset list.
+                refreshPresetBox();
+
+                // 4. Iterate to find the newly saved preset, using the same logic as in rescanPresetFolder.
+                int newPresetIdToSelect = 0;
+                for (int i = 0; i < presetBox.getNumItems(); ++i)
+                {
+                    if (presetBox.getItemId(i) > 0 && presetBox.getItemText(i) == savedPresetName)
+                    {
+                        newPresetIdToSelect = presetBox.getItemId(i);
+                        break;
+                    }
+                }
+                
+                // 5. Once found, select it using its new ID.
+                //    We want to trigger the onChange callback here to ensure all states are updated correctly,
+                //    so a direct call to setSelectedId (which sends a notification by default) is what we need.
+                if (newPresetIdToSelect > 0)
+                {
+                    presetBox.setSelectedId(newPresetIdToSelect);
+                }
+            }
+        });
     }
 
     void StateComponent::openPresetFolder()

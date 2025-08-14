@@ -66,7 +66,7 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         
         juce::HashMap<int, juce::String> comboBoxIdToTagNameMap;
 
-        bool savePreset(juce::File savePath);
+        juce::String savePreset(juce::File savePath);
         void loadPreset(juce::String selectedName);
         void deletePreset();
         juce::AudioProcessor& getProcessor() { return pluginProcessor; }

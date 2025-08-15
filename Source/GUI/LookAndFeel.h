@@ -355,8 +355,8 @@ public:
 
     void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
     {
-        //        auto fontSize = juce::jmin (15.0f, (float) button.getHeight() * 0.75f);
-        //        auto tickWidth = fontSize * 1.1f;
+        auto fontSize = juce::jmin (15.0f, (float) button.getHeight() * 0.75f);
+        auto tickWidth = fontSize * 1.1f;
 
         drawTickBox(g, button, button.getWidth() / 4.0f, button.getHeight() / 4.0f, button.getWidth() / 2.0f, button.getHeight() / 2.0f, button.getToggleState(), button.isEnabled(), shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
         //        drawTickBox (g, button, 4.0f, ((float) button.getHeight() - tickWidth) * 0.5f,
@@ -366,16 +366,16 @@ public:
         //                     shouldDrawButtonAsHighlighted,
         //                     shouldDrawButtonAsDown);
 
-        //        g.setColour (button.findColour (juce::ToggleButton::textColourId));
-        //        g.setFont (fontSize);
-        //
-        //        if (! button.isEnabled())
-        //            g.setOpacity (0.5f);
-        //
-        //        g.drawFittedText (button.getButtonText(),
-        //                          button.getLocalBounds().withTrimmedLeft (juce::roundToInt (tickWidth) + 10)
-        //                                                 .withTrimmedRight (2),
-        //                          juce::Justification::centredLeft, 10);
+        g.setColour (button.findColour (juce::ToggleButton::textColourId));
+        g.setFont (fontSize);
+
+        if (! button.isEnabled())
+            g.setOpacity (0.5f);
+
+        g.drawFittedText (button.getButtonText(),
+                          button.getLocalBounds().withTrimmedLeft (juce::roundToInt (tickWidth) + 10)
+                                                 .withTrimmedRight (2),
+                          juce::Justification::centredLeft, 10);
     }
 
     // rounded menu box

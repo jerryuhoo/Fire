@@ -126,6 +126,15 @@
 #define BIAS_ID4            "bias4"
 #define BIAS_NAME4          "Bias4"
 
+#define DC_BYPASS_ID1       "dcBypass1"
+#define DC_BYPASS_NAME1     "DcBypass1"
+#define DC_BYPASS_ID2       "dcBypass2"
+#define DC_BYPASS_NAME2     "DcBypass2"
+#define DC_BYPASS_ID3       "dcBypass3"
+#define DC_BYPASS_NAME3     "DcBypass3"
+#define DC_BYPASS_ID4       "dcBypass4"
+#define DC_BYPASS_NAME4     "DcBypass4"
+
 #define REC_ID1             "rec1"
 #define REC_NAME1           "Rec1"
 #define REC_ID2             "rec2"

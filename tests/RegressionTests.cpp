@@ -4,7 +4,7 @@
 #include <iostream>
 #include <cmath>
 
-// Compare two audio buffers for equality
+// The comparison function itself is correct.
 void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const juce::AudioBuffer<float>& expected)
 {
     REQUIRE(result.getNumChannels() == expected.getNumChannels());
@@ -85,26 +85,34 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             processor.prepareToPlay(reader->sampleRate, bufferToProcess.getNumSamples());
             processor.processBlock(bufferToProcess, midi);
 
-            // Create the output directory if it doesn't exist
-            juce::File regressionOutputDir { "/Users/yyf/Documents/GitHub/Fire/tests/RegressionOutput/" };
-            if (!regressionOutputDir.isDirectory()) {
-                REQUIRE(regressionOutputDir.createDirectory().wasOk());
-            }
-            juce::File regressionOutputFile = regressionOutputDir.getChildFile(presetName + "_drums_output.wav");
-            regressionOutputFile.deleteFile();
+            // +++ CRITICAL FIX: WRITE-THEN-READ TO SIMULATE FILE I/O PRECISION LOSS +++
+            // To ensure an apples-to-apples comparison, we write the in-memory buffer 
+            // to a temporary file and read it back. This ensures both buffers being
+            // compared have undergone the same float -> int24 -> float conversion.
 
-            std::unique_ptr<juce::AudioFormatWriter> writer(
+            // 1. Write the freshly processed buffer to a temporary file.
+            juce::File tempOutputFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                            .getChildFile("temp_regression_output.wav");
+            tempOutputFile.deleteFile();
+            
+            std::unique_ptr<juce::AudioFormatWriter> tempWriter(
                 formatManager.findFormatForFileExtension("wav")->createWriterFor(
-                    new juce::FileOutputStream(regressionOutputFile),
+                    new juce::FileOutputStream(tempOutputFile),
                     reader->sampleRate, bufferToProcess.getNumChannels(), 24, {}, 0
                 )
             );
-            REQUIRE(writer != nullptr);
-            bool writeOk = writer->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
-            REQUIRE(writeOk);
-            // ===========================================
+            REQUIRE(tempWriter != nullptr);
+            tempWriter->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
+            tempWriter.reset(); // This flushes and closes the writer.
 
-            // Load the golden master file
+            // 2. Read the temporary file back into a new buffer.
+            std::unique_ptr<juce::AudioFormatReader> tempReader(formatManager.createReaderFor(tempOutputFile));
+            REQUIRE(tempReader != nullptr);
+            juce::AudioBuffer<float> reloadedResultBuffer(tempReader->numChannels, (int)tempReader->lengthInSamples);
+            tempReader->read(&reloadedResultBuffer, 0, (int)tempReader->lengthInSamples, 0, true, true);
+            tempOutputFile.deleteFile(); // Clean up the temporary file.
+
+            // 3. Load the golden master file (which has also undergone the same I/O process).
             juce::File goldenFile { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" + presetName + "_drums_output.wav" };
             REQUIRE(goldenFile.existsAsFile());
             std::unique_ptr<juce::AudioFormatReader> goldenReader(formatManager.createReaderFor(goldenFile));
@@ -112,8 +120,8 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             juce::AudioBuffer<float> goldenBuffer(goldenReader->numChannels, (int)goldenReader->lengthInSamples);
             goldenReader->read(&goldenBuffer, 0, (int)goldenReader->lengthInSamples, 0, true, true);
 
-            // Compare the processed buffer with the golden buffer
-            requireBuffersAreEquivalent(bufferToProcess, goldenBuffer);
+            // 4. Now, compare the two buffers that have identical origins. This should pass.
+            requireBuffersAreEquivalent(reloadedResultBuffer, goldenBuffer);
         }
     }
     

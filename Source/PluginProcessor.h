@@ -117,13 +117,13 @@ struct BandProcessor
     using GainProcessor = juce::dsp::Gain<float>;
     using BiasProcessor = juce::dsp::Bias<float>;
     using DriveProcessor = juce::dsp::WaveShaper<float>;
-    using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
+    // using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
 
     // Each band has its own set of processors.
     CompressorProcessor compressor;
     WidthProcessor widthProcessor;
-    DCFilter dcFilter;
+    // DCFilter dcFilter;
     juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor> overdrive;
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
@@ -145,7 +145,9 @@ struct BandProcessor
     float mSampleMaxValue = 0.0f;
     float newDrive = 1.0f;
     
-    void prepare(const juce::dsp::ProcessSpec& spec);
+    void prepare(const juce::dsp::ProcessSpec& spec,
+                 juce::AudioProcessorValueTreeState& treeState,
+                 int bandIndex);
     void reset();
     void process(juce::AudioBuffer<float>& buffer, FireAudioProcessor& processor, int bandIndex);
     

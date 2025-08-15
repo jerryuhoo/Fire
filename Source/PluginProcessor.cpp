@@ -15,7 +15,9 @@
 //==============================================================================
 
 // This is where we tell JUCE what to do when prepareToPlay is called for a single band.
-void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
+void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec,
+                            juce::AudioProcessorValueTreeState& treeState,
+                            int bandIndex)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
@@ -28,8 +30,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressor.setRelease(200.0f);
     
     // The DC filter needs its coefficients to be calculated.
-    dcFilter.prepare(spec);
-    *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
+    // dcFilter.prepare(spec);
+    // *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
     
     // The oversampling object also needs to be prepared.
     oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
@@ -41,6 +43,12 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     bias.reset(spec.sampleRate, 0.05);
     mix.reset(spec.sampleRate, 0.05);
     output.reset(spec.sampleRate, 0.05);
+    
+    drive.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[bandIndex]));
+    rec.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[bandIndex]));
+    bias.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[bandIndex]));
+    mix.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::mixIds[bandIndex]));
+    output.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::outputIds[bandIndex]));
 }
 
 // This is what happens when we need to clear the internal state of a band's processors.
@@ -50,7 +58,7 @@ void BandProcessor::reset()
     overdrive.reset();
     gain.reset();
     dryWetMixer.reset();
-    dcFilter.reset();
+    // dcFilter.reset();
 
     if (oversampling)
         oversampling->reset();
@@ -110,8 +118,8 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
         processSampleLoop(block, dryBuffer, processor, bandIndex);
     }
     
-    auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
-    dcFilter.process(dcFilterContext);
+    // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
+    // dcFilter.process(dcFilterContext);
 
     // === 3. Final Gain and Dry/Wet Mix at block level ===
     auto finalContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -400,8 +408,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     auto channels = static_cast<juce::uint32>(juce::jmin(getMainBusNumInputChannels(), getMainBusNumOutputChannels()));
     juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32>(samplesPerBlock), channels };
     
-    for (auto& band : bands)
-        band->prepare(spec);
+    for (int i = 0; i < 4; ++i)
+    {
+        if (auto* band = bands[i].get())
+        {
+            band->prepare(spec, treeState, i);
+        }
+    }
     
     for (auto& engine : lfoEngines)
     {

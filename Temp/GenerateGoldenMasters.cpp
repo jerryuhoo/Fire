@@ -1,3 +1,4 @@
+// GenerateGoldenMasters.cpp (Corrected for State Isolation)
 #include <catch2/catch_test_macros.hpp>
 #include "../Source/PluginProcessor.h"
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -5,18 +6,13 @@
 
 TEST_CASE("Golden Master Generation")
 {
-    FireAudioProcessor processor;
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
 
     const double standardSampleRate = 48000.0;
-    const int standardBlockSize = 512; // A typical block size is fine here.
-    
-    // Call prepareToPlay() immediately after creating the processor instance.
-    // This ensures that getSampleRate() will always return a valid value from now on.
-    processor.prepareToPlay(standardSampleRate, standardBlockSize);
+    const int standardBlockSize = 512;
 
-    // --- 1. Load Input Audio File ---
+    // --- 1. Load Input Audio File (do this once) ---
     juce::File inputFile { "/Users/yyf/Documents/GitHub/Fire/tests/TestAudioFiles/drum.wav" };
     REQUIRE(inputFile.existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
@@ -39,31 +35,32 @@ TEST_CASE("Golden Master Generation")
         juce::String presetName = presetFile.getFileNameWithoutExtension();
         std::cout << "  Processing preset: " << presetName << std::endl;
         
+        // +++ CREATE A FRESH PROCESSOR FOR EACH PRESET +++
+        // This is the critical fix. It ensures no state is carried over from the previous iteration.
+        FireAudioProcessor processor;
+        processor.prepareToPlay(standardSampleRate, standardBlockSize);
+
         auto bufferToProcess = buffer;
 
-        // --- 3. Load Preset Manually from Attributes (THE CORRECT WAY) ---
+        // --- 3. Load Preset Manually from Attributes ---
         std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
         REQUIRE(xml != nullptr);
 
-        // 遍历 XML 元素的所有属性
         for (int i = 0; i < xml->getNumAttributes(); ++i)
         {
-            // 获取属性的名字 (e.g., "drive1") 和值 (e.g., "0.0")
             auto attributeName = xml->getAttributeName(i);
             auto attributeValue = xml->getAttributeValue(i);
             
-            // 在处理器的参数树 (treeState) 中找到对应的参数
             if (auto* parameter = processor.treeState.getParameter(attributeName))
             {
-                // 将字符串值转换为归一化的浮点数值 (0.0 to 1.0)
                 float normalizedValue = attributeValue.getFloatValue();
-                // 设定参数值，并通知宿主（虽然在测试中这步不是必须的，但是是好习惯）
                 parameter->setValueNotifyingHost(normalizedValue);
             }
         }
 
         // --- 4. Process Audio ---
         juce::MidiBuffer midi;
+        // Prepare the processor with the specifics of the audio file being processed.
         processor.prepareToPlay(reader->sampleRate, bufferToProcess.getNumSamples());
         processor.processBlock(bufferToProcess, midi);
 

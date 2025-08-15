@@ -32,18 +32,13 @@ void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const j
 // Regression Test: Verify output against Golden Masters
 TEST_CASE("Regression Test: Verify output against Golden Masters")
 {
-    FireAudioProcessor processor;
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
 
     const double standardSampleRate = 48000.0;
-    const int standardBlockSize = 512; // A typical block size is fine here.
+    const int standardBlockSize = 512;
     
-    // Call prepareToPlay() immediately after creating the processor instance.
-    // This ensures that getSampleRate() will always return a valid value from now on.
-    processor.prepareToPlay(standardSampleRate, standardBlockSize);
-
-    // Load the input audio file
+    // Load the input audio file once, as it's the same for all tests.
     juce::File inputFile { "/Users/yyf/Documents/GitHub/Fire/tests/TestAudioFiles/drum.wav" };
     REQUIRE(inputFile.existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
@@ -66,6 +61,12 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 
         SECTION("Preset: " + presetName.toStdString())
         {
+            // +++ CREATE A FRESH PROCESSOR FOR EACH PRESET SECTION +++
+            // This is the critical fix. It ensures each test run is independent
+            // and not affected by the state of the processor from a previous run.
+            FireAudioProcessor processor;
+            processor.prepareToPlay(standardSampleRate, standardBlockSize);
+
             auto bufferToProcess = buffer;
 
             // Load the preset parameters from the XML file

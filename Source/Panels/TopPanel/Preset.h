@@ -63,6 +63,8 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
     public:
         StatePresets(juce::AudioProcessor& proc, const juce::String& presetFileLocation);
         ~StatePresets();
+        
+        juce::HashMap<int, juce::String> comboBoxIdToTagNameMap;
 
         bool savePreset(juce::File savePath);
         void loadPreset(juce::String selectedName);
@@ -89,6 +91,7 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::XmlElement presetXmlSingle { "WINGSFIRE" }; // single preset for save file
         juce::File presetFile; // on-disk representation
         juce::String statePresetName { "" };
+        void recursiveSort(juce::XmlElement* parent);
         int mCurrentPresetId { 0 };
         int numPresets = 0;
 
@@ -104,14 +107,18 @@ PluginProcessor).
 */
     class StateComponent : public juce::Component,
                            public juce::Button::Listener,
-                           public juce::ComboBox::Listener
+                           public juce::ComboBox::Listener,
+                           public juce::AudioProcessorValueTreeState::Listener
     {
     public:
-        StateComponent(StateAB& sab, StatePresets& sp);
+        StateComponent(StateAB& sab, StatePresets& sp, juce::AudioProcessorValueTreeState& vts);
+        ~StateComponent();
 
         void paint(juce::Graphics&) override;
         void resized() override;
-
+        void markAsDirty();
+        void parameterChanged(const juce::String& parameterID, float newValue) override;
+        
         juce::String getPresetName();
         /*juce::TextButton& getNextButton();
     juce::TextButton& getPreviousButton();*/
@@ -130,6 +137,10 @@ PluginProcessor).
     private:
         StateAB& procStateAB;
         StatePresets& procStatePresets;
+        
+        juce::AudioProcessorValueTreeState& valueTreeState;
+        
+        bool isProgrammaticChange = false;
         //Multiband multiband{};
         //FireAudioProcessorEditor& editor;
 

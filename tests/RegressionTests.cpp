@@ -32,6 +32,11 @@ void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const j
 // Regression Test: Verify output against Golden Masters
 TEST_CASE("Regression Test: Verify output against Golden Masters")
 {
+    // +++ CONTROL VARIABLE +++
+    // Set this to 'true' to generate .wav files in the RegressionOutput folder for manual inspection.
+    // Set to 'false' for standard automated testing where temporary files are deleted.
+    constexpr bool keepRegressionOutputFiles = true;
+
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
 
@@ -85,34 +90,50 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             processor.prepareToPlay(reader->sampleRate, bufferToProcess.getNumSamples());
             processor.processBlock(bufferToProcess, midi);
 
-            // +++ CRITICAL FIX: WRITE-THEN-READ TO SIMULATE FILE I/O PRECISION LOSS +++
-            // To ensure an apples-to-apples comparison, we write the in-memory buffer 
-            // to a temporary file and read it back. This ensures both buffers being
-            // compared have undergone the same float -> int24 -> float conversion.
-
-            // 1. Write the freshly processed buffer to a temporary file.
-            juce::File tempOutputFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                            .getChildFile("temp_regression_output.wav");
-            tempOutputFile.deleteFile();
+            // --- CRITICAL FIX: WRITE-THEN-READ TO SIMULATE FILE I/O PRECISION LOSS ---
             
-            std::unique_ptr<juce::AudioFormatWriter> tempWriter(
+            juce::File fileForComparison;
+            if (keepRegressionOutputFiles)
+            {
+                // If debugging, write to the final destination.
+                juce::File regressionOutputDir { "/Users/yyf/Documents/GitHub/Fire/tests/RegressionOutput/" };
+                if (!regressionOutputDir.isDirectory())
+                    REQUIRE(regressionOutputDir.createDirectory().wasOk());
+                fileForComparison = regressionOutputDir.getChildFile(presetName + "_drums_output.wav");
+            }
+            else
+            {
+                // For automated tests, use a temporary file.
+                fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                                .getChildFile("temp_regression_output.wav");
+            }
+
+            fileForComparison.deleteFile();
+            
+            // 1. Write the freshly processed buffer to the chosen file path.
+            std::unique_ptr<juce::AudioFormatWriter> writer(
                 formatManager.findFormatForFileExtension("wav")->createWriterFor(
-                    new juce::FileOutputStream(tempOutputFile),
+                    new juce::FileOutputStream(fileForComparison),
                     reader->sampleRate, bufferToProcess.getNumChannels(), 24, {}, 0
                 )
             );
-            REQUIRE(tempWriter != nullptr);
-            tempWriter->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
-            tempWriter.reset(); // This flushes and closes the writer.
+            REQUIRE(writer != nullptr);
+            writer->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
+            writer.reset(); // This flushes and closes the writer.
 
-            // 2. Read the temporary file back into a new buffer.
-            std::unique_ptr<juce::AudioFormatReader> tempReader(formatManager.createReaderFor(tempOutputFile));
-            REQUIRE(tempReader != nullptr);
-            juce::AudioBuffer<float> reloadedResultBuffer(tempReader->numChannels, (int)tempReader->lengthInSamples);
-            tempReader->read(&reloadedResultBuffer, 0, (int)tempReader->lengthInSamples, 0, true, true);
-            tempOutputFile.deleteFile(); // Clean up the temporary file.
+            // 2. Read the file back into a new buffer.
+            std::unique_ptr<juce::AudioFormatReader> resultReader(formatManager.createReaderFor(fileForComparison));
+            REQUIRE(resultReader != nullptr);
+            juce::AudioBuffer<float> reloadedResultBuffer(resultReader->numChannels, (int)resultReader->lengthInSamples);
+            resultReader->read(&reloadedResultBuffer, 0, (int)resultReader->lengthInSamples, 0, true, true);
 
-            // 3. Load the golden master file (which has also undergone the same I/O process).
+            if (!keepRegressionOutputFiles)
+            {
+                // Clean up the temporary file if we're not in debug mode.
+                fileForComparison.deleteFile();
+            }
+
+            // 3. Load the golden master file.
             juce::File goldenFile { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" + presetName + "_drums_output.wav" };
             REQUIRE(goldenFile.existsAsFile());
             std::unique_ptr<juce::AudioFormatReader> goldenReader(formatManager.createReaderFor(goldenFile));
@@ -120,7 +141,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             juce::AudioBuffer<float> goldenBuffer(goldenReader->numChannels, (int)goldenReader->lengthInSamples);
             goldenReader->read(&goldenBuffer, 0, (int)goldenReader->lengthInSamples, 0, true, true);
 
-            // 4. Now, compare the two buffers that have identical origins. This should pass.
+            // 4. Now, compare the two buffers that have identical origins.
             requireBuffersAreEquivalent(reloadedResultBuffer, goldenBuffer);
         }
     }

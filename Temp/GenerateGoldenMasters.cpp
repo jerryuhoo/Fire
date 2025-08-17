@@ -27,7 +27,7 @@ TEST_CASE("Golden Master Generation")
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
 
-    // const double standardSampleRate = 48000.0;
+    // Define a standard block size, similar to what a DAW would use.
     const int standardBlockSize = 512;
 
     // --- 1. Load Input Audio File (do this once) ---
@@ -35,8 +35,10 @@ TEST_CASE("Golden Master Generation")
     REQUIRE(inputFile.existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
     REQUIRE(reader != nullptr);
-    juce::AudioBuffer<float> buffer(reader->numChannels, (int)reader->lengthInSamples);
-    reader->read(&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
+    
+    // This buffer will hold the original, clean input audio.
+    juce::AudioBuffer<float> originalInputBuffer(reader->numChannels, (int)reader->lengthInSamples);
+    reader->read(&originalInputBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
     std::cout << "Input audio loaded successfully." << std::endl;
 
     // --- 2. Iterate Through Preset Files ---
@@ -54,11 +56,7 @@ TEST_CASE("Golden Master Generation")
         std::cout << "  Processing preset: " << presetName << std::endl;
         
         // +++ CREATE A FRESH PROCESSOR FOR EACH PRESET +++
-        // This is the critical fix. It ensures no state is carried over from the previous iteration.
         FireAudioProcessor processor;
-        // processor.prepareToPlay(standardSampleRate, standardBlockSize);
-
-        auto bufferToProcess = buffer;
 
         // --- 3. Load Preset Manually from Attributes ---
         std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
@@ -76,13 +74,43 @@ TEST_CASE("Golden Master Generation")
             }
         }
 
-        // --- 4. Process Audio ---
+        // --- 4. Process Audio in Iterative Blocks (DAW Simulation) ---
         juce::MidiBuffer midi;
-        // Prepare the processor with the specifics of the audio file being processed.
-        processor.prepareToPlay(reader->sampleRate, bufferToProcess.getNumSamples());
-        processor.processBlock(bufferToProcess, midi);
+        
+        // Prepare the processor with the audio file's sample rate and the standard block size.
+        processor.prepareToPlay(reader->sampleRate, standardBlockSize);
 
-        // --- 5. Write Output File ---
+        // Create an empty buffer to store the assembled output.
+        juce::AudioBuffer<float> finalOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
+        finalOutputBuffer.clear();
+
+        // This loop iterates through the entire input buffer in chunks of 'standardBlockSize'.
+        for (int startSample = 0; startSample < originalInputBuffer.getNumSamples(); startSample += standardBlockSize)
+        {
+            // Determine the number of samples for the current block.
+            // This handles the final block, which might be shorter than standardBlockSize.
+            int numSamplesThisBlock = std::min(standardBlockSize, originalInputBuffer.getNumSamples() - startSample);
+
+            // Create a temporary buffer for the current processing block.
+            juce::AudioBuffer<float> blockToProcess(originalInputBuffer.getNumChannels(), numSamplesThisBlock);
+
+            // Copy the current slice of audio from the original input into our temporary block.
+            for (int channel = 0; channel < originalInputBuffer.getNumChannels(); ++channel)
+            {
+                blockToProcess.copyFrom(channel, 0, originalInputBuffer, channel, startSample, numSamplesThisBlock);
+            }
+
+            // Process the small block.
+            processor.processBlock(blockToProcess, midi);
+
+            // Copy the processed result from the temporary block into the correct position in our final output buffer.
+            for (int channel = 0; channel < finalOutputBuffer.getNumChannels(); ++channel)
+            {
+                finalOutputBuffer.copyFrom(channel, startSample, blockToProcess, channel, 0, numSamplesThisBlock);
+            }
+        }
+
+        // --- 5. Write Assembled Output File ---
         juce::File outputDir { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" };
         if (!outputDir.isDirectory()) {
             REQUIRE(outputDir.createDirectory().wasOk());
@@ -95,17 +123,18 @@ TEST_CASE("Golden Master Generation")
             formatManager.findFormatForFileExtension("wav")->createWriterFor(
                 new juce::FileOutputStream(outputFile),
                 reader->sampleRate,
-                bufferToProcess.getNumChannels(),
+                finalOutputBuffer.getNumChannels(),
                 24, {}, 0
             )
         );
         REQUIRE(writer != nullptr);
         
-        bool writeOk = writer->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
+        // Write the final, assembled buffer to the file.
+        bool writeOk = writer->writeFromAudioSampleBuffer(finalOutputBuffer, 0, finalOutputBuffer.getNumSamples());
         REQUIRE(writeOk);
-        std::cout << "    -> Successfully wrote to: " << outputFile.getFullPathName() << std::endl;
     }
 }
+
 
 TEST_CASE("Golden Master Generation (Sine Wave)")
 {
@@ -190,6 +219,6 @@ TEST_CASE("Golden Master Generation (Sine Wave)")
         finalOutputFile.deleteFile();
         REQUIRE(tempOutputFile.moveFileTo(finalOutputFile));
 
-        std::cout << "    -> Successfully wrote to: " << finalOutputFile.getFullPathName() << std::endl;
+        // std::cout << "    -> Successfully wrote to: " << finalOutputFile.getFullPathName() << std::endl;
     }
 }

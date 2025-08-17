@@ -1,9 +1,11 @@
+// RegressionTests.cpp
 #include <catch2/catch_test_macros.hpp>
 #include "../Source/PluginProcessor.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <iostream>
 #include <cmath>
 
+// Helper function to generate a sine wave buffer for testing purposes.
 inline juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
 {
     juce::AudioBuffer<float> buffer(numChannels, numSamples);
@@ -22,13 +24,13 @@ inline juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numC
     return buffer;
 }
 
-// The comparison function itself is correct.
+// Compares two audio buffers sample by sample to check for equivalence within a small tolerance.
 void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const juce::AudioBuffer<float>& expected)
 {
     REQUIRE(result.getNumChannels() == expected.getNumChannels());
     REQUIRE(result.getNumSamples() == expected.getNumSamples());
 
-    const float tolerance = 1e-6f;
+    const float tolerance = 1e-6f; // A small tolerance to account for floating-point inaccuracies.
 
     for (int channel = 0; channel < result.getNumChannels(); ++channel)
     {
@@ -39,15 +41,17 @@ void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const j
 
             if (std::abs(resultSample - expectedSample) > tolerance)
             {
+                // If a sample differs more than the tolerance, the test fails.
                 FAIL("Sample mismatch at channel " << channel << ", sample " << sample 
                      << ". Expected: " << expectedSample << ", Got: " << resultSample);
             }
         }
     }
+    // If all samples match, the test succeeds.
     SUCCEED("Buffers are equivalent within tolerance.");
 }
 
-// Regression Test: Verify output against Golden Masters
+// Regression Test: Verify output against Golden Masters using block-based processing.
 TEST_CASE("Regression Test: Verify output against Golden Masters")
 {
     // +++ CONTROL VARIABLE +++
@@ -58,7 +62,6 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
 
-    const double standardSampleRate = 48000.0;
     const int standardBlockSize = 512;
     
     // Load the input audio file once, as it's the same for all tests.
@@ -66,8 +69,10 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     REQUIRE(inputFile.existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
     REQUIRE(reader != nullptr);
-    juce::AudioBuffer<float> buffer(reader->numChannels, (int)reader->lengthInSamples);
-    reader->read(&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
+    
+    // This buffer holds the original, unprocessed input audio.
+    juce::AudioBuffer<float> originalInputBuffer(reader->numChannels, (int)reader->lengthInSamples);
+    reader->read(&originalInputBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
 
     // Load the preset files
     juce::File presetsDir { "/Users/yyf/Library/Audio/Presets/Wings/Fire/User" };
@@ -84,15 +89,10 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 
         SECTION("Preset: " + presetName.toStdString())
         {
-            // +++ CREATE A FRESH PROCESSOR FOR EACH PRESET SECTION +++
-            // This is the critical fix. It ensures each test run is independent
-            // and not affected by the state of the processor from a previous run.
+            // Create a fresh processor instance for each preset to ensure test isolation.
             FireAudioProcessor processor;
-            processor.prepareToPlay(standardSampleRate, standardBlockSize);
 
-            auto bufferToProcess = buffer;
-
-            // Load the preset parameters from the XML file
+            // Load the preset parameters from the XML file.
             std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
             REQUIRE(xml != nullptr);
             for (int i = 0; i < xml->getNumAttributes(); ++i)
@@ -103,17 +103,50 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
                     parameter->setValueNotifyingHost(attributeValue.getFloatValue());
             }
 
-            // Set up the MIDI buffer and process the audio
+            // --- START: MODIFIED BLOCK-BASED PROCESSING ---
+            // This section now mimics the processing loop from GenerateGoldenMasters.cpp.
             juce::MidiBuffer midi;
-            processor.prepareToPlay(reader->sampleRate, bufferToProcess.getNumSamples());
-            processor.processBlock(bufferToProcess, midi);
+            
+            // Prepare the processor with the correct sample rate and block size.
+            processor.prepareToPlay(reader->sampleRate, standardBlockSize);
 
-            // --- CRITICAL FIX: WRITE-THEN-READ TO SIMULATE FILE I/O PRECISION LOSS ---
+            // Create an empty buffer to assemble the final processed output.
+            juce::AudioBuffer<float> finalOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
+            finalOutputBuffer.clear();
+
+            // Iterate through the input audio in blocks of 'standardBlockSize'.
+            for (int startSample = 0; startSample < originalInputBuffer.getNumSamples(); startSample += standardBlockSize)
+            {
+                // Calculate the size of the current block (handles the last, possibly smaller, block).
+                int numSamplesThisBlock = std::min(standardBlockSize, originalInputBuffer.getNumSamples() - startSample);
+
+                // Create a temporary buffer for the current block.
+                juce::AudioBuffer<float> blockToProcess(originalInputBuffer.getNumChannels(), numSamplesThisBlock);
+
+                // Copy the slice of audio from the original input into the processing block.
+                for (int channel = 0; channel < originalInputBuffer.getNumChannels(); ++channel)
+                {
+                    blockToProcess.copyFrom(channel, 0, originalInputBuffer, channel, startSample, numSamplesThisBlock);
+                }
+
+                // Process the current block.
+                processor.processBlock(blockToProcess, midi);
+
+                // Copy the processed audio from the block into the correct position in the final output buffer.
+                for (int channel = 0; channel < finalOutputBuffer.getNumChannels(); ++channel)
+                {
+                    finalOutputBuffer.copyFrom(channel, startSample, blockToProcess, channel, 0, numSamplesThisBlock);
+                }
+            }
+            // --- END: MODIFIED BLOCK-BASED PROCESSING ---
+
+
+            // The following logic writes the final processed buffer and compares it to the golden master.
             
             juce::File fileForComparison;
             if (keepRegressionOutputFiles)
             {
-                // If debugging, write to the final destination.
+                // If debugging, write to a persistent regression output directory.
                 juce::File regressionOutputDir { "/Users/yyf/Documents/GitHub/Fire/tests/RegressionOutput/" };
                 if (!regressionOutputDir.isDirectory())
                     REQUIRE(regressionOutputDir.createDirectory().wasOk());
@@ -128,18 +161,18 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 
             fileForComparison.deleteFile();
             
-            // 1. Write the freshly processed buffer to the chosen file path.
+            // 1. Write the assembled output buffer to a .wav file.
             std::unique_ptr<juce::AudioFormatWriter> writer(
                 formatManager.findFormatForFileExtension("wav")->createWriterFor(
                     new juce::FileOutputStream(fileForComparison),
-                    reader->sampleRate, bufferToProcess.getNumChannels(), 24, {}, 0
+                    reader->sampleRate, finalOutputBuffer.getNumChannels(), 24, {}, 0
                 )
             );
             REQUIRE(writer != nullptr);
-            writer->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
-            writer.reset(); // This flushes and closes the writer.
+            writer->writeFromAudioSampleBuffer(finalOutputBuffer, 0, finalOutputBuffer.getNumSamples());
+            writer.reset(); // This flushes the writer and closes the file stream.
 
-            // 2. Read the file back into a new buffer.
+            // 2. Read the newly written file back into a separate buffer to account for file I/O precision changes.
             std::unique_ptr<juce::AudioFormatReader> resultReader(formatManager.createReaderFor(fileForComparison));
             REQUIRE(resultReader != nullptr);
             juce::AudioBuffer<float> reloadedResultBuffer(resultReader->numChannels, (int)resultReader->lengthInSamples);
@@ -147,11 +180,11 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 
             if (!keepRegressionOutputFiles)
             {
-                // Clean up the temporary file if we're not in debug mode.
+                // Clean up the temporary file if not in debug mode.
                 fileForComparison.deleteFile();
             }
 
-            // 3. Load the golden master file.
+            // 3. Load the corresponding golden master file.
             juce::File goldenFile { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" + presetName + "_drums_output.wav" };
             REQUIRE(goldenFile.existsAsFile());
             std::unique_ptr<juce::AudioFormatReader> goldenReader(formatManager.createReaderFor(goldenFile));
@@ -159,7 +192,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             juce::AudioBuffer<float> goldenBuffer(goldenReader->numChannels, (int)goldenReader->lengthInSamples);
             goldenReader->read(&goldenBuffer, 0, (int)goldenReader->lengthInSamples, 0, true, true);
 
-            // 4. Now, compare the two buffers that have identical origins.
+            // 4. Compare the reloaded result buffer against the golden master buffer.
             requireBuffersAreEquivalent(reloadedResultBuffer, goldenBuffer);
         }
     }
@@ -167,11 +200,11 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     REQUIRE(atLeastOnePresetTested);
 }
 
+// NOTE: This test case processes a single block of a sine wave and remains unchanged
+// as its original logic is already consistent with single-block processing.
 TEST_CASE("Regression Test (Sine Wave)")
 {
     // +++ CONTROL VARIABLE +++
-    // Set this to 'true' to generate .wav files in the RegressionOutput folder for manual inspection.
-    // Set to 'false' for standard automated testing where temporary files are deleted.
     constexpr bool keepRegressionOutputFiles = true;
 
     // --- Setup ---
@@ -224,7 +257,6 @@ TEST_CASE("Regression Test (Sine Wave)")
             juce::File fileForComparison;
             if (keepRegressionOutputFiles)
             {
-                // If debugging, write to the final destination.
                 juce::File regressionOutputDir { "/Users/yyf/Documents/GitHub/Fire/tests/RegressionOutput/" };
                 if (!regressionOutputDir.isDirectory())
                     REQUIRE(regressionOutputDir.createDirectory().wasOk());
@@ -232,12 +264,10 @@ TEST_CASE("Regression Test (Sine Wave)")
             }
             else
             {
-                // For automated tests, use a temporary file.
                 fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory)
                                                 .getChildFile("temp_regression_sine_output.wav");
             }
             
-            // Ensure the file doesn't exist before writing
             fileForComparison.deleteFile();
 
             // 1. Write the processed buffer to the file
@@ -258,7 +288,6 @@ TEST_CASE("Regression Test (Sine Wave)")
             juce::AudioBuffer<float> reloadedResultBuffer(resultReader->numChannels, (int)resultReader->lengthInSamples);
             resultReader->read(&reloadedResultBuffer, 0, (int)resultReader->lengthInSamples, 0, true, true);
             
-            // Clean up the temporary file if we're not in debug mode
             if (!keepRegressionOutputFiles)
             {
                 fileForComparison.deleteFile();

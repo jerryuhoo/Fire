@@ -1476,9 +1476,18 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
 
         if (shouldAddBand || ignoreSoloLogic)
         {
+            // The number of samples to process for this operation.
+            const int numSamples = currentBandBuffer->getNumSamples();
+
             for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
             {
-                outputBuffer.addFrom(channel, 0, *currentBandBuffer, channel, 0, outputBuffer.getNumSamples());
+                // Ensure the destination buffer has enough space before adding.
+                // This is a safety check.
+                if (channel < currentBandBuffer->getNumChannels())
+                {
+                    // FIX: Use the number of samples from the *source* buffer, not the destination.
+                    outputBuffer.addFrom(channel, 0, *currentBandBuffer, channel, 0, numSamples);
+                }
             }
         }
     }

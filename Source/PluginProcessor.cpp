@@ -453,6 +453,14 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     smoothedFreq2.reset(sampleRate, rampTimeSeconds * 2);
     smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
 
+    float initialFreq1 = *treeState.getRawParameterValue(FREQ_ID1);
+    float initialFreq2 = *treeState.getRawParameterValue(FREQ_ID2);
+    float initialFreq3 = *treeState.getRawParameterValue(FREQ_ID3);
+
+    smoothedFreq1.setCurrentAndTargetValue(initialFreq1);
+    smoothedFreq2.setCurrentAndTargetValue(initialFreq2);
+    smoothedFreq3.setCurrentAndTargetValue(initialFreq3);
+
     // historyArray init
     for (int i = 0; i < samplesPerBlock; i++)
     {

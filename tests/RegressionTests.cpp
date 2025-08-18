@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "../Source/PluginProcessor.h"
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_dsp/juce_dsp.h> // Include for dsp::Oversampling
 #include <iostream>
 #include <cmath>
 
@@ -103,16 +104,12 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
                     parameter->setValueNotifyingHost(attributeValue.getFloatValue());
             }
 
-            // --- START: MODIFIED BLOCK-BASED PROCESSING ---
-            // This section now mimics the processing loop from GenerateGoldenMasters.cpp.
+            // --- Process Audio in Blocks ---
             juce::MidiBuffer midi;
-            
-            // Prepare the processor with the correct sample rate and block size.
             processor.prepareToPlay(reader->sampleRate, standardBlockSize);
-
-            // Create an empty buffer to assemble the final processed output.
-            juce::AudioBuffer<float> finalOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
-            finalOutputBuffer.clear();
+            
+            juce::AudioBuffer<float> rawOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
+            rawOutputBuffer.clear();
 
             // Iterate through the input audio in blocks of 'standardBlockSize'.
             for (int startSample = 0; startSample < originalInputBuffer.getNumSamples(); startSample += standardBlockSize)
@@ -131,18 +128,43 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 
                 // Process the current block.
                 processor.processBlock(blockToProcess, midi);
-
-                // Copy the processed audio from the block into the correct position in the final output buffer.
-                for (int channel = 0; channel < finalOutputBuffer.getNumChannels(); ++channel)
+                for (int channel = 0; channel < rawOutputBuffer.getNumChannels(); ++channel)
                 {
-                    finalOutputBuffer.copyFrom(channel, startSample, blockToProcess, channel, 0, numSamplesThisBlock);
+                    rawOutputBuffer.copyFrom(channel, startSample, blockToProcess, channel, 0, numSamplesThisBlock);
                 }
             }
-            // --- END: MODIFIED BLOCK-BASED PROCESSING ---
 
-
-            // The following logic writes the final processed buffer and compares it to the golden master.
+            // === NEW: DETERMINE PLUGIN LATENCY FOR THIS PRESET ===
+            int latencySamples = 0;
+            if (auto* hqParam = processor.treeState.getParameter("hq"))
+            {
+                if (hqParam->getValue() > 0.5f) // Check if HQ mode is ON
+                {
+                    latencySamples = static_cast<int>(processor.getTotalLatency());
+                }
+            }
             
+            // === NEW: SIMULATE HOST LATENCY COMPENSATION ===
+            juce::AudioBuffer<float> compensatedOutputBuffer(rawOutputBuffer.getNumChannels(), rawOutputBuffer.getNumSamples());
+            compensatedOutputBuffer.clear();
+
+            if (latencySamples > 0)
+            {
+                const int numSamplesToCopy = rawOutputBuffer.getNumSamples() - latencySamples;
+                if (numSamplesToCopy > 0)
+                {
+                    for (int channel = 0; channel < rawOutputBuffer.getNumChannels(); ++channel)
+                    {
+                        compensatedOutputBuffer.copyFrom(channel, 0, rawOutputBuffer, channel, latencySamples, numSamplesToCopy);
+                    }
+                }
+            }
+            else
+            {
+                compensatedOutputBuffer.makeCopyOf(rawOutputBuffer);
+            }
+            
+            // --- Write and Compare the *Compensated* Buffer ---
             juce::File fileForComparison;
             if (keepRegressionOutputFiles)
             {
@@ -154,9 +176,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             }
             else
             {
-                // For automated tests, use a temporary file.
-                fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                                .getChildFile("temp_regression_output.wav");
+                fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("temp_regression_output.wav");
             }
 
             fileForComparison.deleteFile();
@@ -165,12 +185,12 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             std::unique_ptr<juce::AudioFormatWriter> writer(
                 formatManager.findFormatForFileExtension("wav")->createWriterFor(
                     new juce::FileOutputStream(fileForComparison),
-                    reader->sampleRate, finalOutputBuffer.getNumChannels(), 24, {}, 0
+                    reader->sampleRate, compensatedOutputBuffer.getNumChannels(), 24, {}, 0
                 )
             );
             REQUIRE(writer != nullptr);
-            writer->writeFromAudioSampleBuffer(finalOutputBuffer, 0, finalOutputBuffer.getNumSamples());
-            writer.reset(); // This flushes the writer and closes the file stream.
+            writer->writeFromAudioSampleBuffer(compensatedOutputBuffer, 0, compensatedOutputBuffer.getNumSamples());
+            writer.reset();
 
             // 2. Read the newly written file back into a separate buffer to account for file I/O precision changes.
             std::unique_ptr<juce::AudioFormatReader> resultReader(formatManager.createReaderFor(fileForComparison));
@@ -200,11 +220,9 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     REQUIRE(atLeastOnePresetTested);
 }
 
-// NOTE: This test case processes a single block of a sine wave and remains unchanged
-// as its original logic is already consistent with single-block processing.
 TEST_CASE("Regression Test (Sine Wave)")
 {
-    // +++ CONTROL VARIABLE +++
+    // This test remains unchanged as it's not for continuous time-aligned file comparison.
     constexpr bool keepRegressionOutputFiles = true;
 
     // --- Setup ---
@@ -264,8 +282,7 @@ TEST_CASE("Regression Test (Sine Wave)")
             }
             else
             {
-                fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                                .getChildFile("temp_regression_sine_output.wav");
+                fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("temp_regression_sine_output.wav");
             }
             
             fileForComparison.deleteFile();
@@ -280,7 +297,7 @@ TEST_CASE("Regression Test (Sine Wave)")
                 );
                 REQUIRE(writer != nullptr);
                 writer->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples());
-            } // writer is flushed and closed here
+            }
 
             // 2. Read the file back into a new buffer
             std::unique_ptr<juce::AudioFormatReader> resultReader(formatManager.createReaderFor(fileForComparison));

@@ -623,7 +623,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
     
     // report latency
-    float totalLatency = 0.0f;
     if (*treeState.getRawParameterValue(HQ_ID))
     {
         totalLatency = bands[0]->oversampling->getLatencyInSamples();
@@ -1714,4 +1713,9 @@ void FireAudioProcessor::updateGlobalFilters(double sampleRate)
     updateLowCutFilters(smoothedSettings, sampleRate);
     updatePeakFilter(smoothedSettings, sampleRate);
     updateHighCutFilters(smoothedSettings, sampleRate);
+}
+
+float FireAudioProcessor::getTotalLatency() const
+{
+    return totalLatency;
 }

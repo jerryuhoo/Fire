@@ -1,7 +1,8 @@
-// GenerateGoldenMasters.cpp (Corrected for State Isolation)
+// GenerateGoldenMasters.cpp
 #include <catch2/catch_test_macros.hpp>
 #include "../Source/PluginProcessor.h"
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_dsp/juce_dsp.h> // Include for dsp::Oversampling
 #include <iostream>
 
 juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
@@ -30,7 +31,7 @@ TEST_CASE("Golden Master Generation")
     // Define a standard block size, similar to what a DAW would use.
     const int standardBlockSize = 512;
 
-    // --- 1. Load Input Audio File (do this once) ---
+    // --- 1. Load Input Audio File ---
     juce::File inputFile { "/Users/yyf/Documents/GitHub/Fire/tests/TestAudioFiles/drum.wav" };
     REQUIRE(inputFile.existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
@@ -55,10 +56,9 @@ TEST_CASE("Golden Master Generation")
         juce::String presetName = presetFile.getFileNameWithoutExtension();
         std::cout << "  Processing preset: " << presetName << std::endl;
         
-        // +++ CREATE A FRESH PROCESSOR FOR EACH PRESET +++
         FireAudioProcessor processor;
 
-        // --- 3. Load Preset Manually from Attributes ---
+        // --- 3. Load Preset ---
         std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
         REQUIRE(xml != nullptr);
 
@@ -69,20 +69,19 @@ TEST_CASE("Golden Master Generation")
             
             if (auto* parameter = processor.treeState.getParameter(attributeName))
             {
-                float normalizedValue = attributeValue.getFloatValue();
-                parameter->setValueNotifyingHost(normalizedValue);
+                parameter->setValueNotifyingHost(attributeValue.getFloatValue());
             }
         }
 
-        // --- 4. Process Audio in Iterative Blocks (DAW Simulation) ---
+        // --- 4. Process Audio in Blocks ---
         juce::MidiBuffer midi;
         
         // Prepare the processor with the audio file's sample rate and the standard block size.
         processor.prepareToPlay(reader->sampleRate, standardBlockSize);
 
-        // Create an empty buffer to store the assembled output.
-        juce::AudioBuffer<float> finalOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
-        finalOutputBuffer.clear();
+        // This buffer will hold the raw, uncompensated output from the plugin.
+        juce::AudioBuffer<float> rawOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
+        rawOutputBuffer.clear();
 
         // This loop iterates through the entire input buffer in chunks of 'standardBlockSize'.
         for (int startSample = 0; startSample < originalInputBuffer.getNumSamples(); startSample += standardBlockSize)
@@ -102,15 +101,48 @@ TEST_CASE("Golden Master Generation")
 
             // Process the small block.
             processor.processBlock(blockToProcess, midi);
-
-            // Copy the processed result from the temporary block into the correct position in our final output buffer.
-            for (int channel = 0; channel < finalOutputBuffer.getNumChannels(); ++channel)
+            for (int channel = 0; channel < rawOutputBuffer.getNumChannels(); ++channel)
             {
-                finalOutputBuffer.copyFrom(channel, startSample, blockToProcess, channel, 0, numSamplesThisBlock);
+                rawOutputBuffer.copyFrom(channel, startSample, blockToProcess, channel, 0, numSamplesThisBlock);
             }
         }
 
-        // --- 5. Write Assembled Output File ---
+        // === NEW: DETERMINE PLUGIN LATENCY FOR THIS PRESET ===
+        int latencySamples = 0;
+        if (auto* hqParam = processor.treeState.getParameter("hq"))
+        {
+            if (hqParam->getValue() > 0.5f) // Check if HQ mode is ON
+            {
+                latencySamples = static_cast<int>(processor.getTotalLatency());
+            }
+        }
+
+        // === NEW: SIMULATE HOST LATENCY COMPENSATION ===
+        // The host shifts the plugin's output backwards by the reported latency.
+        juce::AudioBuffer<float> compensatedOutputBuffer(rawOutputBuffer.getNumChannels(), rawOutputBuffer.getNumSamples());
+        compensatedOutputBuffer.clear();
+
+        if (latencySamples > 0)
+        {
+            const int numSamplesToCopy = rawOutputBuffer.getNumSamples() - latencySamples;
+            if (numSamplesToCopy > 0)
+            {
+                for (int channel = 0; channel < rawOutputBuffer.getNumChannels(); ++channel)
+                {
+                    // Copy from the raw buffer, skipping the initial latency-induced samples,
+                    // into the start of the compensated buffer.
+                    compensatedOutputBuffer.copyFrom(channel, 0,                  // Dest
+                                                     rawOutputBuffer, channel, latencySamples, // Source
+                                                     numSamplesToCopy);          // Num Samples
+                }
+            }
+        }
+        else // If no latency, just copy the whole buffer.
+        {
+            compensatedOutputBuffer.makeCopyOf(rawOutputBuffer);
+        }
+
+        // --- 5. Write *Compensated* Output File ---
         juce::File outputDir { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" };
         if (!outputDir.isDirectory()) {
             REQUIRE(outputDir.createDirectory().wasOk());
@@ -123,14 +155,13 @@ TEST_CASE("Golden Master Generation")
             formatManager.findFormatForFileExtension("wav")->createWriterFor(
                 new juce::FileOutputStream(outputFile),
                 reader->sampleRate,
-                finalOutputBuffer.getNumChannels(),
+                compensatedOutputBuffer.getNumChannels(), // Use compensated buffer
                 24, {}, 0
             )
         );
         REQUIRE(writer != nullptr);
         
-        // Write the final, assembled buffer to the file.
-        bool writeOk = writer->writeFromAudioSampleBuffer(finalOutputBuffer, 0, finalOutputBuffer.getNumSamples());
+        bool writeOk = writer->writeFromAudioSampleBuffer(compensatedOutputBuffer, 0, compensatedOutputBuffer.getNumSamples());
         REQUIRE(writeOk);
     }
 }
@@ -138,6 +169,10 @@ TEST_CASE("Golden Master Generation")
 
 TEST_CASE("Golden Master Generation (Sine Wave)")
 {
+    // This test processes a single block and doesn't need latency compensation logic
+    // as it's not generating a continuous, time-aligned audio file.
+    // It remains unchanged.
+    
     // --- Setup ---
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
@@ -172,7 +207,7 @@ TEST_CASE("Golden Master Generation (Sine Wave)")
         // Create a deep copy of the original signal for processing.
         auto bufferToProcess = originalBuffer;
 
-        // --- 3. Load Preset Manually from Attributes ---
+        // --- 3. Load Preset ---
         std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
         REQUIRE(xml != nullptr);
 
@@ -191,7 +226,7 @@ TEST_CASE("Golden Master Generation (Sine Wave)")
         processor.prepareToPlay(sampleRate, blockSize);
         processor.processBlock(bufferToProcess, midi);
 
-        // --- 5. Write Output File (using the safe write-then-move method) ---
+        // --- 5. Write Output File ---
         juce::File tempOutputFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
                                         .getChildFile("temp_golden_sine_output.wav");
         tempOutputFile.deleteFile();
@@ -218,7 +253,5 @@ TEST_CASE("Golden Master Generation (Sine Wave)")
         juce::File finalOutputFile = outputDir.getChildFile(presetName + "_sine_output.wav");
         finalOutputFile.deleteFile();
         REQUIRE(tempOutputFile.moveFileTo(finalOutputFile));
-
-        // std::cout << "    -> Successfully wrote to: " << finalOutputFile.getFullPathName() << std::endl;
     }
 }

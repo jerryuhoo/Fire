@@ -269,11 +269,13 @@ public:
     // drive lookandfeel
     float getReductionPrecent(int bandIndex);
     float getSampleMaxValue(int bandIndex);
+    float getTotalLatency() const;
 
 private:
     //==============================================================================
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<std::unique_ptr<BandProcessor>> bands;
+    float totalLatency = 0.0f;
     
     void updateParameters();
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);

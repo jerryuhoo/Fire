@@ -421,46 +421,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         engine.prepare(spec);
     }
 
-    previousLowcutFreq = (float) *treeState.getRawParameterValue(LOWCUT_FREQ_ID);
-    previousHighcutFreq = (float) *treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
-    previousPeakFreq = (float) *treeState.getRawParameterValue(PEAK_FREQ_ID);
-
-    const float rampTimeSeconds = 0.0005f;
-
-    lowcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
-    lowcutFreqSmoother.setCurrentAndTargetValue(previousLowcutFreq);
-    highcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
-    highcutFreqSmoother.setCurrentAndTargetValue(previousHighcutFreq);
-    peakFreqSmoother.reset(sampleRate, rampTimeSeconds);
-    peakFreqSmoother.setCurrentAndTargetValue(previousPeakFreq);
-
-    lowcutGainSmoother.reset(sampleRate, rampTimeSeconds);
-    lowcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
-
-    peakGainSmoother.reset(sampleRate, rampTimeSeconds);
-    peakQualitySmoother.reset(sampleRate, rampTimeSeconds);
-
-    highcutGainSmoother.reset(sampleRate, rampTimeSeconds);
-    highcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
-
-    centralSmoother.reset(sampleRate, 0.1);
-    centralSmoother.setCurrentAndTargetValue(0);
-
-    normalSmoother.reset(sampleRate, 0.5);
-    normalSmoother.setCurrentAndTargetValue(1);
-
-    smoothedFreq1.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq2.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
-
-    float initialFreq1 = *treeState.getRawParameterValue(FREQ_ID1);
-    float initialFreq2 = *treeState.getRawParameterValue(FREQ_ID2);
-    float initialFreq3 = *treeState.getRawParameterValue(FREQ_ID3);
-
-    smoothedFreq1.setCurrentAndTargetValue(initialFreq1);
-    smoothedFreq2.setCurrentAndTargetValue(initialFreq2);
-    smoothedFreq3.setCurrentAndTargetValue(initialFreq3);
-
     // historyArray init
     for (int i = 0; i < samplesPerBlock; i++)
     {
@@ -485,25 +445,40 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
     mDelay.reset(0);
 
-    // dsp init
-
-    //int newBlockSize = (int)oversampling->getOversamplingFactor() * samplesPerBlock;
-
-    /*
-    if (*treeState.getRawParameterValue("hq")) // oversampling
-    {
-        spec.sampleRate = sampleRate * 4;
-    }
-    else
-    {
-         spec.sampleRate = sampleRate;
-    }
-    */
-
     // filter init
     updateFilter(sampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
+    const float rampTimeSeconds = 0.0005f;
+
+    lowcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
+    lowcutFreqSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(LOWCUT_FREQ_ID));
+    lowcutGainSmoother.reset(sampleRate, rampTimeSeconds);
+    lowcutGainSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(LOWCUT_GAIN_ID));
+    lowcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
+    lowcutQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(LOWCUT_Q_ID));
+
+    peakFreqSmoother.reset(sampleRate, rampTimeSeconds);
+    peakFreqSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(PEAK_FREQ_ID));
+    peakGainSmoother.reset(sampleRate, rampTimeSeconds);
+    peakGainSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(PEAK_GAIN_ID));
+    peakQualitySmoother.reset(sampleRate, rampTimeSeconds);
+    peakQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(PEAK_Q_ID));
+
+    highcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
+    highcutFreqSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_FREQ_ID));
+    highcutGainSmoother.reset(sampleRate, rampTimeSeconds);
+    highcutGainSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_GAIN_ID));
+    highcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
+    highcutQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_Q_ID));
+
+    smoothedFreq1.reset(sampleRate, rampTimeSeconds * 2);
+    smoothedFreq1.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID1));
+    smoothedFreq2.reset(sampleRate, rampTimeSeconds * 2);
+    smoothedFreq2.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
+    smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
+    smoothedFreq3.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
+
     // mode diode================
     inputTemp.clear();
     VdiodeL = 0.0f;
@@ -556,6 +531,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessorGlobal.prepare(spec);
 
     // dry wet
+    mixSmootherGlobal.reset(sampleRate, rampTimeSeconds);
+    mixSmootherGlobal.setCurrentAndTargetValue(*treeState.getRawParameterValue(MIX_ID));
     dryWetMixerGlobal.prepare(spec);
     reset();
 }

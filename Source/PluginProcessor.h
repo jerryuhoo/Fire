@@ -315,10 +315,6 @@ private:
     void updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate);
     void updatePeakFilter(const ChainSettings& chainSettings, double sampleRate);
 
-    float previousLowcutFreq = 0.0f;
-    float previousHighcutFreq = 0.0f;
-    float previousPeakFreq = 0.0f;
-
     juce::SmoothedValue<float> mixSmootherGlobal;
 
     // Low-Cut / Low-Shelf Filter
@@ -335,9 +331,6 @@ private:
     juce::SmoothedValue<float> highcutFreqSmoother;
     juce::SmoothedValue<float> highcutGainSmoother;
     juce::SmoothedValue<float> highcutQualitySmoother;
-
-    juce::SmoothedValue<float> centralSmoother;
-    juce::SmoothedValue<float> normalSmoother;
     
     using GainProcessor = juce::dsp::Gain<float>;
     

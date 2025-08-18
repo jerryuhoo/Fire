@@ -445,10 +445,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
     mDelay.reset(0);
 
-    // filter init
-    updateFilter(sampleRate);
-    leftChain.prepare(spec);
-    rightChain.prepare(spec);
     const float rampTimeSeconds = 0.0005f;
 
     lowcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
@@ -478,6 +474,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     smoothedFreq2.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
     smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
     smoothedFreq3.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
+
+    // filter init
+    updateFilter(sampleRate);
+    leftChain.prepare(spec);
+    rightChain.prepare(spec);
 
     // mode diode================
     inputTemp.clear();
@@ -531,8 +532,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessorGlobal.prepare(spec);
 
     // dry wet
-    mixSmootherGlobal.reset(sampleRate, rampTimeSeconds);
-    mixSmootherGlobal.setCurrentAndTargetValue(*treeState.getRawParameterValue(MIX_ID));
+    globalMixSmoother.reset(sampleRate, rampTimeSeconds);
+    globalMixSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(MIX_ID));
     dryWetMixerGlobal.prepare(spec);
     reset();
 }
@@ -551,6 +552,7 @@ void FireAudioProcessor::reset()
     compensatorEQ2.reset();
     compensatorEQ3.reset();
     dryWetMixerGlobal.reset();
+    gainProcessorGlobal.reset();
     for (auto& band : bands)
         band->reset();
 }
@@ -762,7 +764,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     float mixValue;
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
-        mixValue = mixSmootherGlobal.getNextValue();
+        mixValue = globalMixSmoother.getNextValue();
     }
     dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     if (*treeState.getRawParameterValue(HQ_ID))
@@ -781,7 +783,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 //    auto* dryBufferPtr = &delayMatchedDryBuffer;
 //    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
 //    {
-//        float mixValue = mixSmootherGlobal.getNextValue();
+//        float mixValue = globalMixSmoother.getNextValue();
 //
 //        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
 //        {
@@ -1375,7 +1377,7 @@ void FireAudioProcessor::updateParameters()
     smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
     
     // Update global output and mix smoothers.
-    mixSmootherGlobal.setTargetValue(*treeState.getRawParameterValue(MIX_ID));
+    globalMixSmoother.setTargetValue(*treeState.getRawParameterValue(MIX_ID));
     
     //==============================================================================
     // 2. Update Per-Band Smoothed Parameters

@@ -315,7 +315,7 @@ private:
     void updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate);
     void updatePeakFilter(const ChainSettings& chainSettings, double sampleRate);
 
-    juce::SmoothedValue<float> mixSmootherGlobal;
+    juce::SmoothedValue<float> globalMixSmoother;
 
     // Low-Cut / Low-Shelf Filter
     juce::SmoothedValue<float> lowcutFreqSmoother;

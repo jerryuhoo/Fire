@@ -41,14 +41,10 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec,
     drive.reset(spec.sampleRate, 0.05);
     rec.reset(spec.sampleRate, 0.05);
     bias.reset(spec.sampleRate, 0.05);
-    mix.reset(spec.sampleRate, 0.05);
-    output.reset(spec.sampleRate, 0.05);
     
     drive.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[bandIndex]));
     rec.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[bandIndex]));
     bias.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[bandIndex]));
-    mix.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::mixIds[bandIndex]));
-    output.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::outputIds[bandIndex]));
 }
 
 // This is what happens when we need to clear the internal state of a band's processors.
@@ -75,8 +71,8 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
     // === 1. Get Parameters and Prepare ===
     const int   mode      = *treeState.getRawParameterValue(ParameterID::modeIds[bandIndex]);
     const bool  isHQ      = *treeState.getRawParameterValue(HQ_ID);
-    float       outputVal = this->output.getTargetValue();
-    float       mixVal    = this->mix.getTargetValue();
+    const float outputVal = *treeState.getRawParameterValue(ParameterID::outputIds[bandIndex]);
+    const float mixVal    = *treeState.getRawParameterValue(ParameterID::mixIds[bandIndex]);
 
     // Create a copy of the clean signal for the final dry/wet mix
     juce::AudioBuffer<float> dryBuffer;
@@ -126,6 +122,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
     
     // Apply the final output gain to the wet signal
     gain.setGainDecibels(outputVal);
+    gain.setRampDurationSeconds(0.05f);
     gain.process(finalContext);
     
     if (isHQ)
@@ -1391,8 +1388,6 @@ void FireAudioProcessor::updateParameters()
             band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
             band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
             band->bias.setTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
-            band->mix.setTargetValue(*treeState.getRawParameterValue(ParameterID::mixIds[i]));
-            band->output.setTargetValue(*treeState.getRawParameterValue(ParameterID::outputIds[i]));
         }
     }
     

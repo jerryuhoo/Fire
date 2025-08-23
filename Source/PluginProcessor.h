@@ -134,7 +134,7 @@ struct BandProcessor
     }
     
     // And its own set of smoothed parameter values.
-    juce::SmoothedValue<float> drive, rec, bias, mix, output;
+    juce::SmoothedValue<float> drive, rec, bias;
 
     // Per-band meter values
     float mInputLeftSmoothed = 0, mInputRightSmoothed = 0;

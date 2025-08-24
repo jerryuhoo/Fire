@@ -302,6 +302,9 @@ private:
                   bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
     void updateGlobalFilters(double sampleRate);
+    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate);
+    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
+    void applyGlobalMix(juce::AudioBuffer<float>& buffer);
 
     // preset id
     int presetId = 0;

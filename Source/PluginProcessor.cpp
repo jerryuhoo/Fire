@@ -529,6 +529,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // dry wet
     dryWetMixerGlobal.prepare(spec);
+    dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     reset();
 }
 
@@ -697,99 +698,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
     mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
-    splitBands(buffer, sampleRate);
-
-    delayMatchedDryBuffer.clear();
-
-    // 4. PROCESS INDIVIDUAL BANDS
-    
-    // Create an array of pointers to the clean, split buffers.
-    std::array<juce::AudioBuffer<float>*, 4> dryBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
-    // Create an array of pointers to the wet, split buffers.
-    std::array<juce::AudioBuffer<float>*, 4> wetBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
-    
-    // Call sumBands to sum the clean signals into our new dry buffer.
-    // Note: We might want a version of sumBands that ignores solo for this,
-    // but for now this works.
-    sumBands(delayMatchedDryBuffer, dryBandBuffers, true);
-
-    for (int i = 0; i < numBands; ++i)
-    {
-        // Get a pointer to the current band's processor.
-        if (auto* band = bands[i].get())
-        {
-            // First, set the input meter values for this band.
-            setLeftRightMeterRMSValues(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
-
-            if (*treeState.getRawParameterValue(ParameterID::bandEnableIds[i]))
-            {
-                // ** THIS IS THE CENTRAL CHANGE **
-                // 1. Assemble the parameter struct before calling process.
-                BandProcessingParameters params;
-                
-                // Populate the struct from treeState
-                params.mode = *treeState.getRawParameterValue(ParameterID::modeIds[i]);
-                params.isHQ = *treeState.getRawParameterValue(HQ_ID);
-                params.outputVal = *treeState.getRawParameterValue(ParameterID::outputIds[i]);
-                params.mixVal = *treeState.getRawParameterValue(ParameterID::mixIds[i]);
-                params.compThreshold = *treeState.getRawParameterValue(ParameterID::compThreshIds[i]);
-                params.compRatio = *treeState.getRawParameterValue(ParameterID::compRatioIds[i]);
-                params.isCompBypassed = *treeState.getRawParameterValue(ParameterID::compBypassIds[i]) > 0.5f;
-                params.width = *treeState.getRawParameterValue(ParameterID::widthIds[i]);
-                params.isWidthBypassed = *treeState.getRawParameterValue(ParameterID::widthBypassIds[i]) > 0.5f;
-                params.isSafeModeOn = *treeState.getRawParameterValue(ParameterID::safeIds[i]) > 0.5f;
-                params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[i]) > 0.5f;
-                params.biasVal = *treeState.getRawParameterValue(ParameterID::biasIds[i]);
-                // Note: We still update the smoothed values' targets in each block
-                band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-                band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
-
-                params.driveVal = band->drive.getNextValue();
-                params.recVal = band->rec.getNextValue();
-
-                // 2. Call the refactored, decoupled process method
-                band->process(*wetBandBuffers[i], params);
-            }
-
-            // After processing, set the output meter values for this band.
-            setLeftRightMeterRMSValues(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
-        }
-    }
-
-    sumBands(buffer, wetBandBuffers, false);
-
-    // 5. PROCESS GLOBAL BAND
-    if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
-    {
-        updateGlobalFilters(sampleRate);
-        auto block = juce::dsp::AudioBlock<float>(buffer);
-        
-        auto leftBlock = block.getSingleChannelBlock(0);
-        leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
-        
-        if (buffer.getNumChannels() > 1)
-        {
-            auto rightBlock = block.getSingleChannelBlock(1);
-            rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
-        }
-    }
-    
-    auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
-    processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
-
-    float mixValue = *treeState.getRawParameterValue(MIX_ID);
-    dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
-    if (*treeState.getRawParameterValue(HQ_ID))
-    {
-        dryWetMixerGlobal.setWetLatency(totalLatency);
-    }
-    else
-    {
-        dryWetMixerGlobal.setWetLatency(0);
-    }
-    dryWetMixerGlobal.setWetMixProportion(mixValue);
-    dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
-    dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
+    processMultiBand(buffer, sampleRate);
+    applyGlobalEffects(buffer, sampleRate);
+    applyGlobalMix(buffer);
 
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
@@ -1687,4 +1598,104 @@ void FireAudioProcessor::updateGlobalFilters(double sampleRate)
 float FireAudioProcessor::getTotalLatency() const
 {
     return totalLatency;
+}
+
+void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate)
+{
+    splitBands(wetBuffer, sampleRate);
+
+    delayMatchedDryBuffer.clear();
+
+    // Create an array of pointers to the clean, split buffers.
+    std::array<juce::AudioBuffer<float>*, 4> dryBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
+    // Create an array of pointers to the wet, split buffers.
+    std::array<juce::AudioBuffer<float>*, 4> wetBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
+    
+    // Call sumBands to sum the clean signals into our new dry buffer.
+    // Note: We might want a version of sumBands that ignores solo for this,
+    // but for now this works.
+    sumBands(delayMatchedDryBuffer, dryBandBuffers, true);
+
+    for (int i = 0; i < numBands; ++i)
+    {
+        // Get a pointer to the current band's processor.
+        if (auto* band = bands[i].get())
+        {
+            // First, set the input meter values for this band.
+            setLeftRightMeterRMSValues(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
+
+            if (*treeState.getRawParameterValue(ParameterID::bandEnableIds[i]))
+            {
+                // ** THIS IS THE CENTRAL CHANGE **
+                // 1. Assemble the parameter struct before calling process.
+                BandProcessingParameters params;
+                
+                // Populate the struct from treeState
+                params.mode = *treeState.getRawParameterValue(ParameterID::modeIds[i]);
+                params.isHQ = *treeState.getRawParameterValue(HQ_ID);
+                params.outputVal = *treeState.getRawParameterValue(ParameterID::outputIds[i]);
+                params.mixVal = *treeState.getRawParameterValue(ParameterID::mixIds[i]);
+                params.compThreshold = *treeState.getRawParameterValue(ParameterID::compThreshIds[i]);
+                params.compRatio = *treeState.getRawParameterValue(ParameterID::compRatioIds[i]);
+                params.isCompBypassed = *treeState.getRawParameterValue(ParameterID::compBypassIds[i]) > 0.5f;
+                params.width = *treeState.getRawParameterValue(ParameterID::widthIds[i]);
+                params.isWidthBypassed = *treeState.getRawParameterValue(ParameterID::widthBypassIds[i]) > 0.5f;
+                params.isSafeModeOn = *treeState.getRawParameterValue(ParameterID::safeIds[i]) > 0.5f;
+                params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[i]) > 0.5f;
+                params.biasVal = *treeState.getRawParameterValue(ParameterID::biasIds[i]);
+                // Note: We still update the smoothed values' targets in each block
+                band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
+                band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+
+                params.driveVal = band->drive.getNextValue();
+                params.recVal = band->rec.getNextValue();
+
+                // 2. Call the refactored, decoupled process method
+                band->process(*wetBandBuffers[i], params);
+            }
+
+            // After processing, set the output meter values for this band.
+            setLeftRightMeterRMSValues(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
+        }
+    }
+
+    sumBands(wetBuffer, wetBandBuffers, false);
+}
+
+void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate)
+{
+    if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
+    {
+        updateGlobalFilters(sampleRate);
+        auto block = juce::dsp::AudioBlock<float>(buffer);
+        
+        auto leftBlock = block.getSingleChannelBlock(0);
+        leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
+        
+        if (buffer.getNumChannels() > 1)
+        {
+            auto rightBlock = block.getSingleChannelBlock(1);
+            rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
+        }
+    }
+    
+    auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
+    processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
+}
+
+void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
+{
+    float mixValue = *treeState.getRawParameterValue(MIX_ID);
+    
+    if (*treeState.getRawParameterValue(HQ_ID))
+    {
+        dryWetMixerGlobal.setWetLatency(totalLatency);
+    }
+    else
+    {
+        dryWetMixerGlobal.setWetLatency(0);
+    }
+    dryWetMixerGlobal.setWetMixProportion(mixValue);
+    dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
+    dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }

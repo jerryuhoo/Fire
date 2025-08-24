@@ -239,7 +239,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 TEST_CASE("Regression Test (Sine Wave)")
 {
     // This test remains unchanged as it's not for continuous time-aligned file comparison.
-    constexpr bool keepRegressionOutputFiles = true;
+    constexpr bool keepRegressionOutputFiles = false;
 
     // --- Setup ---
     juce::AudioFormatManager formatManager;

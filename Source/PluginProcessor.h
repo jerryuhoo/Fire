@@ -112,6 +112,30 @@ namespace ParameterID
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
+struct BandProcessingParameters
+{
+    // Main process parameters
+    int   mode;
+    bool  isHQ;
+    float outputVal;
+    float mixVal;
+    float compThreshold;
+    float compRatio;
+    bool  isCompBypassed;
+    float width;
+    bool  isWidthBypassed;
+
+    // Distortion-specific parameters
+    bool  isSafeModeOn;
+    bool  isExtremeModeOn;
+    float driveVal;
+    float biasVal;
+    float recVal;
+};
+
+//==============================================================================
+// A struct to encapsulate all DSP modules for a single band.
+//==============================================================================
 struct BandProcessor
 {
     using GainProcessor = juce::dsp::Gain<float>;
@@ -129,12 +153,10 @@ struct BandProcessor
     juce::dsp::DryWetMixer<float> dryWetMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     
-    BandProcessor() : dryWetMixer(2048)
-    {
-    }
+    BandProcessor() : dryWetMixer(2048) {}
     
     // And its own set of smoothed parameter values.
-    juce::SmoothedValue<float> drive, rec, bias;
+    juce::SmoothedValue<float> drive, rec;
 
     // Per-band meter values
     float mInputLeftSmoothed = 0, mInputRightSmoothed = 0;
@@ -145,18 +167,14 @@ struct BandProcessor
     float mSampleMaxValue = 0.0f;
     float newDrive = 1.0f;
     
-    void prepare(const juce::dsp::ProcessSpec& spec,
-                 juce::AudioProcessorValueTreeState& treeState,
-                 int bandIndex);
+    void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
-    void process(juce::AudioBuffer<float>& buffer, FireAudioProcessor& processor, int bandIndex);
-    
+    void process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params);
+
 private:
-    // A private helper to contain the duplicated sample loop.
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                            const juce::AudioBuffer<float>& dryBuffer,
-                           FireAudioProcessor& processor,
-                           int bandIndex);
+                           const BandProcessingParameters& params);
 };
 
 //==============================================================================

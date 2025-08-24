@@ -15,9 +15,7 @@
 //==============================================================================
 
 // This is where we tell JUCE what to do when prepareToPlay is called for a single band.
-void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec,
-                            juce::AudioProcessorValueTreeState& treeState,
-                            int bandIndex)
+void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
@@ -40,11 +38,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec,
     // Reset all smoothed values with the current sample rate and a ramp time.
     drive.reset(spec.sampleRate, 0.05);
     rec.reset(spec.sampleRate, 0.05);
-    bias.reset(spec.sampleRate, 0.05);
-    
-    drive.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[bandIndex]));
-    rec.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[bandIndex]));
-    bias.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[bandIndex]));
 }
 
 // This is what happens when we need to clear the internal state of a band's processors.
@@ -64,15 +57,13 @@ void BandProcessor::reset()
 // This is the new, self-contained processing function for a single band.
 // It replaces the old `processOneBand` and `processDistortion` functions.
 //==============================================================================
-void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor& processor, int bandIndex)
+void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params)
 {
-    auto& treeState = processor.treeState;
-
-    // === 1. Get Parameters and Prepare ===
-    const int   mode      = *treeState.getRawParameterValue(ParameterID::modeIds[bandIndex]);
-    const bool  isHQ      = *treeState.getRawParameterValue(HQ_ID);
-    const float outputVal = *treeState.getRawParameterValue(ParameterID::outputIds[bandIndex]);
-    const float mixVal    = *treeState.getRawParameterValue(ParameterID::mixIds[bandIndex]);
+    // Extract parameters for easier access
+    const int   mode      = params.mode;
+    const bool  isHQ      = params.isHQ;
+    const float outputVal = params.outputVal;
+    const float mixVal    = params.mixVal;
 
     // Create a copy of the clean signal for the final dry/wet mix
     juce::AudioBuffer<float> dryBuffer;
@@ -104,14 +95,14 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
         auto oversampledBlock = oversampling->processSamplesUp(block);
         
         // Call the loop to process the upsampled signal in-place
-        processDistortion(oversampledBlock, dryBuffer, processor, bandIndex);
+        processDistortion(oversampledBlock, dryBuffer, params);
         
         oversampling->processSamplesDown(block);
     }
     else
     {
         // Call the loop to process the signal at the original sample rate
-        processDistortion(block, dryBuffer, processor, bandIndex);
+        processDistortion(block, dryBuffer, params);
     }
     
     // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -154,33 +145,28 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
     auto postDistortionBlock = juce::dsp::AudioBlock<float>(buffer);
     auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(postDistortionBlock);
 
-    if (*treeState.getRawParameterValue(ParameterID::compBypassIds[bandIndex]) > 0.5f)
+    if (params.isCompBypassed)
     {
-        this->compressor.setThreshold(*treeState.getRawParameterValue(ParameterID::compThreshIds[bandIndex]));
-        this->compressor.setRatio(*treeState.getRawParameterValue(ParameterID::compRatioIds[bandIndex]));
+        this->compressor.setThreshold(params.compThreshold);
+        this->compressor.setRatio(params.compRatio);
         this->compressor.process(postDistortionContext);
     }
 
-    if (*treeState.getRawParameterValue(ParameterID::widthBypassIds[bandIndex]) > 0.5f && buffer.getNumChannels() == 2)
+    if (params.isWidthBypassed && buffer.getNumChannels() == 2)
     {
-        const float width = *treeState.getRawParameterValue(ParameterID::widthIds[bandIndex]);
-        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), width, buffer.getNumSamples());
+        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, buffer.getNumSamples());
     }
 }
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                                       const juce::AudioBuffer<float>& dryBuffer,
-                                      FireAudioProcessor& processor,
-                                      int bandIndex)
+                                      const BandProcessingParameters& params)
 {
-    auto& treeState = processor.treeState;
-
-    // --- Get parameters that are constant for the block ---
-    const bool isSafeModeOn    = *treeState.getRawParameterValue(ParameterID::safeIds[bandIndex]) > 0.5f;
-    const bool isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[bandIndex]) > 0.5f;
-    float driveVal             = *treeState.getRawParameterValue(ParameterID::driveIds[bandIndex]);
-    const float biasVal        = *treeState.getRawParameterValue(ParameterID::biasIds[bandIndex]);
-    const float recVal         = *treeState.getRawParameterValue(ParameterID::recIds[bandIndex]);
+    const bool isSafeModeOn    = params.isSafeModeOn;
+    const bool isExtremeModeOn = params.isExtremeModeOn;
+    float driveVal             = params.driveVal;
+    const float biasVal        = params.biasVal;
+    const float recVal         = params.recVal;
     // We calculate the max value from the 'dryBuffer' which represents the
     // clean, per-band signal right before it enters the distortion loop.
     // This ensures each band's Safe Mode reacts only to its own signal level.
@@ -416,7 +402,13 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     {
         if (auto* band = bands[i].get())
         {
-            band->prepare(spec, treeState, i);
+            // Call the newly simplified prepare method
+            band->prepare(spec);
+
+            // ** THIS IS THE CRUCIAL ADDITION **
+            // Initialize smoothed values here, from the treeState
+            band->drive.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
+            band->rec.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
         }
     }
     
@@ -731,12 +723,34 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             // First, set the input meter values for this band.
             setLeftRightMeterRMSValues(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
 
-            // Check if the current band is enabled before processing.
             if (*treeState.getRawParameterValue(ParameterID::bandEnableIds[i]))
             {
-                // Directly call the process method on the BandProcessor instance.
-                // It handles all its own logic internally.
-                band->process(*wetBandBuffers[i], *this, i);
+                // ** THIS IS THE CENTRAL CHANGE **
+                // 1. Assemble the parameter struct before calling process.
+                BandProcessingParameters params;
+                
+                // Populate the struct from treeState
+                params.mode = *treeState.getRawParameterValue(ParameterID::modeIds[i]);
+                params.isHQ = *treeState.getRawParameterValue(HQ_ID);
+                params.outputVal = *treeState.getRawParameterValue(ParameterID::outputIds[i]);
+                params.mixVal = *treeState.getRawParameterValue(ParameterID::mixIds[i]);
+                params.compThreshold = *treeState.getRawParameterValue(ParameterID::compThreshIds[i]);
+                params.compRatio = *treeState.getRawParameterValue(ParameterID::compRatioIds[i]);
+                params.isCompBypassed = *treeState.getRawParameterValue(ParameterID::compBypassIds[i]) > 0.5f;
+                params.width = *treeState.getRawParameterValue(ParameterID::widthIds[i]);
+                params.isWidthBypassed = *treeState.getRawParameterValue(ParameterID::widthBypassIds[i]) > 0.5f;
+                params.isSafeModeOn = *treeState.getRawParameterValue(ParameterID::safeIds[i]) > 0.5f;
+                params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[i]) > 0.5f;
+                params.biasVal = *treeState.getRawParameterValue(ParameterID::biasIds[i]);
+                // Note: We still update the smoothed values' targets in each block
+                band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
+                band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+
+                params.driveVal = band->drive.getNextValue();
+                params.recVal = band->rec.getNextValue();
+
+                // 2. Call the refactored, decoupled process method
+                band->process(*wetBandBuffers[i], params);
             }
 
             // After processing, set the output meter values for this band.
@@ -1394,7 +1408,6 @@ void FireAudioProcessor::updateParameters()
         {
             band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
             band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
-            band->bias.setTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
         }
     }
     

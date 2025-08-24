@@ -153,7 +153,7 @@ struct BandProcessor
     
 private:
     // A private helper to contain the duplicated sample loop.
-    void processSampleLoop(juce::dsp::AudioBlock<float>& blockToProcess,
+    void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                            const juce::AudioBuffer<float>& dryBuffer,
                            FireAudioProcessor& processor,
                            int bandIndex);

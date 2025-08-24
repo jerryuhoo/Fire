@@ -104,14 +104,14 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
         auto oversampledBlock = oversampling->processSamplesUp(block);
         
         // Call the loop to process the upsampled signal in-place
-        processSampleLoop(oversampledBlock, dryBuffer, processor, bandIndex);
+        processDistortion(oversampledBlock, dryBuffer, processor, bandIndex);
         
         oversampling->processSamplesDown(block);
     }
     else
     {
         // Call the loop to process the signal at the original sample rate
-        processSampleLoop(block, dryBuffer, processor, bandIndex);
+        processDistortion(block, dryBuffer, processor, bandIndex);
     }
     
     // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -168,74 +168,81 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, FireAudioProcessor
     }
 }
 
-void BandProcessor::processSampleLoop(juce::dsp::AudioBlock<float>& blockToProcess,
+void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                                       const juce::AudioBuffer<float>& dryBuffer,
                                       FireAudioProcessor& processor,
                                       int bandIndex)
 {
     auto& treeState = processor.treeState;
-    auto& waveShaper = this->overdrive.get<2>(); // Use the WaveShaper from the ProcessorChain
 
     // --- Get parameters that are constant for the block ---
     const bool isSafeModeOn    = *treeState.getRawParameterValue(ParameterID::safeIds[bandIndex]) > 0.5f;
     const bool isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[bandIndex]) > 0.5f;
-
+    float driveVal             = *treeState.getRawParameterValue(ParameterID::driveIds[bandIndex]);
+    const float biasVal        = *treeState.getRawParameterValue(ParameterID::biasIds[bandIndex]);
+    const float recVal         = *treeState.getRawParameterValue(ParameterID::recIds[bandIndex]);
     // We calculate the max value from the 'dryBuffer' which represents the
     // clean, per-band signal right before it enters the distortion loop.
     // This ensures each band's Safe Mode reacts only to its own signal level.
     this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
-
     // --- Start per-sample processing loop ---
-    for (int sample = 0; sample < blockToProcess.getNumSamples(); ++sample)
+    if (isExtremeModeOn)
     {
-        // Get smoothed parameter values for this specific sample
-        float driveVal  = this->drive.getNextValue();
-        float biasVal   = this->bias.getNextValue();
-        float recVal    = this->rec.getNextValue();
-
-        if (isExtremeModeOn)
-        {
-            driveVal = log2f(10.0f) * driveVal;
-        }
-        
-        // --- Safe Mode logic ---
-        const float driveForCalc = driveVal * 6.5f / 100.0f;
-        float powerDrive = std::pow(2.0f, driveForCalc);
-        
-        // mSampleMaxValue is now calculated once per block in the main process() function
-        if (isSafeModeOn && this->mSampleMaxValue * powerDrive > 2.0f)
-            this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
-        else
-            this->newDrive = powerDrive;
-        
-        // Update the reduction percent for the UI to read
-        if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
-        {
-            this->mReductionPercent = 1.0f;
-        }
-        else
-        {
-            this->mReductionPercent = std::log2(this->newDrive) / driveForCalc;
-        }
-            
-
-        // --- Process each channel individually ---
-        for (int channel = 0; channel < blockToProcess.getNumChannels(); ++channel)
-        {
-            auto* channelData = blockToProcess.getChannelPointer(channel);
-            float currentSample = channelData[sample];
-
-            // --- Manually process the overdrive chain ---
-            currentSample *= this->newDrive;
-            currentSample += biasVal;
-            currentSample = waveShaper.functionToUse(currentSample);
-            currentSample = waveshaping::rectificationProcess(currentSample, recVal); // Assuming you have this helper
-            currentSample -= biasVal;
-            
-            // Write the calculated pure wet signal back to the buffer
-            channelData[sample] = currentSample;
-        }
+        driveVal = log2f(10.0f) * driveVal;
     }
+
+    // --- Safe Mode logic (calculates the final drive gain) ---
+    const float driveForCalc = driveVal * 6.5f / 100.0f;
+    float powerDrive = std::pow(2.0f, driveForCalc);
+
+    if (isSafeModeOn && this->mSampleMaxValue * powerDrive > 2.0f)
+        this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
+    else
+        this->newDrive = powerDrive;
+    
+    // Update the reduction percent for the UI to read
+    if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
+        this->mReductionPercent = 1.0f;
+    else
+        this->mReductionPercent = std::log2(this->newDrive) / driveForCalc;
+
+    // --- Configure the ProcessorChain components ---
+
+    // 1. Input Gain (Drive)
+    auto& gainUp = this->overdrive.get<0>();
+    gainUp.setGainLinear(this->newDrive);
+    gainUp.setRampDurationSeconds(0.05f); // Set ramp time in prepareToPlay for better practice
+
+    // 2. Pre-Waveshaper Bias
+    auto& bias1 = this->overdrive.get<1>();
+    // Mute bias if the input signal is silent to prevent DC offset noise
+    float finalBias = (this->mSampleMaxValue < 0.000001f) ? 0.0f : biasVal;
+    bias1.setBias(finalBias);
+    bias1.setRampDurationSeconds(0.05f);
+
+    // 3. Main Waveshaper (functionToUse should be already set)
+    auto& waveShaper = this->overdrive.get<2>(); // No per-block setup needed if function is set elsewhere
+
+    // 4. Rectification (asymmetrical processing)
+    auto& rectifier = this->overdrive.get<3>();
+    rectifier.functionToUse = [recVal](float input)
+    {
+        // This lambda implements the rectification logic
+        if (input < 0.0f)
+        {
+            return input * (0.5f - recVal) * 2.0f;
+        }
+        return input;
+    };
+
+    // 5. Post-Waveshaper Bias (to cancel out the initial DC offset)
+    auto& bias2 = this->overdrive.get<4>();
+    bias2.setBias(-finalBias);
+    bias2.setRampDurationSeconds(0.05f);
+
+    // --- Process the entire block using the configured chain ---
+    auto context = juce::dsp::ProcessContextReplacing<float>(blockToProcess);
+    this->overdrive.process(context);
 }
 
 //==============================================================================

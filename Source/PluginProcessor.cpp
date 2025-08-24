@@ -528,8 +528,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessorGlobal.prepare(spec);
 
     // dry wet
-    globalMixSmoother.reset(sampleRate, rampTimeSeconds);
-    globalMixSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(MIX_ID));
     dryWetMixerGlobal.prepare(spec);
     reset();
 }
@@ -778,12 +776,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     
     auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
     processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
-    
-    float mixValue;
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-    {
-        mixValue = globalMixSmoother.getNextValue();
-    }
+
+    float mixValue = *treeState.getRawParameterValue(MIX_ID);
     dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     if (*treeState.getRawParameterValue(HQ_ID))
     {
@@ -796,22 +790,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     dryWetMixerGlobal.setWetMixProportion(mixValue);
     dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
     dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
-    
-//    auto* wetBufferPtr = &buffer;
-//    auto* dryBufferPtr = &delayMatchedDryBuffer;
-//    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-//    {
-//        float mixValue = globalMixSmoother.getNextValue();
-//
-//        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-//        {
-//            const float wetSample = wetBufferPtr->getSample(channel, sample);
-//            const float drySample = dryBufferPtr->getSample(channel, sample);
-//            const float mixedSample = drySample + (wetSample - drySample) * mixValue;
-//
-//            wetBufferPtr->setSample(channel, sample, mixedSample);
-//        }
-//    }
 
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
@@ -1393,10 +1371,7 @@ void FireAudioProcessor::updateParameters()
     smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(FREQ_ID1));
     smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
     smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
-    
-    // Update global output and mix smoothers.
-    globalMixSmoother.setTargetValue(*treeState.getRawParameterValue(MIX_ID));
-    
+
     //==============================================================================
     // 2. Update Per-Band Smoothed Parameters
     //==============================================================================

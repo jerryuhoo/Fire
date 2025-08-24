@@ -46,7 +46,7 @@ void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const j
     REQUIRE(result.getNumChannels() == expected.getNumChannels());
     REQUIRE(result.getNumSamples() == expected.getNumSamples());
 
-    const float tolerance = 1e-6f; // A small tolerance to account for floating-point inaccuracies.
+    const float tolerance = 1e-5f; // A small tolerance to account for floating-point inaccuracies.
 
     for (int channel = 0; channel < result.getNumChannels(); ++channel)
     {

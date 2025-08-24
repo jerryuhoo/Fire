@@ -1,3 +1,11 @@
 {
-    "clang-format.fallbackStyle": "LLVM"
+    "clang-format.fallbackStyle": "LLVM",
+    "files.associations": {
+        "*.mm": "cpp",
+        "iostream": "cpp",
+        "array": "cpp",
+        "vector": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
+    }
 }

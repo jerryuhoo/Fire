@@ -6,6 +6,21 @@
 #include <iostream>
 #include <cmath>
 
+inline juce::File findProjectRoot()
+{
+    // 获取当前可执行文件的路径 (e.g., /path/to/Fire/build/Test)
+    auto executableFile = juce::File::getSpecialLocation(juce::File::currentApplicationFile);
+
+    // 假设 build 目录总是在项目根目录下
+    // 从 .../build/Test 向上两级就到了 .../Fire/
+    auto projectRoot = executableFile.getParentDirectory().getParentDirectory();
+    
+    // 可以加一个检查来确认我们找到了正确的目录
+    jassert(projectRoot.getChildFile("tests").isDirectory());
+
+    return projectRoot;
+}
+
 // Helper function to generate a sine wave buffer for testing purposes.
 inline juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
 {
@@ -66,7 +81,8 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     const int standardBlockSize = 512;
     
     // Load the input audio file once, as it's the same for all tests.
-    juce::File inputFile { "/Users/yyf/Documents/GitHub/Fire/tests/TestAudioFiles/drum.wav" };
+    auto projectRoot = findProjectRoot();
+    juce::File inputFile { projectRoot.getChildFile("tests/TestAudioFiles/drum.wav") };
     REQUIRE(inputFile.existsAsFile());
     std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
     REQUIRE(reader != nullptr);
@@ -76,7 +92,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     reader->read(&originalInputBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
 
     // Load the preset files
-    juce::File presetsDir { "/Users/yyf/Library/Audio/Presets/Wings/Fire/User" };
+    juce::File presetsDir { projectRoot.getChildFile("tests/Presets") };
     REQUIRE(presetsDir.isDirectory());
     const juce::String filePattern = "*.fire";
 
@@ -169,7 +185,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             if (keepRegressionOutputFiles)
             {
                 // If debugging, write to a persistent regression output directory.
-                juce::File regressionOutputDir { "/Users/yyf/Documents/GitHub/Fire/tests/RegressionOutput/" };
+                juce::File regressionOutputDir { projectRoot.getChildFile("tests/RegressionOutput") };
                 if (!regressionOutputDir.isDirectory())
                     REQUIRE(regressionOutputDir.createDirectory().wasOk());
                 fileForComparison = regressionOutputDir.getChildFile(presetName + "_drums_output.wav");
@@ -205,7 +221,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
             }
 
             // 3. Load the corresponding golden master file.
-            juce::File goldenFile { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" + presetName + "_drums_output.wav" };
+            juce::File goldenFile = projectRoot.getChildFile("tests/GoldenMasters/" + presetName + "_drums_output.wav");
             REQUIRE(goldenFile.existsAsFile());
             std::unique_ptr<juce::AudioFormatReader> goldenReader(formatManager.createReaderFor(goldenFile));
             REQUIRE(goldenReader != nullptr);
@@ -239,7 +255,8 @@ TEST_CASE("Regression Test (Sine Wave)")
     auto originalBuffer = createSineWaveBuffer(sampleRate, numChannels, blockSize, frequency);
 
     // --- 2. Iterate Through Preset Files ---
-    juce::File presetsDir { "/Users/yyf/Library/Audio/Presets/Wings/Fire/User" };
+    auto projectRoot = findProjectRoot();
+    juce::File presetsDir { projectRoot.getChildFile("tests/Presets") };
     REQUIRE(presetsDir.isDirectory());
     const juce::String filePattern = "*.fire";
     bool atLeastOnePresetTested = false;
@@ -275,7 +292,7 @@ TEST_CASE("Regression Test (Sine Wave)")
             juce::File fileForComparison;
             if (keepRegressionOutputFiles)
             {
-                juce::File regressionOutputDir { "/Users/yyf/Documents/GitHub/Fire/tests/RegressionOutput/" };
+                juce::File regressionOutputDir { projectRoot.getChildFile("tests/RegressionOutput") };
                 if (!regressionOutputDir.isDirectory())
                     REQUIRE(regressionOutputDir.createDirectory().wasOk());
                 fileForComparison = regressionOutputDir.getChildFile(presetName + "_sine_output.wav");
@@ -311,7 +328,7 @@ TEST_CASE("Regression Test (Sine Wave)")
             }
 
             // 3. Load the golden master file
-            juce::File goldenFile { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" + presetName + "_sine_output.wav" };
+            juce::File goldenFile = projectRoot.getChildFile("tests/GoldenMasters/" + presetName + "_sine_output.wav");
             REQUIRE(goldenFile.existsAsFile());
             std::unique_ptr<juce::AudioFormatReader> goldenReader(formatManager.createReaderFor(goldenFile));
             REQUIRE(goldenReader != nullptr);

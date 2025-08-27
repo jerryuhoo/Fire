@@ -206,10 +206,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     bias1.setBias(finalBias);
     bias1.setRampDurationSeconds(0.05f);
 
-    // 3. Main Waveshaper (functionToUse should be already set)
-    auto& waveShaper = this->overdrive.get<2>(); // No per-block setup needed if function is set elsewhere
-
-    // 4. Rectification (asymmetrical processing)
+    // 3. Rectification (asymmetrical processing)
     auto& rectifier = this->overdrive.get<3>();
     rectifier.functionToUse = [recVal](float input)
     {
@@ -221,7 +218,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         return input;
     };
 
-    // 5. Post-Waveshaper Bias (to cancel out the initial DC offset)
+    // 4. Post-Waveshaper Bias (to cancel out the initial DC offset)
     auto& bias2 = this->overdrive.get<4>();
     bias2.setBias(-finalBias);
     bias2.setRampDurationSeconds(0.05f);
@@ -274,6 +271,13 @@ FireAudioProcessor::FireAudioProcessor()
 
 #endif
 {
+    // This copy is for the UI (LfoPanel) to use, and it is initialized
+    // AFTER the parameters have been safely created.
+    lfoRateSyncDivisions = {
+        "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", 
+        "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
+    };
+
     // factor = 2 means 2^2 = 4, 4x oversampling
     for (size_t i = 0; i < 4; i++)
     {
@@ -621,21 +625,49 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
+
+    // =============================================================================
+    // LFO MODULATION LOGIC
+    // =============================================================================
+
+    // 1. Get current LFO values for this block.
+    // For simplicity, we get one value per block. For per-sample modulation,
+    // this logic would need to be inside the sample loop.
+    std::array<float, 4> lfoValues;
+    for (int i = 0; i < 4; ++i)
+    {
+        lfoValues[i] = lfoEngines[i].getNextSample();
+    }
+
+    // 2. Apply modulation to parameters
+    for (const auto& routing : modulationRoutings)
+    {
+        // Find the parameter to modulate in the treeState
+        if (auto* parameter = treeState.getParameter(routing.targetParameterID))
+        {
+            // Get the parameter's current value (normalized, 0-1) and its range
+            const float currentValue = parameter->getValue();
+            const auto range = parameter->getNormalisableRange();
+
+            // Get the LFO value, which is typically in the range [-1, 1] or [0, 1]
+            // Our LfoEngine produces values roughly in the [-1, 1] range, let's normalize to [0, 1] for now.
+            const float lfoValue = (lfoValues[routing.sourceLfoIndex] + 1.0f) * 0.5f;
+
+            // Calculate the modulation amount. Depth is bipolar (-1 to 1).
+            const float modulationAmount = (lfoValue - 0.5f) * 2.0f * routing.depth;
+
+            // Apply the modulation. We need to be careful not to go out of the parameter's range.
+            float modulatedValue = currentValue + modulationAmount;
+            modulatedValue = juce::jlimit(0.0f, 1.0f, modulatedValue);
+
+            // Set the new value. This will notify listeners (like our UI) to update.
+            parameter->setValueNotifyingHost(modulatedValue);
+        }
+    }
     
     updateParameters();
 
     setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
-//    mDryBuffer.makeCopyOf(buffer); // Keep a copy for the final global dry/wet mix.
-    
-    // At the start of the block, get the LFO values. For now, let's just get one value
-    // for the whole block for simplicity. A more advanced implementation would
-    // process this per-sample.
-    float lfo1Value = lfoEngines[0].getNextSample(); // This gets the CURRENT LFO value
-    // float lfo2Value = lfoEngines[1].getNextSample();
-    // etc.
-    
-    // (This is a placeholder for the modulation system we will build next)
-    // DBG("LFO 1 Value: " + juce::String(lfo1Value));
 
     // 1. GET PARAMETERS & SMOOTH FREQUENCIES
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
@@ -1194,6 +1226,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     using PBool = juce::AudioParameterBool;
     using PInt = juce::AudioParameterInt;
     using PFloat = juce::AudioParameterFloat;
+    using PChoice = juce::AudioParameterChoice;
 
     // --- Global Parameters ---
     parameters.push_back(std::make_unique<PBool>(ParameterID::hq, HQ_NAME, false));
@@ -1259,6 +1292,36 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<PBool>(ParameterID::low, LOW_NAME, false));
     parameters.push_back(std::make_unique<PBool>(ParameterID::band, BAND_NAME, false));
     parameters.push_back(std::make_unique<PBool>(ParameterID::high, HIGH_NAME, true));
+
+    juce::StringArray lfoRateSyncDivisions = {
+        "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", 
+        "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
+    };
+
+    // --- Per-LFO Parameters (created in a loop using the new structure) ---
+    for (int i = 0; i < 4; ++i)
+    {
+        parameters.push_back(std::make_unique<PBool>(
+            ParameterID::lfoSyncMode(i),
+            ParameterID::lfoSyncModeNames[i],
+            true
+        ));
+
+        parameters.push_back(std::make_unique<PChoice>(
+            ParameterID::lfoRateSync(i),
+            ParameterID::lfoRateSyncNames[i],
+            lfoRateSyncDivisions,
+            5 // Default index for "1/4"
+        ));
+
+        parameters.push_back(std::make_unique<PFloat>(
+            ParameterID::lfoRateHz(i),
+            ParameterID::lfoRateHzNames[i],
+            juce::NormalisableRange<float>(0.01f, 100.0f, 0.01f, 0.3f),
+            1.0f,
+            "Hz"
+        ));
+    }
 
     return { parameters.begin(), parameters.end() };
 }

@@ -91,7 +91,8 @@ private:
 class LfoPanel  : public juce::Component,
                   public juce::Button::Listener,
                   public juce::Slider::Listener,
-                  public juce::Timer
+                  public juce::Timer,
+                  public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     LfoPanel(FireAudioProcessor& p);
@@ -134,6 +135,17 @@ private:
     juce::Label  gridYLabel;
     
     FlatLnf flatLnf;
+
+    // ADD/REPLACE these attachment members
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncButtonAttachment;
+    bool isUpdatingRateSlider = false;
+    
+    // ADD this helper function declaration
+    void updateRateSlider();
+
+    // ADD THIS override for the parameter listener
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LfoPanel)
 };

@@ -107,6 +107,20 @@ namespace ParameterID
     // --- Other Global Parameters ---
     const juce::ParameterID downsample = { DOWNSAMPLE_ID, versionNum };
     const juce::ParameterID downsampleBypass = { DOWNSAMPLE_BYPASS_ID, versionNum };
+
+    // --- Arrays of Macros for Per-LFO Parameters ---
+    const char* const lfoSyncModeIds[] = { LFO_SYNC_MODE_ID1, LFO_SYNC_MODE_ID2, LFO_SYNC_MODE_ID3, LFO_SYNC_MODE_ID4 };
+    const char* const lfoRateSyncIds[] = { LFO_RATE_SYNC_ID1, LFO_RATE_SYNC_ID2, LFO_RATE_SYNC_ID3, LFO_RATE_SYNC_ID4 };
+    const char* const lfoRateHzIds[]   = { LFO_RATE_HZ_ID1,   LFO_RATE_HZ_ID2,   LFO_RATE_HZ_ID3,   LFO_RATE_HZ_ID4 };
+
+    const char* const lfoSyncModeNames[] = { LFO_SYNC_MODE_NAME1, LFO_SYNC_MODE_NAME2, LFO_SYNC_MODE_NAME3, LFO_SYNC_MODE_NAME4 };
+    const char* const lfoRateSyncNames[] = { LFO_RATE_SYNC_NAME1, LFO_RATE_SYNC_NAME2, LFO_RATE_SYNC_NAME3, LFO_RATE_SYNC_NAME4 };
+    const char* const lfoRateHzNames[]   = { LFO_RATE_HZ_NAME1,   LFO_RATE_HZ_NAME2,   LFO_RATE_HZ_NAME3,   LFO_RATE_HZ_NAME4 };
+
+    // --- Helper functions that return a complete juce::ParameterID object for LFOs ---
+    inline juce::ParameterID lfoSyncMode (int i) { return { lfoSyncModeIds[i], versionNum }; }
+    inline juce::ParameterID lfoRateSync (int i) { return { lfoRateSyncIds[i], versionNum }; }
+    inline juce::ParameterID lfoRateHz (int i)   { return { lfoRateHzIds[i],   versionNum }; }
 }
 
 //==============================================================================
@@ -250,6 +264,11 @@ public:
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(juce::AudioBuffer<float> buffer);
     
+    // LFO
+    // A publicly accessible list of BPM sync divisions
+    // This allows the GUI to know what text to display for the sync rates.
+    juce::StringArray lfoRateSyncDivisions;
+
     // The central list of all modulation connections in the plugin.
     juce::Array<ModulationRouting> modulationRoutings;
 

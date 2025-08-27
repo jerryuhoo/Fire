@@ -139,7 +139,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowRightButton.setLookAndFeel(&otherLookAndFeel);
     windowRightButton.addListener(this);
         
-    // (*** NEW ***) Setup for the new LFO button
+    // Setup for the new LFO button
     addAndMakeVisible(windowLfoButton);
     windowLfoButton.setClickingTogglesState(true);
     windowLfoButton.setRadioGroupId(windowButtons);
@@ -163,7 +163,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
     graphPanel.setVisible(isBandView || isGlobalView);
-        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
+    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 

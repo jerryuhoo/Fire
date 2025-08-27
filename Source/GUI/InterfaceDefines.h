@@ -266,6 +266,35 @@
 #define NUM_BANDS_ID            "numBands"
 #define NUM_BANDS_NAME          "NumBands"
 
+// LFO PARAMETERS
+#define LFO_SYNC_MODE_ID1       "lfoSyncMode1"
+#define LFO_SYNC_MODE_NAME1     "LfoSyncMode1"
+#define LFO_RATE_SYNC_ID1       "lfoRateSync1"
+#define LFO_RATE_SYNC_NAME1     "LfoRateSync1"
+#define LFO_RATE_HZ_ID1         "lfoRateHz1"
+#define LFO_RATE_HZ_NAME1       "LfoRateHz1"
+
+#define LFO_SYNC_MODE_ID2       "lfoSyncMode2"
+#define LFO_SYNC_MODE_NAME2     "LfoSyncMode2"
+#define LFO_RATE_SYNC_ID2       "lfoRateSync2"
+#define LFO_RATE_SYNC_NAME2     "LfoRateSync2"
+#define LFO_RATE_HZ_ID2         "lfoRateHz2"
+#define LFO_RATE_HZ_NAME2       "LfoRateHz2"
+
+#define LFO_SYNC_MODE_ID3       "lfoSyncMode3"
+#define LFO_SYNC_MODE_NAME3     "LfoSyncMode3"
+#define LFO_RATE_SYNC_ID3       "lfoRateSync3"
+#define LFO_RATE_SYNC_NAME3     "LfoRateSync3"
+#define LFO_RATE_HZ_ID3         "lfoRateHz3"
+#define LFO_RATE_HZ_NAME3       "LfoRateHz3"
+
+#define LFO_SYNC_MODE_ID4       "lfoSyncMode4"
+#define LFO_SYNC_MODE_NAME4     "LfoSyncMode4"
+#define LFO_RATE_SYNC_ID4       "lfoRateSync4"
+#define LFO_RATE_SYNC_NAME4     "LfoRateSync4"
+#define LFO_RATE_HZ_ID4         "lfoRateHz4"
+#define LFO_RATE_HZ_NAME4       "LfoRateHz4"
+
 // Define Font
 #define KNOB_FONT           "Futura"
 #define KNOB_FONT_SIZE      18.0f

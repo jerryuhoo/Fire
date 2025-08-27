@@ -352,7 +352,6 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
-    rateSlider.setRange(0.1, 20.0, 0.01);
     
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
@@ -385,6 +384,23 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     addAndMakeVisible(gridYLabel);
     gridYLabel.setText("Grid Y", juce::dontSendNotification);
 
+    // ADD THIS: Register as a parameter listener for each of the LFO sync mode parameters.
+    for (int i = 0; i < 4; ++i)
+    {
+        // Use the ParameterID helper function to get the correct ID.
+        // The loop now correctly runs from 0 to 3 to match the array indices.
+        processor.treeState.addParameterListener(ParameterID::lfoSyncMode(i).getParamID(), this);
+    }
+    
+    // --- ADD Attachments ---
+    // Attach the sync button to the first LFO's sync mode parameter
+    syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.treeState, LFO_SYNC_MODE_ID1, syncButton
+    );
+    
+    // Set up the rate slider based on the initial state
+    updateRateSlider();
+
     startTimerHz(60);
 }
 
@@ -397,6 +413,12 @@ LfoPanel::~LfoPanel()
     matrixButton.setLookAndFeel(nullptr);
     for (auto& button : lfoSelectButtons)
         button->setLookAndFeel(nullptr);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        // Use the same helper function to ensure we remove the correct listener.
+        processor.treeState.removeParameterListener(ParameterID::lfoSyncMode(i).getParamID(), this);
+    }
 }
 
 void LfoPanel::paint(juce::Graphics& g)
@@ -532,41 +554,117 @@ void LfoPanel::buttonClicked(juce::Button* button)
         // Handle BPM sync logic here
     }
     else
+    {
+        // --- NEW LOGIC ---
+        // Variable to hold the index of the button that was clicked.
+        int clickedIndex = -1;
+
+        // First, find which of our LFO buttons was the one that was clicked.
+        for (int i = 0; i < lfoSelectButtons.size(); ++i)
         {
-            // --- NEW LOGIC ---
-            // Variable to hold the index of the button that was clicked.
-            int clickedIndex = -1;
-
-            // First, find which of our LFO buttons was the one that was clicked.
-            for (int i = 0; i < lfoSelectButtons.size(); ++i)
+            if (button == lfoSelectButtons[i].get())
             {
-                if (button == lfoSelectButtons[i].get())
-                {
-                    clickedIndex = i;
-                    break;
-                }
-            }
-
-            // If one of the LFO select buttons was clicked...
-            if (clickedIndex != -1)
-            {
-                // ...update the current LFO index and tell the editor to display the new data.
-                currentLfoIndex = clickedIndex;
-                lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
-
-                // Explicitly set the toggle state for all buttons in the group.
-                // This is the most robust way to manage radio button states.
-                for (int i = 0; i < lfoSelectButtons.size(); ++i)
-                {
-                    // If the button's index matches the one we just clicked, set its state to true.
-                    // Otherwise, set it to false.
-                    // The 'dontSendNotification' flag is crucial to prevent this action from triggering
-                    // another call to buttonClicked, which would cause an infinite loop.
-                    lfoSelectButtons[i]->setToggleState(i == clickedIndex, juce::dontSendNotification);
-                }
+                clickedIndex = i;
+                break;
             }
         }
+
+        // If one of the LFO select buttons was clicked...
+        if (clickedIndex != -1)
+        {
+            // ...update the current LFO index and tell the editor to display the new data.
+            currentLfoIndex = clickedIndex;
+            lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
+
+            // Explicitly set the toggle state for all buttons in the group.
+            // This is the most robust way to manage radio button states.
+            for (int i = 0; i < lfoSelectButtons.size(); ++i)
+            {
+                // If the button's index matches the one we just clicked, set its state to true.
+                // Otherwise, set it to false.
+                // The 'dontSendNotification' flag is crucial to prevent this action from triggering
+                // another call to buttonClicked, which would cause an infinite loop.
+                lfoSelectButtons[i]->setToggleState(i == clickedIndex, juce::dontSendNotification);
+            }
+
+            // Re-attach the sync button to the newly selected LFO's sync parameter
+            auto syncModeID = ParameterID::lfoSyncMode(clickedIndex);
+            syncButtonAttachment.reset();
+            syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+                processor.treeState, syncModeID.getParamID(), syncButton
+            );
+
+            updateRateSlider();
+        }
     }
+}
+
+void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
+{
+    // --- Get Parameter IDs using the robust ParameterID namespace ---
+    // The currentLfoIndex is 0-based, which matches our arrays perfectly.
+    auto syncModeID = ParameterID::lfoSyncMode(currentLfoIndex);
+    auto rateSyncID = ParameterID::lfoRateSync(currentLfoIndex);
+    auto rateHzID   = ParameterID::lfoRateHz(currentLfoIndex);
+
+    // Find out if the current LFO is in sync mode from the parameter value.
+    // We use .getParamID() to get the string from the juce::ParameterID object.
+    auto* param = processor.treeState.getParameter(syncModeID.getParamID());
+    jassert(param != nullptr);
+    bool isInSyncMode = param->getValue();
+
+    // First, always destroy the old attachment before creating a new one.
+    rateSliderAttachment.reset();
+
+    if (isInSyncMode)
+    {
+        // --- BPM SYNC MODE (Discrete Choices) ---
+
+        // We only provide the text conversion lambda.
+        rateSlider.textFromValueFunction = [this](double value)
+        {
+            const int index = juce::roundToInt(value);
+            if (juce::isPositiveAndBelow(index, processor.lfoRateSyncDivisions.size()))
+                return processor.lfoRateSyncDivisions[index];
+            return juce::String();
+        };
+        
+        // Disable text entry for stability.
+        rateSlider.valueFromTextFunction = nullptr;
+
+        // Create the attachment using the correct ParameterID.
+        rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            processor.treeState, rateSyncID.getParamID(), rateSlider
+        );
+    }
+    else // --- HZ (FREE) MODE (Continuous) ---
+    {
+        // Revert to default behavior.
+        rateSlider.textFromValueFunction = nullptr;
+        rateSlider.valueFromTextFunction = nullptr;
+
+        // Create the attachment using the correct ParameterID.
+        rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+            processor.treeState, rateHzID.getParamID(), rateSlider
+        );
+    }
+}
+
+
+// ADD THIS NEW FUNCTION
+void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
+{
+    // Get the authoritative ParameterID for the currently active LFO's sync mode.
+    auto currentSyncModeID = ParameterID::lfoSyncMode(currentLfoIndex);
+
+    // Compare the incoming parameterID string with our authoritative one.
+    if (parameterID == currentSyncModeID.getParamID())
+    {
+        // If they match, it means the sync mode for the visible LFO has changed
+        // (likely via automation or a preset load), so we must update the UI.
+        updateRateSlider();
+    }
+}
 
 void LfoPanel::sliderValueChanged(juce::Slider* slider)
 {

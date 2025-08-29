@@ -11,6 +11,7 @@
 #pragma once
 
 #include "juce_dsp/juce_dsp.h"
+#include "LfoData.h"
 #include <vector>
 
 //==============================================================================
@@ -41,83 +42,75 @@ public:
     }
 
     // Call this from the message thread whenever the LFO shape changes in the UI.
-    void updateShape(const std::vector<juce::Point<float>>& points, const std::vector<float>& curvatures)
+    void updateShape(const LfoData& shapeData)
     {
+        const auto& points = shapeData.points;
+        const auto& curvatures = shapeData.curvatures;
+
         auto pointsCopy = points;
         auto curvaturesCopy = curvatures;
-        const auto numPoints = wavetable.getNumPoints();
+        const auto numPointsInTable = wavetable.getNumPoints();
 
-        // Add 'numPoints' to the lambda's capture list so it can be used inside.
-        wavetable.initialise([pointsCopy, curvaturesCopy, numPoints](size_t i) -> float
+        wavetable.initialise([pointsCopy, curvaturesCopy, numPointsInTable](size_t i) -> float
         {
-            const float phase = (float)i / (float)numPoints; // Now this is valid
+            const float phase = (float)i / (float)(numPointsInTable > 1 ? numPointsInTable - 1 : 1);
             
-            int pointIndex1 = -1, pointIndex2 = -1;
-            if (!pointsCopy.empty())
+            if (pointsCopy.size() < 2)
+                return 0.5f;
+
+            for (size_t p = 0; p < pointsCopy.size() - 1; ++p)
             {
-                for (int p = 0; p < (int)pointsCopy.size() - 1; ++p)
+                const auto& p1 = pointsCopy[p];
+                const auto& p2 = pointsCopy[p + 1];
+
+                if (phase >= p1.x && phase <= p2.x)
                 {
-                    if (phase >= pointsCopy[p].x && phase <= pointsCopy[p + 1].x)
-                    {
-                        pointIndex1 = p;
-                        pointIndex2 = p + 1;
-                        break;
-                    }
+                    if (p >= curvaturesCopy.size())
+                        return p1.y + (p2.y - p1.y) * ((phase - p1.x) / (p2.x - p1.x)); // Fallback
+
+                    const float curvature = curvaturesCopy[p];
+                    
+                    const float segmentWidth = p2.x - p1.x;
+                    const float tx = (segmentWidth > 0.0f) ? (phase - p1.x) / segmentWidth : 0.0f;
+                    
+                    const float absExp = std::pow(4.0f, std::abs(curvature));
+                    float ty;
+
+                    if (curvature >= 0.0f)
+                        ty = std::pow(tx, absExp);
+                    else
+                        ty = 1.0f - std::pow(juce::jmax(0.0f, 1.0f - tx), absExp);
+                    
+                    return p1.y + (p2.y - p1.y) * ty;
                 }
             }
-
-            if (pointIndex1 != -1 && pointIndex1 < curvaturesCopy.size())
-            {
-                const auto p1 = pointsCopy[pointIndex1];
-                const auto p2 = pointsCopy[pointIndex2];
-                const float curvature = curvaturesCopy[pointIndex1];
-                
-                const float segmentWidth = p2.x - p1.x;
-                const float tx = (segmentWidth > 0.0f) ? (phase - p1.x) / segmentWidth : 0.0f;
-                
-                const float absExp = std::pow(4.0f, std::abs(curvature));
-                float ty;
-
-                if (curvature >= 0.0f)
-                    ty = std::pow(tx, absExp);
-                else
-                    ty = 1.0f - std::pow(juce::jmax(0.0f, 1.0f - tx), absExp);
-                
-                return p1.y + (p2.y - p1.y) * ty;
-            }
-
-            return 0.0f; // Fallback value
-        },
-        numPoints);
+            return pointsCopy.back().y;
+        }, numPointsInTable);
     }
 
-    // Sets the LFO frequency in Hertz. Call this when the "Rate" parameter changes.
-    void setFrequency(float frequency)
+    float process()
     {
-        if (sampleRate > 0)
-            phaseDelta = frequency / (float)sampleRate;
-    }
-
-    // Call this for every single audio sample in your processBlock.
-    float getNextSample()
-    {
-        // The index for getUnchecked should be between 0 and getNumPoints().
-        // We calculate this from our normalized phase [0, 1].
-        const float tableIndex = phase * wavetable.getNumPoints();
-        const float output = wavetable.getUnchecked(tableIndex);
+        const float unipolarOutput = wavetable.getUnchecked(phase * (wavetable.getNumPoints() - 1));
         
-        // Advance the phase for the next sample.
+        const float phaseDelta = frequency / sampleRate;
         phase += phaseDelta;
+
         if (phase >= 1.0f)
             phase -= 1.0f;
             
-        return output;
+        return unipolarOutput * 2.0f - 1.0f;
+    }
+
+    // Sets the LFO frequency in Hertz. Call this when the "Rate" parameter changes.
+    void setFrequency(float newFrequency)
+    {
+        frequency = newFrequency;
     }
     
 private:
     double sampleRate = 44100.0;
     float phase = 0.0f;
-    float phaseDelta = 0.0f;
+    float frequency = 1.0f;
 
     juce::dsp::LookupTable<float> wavetable;
 };

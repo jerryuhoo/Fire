@@ -1,4 +1,5 @@
 #include "LfoPanel.h"
+#include "../../PluginProcessor.h"
 
 //==============================================================================
 // LfoEditor Implementation
@@ -311,11 +312,7 @@ void LfoEditor::updateAndSortPoints()
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
-    // First, create and initialize all data models.
-    lfoData.resize(4);
-
-    // Then, set the editor to point to the first LFO's data.
-    lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(&processor.lfoData[currentLfoIndex]);
     addAndMakeVisible(lfoEditor);
     
     // Create UI Components
@@ -574,7 +571,7 @@ void LfoPanel::buttonClicked(juce::Button* button)
         {
             // ...update the current LFO index and tell the editor to display the new data.
             currentLfoIndex = clickedIndex;
-            lfoEditor.setDataToDisplay(&lfoData[currentLfoIndex]);
+            lfoEditor.setDataToDisplay(&processor.lfoData[currentLfoIndex]);
 
             // Explicitly set the toggle state for all buttons in the group.
             // This is the most robust way to manage radio button states.

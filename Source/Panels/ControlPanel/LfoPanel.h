@@ -11,29 +11,12 @@
 #pragma once
 
 #include "juce_gui_basics/juce_gui_basics.h"
-#include "../../PluginProcessor.h"
+#include "juce_audio_processors/juce_audio_processors.h"
 #include "../../GUI/LookAndFeel.h"
 #include "ModulationMatrixPanel.h"
+#include "../../DSP/LfoData.h"
 
-//
-//  Represents the data model for a single LFO shape.
-//  This ensures that every LFO always starts with a valid default state.
-//
-struct LfoData
-{
-    std::vector<juce::Point<float>> points;
-    std::vector<float> curvatures;
-
-    // Default constructor to initialize a valid shape
-    LfoData()
-    {
-        points.push_back({ 0.0f, 0.5f });
-        points.push_back({ 1.0f, 0.5f });
-        curvatures.push_back(0.0f);
-    }
-};
-
-
+class FireAudioProcessor;
 //
 //  The LfoEditor is now a pure "View" component.
 //  It holds a pointer to the data it should display and modify.
@@ -115,7 +98,6 @@ private:
 
     // --- Data Model ---
     // The LfoPanel owns the data for all 4 LFOs.
-    std::vector<LfoData> lfoData;
     int currentLfoIndex = 0;
 
     // --- UI Components ---

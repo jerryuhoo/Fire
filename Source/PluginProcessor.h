@@ -19,6 +19,7 @@
 #include "Utility/AudioHelpers.h"
 #include "DSP/ClippingFunctions.h"
 #include "DSP/DiodeWDF.h"
+#include "DSP/LfoData.h"
 #include "DSP/LfoEngine.h"
 
 //==============================================================================
@@ -183,7 +184,7 @@ struct BandProcessor
     
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
-    void process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params);
+    void process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params, LfoEngine& lfoEngine);
 
 private:
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
@@ -268,6 +269,7 @@ public:
     // A publicly accessible list of BPM sync divisions
     // This allows the GUI to know what text to display for the sync rates.
     juce::StringArray lfoRateSyncDivisions;
+    std::vector<LfoData> lfoData;
 
     // The central list of all modulation connections in the plugin.
     juce::Array<ModulationRouting> modulationRoutings;

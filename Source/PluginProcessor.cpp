@@ -57,9 +57,11 @@ void BandProcessor::reset()
 // This is the new, self-contained processing function for a single band.
 // It replaces the old `processOneBand` and `processDistortion` functions.
 //==============================================================================
-void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params)
+void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params, LfoEngine& lfoEngine)
 {
     // Extract parameters for easier access
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples  = buffer.getNumSamples();
     const int   mode      = params.mode;
     const bool  isHQ      = params.isHQ;
     const float outputVal = params.outputVal;
@@ -277,6 +279,8 @@ FireAudioProcessor::FireAudioProcessor()
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", 
         "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
     };
+
+    lfoData.resize(4);
 
     // factor = 2 means 2^2 = 4, 4x oversampling
     for (size_t i = 0; i < 4; i++)
@@ -617,6 +621,34 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         sampleRate = 48000;
     }
 
+    for (int i = 0; i < 4; ++i)
+    {
+        // Get parameter values for the current LFO
+        auto syncModeID = ParameterID::lfoSyncMode(i);
+        auto rateHzID   = ParameterID::lfoRateHz(i);
+        
+        auto* syncParam = treeState.getRawParameterValue(syncModeID.getParamID());
+        auto* rateHzParam = treeState.getRawParameterValue(rateHzID.getParamID());
+
+        if (syncParam && rateHzParam)
+        {
+            const bool isInSyncMode = syncParam->load() > 0.5f;
+
+            if (!isInSyncMode) // We only implement free mode for now
+            {
+                lfoEngines[i].setFrequency(rateHzParam->load());
+            }
+            else
+            {
+                // Placeholder for BPM sync mode
+                lfoEngines[i].setFrequency(0.0f); // Turn it off in sync mode for now
+            }
+        }
+        
+        // Push the latest UI shape data to the corresponding LFO engine
+        lfoEngines[i].updateShape(lfoData[i]);
+    }
+
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
     // guaranteed to be empty - they may contain garbage).
@@ -625,45 +657,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, buffer.getNumSamples());
-
-    // =============================================================================
-    // LFO MODULATION LOGIC
-    // =============================================================================
-
-    // 1. Get current LFO values for this block.
-    // For simplicity, we get one value per block. For per-sample modulation,
-    // this logic would need to be inside the sample loop.
-    std::array<float, 4> lfoValues;
-    for (int i = 0; i < 4; ++i)
-    {
-        lfoValues[i] = lfoEngines[i].getNextSample();
-    }
-
-    // 2. Apply modulation to parameters
-    for (const auto& routing : modulationRoutings)
-    {
-        // Find the parameter to modulate in the treeState
-        if (auto* parameter = treeState.getParameter(routing.targetParameterID))
-        {
-            // Get the parameter's current value (normalized, 0-1) and its range
-            const float currentValue = parameter->getValue();
-            const auto range = parameter->getNormalisableRange();
-
-            // Get the LFO value, which is typically in the range [-1, 1] or [0, 1]
-            // Our LfoEngine produces values roughly in the [-1, 1] range, let's normalize to [0, 1] for now.
-            const float lfoValue = (lfoValues[routing.sourceLfoIndex] + 1.0f) * 0.5f;
-
-            // Calculate the modulation amount. Depth is bipolar (-1 to 1).
-            const float modulationAmount = (lfoValue - 0.5f) * 2.0f * routing.depth;
-
-            // Apply the modulation. We need to be careful not to go out of the parameter's range.
-            float modulatedValue = currentValue + modulationAmount;
-            modulatedValue = juce::jlimit(0.0f, 1.0f, modulatedValue);
-
-            // Set the new value. This will notify listeners (like our UI) to update.
-            parameter->setValueNotifyingHost(modulatedValue);
-        }
-    }
     
     updateParameters();
 
@@ -1714,7 +1707,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.recVal = band->rec.getNextValue();
 
                 // 2. Call the refactored, decoupled process method
-                band->process(*wetBandBuffers[i], params);
+                band->process(*wetBandBuffers[i], params, lfoEngines[i]);
             }
 
             // After processing, set the output meter values for this band.

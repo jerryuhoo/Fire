@@ -154,8 +154,6 @@ struct BandProcessingParameters
 struct BandProcessor
 {
     using GainProcessor = juce::dsp::Gain<float>;
-    using BiasProcessor = juce::dsp::Bias<float>;
-    using DriveProcessor = juce::dsp::WaveShaper<float>;
     // using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
 
@@ -163,15 +161,25 @@ struct BandProcessor
     CompressorProcessor compressor;
     WidthProcessor widthProcessor;
     // DCFilter dcFilter;
-    juce::dsp::ProcessorChain<GainProcessor, BiasProcessor, DriveProcessor, juce::dsp::WaveShaper<float, std::function<float(float)>>, BiasProcessor> overdrive;
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     
-    BandProcessor() : dryWetMixer(2048) {}
+    BandProcessor() : dryWetMixer(2048)
+    {
+        // Set a default waveshaper so it's never null
+        waveshaperFunction = [](float x) { return x; };
+        rectifierFunction  = [](float x) { return x; };
+    }
     
     // And its own set of smoothed parameter values.
-    juce::SmoothedValue<float> drive, rec;
+    juce::SmoothedValue<float> driveSmoother;
+    juce::SmoothedValue<float> biasSmoother;
+    juce::SmoothedValue<float> recSmoother;
+    bool isFirstBlock = true;
+
+    std::function<float(float)> waveshaperFunction;
+    std::function<float(float)> rectifierFunction;
 
     // Per-band meter values
     float mInputLeftSmoothed = 0, mInputRightSmoothed = 0;

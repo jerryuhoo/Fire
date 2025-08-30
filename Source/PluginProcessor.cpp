@@ -19,7 +19,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
-    overdrive.prepare(spec);
     gain.prepare(spec);
     dryWetMixer.prepare(spec);
 
@@ -36,15 +35,16 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     oversampling->initProcessing(spec.maximumBlockSize);
     
     // Reset all smoothed values with the current sample rate and a ramp time.
-    drive.reset(spec.sampleRate, 0.05);
-    rec.reset(spec.sampleRate, 0.05);
+    driveSmoother.reset(spec.sampleRate, 0.05);
+    biasSmoother.reset(spec.sampleRate, 0.05);
+    recSmoother.reset(spec.sampleRate, 0.05);
 }
 
 // This is what happens when we need to clear the internal state of a band's processors.
 void BandProcessor::reset()
 {
+    isFirstBlock = true;
     compressor.reset();
-    overdrive.reset();
     gain.reset();
     dryWetMixer.reset();
     // dcFilter.reset();
@@ -70,26 +70,8 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessi
     // Create a copy of the clean signal for the final dry/wet mix
     juce::AudioBuffer<float> dryBuffer;
     dryBuffer.makeCopyOf(buffer);
-
-    // Set the waveshaper function based on the current mode
-    auto& waveShaper = this->overdrive.get<2>();
-    switch (mode)
-    {
-        case 0:  waveShaper.functionToUse = waveshaping::arctanSoftClipping; break;
-        case 1:  waveShaper.functionToUse = waveshaping::expSoftClipping;    break;
-        case 2:  waveShaper.functionToUse = waveshaping::tanhSoftClipping;   break;
-        case 3:  waveShaper.functionToUse = waveshaping::cubicSoftClipping;  break;
-        case 4:  waveShaper.functionToUse = waveshaping::hardClipping;      break;
-        case 5:  waveShaper.functionToUse = waveshaping::sausageFattener;   break;
-        case 6:  waveShaper.functionToUse = waveshaping::sinFoldback;       break;
-        case 7:  waveShaper.functionToUse = waveshaping::linFoldback;       break;
-        case 8:  waveShaper.functionToUse = waveshaping::limitClip;         break;
-        case 9:  waveShaper.functionToUse = waveshaping::singleSinClip;     break;
-        case 10: waveShaper.functionToUse = waveshaping::logicClip;         break;
-        case 11: waveShaper.functionToUse = waveshaping::tanclip;           break;
-    }
     
-    // === 2. Core Processing (with correct Oversampling) ===
+    // Core Processing (with correct Oversampling)
     auto block = juce::dsp::AudioBlock<float>(buffer);
 
     if (isHQ)
@@ -110,7 +92,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessi
     // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
     // dcFilter.process(dcFilterContext);
 
-    // === 3. Final Gain and Dry/Wet Mix at block level ===
+    // Final Gain and Dry/Wet Mix at block level
     auto finalContext = juce::dsp::ProcessContextReplacing<float>(block);
     
     // Apply the final output gain to the wet signal
@@ -169,6 +151,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     float driveVal             = params.driveVal;
     const float biasVal        = params.biasVal;
     const float recVal         = params.recVal;
+    const int   mode           = params.mode;
     // We calculate the max value from the 'dryBuffer' which represents the
     // clean, per-band signal right before it enters the distortion loop.
     // This ensures each band's Safe Mode reacts only to its own signal level.
@@ -194,40 +177,82 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     else
         this->mReductionPercent = std::log2(this->newDrive) / driveForCalc;
 
-    // --- Configure the ProcessorChain components ---
-
-    // 1. Input Gain (Drive)
-    auto& gainUp = this->overdrive.get<0>();
-    gainUp.setGainLinear(this->newDrive);
-    gainUp.setRampDurationSeconds(0.05f); // Set ramp time in prepareToPlay for better practice
-
-    // 2. Pre-Waveshaper Bias
-    auto& bias1 = this->overdrive.get<1>();
-    // Mute bias if the input signal is silent to prevent DC offset noise
-    float finalBias = (this->mSampleMaxValue < 0.000001f) ? 0.0f : biasVal;
-    bias1.setBias(finalBias);
-    bias1.setRampDurationSeconds(0.05f);
-
-    // 3. Rectification (asymmetrical processing)
-    auto& rectifier = this->overdrive.get<3>();
-    rectifier.functionToUse = [recVal](float input)
+    // --- Initial value handling for smoothers ---
+    if (isFirstBlock)
     {
-        // This lambda implements the rectification logic
+        // If it's the first block, forcibly set the current and target values
+        driveSmoother.setCurrentAndTargetValue(this->newDrive);
+        
+        float finalBias = (this->mSampleMaxValue < 0.000001f) ? 0.0f : biasVal;
+        biasSmoother.setCurrentAndTargetValue(finalBias);
+        recSmoother.setCurrentAndTargetValue(recVal);
+
+        isFirstBlock = false; // Disable this for subsequent blocks
+    }
+    else
+    {
+        // For all other blocks, use setTargetValue for smooth transitions
+        driveSmoother.setTargetValue(this->newDrive);
+
+        float finalBias = (this->mSampleMaxValue < 0.000001f) ? 0.0f : biasVal;
+        biasSmoother.setTargetValue(finalBias);
+        recSmoother.setTargetValue(recVal);
+    }
+
+    // 1. Set the main waveshaper function based on the current mode
+    switch (mode)
+    {
+        case 0:  this->waveshaperFunction = waveshaping::arctanSoftClipping<float>; break;
+        case 1:  this->waveshaperFunction = waveshaping::expSoftClipping<float>;    break;
+        case 2:  this->waveshaperFunction = waveshaping::tanhSoftClipping<float>;   break;
+        case 3:  this->waveshaperFunction = waveshaping::cubicSoftClipping<float>;  break;
+        case 4:  this->waveshaperFunction = waveshaping::hardClipping<float>;      break;
+        case 5:  this->waveshaperFunction = waveshaping::sausageFattener<float>;   break;
+        case 6:  this->waveshaperFunction = waveshaping::sinFoldback<float>;       break;
+        case 7:  this->waveshaperFunction = waveshaping::linFoldback<float>;       break;
+        case 8:  this->waveshaperFunction = waveshaping::limitClip<float>;         break;
+        case 9:  this->waveshaperFunction = waveshaping::singleSinClip<float>;     break;
+        case 10: this->waveshaperFunction = waveshaping::logicClip<float>;         break;
+        case 11: this->waveshaperFunction = waveshaping::tanclip<float>;           break;
+    }
+    
+    // Rectification (asymmetrical processing)
+    const float smoothedRec = recSmoother.getNextValue();
+    this->rectifierFunction = [smoothedRec](float input)
+    {
         if (input < 0.0f)
         {
-            return input * (0.5f - recVal) * 2.0f;
+            return input * (0.5f - smoothedRec) * 2.0f;
         }
         return input;
     };
 
-    // 4. Post-Waveshaper Bias (to cancel out the initial DC offset)
-    auto& bias2 = this->overdrive.get<4>();
-    bias2.setBias(-finalBias);
-    bias2.setRampDurationSeconds(0.05f);
+    // --- 5. Manual Per-Sample Processing Loop ---
+    const int numSamples = (int) blockToProcess.getNumSamples();
+    const int numChannels = (int) blockToProcess.getNumChannels();
+    static int refactoredBlockCounter = 0;
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        // Calculate smoothed values ONCE per sample frame
+        const float smoothedDrive = driveSmoother.getNextValue();
+        const float smoothedBias = biasSmoother.getNextValue();
 
-    // --- Process the entire block using the configured chain ---
-    auto context = juce::dsp::ProcessContextReplacing<float>(blockToProcess);
-    this->overdrive.process(context);
+        // Apply these values to all channels
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            float currentSample = blockToProcess.getSample(channel, sample);
+            
+            // The processing chain, applied manually:
+            currentSample *= smoothedDrive;             // 1. Drive Gain
+            currentSample += smoothedBias;             // 2. Pre-Bias
+            currentSample = waveshaperFunction(currentSample); // 3. Waveshaper
+            currentSample = rectifierFunction(currentSample);  // 4. Rectifier
+            currentSample -= smoothedBias;             // 5. Post-Bias
+
+            blockToProcess.setSample(channel, sample, currentSample);
+        }
+    }
+    refactoredBlockCounter++;
 }
 
 //==============================================================================
@@ -415,8 +440,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
             // ** THIS IS THE CRUCIAL ADDITION **
             // Initialize smoothed values here, from the treeState
-            band->drive.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-            band->rec.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+            // TODO: need to use new drive logic instead of ParameterID::driveIds[i])
+            // band->newDriveSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
+            band->recSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+            band->biasSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
         }
     }
     
@@ -1348,8 +1375,9 @@ void FireAudioProcessor::updateParameters()
     {
         if (auto* band = bands[i].get())
         {
-            band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-            band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+//            band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
+            band->recSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+            band->biasSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
         }
     }
     
@@ -1700,11 +1728,11 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[i]) > 0.5f;
                 params.biasVal = *treeState.getRawParameterValue(ParameterID::biasIds[i]);
                 // Note: We still update the smoothed values' targets in each block
-                band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-                band->rec.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+//                band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
+                params.driveVal = *treeState.getRawParameterValue(ParameterID::driveIds[i]);
+                band->recSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
+                band->biasSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
 
-                params.driveVal = band->drive.getNextValue();
-                params.recVal = band->rec.getNextValue();
 
                 // 2. Call the refactored, decoupled process method
                 band->process(*wetBandBuffers[i], params, lfoEngines[i]);

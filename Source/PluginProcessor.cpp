@@ -654,11 +654,15 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     // Check if the DAW is playing, and if so, reset all LFOs
     bool isPlaying = false;
+    double currentBpm = 120.0;
+
     if (auto* playHead = getPlayHead())
     {
         if (auto position = playHead->getPosition())
         {
             isPlaying = position->getIsPlaying();
+            if (auto bpm = position->getBpm())
+                currentBpm = *bpm;
         }
     }
 
@@ -697,31 +701,51 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     for (int i = 0; i < 4; ++i)
     {
-        // Get parameter values for the current LFO
-        auto syncModeID = ParameterID::lfoSyncMode(i);
-        auto rateHzID   = ParameterID::lfoRateHz(i);
-        
-        auto* syncParam = treeState.getRawParameterValue(syncModeID.getParamID());
-        auto* rateHzParam = treeState.getRawParameterValue(rateHzID.getParamID());
+        // Get LFO parameters
+        auto* syncParam = treeState.getRawParameterValue(ParameterID::lfoSyncMode(i).getParamID());
+        const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
 
-        if (syncParam && rateHzParam)
+        float phaseDelta = 0.0f;
+
+        if (isInSyncMode && isPlaying)
         {
-            const bool isInSyncMode = syncParam->load() > 0.5f;
+            // --- BPM SYNC CALCULATION ---
+            auto* rateSyncParam = treeState.getRawParameterValue(ParameterID::lfoRateSync(i).getParamID());
+            if (rateSyncParam != nullptr)
+            {
+                const int rateIndex = static_cast<int>(rateSyncParam->load());
+                const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
 
-            if (!isInSyncMode) // We only implement free mode for now
-            {
-                lfoEngines[i].setFrequency(rateHzParam->load());
+                // How many quarter notes for one full LFO cycle?
+                // Note: Our multiplier is already relative to a full bar (4 beats),
+                // so we multiply by 4 to get it in terms of quarter notes.
+                const float beatsPerCycle = beatMultiplier * 4.0f;
+
+                if (beatsPerCycle > 0.0 && currentBpm > 0.0)
+                {
+                    // How many samples does one full LFO cycle take?
+                    // (Beats / (Beats/Minute)) * (Seconds/Minute) * (Samples/Second)
+                    const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float)sampleRate;
+                    
+                    if (samplesPerCycle > 0)
+                        phaseDelta = 1.0f / samplesPerCycle;
+                }
             }
-            else
+        }
+        else // --- FREE (HZ) MODE CALCULATION ---
+        {
+            auto* rateHzParam = treeState.getRawParameterValue(ParameterID::lfoRateHz(i).getParamID());
+            if (rateHzParam != nullptr)
             {
-                // Placeholder for BPM sync mode
-                lfoEngines[i].setFrequency(0.0f); // Turn it off in sync mode for now
+                const float freqInHz = rateHzParam->load();
+                if (sampleRate > 0)
+                    phaseDelta = freqInHz / (float)sampleRate;
             }
         }
         
-        // Push the latest UI shape data to the corresponding LFO engine
+        lfoEngines[i].setPhaseDelta(phaseDelta);
         lfoEngines[i].updateShape(lfoData[i]);
-
+        
         // Generate LFO output for the entire block
         auto* writer = lfoOutputBuffer.getWritePointer(i);
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)

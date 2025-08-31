@@ -330,6 +330,28 @@ public:
 
 private:
     //==============================================================================
+    static float mapRateSyncIndexToBeatMultiplier(int index)
+    {
+        switch (index)
+        {
+            case 0:  return 1.0f / 64.0f; // 1/64
+            case 1:  return 1.0f / 32.0f * 2.0f / 3.0f; // 1/32T
+            case 2:  return 1.0f / 32.0f; // 1/32
+            case 3:  return 1.0f / 16.0f * 2.0f / 3.0f; // 1/16T
+            case 4:  return 1.0f / 16.0f; // 1/16
+            case 5:  return 1.0f / 8.0f * 2.0f / 3.0f;  // 1/8T
+            case 6:  return 1.0f / 8.0f;  // 1/8
+            case 7:  return 1.0f / 4.0f * 2.0f / 3.0f;  // 1/4T
+            case 8:  return 1.0f / 4.0f;  // 1/4
+            case 9:  return 1.0f / 2.0f * 2.0f / 3.0f;  // 1/2T
+            case 10: return 1.0f / 2.0f;  // 1/2
+            case 11: return 1.0f;         // 1 Bar
+            case 12: return 2.0f;         // 2 Bars
+            case 13: return 4.0f;         // 4 Bars
+            default: return 1.0f / 4.0f;
+        }
+    }
+
     bool wasPlaying = false;
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<std::unique_ptr<BandProcessor>> bands;

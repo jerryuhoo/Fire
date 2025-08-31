@@ -47,11 +47,13 @@ public:
     }
 
     // Call this from the message thread whenever the LFO shape changes in the UI.
+    // This pre-calculates the LFO shape into a high-performance wavetable.
     void updateShape(const LfoData& shapeData)
     {
         const auto& points = shapeData.points;
         const auto& curvatures = shapeData.curvatures;
 
+        // Make copies to safely capture in the lambda for the audio thread.
         auto pointsCopy = points;
         auto curvaturesCopy = curvatures;
         const auto numPointsInTable = wavetable.getNumPoints();
@@ -61,7 +63,7 @@ public:
             const float phase = (float)i / (float)(numPointsInTable > 1 ? numPointsInTable - 1 : 1);
             
             if (pointsCopy.size() < 2)
-                return 0.5f;
+                return 0.5f; // Return middle value if shape is invalid
 
             for (size_t p = 0; p < pointsCopy.size() - 1; ++p)
             {
@@ -70,8 +72,9 @@ public:
 
                 if (phase >= p1.x && phase <= p2.x)
                 {
+                    // Fallback to linear interpolation if curvatures data is missing
                     if (p >= curvaturesCopy.size())
-                        return p1.y + (p2.y - p1.y) * ((phase - p1.x) / (p2.x - p1.x)); // Fallback
+                        return p1.y + (p2.y - p1.y) * ((phase - p1.x) / (p2.x - p1.x));
 
                     const float curvature = curvaturesCopy[p];
                     
@@ -93,29 +96,33 @@ public:
         }, numPointsInTable);
     }
 
+    // Call this on every sample in processBlock. Returns a bipolar [-1, 1] signal.
     float process()
     {
+        // Get the unipolar [0, 1] value from the pre-calculated wavetable
         const float unipolarOutput = wavetable.getUnchecked(phase * (wavetable.getNumPoints() - 1));
         
-        const float phaseDelta = frequency / sampleRate;
+        // Advance the phase using the externally calculated delta
         phase += phaseDelta;
 
         if (phase >= 1.0f)
             phase -= 1.0f;
             
+        // Convert the output to bipolar [-1, 1] for modulation
         return unipolarOutput * 2.0f - 1.0f;
     }
 
-    // Sets the LFO frequency in Hertz. Call this when the "Rate" parameter changes.
-    void setFrequency(float newFrequency)
+    // Call this from your processor before each block to set the LFO speed.
+    // The processor is responsible for calculating the correct delta for Hz or BPM sync.
+    void setPhaseDelta(float newPhaseDelta)
     {
-        frequency = newFrequency;
+        phaseDelta = newPhaseDelta;
     }
     
 private:
     double sampleRate = 44100.0;
     float phase = 0.0f;
-    float frequency = 1.0f;
+    float phaseDelta = 0.0f; 
 
     juce::dsp::LookupTable<float> wavetable;
 };

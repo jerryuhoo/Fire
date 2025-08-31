@@ -21,13 +21,13 @@ void LfoEditor::paint(juce::Graphics& g)
     g.fillAll(juce::Colours::black.brighter(0.1f));
     g.setColour(juce::Colours::darkgrey);
     g.drawRect(getLocalBounds(), 1.0f);
-    
+
     // Paint grid
     g.setColour(juce::Colours::white.withAlpha(0.2f));
     for (int i = 1; i < hGridDivs; ++i)
-        g.drawVerticalLine(juce::roundToInt(getWidth() * i / (float)hGridDivs), 0.0f, getHeight());
+        g.drawVerticalLine(juce::roundToInt(getWidth() * i / (float) hGridDivs), 0.0f, getHeight());
     for (int i = 1; i < vGridDivs; ++i)
-        g.drawHorizontalLine(juce::roundToInt(getHeight() * i / (float)vGridDivs), 0.0f, getWidth());
+        g.drawHorizontalLine(juce::roundToInt(getHeight() * i / (float) vGridDivs), 0.0f, getWidth());
 
     // Defensive check: ensure data is valid before drawing.
     if (activeLfoData == nullptr || activeLfoData->points.size() < 2)
@@ -40,12 +40,12 @@ void LfoEditor::paint(juce::Graphics& g)
     for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
     {
         auto p1_screen = fromNormalized(activeLfoData->points[i]);
-        auto p2_screen = fromNormalized(activeLfoData->points[i+1]);
-        
-        // Safety check to prevent array out of bounds.
-        bool isCurved = (i < activeLfoData->curvatures.size() && !juce::approximatelyEqual(activeLfoData->curvatures[i], 0.0f));
+        auto p2_screen = fromNormalized(activeLfoData->points[i + 1]);
 
-        if (juce::approximatelyEqual(p1_screen.x, p2_screen.x) || !isCurved)
+        // Safety check to prevent array out of bounds.
+        bool isCurved = (i < activeLfoData->curvatures.size() && ! juce::approximatelyEqual(activeLfoData->curvatures[i], 0.0f));
+
+        if (juce::approximatelyEqual(p1_screen.x, p2_screen.x) || ! isCurved)
         {
             lfoPath.lineTo(p2_screen);
         }
@@ -53,10 +53,10 @@ void LfoEditor::paint(juce::Graphics& g)
         {
             const int numSegments = 30;
             const float curvature = activeLfoData->curvatures[i];
-            
+
             for (int j = 1; j <= numSegments; ++j)
             {
-                float tx = (float)j / (float)numSegments;
+                float tx = (float) j / (float) numSegments;
                 const float absExp = std::pow(4.0f, std::abs(curvature));
                 float ty;
 
@@ -72,15 +72,15 @@ void LfoEditor::paint(juce::Graphics& g)
 
                 float currentX = p1_screen.x + (p2_screen.x - p1_screen.x) * tx;
                 float currentY = p1_screen.y + (p2_screen.y - p1_screen.y) * ty;
-                
+
                 if (std::isnan(currentX) || std::isnan(currentY))
                     continue;
-                
+
                 lfoPath.lineTo({ currentX, currentY });
             }
         }
     }
-    
+
     g.setColour(juce::Colours::orange);
     g.strokePath(lfoPath, juce::PathStrokeType(2.0f));
 
@@ -91,12 +91,12 @@ void LfoEditor::paint(juce::Graphics& g)
         auto localPoint = fromNormalized(point);
         g.fillEllipse(localPoint.x - pointRadius, localPoint.y - pointRadius, pointRadius * 2, pointRadius * 2);
     }
-    
+
     // Draw playhead
     if (playheadPos >= 0.0f)
     {
         g.setColour(juce::Colours::white.withAlpha(0.7f));
-        g.drawVerticalLine(juce::roundToInt(getWidth() * playheadPos), 0.0f, (float)getHeight());
+        g.drawVerticalLine(juce::roundToInt(getWidth() * playheadPos), 0.0f, (float) getHeight());
     }
 }
 
@@ -111,16 +111,17 @@ void LfoEditor::setGridDivisions(int horizontal, int vertical)
 
 void LfoEditor::setPlayheadPosition(float position)
 {
-   if (! juce::approximatelyEqual(playheadPos, position))
-   {
-       playheadPos = position;
-       repaint();
-   }
+    if (! juce::approximatelyEqual(playheadPos, position))
+    {
+        playheadPos = position;
+        repaint();
+    }
 }
 
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
-    if (activeLfoData == nullptr) return; // Safety check
+    if (activeLfoData == nullptr)
+        return; // Safety check
 
     if (event.mods.isLeftButtonDown())
     {
@@ -133,7 +134,7 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
                 return;
             }
         }
-        
+
         if (activeLfoData->points.size() < maxPoints)
         {
             addPoint(toNormalized(event.getPosition()));
@@ -145,7 +146,7 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     else if (event.mods.isRightButtonDown())
     {
         editingCurveIndex = -1;
-        for (int i = (int)activeLfoData->points.size() - 2; i >= 0; --i)
+        for (int i = (int) activeLfoData->points.size() - 2; i >= 0; --i)
         {
             auto p1 = fromNormalized(activeLfoData->points[i]);
             auto p2 = fromNormalized(activeLfoData->points[i + 1]);
@@ -162,29 +163,30 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 {
-    if (activeLfoData == nullptr) return; // Safety check
-    
+    if (activeLfoData == nullptr)
+        return; // Safety check
+
     if (event.mods.isLeftButtonDown() && draggingPointIndex != -1)
     {
         auto currentPos = event.getPosition();
         if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
-            float snappedX = std::round((float)currentPos.x * (float)hGridDivs / (float)getWidth()) * ((float)getWidth() / (float)hGridDivs);
-            float snappedY = std::round((float)currentPos.y * (float)vGridDivs / (float)getHeight()) * ((float)getHeight() / (float)vGridDivs);
+            float snappedX = std::round((float) currentPos.x * (float) hGridDivs / (float) getWidth()) * ((float) getWidth() / (float) hGridDivs);
+            float snappedY = std::round((float) currentPos.y * (float) vGridDivs / (float) getHeight()) * ((float) getHeight() / (float) vGridDivs);
             currentPos = { juce::roundToInt(snappedX), juce::roundToInt(snappedY) };
         }
-        
+
         float minX = 0.0f;
-        float maxX = (float)getWidth();
+        float maxX = (float) getWidth();
         if (draggingPointIndex > 0)
             minX = fromNormalized(activeLfoData->points[draggingPointIndex - 1]).x;
         if (draggingPointIndex < activeLfoData->points.size() - 1)
             maxX = fromNormalized(activeLfoData->points[draggingPointIndex + 1]).x;
-        
-        currentPos.setX(juce::jlimit(minX, maxX, (float)currentPos.x));
+
+        currentPos.setX(juce::jlimit(minX, maxX, (float) currentPos.x));
         auto constrainedPos = getLocalBounds().getConstrainedPoint(currentPos);
         activeLfoData->points[draggingPointIndex] = toNormalized(constrainedPos);
-        
+
         repaint();
     }
     else if (event.mods.isRightButtonDown() && editingCurveIndex != -1)
@@ -205,11 +207,12 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
 void LfoEditor::mouseUp(const juce::MouseEvent& event)
 {
-    if (activeLfoData == nullptr || activeLfoData->points.empty()) return;
+    if (activeLfoData == nullptr || activeLfoData->points.empty())
+        return;
 
     activeLfoData->points.front().x = 0.0f;
     activeLfoData->points.back().x = 1.0f;
-    
+
     draggingPointIndex = -1;
     editingCurveIndex = -1;
     repaint();
@@ -217,12 +220,13 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    if (activeLfoData == nullptr) return;
-    
+    if (activeLfoData == nullptr)
+        return;
+
     if (event.mods.isRightButtonDown())
     {
         int curveToReset = -1;
-        for (int i = (int)activeLfoData->points.size() - 2; i >= 0; --i)
+        for (int i = (int) activeLfoData->points.size() - 2; i >= 0; --i)
         {
             auto p1 = fromNormalized(activeLfoData->points[i]);
             auto p2 = fromNormalized(activeLfoData->points[i + 1]);
@@ -240,8 +244,9 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
         }
         return;
     }
-    
-    if (activeLfoData->points.size() <= 2) return;
+
+    if (activeLfoData->points.size() <= 2)
+        return;
     for (size_t i = activeLfoData->points.size() - 1; i > 0; --i)
     {
         if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
@@ -254,14 +259,15 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 
 void LfoEditor::addPoint(juce::Point<float> newPoint)
 {
-    if (activeLfoData == nullptr || activeLfoData->points.size() >= maxPoints) return;
-    
+    if (activeLfoData == nullptr || activeLfoData->points.size() >= maxPoints)
+        return;
+
     activeLfoData->points.push_back(newPoint);
     updateAndSortPoints();
-    
+
     auto it = std::find(activeLfoData->points.begin(), activeLfoData->points.end(), newPoint);
     int insertIndex = static_cast<int>(std::distance(activeLfoData->points.begin(), it));
-    
+
     if (insertIndex > 0)
     {
         activeLfoData->curvatures.insert(activeLfoData->curvatures.begin() + insertIndex - 1, 0.0f);
@@ -277,10 +283,11 @@ void LfoEditor::addPoint(juce::Point<float> newPoint)
 
 void LfoEditor::removePoint(int index)
 {
-    if (activeLfoData == nullptr || index <= 0 || index >= activeLfoData->points.size() - 1) return;
-    
+    if (activeLfoData == nullptr || index <= 0 || index >= activeLfoData->points.size() - 1)
+        return;
+
     activeLfoData->points.erase(activeLfoData->points.begin() + index);
-    
+
     activeLfoData->curvatures.erase(activeLfoData->curvatures.begin() + index - 1);
     if (index - 1 < activeLfoData->curvatures.size())
         activeLfoData->curvatures[index - 1] = 0.0f;
@@ -290,21 +297,21 @@ void LfoEditor::removePoint(int index)
 
 juce::Point<float> LfoEditor::toNormalized(juce::Point<int> localPoint)
 {
-    return { (float)localPoint.x / (float)getWidth(), 1.0f - ((float)localPoint.y / (float)getHeight()) };
+    return { (float) localPoint.x / (float) getWidth(), 1.0f - ((float) localPoint.y / (float) getHeight()) };
 }
 
 juce::Point<float> LfoEditor::fromNormalized(juce::Point<float> normalizedPoint)
 {
     // Ensure the calculation is done with floats and returns a float point
-    return { normalizedPoint.x * (float)getWidth(), (1.0f - normalizedPoint.y) * (float)getHeight() };
+    return { normalizedPoint.x * (float) getWidth(), (1.0f - normalizedPoint.y) * (float) getHeight() };
 }
 
 void LfoEditor::updateAndSortPoints()
 {
-    if (activeLfoData == nullptr) return;
-    std::sort(activeLfoData->points.begin(), activeLfoData->points.end(), [](const auto& a, const auto& b) {
-        return a.x < b.x;
-    });
+    if (activeLfoData == nullptr)
+        return;
+    std::sort(activeLfoData->points.begin(), activeLfoData->points.end(), [](const auto& a, const auto& b)
+              { return a.x < b.x; });
 }
 
 //==============================================================================
@@ -314,7 +321,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
     lfoEditor.setDataToDisplay(&processor.lfoData[currentLfoIndex]);
     addAndMakeVisible(lfoEditor);
-    
+
     // Create UI Components
     for (int i = 0; i < 4; ++i)
     {
@@ -322,7 +329,6 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
         lfoSelectButtons[i]->addListener(this);
-        lfoSelectButtons[i]->setLookAndFeel(&flatLnf);
         lfoSelectButtons[i]->setColour(juce::TextButton::buttonColourId, COLOUR7);
         lfoSelectButtons[i]->setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
         lfoSelectButtons[i]->setColour(juce::ComboBox::outlineColourId, COLOUR6);
@@ -334,8 +340,12 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     addAndMakeVisible(matrixButton);
     matrixButton.addListener(this);
-    matrixButton.setLookAndFeel(&flatLnf);
-    
+    matrixButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
+    matrixButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
+    matrixButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    matrixButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    matrixButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+
     addAndMakeVisible(syncButton);
     syncButton.setClickingTogglesState(true);
     syncButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
@@ -344,12 +354,11 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     syncButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     syncButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
     syncButton.setButtonText("BPM");
-    syncButton.setLookAndFeel(&flatLnf);
-    
+
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
-    
+
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
     rateLabel.setFont(juce::Font {
@@ -360,23 +369,32 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     rateLabel.attachToComponent(&rateSlider, false);
     rateLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
     rateLabel.setJustificationType(juce::Justification::centred);
-    
+
     addAndMakeVisible(gridXSlider);
     gridXSlider.setSliderStyle(juce::Slider::IncDecButtons);
     gridXSlider.setRange(2, 16, 1);
     gridXSlider.setValue(4);
     gridXSlider.addListener(this);
-    gridXSlider.setLookAndFeel(&flatLnf);
-    
+    gridXSlider.setColour(juce::Slider::backgroundColourId, COLOUR6);
+    gridXSlider.setColour(juce::Slider::thumbColourId, COLOUR1); // For the arrow
+    gridXSlider.setColour(juce::Slider::textBoxOutlineColourId, COLOUR6.withAlpha(0.5f)); // Border color
+    gridXSlider.setColour(juce::Slider::textBoxHighlightColourId, COLOUR1);
+    gridXSlider.setColour(juce::TextButton::textColourOnId, COLOUR1);
+
     addAndMakeVisible(gridXLabel);
     gridXLabel.setText("Grid X", juce::dontSendNotification);
-    
+
     addAndMakeVisible(gridYSlider);
     gridYSlider.setSliderStyle(juce::Slider::IncDecButtons);
     gridYSlider.setRange(2, 16, 1);
     gridYSlider.setValue(4);
     gridYSlider.addListener(this);
-    gridYSlider.setLookAndFeel(&flatLnf);
+    gridYSlider.setColour(juce::Slider::backgroundColourId, COLOUR6);
+    gridYSlider.setColour(juce::Slider::thumbColourId, COLOUR1); // For the arrow
+    // Add these two lines:
+    gridYSlider.setColour(juce::Slider::textBoxOutlineColourId, COLOUR6.withAlpha(0.5f)); // Border color
+    gridYSlider.setColour(juce::Slider::textBoxHighlightColourId, COLOUR1);
+    gridYSlider.setColour(juce::TextButton::textColourOnId, COLOUR1);
 
     addAndMakeVisible(gridYLabel);
     gridYLabel.setText("Grid Y", juce::dontSendNotification);
@@ -388,13 +406,12 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         // The loop now correctly runs from 0 to 3 to match the array indices.
         processor.treeState.addParameterListener(ParameterID::lfoSyncMode(i).getParamID(), this);
     }
-    
+
     // --- ADD Attachments ---
     // Attach the sync button to the first LFO's sync mode parameter
     syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        processor.treeState, LFO_SYNC_MODE_ID1, syncButton
-    );
-    
+        processor.treeState, LFO_SYNC_MODE_ID1, syncButton);
+
     // Set up the rate slider based on the initial state
     updateRateSlider();
 
@@ -404,12 +421,6 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 LfoPanel::~LfoPanel()
 {
     stopTimer();
-    syncButton.setLookAndFeel(nullptr);
-    gridXSlider.setLookAndFeel(nullptr);
-    gridYSlider.setLookAndFeel(nullptr);
-    matrixButton.setLookAndFeel(nullptr);
-    for (auto& button : lfoSelectButtons)
-        button->setLookAndFeel(nullptr);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -426,6 +437,11 @@ void LfoPanel::paint(juce::Graphics& g)
 
 void LfoPanel::resized()
 {
+    // First, get the scale factor from the parent editor
+    if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
+        if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&editor->getLookAndFeel()))
+            scale = lnf->scale;
+
     // Define layout constants based on an initial design size.
     constexpr int initialMargin = 10;
     constexpr int initialLeftColWidth = 60;
@@ -434,16 +450,22 @@ void LfoPanel::resized()
     constexpr int initialMatrixWidth = 150;
     constexpr int initialSyncWidth = 100;
     constexpr int initialGridLabelWidth = 50;
-    
+
     // Create a working area, scaled from the initial margin.
     juce::Rectangle<int> bounds = getLocalBounds();
     bounds.reduce(juce::roundToInt(initialMargin * scale), juce::roundToInt(initialMargin * scale));
-    
+
     // Calculate scaled dimensions for the main columns and rows.
     auto leftColumn = bounds.removeFromLeft(juce::roundToInt(initialLeftColWidth * scale));
     auto rightColumn = bounds.removeFromRight(juce::roundToInt(initialRightColWidth * scale));
+
+    // Add some spacing between columns and the central editor
+    bounds.removeFromLeft(juce::roundToInt(initialMargin * scale));
+    bounds.removeFromRight(juce::roundToInt(initialMargin * scale));
+
     auto topRow = bounds.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
-    
+    bounds.removeFromTop(juce::roundToInt(initialMargin * scale)); // Spacing below top row
+
     // Layout the top row with scaled dimensions.
     {
         auto matrixButtonArea = topRow.removeFromLeft(juce::roundToInt(initialMatrixWidth * scale));
@@ -455,25 +477,29 @@ void LfoPanel::resized()
         auto gridControlsArea = topRow;
         auto gridXArea = gridControlsArea.removeFromLeft(gridControlsArea.getWidth() / 2);
         auto gridYArea = gridControlsArea;
-        
+
+        // Add some spacing between the grid controls
+        gridXArea.removeFromRight(juce::roundToInt(5 * scale));
+        gridYArea.removeFromLeft(juce::roundToInt(5 * scale));
+
         gridXLabel.setBounds(gridXArea.removeFromLeft(juce::roundToInt(initialGridLabelWidth * scale)).reduced(juce::roundToInt(2 * scale)));
         gridXSlider.setBounds(gridXArea);
-        
+
         gridYLabel.setBounds(gridYArea.removeFromLeft(juce::roundToInt(initialGridLabelWidth * scale)).reduced(juce::roundToInt(2 * scale)));
         gridYSlider.setBounds(gridYArea);
     }
 
-    // Layout for the main columns using FlexBox (FlexBox handles scaling internally).
+    // Layout for the main columns using FlexBox for the buttons.
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
     for (const auto& button : lfoSelectButtons)
-        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(2));
+        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(2 * scale)));
     lfoSelectBox.performLayout(leftColumn);
-    
+
     // Center the rate slider in the right column with a scaled size.
-    const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.8f); // 80% of the smallest dimension
+    const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.9f); // 90%
     rateSlider.setBounds(rightColumn.withSizeKeepingCentre(sliderSize, sliderSize));
-    
+
     // The LFO editor takes the remaining central space.
     lfoEditor.setBounds(bounds);
 }
@@ -545,8 +571,7 @@ void LfoPanel::buttonClicked(juce::Button* button)
             auto syncModeID = ParameterID::lfoSyncMode(clickedIndex);
             syncButtonAttachment.reset();
             syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-                processor.treeState, syncModeID.getParamID(), syncButton
-            );
+                processor.treeState, syncModeID.getParamID(), syncButton);
 
             updateRateSlider();
         }
@@ -559,7 +584,7 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
     // The currentLfoIndex is 0-based, which matches our arrays perfectly.
     auto syncModeID = ParameterID::lfoSyncMode(currentLfoIndex);
     auto rateSyncID = ParameterID::lfoRateSync(currentLfoIndex);
-    auto rateHzID   = ParameterID::lfoRateHz(currentLfoIndex);
+    auto rateHzID = ParameterID::lfoRateHz(currentLfoIndex);
 
     // Find out if the current LFO is in sync mode from the parameter value.
     // We use .getParamID() to get the string from the juce::ParameterID object.
@@ -582,14 +607,13 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
                 return processor.lfoRateSyncDivisions[index];
             return juce::String();
         };
-        
+
         // Disable text entry for stability.
         rateSlider.valueFromTextFunction = nullptr;
 
         // Create the attachment using the correct ParameterID.
         rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            processor.treeState, rateSyncID.getParamID(), rateSlider
-        );
+            processor.treeState, rateSyncID.getParamID(), rateSlider);
     }
     else // --- HZ (FREE) MODE (Continuous) ---
     {
@@ -599,11 +623,9 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
 
         // Create the attachment using the correct ParameterID.
         rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            processor.treeState, rateHzID.getParamID(), rateSlider
-        );
+            processor.treeState, rateHzID.getParamID(), rateSlider);
     }
 }
-
 
 // ADD THIS NEW FUNCTION
 void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
@@ -623,11 +645,11 @@ void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
 void LfoPanel::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == &gridXSlider || slider == &gridYSlider)
-        lfoEditor.setGridDivisions((int)gridXSlider.getValue(), (int)gridYSlider.getValue());
+        lfoEditor.setGridDivisions((int) gridXSlider.getValue(), (int) gridYSlider.getValue());
 }
 
 void LfoPanel::setScale(float newScale)
 {
     scale = newScale;
-//    flatLnf.scale = newScale; // Pass the scale to the LookAndFeel if it needs it.
+    //    flatLnf.scale = newScale; // Pass the scale to the LookAndFeel if it needs it.
 }

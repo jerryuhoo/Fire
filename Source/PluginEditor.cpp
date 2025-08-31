@@ -97,7 +97,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     stateComponent.getPreviousButton()->addListener(this);
     stateComponent.getNextButton()->addListener(this);
 
-    setLookAndFeel(&otherLookAndFeel);
+    setLookAndFeel(&fireLookAndFeel);
 
     // HQ(oversampling) Button
     addAndMakeVisible(hqButton);
@@ -122,7 +122,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowLeftButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
     windowLeftButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     windowLeftButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
-    windowLeftButton.setLookAndFeel(&otherLookAndFeel);
     windowLeftButton.addListener(this);
 
     // Window Right Button
@@ -136,9 +135,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowRightButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
     windowRightButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     windowRightButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
-    windowRightButton.setLookAndFeel(&otherLookAndFeel);
     windowRightButton.addListener(this);
-        
+
     // Setup for the new LFO button
     addAndMakeVisible(windowLfoButton);
     windowLfoButton.setClickingTogglesState(true);
@@ -150,7 +148,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowLfoButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
     windowLfoButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     windowLfoButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
-    windowLfoButton.setLookAndFeel(&otherLookAndFeel);
     windowLfoButton.addListener(this);
 
     const bool isBandView = windowLeftButton.getToggleState();
@@ -182,7 +179,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     zoomButton.setColour(juce::ComboBox::outlineColourId, COLOUR5.withAlpha(0.5f));
     zoomButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
     zoomButton.setColour(juce::TextButton::textColourOffId, COLOUR1.withAlpha(0.5f));
-    zoomButton.setLookAndFeel(&zoomLookAndFeel);
+    zoomButton.setComponentID("zoom");
 
     // use global lookandfeel
     getLookAndFeel().setColour(juce::ComboBox::textColourId, KNOB_SUBFONT_COLOUR);
@@ -250,16 +247,18 @@ void FireAudioProcessorEditor::initEditor()
 //==============================================================================
 void FireAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    int part1 = getHeight() / 10;
-    int part2 = part1 * 3;
+    float part1 = getHeight() / 10.0f;
+    float part2 = part1 * 3.0f;
 
     // background
     g.setColour(COLOUR7);
-    g.fillRect(0.0f, getHeight() * 3 / 10.0f, static_cast<float>(getWidth()), getHeight() * 7 / 10.0f);
+    g.fillRect(0.0f, getHeight() * 3.0f / 10.0f, static_cast<float>(getWidth()), getHeight() * 7.0f / 10.0f);
 
     // title
     g.setColour(COLOUR5);
-    g.fillRect(0, 0, getWidth(), part1);
+    const float scale = getWidth() / (float)INIT_WIDTH;
+    const auto topBarHeight = juce::roundToInt(50.0f * scale);
+    g.fillRect(0, 0, getWidth(), topBarHeight);
 
     // draw version
     g.setColour(COLOUR5);
@@ -274,11 +273,13 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
     // set logo "Fire"
     juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
-    g.drawImage(logo, 0, 0, part1, part1, 0, 0, logo.getWidth(), logo.getHeight());
+    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(),
+                          juce::RectanglePlacement::centred);
 
     // set logo "Wings"
     juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
-    g.drawImage(logoWings, getWidth() - part1, 0, part1, part1, 0, 0, logoWings.getWidth(), logoWings.getHeight());
+    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(),
+                          juce::RectanglePlacement::centred);
 
     auto frame = getLocalBounds();
     frame.setBounds(0, part1, getWidth(), part2);
@@ -302,7 +303,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
     {
         setDistortionGraph(MODE_ID4, DRIVE_ID4, REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4, focusIndex);
     }
-    
+
     // TODO: change it to mouse click
     setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
 
@@ -330,15 +331,29 @@ void FireAudioProcessorEditor::resized()
     processor.setSavedWidth(getWidth());
 
     // knobs
-    const float scale = juce::jmin(getHeight() / (float)INIT_HEIGHT, getWidth() / (float)INIT_WIDTH);
-    
+    const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
+    // set look and feel scale
+    fireLookAndFeel.scale = scale;
+
     juce::Rectangle<int> bounds(getLocalBounds());
 
-    // top bar
-    const auto topBarHeight = juce::roundToInt(50.0f * getHeight() / (float)INIT_HEIGHT);
+    // ===== Top Bar Layout =====
+    const auto topBarHeight = juce::roundToInt(50.0f * scale);
     auto topBar = bounds.removeFromTop(topBarHeight);
+
+    // 1. Reserve space for the right logo (which is painted manually)
+    wingsArea = topBar.removeFromRight(topBar.getHeight());
+
+    // 2. Reserve space for the left logo (which is painted manually)
+    logoArea = topBar.removeFromLeft(topBar.getHeight());
+
+    // 3. Place the HQ button immediately to the right of the logo's space
     hqButton.setBounds(topBar.removeFromLeft(topBar.getHeight()));
+
+    // 4. Reserve space for the right logo
     topBar.removeFromRight(topBar.getHeight());
+
+    // 5. The StateComponent takes all the remaining space in the middle
     stateComponent.setBounds(topBar);
 
     // spectrum and filter
@@ -372,17 +387,17 @@ void FireAudioProcessorEditor::resized()
         // 3. Left and right margin
         bounds.removeFromLeft(juce::roundToInt(getWidth() / 20.0f));
         bounds.removeFromRight(juce::roundToInt(getWidth() / 20.0f));
-        
+
         // 4. Main Control
         auto mainControlsAreaForBand = bounds;
         auto mainControlsArea = bounds;
         mainControlsArea.removeFromBottom(mainControlsArea.getHeight() / 6);
-        
+
         // Top Section
         auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
-        
+
         auto lfoArea = mainControlsArea;
-        
+
         // Menu
         auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
         distortionModeArea.reduce(0, topSection.getHeight() / 4); // 上下留出1/4的空白
@@ -396,27 +411,20 @@ void FireAudioProcessorEditor::resized()
         auto graphArea = mainControlsArea.removeFromLeft(graphPanelWidth);
         mainControlsAreaForBand.removeFromLeft(graphPanelWidth);
         graphPanel.setBounds(graphArea);
-        
+
         // Right Controls
         auto rightHandPanelsArea = mainControlsArea;
-        
+
         bandPanel.setBounds(mainControlsAreaForBand);
         globalPanel.setBounds(rightHandPanelsArea);
         lfoPanel.setBounds(lfoArea);
     }
-    
+
     // Zoom button
     zoomButton.setBounds(getWidth() - 30.0f * scale,
                          multiband.getY() + multiband.getHeight() - 30.0f * scale,
                          getHeight() / 25.0f,
                          getHeight() / 25.0f);
-
-    // set look and feel scale
-    otherLookAndFeel.scale = scale;
-    bandPanel.setScale(scale);
-    globalPanel.setScale(scale);
-    multiband.setScale(scale);
-    lfoPanel.setScale(scale);
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -447,7 +455,7 @@ void FireAudioProcessorEditor::timerCallback()
         originalSpectrum.setSpecAlpha(specAlpha);
         processedSpectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTDataProcessed, processor.getSampleRate() / (float) processor.getFFTSize());
         originalSpectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTDataOriginal, processor.getSampleRate() / (float) processor.getFFTSize());
-
+        bandPanel.updateDriveMeter();
         graphPanel.repaint();
         processedSpectrum.repaint();
         originalSpectrum.repaint();
@@ -464,16 +472,16 @@ void FireAudioProcessorEditor::sliderValueChanged(juce::Slider* slider)
 
 void FireAudioProcessorEditor::updateMainPanelVisibility()
 {
-    const bool isBandView   = windowLeftButton.getToggleState();
+    const bool isBandView = windowLeftButton.getToggleState();
     const bool isGlobalView = windowRightButton.getToggleState();
-    const bool isLfoView    = windowLfoButton.getToggleState();
+    const bool isLfoView = windowLfoButton.getToggleState();
 
     multiband.setVisible(isBandView || isLfoView);
     bandPanel.setVisible(isBandView);
     globalPanel.setVisible(isGlobalView);
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
-    
+
     // The graph panel should be visible for Band and Global views, but not LFO view.
     graphPanel.setVisible(isBandView || isGlobalView);
 }
@@ -500,21 +508,20 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     {
         // Since setClickingTogglesState is false, we manually toggle the state.
         // This flips the state from its previous value.
-        zoomButton.setToggleState(!zoomButton.getToggleState(), juce::dontSendNotification);
-        
+        zoomButton.setToggleState(! zoomButton.getToggleState(), juce::dontSendNotification);
+
         const bool isNowZoomed = zoomButton.getToggleState();
 
         // Define all components that are hidden when zoomed.
         std::array<juce::Component*, 7> componentsToHideOnZoom = {
-            &windowLeftButton, &windowRightButton, &windowLfoButton,
-            &distortionMode1,  &distortionMode2,   &distortionMode3, &distortionMode4
+            &windowLeftButton, &windowRightButton, &windowLfoButton, &distortionMode1, &distortionMode2, &distortionMode3, &distortionMode4
         };
 
         // Set visibility for the top-level controls.
         // If we are zoomed, these are NOT visible. If not zoomed, they ARE visible.
         for (auto* comp : componentsToHideOnZoom)
-            comp->setVisible(!isNowZoomed);
-        
+            comp->setVisible(! isNowZoomed);
+
         if (isNowZoomed)
         {
             // When entering zoom, hide all main panels.
@@ -536,8 +543,8 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         multiband.setVisible(windowLeftButton.getToggleState());
         bandPanel.setVisible(windowLeftButton.getToggleState());
         setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
-        graphPanel.setVisible(!windowLfoButton.getToggleState());
-        
+        graphPanel.setVisible(! windowLfoButton.getToggleState());
+
         filterControl.setVisible(windowRightButton.getToggleState());
         globalPanel.setVisible(windowRightButton.getToggleState());
 
@@ -687,7 +694,7 @@ void FireAudioProcessorEditor::setMultiband()
 void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible)
 {
     // 首先确定一个总的可见性开关
-    const bool shouldShowAny = !zoomButton.getToggleState() && isComboboxVisible;
+    const bool shouldShowAny = ! zoomButton.getToggleState() && isComboboxVisible;
 
     // 直接根据 bandNum 和总开关来设置每个组件的可见性
     component1.setVisible(shouldShowAny && (bandNum == 0));

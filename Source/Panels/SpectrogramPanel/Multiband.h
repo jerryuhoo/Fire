@@ -41,7 +41,6 @@ public:
     void setSoloRelatedBounds();
     EnableButton& getEnableButton(int index);
 
-    void setScale(float scale);
     void setBandBypassStates(int index, bool state);
     state::StateComponent& getStateComponent();
 

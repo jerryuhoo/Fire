@@ -41,6 +41,7 @@ public:
     juce::ToggleButton& getWidthButton(const int index);
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
+    void updateDriveMeter();
 
 private:
     FireAudioProcessor& processor;
@@ -242,18 +243,6 @@ private:
         widthBypassAttachment2,
         widthBypassAttachment3,
         widthBypassAttachment4;
-
-    // create own knob style
-    OtherLookAndFeel otherLookAndFeel;
-    RoundedButtonLnf roundedButtonLnf;
-    DriveLookAndFeel driveLookAndFeel1;
-    DriveLookAndFeel driveLookAndFeel2;
-    DriveLookAndFeel driveLookAndFeel3;
-    DriveLookAndFeel driveLookAndFeel4;
-    LowPassButtonLnf lowPassButtonLnf;
-    BandPassButtonLnf bandPassButtonLnf;
-    HighPassButtonLnf highPassButtonLnf;
-    FlatLnf flatLnf;
 
     int focusBandNum;
     float scale = 1.0f;

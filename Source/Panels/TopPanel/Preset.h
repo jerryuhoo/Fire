@@ -148,7 +148,7 @@ PluginProcessor).
         std::unique_ptr<VersionInfo> versionInfo;
         juce::String version;
 
-        OtherLookAndFeel otherLookAndFeel;
+        FireLookAndFeel fireLookAndFeel;
 
         juce::TextButton toggleABButton;
         juce::TextButton copyABButton;

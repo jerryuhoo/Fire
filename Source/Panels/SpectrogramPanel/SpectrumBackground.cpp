@@ -27,6 +27,9 @@ void SpectrumBackground::paint (juce::Graphics& g)
     // paint background
     g.setColour (COLOUR6);
     g.fillAll();
+    
+    // Set a scalable font size for the frequency labels
+    g.setFont(12.0f * scale);
 
     // paint horizontal lines and frequency numbers
     g.setColour (juce::Colours::lightgrey.withAlpha (0.2f));
@@ -37,14 +40,20 @@ void SpectrumBackground::paint (juce::Graphics& g)
         const double proportion = frequenciesForLines[i] / 20000.0;
         int xPos = SpectrumComponent::transformToLog (proportion * 20000) * (getWidth());
         g.drawVerticalLine (xPos, getHeight() / 5, getHeight());
+        
+        const int scaledWidth = (int)(60 * scale);
+        const int scaledXOffset = (int)(30 * scale);
+        
+        juce::Rectangle<int> textBounds(xPos - scaledXOffset, 0, scaledWidth, getHeight() / 5);
+
         if (frequenciesForLines[i] == 10 || frequenciesForLines[i] == 100 || frequenciesForLines[i] == 200)
-            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i]), xPos - 30, 0, 60, getHeight() / 5, juce::Justification::centred, 2);
+            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i]), textBounds, juce::Justification::centred, 2);
         else if (frequenciesForLines[i] == 1000 || frequenciesForLines[i] == 10000 || frequenciesForLines[i] == 2000)
-            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i] / 1000) + "k", xPos - 30, 0, 60, getHeight() / 5, juce::Justification::centred, 2);
+            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i] / 1000) + "k", textBounds, juce::Justification::centred, 2);
         else if (frequenciesForLines[i] == 20)
-            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i]), xPos - 30, 0, 60, getHeight() / 5, juce::Justification::right, 2);
+            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i]), textBounds, juce::Justification::right, 2);
         else if (frequenciesForLines[i] == 20000)
-            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i] / 1000) + "k", xPos - 30, 0, 60, getHeight() / 5, juce::Justification::left, 2);
+            g.drawFittedText (static_cast<juce::String> (frequenciesForLines[i] / 1000) + "k", textBounds, juce::Justification::left, 2);
     }
 
     // paint vertical db numbers
@@ -59,4 +68,8 @@ void SpectrumBackground::paint (juce::Graphics& g)
 
 void SpectrumBackground::resized()
 {
+    // Add this block to get the scale factor from the editor
+    if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
+        if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&editor->getLookAndFeel()))
+            scale = lnf->scale;
 }

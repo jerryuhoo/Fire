@@ -39,7 +39,6 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
 
     // init panel labels
     addAndMakeVisible(shapePanelLabel);
-    shapePanelLabel.setLookAndFeel(&flatLnf);
     shapePanelLabel.setText("Shape", juce::dontSendNotification);
     shapePanelLabel.setFont(juce::Font {
         juce::FontOptions()
@@ -49,7 +48,6 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     shapePanelLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
 
     addAndMakeVisible(compressorPanelLabel);
-    compressorPanelLabel.setLookAndFeel(&flatLnf);
     compressorPanelLabel.setText("Compressor", juce::dontSendNotification);
     compressorPanelLabel.setFont(juce::Font {
         juce::FontOptions()
@@ -59,7 +57,6 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     compressorPanelLabel.setColour(juce::Label::textColourId, COMP_COLOUR);
 
     addAndMakeVisible(widthPanelLabel);
-    widthPanelLabel.setLookAndFeel(&flatLnf);
     widthPanelLabel.setText("Stereo", juce::dontSendNotification);
     widthPanelLabel.setFont(juce::Font {
         juce::FontOptions()
@@ -69,11 +66,15 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     widthPanelLabel.setColour(juce::Label::textColourId, WIDTH_COLOUR);
 
     // drive knobs
-    driveKnob1.setLookAndFeel(&driveLookAndFeel1);
-    driveKnob2.setLookAndFeel(&driveLookAndFeel2);
-    driveKnob3.setLookAndFeel(&driveLookAndFeel3);
-    driveKnob4.setLookAndFeel(&driveLookAndFeel4);
-    initRotarySlider(driveKnob1, DRIVE_COLOUR); 
+    driveKnob1.setComponentID("drive");
+    driveKnob1.setName(DRIVE_ID1);
+    driveKnob2.setComponentID("drive");
+    driveKnob2.setName(DRIVE_ID2);
+    driveKnob3.setComponentID("drive");
+    driveKnob3.setName(DRIVE_ID3);
+    driveKnob4.setComponentID("drive");
+    driveKnob4.setName(DRIVE_ID4);
+    initRotarySlider(driveKnob1, DRIVE_COLOUR);
     initRotarySlider(driveKnob2, DRIVE_COLOUR);
     initRotarySlider(driveKnob3, DRIVE_COLOUR);
     initRotarySlider(driveKnob4, DRIVE_COLOUR);
@@ -241,13 +242,17 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     mixLabel.setJustificationType(juce::Justification::centred);
 
     // switches
+    oscSwitch.setComponentID("flat_toggle");
+    shapeSwitch.setComponentID("flat_toggle");
+    compressorSwitch.setComponentID("flat_toggle");
+    widthSwitch.setComponentID("flat_toggle");
+
     addAndMakeVisible(oscSwitch);
     oscSwitch.setRadioGroupId(switchButtons);
     oscSwitch.setToggleState(true, juce::dontSendNotification);
     oscSwitch.setColour(juce::ToggleButton::tickDisabledColourId, DRIVE_COLOUR.withBrightness(0.5f));
     oscSwitch.setColour(juce::ToggleButton::tickColourId, DRIVE_COLOUR.withBrightness(0.9f));
     oscSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    oscSwitch.setLookAndFeel(&flatLnf);
     oscSwitch.addListener(this);
 
     addAndMakeVisible(shapeSwitch);
@@ -256,7 +261,6 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     shapeSwitch.setColour(juce::ToggleButton::tickDisabledColourId, SHAPE_COLOUR.withBrightness(0.5f));
     shapeSwitch.setColour(juce::ToggleButton::tickColourId, SHAPE_COLOUR.withBrightness(0.9f));
     shapeSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    shapeSwitch.setLookAndFeel(&flatLnf);
     shapeSwitch.addListener(this);
 
     addAndMakeVisible(compressorSwitch);
@@ -265,7 +269,6 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     compressorSwitch.setColour(juce::ToggleButton::tickDisabledColourId, COMP_COLOUR.withBrightness(0.5f));
     compressorSwitch.setColour(juce::ToggleButton::tickColourId, COMP_COLOUR.withBrightness(0.9f));
     compressorSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    compressorSwitch.setLookAndFeel(&flatLnf);
     compressorSwitch.addListener(this);
 
     addAndMakeVisible(widthSwitch);
@@ -274,7 +277,6 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p),
     widthSwitch.setColour(juce::ToggleButton::tickDisabledColourId, WIDTH_COLOUR.withBrightness(0.5f));
     widthSwitch.setColour(juce::ToggleButton::tickColourId, WIDTH_COLOUR.withBrightness(0.9f));
     widthSwitch.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    widthSwitch.setLookAndFeel(&flatLnf);
     widthSwitch.addListener(this);
 
     initBypassButton(*compressorBypassButton1, COMP_COLOUR, 0);
@@ -426,31 +428,6 @@ BandPanel::~BandPanel()
     shapeSwitch.removeListener(this);
     widthSwitch.removeListener(this);
     compressorSwitch.removeListener(this);
-
-    // Your existing LookAndFeel cleanup (this is good practice)
-    driveKnob1.setLookAndFeel(nullptr);
-    driveKnob2.setLookAndFeel(nullptr);
-    driveKnob3.setLookAndFeel(nullptr);
-    driveKnob4.setLookAndFeel(nullptr);
-    linkedButton1.setLookAndFeel(nullptr);
-    linkedButton2.setLookAndFeel(nullptr);
-    linkedButton3.setLookAndFeel(nullptr);
-    linkedButton4.setLookAndFeel(nullptr);
-    safeButton1.setLookAndFeel(nullptr);
-    safeButton2.setLookAndFeel(nullptr);
-    safeButton3.setLookAndFeel(nullptr);
-    safeButton4.setLookAndFeel(nullptr);
-    extremeButton1.setLookAndFeel(nullptr);
-    extremeButton2.setLookAndFeel(nullptr);
-    extremeButton3.setLookAndFeel(nullptr);
-    extremeButton4.setLookAndFeel(nullptr);
-    oscSwitch.setLookAndFeel(nullptr);
-    shapeSwitch.setLookAndFeel(nullptr);
-    widthSwitch.setLookAndFeel(nullptr);
-    compressorSwitch.setLookAndFeel(nullptr);
-    shapePanelLabel.setLookAndFeel(nullptr);
-    compressorPanelLabel.setLookAndFeel(nullptr);
-    widthPanelLabel.setLookAndFeel(nullptr);
 }
 
 void BandPanel::paint(juce::Graphics& g)
@@ -469,16 +446,6 @@ void BandPanel::paint(juce::Graphics& g)
         g.drawRect(driveKnobArea);
     }
     g.drawRect(outputKnobArea);
-
-    // drive reduction
-    driveLookAndFeel1.sampleMaxValue = processor.getSampleMaxValue(0);
-    driveLookAndFeel1.reductionPrecent = processor.getReductionPrecent(0);
-    driveLookAndFeel2.sampleMaxValue = processor.getSampleMaxValue(1);
-    driveLookAndFeel2.reductionPrecent = processor.getReductionPrecent(1);
-    driveLookAndFeel3.sampleMaxValue = processor.getSampleMaxValue(2);
-    driveLookAndFeel3.reductionPrecent = processor.getReductionPrecent(2);
-    driveLookAndFeel4.sampleMaxValue = processor.getSampleMaxValue(3);
-    driveLookAndFeel4.reductionPrecent = processor.getReductionPrecent(3);
 }
 
 void BandPanel::resized()
@@ -603,13 +570,6 @@ void BandPanel::resized()
     extremeButton2.setBounds(outputButtonArea3);
     extremeButton3.setBounds(outputButtonArea3);
     extremeButton4.setBounds(outputButtonArea3);
-
-    // set look and feel scale
-    driveLookAndFeel1.scale = scale;
-    driveLookAndFeel2.scale = scale;
-    driveLookAndFeel3.scale = scale;
-    driveLookAndFeel4.scale = scale;
-    flatLnf.scale = scale;
 }
 
 void BandPanel::comboBoxChanged(juce::ComboBox* combobox)
@@ -624,11 +584,28 @@ void BandPanel::updateLinkedValue(int bandIndex)
 
     switch (bandIndex)
     {
-        case 0: driveKnob = &driveKnob1; outputKnob = &outputKnob1; linkedButton = &linkedButton1; break;
-        case 1: driveKnob = &driveKnob2; outputKnob = &outputKnob2; linkedButton = &linkedButton2; break;
-        case 2: driveKnob = &driveKnob3; outputKnob = &outputKnob3; linkedButton = &linkedButton3; break;
-        case 3: driveKnob = &driveKnob4; outputKnob = &outputKnob4; linkedButton = &linkedButton4; break;
-        default: return;
+        case 0:
+            driveKnob = &driveKnob1;
+            outputKnob = &outputKnob1;
+            linkedButton = &linkedButton1;
+            break;
+        case 1:
+            driveKnob = &driveKnob2;
+            outputKnob = &outputKnob2;
+            linkedButton = &linkedButton2;
+            break;
+        case 2:
+            driveKnob = &driveKnob3;
+            outputKnob = &outputKnob3;
+            linkedButton = &linkedButton3;
+            break;
+        case 3:
+            driveKnob = &driveKnob4;
+            outputKnob = &outputKnob4;
+            linkedButton = &linkedButton4;
+            break;
+        default:
+            return;
     }
 
     if (linkedButton->getToggleState())
@@ -636,7 +613,7 @@ void BandPanel::updateLinkedValue(int bandIndex)
         // SliderAttachment already updated the drive knob's visual position.
         // We just need to calculate and set the output knob's value.
         float newOutputValue = -driveKnob->getValue() * 0.1f;
-        
+
         // To prevent feedback loops, only set the value if it has changed.
         if (std::abs(outputKnob->getValue() - newOutputValue) > 0.001)
         {
@@ -645,6 +622,15 @@ void BandPanel::updateLinkedValue(int bandIndex)
             // This prevents this setValue call from triggering another parameterChanged callback.
             outputKnob->setValue(newOutputValue, juce::dontSendNotification);
         }
+    }
+}
+
+void BandPanel::updateDriveMeter()
+{
+    if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&getLookAndFeel()))
+    {
+        lnf->sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
+        lnf->reductionPercent = processor.getReductionPrecent(focusBandNum);
     }
 }
 
@@ -747,7 +733,6 @@ void BandPanel::initFlatButton(juce::TextButton& button, juce::String paramId, j
     button.setColour(juce::TextButton::textColourOnId, COLOUR1);
     button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
     button.setButtonText(buttonName);
-    button.setLookAndFeel(&flatLnf);
 }
 
 void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour, int index)
@@ -798,6 +783,7 @@ void BandPanel::setFourComponentsVisibility(juce::Component& component1, juce::C
 void BandPanel::setFocusBandNum(int num)
 {
     focusBandNum = num;
+    updateDriveMeter();
 }
 
 void BandPanel::setScale(float scale)
@@ -1019,6 +1005,7 @@ void BandPanel::setSwitch(const int index, bool state)
 
 void BandPanel::updateWhenChangingFocus()
 {
+    updateDriveMeter();
     if (oscSwitch.getToggleState())
     {
         setVisibility(shapeVector, false);

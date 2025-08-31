@@ -630,14 +630,6 @@ EnableButton& Multiband::getEnableButton(const int index)
     return *bandUIs[index].enableButton; // <--- MODIFIED
 }
 
-void Multiband::setScale(float scale)
-{
-    for (int i = 0; i < 3; i++)
-    {
-        freqDividerGroup[i]->setScale(scale);
-    }
-}
-
 void Multiband::setBandBypassStates(int index, bool state)
 {
     bandUIs[index].enableButton->setToggleState(state, juce::NotificationType::dontSendNotification); // <--- MODIFIED

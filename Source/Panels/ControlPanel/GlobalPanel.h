@@ -135,18 +135,6 @@ private:
         downsampleBypassButton;
 //        limiterBypassButton;
 
-    // create own knob style
-    OtherLookAndFeel otherLookAndFeel;
-    RoundedButtonLnf roundedButtonLnf;
-    DriveLookAndFeel driveLookAndFeel1;
-    DriveLookAndFeel driveLookAndFeel2;
-    DriveLookAndFeel driveLookAndFeel3;
-    DriveLookAndFeel driveLookAndFeel4;
-    LowPassButtonLnf lowPassButtonLnf;
-    BandPassButtonLnf bandPassButtonLnf;
-    HighPassButtonLnf highPassButtonLnf;
-    FlatLnf flatButtonLnf;
-
     // Slider attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
         outputAttachment,
@@ -185,8 +173,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
         lowcutModeAttachment,
         highcutModeAttachment;
-    
-    FlatLnf flatLnf;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalPanel)
 };

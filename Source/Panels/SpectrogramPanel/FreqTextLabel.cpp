@@ -16,7 +16,6 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
     mFrequency = -1;
     addAndMakeVisible(freqLabel);
     freqLabel.setEditable(true);
-    setLookAndFeel(&flatButtonLnf);
 }
 
 FreqTextLabel::~FreqTextLabel()

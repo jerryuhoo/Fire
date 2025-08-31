@@ -14,13 +14,13 @@
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
 #include "Panels/ControlPanel/BandPanel.h"
-#include "Panels/ControlPanel/LfoPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
 #include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
 #include "Panels/ControlPanel/Graph Components/GraphPanel.h"
 #include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
 #include "Panels/ControlPanel/Graph Components/VUPanel.h"
 #include "Panels/ControlPanel/Graph Components/WidthGraph.h"
+#include "Panels/ControlPanel/LfoPanel.h"
 #include "Panels/SpectrogramPanel/FilterControl.h"
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
@@ -55,8 +55,7 @@ private:
     state::StateComponent stateComponent;
 
     // create own knob style
-    OtherLookAndFeel otherLookAndFeel;
-    ZoomLookAndFeel zoomLookAndFeel;
+    FireLookAndFeel fireLookAndFeel;
 
     int focusIndex = 0;
     void updateWhenChangingFocus();
@@ -67,6 +66,10 @@ private:
 
     // init editor
     void initEditor();
+    
+    // Top Area
+    juce::Rectangle<int> logoArea;
+    juce::Rectangle<int> wingsArea;
 
     // Graph panel
     GraphPanel graphPanel { processor };
@@ -79,7 +82,7 @@ private:
 
     // Global
     GlobalPanel globalPanel;
-    
+
     // LFO
     LfoPanel lfoPanel;
 

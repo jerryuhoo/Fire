@@ -12,7 +12,6 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "juce_audio_processors/juce_audio_processors.h"
-#include "../../GUI/LookAndFeel.h"
 #include "ModulationMatrixPanel.h"
 #include "../../DSP/LfoData.h"
 
@@ -115,8 +114,6 @@ private:
     juce::Label  gridXLabel;
     juce::Slider gridYSlider;
     juce::Label  gridYLabel;
-    
-    FlatLnf flatLnf;
 
     // ADD/REPLACE these attachment members
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;

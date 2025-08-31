@@ -59,6 +59,9 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
         sourceMenu.addItem("LFO " + juce::String(i), i);
     sourceMenu.setSelectedId(processor.modulationRoutings[index].sourceLfoIndex + 1, juce::dontSendNotification);
     sourceMenu.addListener(this);
+    sourceMenu.setColour(juce::ComboBox::backgroundColourId, COLOUR6);
+    sourceMenu.setColour(juce::ComboBox::outlineColourId, COLOUR7);
+    sourceMenu.setColour(juce::ComboBox::textColourId, COLOUR1);
 
     // AMOUNT SLIDER
     addAndMakeVisible(amountSlider);
@@ -100,6 +103,9 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
         }
     }
     destinationMenu.addListener(this);
+    destinationMenu.setColour(juce::ComboBox::backgroundColourId, COLOUR6);
+    destinationMenu.setColour(juce::ComboBox::outlineColourId, COLOUR7);
+    destinationMenu.setColour(juce::ComboBox::textColourId, COLOUR1);
 
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
@@ -179,7 +185,7 @@ ModulationMatrixPanel::~ModulationMatrixPanel() {}
 
 void ModulationMatrixPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::darkslategrey);
+    g.fillAll(COLOUR7);
 }
 
 void ModulationMatrixPanel::resized()

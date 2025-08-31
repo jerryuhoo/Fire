@@ -44,7 +44,6 @@ FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processo
     // The parent component WON'T respond to mouse clicks,
     // while child components WILL respond to mouse clicks!
     setInterceptsMouseClicks (false, true);
-    freqTextLabel.setLookAndFeel (&otherLookAndFeel);
 }
 
 FreqDividerGroup::~FreqDividerGroup()
@@ -174,9 +173,3 @@ void FreqDividerGroup::mouseEnter (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseExit (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseDown (const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseDrag (const juce::MouseEvent& e) {}
-
-void FreqDividerGroup::setScale (float scale)
-{
-    otherLookAndFeel.scale = scale;
-    freqTextLabel.setScale (scale);
-}

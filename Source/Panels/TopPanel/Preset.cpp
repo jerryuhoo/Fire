@@ -533,8 +533,8 @@ namespace state
           valueTreeState { vts },
           toggleABButton { "A" },
           copyABButton { "Copy" },
-          previousButton { "<" },
-          nextButton { ">" },
+          previousButton { "" },
+          nextButton { "" },
           savePresetButton { "Save" },
           //deletePresetButton{"Delete"},
           menuButton { "Menu" }
@@ -589,11 +589,15 @@ namespace state
         copyABButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         copyABButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
         previousButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+        previousButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
         previousButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         previousButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
+        previousButton.setComponentID("left_arrow");
         nextButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+        nextButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
         nextButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         nextButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
+        nextButton.setComponentID("right_arrow");
         savePresetButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
         savePresetButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         savePresetButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
@@ -609,7 +613,7 @@ namespace state
         menuButton.getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR7);
         menuButton.getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
         menuButton.getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR7);
-        presetMenu.setLookAndFeel(&otherLookAndFeel);
+        presetMenu.setLookAndFeel(&fireLookAndFeel);
 
         menuButton.getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
         menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
@@ -916,7 +920,7 @@ namespace state
         float heightScale = getHeight() / 50.0f;
         float widthScale = getWidth() / 1000.0f;
         float scale = juce::jmin(heightScale, widthScale);
-        otherLookAndFeel.scale = scale;
+        fireLookAndFeel.scale = scale;
 
         presetMenu.showMenuAsync(juce::PopupMenu::Options().withStandardItemHeight(30 * heightScale).withMinimumWidth(250 * widthScale), [this](int result)
                                  {

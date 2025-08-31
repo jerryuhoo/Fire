@@ -111,11 +111,11 @@ void LfoEditor::setGridDivisions(int horizontal, int vertical)
 
 void LfoEditor::setPlayheadPosition(float position)
 {
-//    if (! juce::approximatelyEqual(playheadPos, position))
-//    {
-//        playheadPos = position;
-//        repaint();
-//    }
+   if (! juce::approximatelyEqual(playheadPos, position))
+   {
+       playheadPos = position;
+       repaint();
+   }
 }
 
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
@@ -480,60 +480,17 @@ void LfoPanel::resized()
 
 void LfoPanel::timerCallback()
 {
-//    // This is the most robust way to handle potentially buggy hosts.
-//    try
-//    {
-//        // 1. Safely get the playhead pointer.
-//        if (auto* playHead = processor.getPlayHead())
-//        {
-//            // 2. Get the position information optional. This is the call that can crash.
-//            auto positionInfoOpt = playHead->getPosition();
-//
-//            // 3. Check if the optional contains a valid object.
-//            if (positionInfoOpt)
-//            {
-//                const auto& positionInfo = *positionInfoOpt;
-//
-//                if (positionInfo.getIsPlaying())
-//                {
-//                    if (auto ppq = positionInfo.getPpqPosition())
-//                    {
-//                        // This is a basic example. A real implementation would use the Rate slider and Sync button.
-//                        double beatsPerBar = 4.0;
-//                        double currentBeat = std::fmod(*ppq, beatsPerBar);
-//                        float normalizedPosition = static_cast<float>(currentBeat / beatsPerBar);
-//                        lfoEditor.setPlayheadPosition(normalizedPosition);
-//                    }
-//                    else
-//                    {
-//                        // Host is playing but not providing PPQ.
-//                        lfoEditor.setPlayheadPosition(-1.0f);
-//                    }
-//                }
-//                else
-//                {
-//                    // Host is not playing.
-//                    lfoEditor.setPlayheadPosition(-1.0f);
-//                }
-//            }
-//            else // positionInfoOpt is empty (juce::nullopt)
-//            {
-//                lfoEditor.setPlayheadPosition(-1.0f);
-//            }
-//        }
-//        else // playHead is a nullptr
-//        {
-//            lfoEditor.setPlayheadPosition(-1.0f);
-//        }
-//    }
-//    catch (...)
-//    {
-//        // If any part of the above code causes a severe error (like the host bug),
-//        // this block will catch it and prevent the plugin UI from crashing.
-//        // We can simply do nothing and wait for the next timer callback,
-//        // hoping the host has sorted itself out.
-//        lfoEditor.setPlayheadPosition(-1.0f);
-//    }
+    if (processor.isDawPlaying())
+    {
+        // If the DAW is playing, get the current phase and show the playhead.
+        const float currentPhase = processor.getLfoPhase(currentLfoIndex);
+        lfoEditor.setPlayheadPosition(currentPhase);
+    }
+    else
+    {
+        // If the DAW is stopped, pass a special value (-1.0f) to hide the playhead.
+        lfoEditor.setPlayheadPosition(-1.0f);
+    }
 }
 
 void LfoPanel::buttonClicked(juce::Button* button)

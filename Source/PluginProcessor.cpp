@@ -653,7 +653,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
 
     // Check if the DAW is playing, and if so, reset all LFOs
-    bool isPlaying = false;
+    isPlaying = false;
     double currentBpm = 120.0;
 
     if (auto* playHead = getPlayHead())
@@ -1424,10 +1424,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     return { parameters.begin(), parameters.end() };
 }
 
-//juce::AudioProcessorValueTreeState& FireAudioProcessor::getTreeState()
-//{
-//    return treeState;
-//}
+bool FireAudioProcessor::isDawPlaying() const
+{
+    return isPlaying;
+}
+
+float FireAudioProcessor::getLfoPhase(int lfoIndex) const
+{
+    if (juce::isPositiveAndBelow(lfoIndex, (int)lfoEngines.size()))
+    {
+        return lfoEngines[lfoIndex].getPhase();
+    }
+
+    jassertfalse; // Should not happen if lfoIndex is always valid
+    return 0.0f;
+}
 
 void FireAudioProcessor::updateParameters()
 {

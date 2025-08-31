@@ -288,6 +288,8 @@ public:
     // This allows the GUI to know what text to display for the sync rates.
     juce::StringArray lfoRateSyncDivisions;
     std::vector<LfoData> lfoData;
+    float getLfoPhase(int lfoIndex) const;
+    bool isDawPlaying() const;
 
     // The central list of all modulation connections in the plugin.
     juce::Array<ModulationRouting> modulationRoutings;
@@ -352,6 +354,7 @@ private:
         }
     }
 
+    bool isPlaying = false;
     bool wasPlaying = false;
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<std::unique_ptr<BandProcessor>> bands;

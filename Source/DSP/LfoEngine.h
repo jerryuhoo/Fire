@@ -118,6 +118,11 @@ public:
     {
         phaseDelta = newPhaseDelta;
     }
+
+    float getPhase() const
+    {
+        return phase;
+    }
     
 private:
     double sampleRate = 44100.0;

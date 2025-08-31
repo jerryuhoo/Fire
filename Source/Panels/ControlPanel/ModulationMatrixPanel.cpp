@@ -24,6 +24,10 @@ ModulationMatrixHeader::ModulationMatrixHeader()
     amountLabel.setText("Amount", juce::dontSendNotification);
     amountLabel.setJustificationType(juce::Justification::centred);
 
+    addAndMakeVisible(polarityLabel);
+    polarityLabel.setText("Polarity", juce::dontSendNotification);
+    polarityLabel.setJustificationType(juce::Justification::centred);
+
     addAndMakeVisible(destinationLabel);
     destinationLabel.setText("Destination", juce::dontSendNotification);
     destinationLabel.setJustificationType(juce::Justification::centred);
@@ -36,12 +40,12 @@ void ModulationMatrixHeader::resized()
     flex.flexDirection = juce::FlexBox::Direction::row;
     flex.items.add(juce::FlexItem(sourceLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(amountLabel).withFlex(2.0f));
+    flex.items.add(juce::FlexItem(polarityLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(destinationLabel).withFlex(1.0f));
     // A dummy item for the space where the remove button will be in the rows.
     flex.items.add(juce::FlexItem().withWidth(35));
     flex.performLayout(getLocalBounds());
 }
-
 
 //==============================================================================
 // ModulationMatrixRow Implementation
@@ -65,6 +69,17 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     amountSlider.setScrollWheelEnabled(false); // Disable mouse wheel interaction.
     amountSlider.addListener(this);
 
+    // BIPOLAR BUTTON
+    addAndMakeVisible(bipolarButton);
+    bipolarButton.setClickingTogglesState(true);
+    bipolarButton.setToggleState(processor.modulationRoutings[index].isBipolar, juce::dontSendNotification);
+    bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
+    bipolarButton.onStateChange = [this]
+    {
+        bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
+        processor.modulationRoutings.getReference(index).isBipolar = bipolarButton.getToggleState();
+    };
+
     // DESTINATION MENU
     addAndMakeVisible(destinationMenu);
     auto& params = processor.getParameters();
@@ -85,7 +100,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
         }
     }
     destinationMenu.addListener(this);
-    
+
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
     removeButton.addListener(this);
@@ -99,6 +114,7 @@ void ModulationMatrixRow::resized()
     flex.flexDirection = juce::FlexBox::Direction::row;
     flex.items.add(juce::FlexItem(sourceMenu).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(amountSlider).withFlex(2.0f).withMargin(2));
+    flex.items.add(juce::FlexItem(bipolarButton).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(destinationMenu).withFlex(1.0f).withMargin(2));
     // Add a fixed-size item for the remove button.
     flex.items.add(juce::FlexItem(removeButton).withWidth(35).withMargin(2));
@@ -118,7 +134,7 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == &amountSlider)
-        processor.modulationRoutings.getReference(index).depth = (float)amountSlider.getValue();
+        processor.modulationRoutings.getReference(index).depth = (float) amountSlider.getValue();
 }
 
 void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
@@ -172,7 +188,7 @@ void ModulationMatrixPanel::resized()
     auto bottomArea = bounds.removeFromBottom(40);
     closeButton.setBounds(bottomArea.removeFromRight(100).reduced(5));
     addButton.setBounds(bottomArea.removeFromLeft(100).reduced(5));
-    
+
     // Position the header at the top.
     header.setBounds(bounds.removeFromTop(30));
     viewport.setBounds(bounds);

@@ -268,6 +268,12 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             {
                 // Get the LFO value for the current source and sample
                 float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, sample);
+
+                if (routing.isBipolar)
+                {
+                    lfoValue = lfoValue * 2.0f - 1.0f;
+                }
+
                 float currentModValue = lfoValue * routing.depth;
 
                 if (routing.targetParameterID == params.biasID)
@@ -1890,9 +1896,17 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 {
                     if (routing.targetParameterID == params.driveID)
                     {
-                        // Use the first LFO sample of the block as an approximation.
+                        // 1. Get the UNIPOLAR [0, 1] LFO value
                         float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
-                        driveModulation += lfoValue * routing.depth * 50.0f; // Depth of 1.0 modulates by +/- 50
+
+                        // 2. Conditionally convert to bipolar [-1, 1]
+                        if (routing.isBipolar)
+                        {
+                            lfoValue = lfoValue * 2.0f - 1.0f;
+                        }
+
+                        // 3. Apply depth
+                        driveModulation += lfoValue * routing.depth * 50.0f;
                     }
                 }
                 params.driveVal = juce::jlimit(0.0f, 100.0f, baseDrive + driveModulation);

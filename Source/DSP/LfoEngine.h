@@ -10,8 +10,8 @@
 
 #pragma once
 
-#include "juce_dsp/juce_dsp.h"
 #include "LfoData.h"
+#include "juce_dsp/juce_dsp.h"
 #include <vector>
 
 //==============================================================================
@@ -31,10 +31,10 @@ public:
         wavetable.initialise([](size_t i)
                              {
                                  const auto numPoints = 1024.0;
-                                 return std::sin((double)i / numPoints * juce::MathConstants<double>::twoPi);
-                             }, 1024);
+                                 return std::sin((double)i / numPoints * juce::MathConstants<double>::twoPi); },
+                             1024);
     }
-    
+
     void reset()
     {
         phase = 0.0f;
@@ -59,7 +59,7 @@ public:
         const auto numPointsInTable = wavetable.getNumPoints();
 
         wavetable.initialise([pointsCopy, curvaturesCopy, numPointsInTable](size_t i) -> float
-        {
+                             {
             const float phase = (float)i / (float)(numPointsInTable > 1 ? numPointsInTable - 1 : 1);
             
             if (pointsCopy.size() < 2)
@@ -92,8 +92,8 @@ public:
                     return p1.y + (p2.y - p1.y) * ty;
                 }
             }
-            return pointsCopy.back().y;
-        }, numPointsInTable);
+            return pointsCopy.back().y; },
+                             numPointsInTable);
     }
 
     // Call this on every sample in processBlock. Returns a bipolar [-1, 1] signal.
@@ -101,15 +101,15 @@ public:
     {
         // Get the unipolar [0, 1] value from the pre-calculated wavetable
         const float unipolarOutput = wavetable.getUnchecked(phase * (wavetable.getNumPoints() - 1));
-        
+
         // Advance the phase using the externally calculated delta
         phase += phaseDelta;
 
         if (phase >= 1.0f)
             phase -= 1.0f;
-            
+
         // Convert the output to bipolar [-1, 1] for modulation
-        return unipolarOutput * 2.0f - 1.0f;
+        return unipolarOutput;
     }
 
     // Call this from your processor before each block to set the LFO speed.
@@ -123,11 +123,11 @@ public:
     {
         return phase;
     }
-    
+
 private:
     double sampleRate = 44100.0;
     float phase = 0.0f;
-    float phaseDelta = 0.0f; 
+    float phaseDelta = 0.0f;
 
     juce::dsp::LookupTable<float> wavetable;
 };

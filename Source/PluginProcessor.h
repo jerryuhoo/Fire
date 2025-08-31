@@ -188,6 +188,7 @@ struct ModulationRouting
 
     // Depth can be bipolar (-1.0 to 1.0), representing -100% to +100%
     float depth = 0.5f;
+    bool isBipolar = true;
 
     // Helper for saving/loading state
     void writeToXml(juce::XmlElement& xml) const
@@ -195,13 +196,15 @@ struct ModulationRouting
         xml.setAttribute("source", sourceLfoIndex);
         xml.setAttribute("target", targetParameterID);
         xml.setAttribute("depth", depth);
+        xml.setAttribute("bipolar", isBipolar);
     }
 
     static ModulationRouting readFromXml(const juce::XmlElement& xml)
     {
         return { xml.getIntAttribute("source", 0),
                  xml.getStringAttribute("target"),
-                 (float) xml.getDoubleAttribute("depth", 0.5) };
+                 (float) xml.getDoubleAttribute("depth", 0.5),
+                 xml.getBoolAttribute("bipolar", true) };
     }
 };
 

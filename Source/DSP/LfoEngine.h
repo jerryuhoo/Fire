@@ -34,6 +34,11 @@ public:
                                  return std::sin((double)i / numPoints * juce::MathConstants<double>::twoPi);
                              }, 1024);
     }
+    
+    void reset()
+    {
+        phase = 0.0f;
+    }
 
     // Call this in your processor's prepareToPlay method.
     void prepare(const juce::dsp::ProcessSpec& spec)

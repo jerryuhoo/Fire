@@ -651,6 +651,29 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     {
         isBypassed = false;
     }
+
+    // Check if the DAW is playing, and if so, reset all LFOs
+    bool isPlaying = false;
+    if (auto* playHead = getPlayHead())
+    {
+        if (auto position = playHead->getPosition())
+        {
+            isPlaying = position->getIsPlaying();
+        }
+    }
+
+    // Check if the transport has just started playing
+    if (isPlaying && !wasPlaying)
+    {
+        // If so, reset all LFOs
+        for (auto& engine : lfoEngines)
+        {
+            engine.reset();
+        }
+    }
+
+    // Update the state for the next block
+    wasPlaying = isPlaying;
     
     // report latency
     if (*treeState.getRawParameterValue(HQ_ID))

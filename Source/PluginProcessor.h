@@ -330,6 +330,7 @@ public:
 
 private:
     //==============================================================================
+    bool wasPlaying = false;
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<std::unique_ptr<BandProcessor>> bands;
     float totalLatency = 0.0f;

@@ -290,13 +290,13 @@ void LfoEditor::removePoint(int index)
 
 juce::Point<float> LfoEditor::toNormalized(juce::Point<int> localPoint)
 {
-    return { (float)localPoint.x / (float)getWidth(), (float)localPoint.y / (float)getHeight() };
+    return { (float)localPoint.x / (float)getWidth(), 1.0f - ((float)localPoint.y / (float)getHeight()) };
 }
 
 juce::Point<float> LfoEditor::fromNormalized(juce::Point<float> normalizedPoint)
 {
     // Ensure the calculation is done with floats and returns a float point
-    return { normalizedPoint.x * (float)getWidth(), normalizedPoint.y * (float)getHeight() };
+    return { normalizedPoint.x * (float)getWidth(), (1.0f - normalizedPoint.y) * (float)getHeight() };
 }
 
 void LfoEditor::updateAndSortPoints()

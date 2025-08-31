@@ -125,6 +125,32 @@ namespace ParameterID
 }
 
 //==============================================================================
+// Describes a single connection from a source (LFO) to a target (Parameter)
+struct ModulationRouting
+{
+    int sourceLfoIndex = 0;
+    juce::String targetParameterID;
+    
+    // Depth can be bipolar (-1.0 to 1.0), representing -100% to +100%
+    float depth = 0.5f;
+    
+    // Helper for saving/loading state
+    void writeToXml (juce::XmlElement& xml) const
+    {
+        xml.setAttribute ("source", sourceLfoIndex);
+        xml.setAttribute ("target", targetParameterID);
+        xml.setAttribute ("depth", depth);
+    }
+    
+    static ModulationRouting readFromXml (const juce::XmlElement& xml)
+    {
+        return { xml.getIntAttribute    ("source", 0),
+                 xml.getStringAttribute ("target"),
+                 (float) xml.getDoubleAttribute ("depth", 0.5) };
+    }
+};
+
+//==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
 struct BandProcessingParameters
@@ -146,6 +172,11 @@ struct BandProcessingParameters
     float driveVal;
     float biasVal;
     float recVal;
+
+    // Parameter IDs for modulation
+    juce::String driveID;
+    juce::String biasID;
+    juce::String recID;
 };
 
 //==============================================================================
@@ -190,41 +221,21 @@ struct BandProcessor
     
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
-    void process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params, LfoEngine& lfoEngine);
+    void process(juce::AudioBuffer<float>& buffer,
+                 const BandProcessingParameters& params,
+                 const juce::AudioBuffer<float>& lfoOutputBuffer,
+                 const juce::Array<ModulationRouting>& modulationRoutings);
 
 private:
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                            const juce::AudioBuffer<float>& dryBuffer,
                            const BandProcessingParameters& params,
-                           LfoEngine& lfoEngine);
+                           const juce::AudioBuffer<float>& lfoOutputBuffer,
+                           const juce::Array<ModulationRouting>& modulationRoutings);
 };
 
 //==============================================================================
-// Describes a single connection from a source (LFO) to a target (Parameter)
-struct ModulationRouting
-{
-    int sourceLfoIndex = 0;
-    juce::String targetParameterID;
-    
-    // Depth can be bipolar (-1.0 to 1.0), representing -100% to +100%
-    float depth = 0.5f;
-    
-    // Helper for saving/loading state
-    void writeToXml (juce::XmlElement& xml) const
-    {
-        xml.setAttribute ("source", sourceLfoIndex);
-        xml.setAttribute ("target", targetParameterID);
-        xml.setAttribute ("depth", depth);
-    }
-    
-    static ModulationRouting readFromXml (const juce::XmlElement& xml)
-    {
-        return { xml.getIntAttribute    ("source", 0),
-                 xml.getStringAttribute ("target"),
-                 (float) xml.getDoubleAttribute ("depth", 0.5) };
-    }
-};
-//==============================================================================
+
 
 class FireAudioProcessor : public juce::AudioProcessor
 {
@@ -330,7 +341,7 @@ private:
                   bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
     void updateGlobalFilters(double sampleRate);
-    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate);
+    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate, const juce::AudioBuffer<float>& lfoOutputBuffer);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
 

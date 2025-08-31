@@ -57,7 +57,10 @@ void BandProcessor::reset()
 // This is the new, self-contained processing function for a single band.
 // It replaces the old `processOneBand` and `processDistortion` functions.
 //==============================================================================
-void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessingParameters& params, LfoEngine& lfoEngine)
+void BandProcessor::process(juce::AudioBuffer<float>& buffer,
+                            const BandProcessingParameters& params,
+                            const juce::AudioBuffer<float>& lfoOutputBuffer,
+                            const juce::Array<ModulationRouting>& modulationRoutings)
 {
     // Extract parameters for easier access
     const int numChannels = buffer.getNumChannels();
@@ -79,14 +82,14 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessi
         auto oversampledBlock = oversampling->processSamplesUp(block);
         
         // Call the loop to process the upsampled signal in-place
-        processDistortion(oversampledBlock, dryBuffer, params, lfoEngine);
+        processDistortion(oversampledBlock, dryBuffer, params, lfoOutputBuffer, modulationRoutings);
         
         oversampling->processSamplesDown(block);
     }
     else
     {
         // Call the loop to process the signal at the original sample rate
-        processDistortion(block, dryBuffer, params, lfoEngine);
+        processDistortion(block, dryBuffer, params, lfoOutputBuffer, modulationRoutings);
     }
     
     // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -145,7 +148,8 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessi
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                                       const juce::AudioBuffer<float>& dryBuffer,
                                       const BandProcessingParameters& params,
-                                      LfoEngine& lfoEngine)
+                                      const juce::AudioBuffer<float>& lfoOutputBuffer,
+                                      const juce::Array<ModulationRouting>& modulationRoutings)
 {
     const bool isSafeModeOn    = params.isSafeModeOn;
     const bool isExtremeModeOn = params.isExtremeModeOn;
@@ -228,14 +232,30 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         const float smoothedBias = biasSmoother.getNextValue();
         const float smoothedRec  = recSmoother.getNextValue();
 
-        // Get a fresh, bipolar LFO value (-1.0 to 1.0) for the current sample.
-        const float lfoValue = lfoEngine.process();
+        // --- NEW PER-SAMPLE MODULATION LOGIC for Bias and Rec ---
+        float biasModulation = 0.0f;
+        float recModulation = 0.0f;
 
-        // Calculate the LFO-modulated values for the current sample.
-        const float modulationDepth = 0.5f; // This can be made a parameter later
+        // Iterate through all active routings to see if they target our parameters
+        for (const auto& routing : modulationRoutings)
+        {
+            // Check if the target is this band's bias or rec parameter
+            if (routing.targetParameterID == params.biasID || routing.targetParameterID == params.recID)
+            {
+                // Get the LFO value for the current source and sample
+                float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, sample);
+                float currentModValue = lfoValue * routing.depth;
+
+                if (routing.targetParameterID == params.biasID)
+                    biasModulation += currentModValue; // Depth of 1.0 modulates over +/- 1.0 range
+                else if (routing.targetParameterID == params.recID)
+                    recModulation += currentModValue;  // Depth of 1.0 modulates over +/- 1.0 range
+            }
+        }
+
         // float modulatedDrive = juce::jlimit(0.0f, 100.0f, smoothedDrive + lfoValue * (100.0f * modulationDepth));
-        float modulatedRec   = juce::jlimit(0.0f, 1.0f,   smoothedRec   + lfoValue * (1.0f * modulationDepth));
-        float modulatedBias  = juce::jlimit(-1.0f, 1.0f,  smoothedBias  + lfoValue * (2.0f * modulationDepth));
+        float modulatedBias  = juce::jlimit(-1.0f, 1.0f, smoothedBias + biasModulation);
+        float modulatedRec   = juce::jlimit(0.0f, 1.0f, smoothedRec + recModulation);
 
         // Apply these values to all channels
         for (int channel = 0; channel < numChannels; ++channel)
@@ -649,6 +669,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         sampleRate = 48000;
     }
 
+    juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
+    lfoOutputBuffer.clear();
+
     for (int i = 0; i < 4; ++i)
     {
         // Get parameter values for the current LFO
@@ -675,6 +698,13 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         
         // Push the latest UI shape data to the corresponding LFO engine
         lfoEngines[i].updateShape(lfoData[i]);
+
+        // Generate LFO output for the entire block
+        auto* writer = lfoOutputBuffer.getWritePointer(i);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            writer[sample] = lfoEngines[i].process();
+        }
     }
 
     // In case we have more outputs than inputs, this code clears any output
@@ -751,7 +781,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
     mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
-    processMultiBand(buffer, sampleRate);
+    processMultiBand(buffer, sampleRate, lfoOutputBuffer);
     applyGlobalEffects(buffer, sampleRate);
     applyGlobalMix(buffer);
 
@@ -1685,7 +1715,7 @@ float FireAudioProcessor::getTotalLatency() const
     return totalLatency;
 }
 
-void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate)
+void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate, const juce::AudioBuffer<float>& lfoOutputBuffer)
 {
     splitBands(wetBuffer, sampleRate);
 
@@ -1728,15 +1758,30 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.isSafeModeOn = *treeState.getRawParameterValue(ParameterID::safeIds[i]) > 0.5f;
                 params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[i]) > 0.5f;
                 params.biasVal = *treeState.getRawParameterValue(ParameterID::biasIds[i]);
-                // Note: We still update the smoothed values' targets in each block
-//                band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-                params.driveVal = *treeState.getRawParameterValue(ParameterID::driveIds[i]);
-                band->recSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
-                band->biasSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
+                params.recVal = *treeState.getRawParameterValue(ParameterID::recIds[i]);
+                band->biasSmoother.setTargetValue(params.biasVal);
+                band->recSmoother.setTargetValue(params.recVal);
 
+                params.driveID = ParameterID::drive(i).getParamID();
+                params.biasID  = ParameterID::bias(i).getParamID();
+                params.recID   = ParameterID::rec(i).getParamID();
+
+                // --- DRIVE MODULATION (PER-BLOCK) ---
+                float baseDrive = *treeState.getRawParameterValue(params.driveID);
+                float driveModulation = 0.0f;
+                for (const auto& routing : this->modulationRoutings)
+                {
+                    if (routing.targetParameterID == params.driveID)
+                    {
+                        // Use the first LFO sample of the block as an approximation.
+                        float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
+                        driveModulation += lfoValue * routing.depth * 50.0f; // Depth of 1.0 modulates by +/- 50
+                    }
+                }
+                params.driveVal = juce::jlimit(0.0f, 100.0f, baseDrive + driveModulation);
 
                 // 2. Call the refactored, decoupled process method
-                band->process(*wetBandBuffers[i], params, lfoEngines[i]);
+                band->process(*wetBandBuffers[i], params, lfoOutputBuffer, this->modulationRoutings);
             }
 
             // After processing, set the output meter values for this band.

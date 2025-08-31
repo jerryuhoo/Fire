@@ -169,7 +169,6 @@ struct BandProcessor
     {
         // Set a default waveshaper so it's never null
         waveshaperFunction = [](float x) { return x; };
-        rectifierFunction  = [](float x) { return x; };
     }
     
     // And its own set of smoothed parameter values.
@@ -179,7 +178,6 @@ struct BandProcessor
     bool isFirstBlock = true;
 
     std::function<float(float)> waveshaperFunction;
-    std::function<float(float)> rectifierFunction;
 
     // Per-band meter values
     float mInputLeftSmoothed = 0, mInputRightSmoothed = 0;
@@ -197,7 +195,8 @@ struct BandProcessor
 private:
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                            const juce::AudioBuffer<float>& dryBuffer,
-                           const BandProcessingParameters& params);
+                           const BandProcessingParameters& params,
+                           LfoEngine& lfoEngine);
 };
 
 //==============================================================================

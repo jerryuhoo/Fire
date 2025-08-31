@@ -79,14 +79,14 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessi
         auto oversampledBlock = oversampling->processSamplesUp(block);
         
         // Call the loop to process the upsampled signal in-place
-        processDistortion(oversampledBlock, dryBuffer, params);
+        processDistortion(oversampledBlock, dryBuffer, params, lfoEngine);
         
         oversampling->processSamplesDown(block);
     }
     else
     {
         // Call the loop to process the signal at the original sample rate
-        processDistortion(block, dryBuffer, params);
+        processDistortion(block, dryBuffer, params, lfoEngine);
     }
     
     // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -144,7 +144,8 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer, const BandProcessi
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                                       const juce::AudioBuffer<float>& dryBuffer,
-                                      const BandProcessingParameters& params)
+                                      const BandProcessingParameters& params,
+                                      LfoEngine& lfoEngine)
 {
     const bool isSafeModeOn    = params.isSafeModeOn;
     const bool isExtremeModeOn = params.isExtremeModeOn;
@@ -167,7 +168,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     float powerDrive = std::pow(2.0f, driveForCalc);
 
     if (isSafeModeOn && this->mSampleMaxValue * powerDrive > 2.0f)
-        this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * std::log2(powerDrive);
+        this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * driveForCalc;
     else
         this->newDrive = powerDrive;
     
@@ -215,17 +216,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         case 10: this->waveshaperFunction = waveshaping::logicClip<float>;         break;
         case 11: this->waveshaperFunction = waveshaping::tanclip<float>;           break;
     }
-    
-    // Rectification (asymmetrical processing)
-    const float smoothedRec = recSmoother.getNextValue();
-    this->rectifierFunction = [smoothedRec](float input)
-    {
-        if (input < 0.0f)
-        {
-            return input * (0.5f - smoothedRec) * 2.0f;
-        }
-        return input;
-    };
 
     // --- 5. Manual Per-Sample Processing Loop ---
     const int numSamples = (int) blockToProcess.getNumSamples();
@@ -236,6 +226,16 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // Calculate smoothed values ONCE per sample frame
         const float smoothedDrive = driveSmoother.getNextValue();
         const float smoothedBias = biasSmoother.getNextValue();
+        const float smoothedRec  = recSmoother.getNextValue();
+
+        // Get a fresh, bipolar LFO value (-1.0 to 1.0) for the current sample.
+        const float lfoValue = lfoEngine.process();
+
+        // Calculate the LFO-modulated values for the current sample.
+        const float modulationDepth = 0.5f; // This can be made a parameter later
+        // float modulatedDrive = juce::jlimit(0.0f, 100.0f, smoothedDrive + lfoValue * (100.0f * modulationDepth));
+        float modulatedRec   = juce::jlimit(0.0f, 1.0f,   smoothedRec   + lfoValue * (1.0f * modulationDepth));
+        float modulatedBias  = juce::jlimit(-1.0f, 1.0f,  smoothedBias  + lfoValue * (2.0f * modulationDepth));
 
         // Apply these values to all channels
         for (int channel = 0; channel < numChannels; ++channel)
@@ -244,10 +244,11 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             
             // The processing chain, applied manually:
             currentSample *= smoothedDrive;             // 1. Drive Gain
-            currentSample += smoothedBias;             // 2. Pre-Bias
+            currentSample += modulatedBias;             // 2. Pre-Bias
             currentSample = waveshaperFunction(currentSample); // 3. Waveshaper
-            currentSample = rectifierFunction(currentSample);  // 4. Rectifier
-            currentSample -= smoothedBias;             // 5. Post-Bias
+            if (currentSample < 0.0f)
+                currentSample *= (0.5f - modulatedRec) * 2.0f;  // 4. Rectifier
+            currentSample -= modulatedBias;             // 5. Post-Bias
 
             blockToProcess.setSample(channel, sample, currentSample);
         }

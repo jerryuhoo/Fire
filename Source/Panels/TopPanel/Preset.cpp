@@ -18,16 +18,42 @@ namespace state
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
         //xml.removeAllAttributes(); // clear first
+        auto& fireProc = static_cast<const FireAudioProcessor&>(proc);
 
-        for (const auto& param : proc.getParameters())
+        for (const auto& param : fireProc.getParameters())
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             {
                 xml.setAttribute(p->paramID, p->getValue());
             }
+
+        // 1. Save LFO Shapes
+        auto* lfoState = xml.createNewChildElement("LFO_STATE");
+        for (int i = 0; i < fireProc.lfoData.size(); ++i)
+        {
+            auto* lfoXml = new juce::XmlElement("LFO");
+            lfoXml->setAttribute("index", i);
+            fireProc.lfoData[i].writeToXml(*lfoXml);
+            lfoState->addChildElement(lfoXml);
+        }
+
+        // 2. Save Modulation Matrix Routings
+        auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
+        for (const auto& routing : fireProc.modulationRoutings)
+        {
+            // Only save routings that are actually in use
+            if (! routing.targetParameterID.isEmpty())
+            {
+                auto* routingXml = new juce::XmlElement("ROUTING");
+                routing.writeToXml(*routingXml);
+                modMatrixState->addChildElement(routingXml);
+            }
+        }
     }
 
     void loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
     {
+        auto& fireProc = static_cast<FireAudioProcessor&>(proc);
+
         const int lineNum = 3;
         int freqIndex = 0;
         int stateIndex = 0;
@@ -95,6 +121,44 @@ namespace state
             // set lineState first, so that sliderValueChanged in multiband.cpp will be triggered after line state updated.
             stateParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].second);
             freqParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].first);
+        }
+
+        // --- Load LFO and Matrix data ---
+
+        // This ensures that loading an old preset correctly clears out the new data.
+        for (auto& lfo : fireProc.lfoData)
+        {
+            lfo = LfoData();
+        }
+        fireProc.modulationRoutings.clear();
+
+        // 1. Load LFO Shapes
+        if (auto* lfoState = xml.getChildByName("LFO_STATE"))
+        {
+            for (auto* lfoXml : lfoState->getChildIterator())
+            {
+                const int index = lfoXml->getIntAttribute("index", -1);
+                if (juce::isPositiveAndBelow(index, (int) fireProc.lfoData.size()))
+                {
+                    fireProc.lfoData[index] = LfoData::readFromXml(*lfoXml);
+                }
+            }
+        }
+
+        // 2. Load Modulation Matrix Routings
+        if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
+        {
+            fireProc.modulationRoutings.clear();
+            for (auto* routingXml : modMatrixState->getChildIterator())
+            {
+                fireProc.modulationRoutings.add(ModulationRouting::readFromXml(*routingXml));
+            }
+        }
+
+        // 3. IMPORTANT: Notify the editor to update its display
+        if (auto* editor = fireProc.getActiveEditor())
+        {
+            editor->repaint();
         }
     }
 
@@ -189,15 +253,15 @@ namespace state
             if (firstIsPreset && secondIsPreset)
             {
                 return first->getStringAttribute("presetName")
-                            .compareNatural(second->getStringAttribute("presetName"));
+                    .compareNatural(second->getStringAttribute("presetName"));
             }
             // 两个都是文件夹，按文件夹名 (TagName) 排序
-            else if (!firstIsPreset && !secondIsPreset)
+            else if (! firstIsPreset && ! secondIsPreset)
             {
                 return first->getTagName().compareNatural(second->getTagName());
             }
             // 一个是预设，一个是文件夹，让文件夹排在前面
-            else if (firstIsPreset && !secondIsPreset)
+            else if (firstIsPreset && ! secondIsPreset)
             {
                 return 1; // first (preset) > second (folder)
             }
@@ -282,7 +346,7 @@ namespace state
         for (auto* child : parent->getChildIterator())
         {
             // 如果子元素是一个文件夹 (即没有 presetName 属性)，则对其进行递归排序
-            if (!child->hasAttribute("presetName"))
+            if (! child->hasAttribute("presetName"))
             {
                 recursiveSort(child);
             }
@@ -296,7 +360,7 @@ namespace state
         //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
 
         recursiveFileSearch(mPresetXml, presetFile);
-        
+
         recursiveSort(&mPresetXml);
 
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
@@ -333,7 +397,7 @@ namespace state
         {
             statePresetName = presetName; // Also update the internal state.
             scanAllPresets(); // Rescan and sort all presets.
-            
+
             // Key change: Return the preset name on success.
             return presetName;
         }
@@ -400,7 +464,7 @@ namespace state
                     n = "(Unnamed preset)";
                 menu.addItem(n, index);
                 comboBoxIdToTagNameMap.set(index, child->getTagName());
-                
+
                 // save new preset and rescan, this will return new preset index
                 if (statePresetName == n)
                 {
@@ -505,7 +569,8 @@ namespace state
         presetBox.setTextWhenNothingSelected("- Init -");
 
         // when selecting the same preset, this will revert back to the original preset (in case you changed something)
-        presetBox.onChange = [this] { updatePresetBox(presetBox.getSelectedId()); };
+        presetBox.onChange = [this]
+        { updatePresetBox(presetBox.getSelectedId()); };
 
         refreshPresetBox();
         ifPresetActiveShowInBox();
@@ -625,7 +690,7 @@ namespace state
     void StateComponent::markAsDirty()
     {
         // 只有在当前有一个“干净”的预设被选中时 (ID > 0 且不带 *)，才执行操作
-        if (presetBox.getSelectedId() > 0 && !presetBox.getText().endsWith("*"))
+        if (presetBox.getSelectedId() > 0 && ! presetBox.getText().endsWith("*"))
         {
             const auto currentText = presetBox.getText();
 
@@ -679,8 +744,9 @@ namespace state
                 isProgrammaticChange = true;
                 presetManager->setCurrentPresetId(selectedId);
                 presetManager->loadPreset(internalIdToLoad);
-                
-                juce::MessageManager::callAsync([this]() { isProgrammaticChange = false; });
+
+                juce::MessageManager::callAsync([this]()
+                                                { isProgrammaticChange = false; });
 
                 juce::String presetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
 
@@ -749,7 +815,7 @@ namespace state
         auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
 
         fileChooser->launchAsync(folderChooserFlags, [this](const juce::FileChooser& chooser)
-        {
+                                 {
             juce::File inputName = chooser.getResult();
 
             // 1. Call the modified savePreset and get the returned name.
@@ -779,8 +845,7 @@ namespace state
                 {
                     presetBox.setSelectedId(newPresetIdToSelect);
                 }
-            }
-        });
+            } });
     }
 
     void StateComponent::openPresetFolder()
@@ -793,7 +858,7 @@ namespace state
             juce::File(userFile).startAsProcess();
         }
     }
-    
+
     void StateComponent::rescanPresetFolder()
     {
         juce::String previouslySelectedName;

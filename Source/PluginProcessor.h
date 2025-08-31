@@ -32,47 +32,53 @@ namespace ParameterID
 
     // --- Arrays of Macros for Per-Band Parameters ---
     // This allows us to access parameters like DRIVE_ID1, DRIVE_ID2 etc. via an index.
-    const char* const modeIds[]        = { MODE_ID1, MODE_ID2, MODE_ID3, MODE_ID4 };
-    const char* const linkedIds[]      = { LINKED_ID1, LINKED_ID2, LINKED_ID3, LINKED_ID4 };
-    const char* const safeIds[]        = { SAFE_ID1, SAFE_ID2, SAFE_ID3, SAFE_ID4 };
-    const char* const extremeIds[]     = { EXTREME_ID1, EXTREME_ID2, EXTREME_ID3, EXTREME_ID4 };
-    const char* const driveIds[]       = { DRIVE_ID1, DRIVE_ID2, DRIVE_ID3, DRIVE_ID4 };
-    const char* const compRatioIds[]   = { COMP_RATIO_ID1, COMP_RATIO_ID2, COMP_RATIO_ID3, COMP_RATIO_ID4 };
-    const char* const compThreshIds[]  = { COMP_THRESH_ID1, COMP_THRESH_ID2, COMP_THRESH_ID3, COMP_THRESH_ID4 };
-    const char* const widthIds[]       = { WIDTH_ID1, WIDTH_ID2, WIDTH_ID3, WIDTH_ID4 };
-    const char* const outputIds[]      = { OUTPUT_ID1, OUTPUT_ID2, OUTPUT_ID3, OUTPUT_ID4 };
-    const char* const mixIds[]         = { MIX_ID1, MIX_ID2, MIX_ID3, MIX_ID4 };
-    const char* const biasIds[]        = { BIAS_ID1, BIAS_ID2, BIAS_ID3, BIAS_ID4 };
-    const char* const recIds[]         = { REC_ID1, REC_ID2, REC_ID3, REC_ID4 };
-    const char* const bandEnableIds[]  = { BAND_ENABLE_ID1, BAND_ENABLE_ID2, BAND_ENABLE_ID3, BAND_ENABLE_ID4 };
-    const char* const bandSoloIds[]    = { BAND_SOLO_ID1, BAND_SOLO_ID2, BAND_SOLO_ID3, BAND_SOLO_ID4 };
-    const char* const compBypassIds[]  = { COMP_BYPASS_ID1, COMP_BYPASS_ID2, COMP_BYPASS_ID3, COMP_BYPASS_ID4 };
+    const char* const modeIds[] = { MODE_ID1, MODE_ID2, MODE_ID3, MODE_ID4 };
+    const char* const linkedIds[] = { LINKED_ID1, LINKED_ID2, LINKED_ID3, LINKED_ID4 };
+    const char* const safeIds[] = { SAFE_ID1, SAFE_ID2, SAFE_ID3, SAFE_ID4 };
+    const char* const extremeIds[] = { EXTREME_ID1, EXTREME_ID2, EXTREME_ID3, EXTREME_ID4 };
+    const char* const driveIds[] = { DRIVE_ID1, DRIVE_ID2, DRIVE_ID3, DRIVE_ID4 };
+    const char* const compRatioIds[] = { COMP_RATIO_ID1, COMP_RATIO_ID2, COMP_RATIO_ID3, COMP_RATIO_ID4 };
+    const char* const compThreshIds[] = { COMP_THRESH_ID1, COMP_THRESH_ID2, COMP_THRESH_ID3, COMP_THRESH_ID4 };
+    const char* const widthIds[] = { WIDTH_ID1, WIDTH_ID2, WIDTH_ID3, WIDTH_ID4 };
+    const char* const outputIds[] = { OUTPUT_ID1, OUTPUT_ID2, OUTPUT_ID3, OUTPUT_ID4 };
+    const char* const mixIds[] = { MIX_ID1, MIX_ID2, MIX_ID3, MIX_ID4 };
+    const char* const biasIds[] = { BIAS_ID1, BIAS_ID2, BIAS_ID3, BIAS_ID4 };
+    const char* const recIds[] = { REC_ID1, REC_ID2, REC_ID3, REC_ID4 };
+    const char* const bandEnableIds[] = { BAND_ENABLE_ID1, BAND_ENABLE_ID2, BAND_ENABLE_ID3, BAND_ENABLE_ID4 };
+    const char* const bandSoloIds[] = { BAND_SOLO_ID1, BAND_SOLO_ID2, BAND_SOLO_ID3, BAND_SOLO_ID4 };
+    const char* const compBypassIds[] = { COMP_BYPASS_ID1, COMP_BYPASS_ID2, COMP_BYPASS_ID3, COMP_BYPASS_ID4 };
     const char* const widthBypassIds[] = { WIDTH_BYPASS_ID1, WIDTH_BYPASS_ID2, WIDTH_BYPASS_ID3, WIDTH_BYPASS_ID4 };
-    
+    const char* const lfoSyncModeIds[] = { LFO_SYNC_MODE_ID1, LFO_SYNC_MODE_ID2, LFO_SYNC_MODE_ID3, LFO_SYNC_MODE_ID4 };
+    const char* const lfoRateSyncIds[] = { LFO_RATE_SYNC_ID1, LFO_RATE_SYNC_ID2, LFO_RATE_SYNC_ID3, LFO_RATE_SYNC_ID4 };
+    const char* const lfoRateHzIds[] = { LFO_RATE_HZ_ID1, LFO_RATE_HZ_ID2, LFO_RATE_HZ_ID3, LFO_RATE_HZ_ID4 };
+
     // --- Helper functions that return a complete juce::ParameterID object ---
-    inline juce::ParameterID mode (int i)        { return { modeIds[i], versionNum }; }
-    inline juce::ParameterID linked (int i)      { return { linkedIds[i], versionNum }; }
-    inline juce::ParameterID safe (int i)        { return { safeIds[i], versionNum }; }
-    inline juce::ParameterID extreme (int i)     { return { extremeIds[i], versionNum }; }
-    inline juce::ParameterID drive (int i)       { return { driveIds[i], versionNum }; }
-    inline juce::ParameterID compRatio (int i)   { return { compRatioIds[i], versionNum }; }
-    inline juce::ParameterID compThresh (int i)  { return { compThreshIds[i], versionNum }; }
-    inline juce::ParameterID width (int i)       { return { widthIds[i], versionNum }; }
-    inline juce::ParameterID output (int i)      { return { outputIds[i], versionNum }; }
-    inline juce::ParameterID mix (int i)         { return { mixIds[i], versionNum }; }
-    inline juce::ParameterID bias (int i)        { return { biasIds[i], versionNum }; }
-    inline juce::ParameterID rec (int i)         { return { recIds[i], versionNum }; }
-    inline juce::ParameterID bandEnable (int i)  { return { bandEnableIds[i], versionNum }; }
-    inline juce::ParameterID bandSolo (int i)    { return { bandSoloIds[i], versionNum }; }
-    inline juce::ParameterID compBypass (int i)  { return { compBypassIds[i], versionNum }; }
-    inline juce::ParameterID widthBypass (int i) { return { widthBypassIds[i], versionNum }; }
+    inline juce::ParameterID mode(int i) { return { modeIds[i], versionNum }; }
+    inline juce::ParameterID linked(int i) { return { linkedIds[i], versionNum }; }
+    inline juce::ParameterID safe(int i) { return { safeIds[i], versionNum }; }
+    inline juce::ParameterID extreme(int i) { return { extremeIds[i], versionNum }; }
+    inline juce::ParameterID drive(int i) { return { driveIds[i], versionNum }; }
+    inline juce::ParameterID compRatio(int i) { return { compRatioIds[i], versionNum }; }
+    inline juce::ParameterID compThresh(int i) { return { compThreshIds[i], versionNum }; }
+    inline juce::ParameterID width(int i) { return { widthIds[i], versionNum }; }
+    inline juce::ParameterID output(int i) { return { outputIds[i], versionNum }; }
+    inline juce::ParameterID mix(int i) { return { mixIds[i], versionNum }; }
+    inline juce::ParameterID bias(int i) { return { biasIds[i], versionNum }; }
+    inline juce::ParameterID rec(int i) { return { recIds[i], versionNum }; }
+    inline juce::ParameterID bandEnable(int i) { return { bandEnableIds[i], versionNum }; }
+    inline juce::ParameterID bandSolo(int i) { return { bandSoloIds[i], versionNum }; }
+    inline juce::ParameterID compBypass(int i) { return { compBypassIds[i], versionNum }; }
+    inline juce::ParameterID widthBypass(int i) { return { widthBypassIds[i], versionNum }; }
+    inline juce::ParameterID lfoSyncMode(int i) { return { lfoSyncModeIds[i], versionNum }; }
+    inline juce::ParameterID lfoRateSync(int i) { return { lfoRateSyncIds[i], versionNum }; }
+    inline juce::ParameterID lfoRateHz(int i) { return { lfoRateHzIds[i], versionNum }; }
 
     // --- Global Parameters built from macros ---
     const juce::ParameterID hq = { HQ_ID, versionNum };
     const juce::ParameterID globalOutput = { OUTPUT_ID, versionNum };
     const juce::ParameterID globalMix = { MIX_ID, versionNum };
     const juce::ParameterID numBands = { NUM_BANDS_ID, versionNum };
-    
+
     // --- Crossover Parameters ---
     const juce::ParameterID lineState1 = { LINE_STATE_ID1, versionNum };
     const juce::ParameterID lineState2 = { LINE_STATE_ID2, versionNum };
@@ -109,20 +115,69 @@ namespace ParameterID
     const juce::ParameterID downsample = { DOWNSAMPLE_ID, versionNum };
     const juce::ParameterID downsampleBypass = { DOWNSAMPLE_BYPASS_ID, versionNum };
 
-    // --- Arrays of Macros for Per-LFO Parameters ---
-    const char* const lfoSyncModeIds[] = { LFO_SYNC_MODE_ID1, LFO_SYNC_MODE_ID2, LFO_SYNC_MODE_ID3, LFO_SYNC_MODE_ID4 };
-    const char* const lfoRateSyncIds[] = { LFO_RATE_SYNC_ID1, LFO_RATE_SYNC_ID2, LFO_RATE_SYNC_ID3, LFO_RATE_SYNC_ID4 };
-    const char* const lfoRateHzIds[]   = { LFO_RATE_HZ_ID1,   LFO_RATE_HZ_ID2,   LFO_RATE_HZ_ID3,   LFO_RATE_HZ_ID4 };
+    // --- Put Names here in the future ---
 
+    // --- Arrays for Per-Band Parameter Names ---
+    const char* const modeNames[] = { MODE_NAME1, MODE_NAME2, MODE_NAME3, MODE_NAME4 };
+    const char* const linkedNames[] = { LINKED_NAME1, LINKED_NAME2, LINKED_NAME3, LINKED_NAME4 };
+    const char* const safeNames[] = { SAFE_NAME1, SAFE_NAME2, SAFE_NAME3, SAFE_NAME4 };
+    const char* const extremeNames[] = { EXTREME_NAME1, EXTREME_NAME2, EXTREME_NAME3, EXTREME_NAME4 };
+    const char* const driveNames[] = { DRIVE_NAME1, DRIVE_NAME2, DRIVE_NAME3, DRIVE_NAME4 };
+    const char* const compRatioNames[] = { COMP_RATIO_NAME1, COMP_RATIO_NAME2, COMP_RATIO_NAME3, COMP_RATIO_NAME4 };
+    const char* const compThreshNames[] = { COMP_THRESH_NAME1, COMP_THRESH_NAME2, COMP_THRESH_NAME3, COMP_THRESH_NAME4 };
+    const char* const widthNames[] = { WIDTH_NAME1, WIDTH_NAME2, WIDTH_NAME3, WIDTH_NAME4 };
+    const char* const outputNames[] = { OUTPUT_NAME1, OUTPUT_NAME2, OUTPUT_NAME3, OUTPUT_NAME4 };
+    const char* const mixNames[] = { MIX_NAME1, MIX_NAME2, MIX_NAME3, MIX_NAME4 };
+    const char* const biasNames[] = { BIAS_NAME1, BIAS_NAME2, BIAS_NAME3, BIAS_NAME4 };
+    const char* const recNames[] = { REC_NAME1, REC_NAME2, REC_NAME3, REC_NAME4 };
+    const char* const bandEnableNames[] = { BAND_ENABLE_NAME1, BAND_ENABLE_NAME2, BAND_ENABLE_NAME3, BAND_ENABLE_NAME4 };
+    const char* const bandSoloNames[] = { BAND_SOLO_NAME1, BAND_SOLO_NAME2, BAND_SOLO_NAME3, BAND_SOLO_NAME4 };
+    const char* const compBypassNames[] = { COMP_BYPASS_NAME1, COMP_BYPASS_NAME2, COMP_BYPASS_NAME3, COMP_BYPASS_NAME4 };
+    const char* const widthBypassNames[] = { WIDTH_BYPASS_NAME1, WIDTH_BYPASS_NAME2, WIDTH_BYPASS_NAME3, WIDTH_BYPASS_NAME4 };
     const char* const lfoSyncModeNames[] = { LFO_SYNC_MODE_NAME1, LFO_SYNC_MODE_NAME2, LFO_SYNC_MODE_NAME3, LFO_SYNC_MODE_NAME4 };
     const char* const lfoRateSyncNames[] = { LFO_RATE_SYNC_NAME1, LFO_RATE_SYNC_NAME2, LFO_RATE_SYNC_NAME3, LFO_RATE_SYNC_NAME4 };
-    const char* const lfoRateHzNames[]   = { LFO_RATE_HZ_NAME1,   LFO_RATE_HZ_NAME2,   LFO_RATE_HZ_NAME3,   LFO_RATE_HZ_NAME4 };
+    const char* const lfoRateHzNames[] = { LFO_RATE_HZ_NAME1, LFO_RATE_HZ_NAME2, LFO_RATE_HZ_NAME3, LFO_RATE_HZ_NAME4 };
 
-    // --- Helper functions that return a complete juce::ParameterID object for LFOs ---
-    inline juce::ParameterID lfoSyncMode (int i) { return { lfoSyncModeIds[i], versionNum }; }
-    inline juce::ParameterID lfoRateSync (int i) { return { lfoRateSyncIds[i], versionNum }; }
-    inline juce::ParameterID lfoRateHz (int i)   { return { lfoRateHzIds[i],   versionNum }; }
-}
+    // --- Global Parameter Names ---
+    const char* const hqName = HQ_NAME;
+    const char* const globalOutputName = OUTPUT_NAME;
+    const char* const globalMixName = MIX_NAME;
+    const char* const numBandsName = NUM_BANDS_NAME;
+    const char* const filterBypassName = FILTER_BYPASS_NAME;
+    const char* const downsampleName = DOWNSAMPLE_NAME;
+    const char* const downsampleBypassName = DOWNSAMPLE_BYPASS_NAME;
+
+    // --- Crossover Parameter Names ---
+    const char* const freqName1 = FREQ_NAME1;
+    const char* const freqName2 = FREQ_NAME2;
+    const char* const freqName3 = FREQ_NAME3;
+    const char* const lineStateName1 = LINE_STATE_NAME1;
+    const char* const lineStateName2 = LINE_STATE_NAME2;
+    const char* const lineStateName3 = LINE_STATE_NAME3;
+
+    // --- Global Filter Parameter Names ---
+    const char* const lowCutFreqName = LOWCUT_FREQ_NAME;
+    const char* const lowCutQName = LOWCUT_Q_NAME;
+    const char* const lowCutGainName = LOWCUT_GAIN_NAME;
+    const char* const highCutFreqName = HIGHCUT_FREQ_NAME;
+    const char* const highCutQName = HIGHCUT_Q_NAME;
+    const char* const highCutGainName = HIGHCUT_GAIN_NAME;
+    const char* const peakFreqName = PEAK_FREQ_NAME;
+    const char* const peakQName = PEAK_Q_NAME;
+    const char* const peakGainName = PEAK_GAIN_NAME;
+    const char* const lowCutSlopeName = LOWCUT_SLOPE_NAME;
+    const char* const highCutSlopeName = HIGHCUT_SLOPE_NAME;
+    const char* const lowCutBypassedName = LOWCUT_BYPASSED_NAME;
+    const char* const peakBypassedName = PEAK_BYPASSED_NAME;
+    const char* const highCutBypassedName = HIGHCUT_BYPASSED_NAME;
+    const char* const offName = OFF_NAME;
+    const char* const preName = PRE_NAME;
+    const char* const postName = POST_NAME;
+    const char* const lowName = LOW_NAME;
+    const char* const bandName = BAND_NAME;
+    const char* const highName = HIGH_NAME;
+
+} // namespace ParameterID
 
 //==============================================================================
 // Describes a single connection from a source (LFO) to a target (Parameter)
@@ -130,23 +185,23 @@ struct ModulationRouting
 {
     int sourceLfoIndex = 0;
     juce::String targetParameterID;
-    
+
     // Depth can be bipolar (-1.0 to 1.0), representing -100% to +100%
     float depth = 0.5f;
-    
+
     // Helper for saving/loading state
-    void writeToXml (juce::XmlElement& xml) const
+    void writeToXml(juce::XmlElement& xml) const
     {
-        xml.setAttribute ("source", sourceLfoIndex);
-        xml.setAttribute ("target", targetParameterID);
-        xml.setAttribute ("depth", depth);
+        xml.setAttribute("source", sourceLfoIndex);
+        xml.setAttribute("target", targetParameterID);
+        xml.setAttribute("depth", depth);
     }
-    
-    static ModulationRouting readFromXml (const juce::XmlElement& xml)
+
+    static ModulationRouting readFromXml(const juce::XmlElement& xml)
     {
-        return { xml.getIntAttribute    ("source", 0),
-                 xml.getStringAttribute ("target"),
-                 (float) xml.getDoubleAttribute ("depth", 0.5) };
+        return { xml.getIntAttribute("source", 0),
+                 xml.getStringAttribute("target"),
+                 (float) xml.getDoubleAttribute("depth", 0.5) };
     }
 };
 
@@ -156,19 +211,19 @@ struct ModulationRouting
 struct BandProcessingParameters
 {
     // Main process parameters
-    int   mode;
-    bool  isHQ;
+    int mode;
+    bool isHQ;
     float outputVal;
     float mixVal;
     float compThreshold;
     float compRatio;
-    bool  isCompBypassed;
+    bool isCompBypassed;
     float width;
-    bool  isWidthBypassed;
+    bool isWidthBypassed;
 
     // Distortion-specific parameters
-    bool  isSafeModeOn;
-    bool  isExtremeModeOn;
+    bool isSafeModeOn;
+    bool isExtremeModeOn;
     float driveVal;
     float biasVal;
     float recVal;
@@ -195,13 +250,14 @@ struct BandProcessor
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
-    
+
     BandProcessor() : dryWetMixer(2048)
     {
         // Set a default waveshaper so it's never null
-        waveshaperFunction = [](float x) { return x; };
+        waveshaperFunction = [](float x)
+        { return x; };
     }
-    
+
     // And its own set of smoothed parameter values.
     juce::SmoothedValue<float> driveSmoother;
     juce::SmoothedValue<float> biasSmoother;
@@ -213,12 +269,12 @@ struct BandProcessor
     // Per-band meter values
     float mInputLeftSmoothed = 0, mInputRightSmoothed = 0;
     float mOutputLeftSmoothed = 0, mOutputRightSmoothed = 0;
-    
+
     // Per-band state for Safe Mode
     float mReductionPercent = 1.0f;
     float mSampleMaxValue = 0.0f;
     float newDrive = 1.0f;
-    
+
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
     void process(juce::AudioBuffer<float>& buffer,
@@ -235,7 +291,6 @@ private:
 };
 
 //==============================================================================
-
 
 class FireAudioProcessor : public juce::AudioProcessor
 {
@@ -282,7 +337,7 @@ public:
 
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(juce::AudioBuffer<float> buffer);
-    
+
     // LFO
     // A publicly accessible list of BPM sync divisions
     // This allows the GUI to know what text to display for the sync rates.
@@ -336,21 +391,36 @@ private:
     {
         switch (index)
         {
-            case 0:  return 1.0f / 64.0f; // 1/64
-            case 1:  return 1.0f / 32.0f * 2.0f / 3.0f; // 1/32T
-            case 2:  return 1.0f / 32.0f; // 1/32
-            case 3:  return 1.0f / 16.0f * 2.0f / 3.0f; // 1/16T
-            case 4:  return 1.0f / 16.0f; // 1/16
-            case 5:  return 1.0f / 8.0f * 2.0f / 3.0f;  // 1/8T
-            case 6:  return 1.0f / 8.0f;  // 1/8
-            case 7:  return 1.0f / 4.0f * 2.0f / 3.0f;  // 1/4T
-            case 8:  return 1.0f / 4.0f;  // 1/4
-            case 9:  return 1.0f / 2.0f * 2.0f / 3.0f;  // 1/2T
-            case 10: return 1.0f / 2.0f;  // 1/2
-            case 11: return 1.0f;         // 1 Bar
-            case 12: return 2.0f;         // 2 Bars
-            case 13: return 4.0f;         // 4 Bars
-            default: return 1.0f / 4.0f;
+            case 0:
+                return 1.0f / 64.0f; // 1/64
+            case 1:
+                return 1.0f / 32.0f * 2.0f / 3.0f; // 1/32T
+            case 2:
+                return 1.0f / 32.0f; // 1/32
+            case 3:
+                return 1.0f / 16.0f * 2.0f / 3.0f; // 1/16T
+            case 4:
+                return 1.0f / 16.0f; // 1/16
+            case 5:
+                return 1.0f / 8.0f * 2.0f / 3.0f; // 1/8T
+            case 6:
+                return 1.0f / 8.0f; // 1/8
+            case 7:
+                return 1.0f / 4.0f * 2.0f / 3.0f; // 1/4T
+            case 8:
+                return 1.0f / 4.0f; // 1/4
+            case 9:
+                return 1.0f / 2.0f * 2.0f / 3.0f; // 1/2T
+            case 10:
+                return 1.0f / 2.0f; // 1/2
+            case 11:
+                return 1.0f; // 1 Bar
+            case 12:
+                return 2.0f; // 2 Bars
+            case 13:
+                return 4.0f; // 4 Bars
+            default:
+                return 1.0f / 4.0f;
         }
     }
 
@@ -359,7 +429,7 @@ private:
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<std::unique_ptr<BandProcessor>> bands;
     float totalLatency = 0.0f;
-    
+
     void updateParameters();
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer,
@@ -388,7 +458,7 @@ private:
     SpectrumProcessor originalSpecProcessor;
 
     // dry audio buffer
-//    juce::AudioBuffer<float> mDryBuffer;
+    //    juce::AudioBuffer<float> mDryBuffer;
     juce::AudioBuffer<float> delayMatchedDryBuffer;
     // wet audio buffer
     juce::AudioBuffer<float> mWetBuffer;
@@ -415,9 +485,9 @@ private:
     juce::SmoothedValue<float> highcutFreqSmoother;
     juce::SmoothedValue<float> highcutGainSmoother;
     juce::SmoothedValue<float> highcutQualitySmoother;
-    
+
     using GainProcessor = juce::dsp::Gain<float>;
-    
+
     GainProcessor gainProcessorGlobal;
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 100 };
 

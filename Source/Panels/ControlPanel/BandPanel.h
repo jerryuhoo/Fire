@@ -34,7 +34,7 @@ public:
 
     void handleAsyncUpdate() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
-    
+
     //    void changeSliderState(int bandNum, bool isPresetChanged);
     void setBandKnobsStates(int index, bool state, bool callFromSubBypass);
     juce::ToggleButton& getCompButton(const int index);
@@ -92,10 +92,10 @@ private:
         recKnob3,
         recKnob4,
 
-        biasKnob1,
-        biasKnob2,
-        biasKnob3,
-        biasKnob4,
+        // biasKnob1,
+        // biasKnob2,
+        // biasKnob3,
+        // biasKnob4,
 
         compRatioKnob1,
         compRatioKnob2,
@@ -111,6 +111,12 @@ private:
         widthKnob2,
         widthKnob3,
         widthKnob4;
+
+    ModulatableSlider
+        biasKnob1,
+        biasKnob2,
+        biasKnob3,
+        biasKnob4;
 
     juce::Label
         driveLabel,

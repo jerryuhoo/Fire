@@ -12,6 +12,7 @@
 #pragma once
 
 #include "InterfaceDefines.h"
+#include "ModulatableSlider.h" // Include the new header
 #include "juce_graphics/juce_graphics.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
@@ -257,6 +258,10 @@ public:
         if (slider.getComponentID() == "drive")
         {
             drawDriveSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
+        }
+        else if (auto* modulatableSlider = dynamic_cast<ModulatableSlider*>(&slider))
+        {
+            drawModulatableSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, *modulatableSlider);
         }
         else
         {
@@ -609,8 +614,24 @@ private:
         juce::Rectangle<float> dialArea(centerX - radiusInner, centerY - radiusInner, diameterInner, diameterInner);
 
         juce::Colour innerColor = KNOB_INNER_COLOUR;
-        if (slider.isMouseOverOrDragging() && slider.isEnabled())
+
+        // --- CORRECTED HIGHLIGHT LOGIC ---
+        bool highlight = false;
+        if (auto* ms = dynamic_cast<ModulatableSlider*>(&slider))
+        {
+            // If it's a ModulatableSlider, use our specific hover logic
+            highlight = (ms->isMouseOverMainSlider() || ms->isMouseButtonDown()) && ! ms->isModHandleMouseDown;
+        }
+        else
+        {
+            // For all other sliders, use the default JUCE logic
+            highlight = slider.isMouseOverOrDragging();
+        }
+
+        if (highlight && slider.isEnabled())
+        {
             innerColor = innerColor.brighter();
+        }
 
         g.setColour(innerColor);
         g.fillEllipse(dialArea);
@@ -619,6 +640,80 @@ private:
         dialTick.addRectangle(0, -radiusInner * 0.95f, radiusInner * 0.15f, radiusInner * 0.3f);
         g.setColour(KNOB_TICK_COLOUR);
         g.fillPath(dialTick, juce::AffineTransform::rotation(toAngle).translated(centerX, centerY));
+    }
+
+    void drawModulatableSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, ModulatableSlider& slider)
+    {
+        // This function no longer needs to worry about the main dial's highlight,
+        // as that is now correctly handled in drawDefaultSlider.
+
+        // First, draw the default slider visuals
+        drawDefaultSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
+
+        auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10 * scale);
+        auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+        auto center = bounds.getCentre();
+        auto lineW = radius * 0.2f;
+        auto arcRadius = radius - lineW * 0.5f;
+
+        // The angle representing the slider's current value (the center of the modulation)
+        auto valueAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
+
+        // --- Modulation Visualization ---
+        if (slider.lfoAmount != 0.0 && slider.isEnabled())
+        {
+            // Define a new, smaller radius for the modulation arc
+            float modulationArcRadius = arcRadius - lineW * 1.2f;
+            float modulationArcWidth = lineW * 0.5f;
+
+            // 1. Draw the modulation DEPTH arc (light red)
+            // This represents the total possible range of modulation
+            auto totalAngleRange = rotaryEndAngle - rotaryStartAngle;
+            auto modulationDepthAngle = totalAngleRange * juce::jlimit(0.0, 1.0, slider.lfoAmount);
+
+            auto modStartAngle = valueAngle - modulationDepthAngle / 2.0f;
+            auto modEndAngle = valueAngle + modulationDepthAngle / 2.0f;
+
+            juce::Path modulationDepthArc;
+            modulationDepthArc.addCentredArc(center.x,
+                                             center.y,
+                                             modulationArcRadius,
+                                             modulationArcRadius,
+                                             0.0f,
+                                             modStartAngle,
+                                             modEndAngle,
+                                             true);
+
+            g.setColour(juce::Colours::red.withAlpha(0.5f));
+            g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            // 2. Draw the current modulation VALUE point (solid red)
+            // This point moves along the depth arc based on the current LFO value
+            auto lfoValueMapped = (slider.lfoValue * modulationDepthAngle) / 2.0f;
+            auto currentModAngle = valueAngle + lfoValueMapped;
+
+            juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
+                                             center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
+
+            g.setColour(juce::Colours::red);
+            g.fillEllipse(juce::Rectangle<float>(modulationArcWidth * 1.5f, modulationArcWidth * 1.5f).withCentre(modThumbPoint));
+        }
+
+        // --- Draw modulation handle ---
+        auto handleBounds = slider.getModulationHandleBounds();
+
+        juce::Colour handleColour = COLOUR5;
+        if (slider.isModHandleMouseOver || slider.isModHandleMouseDown)
+        {
+            handleColour = handleColour.brighter(0.2f);
+        }
+
+        g.setColour(handleColour);
+        g.fillEllipse(handleBounds);
+
+        g.setColour(juce::Colours::white);
+        g.setFont(getBaseFont(handleBounds.getHeight() * 0.6f));
+        g.drawText(juce::String(slider.lfoSource), handleBounds, juce::Justification::centred);
     }
 
     void drawDriveSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider)

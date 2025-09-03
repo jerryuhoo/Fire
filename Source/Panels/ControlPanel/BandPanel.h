@@ -19,7 +19,6 @@
 */
 class BandPanel : public juce::Component,
                   public juce::AudioProcessorValueTreeState::Listener,
-                  public juce::ComboBox::Listener,
                   public juce::AsyncUpdater,
                   public juce::Button::Listener
 {
@@ -29,232 +28,91 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
-    void setFocusBandNum(int num);
-    void setScale(float scale);
+    void setFocusBandNum(int num, bool forceUpdate = false);
 
     void handleAsyncUpdate() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
 
     //    void changeSliderState(int bandNum, bool isPresetChanged);
-    void setBandKnobsStates(int index, bool state, bool callFromSubBypass);
-    juce::ToggleButton& getCompButton(const int index);
-    juce::ToggleButton& getWidthButton(const int index);
+    void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
+    juce::ToggleButton compressorBypassButton, widthBypassButton;
+    int getFocusBandNum() const { return focusBandNum; }
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
     void updateDriveMeter();
 
+    // Handles the logic for the sub-module bypass buttons (Compressor, Width).
+    void saveBypassStatesToMemory();
+
 private:
+    // Re-attaches all UI components to the parameters of the current focusBandNum.
+    void updateAttachments();
+    // Helper to generate parameter IDs based on a base string and the band index.
+    juce::String getParamID(const juce::String& base, int bandIndex);
+
+    void updateLinkedValue();
+    bool canEnableSubKnob(juce::Component& component);
+
+    void buttonClicked(juce::Button* clickedButton) override;
+    // Initialization helpers
+    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
+    void initFlatButton(juce::TextButton& button, juce::String buttonName);
+    void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
+
+    // Sets visibility for a group of components.
+    void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
+
     FireAudioProcessor& processor;
+
+    // UI layout areas
     juce::Rectangle<int> bandKnobArea;
     juce::Rectangle<int> driveKnobArea;
     juce::Rectangle<int> outputKnobArea;
+    juce::Rectangle<int> bottomArea;
 
-    void updateLinkedValue(int bandIndex);
+    juce::Slider driveKnob, outputKnob, mixKnob, recKnob, biasKnob,
+        compRatioKnob, compThreshKnob, widthKnob;
 
-    // combobox changed and set knob enable/disable
-    void comboBoxChanged(juce::ComboBox* combobox) override;
-    void buttonClicked(juce::Button* clickedButton) override;
-    // void initListenerKnob(juce::Slider& slider);
-    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
-    void initFlatButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
-    void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour, int index);
-    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
-    void linkValue(juce::Slider& xSlider, juce::Slider& driveSlider, juce::Slider& outputSlider, juce::TextButton& linkedButton);
-    void setVisibility(juce::Array<juce::Component*>& array, bool isVisible);
-    void updateBypassState(juce::ToggleButton& clickedButton, int index);
-    void setBypassState(int index, bool state);
-    bool canEnableSubKnobs(juce::Component& component);
+    juce::Label driveLabel, CompRatioLabel, CompThreshLabel, widthLabel,
+        outputLabel, recLabel, mixLabel, biasLabel,
+        shapePanelLabel, compressorPanelLabel, widthPanelLabel;
+
+    juce::TextButton linkedButton, safeButton, extremeButton;
+
+    // Panel switching buttons
+    juce::ToggleButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
 
     enum RadioButtonIds
     {
-        // switches band
-        switchButtons = 1004,
+        switchButtons = 1004
     };
 
-    juce::Slider
-        driveKnob1,
-        driveKnob2,
-        driveKnob3,
-        driveKnob4,
+    // Groups of components for easy visibility toggling.
+    juce::Array<juce::Component*> shapeComponents;
+    juce::Array<juce::Component*> widthComponents;
+    juce::Array<juce::Component*> compressorComponents;
+    juce::Array<juce::Component*> allControls;
 
-        outputKnob1,
-        outputKnob2,
-        outputKnob3,
-        outputKnob4,
+    juce::Array<juce::Component*> mainControls;
+    juce::Array<juce::Slider*> compressorKnobs;
+    juce::Array<juce::Slider*> widthKnobs;
 
-        mixKnob1,
-        mixKnob2,
-        mixKnob3,
-        mixKnob4,
+    // A single set of attachments, dynamically reassigned.
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
-        recKnob1,
-        recKnob2,
-        recKnob3,
-        recKnob4,
+    std::unique_ptr<SliderAttachment> driveAttachment, outputAttachment, mixAttachment,
+        recAttachment, biasAttachment, compRatioAttachment,
+        compThreshAttachment, widthAttachment;
 
-        // biasKnob1,
-        // biasKnob2,
-        // biasKnob3,
-        // biasKnob4,
-
-        compRatioKnob1,
-        compRatioKnob2,
-        compRatioKnob3,
-        compRatioKnob4,
-
-        compThreshKnob1,
-        compThreshKnob2,
-        compThreshKnob3,
-        compThreshKnob4,
-
-        widthKnob1,
-        widthKnob2,
-        widthKnob3,
-        widthKnob4;
-
-    ModulatableSlider
-        biasKnob1,
-        biasKnob2,
-        biasKnob3,
-        biasKnob4;
-
-    juce::Label
-        driveLabel,
-        CompRatioLabel,
-        CompThreshLabel,
-        widthLabel,
-        outputLabel,
-        recLabel,
-        mixLabel,
-        linkedLabel,
-        safeLabel,
-        biasLabel,
-        shapePanelLabel,
-        compressorPanelLabel,
-        widthPanelLabel;
-
-    juce::TextButton
-        linkedButton1,
-        linkedButton2,
-        linkedButton3,
-        linkedButton4,
-        safeButton1,
-        safeButton2,
-        safeButton3,
-        safeButton4,
-        extremeButton1,
-        extremeButton2,
-        extremeButton3,
-        extremeButton4;
-
-    std::unique_ptr<juce::ToggleButton>
-        compressorBypassButton1,
-        compressorBypassButton2,
-        compressorBypassButton3,
-        compressorBypassButton4,
-        widthBypassButton1,
-        widthBypassButton2,
-        widthBypassButton3,
-        widthBypassButton4;
-
-    bool compBypassTemp[4] = { false };
-    bool widthBypassTemp[4] = { false };
-
-    // switches
-    juce::ToggleButton
-        oscSwitch,
-        shapeSwitch,
-        widthSwitch,
-        compressorSwitch;
-
-    // vectors for sliders
-    juce::Array<juce::Component*>
-        shapeVector,
-        widthVector,
-        compressorVector,
-        oscVector,
-
-        componentArray1,
-        componentArray2,
-        componentArray3,
-        componentArray4,
-        componentArray5,
-        componentArray6,
-        componentArray7,
-        componentArray8;
-
-    // Slider attachment
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
-        driveAttachment1,
-        driveAttachment2,
-        driveAttachment3,
-        driveAttachment4,
-
-        outputAttachment1,
-        outputAttachment2,
-        outputAttachment3,
-        outputAttachment4,
-
-        mixAttachment1,
-        mixAttachment2,
-        mixAttachment3,
-        mixAttachment4,
-
-        compRatioAttachment1,
-        compRatioAttachment2,
-        compRatioAttachment3,
-        compRatioAttachment4,
-
-        compThreshAttachment1,
-        compThreshAttachment2,
-        compThreshAttachment3,
-        compThreshAttachment4,
-
-        widthAttachment1,
-        widthAttachment2,
-        widthAttachment3,
-        widthAttachment4,
-
-        recAttachment1,
-        recAttachment2,
-        recAttachment3,
-        recAttachment4,
-
-        biasAttachment1,
-        biasAttachment2,
-        biasAttachment3,
-        biasAttachment4;
-
-    // Button attachment
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-        linkedAttachment1,
-        linkedAttachment2,
-        linkedAttachment3,
-        linkedAttachment4,
-        safeAttachment1,
-        safeAttachment2,
-        safeAttachment3,
-        safeAttachment4,
-        extremeAttachment1,
-        extremeAttachment2,
-        extremeAttachment3,
-        extremeAttachment4;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-        compressorBypassAttachment1,
-        compressorBypassAttachment2,
-        compressorBypassAttachment3,
-        compressorBypassAttachment4,
-        widthBypassAttachment1,
-        widthBypassAttachment2,
-        widthBypassAttachment3,
-        widthBypassAttachment4;
+    std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
+        compressorBypassAttachment, widthBypassAttachment;
 
     int focusBandNum;
-    float scale = 1.0f;
 
-    float tempDriveValue[4] = { 1, 1, 1, 1 };
-    float tempBiasValue[4] = { 0, 0, 0, 0 };
+    // Store bypass states for all 4 bands, since the UI only shows one at a time.
+    bool compBypassTemp[4] = { false };
+    bool widthBypassTemp[4] = { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

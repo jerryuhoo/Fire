@@ -78,12 +78,13 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     updateWhenChangingFocus();
     addAndMakeVisible(filterControl);
 
-    for (int i = 0; i < 4; i++)
-    {
+    // Listen to ALL relevant buttons
+    for (int i = 0; i < 4; ++i)
         multiband.getEnableButton(i).addListener(this);
-        bandPanel.getCompButton(i).addListener(this);
-        bandPanel.getWidthButton(i).addListener(this);
-    }
+
+    // Add the editor as a listener DIRECTLY to BandPanel's public buttons
+    bandPanel.compressorBypassButton.addListener(this);
+    bandPanel.widthBypassButton.addListener(this);
 
     processedSpectrum.setInterceptsMouseClicks(false, false);
     processedSpectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(1), processor.getSampleRate() / (float) processor.getFFTSize());
@@ -231,6 +232,39 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
         }
     }
 
+    // Mouse Listeners
+    graphPanel.removeMouseListener(this);
+    multiband.removeMouseListener(this);
+
+    // StateComponent Listeners
+    stateComponent.getPresetBox()->removeListener(this);
+    stateComponent.getToggleABButton()->removeListener(this);
+    stateComponent.getCopyABButton()->removeListener(this);
+    stateComponent.getPreviousButton()->removeListener(this);
+    stateComponent.getNextButton()->removeListener(this);
+
+    // Window Button Listeners
+    windowLeftButton.removeListener(this);
+    windowRightButton.removeListener(this);
+    windowLfoButton.removeListener(this);
+
+    // Distortion Mode ComboBox Listeners
+    distortionMode1.removeListener(this);
+    distortionMode2.removeListener(this);
+    distortionMode3.removeListener(this);
+    distortionMode4.removeListener(this);
+
+    // Other Button Listeners
+    zoomButton.removeListener(this);
+
+    for (int i = 0; i < 4; ++i)
+    {
+        multiband.getEnableButton(i).removeListener(this);
+    }
+
+    bandPanel.compressorBypassButton.removeListener(this);
+    bandPanel.widthBypassButton.removeListener(this);
+
     setLookAndFeel(nullptr);
 }
 
@@ -256,7 +290,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
     // title
     g.setColour(COLOUR5);
-    const float scale = getWidth() / (float)INIT_WIDTH;
+    const float scale = getWidth() / (float) INIT_WIDTH;
     const auto topBarHeight = juce::roundToInt(50.0f * scale);
     g.fillRect(0, 0, getWidth(), topBarHeight);
 
@@ -273,13 +307,11 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 
     // set logo "Fire"
     juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
-    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(),
-                          juce::RectanglePlacement::centred);
+    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(), juce::RectanglePlacement::centred);
 
     // set logo "Wings"
     juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
-    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(),
-                          juce::RectanglePlacement::centred);
+    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(), juce::RectanglePlacement::centred);
 
     auto frame = getLocalBounds();
     frame.setBounds(0, part1, getWidth(), part2);
@@ -555,19 +587,24 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         // bypass button for each band
         if (clickedButton == &multiband.getEnableButton(i))
         {
-            bandPanel.setBandKnobsStates(i, clickedButton->getToggleState(), false);
-        }
-        // bypass button for band compressor/width
-        if (clickedButton == &bandPanel.getCompButton(i) || clickedButton == &bandPanel.getWidthButton(i))
-        {
-            bool state = clickedButton->getToggleState();
-            if (state && ! multiband.getStateComponent().getChangedState())
+            // Only command the panel if the button belongs to the currently viewed band
+            if (i == bandPanel.getFocusBandNum())
             {
-                multiband.setBandBypassStates(i, state);
-                bandPanel.setBandKnobsStates(i, state, true);
-                multiband.getStateComponent().setChangedState(false);
+                bandPanel.setBandKnobsStates(clickedButton->getToggleState(), false);
             }
         }
+    }
+    // This block replaces the one you just deleted.
+    if (clickedButton == &bandPanel.compressorBypassButton || clickedButton == &bandPanel.widthBypassButton)
+    {
+        // 1. Command the BandPanel to save the new bypass state to its internal "memory".
+        bandPanel.saveBypassStatesToMemory();
+
+        // 2. Command the BandPanel to re-evaluate all knob states based on this new bypass setting.
+        // We pass the current state of the main enableButton to ensure correct logic.
+        int focusBand = bandPanel.getFocusBandNum();
+        bool isMainBandEnabled = multiband.getEnableButton(focusBand).getToggleState();
+        bandPanel.setBandKnobsStates(isMainBandEnabled, true); // Use 'true' to prevent feedback on the bypass button's visual state
     }
 }
 
@@ -590,7 +627,7 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
         {
             stateComponent.updatePresetBox(selectedId);
         }
-        //setMultiband();
+        setMultiband();
     }
 }
 

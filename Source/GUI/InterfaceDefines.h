@@ -20,6 +20,8 @@
 #define AUTO_UPDATE_NAME    "Auto Check For Updates"
 
 // paramID paramName
+#define DRIVE_ID            "drive"
+#define DRIVE_NAME          "Drive"
 #define DRIVE_ID1           "drive1"
 #define DRIVE_NAME1         "Drive1"
 #define DRIVE_ID2           "drive2"
@@ -41,6 +43,8 @@
 #define MODE_ID4            "mode4"
 #define MODE_NAME4          "Mode4"
 
+#define LINKED_ID           "linked"
+#define LINKED_NAME         "Linked"
 #define LINKED_ID1          "linked1"
 #define LINKED_NAME1        "Linked1"
 #define LINKED_ID2          "linked2"
@@ -50,6 +54,8 @@
 #define LINKED_ID4          "linked4"
 #define LINKED_NAME4        "Linked4"
 
+#define SAFE_ID             "safe"
+#define SAFE_NAME           "Safe"
 #define SAFE_ID1            "safe1"
 #define SAFE_NAME1          "Safe1"
 #define SAFE_ID2            "safe2"
@@ -59,6 +65,8 @@
 #define SAFE_ID4            "safe4"
 #define SAFE_NAME4          "Safe4"
 
+#define EXTREME_ID          "extreme"
+#define EXTREME_NAME        "Extreme"
 #define EXTREME_ID1         "extreme1"
 #define EXTREME_NAME1       "Extreme1"
 #define EXTREME_ID2         "extreme2"
@@ -68,6 +76,8 @@
 #define EXTREME_ID4         "extreme4"
 #define EXTREME_NAME4       "Extreme4"
 
+#define COMP_RATIO_ID       "compRatio"
+#define COMP_RATIO_NAME     "CompRatio"
 #define COMP_RATIO_ID1      "compRatio1"
 #define COMP_RATIO_NAME1    "CompRatio1"
 #define COMP_RATIO_ID2      "compRatio2"
@@ -77,6 +87,8 @@
 #define COMP_RATIO_ID4      "compRatio4"
 #define COMP_RATIO_NAME4    "CompRatio4"
 
+#define COMP_THRESH_ID      "compThresh"
+#define COMP_THRESH_NAME    "CompThresh"
 #define COMP_THRESH_ID1     "compThresh1"
 #define COMP_THRESH_NAME1   "CompThresh1"
 #define COMP_THRESH_ID2     "compThresh2"
@@ -86,6 +98,8 @@
 #define COMP_THRESH_ID4     "compThresh4"
 #define COMP_THRESH_NAME4   "CompThresh4"
 
+#define WIDTH_ID            "width"
+#define WIDTH_NAME          "Width"
 #define WIDTH_ID1           "width1"
 #define WIDTH_NAME1         "Width1"
 #define WIDTH_ID2           "width2"
@@ -117,6 +131,8 @@
 #define MIX_ID              "mix"
 #define MIX_NAME            "Mix"
 
+#define BIAS_ID             "bias"
+#define BIAS_NAME           "Bias"
 #define BIAS_ID1            "bias1"
 #define BIAS_NAME1          "Bias1"
 #define BIAS_ID2            "bias2"
@@ -135,6 +151,8 @@
 #define DC_BYPASS_ID4       "dcBypass4"
 #define DC_BYPASS_NAME4     "DcBypass4"
 
+#define REC_ID              "rec"
+#define REC_NAME            "Rec"
 #define REC_ID1             "rec1"
 #define REC_NAME1           "Rec1"
 #define REC_ID2             "rec2"
@@ -207,6 +225,8 @@
 #define FREQ_ID3            "freq3"
 #define FREQ_NAME3          "Freq3"
 
+#define BAND_ENABLE_ID      "multibandEnable"
+#define BAND_ENABLE_NAME    "MultibandEnable"
 #define BAND_ENABLE_ID1     "multibandEnable1"
 #define BAND_ENABLE_NAME1   "MultibandEnable1"
 #define BAND_ENABLE_ID2     "multibandEnable2"
@@ -241,6 +261,8 @@
 #define LINE_STATE_ID3      "lineState3"
 #define LINE_STATE_NAME3    "LineState3"
 
+#define COMP_BYPASS_ID          "compressorBypass"
+#define COMP_BYPASS_NAME        "CompressorBypass"
 #define COMP_BYPASS_ID1         "compressorBypass1"
 #define COMP_BYPASS_NAME1       "CompressorBypass1"
 #define COMP_BYPASS_ID2         "compressorBypass2"
@@ -249,6 +271,9 @@
 #define COMP_BYPASS_NAME3       "CompressorBypass3"
 #define COMP_BYPASS_ID4         "compressorBypass4"
 #define COMP_BYPASS_NAME4       "CompressorBypass4"
+
+#define WIDTH_BYPASS_ID         "widthBypass"
+#define WIDTH_BYPASS_NAME       "WidthBypass"
 #define WIDTH_BYPASS_ID1        "widthBypass1"
 #define WIDTH_BYPASS_NAME1      "WidthBypass1"
 #define WIDTH_BYPASS_ID2        "widthBypass2"

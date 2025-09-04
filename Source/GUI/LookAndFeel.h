@@ -510,23 +510,31 @@ public:
             g.setColour(tickColour);
             g.fillRect(tickBounds);
         }
-        else
+        else // This 'else' block handles your bypassButtons
         {
             juce::Rectangle<float> tickBounds(x, y, w, h);
-            auto tickColour = component.findColour(juce::ToggleButton::tickColourId);
 
-            if (component.isMouseButtonDown())
-                tickColour = tickColour.darker();
-            else if (component.isMouseOver())
-                tickColour = tickColour.brighter();
+            // 1. Determine the base colour based on the 'ticked' state.
+            auto baseColour = ticked ? component.findColour(juce::ToggleButton::tickColourId)
+                                     : juce::Colours::grey;
 
-            g.setColour(ticked ? tickColour.darker().darker() : juce::Colours::grey.darker());
-            g.fillEllipse(tickBounds);
+            // 2. ONLY apply hover/down effects if the component is ENABLED.
+            if (isEnabled)
+            {
+                if (component.isMouseButtonDown())
+                    baseColour = baseColour.darker();
+                else if (component.isMouseOver())
+                    baseColour = baseColour.darker(0.3f);
+            }
 
-            g.setColour(ticked ? tickColour : juce::Colours::grey);
+            // 3. Apply a final alpha modification if the component is disabled.
+            // This makes it look "greyed out" when the enableButton is off.
+            g.setColour(baseColour.withMultipliedAlpha(isEnabled ? 1.0f : 0.5f));
 
-            auto radius = juce::jmin(tickBounds.getWidth(), tickBounds.getHeight()) / 2.0f;
-            auto lineW = radius * 0.2f;
+            // 4. Draw the button shape.
+            // The logic below is slightly simplified from your original for clarity.
+            float radius = juce::jmin(tickBounds.getWidth(), tickBounds.getHeight()) / 2.0f;
+            float lineW = radius * 0.2f;
             auto arcRadius = radius - lineW * 2.0f;
 
             juce::Path powerSymbol;
@@ -542,6 +550,7 @@ public:
             powerSymbol.startNewSubPath(tickBounds.getCentreX(), tickBounds.getY() + tickBounds.getHeight() * 0.2f);
             powerSymbol.lineTo(tickBounds.getCentreX(), tickBounds.getCentreY());
 
+            // Use the final calculated colour to draw.
             g.strokePath(powerSymbol, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
     }

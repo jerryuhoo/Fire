@@ -38,6 +38,7 @@ public:
     // Is the mouse over the main body of the slider, and not the handle?
     bool isMouseOverMainSlider() const;
     bool isModulated = false;
+    bool isBipolar = true;
     juce::String parameterID;
 
     // Callback to notify when the modulation amount changes via UI drag

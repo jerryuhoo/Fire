@@ -1967,22 +1967,33 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
     {
         if (routing.targetParameterID == parameterID)
         {
-            // Found a routing for this parameter.
-            // Note: This only returns the *first* routing found. For this UI feature, showing the first one is a reasonable approach.
             if (juce::isPositiveAndBelow(routing.sourceLfoIndex, (int) lfoEngines.size()))
             {
-                // The LFO engine outputs [0, 1]. We need to map it to bipolar [-1, 1] for our visualization logic.
                 const float unipolarLfoValue = lfoEngines[routing.sourceLfoIndex].getLastOutput();
-                const float bipolarLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
+                float finalLfoValue = 0.0f;
 
-                // Return all the data the UI needs. LFO index is 1-based for display.
-                return { true, routing.sourceLfoIndex + 1, routing.depth, bipolarLfoValue };
+                // ======================== NEW LOGIC STARTS HERE ========================
+                if (routing.isBipolar)
+                {
+                    // For Bi-polar, map [0, 1] to [-1, 1]
+                    finalLfoValue = unipolarLfoValue * 2.0f - 1.0f;
+                }
+                else
+                {
+                    // For Uni-polar, the value is already correct [0, 1]
+                    finalLfoValue = unipolarLfoValue;
+                }
+
+                // Return all the data the UI needs, including the isBipolar flag.
+                return { true, routing.sourceLfoIndex + 1, routing.depth, finalLfoValue, routing.isBipolar };
+                // ========================= NEW LOGIC ENDS HERE =========================
             }
         }
     }
 
-    // If no routing is found for this parameter, return the default "not modulated" state.
-    return { false };
+    // If no routing is found, return the default "not modulated" state.
+    // Defaulting isBipolar to true doesn't matter here as isModulated is false.
+    return { false, 0, 0.0f, 0.0f, true };
 }
 
 void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
@@ -1993,7 +2004,7 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
         if (routing.targetParameterID == targetParameterID)
         {
             // Found it. Update its depth value, ensuring it stays within the [0, 1] range.
-            routing.depth = juce::jlimit(0.0f, 1.0f, newDepth);
+            routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
 
             // For now, we only handle the first match.
             return;

@@ -473,6 +473,7 @@ void FireAudioProcessorEditor::timerCallback()
         slider.lfoSource = modInfo.sourceLfoIndex;
         slider.lfoAmount = modInfo.depth;
         slider.lfoValue = modInfo.currentValue;
+        slider.isBipolar = modInfo.isBipolar;
     };
 
     // Update the modulatable knobs in BandPanel

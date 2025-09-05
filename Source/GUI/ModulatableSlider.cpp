@@ -189,8 +189,8 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
         // Use the initial amount for a more stable drag interaction
         auto newAmount = initialLfoAmount - diff.y * 0.005;
 
-        // Clamp the new value between 0.0 and 1.0
-        lfoAmount = juce::jlimit(0.0, 1.0, newAmount);
+        // Allow amount to be from -1.0 to 1.0
+        lfoAmount = juce::jlimit(-1.0, 1.0, newAmount);
 
         // If the callback is set, call it to notify the processor
         if (onModAmountChanged)

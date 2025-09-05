@@ -669,37 +669,74 @@ private:
         auto valueAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
         // --- Modulation Visualization ---
-        if (slider.lfoAmount != 0.0 && slider.isEnabled())
+        if (slider.isModulated && slider.lfoAmount != 0.0 && slider.isEnabled())
         {
             // Define a new, smaller radius for the modulation arc
             float modulationArcRadius = arcRadius - lineW * 1.2f;
             float modulationArcWidth = lineW * 0.5f;
 
-            // 1. Draw the modulation DEPTH arc (light red)
-            // This represents the total possible range of modulation
-            auto totalAngleRange = rotaryEndAngle - rotaryStartAngle;
-            auto modulationDepthAngle = totalAngleRange * juce::jlimit(0.0, 1.0, slider.lfoAmount);
+            // Helper to convert a value to an angle
+            auto valueToAngle = [&](double value)
+            {
+                return rotaryStartAngle + slider.valueToProportionOfLength(value) * (rotaryEndAngle - rotaryStartAngle);
+            };
 
-            auto modStartAngle = valueAngle - modulationDepthAngle / 2.0f;
-            auto modEndAngle = valueAngle + modulationDepthAngle / 2.0f;
+            // Get slider properties
+            const double sliderMin = slider.getMinimum();
+            const double sliderMax = slider.getMaximum();
+            const double sliderRange = sliderMax - sliderMin;
+            const double currentValue = slider.getValue();
+
+            // Calculate the modulation range in terms of value, not angle
+            const double modulationValueRange = sliderRange * slider.lfoAmount;
+
+            double modStartValue, modEndValue;
+
+            if (slider.isBipolar)
+            {
+                // BI-POLAR: centered around the current value
+                modStartValue = currentValue - modulationValueRange / 2.0;
+                modEndValue = currentValue + modulationValueRange / 2.0;
+            }
+            else
+            {
+                // UNI-POLAR: starts from the current value
+                modStartValue = currentValue;
+                modEndValue = currentValue + modulationValueRange;
+
+                // Handle negative amount
+                if (modEndValue < modStartValue)
+                    std::swap(modStartValue, modEndValue);
+            }
+
+            // THE FIX: Clamp the start and end VALUES to the slider's actual min/max
+            auto clampedStartValue = juce::jlimit(sliderMin, sliderMax, modStartValue);
+            auto clampedEndValue = juce::jlimit(sliderMin, sliderMax, modEndValue);
+
+            // Now, convert the CLAMPED values to angles for drawing
+            float modStartAngle = valueToAngle(clampedStartValue);
+            float modEndAngle = valueToAngle(clampedEndValue);
 
             juce::Path modulationDepthArc;
-            modulationDepthArc.addCentredArc(center.x,
-                                             center.y,
-                                             modulationArcRadius,
-                                             modulationArcRadius,
-                                             0.0f,
-                                             modStartAngle,
-                                             modEndAngle,
-                                             true);
+            modulationDepthArc.addCentredArc(center.x, center.y, modulationArcRadius, modulationArcRadius, 0.0f, modStartAngle, modEndAngle, true);
 
             g.setColour(juce::Colours::red.withAlpha(0.5f));
             g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-            // 2. Draw the current modulation VALUE point (solid red)
-            // This point moves along the depth arc based on the current LFO value
-            auto lfoValueMapped = (slider.lfoValue * modulationDepthAngle) / 2.0f;
-            auto currentModAngle = valueAngle + lfoValueMapped;
+            // --- Current Value Point ---
+            // We also need to calculate the point's value and clamp it for visual accuracy
+            double currentModulatedValue = 0.0;
+            if (slider.isBipolar)
+            {
+                currentModulatedValue = currentValue + (slider.lfoValue * modulationValueRange / 2.0);
+            }
+            else
+            {
+                currentModulatedValue = currentValue + (slider.lfoValue * modulationValueRange);
+            }
+
+            auto clampedModulatedValue = juce::jlimit(sliderMin, sliderMax, currentModulatedValue);
+            float currentModAngle = valueToAngle(clampedModulatedValue);
 
             juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
                                              center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));

@@ -101,6 +101,10 @@
         <FILE id="rznrv4" name="InterfaceDefines.h" compile="0" resource="0"
               file="Source/GUI/InterfaceDefines.h"/>
         <FILE id="NKA4fO" name="LookAndFeel.h" compile="0" resource="0" file="Source/GUI/LookAndFeel.h"/>
+        <FILE id="Xpmn00" name="ModulatableSlider.cpp" compile="1" resource="0"
+              file="Source/GUI/ModulatableSlider.cpp"/>
+        <FILE id="p1LFw2" name="ModulatableSlider.h" compile="0" resource="0"
+              file="Source/GUI/ModulatableSlider.h"/>
         <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
               file="Source/GUI/SettingsComponent.h"/>
       </GROUP>

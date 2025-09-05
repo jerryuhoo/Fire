@@ -461,6 +461,27 @@ void FireAudioProcessorEditor::resized()
 
 void FireAudioProcessorEditor::timerCallback()
 {
+    auto updateSliderState = [&](ModulatableSlider& slider)
+    {
+        if (slider.parameterID.isEmpty())
+            return;
+
+        auto modInfo = processor.getModulationInfoForParameter(slider.parameterID);
+        slider.isModulated = modInfo.isModulated;
+
+        // Always update the values. If not modulated, depth will be 0 from getModulationInfoForParameter.
+        slider.lfoSource = modInfo.sourceLfoIndex;
+        slider.lfoAmount = modInfo.depth;
+        slider.lfoValue = modInfo.currentValue;
+    };
+
+    // Update the modulatable knobs in BandPanel
+    // This will automatically update the knobs for whichever band is currently in focus
+    updateSliderState(bandPanel.recKnob);
+    updateSliderState(bandPanel.biasKnob);
+    // Repaint the entire panel once, which is more efficient than repainting individual sliders.
+    bandPanel.repaint();
+
     // bypassed
     if (processor.getBypassedState())
     {

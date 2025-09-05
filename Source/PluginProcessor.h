@@ -349,6 +349,18 @@ public:
     float getLfoPhase(int lfoIndex) const;
     bool isDawPlaying() const;
 
+    struct ModulationInfo
+    {
+        bool isModulated = false;
+        int sourceLfoIndex = 0; // Will be 1-based for the UI
+        float depth = 0.0f;
+        float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
+    };
+
+    // New public method for the editor to call
+    ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;
+    void setModulationDepth(const juce::String& targetParameterID, float newDepth);
+
     // The central list of all modulation connections in the plugin.
     juce::Array<ModulationRouting> modulationRoutings;
 

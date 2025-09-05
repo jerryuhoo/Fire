@@ -21,7 +21,7 @@ class ModulatableSlider : public juce::Slider
 public:
     ModulatableSlider();
 
-    // Overridden to restrict hit testing to the slider's rotary path
+    // void paint(juce::Graphics& g) override;
     bool hitTest(int x, int y) override;
 
     juce::Rectangle<float> getModulationHandleBounds();
@@ -37,15 +37,23 @@ public:
 
     // Is the mouse over the main body of the slider, and not the handle?
     bool isMouseOverMainSlider() const;
+    bool isModulated = false;
+    juce::String parameterID;
+
+    // Callback to notify when the modulation amount changes via UI drag
+    std::function<void(double)> onModAmountChanged;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
-    void mouseDrag(const juce::MouseEvent& event) override; // Override mouseDrag
+    void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
 
 private:
-    bool isDraggingMainSlider; // New: Track if the drag is for the main slider
+    bool isDraggingMainSlider;
+
+    // Store the initial LFO amount when a drag starts for smoother interaction
+    double initialLfoAmount = 0.0;
 };

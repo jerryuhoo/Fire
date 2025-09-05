@@ -44,6 +44,8 @@ public:
     // Handles the logic for the sub-module bypass buttons (Compressor, Width).
     void saveBypassStatesToMemory();
 
+    ModulatableSlider recKnob, biasKnob;
+
 private:
     // Re-attaches all UI components to the parameters of the current focusBandNum.
     void updateAttachments();
@@ -70,7 +72,7 @@ private:
     juce::Rectangle<int> outputKnobArea;
     juce::Rectangle<int> bottomArea;
 
-    juce::Slider driveKnob, outputKnob, mixKnob, recKnob, biasKnob,
+    juce::Slider driveKnob, outputKnob, mixKnob,
         compRatioKnob, compThreshKnob, widthKnob;
 
     juce::Label driveLabel, CompRatioLabel, CompThreshLabel, widthLabel,

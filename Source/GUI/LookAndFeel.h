@@ -708,21 +708,26 @@ private:
             g.fillEllipse(juce::Rectangle<float>(modulationArcWidth * 1.5f, modulationArcWidth * 1.5f).withCentre(modThumbPoint));
         }
 
-        // --- Draw modulation handle ---
-        auto handleBounds = slider.getModulationHandleBounds();
-
-        juce::Colour handleColour = COLOUR5;
-        if (slider.isModHandleMouseOver || slider.isModHandleMouseDown)
+        if (slider.isModulated)
         {
-            handleColour = handleColour.brighter(0.2f);
+            auto handleBounds = slider.getModulationHandleBounds();
+
+            juce::Colour handleColour = COLOUR5;
+            if (slider.isModHandleMouseOver || slider.isModHandleMouseDown)
+            {
+                handleColour = handleColour.brighter(0.2f);
+            }
+
+            g.setColour(handleColour);
+            g.fillEllipse(handleBounds);
+
+            g.setColour(juce::Colours::white);
+            g.setFont(getBaseFont(handleBounds.getHeight() * 0.6f));
+
+            // The lfoSource value passed from the timerCallback is already 1-based.
+            // So we can draw it directly. It will correctly show 1, 2, 3, or 4.
+            g.drawText(juce::String(slider.lfoSource), handleBounds, juce::Justification::centred);
         }
-
-        g.setColour(handleColour);
-        g.fillEllipse(handleBounds);
-
-        g.setColour(juce::Colours::white);
-        g.setFont(getBaseFont(handleBounds.getHeight() * 0.6f));
-        g.drawText(juce::String(slider.lfoSource), handleBounds, juce::Justification::centred);
     }
 
     void drawDriveSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider)

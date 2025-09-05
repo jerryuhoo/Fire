@@ -13,12 +13,74 @@
 ModulatableSlider::ModulatableSlider()
 {
     // Default values
+    parameterID = "";
     lfoSource = 0;
-    lfoAmount = 0.4;
-    lfoValue = 0.2;
+    lfoAmount = 0.0;
+    lfoValue = 0.0;
     isModHandleMouseOver = false;
     isModHandleMouseDown = false;
+    isDraggingMainSlider = false;
 }
+
+// void ModulatableSlider::paint(juce::Graphics& g)
+// {
+//     // First, let the base class draw the slider itself.
+//     juce::Slider::paint(g);
+
+//     // Only draw modulation visuals if the parameter is modulated
+//     if (isModulated)
+//     {
+//         auto bounds = getLocalBounds().toFloat().reduced(10);
+//         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+//         auto centre = bounds.getCentre();
+//         auto rotaryParams = getRotaryParameters();
+
+//         auto valueToAngle = [&](double value)
+//         {
+//             return rotaryParams.startAngleRadians
+//                    + (rotaryParams.endAngleRadians - rotaryParams.startAngleRadians)
+//                          * (float) valueToProportionOfLength(value);
+//         };
+
+//         // Draw modulation range arc (lfoAmount)
+//         // This is your existing logic, which is great.
+//         double range = getMaximum() - getMinimum();
+//         double halfModRange = lfoAmount * range * 0.5;
+//         double currentValue = getValue();
+
+//         auto arcStartValue = juce::jlimit(getMinimum(), getMaximum(), currentValue - halfModRange);
+//         auto arcEndValue = juce::jlimit(getMinimum(), getMaximum(), currentValue + halfModRange);
+
+//         float startAngle = valueToAngle(arcStartValue);
+//         float endAngle = valueToAngle(arcEndValue);
+
+//         juce::Path modulationArc;
+//         // Draw the arc from start to end angle
+//         modulationArc.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, startAngle, endAngle, true);
+
+//         g.setColour(juce::Colours::cyan.withAlpha(0.5f));
+//         g.strokePath(modulationArc, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+//         // NEW: Draw the current LFO value indicator on the arc
+//         if (lfoAmount > 0)
+//         {
+//             // lfoValue is from -1 to 1. Map it to the modulation arc.
+//             double modulatedValue = currentValue + lfoValue * halfModRange;
+//             float indicatorAngle = valueToAngle(juce::jlimit(getMinimum(), getMaximum(), modulatedValue));
+
+//             juce::Point<float> indicatorPoint(centre.x + radius * std::sin(indicatorAngle),
+//                                               centre.y - radius * std::cos(indicatorAngle));
+
+//             g.setColour(juce::Colours::orange);
+//             g.fillEllipse(indicatorPoint.x - 3.5f, indicatorPoint.y - 3.5f, 7.0f, 7.0f);
+//         }
+
+//         // Draw Modulation Handle
+//         auto handleBounds = getModulationHandleBounds();
+//         g.setColour(isModHandleMouseDown ? juce::Colours::white.darker(0.2f) : (isModHandleMouseOver ? juce::Colours::white : juce::Colours::grey));
+//         g.fillEllipse(handleBounds);
+//     }
+// }
 
 bool ModulatableSlider::hitTest(int x, int y)
 {
@@ -35,7 +97,7 @@ bool ModulatableSlider::hitTest(int x, int y)
         return true;
     }
 
-    if (getModulationHandleBounds().contains((float) x, (float) y))
+    if (isModulated && getModulationHandleBounds().contains((float) x, (float) y))
     {
         return true;
     }
@@ -66,7 +128,7 @@ bool ModulatableSlider::isMouseOverMainSlider() const
 // New/updated mouse handlers
 void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
 {
-    bool isOverHandleNow = getModulationHandleBounds().contains(event.getPosition().toFloat());
+    bool isOverHandleNow = isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat());
 
     if (isOverHandleNow != isModHandleMouseOver)
     {
@@ -104,11 +166,10 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
         juce::Slider::mouseDown(event);
     }
     // Check if the click is on the modulation handle
-    else if (getModulationHandleBounds().contains(event.getPosition().toFloat()))
+    else if (isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
     {
         isModHandleMouseDown = true;
-        // Here you would start the logic for dragging the modulation amount
-        // For now, we just show visual feedback.
+        initialLfoAmount = lfoAmount;
         repaint();
     }
     // If the click is elsewhere (e.g., empty space), do nothing.
@@ -121,10 +182,25 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
     {
         juce::Slider::mouseDrag(event);
     }
-    // else if (isModHandleMouseDown)
-    // {
-    //     // Here you would implement the logic to change lfoAmount based on drag distance
-    // }
+    else if (isModHandleMouseDown)
+    {
+        auto diff = event.getPosition() - event.getMouseDownPosition();
+
+        // Use the initial amount for a more stable drag interaction
+        auto newAmount = initialLfoAmount - diff.y * 0.005;
+
+        // Clamp the new value between 0.0 and 1.0
+        lfoAmount = juce::jlimit(0.0, 1.0, newAmount);
+
+        // If the callback is set, call it to notify the processor
+        if (onModAmountChanged)
+        {
+            onModAmountChanged(lfoAmount);
+        }
+
+        // This will update the UI
+        repaint();
+    }
 }
 
 void ModulatableSlider::mouseUp(const juce::MouseEvent& event)

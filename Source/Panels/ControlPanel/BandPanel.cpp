@@ -316,22 +316,6 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
         setVisibility(compressorComponents, false);
         setVisibility(widthComponents, true);
     }
-    // else if (clickedButton == &compressorBypassButton)
-    // {
-    //     updateSubBypassState(compressorBypassButton, true);
-    //     if (onCompBypassClicked) // Check if the callback has been set
-    //     {
-    //         onCompBypassClicked(focusBandNum, compressorBypassButton.getToggleState());
-    //     }
-    // }
-    // else if (clickedButton == &widthBypassButton)
-    // {
-    //     updateSubBypassState(widthBypassButton, false);
-    //     if (onWidthBypassClicked) // Check if the callback has been set
-    //     {
-    //         onWidthBypassClicked(focusBandNum, widthBypassButton.getToggleState());
-    //     }
-    // }
 
     resized(); // Recalculate layout, especially for the drive knob size
     repaint();
@@ -378,6 +362,25 @@ void BandPanel::updateAttachments()
     // Apply the correct enabled/disabled states for the new band
     bool bandEnabled = *processor.treeState.getRawParameterValue(getParamID(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(bandEnabled, false);
+
+    // After attaching, configure the modulatable properties for the current focus band.
+
+    // Configure Rectification Knob
+    recKnob.parameterID = getParamID(REC_ID, focusBandNum);
+    recKnob.onModAmountChanged = [this](double newAmount)
+    {
+        // Use a local copy of focusBandNum in the lambda capture to be safe
+        int band = focusBandNum;
+        processor.setModulationDepth(getParamID(REC_ID, band), (float) newAmount);
+    };
+
+    // Configure Bias Knob
+    biasKnob.parameterID = getParamID(BIAS_ID, focusBandNum);
+    biasKnob.onModAmountChanged = [this](double newAmount)
+    {
+        int band = focusBandNum;
+        processor.setModulationDepth(getParamID(BIAS_ID, band), (float) newAmount);
+    };
 }
 
 void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
@@ -505,59 +508,6 @@ void BandPanel::setSwitch(const int index, bool state)
 void BandPanel::updateWhenChangingFocus()
 {
     updateDriveMeter();
-    // if (oscSwitch.getToggleState())
-    // {
-    //     setVisibility(shapeVector, false);
-    //     setVisibility(compressorVector, false);
-    //     setVisibility(widthVector, false);
-    //     recLabel.setVisible(false);
-    //     biasLabel.setVisible(false);
-    //     widthLabel.setVisible(false);
-    //     CompRatioLabel.setVisible(false);
-    //     CompThreshLabel.setVisible(false);
-    // }
-
-    // if (shapeSwitch.getToggleState())
-    // {
-    //     setFourComponentsVisibility(recKnob1, recKnob2, recKnob3, recKnob4, focusBandNum);
-    //     setFourComponentsVisibility(biasKnob1, biasKnob2, biasKnob3, biasKnob4, focusBandNum);
-    //     setVisibility(compressorVector, false);
-    //     setVisibility(widthVector, false);
-    //     CompRatioLabel.setVisible(false);
-    //     CompThreshLabel.setVisible(false);
-    //     recLabel.setVisible(true);
-    //     biasLabel.setVisible(true);
-    //     widthLabel.setVisible(false);
-    // }
-
-    // if (compressorSwitch.getToggleState())
-    // {
-    //     setVisibility(compressorVector, true);
-    //     setFourComponentsVisibility(compRatioKnob1, compRatioKnob2, compRatioKnob3, compRatioKnob4, focusBandNum);
-    //     setFourComponentsVisibility(compThreshKnob1, compThreshKnob2, compThreshKnob3, compThreshKnob4, focusBandNum);
-    //     setFourComponentsVisibility(*compressorBypassButton1, *compressorBypassButton2, *compressorBypassButton3, *compressorBypassButton4, focusBandNum);
-    //     setVisibility(shapeVector, false);
-    //     setVisibility(widthVector, false);
-    //     CompRatioLabel.setVisible(true);
-    //     CompThreshLabel.setVisible(true);
-    //     recLabel.setVisible(false);
-    //     biasLabel.setVisible(false);
-    //     widthLabel.setVisible(false);
-    // }
-
-    // if (widthSwitch.getToggleState())
-    // {
-    //     setVisibility(widthVector, true);
-    //     setFourComponentsVisibility(widthKnob1, widthKnob2, widthKnob3, widthKnob4, focusBandNum); // put after setVisibility
-    //     setFourComponentsVisibility(*widthBypassButton1, *widthBypassButton2, *widthBypassButton3, *widthBypassButton4, focusBandNum);
-    //     setVisibility(shapeVector, false);
-    //     setVisibility(compressorVector, false);
-    //     CompRatioLabel.setVisible(false);
-    //     CompThreshLabel.setVisible(false);
-    //     recLabel.setVisible(false);
-    //     biasLabel.setVisible(false);
-    //     widthLabel.setVisible(true);
-    // }
     buttonClicked(&oscSwitch);
     buttonClicked(&shapeSwitch);
     buttonClicked(&compressorSwitch);

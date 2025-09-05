@@ -109,6 +109,7 @@ public:
             phase -= 1.0f;
 
         // Convert the output to bipolar [-1, 1] for modulation
+        lastOutput = unipolarOutput;
         return unipolarOutput;
     }
 
@@ -124,10 +125,16 @@ public:
         return phase;
     }
 
+    float getLastOutput() const
+    {
+        return lastOutput;
+    }
+
 private:
     double sampleRate = 44100.0;
     float phase = 0.0f;
     float phaseDelta = 0.0f;
+    float lastOutput = 0.0f;
 
     juce::dsp::LookupTable<float> wavetable;
 };

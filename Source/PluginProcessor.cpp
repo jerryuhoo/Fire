@@ -1960,3 +1960,43 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
     dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
     dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }
+
+FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const
+{
+    for (const auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == parameterID)
+        {
+            // Found a routing for this parameter.
+            // Note: This only returns the *first* routing found. For this UI feature, showing the first one is a reasonable approach.
+            if (juce::isPositiveAndBelow(routing.sourceLfoIndex, (int) lfoEngines.size()))
+            {
+                // The LFO engine outputs [0, 1]. We need to map it to bipolar [-1, 1] for our visualization logic.
+                const float unipolarLfoValue = lfoEngines[routing.sourceLfoIndex].getLastOutput();
+                const float bipolarLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
+
+                // Return all the data the UI needs. LFO index is 1-based for display.
+                return { true, routing.sourceLfoIndex + 1, routing.depth, bipolarLfoValue };
+            }
+        }
+    }
+
+    // If no routing is found for this parameter, return the default "not modulated" state.
+    return { false };
+}
+
+void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
+{
+    // Find the matching routing in the modulation array.
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            // Found it. Update its depth value, ensuring it stays within the [0, 1] range.
+            routing.depth = juce::jlimit(0.0f, 1.0f, newDepth);
+
+            // For now, we only handle the first match.
+            return;
+        }
+    }
+}

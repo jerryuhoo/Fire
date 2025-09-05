@@ -361,6 +361,8 @@ public:
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;
     void setModulationDepth(const juce::String& targetParameterID, float newDepth);
+    void toggleBipolarMode(const juce::String& targetParameterID);
+    void resetModulation(const juce::String& targetParameterID);
 
     // The central list of all modulation connections in the plugin.
     juce::Array<ModulationRouting> modulationRoutings;

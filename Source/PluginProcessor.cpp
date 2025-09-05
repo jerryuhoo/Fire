@@ -2011,3 +2011,36 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
         }
     }
 }
+
+void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID)
+{
+    // Find the matching routing in the modulation array.
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            // Found it. Flip the boolean state.
+            routing.isBipolar = ! routing.isBipolar;
+
+            // For now, we only handle the first match.
+            return;
+        }
+    }
+}
+
+void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
+{
+    // Find the matching routing in the modulation array.
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            // Reset depth to 0.5 and mode to the default (bipolar)
+            routing.depth = 0.5f;
+            routing.isBipolar = true;
+
+            // We found the routing and reset it, so we can exit the function.
+            return;
+        }
+    }
+}

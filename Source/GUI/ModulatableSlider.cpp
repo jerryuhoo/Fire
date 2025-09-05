@@ -156,10 +156,38 @@ void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
     }
 }
 
+void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
+{
+    // Check if the double-click is on the modulation handle
+    if (isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
+    {
+        if (onModulationReset)
+        {
+            onModulationReset();
+        }
+
+        repaint();
+    }
+    else
+    {
+        // Otherwise, perform the default slider action (resetting the slider's value)
+        juce::Slider::mouseDoubleClick(event);
+    }
+}
+
 void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 {
-    // Check if the click is on the main slider body
-    if (isMouseOverMainSlider())
+    // Check for Cmd+Click (macOS) or Ctrl+Click (Windows) on the handle
+    if (isModulated && (event.mods.isCommandDown() || event.mods.isCtrlDown()) && getModulationHandleBounds().contains(event.getPosition().toFloat()))
+    {
+        // If the modifier is pressed on the handle, toggle the bipolar mode
+        if (onBipolarModeToggled)
+        {
+            onBipolarModeToggled();
+        }
+        // We don't start a drag in this case
+    }
+    else if (isMouseOverMainSlider())
     {
         isDraggingMainSlider = true;
         // CRITICAL: Only call the base class mouseDown if we intend to start a drag on the main slider
@@ -172,7 +200,6 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
         initialLfoAmount = lfoAmount;
         repaint();
     }
-    // If the click is elsewhere (e.g., empty space), do nothing.
 }
 
 void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)

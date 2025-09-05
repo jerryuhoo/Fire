@@ -52,6 +52,8 @@ private:
     // Helper to generate parameter IDs based on a base string and the band index.
     juce::String getParamID(const juce::String& base, int bandIndex);
 
+    void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase);
+
     void updateLinkedValue();
     bool canEnableSubKnob(juce::Component& component);
 
@@ -71,6 +73,8 @@ private:
     juce::Rectangle<int> driveKnobArea;
     juce::Rectangle<int> outputKnobArea;
     juce::Rectangle<int> bottomArea;
+
+    std::vector<std::pair<ModulatableSlider*, juce::String>> modulatableKnobs;
 
     juce::Slider driveKnob, outputKnob, mixKnob,
         compRatioKnob, compThreshKnob, widthKnob;

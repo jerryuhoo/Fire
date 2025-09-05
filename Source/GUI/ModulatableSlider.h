@@ -43,11 +43,14 @@ public:
 
     // Callback to notify when the modulation amount changes via UI drag
     std::function<void(double)> onModAmountChanged;
+    std::function<void()> onBipolarModeToggled;
+    std::function<void()> onModulationReset;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
+    void mouseDoubleClick(const juce::MouseEvent& event) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;

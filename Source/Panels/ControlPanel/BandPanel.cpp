@@ -25,6 +25,9 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
     //     knobs[3]->parameterID = id4;
     // };
 
+    modulatableKnobs.push_back({ &recKnob, REC_ID });
+    modulatableKnobs.push_back({ &biasKnob, BIAS_ID });
+
     // We listen directly to the parameters that affect our "link" logic.
     for (int i = 0; i < 4; ++i)
     {
@@ -321,6 +324,26 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     repaint();
 }
 
+void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase)
+{
+    slider.parameterID = getParamID(paramIDBase, focusBandNum);
+
+    slider.onModAmountChanged = [this, &slider](double newAmount)
+    {
+        processor.setModulationDepth(slider.parameterID, (float) newAmount);
+    };
+
+    slider.onBipolarModeToggled = [this, &slider]()
+    {
+        processor.toggleBipolarMode(slider.parameterID);
+    };
+
+    slider.onModulationReset = [this, &slider]()
+    {
+        processor.resetModulation(slider.parameterID);
+    };
+}
+
 void BandPanel::updateAttachments()
 {
     // Detach old parameters by resetting unique_ptrs
@@ -365,22 +388,12 @@ void BandPanel::updateAttachments()
 
     // After attaching, configure the modulatable properties for the current focus band.
 
-    // Configure Rectification Knob
-    recKnob.parameterID = getParamID(REC_ID, focusBandNum);
-    recKnob.onModAmountChanged = [this](double newAmount)
+    for (auto& knobPair : modulatableKnobs)
     {
-        // Use a local copy of focusBandNum in the lambda capture to be safe
-        int band = focusBandNum;
-        processor.setModulationDepth(getParamID(REC_ID, band), (float) newAmount);
-    };
-
-    // Configure Bias Knob
-    biasKnob.parameterID = getParamID(BIAS_ID, focusBandNum);
-    biasKnob.onModAmountChanged = [this](double newAmount)
-    {
-        int band = focusBandNum;
-        processor.setModulationDepth(getParamID(BIAS_ID, band), (float) newAmount);
-    };
+        // knobPair.first is a pointer to ModulatableSlider
+        // knobPair.second is its parameter ID base (e.g. REC_ID)
+        configureModulatableSlider(*knobPair.first, knobPair.second);
+    }
 }
 
 void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)

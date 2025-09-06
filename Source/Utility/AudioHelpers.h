@@ -129,17 +129,75 @@ void updateCutFilter(ChainType& chain,
     }
 }
 
-namespace ParameterID
+namespace ParameterIDAndName
 {
+    // Define the parameter version number in one central place.
+    const int versionNum = 1;
+
+    // --- Part 1: Functions that return juce::String ---
+
     /**
-     * @brief Get the parameter ID for a specific band.
-     * @param base The base parameter ID (e.g., "drive")
-     * @param bandIndex focused band index (0-based, e.g., 0, 1, 2, 3)
-     * @return juce::String return final ID (e.g., "drive1", "drive2")
+     * @brief [String] Creates the raw string ID for an indexed parameter.
+     * @param base      The base part of the parameter ID (e.g., DRIVE_ID).
+     * @param index     The zero-based index of the band or channel.
+     * @return juce::String Returns the final string ID (e.g., "drive1").
      */
-    static inline juce::String getParamID(const juce::String& base, int bandIndex)
+    static inline juce::String getIDString(const juce::String& base, int index)
     {
-        // Parameter IDs are 1-based, so add 1 to the index.
-        return base + juce::String(bandIndex + 1);
+        return base + juce::String(index + 1);
     }
-} // namespace ParameterID
+
+    /**
+     * @brief [String] Gets the raw string ID for a global (non-indexed) parameter.
+     * @param base      The parameter ID (e.g., HQ_ID).
+     * @return juce::String Returns the base string itself.
+     */
+    static inline juce::String getIDString(const juce::String& base)
+    {
+        return base;
+    }
+
+    /**
+     * @brief [String] Creates the display name for an indexed parameter.
+     * @param base      The base part of the parameter name (e.g., "Drive").
+     * @param index     The zero-based index of the band or channel.
+     * @return juce::String Returns the final display name (e.g., "Drive 1").
+     */
+    static inline juce::String getName(const juce::String& base, int index)
+    {
+        return base + " " + juce::String(index + 1);
+    }
+
+    /**
+     * @brief [String] Gets the display name for a global (non-indexed) parameter.
+     * @param base      The parameter name (e.g., "Quality").
+     * @return juce::String Returns the base string itself.
+     */
+    static inline juce::String getName(const juce::String& base)
+    {
+        return base;
+    }
+
+    // --- Part 2: Functions that return juce::ParameterID ---
+
+    /**
+     * @brief [ParameterID] Creates a full juce::ParameterID object for an indexed parameter.
+     * @param base      The base part of the parameter ID (e.g., DRIVE_ID).
+     * @param index     The zero-based index of the band or channel.
+     * @return juce::ParameterID Returns the complete ParameterID object (e.g., {"drive1", 1}).
+     */
+    static inline juce::ParameterID getID(const juce::String& base, int index)
+    {
+        return { getIDString(base, index), versionNum };
+    }
+
+    /**
+     * @brief [ParameterID] Creates a full juce::ParameterID object for a global parameter.
+     * @param base      The parameter ID (e.g., HQ_ID).
+     * @return juce::ParameterID Returns the complete ParameterID object (e.g., {"hq", 1}).
+     */
+    static inline juce::ParameterID getID(const juce::String& base)
+    {
+        return { base, versionNum };
+    }
+} // namespace ParameterIDAndName

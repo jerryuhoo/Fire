@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../PluginProcessor.h"
+#include "../../Utility/AudioHelpers.h"
 #include "../TopPanel/Preset.h"
 #include "CloseButton.h"
 #include "EnableButton.h"
@@ -74,10 +75,10 @@ private:
     int focusIndex = 0;
     bool isDragging = false;
 
-    std::vector<juce::String> paramsArray1 = { MODE_NAME1, LINKED_NAME1, SAFE_NAME1, DRIVE_NAME1, COMP_RATIO_NAME1, COMP_THRESH_NAME1, WIDTH_NAME1, OUTPUT_NAME1, MIX_NAME1, BIAS_NAME1, REC_NAME1, COMP_BYPASS_NAME1, WIDTH_BYPASS_NAME1 };
-    std::vector<juce::String> paramsArray2 = { MODE_NAME2, LINKED_NAME2, SAFE_NAME2, DRIVE_NAME2, COMP_RATIO_NAME2, COMP_THRESH_NAME2, WIDTH_NAME2, OUTPUT_NAME2, MIX_NAME2, BIAS_NAME2, REC_NAME2, COMP_BYPASS_NAME2, WIDTH_BYPASS_NAME2 };
-    std::vector<juce::String> paramsArray3 = { MODE_NAME3, LINKED_NAME3, SAFE_NAME3, DRIVE_NAME3, COMP_RATIO_NAME3, COMP_THRESH_NAME3, WIDTH_NAME3, OUTPUT_NAME3, MIX_NAME3, BIAS_NAME3, REC_NAME3, COMP_BYPASS_NAME3, WIDTH_BYPASS_NAME3 };
-    std::vector<juce::String> paramsArray4 = { MODE_NAME4, LINKED_NAME4, SAFE_NAME4, DRIVE_NAME4, COMP_RATIO_NAME4, COMP_THRESH_NAME4, WIDTH_NAME4, OUTPUT_NAME4, MIX_NAME4, BIAS_NAME4, REC_NAME4, COMP_BYPASS_NAME4, WIDTH_BYPASS_NAME4 };
+    std::vector<juce::String> paramsArray1 = { ParameterIDAndName::getName(MODE_NAME, 0), ParameterIDAndName::getName(LINKED_NAME, 0), ParameterIDAndName::getName(SAFE_NAME, 0), ParameterIDAndName::getName(DRIVE_NAME, 0), ParameterIDAndName::getName(COMP_RATIO_NAME, 0), ParameterIDAndName::getName(COMP_THRESH_NAME, 0), ParameterIDAndName::getName(WIDTH_NAME, 0), ParameterIDAndName::getName(OUTPUT_NAME, 0), ParameterIDAndName::getName(MIX_NAME, 0), ParameterIDAndName::getName(BIAS_NAME, 0), ParameterIDAndName::getName(REC_NAME, 0), ParameterIDAndName::getName(COMP_BYPASS_NAME, 0), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 0) };
+    std::vector<juce::String> paramsArray2 = { ParameterIDAndName::getName(MODE_NAME, 1), ParameterIDAndName::getName(LINKED_NAME, 1), ParameterIDAndName::getName(SAFE_NAME, 1), ParameterIDAndName::getName(DRIVE_NAME, 1), ParameterIDAndName::getName(COMP_RATIO_NAME, 1), ParameterIDAndName::getName(COMP_THRESH_NAME, 1), ParameterIDAndName::getName(WIDTH_NAME, 1), ParameterIDAndName::getName(OUTPUT_NAME, 1), ParameterIDAndName::getName(MIX_NAME, 1), ParameterIDAndName::getName(BIAS_NAME, 1), ParameterIDAndName::getName(REC_NAME, 1), ParameterIDAndName::getName(COMP_BYPASS_NAME, 1), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 1) };
+    std::vector<juce::String> paramsArray3 = { ParameterIDAndName::getName(MODE_NAME, 2), ParameterIDAndName::getName(LINKED_NAME, 2), ParameterIDAndName::getName(SAFE_NAME, 2), ParameterIDAndName::getName(DRIVE_NAME, 2), ParameterIDAndName::getName(COMP_RATIO_NAME, 2), ParameterIDAndName::getName(COMP_THRESH_NAME, 2), ParameterIDAndName::getName(WIDTH_NAME, 2), ParameterIDAndName::getName(OUTPUT_NAME, 2), ParameterIDAndName::getName(MIX_NAME, 2), ParameterIDAndName::getName(BIAS_NAME, 2), ParameterIDAndName::getName(REC_NAME, 2), ParameterIDAndName::getName(COMP_BYPASS_NAME, 2), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 2) };
+    std::vector<juce::String> paramsArray4 = { ParameterIDAndName::getName(MODE_NAME, 3), ParameterIDAndName::getName(LINKED_NAME, 3), ParameterIDAndName::getName(SAFE_NAME, 3), ParameterIDAndName::getName(DRIVE_NAME, 3), ParameterIDAndName::getName(COMP_RATIO_NAME, 3), ParameterIDAndName::getName(COMP_THRESH_NAME, 3), ParameterIDAndName::getName(WIDTH_NAME, 3), ParameterIDAndName::getName(OUTPUT_NAME, 3), ParameterIDAndName::getName(MIX_NAME, 3), ParameterIDAndName::getName(BIAS_NAME, 3), ParameterIDAndName::getName(REC_NAME, 3), ParameterIDAndName::getName(COMP_BYPASS_NAME, 3), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 3) };
     bool isParamInArray(juce::String paramName, std::vector<juce::String> paramArray);
     void setParametersToAFromB(int toIndex, int fromIndex);
     void initParameters(int bandindex);

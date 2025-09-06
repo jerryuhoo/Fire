@@ -196,10 +196,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
 
-    modeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID1, distortionMode1);
-    modeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID2, distortionMode2);
-    modeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID3, distortionMode3);
-    modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, MODE_ID4, distortionMode4);
+    modeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 0), distortionMode1);
+    modeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 1), distortionMode2);
+    modeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 2), distortionMode3);
+    modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 3), distortionMode4);
 
     // set resize
     setResizable(true, true);
@@ -468,12 +468,12 @@ void FireAudioProcessorEditor::timerCallback()
     bandPanel.repaint();
 
     int currentBand = bandPanel.getFocusBandNum();
-    setDistortionGraph(ParameterID::getParamID(MODE_ID, currentBand),
-                       ParameterID::getParamID(DRIVE_ID, currentBand),
-                       ParameterID::getParamID(REC_ID, currentBand),
-                       ParameterID::getParamID(MIX_ID, currentBand),
-                       ParameterID::getParamID(BIAS_ID, currentBand),
-                       ParameterID::getParamID(SAFE_ID, currentBand),
+    setDistortionGraph(ParameterIDAndName::getIDString(MODE_ID, currentBand),
+                       ParameterIDAndName::getIDString(DRIVE_ID, currentBand),
+                       ParameterIDAndName::getIDString(REC_ID, currentBand),
+                       ParameterIDAndName::getIDString(MIX_ID, currentBand),
+                       ParameterIDAndName::getIDString(BIAS_ID, currentBand),
+                       ParameterIDAndName::getIDString(SAFE_ID, currentBand),
                        currentBand);
 
     // bypassed

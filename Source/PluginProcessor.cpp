@@ -455,8 +455,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
             // Initialize smoothed values here, from the treeState
             // TODO: need to use new drive logic instead of ParameterID::driveIds[i])
             // band->newDriveSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-            band->recSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
-            band->biasSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
+            band->recSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(REC_ID, i)));
+            band->biasSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BIAS_ID, i)));
         }
     }
 
@@ -513,11 +513,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     highcutQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_Q_ID));
 
     smoothedFreq1.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq1.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID1));
+    smoothedFreq1.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 0)));
     smoothedFreq2.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq2.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
+    smoothedFreq2.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 1)));
     smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq3.setCurrentAndTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
+    smoothedFreq3.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 2)));
 
     // filter init
     updateFilter(sampleRate);
@@ -694,7 +694,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (int i = 0; i < 4; ++i)
     {
         // Get LFO parameters
-        auto* syncParam = treeState.getRawParameterValue(ParameterID::lfoSyncMode(i).getParamID());
+        auto* syncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i));
         const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
 
         float phaseDelta = 0.0f;
@@ -702,7 +702,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         if (isInSyncMode && isPlaying)
         {
             // --- BPM SYNC CALCULATION ---
-            auto* rateSyncParam = treeState.getRawParameterValue(ParameterID::lfoRateSync(i).getParamID());
+            auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
             if (rateSyncParam != nullptr)
             {
                 const int rateIndex = static_cast<int>(rateSyncParam->load());
@@ -726,7 +726,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
         else // --- FREE (HZ) MODE CALCULATION ---
         {
-            auto* rateHzParam = treeState.getRawParameterValue(ParameterID::lfoRateHz(i).getParamID());
+            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
             if (rateHzParam != nullptr)
             {
                 const float freqInHz = rateHzParam->load();
@@ -764,19 +764,19 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     int lineNum = numBands - 1;
 
     // Set target values for smoothers from APVTS
-    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(FREQ_ID1));
-    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
-    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
+    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 0)));
+    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 1)));
+    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 2)));
 
     // Get the smoothed frequency values for this block
     // And also handle sorting based on active lines
     std::array<float, 3> freqArray = { 0.0f, 0.0f, 0.0f };
     int activeLineCount = 0;
-    if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID1)))
+    if (static_cast<bool>(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINE_STATE_ID, 0))))
         freqArray[activeLineCount++] = smoothedFreq1.getNextValue();
-    if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID2)))
+    if (static_cast<bool>(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINE_STATE_ID, 1))))
         freqArray[activeLineCount++] = smoothedFreq2.getNextValue();
-    if (static_cast<bool>(*treeState.getRawParameterValue(LINE_STATE_ID3)))
+    if (static_cast<bool>(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINE_STATE_ID, 2))))
         freqArray[activeLineCount++] = smoothedFreq3.getNextValue();
 
     if (activeLineCount > 1)
@@ -1358,69 +1358,69 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     using PChoice = juce::AudioParameterChoice;
 
     // --- Global Parameters ---
-    parameters.push_back(std::make_unique<PBool>(ParameterID::hq, HQ_NAME, false));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::globalOutput, OUTPUT_NAME, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::globalMix, MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<PInt>(ParameterID::numBands, NUM_BANDS_NAME, 1, 4, 1));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::filterBypass, FILTER_BYPASS_NAME, false));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::downsample, DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::downsampleBypass, DOWNSAMPLE_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(HQ_ID), HQ_NAME, false));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(OUTPUT_ID), OUTPUT_NAME, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(MIX_ID), MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PInt>(ParameterIDAndName::getID(NUM_BANDS_ID), NUM_BANDS_NAME, 1, 4, 1));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(FILTER_BYPASS_ID), FILTER_BYPASS_NAME, false));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(DOWNSAMPLE_ID), DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(DOWNSAMPLE_BYPASS_ID), DOWNSAMPLE_BYPASS_NAME, false));
 
     // --- Per-Band Parameters (created in a loop) ---
     for (int i = 0; i < 4; ++i)
     {
-        parameters.push_back(std::make_unique<PInt>(ParameterID::mode(i), ParameterID::modeNames[i], 0, 11, 3));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::linked(i), ParameterID::linkedNames[i], true));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::safe(i), ParameterID::safeNames[i], true));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::extreme(i), ParameterID::extremeNames[i], false));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::drive(i), ParameterID::driveNames[i], juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::compRatio(i), ParameterID::compRatioNames[i], juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::compThresh(i), ParameterID::compThreshNames[i], juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::width(i), ParameterID::widthNames[i], juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::output(i), ParameterID::outputNames[i], juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::mix(i), ParameterID::mixNames[i], juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::bias(i), ParameterID::biasNames[i], juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterID::rec(i), ParameterID::recNames[i], juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::bandEnable(i), ParameterID::bandEnableNames[i], true));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::bandSolo(i), ParameterID::bandSoloNames[i], false));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::compBypass(i), ParameterID::compBypassNames[i], false));
-        parameters.push_back(std::make_unique<PBool>(ParameterID::widthBypass(i), ParameterID::widthBypassNames[i], false));
+        parameters.push_back(std::make_unique<PInt>(ParameterIDAndName::getID(MODE_ID, i), ParameterIDAndName::getName(MODE_NAME, i), 0, 11, 3));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(LINKED_ID, i), ParameterIDAndName::getName(LINKED_NAME, i), true));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(SAFE_ID, i), ParameterIDAndName::getName(SAFE_NAME, i), true));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(EXTREME_ID, i), ParameterIDAndName::getName(EXTREME_NAME, i), false));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(DRIVE_ID, i), ParameterIDAndName::getName(DRIVE_NAME, i), juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_RATIO_ID, i), ParameterIDAndName::getName(COMP_RATIO_NAME, i), juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_THRESH_ID, i), ParameterIDAndName::getName(COMP_THRESH_NAME, i), juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(WIDTH_ID, i), ParameterIDAndName::getName(WIDTH_NAME, i), juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(OUTPUT_ID, i), ParameterIDAndName::getName(OUTPUT_NAME, i), juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(MIX_ID, i), ParameterIDAndName::getName(MIX_NAME, i), juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(BIAS_ID, i), ParameterIDAndName::getName(BIAS_NAME, i), juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(REC_ID, i), ParameterIDAndName::getName(REC_NAME, i), juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_ENABLE_ID, i), ParameterIDAndName::getName(BAND_ENABLE_NAME, i), true));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_SOLO_ID, i), ParameterIDAndName::getName(BAND_SOLO_NAME, i), false));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(COMP_BYPASS_ID, i), ParameterIDAndName::getName(COMP_BYPASS_NAME, i), false));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(WIDTH_BYPASS_ID, i), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, i), false));
     }
 
     // --- Crossover Parameters ---
     juce::NormalisableRange<float> freqRange(40.0f, 10024.0f, 1.0f);
     freqRange.setSkewForCentre(651.0f);
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::freq1, ParameterID::freqName1, freqRange, 21.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::freq2, ParameterID::freqName2, freqRange, 21.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::freq3, ParameterID::freqName3, freqRange, 21.0f));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::lineState1, ParameterID::lineStateName1, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::lineState2, ParameterID::lineStateName2, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::lineState3, ParameterID::lineStateName3, false));
+
+    for (int i = 0; i < 3; ++i)
+    {
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(FREQ_ID, i), ParameterIDAndName::getName(FREQ_NAME, i), freqRange, 21.0f));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(LINE_STATE_ID, i), ParameterIDAndName::getName(LINE_STATE_NAME, i), false));
+    }
 
     // --- Global Filter Parameters ---
     juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
     cutoffRange.setSkewForCentre(1000.0f);
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::lowCutFreq, ParameterID::lowCutFreqName, cutoffRange, 20.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::lowCutQ, ParameterID::lowCutQName, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::lowCutGain, ParameterID::lowCutGainName, juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::highCutFreq, ParameterID::highCutFreqName, cutoffRange, 20000.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::highCutQ, ParameterID::highCutQName, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::highCutGain, ParameterID::highCutGainName, juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::peakFreq, ParameterID::peakFreqName, cutoffRange, 1000.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::peakQ, ParameterID::peakQName, juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
-    parameters.push_back(std::make_unique<PFloat>(ParameterID::peakGain, ParameterID::peakGainName, juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
-    parameters.push_back(std::make_unique<PInt>(ParameterID::lowCutSlope, ParameterID::lowCutSlopeName, 0, 3, 0));
-    parameters.push_back(std::make_unique<PInt>(ParameterID::highCutSlope, ParameterID::highCutSlopeName, 0, 3, 0));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::lowCutBypassed, ParameterID::lowCutBypassedName, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::peakBypassed, ParameterID::peakBypassedName, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::highCutBypassed, ParameterID::highCutBypassedName, false));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(LOWCUT_FREQ_ID), ParameterIDAndName::getName(LOWCUT_FREQ_NAME), cutoffRange, 20.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(LOWCUT_Q_ID), ParameterIDAndName::getName(LOWCUT_Q_NAME), juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(LOWCUT_GAIN_ID), ParameterIDAndName::getName(LOWCUT_GAIN_NAME), juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(HIGHCUT_FREQ_ID), ParameterIDAndName::getName(HIGHCUT_FREQ_NAME), cutoffRange, 20000.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(HIGHCUT_Q_ID), ParameterIDAndName::getName(HIGHCUT_Q_NAME), juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(HIGHCUT_GAIN_ID), ParameterIDAndName::getName(HIGHCUT_GAIN_NAME), juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(PEAK_FREQ_ID), ParameterIDAndName::getName(PEAK_FREQ_NAME), cutoffRange, 1000.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(PEAK_Q_ID), ParameterIDAndName::getName(PEAK_Q_NAME), juce::NormalisableRange<float>(1.0f, 5.0f, 0.1f), 1.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(PEAK_GAIN_ID), ParameterIDAndName::getName(PEAK_GAIN_NAME), juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f), 0.0f));
+    parameters.push_back(std::make_unique<PInt>(ParameterIDAndName::getID(LOWCUT_SLOPE_ID), ParameterIDAndName::getName(LOWCUT_SLOPE_NAME), 0, 3, 0));
+    parameters.push_back(std::make_unique<PInt>(ParameterIDAndName::getID(HIGHCUT_SLOPE_ID), ParameterIDAndName::getName(HIGHCUT_SLOPE_NAME), 0, 3, 0));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(LOWCUT_BYPASSED_ID), ParameterIDAndName::getName(LOWCUT_BYPASSED_NAME), false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(PEAK_BYPASSED_ID), ParameterIDAndName::getName(PEAK_BYPASSED_NAME), false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(HIGHCUT_BYPASSED_ID), ParameterIDAndName::getName(HIGHCUT_BYPASSED_NAME), false));
 
-    parameters.push_back(std::make_unique<PBool>(ParameterID::off, ParameterID::offName, true));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::pre, ParameterID::preName, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::post, ParameterID::postName, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::low, ParameterID::lowName, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::band, ParameterID::bandName, false));
-    parameters.push_back(std::make_unique<PBool>(ParameterID::high, ParameterID::highName, true));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(OFF_ID), ParameterIDAndName::getName(OFF_NAME), true));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(PRE_ID), ParameterIDAndName::getName(PRE_NAME), false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(POST_ID), ParameterIDAndName::getName(POST_NAME), false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(LOW_ID), ParameterIDAndName::getName(LOW_NAME), false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_ID), ParameterIDAndName::getName(BAND_NAME), false));
+    parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(HIGH_ID), ParameterIDAndName::getName(HIGH_NAME), true));
 
     juce::StringArray lfoRateSyncDivisions = {
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
@@ -1430,20 +1430,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     for (int i = 0; i < 4; ++i)
     {
         parameters.push_back(std::make_unique<PBool>(
-            ParameterID::lfoSyncMode(i),
-            ParameterID::lfoSyncModeNames[i],
+            ParameterIDAndName::getID(LFO_SYNC_MODE_ID, i),
+            ParameterIDAndName::getName(LFO_SYNC_MODE_NAME, i),
             true));
 
         parameters.push_back(std::make_unique<PChoice>(
-            ParameterID::lfoRateSync(i),
-            ParameterID::lfoRateSyncNames[i],
+            ParameterIDAndName::getID(LFO_RATE_SYNC_ID, i),
+            ParameterIDAndName::getName(LFO_RATE_SYNC_NAME, i),
             lfoRateSyncDivisions,
             5 // Default index for "1/4"
             ));
 
         parameters.push_back(std::make_unique<PFloat>(
-            ParameterID::lfoRateHz(i),
-            ParameterID::lfoRateHzNames[i],
+            ParameterIDAndName::getID(LFO_RATE_HZ_ID, i),
+            ParameterIDAndName::getName(LFO_RATE_HZ_NAME, i),
             juce::NormalisableRange<float>(0.01f, 100.0f, 0.01f, 0.3f),
             1.0f,
             "Hz"));
@@ -1479,9 +1479,9 @@ void FireAudioProcessor::updateParameters()
     activeCrossovers = numBands - 1;
 
     // Update smoothers for crossover frequencies.
-    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(FREQ_ID1));
-    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(FREQ_ID2));
-    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(FREQ_ID3));
+    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 0)));
+    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 1)));
+    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 2)));
 
     //==============================================================================
     // 2. Update Per-Band Smoothed Parameters
@@ -1493,8 +1493,8 @@ void FireAudioProcessor::updateParameters()
         if (auto* band = bands[i].get())
         {
             //            band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-            band->recSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::recIds[i]));
-            band->biasSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterID::biasIds[i]));
+            band->recSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(REC_ID, i)));
+            band->biasSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BIAS_ID, i)));
         }
     }
 
@@ -1531,7 +1531,7 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
     {
         for (int i = 0; i < numBands; ++i)
         {
-            if (*treeState.getRawParameterValue(ParameterID::bandSoloIds[i]))
+            if (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_SOLO_ID, i)))
             {
                 anySoloActive = true;
                 break;
@@ -1549,7 +1549,7 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
         if (currentBandBuffer == nullptr)
             continue;
 
-        const bool isThisBandSoloed = *treeState.getRawParameterValue(ParameterID::bandSoloIds[i]) > 0.5f;
+        const bool isThisBandSoloed = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_SOLO_ID, i)) > 0.5f;
 
         // Determine if this band should be added to the mix.
         const bool shouldAddBand = anySoloActive ? isThisBandSoloed : true;
@@ -1825,32 +1825,32 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
             // First, set the input meter values for this band.
             setLeftRightMeterRMSValues(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
 
-            if (*treeState.getRawParameterValue(ParameterID::bandEnableIds[i]))
+            if (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i)))
             {
                 // ** THIS IS THE CENTRAL CHANGE **
                 // 1. Assemble the parameter struct before calling process.
                 BandProcessingParameters params;
 
                 // Populate the struct from treeState
-                params.mode = *treeState.getRawParameterValue(ParameterID::modeIds[i]);
+                params.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, i));
                 params.isHQ = *treeState.getRawParameterValue(HQ_ID);
-                params.outputVal = *treeState.getRawParameterValue(ParameterID::outputIds[i]);
-                params.mixVal = *treeState.getRawParameterValue(ParameterID::mixIds[i]);
-                params.compThreshold = *treeState.getRawParameterValue(ParameterID::compThreshIds[i]);
-                params.compRatio = *treeState.getRawParameterValue(ParameterID::compRatioIds[i]);
-                params.isCompBypassed = *treeState.getRawParameterValue(ParameterID::compBypassIds[i]) > 0.5f;
-                params.width = *treeState.getRawParameterValue(ParameterID::widthIds[i]);
-                params.isWidthBypassed = *treeState.getRawParameterValue(ParameterID::widthBypassIds[i]) > 0.5f;
-                params.isSafeModeOn = *treeState.getRawParameterValue(ParameterID::safeIds[i]) > 0.5f;
-                params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterID::extremeIds[i]) > 0.5f;
-                params.biasVal = *treeState.getRawParameterValue(ParameterID::biasIds[i]);
-                params.recVal = *treeState.getRawParameterValue(ParameterID::recIds[i]);
+                params.outputVal = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(OUTPUT_ID, i));
+                params.mixVal = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MIX_ID, i));
+                params.compThreshold = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_THRESH_ID, i));
+                params.compRatio = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_RATIO_ID, i));
+                params.isCompBypassed = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i)) > 0.5f;
+                params.width = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_ID, i));
+                params.isWidthBypassed = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i)) > 0.5f;
+                params.isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, i)) > 0.5f;
+                params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(EXTREME_ID, i)) > 0.5f;
+                params.biasVal = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(BIAS_ID, i));
+                params.recVal = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(REC_ID, i));
                 band->biasSmoother.setTargetValue(params.biasVal);
                 band->recSmoother.setTargetValue(params.recVal);
 
-                params.driveID = ParameterID::drive(i).getParamID();
-                params.biasID = ParameterID::bias(i).getParamID();
-                params.recID = ParameterID::rec(i).getParamID();
+                params.driveID = ParameterIDAndName::getIDString(DRIVE_ID, i);
+                params.biasID = ParameterIDAndName::getIDString(BIAS_ID, i);
+                params.recID = ParameterIDAndName::getIDString(REC_ID, i);
 
                 params.driveRange = treeState.getParameterRange(params.driveID);
                 params.biasRange = treeState.getParameterRange(params.biasID);

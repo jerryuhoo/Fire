@@ -43,19 +43,19 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
     }
 
-    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID1, *bandUIs[0].enableButton);
-    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID2, *bandUIs[1].enableButton);
-    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID3, *bandUIs[2].enableButton);
-    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID4, *bandUIs[3].enableButton);
+    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_ENABLE_ID, 0), *bandUIs[0].enableButton);
+    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_ENABLE_ID, 1), *bandUIs[1].enableButton);
+    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_ENABLE_ID, 2), *bandUIs[2].enableButton);
+    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_ENABLE_ID, 3), *bandUIs[3].enableButton);
 
-    multiSoloAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID1, *bandUIs[0].soloButton);
-    multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID2, *bandUIs[1].soloButton);
-    multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID3, *bandUIs[2].soloButton);
-    multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID4, *bandUIs[3].soloButton);
+    multiSoloAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_SOLO_ID, 0), *bandUIs[0].soloButton);
+    multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_SOLO_ID, 1), *bandUIs[1].soloButton);
+    multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_SOLO_ID, 2), *bandUIs[2].soloButton);
+    multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(BAND_SOLO_ID, 3), *bandUIs[3].soloButton);
 
-    freqDividerGroupAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID1, *freqDividerGroup[0]);
-    freqDividerGroupAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID2, *freqDividerGroup[1]);
-    freqDividerGroupAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID3, *freqDividerGroup[2]);
+    freqDividerGroupAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINE_STATE_ID, 0), *freqDividerGroup[0]);
+    freqDividerGroupAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINE_STATE_ID, 1), *freqDividerGroup[1]);
+    freqDividerGroupAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINE_STATE_ID, 2), *freqDividerGroup[2]);
 }
 
 Multiband::~Multiband()

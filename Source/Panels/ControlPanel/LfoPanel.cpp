@@ -404,13 +404,13 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     {
         // Use the ParameterID helper function to get the correct ID.
         // The loop now correctly runs from 0 to 3 to match the array indices.
-        processor.treeState.addParameterListener(ParameterID::lfoSyncMode(i).getParamID(), this);
+        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);
     }
 
     // --- ADD Attachments ---
     // Attach the sync button to the first LFO's sync mode parameter
     syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        processor.treeState, LFO_SYNC_MODE_ID1, syncButton);
+        processor.treeState, ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0), syncButton);
 
     // Set up the rate slider based on the initial state
     updateRateSlider();
@@ -425,7 +425,7 @@ LfoPanel::~LfoPanel()
     for (int i = 0; i < 4; ++i)
     {
         // Use the same helper function to ensure we remove the correct listener.
-        processor.treeState.removeParameterListener(ParameterID::lfoSyncMode(i).getParamID(), this);
+        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);
     }
 }
 
@@ -568,10 +568,10 @@ void LfoPanel::buttonClicked(juce::Button* button)
             }
 
             // Re-attach the sync button to the newly selected LFO's sync parameter
-            auto syncModeID = ParameterID::lfoSyncMode(clickedIndex);
+            auto syncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, clickedIndex);
             syncButtonAttachment.reset();
             syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-                processor.treeState, syncModeID.getParamID(), syncButton);
+                processor.treeState, syncModeID, syncButton);
 
             updateRateSlider();
         }
@@ -582,13 +582,13 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
 {
     // --- Get Parameter IDs using the robust ParameterID namespace ---
     // The currentLfoIndex is 0-based, which matches our arrays perfectly.
-    auto syncModeID = ParameterID::lfoSyncMode(currentLfoIndex);
-    auto rateSyncID = ParameterID::lfoRateSync(currentLfoIndex);
-    auto rateHzID = ParameterID::lfoRateHz(currentLfoIndex);
+    auto syncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex);
+    auto rateSyncID = ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, currentLfoIndex);
+    auto rateHzID = ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, currentLfoIndex);
 
     // Find out if the current LFO is in sync mode from the parameter value.
     // We use .getParamID() to get the string from the juce::ParameterID object.
-    auto* param = processor.treeState.getParameter(syncModeID.getParamID());
+    auto* param = processor.treeState.getParameter(syncModeID);
     jassert(param != nullptr);
     bool isInSyncMode = param->getValue();
 
@@ -613,7 +613,7 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
 
         // Create the attachment using the correct ParameterID.
         rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            processor.treeState, rateSyncID.getParamID(), rateSlider);
+            processor.treeState, rateSyncID, rateSlider);
     }
     else // --- HZ (FREE) MODE (Continuous) ---
     {
@@ -623,7 +623,7 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
 
         // Create the attachment using the correct ParameterID.
         rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            processor.treeState, rateHzID.getParamID(), rateSlider);
+            processor.treeState, rateHzID, rateSlider);
     }
 }
 
@@ -631,10 +631,10 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
 void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
 {
     // Get the authoritative ParameterID for the currently active LFO's sync mode.
-    auto currentSyncModeID = ParameterID::lfoSyncMode(currentLfoIndex);
+    auto currentSyncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex);
 
     // Compare the incoming parameterID string with our authoritative one.
-    if (parameterID == currentSyncModeID.getParamID())
+    if (parameterID == currentSyncModeID)
     {
         // If they match, it means the sync mode for the visible LFO has changed
         // (likely via automation or a preset load), so we must update the UI.

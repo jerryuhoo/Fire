@@ -32,8 +32,8 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
     // We listen directly to the parameters that affect our "link" logic.
     for (int i = 0; i < 4; ++i)
     {
-        processor.treeState.addParameterListener(ParameterID::getParamID(DRIVE_ID, i), this);
-        processor.treeState.addParameterListener(ParameterID::getParamID(LINKED_ID, i), this);
+        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
+        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
     }
 
     // Initialize a single set of sliders
@@ -136,8 +136,8 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
     // Load initial bypass states from the processor's state tree
     for (int i = 0; i < 4; ++i)
     {
-        compBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterID::getParamID(COMP_BYPASS_ID, i));
-        widthBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterID::getParamID(WIDTH_BYPASS_ID, i));
+        compBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i));
+        widthBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i));
     }
 
     // Set initial attachments for band 0 and update knob enabled states
@@ -145,7 +145,7 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
 
     for (int i = 0; i < 4; ++i)
     {
-        bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterID::getParamID(BAND_ENABLE_ID, i));
+        bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i));
         setBandKnobsStates(bandEnabled, false);
     }
 }
@@ -155,8 +155,8 @@ BandPanel::~BandPanel()
     // Remove all parameter listeners that were added in the constructor.
     for (int i = 0; i < 4; ++i)
     {
-        processor.treeState.removeParameterListener(ParameterID::getParamID(DRIVE_ID, i), this);
-        processor.treeState.removeParameterListener(ParameterID::getParamID(LINKED_ID, i), this);
+        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
+        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
     }
 
     oscSwitch.removeListener(this);
@@ -327,7 +327,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
 void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase)
 {
-    slider.parameterID = ParameterID::getParamID(paramIDBase, focusBandNum);
+    slider.parameterID = ParameterIDAndName::getIDString(paramIDBase, focusBandNum);
 
     slider.onModAmountChanged = [this, &slider](double newAmount)
     {
@@ -363,28 +363,28 @@ void BandPanel::updateAttachments()
     widthBypassAttachment.reset();
 
     // Attach UI components to the new band's parameters
-    driveAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(DRIVE_ID, focusBandNum), driveKnob);
-    outputAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(OUTPUT_ID, focusBandNum), outputKnob);
-    mixAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(MIX_ID, focusBandNum), mixKnob);
-    recAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(REC_ID, focusBandNum), recKnob);
-    biasAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(BIAS_ID, focusBandNum), biasKnob);
-    compRatioAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(COMP_RATIO_ID, focusBandNum), compRatioKnob);
-    compThreshAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(COMP_THRESH_ID, focusBandNum), compThreshKnob);
-    widthAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterID::getParamID(WIDTH_ID, focusBandNum), widthKnob);
+    driveAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(DRIVE_ID, focusBandNum), driveKnob);
+    outputAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(OUTPUT_ID, focusBandNum), outputKnob);
+    mixAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(MIX_ID, focusBandNum), mixKnob);
+    recAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(REC_ID, focusBandNum), recKnob);
+    biasAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(BIAS_ID, focusBandNum), biasKnob);
+    compRatioAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_RATIO_ID, focusBandNum), compRatioKnob);
+    compThreshAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_THRESH_ID, focusBandNum), compThreshKnob);
+    widthAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_ID, focusBandNum), widthKnob);
 
-    linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterID::getParamID(LINKED_ID, focusBandNum), linkedButton);
-    safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterID::getParamID(SAFE_ID, focusBandNum), safeButton);
-    extremeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterID::getParamID(EXTREME_ID, focusBandNum), extremeButton);
+    linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
+    safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
+    extremeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(EXTREME_ID, focusBandNum), extremeButton);
 
-    compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterID::getParamID(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
-    widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterID::getParamID(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
+    compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
+    widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
 
     // Update the visual state of the bypass buttons to match the newly focused band
     compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
     widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
 
     // Apply the correct enabled/disabled states for the new band
-    bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterID::getParamID(BAND_ENABLE_ID, focusBandNum));
+    bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(bandEnabled, false);
 
     // After attaching, configure the modulatable properties for the current focus band.
@@ -434,7 +434,7 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     updateWhenChangingFocus();
 
     // After switching, immediately sync the UI with the processor's state for the new band
-    bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterID::getParamID(BAND_ENABLE_ID, focusBandNum));
+    bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(isBandEnabled, false);
 }
 

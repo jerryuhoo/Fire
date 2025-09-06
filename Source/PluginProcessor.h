@@ -235,6 +235,11 @@ struct BandProcessingParameters
     juce::String driveID;
     juce::String biasID;
     juce::String recID;
+
+    // Normalisable ranges for parameter modulation
+    juce::NormalisableRange<float> driveRange;
+    juce::NormalisableRange<float> biasRange;
+    juce::NormalisableRange<float> recRange;
 };
 
 //==============================================================================

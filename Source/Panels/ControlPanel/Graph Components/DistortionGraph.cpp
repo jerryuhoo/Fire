@@ -81,7 +81,6 @@ void DistortionGraph::updateDistortionCurve()
     distortionCurve.clear();
     auto frameRight = getLocalBounds();
 
-    // <<<< 2. USE THE SHARED LOGIC >>>>
     // Create a single state object for the graph using the parameters passed to this component.
     DistortionLogic::State graphState;
     graphState.drive = this->drive;

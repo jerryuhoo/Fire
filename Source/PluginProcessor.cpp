@@ -241,16 +241,21 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         }
 
         // float modulatedDrive = juce::jlimit(0.0f, 100.0f, smoothedDrive + lfoValue * (100.0f * modulationDepth));
-        float modulatedBias = juce::jlimit(-1.0f, 1.0f, smoothedBias + biasModulation);
-        float modulatedRec = juce::jlimit(0.0f, 1.0f, smoothedRec + recModulation);
-        
+        // float modulatedBias = juce::jlimit(-1.0f, 1.0f, smoothedBias + biasModulation);
+        // float modulatedRec = juce::jlimit(0.0f, 1.0f, smoothedRec + recModulation);
+
+        // Use the injected range objects to clamp the final values. No hardcoding.
+        // float modulatedDrive = juce::jlimit(params.driveRange.start, params.driveRange.end, smoothedDrive + lfoValue * (100.0f * modulationDepth));
+        float modulatedBias = juce::jlimit(params.biasRange.start, params.biasRange.end, smoothedBias + biasModulation);
+        float modulatedRec = juce::jlimit(params.recRange.start, params.recRange.end, smoothedRec + recModulation);
+
         // Create a state object with the final, modulated parameters for this sample.
         DistortionLogic::State currentState;
         currentState.drive = smoothedDrive;
         currentState.bias = modulatedBias;
         currentState.rec = modulatedRec;
         currentState.mode = mode;
-        
+
         // Apply these values to all channels
         for (int channel = 0; channel < numChannels; ++channel)
         {
@@ -1846,6 +1851,10 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.driveID = ParameterID::drive(i).getParamID();
                 params.biasID = ParameterID::bias(i).getParamID();
                 params.recID = ParameterID::rec(i).getParamID();
+
+                params.driveRange = treeState.getParameterRange(params.driveID);
+                params.biasRange = treeState.getParameterRange(params.biasID);
+                params.recRange = treeState.getParameterRange(params.recID);
 
                 // --- DRIVE MODULATION (PER-BLOCK) ---
                 float baseDrive = *treeState.getRawParameterValue(params.driveID);

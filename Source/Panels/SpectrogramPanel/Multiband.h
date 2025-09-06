@@ -75,11 +75,10 @@ private:
     int focusIndex = 0;
     bool isDragging = false;
 
-    std::vector<juce::String> paramsArray1 = { ParameterIDAndName::getName(MODE_NAME, 0), ParameterIDAndName::getName(LINKED_NAME, 0), ParameterIDAndName::getName(SAFE_NAME, 0), ParameterIDAndName::getName(DRIVE_NAME, 0), ParameterIDAndName::getName(COMP_RATIO_NAME, 0), ParameterIDAndName::getName(COMP_THRESH_NAME, 0), ParameterIDAndName::getName(WIDTH_NAME, 0), ParameterIDAndName::getName(OUTPUT_NAME, 0), ParameterIDAndName::getName(MIX_NAME, 0), ParameterIDAndName::getName(BIAS_NAME, 0), ParameterIDAndName::getName(REC_NAME, 0), ParameterIDAndName::getName(COMP_BYPASS_NAME, 0), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 0) };
-    std::vector<juce::String> paramsArray2 = { ParameterIDAndName::getName(MODE_NAME, 1), ParameterIDAndName::getName(LINKED_NAME, 1), ParameterIDAndName::getName(SAFE_NAME, 1), ParameterIDAndName::getName(DRIVE_NAME, 1), ParameterIDAndName::getName(COMP_RATIO_NAME, 1), ParameterIDAndName::getName(COMP_THRESH_NAME, 1), ParameterIDAndName::getName(WIDTH_NAME, 1), ParameterIDAndName::getName(OUTPUT_NAME, 1), ParameterIDAndName::getName(MIX_NAME, 1), ParameterIDAndName::getName(BIAS_NAME, 1), ParameterIDAndName::getName(REC_NAME, 1), ParameterIDAndName::getName(COMP_BYPASS_NAME, 1), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 1) };
-    std::vector<juce::String> paramsArray3 = { ParameterIDAndName::getName(MODE_NAME, 2), ParameterIDAndName::getName(LINKED_NAME, 2), ParameterIDAndName::getName(SAFE_NAME, 2), ParameterIDAndName::getName(DRIVE_NAME, 2), ParameterIDAndName::getName(COMP_RATIO_NAME, 2), ParameterIDAndName::getName(COMP_THRESH_NAME, 2), ParameterIDAndName::getName(WIDTH_NAME, 2), ParameterIDAndName::getName(OUTPUT_NAME, 2), ParameterIDAndName::getName(MIX_NAME, 2), ParameterIDAndName::getName(BIAS_NAME, 2), ParameterIDAndName::getName(REC_NAME, 2), ParameterIDAndName::getName(COMP_BYPASS_NAME, 2), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 2) };
-    std::vector<juce::String> paramsArray4 = { ParameterIDAndName::getName(MODE_NAME, 3), ParameterIDAndName::getName(LINKED_NAME, 3), ParameterIDAndName::getName(SAFE_NAME, 3), ParameterIDAndName::getName(DRIVE_NAME, 3), ParameterIDAndName::getName(COMP_RATIO_NAME, 3), ParameterIDAndName::getName(COMP_THRESH_NAME, 3), ParameterIDAndName::getName(WIDTH_NAME, 3), ParameterIDAndName::getName(OUTPUT_NAME, 3), ParameterIDAndName::getName(MIX_NAME, 3), ParameterIDAndName::getName(BIAS_NAME, 3), ParameterIDAndName::getName(REC_NAME, 3), ParameterIDAndName::getName(COMP_BYPASS_NAME, 3), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, 3) };
-    bool isParamInArray(juce::String paramName, std::vector<juce::String> paramArray);
+    // Use a 2D vector to store parameter arrays for each band
+    std::vector<std::vector<juce::String>> paramsArrays;
+
+    bool isParamInArray(juce::String paramName, const std::vector<juce::String>& paramArray);
     void setParametersToAFromB(int toIndex, int fromIndex);
     void initParameters(int bandindex);
     void setStatesWhenAdd(int changedIndex);
@@ -97,9 +96,10 @@ private:
 
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiEnableAttachment1, multiEnableAttachment2, multiEnableAttachment3, multiEnableAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> multiSoloAttachment1, multiSoloAttachment2, multiSoloAttachment3, multiSoloAttachment4;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> freqDividerGroupAttachment1, freqDividerGroupAttachment2, freqDividerGroupAttachment3;
+    // Use vectors to manage attachments
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> multiEnableAttachments;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> multiSoloAttachments;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> freqDividerGroupAttachments;
 
     struct BandState
     {

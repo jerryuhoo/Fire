@@ -34,6 +34,7 @@
 #define HQ_ID               "hq"
 #define HQ_NAME             "Hq"
 
+#define MODE_ID             "mode"
 #define MODE_ID1            "mode1"
 #define MODE_NAME1          "Mode1"
 #define MODE_ID2            "mode2"

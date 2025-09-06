@@ -8,6 +8,7 @@
   ==============================================================================
 */
 #include "PluginProcessor.h"
+#include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
 
 //==============================================================================
@@ -63,9 +64,6 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
                             const juce::Array<ModulationRouting>& modulationRoutings)
 {
     // Extract parameters for easier access
-    const int numChannels = buffer.getNumChannels();
-    const int numSamples = buffer.getNumSamples();
-    const int mode = params.mode;
     const bool isHQ = params.isHQ;
     const float outputVal = params.outputVal;
     const float mixVal = params.mixVal;
@@ -204,48 +202,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         recSmoother.setTargetValue(recVal);
     }
 
-    // 1. Set the main waveshaper function based on the current mode
-    switch (mode)
-    {
-        case 0:
-            this->waveshaperFunction = waveshaping::arctanSoftClipping<float>;
-            break;
-        case 1:
-            this->waveshaperFunction = waveshaping::expSoftClipping<float>;
-            break;
-        case 2:
-            this->waveshaperFunction = waveshaping::tanhSoftClipping<float>;
-            break;
-        case 3:
-            this->waveshaperFunction = waveshaping::cubicSoftClipping<float>;
-            break;
-        case 4:
-            this->waveshaperFunction = waveshaping::hardClipping<float>;
-            break;
-        case 5:
-            this->waveshaperFunction = waveshaping::sausageFattener<float>;
-            break;
-        case 6:
-            this->waveshaperFunction = waveshaping::sinFoldback<float>;
-            break;
-        case 7:
-            this->waveshaperFunction = waveshaping::linFoldback<float>;
-            break;
-        case 8:
-            this->waveshaperFunction = waveshaping::limitClip<float>;
-            break;
-        case 9:
-            this->waveshaperFunction = waveshaping::singleSinClip<float>;
-            break;
-        case 10:
-            this->waveshaperFunction = waveshaping::logicClip<float>;
-            break;
-        case 11:
-            this->waveshaperFunction = waveshaping::tanclip<float>;
-            break;
-    }
-
-    // --- 5. Manual Per-Sample Processing Loop ---
+    // Manual Per-Sample Processing Loop
     const int numSamples = (int) blockToProcess.getNumSamples();
     const int numChannels = (int) blockToProcess.getNumChannels();
     static int refactoredBlockCounter = 0;
@@ -286,21 +243,22 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // float modulatedDrive = juce::jlimit(0.0f, 100.0f, smoothedDrive + lfoValue * (100.0f * modulationDepth));
         float modulatedBias = juce::jlimit(-1.0f, 1.0f, smoothedBias + biasModulation);
         float modulatedRec = juce::jlimit(0.0f, 1.0f, smoothedRec + recModulation);
-
+        
+        // Create a state object with the final, modulated parameters for this sample.
+        DistortionLogic::State currentState;
+        currentState.drive = smoothedDrive;
+        currentState.bias = modulatedBias;
+        currentState.rec = modulatedRec;
+        currentState.mode = mode;
+        
         // Apply these values to all channels
         for (int channel = 0; channel < numChannels; ++channel)
         {
-            float currentSample = blockToProcess.getSample(channel, sample);
+            float inputSample = blockToProcess.getSample(channel, sample);
 
-            // The processing chain, applied manually:
-            currentSample *= smoothedDrive; // 1. Drive Gain
-            currentSample += modulatedBias; // 2. Pre-Bias
-            currentSample = waveshaperFunction(currentSample); // 3. Waveshaper
-            if (currentSample < 0.0f)
-                currentSample *= (0.5f - modulatedRec) * 2.0f; // 4. Rectifier
-            currentSample -= modulatedBias; // 5. Post-Bias
+            float wetSample = DistortionLogic::processSample(inputSample, currentState);
 
-            blockToProcess.setSample(channel, sample, currentSample);
+            blockToProcess.setSample(channel, sample, wetSample);
         }
     }
     refactoredBlockCounter++;

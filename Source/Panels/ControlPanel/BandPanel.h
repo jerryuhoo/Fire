@@ -49,8 +49,6 @@ public:
 private:
     // Re-attaches all UI components to the parameters of the current focusBandNum.
     void updateAttachments();
-    // Helper to generate parameter IDs based on a base string and the band index.
-    juce::String getParamID(const juce::String& base, int bandIndex);
 
     void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase);
 

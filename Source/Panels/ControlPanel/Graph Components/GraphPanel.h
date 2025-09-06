@@ -22,13 +22,12 @@
 class GraphPanel : public juce::Component
 {
 public:
-    GraphPanel (FireAudioProcessor&);
+    GraphPanel(FireAudioProcessor&);
     ~GraphPanel() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
-    void setDistortionState (int mode, float rec, float mix, float bias, float drive, float rateDivide);
-    void setFocusBandNum (int num);
+    void setFocusBandNum(int num);
 
     Oscilloscope* getOscilloscope();
     VUPanel* getVuPanel();
@@ -50,5 +49,5 @@ private:
     // Width Graph
     WidthGraph widthGraph { processor };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GraphPanel)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphPanel)
 };

@@ -9,6 +9,7 @@
 */
 
 #include "DistortionGraph.h"
+#include "../../../DSP/DistortionLogic.h"
 
 //==============================================================================
 DistortionGraph::DistortionGraph(FireAudioProcessor& p) : processor(p)
@@ -77,128 +78,41 @@ void DistortionGraph::handleAsyncUpdate()
 
 void DistortionGraph::updateDistortionCurve()
 {
-    // Clear the old path before calculating the new one.
     distortionCurve.clear();
-
     auto frameRight = getLocalBounds();
 
-    // Symmetrical distortion drawing logic, migrated from your original paint() function.
-    if (mode <= 15)
+    // <<<< 2. USE THE SHARED LOGIC >>>>
+    // Create a single state object for the graph using the parameters passed to this component.
+    DistortionLogic::State graphState;
+    graphState.drive = this->drive;
+    graphState.bias = this->bias;
+    graphState.rec = this->rec;
+    graphState.mode = this->mode;
+
+    const int numPix = frameRight.getWidth();
+    float maxInput = 2.0f; // Max input value for the graph's x-axis
+    float input = -maxInput;
+    const float inputInc = (maxInput * 2.0f) / numPix;
+
+    for (int i = 0; i < numPix; ++i)
     {
-        float functionValue = 0.0f;
-        float mixValue;
+        // Calculate the output using the shared processing function.
+        float wetValue = DistortionLogic::processSample(input, graphState);
 
-        const int numPix = frameRight.getWidth();
-        float driveScale = 1.0f;
-        float maxValue = 2.0f * driveScale * mix + 2.0f * (1.0f - mix);
-        float value = -maxValue;
-        float valInc = (maxValue - value) / numPix;
-        float xPos = frameRight.getX();
-        const float posInc = (float) frameRight.getWidth() / (float) numPix;
+        // The mix logic is specific to the graph, so we keep it here.
+        float mixedValue = (1.0f - this->mix) * input + this->mix * wetValue;
 
-        bool edgePointL = false;
-        bool edgePointR = false;
-        float step = 0.5f;
+        // Map the input and output values to screen coordinates
+        float xPos = juce::jmap((float) i, 0.0f, (float) numPix, (float) frameRight.getX(), (float) frameRight.getRight());
+        float yPos = juce::jmap(mixedValue, maxInput, -maxInput, (float) frameRight.getY(), (float) frameRight.getBottom());
 
-        for (float i = 1; i < numPix; i += step)
-        {
-            value += valInc * step;
-            xPos += posInc * step;
-
-            float valueAfterDrive = value;
-
-            // downsample
-            if (rateDivide > 1.0f)
-            {
-                valueAfterDrive = ceilf(valueAfterDrive / (rateDivide / 256.0f)) * (rateDivide / 256.0f);
-            }
-
-            valueAfterDrive = valueAfterDrive * drive + bias;
-
-            switch (mode)
-            {
-                case 0:
-                    functionValue = waveshaping::arctanSoftClipping(valueAfterDrive);
-                    break;
-                case 1:
-                    functionValue = waveshaping::expSoftClipping(valueAfterDrive);
-                    break;
-                case 2:
-                    functionValue = waveshaping::tanhSoftClipping(valueAfterDrive);
-                    break;
-                case 3:
-                    functionValue = waveshaping::cubicSoftClipping(valueAfterDrive);
-                    break;
-                case 4:
-                    functionValue = waveshaping::hardClipping(valueAfterDrive);
-                    break;
-                case 5:
-                    functionValue = waveshaping::sausageFattener(valueAfterDrive);
-                    break;
-                case 6:
-                    functionValue = waveshaping::sinFoldback(valueAfterDrive);
-                    break;
-                case 7:
-                    functionValue = waveshaping::linFoldback(valueAfterDrive);
-                    break;
-                case 8:
-                    functionValue = waveshaping::limitClip(valueAfterDrive);
-                    break;
-                case 9:
-                    functionValue = waveshaping::singleSinClip(valueAfterDrive);
-                    break;
-                case 10:
-                    functionValue = waveshaping::logicClip(valueAfterDrive);
-                    break;
-                case 11:
-                    functionValue = waveshaping::tanclip(valueAfterDrive);
-                    break;
-            }
-
-            functionValue = waveshaping::rectificationProcess(functionValue, rec);
-            functionValue = (1.0f - mix) * value + mix * functionValue;
-            mixValue = (2.0f / 3.0f) * functionValue;
-            float yPos = frameRight.getCentreY() - frameRight.getHeight() * mixValue / 2.0f;
-
-            if (yPos < frameRight.getY())
-            {
-                if (edgePointR == false)
-                {
-                    yPos = frameRight.getY();
-                    edgePointR = true;
-                }
-                else
-                {
-                    continue;
-                }
-            }
-
-            if (yPos > frameRight.getBottom())
-            {
-                if (edgePointL == false)
-                {
-                    continue;
-                }
-                else
-                {
-                    yPos = frameRight.getBottom();
-                }
-            }
-            else if (edgePointL == false)
-            {
-                if (mode == 0)
-                {
-                    distortionCurve.startNewSubPath(xPos, frameRight.getBottom());
-                    distortionCurve.lineTo(xPos, yPos);
-                }
-                else
-                {
-                    distortionCurve.startNewSubPath(xPos, yPos);
-                }
-                edgePointL = true;
-            }
+        if (i == 0)
+            distortionCurve.startNewSubPath(xPos, yPos);
+        else
             distortionCurve.lineTo(xPos, yPos);
-        }
+
+        input += inputInc;
     }
+
     repaint();
 }

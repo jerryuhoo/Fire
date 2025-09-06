@@ -11,6 +11,7 @@
 #include "PluginEditor.h"
 #include "Panels/ControlPanel/Graph Components/VUMeter.h"
 #include "PluginProcessor.h"
+#include "Utility/AudioHelpers.h"
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
@@ -319,23 +320,6 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
     int focusIndex = 0;
     focusIndex = multiband.getFocusIndex();
 
-    if (focusIndex == 0)
-    {
-        setDistortionGraph(MODE_ID1, DRIVE_ID1, REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1, focusIndex);
-    }
-    else if (focusIndex == 1)
-    {
-        setDistortionGraph(MODE_ID2, DRIVE_ID2, REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2, focusIndex);
-    }
-    else if (focusIndex == 2)
-    {
-        setDistortionGraph(MODE_ID3, DRIVE_ID3, REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3, focusIndex);
-    }
-    else if (focusIndex == 3)
-    {
-        setDistortionGraph(MODE_ID4, DRIVE_ID4, REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4, focusIndex);
-    }
-
     // TODO: change it to mouse click
     setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
 
@@ -482,6 +466,15 @@ void FireAudioProcessorEditor::timerCallback()
     updateSliderState(bandPanel.biasKnob);
     // Repaint the entire panel once, which is more efficient than repainting individual sliders.
     bandPanel.repaint();
+
+    int currentBand = bandPanel.getFocusBandNum();
+    setDistortionGraph(ParameterID::getParamID(MODE_ID, currentBand),
+                       ParameterID::getParamID(DRIVE_ID, currentBand),
+                       ParameterID::getParamID(REC_ID, currentBand),
+                       ParameterID::getParamID(MIX_ID, currentBand),
+                       ParameterID::getParamID(BIAS_ID, currentBand),
+                       ParameterID::getParamID(SAFE_ID, currentBand),
+                       currentBand);
 
     // bypassed
     if (processor.getBypassedState())
@@ -708,14 +701,16 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
 {
     // paint distortion function
     int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
+    float drive = *processor.treeState.getRawParameterValue(driveId);
+    float rec = *processor.treeState.getRawParameterValue(recId);
+    float mix = *processor.treeState.getRawParameterValue(mixId);
+    float bias = *processor.treeState.getRawParameterValue(biasId);
+    bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
 
     // protection
-    float drive = static_cast<int>(*processor.treeState.getRawParameterValue(driveId));
     drive = drive * 6.5f / 100.0f;
     float powerDrive = powf(2, drive);
-
     float sampleMaxValue = processor.getSampleMaxValue(bandIndex);
-    bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
 
     if (isSafeModeOn && sampleMaxValue * powerDrive > 2.0f)
     {
@@ -726,18 +721,39 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
         drive = powerDrive;
     }
 
-    /// bypass audio will not run processblock
-    //drive = processor.safeMode(drive, processor.getHistoryArrayL(), safeId);
+    // get modulated value
+    auto getModulatedValue = [&](const juce::String& paramId, float baseValue) -> float
+    {
+        auto modInfo = processor.getModulationInfoForParameter(paramId);
+        if (! modInfo.isModulated)
+            return baseValue;
 
-    float rec = static_cast<float>(*processor.treeState.getRawParameterValue(recId));
-    float mix = static_cast<float>(*processor.treeState.getRawParameterValue(mixId));
-    float bias = static_cast<float>(*processor.treeState.getRawParameterValue(biasId));
+        if (auto* parameter = processor.treeState.getParameter(paramId))
+        {
+            auto range = parameter->getNormalisableRange();
+            float parameterRange = range.end - range.start;
+            float modulationOffset = 0.0f;
+
+            if (modInfo.isBipolar)
+                modulationOffset = modInfo.currentValue * modInfo.depth * parameterRange * 0.5f;
+            else
+                modulationOffset = modInfo.currentValue * modInfo.depth * parameterRange;
+
+            return juce::jlimit(range.start, range.end, baseValue + modulationOffset);
+        }
+        return baseValue;
+    };
+
+    // apply modulation
+    float finalRec = getModulatedValue(recId, rec);
+    float finalBias = getModulatedValue(biasId, bias);
+
+    // apply downsampling
     float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
-
     if (! *processor.treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
         rateDivide = 1;
 
-    graphPanel.setDistortionState(mode, rec, mix, bias, drive, rateDivide);
+    graphPanel.getDistortionGraph()->setState(mode, finalRec, mix, finalBias, drive, rateDivide);
 }
 
 void FireAudioProcessorEditor::setMultiband()
@@ -752,10 +768,8 @@ void FireAudioProcessorEditor::setMultiband()
 
 void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible)
 {
-    // 首先确定一个总的可见性开关
     const bool shouldShowAny = ! zoomButton.getToggleState() && isComboboxVisible;
 
-    // 直接根据 bandNum 和总开关来设置每个组件的可见性
     component1.setVisible(shouldShowAny && (bandNum == 0));
     component2.setVisible(shouldShowAny && (bandNum == 1));
     component3.setVisible(shouldShowAny && (bandNum == 2));

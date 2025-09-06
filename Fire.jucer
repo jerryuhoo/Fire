@@ -113,6 +113,8 @@
               file="Source/DSP/ClippingFunctions.h"/>
         <FILE id="fGPNaV" name="Delay.h" compile="0" resource="0" file="Source/DSP/Delay.h"/>
         <FILE id="TPnhKC" name="DiodeWDF.h" compile="0" resource="0" file="Source/DSP/DiodeWDF.h"/>
+        <FILE id="pm8EEh" name="DistortionLogic.h" compile="0" resource="0"
+              file="Source/DSP/DistortionLogic.h"/>
         <FILE id="DEFvzA" name="LfoData.h" compile="0" resource="0" file="Source/DSP/LfoData.h"/>
         <FILE id="IEdaZX" name="LfoEngine.h" compile="0" resource="0" file="Source/DSP/LfoEngine.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>

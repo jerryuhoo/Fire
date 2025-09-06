@@ -42,12 +42,12 @@ enum Slope
 
 struct ChainSettings
 {
-    float peakFreq { 0 }, peakGainInDecibels{ 0 }, peakQuality {1.0f};
-    float lowCutFreq { 0 }, highCutFreq { 0 }, lowCutQuality {1.0f}, highCutQuality {1.0f},
-    lowCutGainInDecibels{ 0 }, highCutGainInDecibels{ 0 };
-    
+    float peakFreq { 0 }, peakGainInDecibels { 0 }, peakQuality { 1.0f };
+    float lowCutFreq { 0 }, highCutFreq { 0 }, lowCutQuality { 1.0f }, highCutQuality { 1.0f },
+        lowCutGainInDecibels { 0 }, highCutGainInDecibels { 0 };
+
     Slope lowCutSlope { Slope::Slope_12 }, highCutSlope { Slope::Slope_12 };
-    
+
     bool lowCutBypassed { false }, peakBypassed { false }, highCutBypassed { false };
 };
 
@@ -74,14 +74,14 @@ CoefficientsPtr makePeakFilter(const ChainSettings& chainSettings, double sample
 CoefficientsPtr makeLowcutQFilter(const ChainSettings& chainSettings, double sampleRate);
 CoefficientsPtr makeHighcutQFilter(const ChainSettings& chainSettings, double sampleRate);
 
-inline auto makeLowCutFilter(const ChainSettings& chainSettings, double sampleRate )
+inline auto makeLowCutFilter(const ChainSettings& chainSettings, double sampleRate)
 {
     return juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(chainSettings.lowCutFreq,
                                                                                        sampleRate,
                                                                                        2 * (chainSettings.lowCutSlope + 1));
 }
 
-inline auto makeHighCutFilter(const ChainSettings& chainSettings, double sampleRate )
+inline auto makeHighCutFilter(const ChainSettings& chainSettings, double sampleRate)
 {
     return juce::dsp::FilterDesign<float>::designIIRLowpassHighOrderButterworthMethod(chainSettings.highCutFreq,
                                                                                       sampleRate,
@@ -90,7 +90,7 @@ inline auto makeHighCutFilter(const ChainSettings& chainSettings, double sampleR
 
 void updateCoefficients(CoefficientsPtr& old, const CoefficientsPtr& replacements);
 
-template<int Index, typename ChainType, typename CoefficientType>
+template <int Index, typename ChainType, typename CoefficientType>
 
 void update(ChainType& chain, const CoefficientType& coefficients)
 {
@@ -98,7 +98,7 @@ void update(ChainType& chain, const CoefficientType& coefficients)
     chain.template setBypassed<Index>(false);
 }
 
-template<typename ChainType, typename CoefficientType>
+template <typename ChainType, typename CoefficientType>
 void updateCutFilter(ChainType& chain,
                      const CoefficientType& coefficients,
                      const Slope& slope)
@@ -108,7 +108,7 @@ void updateCutFilter(ChainType& chain,
     chain.template setBypassed<2>(true);
     chain.template setBypassed<3>(true);
 
-    switch( slope )
+    switch (slope)
     {
         case Slope_48:
         {
@@ -128,3 +128,18 @@ void updateCutFilter(ChainType& chain,
         }
     }
 }
+
+namespace ParameterID
+{
+    /**
+     * @brief Get the parameter ID for a specific band.
+     * @param base The base parameter ID (e.g., "drive")
+     * @param bandIndex focused band index (0-based, e.g., 0, 1, 2, 3)
+     * @return juce::String return final ID (e.g., "drive1", "drive2")
+     */
+    static inline juce::String getParamID(const juce::String& base, int bandIndex)
+    {
+        // Parameter IDs are 1-based, so add 1 to the index.
+        return base + juce::String(bandIndex + 1);
+    }
+} // namespace ParameterID

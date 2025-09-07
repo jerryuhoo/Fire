@@ -207,58 +207,64 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // Manual Per-Sample Processing Loop
     const int numSamples = (int) blockToProcess.getNumSamples();
     const int numChannels = (int) blockToProcess.getNumChannels();
-    static int refactoredBlockCounter = 0;
+
+    // A map to hold the final accumulated modulation amount for any per-sample parameter.
+    // This makes the logic generic and ready for future expansion.
+    std::map<juce::String, float> perSampleModulationAmounts;
+
+    // --- Pre-calculate modulation amounts for the entire block ---
+    for (const auto& routing : modulationRoutings)
+    {
+        // Check if this routing targets a per-sample parameter for this band.
+        if (routing.targetParameterID == params.biasID || routing.targetParameterID == params.recID)
+        {
+            // Initialize the map entry if it doesn't exist.
+            if (perSampleModulationAmounts.find(routing.targetParameterID) == perSampleModulationAmounts.end())
+            {
+                perSampleModulationAmounts[routing.targetParameterID] = 0.0f;
+            }
+
+            float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0); // Using sample 0 for per-block LFO value
+
+            const auto& range = (routing.targetParameterID == params.biasID) ? params.biasRange : params.recRange;
+            const float rangeSpan = range.end - range.start;
+            float scalingFactor;
+
+            if (routing.isBipolar)
+            {
+                lfoValue = lfoValue * 2.0f - 1.0f; // Map to [-1, 1]
+                scalingFactor = rangeSpan * 0.5f;
+            }
+            else
+            {
+                scalingFactor = rangeSpan;
+            }
+
+            perSampleModulationAmounts[routing.targetParameterID] += lfoValue * routing.depth * scalingFactor;
+        }
+    }
+
+    // --- Manual Per-Sample Processing Loop ---
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        // Calculate smoothed values ONCE per sample frame
         const float smoothedDrive = driveSmoother.getNextValue();
         const float smoothedBias = biasSmoother.getNextValue();
         const float smoothedRec = recSmoother.getNextValue();
 
-        // --- NEW PER-SAMPLE MODULATION LOGIC for Bias and Rec ---
-        float biasModulation = 0.0f;
-        float recModulation = 0.0f;
+        // Apply the pre-calculated modulation amounts.
+        // The '? 0.0f' is a safe fallback in case no modulation is active for that parameter.
+        float finalBiasModAmount = perSampleModulationAmounts.count(params.biasID) ? perSampleModulationAmounts.at(params.biasID) : 0.0f;
+        float finalRecModAmount = perSampleModulationAmounts.count(params.recID) ? perSampleModulationAmounts.at(params.recID) : 0.0f;
 
-        // Iterate through all active routings to see if they target our parameters
-        for (const auto& routing : modulationRoutings)
-        {
-            // Check if the target is this band's bias or rec parameter
-            if (routing.targetParameterID == params.biasID || routing.targetParameterID == params.recID)
-            {
-                // Get the LFO value for the current source and sample
-                float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, sample);
+        float modulatedBias = juce::jlimit(params.biasRange.start, params.biasRange.end, smoothedBias + finalBiasModAmount);
+        float modulatedRec = juce::jlimit(params.recRange.start, params.recRange.end, smoothedRec + finalRecModAmount);
 
-                if (routing.isBipolar)
-                {
-                    lfoValue = lfoValue * 2.0f - 1.0f;
-                }
-
-                float currentModValue = lfoValue * routing.depth;
-
-                if (routing.targetParameterID == params.biasID)
-                    biasModulation += currentModValue; // Depth of 1.0 modulates over +/- 1.0 range
-                else if (routing.targetParameterID == params.recID)
-                    recModulation += currentModValue;
-            }
-        }
-
-        // MODULATION CORRECTION:
-        // 'rec' has a range of [0, 1], so its span is 1.0. To make its depth control
-        // behave like 'bias' (and all other parameters), we scale its modulation
-        // by half its range (1.0 * 0.5f).
-        float scaledRecModulation = recModulation * 0.5f;
-
-        float modulatedBias = juce::jlimit(params.biasRange.start, params.biasRange.end, smoothedBias + biasModulation);
-        float modulatedRec = juce::jlimit(params.recRange.start, params.recRange.end, smoothedRec + scaledRecModulation);
-
-        // Create a state object with the final, modulated parameters for this sample.
         DistortionLogic::State currentState;
         currentState.drive = smoothedDrive;
         currentState.bias = modulatedBias;
         currentState.rec = modulatedRec;
-        currentState.mode = mode;
+        currentState.mode = params.mode;
 
-        // Apply these values to all channels
         for (int channel = 0; channel < numChannels; ++channel)
         {
             float inputSample = blockToProcess.getSample(channel, sample);
@@ -266,7 +272,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             blockToProcess.setSample(channel, sample, wetSample);
         }
     }
-    refactoredBlockCounter++;
 }
 
 //==============================================================================
@@ -1853,7 +1858,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 band->biasSmoother.setTargetValue(params.biasVal);
                 band->recSmoother.setTargetValue(params.recVal);
 
-                // Get parameter IDs for the current band
+                // Get parameter info for the current band
                 params.driveID = ParameterIDAndName::getIDString(DRIVE_ID, i);
                 params.biasID = ParameterIDAndName::getIDString(BIAS_ID, i);
                 params.recID = ParameterIDAndName::getIDString(REC_ID, i);
@@ -1863,61 +1868,72 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.outputID = ParameterIDAndName::getIDString(OUTPUT_ID, i);
                 params.mixID = ParameterIDAndName::getIDString(MIX_ID, i);
 
-                // --- PER-BLOCK MODULATION CALCULATION ---
-                float driveModulation = 0.0f, compRatioModulation = 0.0f, compThreshModulation = 0.0f;
-                float widthModulation = 0.0f, outputModulation = 0.0f, mixModulation = 0.0f;
+                params.driveRange = treeState.getParameterRange(params.driveID);
+                params.biasRange = treeState.getParameterRange(params.biasID);
+                params.recRange = treeState.getParameterRange(params.recID);
+                params.compRatioRange = treeState.getParameterRange(params.compRatioID);
+                params.compThreshRange = treeState.getParameterRange(params.compThreshID);
+                params.widthRange = treeState.getParameterRange(params.widthID);
+                params.outputRange = treeState.getParameterRange(params.outputID);
+                params.mixRange = treeState.getParameterRange(params.mixID);
+
+                // === PER-BLOCK MODULATION CALCULATION ===
+                float driveModulationAmount = 0.0f, compRatioModulationAmount = 0.0f, compThreshModulationAmount = 0.0f;
+                float widthModulationAmount = 0.0f, outputModulationAmount = 0.0f, mixModulationAmount = 0.0f;
 
                 for (const auto& routing : this->modulationRoutings)
                 {
-                    // Get the LFO value, normalized to [-1, 1] for bipolar or [0, 1] for unipolar
+                    if (routing.targetParameterID.isEmpty())
+                        continue;
+
+                    if (routing.targetParameterID != params.driveID && routing.targetParameterID != params.compRatioID && routing.targetParameterID != params.compThreshID && routing.targetParameterID != params.widthID && routing.targetParameterID != params.outputID && routing.targetParameterID != params.mixID)
+                    {
+                        continue;
+                    }
+
                     float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
+                    const auto range = treeState.getParameterRange(routing.targetParameterID);
+                    if (range.start == range.end)
+                        continue;
+
+                    const float rangeSpan = range.end - range.start;
+                    float scalingFactor;
+
                     if (routing.isBipolar)
                     {
                         lfoValue = lfoValue * 2.0f - 1.0f;
+                        scalingFactor = rangeSpan * 0.5f;
+                    }
+                    else
+                    {
+                        scalingFactor = rangeSpan;
                     }
 
-                    // The final modulation signal is the LFO value scaled by the depth.
-                    // This results in a normalized modulation value, typically in the [-1, 1] range.
-                    const float modulationValue = lfoValue * routing.depth;
+                    const float modulationAmount = lfoValue * routing.depth * scalingFactor;
 
-                    // Accumulate the modulation signal for each targeted parameter
                     if (routing.targetParameterID == params.driveID)
-                        driveModulation += modulationValue;
+                        driveModulationAmount += modulationAmount;
                     else if (routing.targetParameterID == params.compRatioID)
-                        compRatioModulation += modulationValue;
+                        compRatioModulationAmount += modulationAmount;
                     else if (routing.targetParameterID == params.compThreshID)
-                        compThreshModulation += modulationValue;
+                        compThreshModulationAmount += modulationAmount;
                     else if (routing.targetParameterID == params.widthID)
-                        widthModulation += modulationValue;
+                        widthModulationAmount += modulationAmount;
                     else if (routing.targetParameterID == params.outputID)
-                        outputModulation += modulationValue;
+                        outputModulationAmount += modulationAmount;
                     else if (routing.targetParameterID == params.mixID)
-                        mixModulation += modulationValue;
+                        mixModulationAmount += modulationAmount;
                 }
 
-                // --- APPLY MODULATION TO BASE VALUES ---
-                // This helper function applies the accumulated modulation to a base parameter value.
-                auto getModulatedValue = [&](const juce::String& paramID, float baseValue, float normalizedModulation)
-                {
-                    const auto range = treeState.getParameterRange(paramID);
-
-                    // CRITICAL LOGIC: Scale the normalized modulation by HALF of the parameter's total range.
-                    // This ensures that a bipolar LFO at full depth (modulating from -1 to 1)
-                    // sweeps across the parameter's full range when the knob is centered.
-                    // This logic is consistent with the per-sample implementation of the 'bias' parameter.
-                    const float modulationAmount = normalizedModulation * (range.end - range.start) * 0.5f;
-
-                    // Add the scaled modulation to the base value and clamp it to the valid range.
-                    return juce::jlimit(range.start, range.end, baseValue + modulationAmount);
-                };
-
-                // Calculate the final value for each per-block modulated parameter
-                params.driveVal = getModulatedValue(params.driveID, *treeState.getRawParameterValue(params.driveID), driveModulation);
-                params.compRatio = getModulatedValue(params.compRatioID, *treeState.getRawParameterValue(params.compRatioID), compRatioModulation);
-                params.compThreshold = getModulatedValue(params.compThreshID, *treeState.getRawParameterValue(params.compThreshID), compThreshModulation);
-                params.width = getModulatedValue(params.widthID, *treeState.getRawParameterValue(params.widthID), widthModulation);
-                params.outputVal = getModulatedValue(params.outputID, *treeState.getRawParameterValue(params.outputID), outputModulation);
-                params.mixVal = getModulatedValue(params.mixID, *treeState.getRawParameterValue(params.mixID), mixModulation);
+                // === APPLY MODULATION TO BASE VALUES ===
+                // Get the base (user-set) value and add the final calculated modulation amount.
+                // The result is clamped to the parameter's valid range.
+                params.driveVal = juce::jlimit(params.driveRange.start, params.driveRange.end, *treeState.getRawParameterValue(params.driveID) + driveModulationAmount);
+                params.compRatio = juce::jlimit(params.compRatioRange.start, params.compRatioRange.end, *treeState.getRawParameterValue(params.compRatioID) + compRatioModulationAmount);
+                params.compThreshold = juce::jlimit(params.compThreshRange.start, params.compThreshRange.end, *treeState.getRawParameterValue(params.compThreshID) + compThreshModulationAmount);
+                params.width = juce::jlimit(params.widthRange.start, params.widthRange.end, *treeState.getRawParameterValue(params.widthID) + widthModulationAmount);
+                params.outputVal = juce::jlimit(params.outputRange.start, params.outputRange.end, *treeState.getRawParameterValue(params.outputID) + outputModulationAmount);
+                params.mixVal = juce::jlimit(params.mixRange.start, params.mixRange.end, *treeState.getRawParameterValue(params.mixID) + mixModulationAmount);
 
                 // Call the process method with the final, modulated parameters
                 band->process(*wetBandBuffers[i], params, lfoOutputBuffer, this->modulationRoutings);

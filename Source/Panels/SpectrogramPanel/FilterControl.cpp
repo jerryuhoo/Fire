@@ -82,41 +82,59 @@ void FilterControl::paint(juce::Graphics& g)
     float buttonX = mousePos.x - size / 2.0f;
     float buttonY = mousePos.y - size / 2.0f;
 
+    // A helper lambda to set parameter values directly in the processor state
+    auto setParameterValue = [&](const juce::String& paramID, float value)
+    {
+        if (auto* param = processor.treeState.getParameter(paramID))
+        {
+            param->setValueNotifyingHost(param->convertTo0to1(value));
+        }
+    };
+
     if (draggableLowButton.isMouseButtonDown() && isFilterEnabled)
     {
         isDragging = true;
-        globalPanel.setToggleButtonState("lowcut");
+        // Instead of calling GlobalPanel, directly set the parameter that controls the filter type
+        processor.treeState.getParameter(LOW_ID)->setValueNotifyingHost(1.0f);
+
         draggableLowButton.setBounds(buttonX, buttonY, size, size);
 
         currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
         currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
 
-        globalPanel.getLowcutFreqKnob().setValue(currentFreq);
-        globalPanel.getLowcutGainKnob().setValue(currentGain);
+        // Set the parameter values directly, not the slider
+        setParameterValue(LOWCUT_FREQ_ID, currentFreq);
+        setParameterValue(LOWCUT_GAIN_ID, currentGain);
     }
     if (draggablePeakButton.isMouseButtonDown() && isFilterEnabled)
     {
         isDragging = true;
-        globalPanel.setToggleButtonState("peak");
+        // Set the parameter for the Peak filter type
+        processor.treeState.getParameter(BAND_ID)->setValueNotifyingHost(1.0f);
+
         draggablePeakButton.setBounds(buttonX, buttonY, size, size);
 
         currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
         currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
 
-        globalPanel.getPeakFreqKnob().setValue(currentFreq);
-        globalPanel.getPeakGainKnob().setValue(currentGain);
+        // FIX: Set the parameter values directly
+        setParameterValue(PEAK_FREQ_ID, currentFreq);
+        setParameterValue(PEAK_GAIN_ID, currentGain);
     }
     if (draggableHighButton.isMouseButtonDown() && isFilterEnabled)
     {
         isDragging = true;
-        globalPanel.setToggleButtonState("highcut");
+        // FIX: Set the parameter for the High-pass filter type
+        processor.treeState.getParameter(HIGH_ID)->setValueNotifyingHost(1.0f);
+
         draggableHighButton.setBounds(buttonX, buttonY, size, size);
 
         currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
         currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
 
-        globalPanel.getHighcutFreqKnob().setValue(currentFreq);
-        globalPanel.getHighcutGainKnob().setValue(currentGain);
+        // FIX: Set the parameter values directly
+        setParameterValue(HIGHCUT_FREQ_ID, currentFreq);
+        setParameterValue(HIGHCUT_GAIN_ID, currentGain);
     }
 
     if (isDragging)
@@ -191,9 +209,9 @@ void FilterControl::updateChain()
     {
         maxFreq = minFreq;
     }
-    
-    chainSettings.lowCutFreq  = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
-    chainSettings.peakFreq    = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+
+    chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
     chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
 
     monoChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
@@ -246,7 +264,7 @@ void FilterControl::updateResponseCurve()
     for (int i = 0; i < w; ++i)
     {
         double mag = 1.0f;
-        
+
         auto freq = juce::mapToLog10(double(i) / double(w), 20.0, maxDisplayFreq);
 
         if (! monoChain.isBypassed<ChainPositions::Peak>())

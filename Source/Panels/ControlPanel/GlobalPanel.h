@@ -10,49 +10,68 @@
 
 #pragma once
 
-#include "juce_gui_basics/juce_gui_basics.h"
-#include "juce_audio_processors/juce_audio_processors.h"
 #include "../../GUI/LookAndFeel.h"
+#include "../../GUI/ModulatableSlider.h"
+#include "../../PluginProcessor.h"
+#include "juce_gui_basics/juce_gui_basics.h"
+#include <map>
+#include <vector>
 
 //==============================================================================
 /*
 */
 class GlobalPanel : public juce::Component,
-                    public juce::Slider::Listener,
                     public juce::ComboBox::Listener,
-                    public juce::Timer,
                     public juce::Button::Listener
 {
 public:
-    GlobalPanel (juce::AudioProcessorValueTreeState& apvts);
+    GlobalPanel(FireAudioProcessor& p);
     ~GlobalPanel() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
 
-    void setScale (float scale);
-    juce::Slider& getLowcutFreqKnob();
-    juce::Slider& getPeakFreqKnob();
-    juce::Slider& getHighcutFreqKnob();
-    juce::Slider& getLowcutGainKnob();
-    juce::Slider& getPeakGainKnob();
-    juce::Slider& getHighcutGainKnob();
+    // A public list of all modulatable sliders for the editor to access and update.
+    std::vector<ModulatableSlider*> modulatableSliders;
 
-    void setToggleButtonState (juce::String toggleButton);
+    ModulatableSlider& getLowcutFreqKnob();
+    ModulatableSlider& getPeakFreqKnob();
+    ModulatableSlider& getHighcutFreqKnob();
+    ModulatableSlider& getLowcutGainKnob();
+    ModulatableSlider& getPeakGainKnob();
+    ModulatableSlider& getHighcutGainKnob();
+
+    void setToggleButtonState(juce::String toggleButton);
 
 private:
-    float scale = 1.0f;
-    // override listener functions
-    // linked
-    void sliderValueChanged (juce::Slider* slider) override;
-    // combobox changed and set knob enable/disable
-    void comboBoxChanged (juce::ComboBox* combobox) override;
-    void buttonClicked (juce::Button* clickedButton) override;
-    void setRotarySlider (juce::Slider& slider, juce::Colour colour);
-    void setRoundButton (juce::TextButton& button, juce::String paramId, juce::String buttonName);
-    void setBypassState (int index, bool state);
-    void setVisibility (juce::Array<juce::Component*>& array, bool isVisible);
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+
+    // Initialization helpers
+    void createSliders();
+    void createLabels();
+    void createButtons();
+    void createComboBoxes();
+    void setupComponentGroups();
+
+    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
+    void initFlatButton(juce::TextButton& button, juce::String buttonName);
+    void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
+    void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+
+    // Re-attaches all UI components to their parameters.
+    void updateAttachments();
+    void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramID);
+
+    // UI update helpers
+    void updateFilterKnobVisibility();
+
+    void buttonClicked(juce::Button* clickedButton) override;
+    void comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged) override {}
+
+    void setBypassState(int index, bool state);
+    void setVisibility(juce::Array<juce::Component*>& array, bool isVisible);
 
     enum RadioButtonIds
     {
@@ -64,115 +83,39 @@ private:
         switchButtonsGlobal = 1005
     };
 
+    FireAudioProcessor& processor;
+
+    // UI layout areas
     juce::Rectangle<int> globalEffectArea;
     juce::Rectangle<int> outputKnobArea;
 
-    // Sliders
-    juce::Slider
-        downSampleKnob,
-        lowcutFreqKnob,
-        lowcutQKnob,
-        lowcutGainKnob,
-        highcutFreqKnob,
-        highcutQKnob,
-        highcutGainKnob,
-        peakFreqKnob,
-        peakQKnob,
-        peakGainKnob,
-//        limiterThreshKnob,
-//        limiterReleaseKnob,
-        mixKnob,
-        outputKnob;
+    // === UI Component Management ===
+    std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
+    std::map<juce::String, std::unique_ptr<juce::Label>> labels;
+    std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
 
-    // Labels
-    juce::Label
-        downSampleLabel,
-        outputLabelGlobal,
-        mixLabelGlobal,
-        lowcutFreqLabel,
-        lowcutQLabel,
-        lowcutGainLabel,
-        highcutFreqLabel,
-        highcutQLabel,
-        highcutGainLabel,
-        peakFreqLabel,
-        peakQLabel,
-        peakGainLabel,
-        filterStateLabel,
-        filterTypeLabel,
-        lowcutSlopeLabel,
-        highcutSlopeLabel,
-//        limiterThreshLabel,
-//        limiterReleaseLabel,
-    
-        postFilterPanelLabel,
-        downSamplePanelLabel;
-//        limiterPanelLabel;
+    // --- Buttons ---
+    juce::TextButton filterLowCutButton, filterPeakButton, filterHighCutButton;
+    juce::ToggleButton filterSwitch, downsampleSwitch;
+    std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
 
-    // Buttons
-    juce::TextButton
-//        filterOffButton,
-//        filterPreButton,
-//        filterPostButton,
-        filterLowPassButton,
-        filterPeakButton,
-        filterHighPassButton;
-    
-    // switches
-    juce::ToggleButton
-        filterSwitch,
-        downsampleSwitch;
-//        limiterSwitch;
-    
-    // vectors for sliders
-    juce::Array<juce::Component*>
-        filterVector,
-        downsampleVector;
-//        limiterVector;
+    std::unique_ptr<ButtonAttachment> filterLowAttachment, filterBandAttachment, filterHighAttachment,
+        filterBypassAttachment, downsampleBypassAttachment;
 
-    std::unique_ptr<juce::ToggleButton>
-        filterBypassButton,
-        downsampleBypassButton;
-//        limiterBypassButton;
+    // --- ComboBoxes ---
+    juce::ComboBox lowcutSlopeMode, highcutSlopeMode;
+    std::unique_ptr<ComboBoxAttachment> lowcutModeAttachment, highcutModeAttachment;
 
-    // Slider attachment
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>
-        outputAttachment,
-        mixAttachment,
-        downSampleAttachment,
-        lowcutFreqAttachment,
-        lowcutQAttachment,
-        lowcutGainAttachment,
-        highcutFreqAttachment,
-        highcutQAttachment,
-        highcutGainAttachment,
-        peakFreqAttachment,
-        peakQAttachment,
-        peakGainAttachment;
-//        limiterThreshAttachment,
-//        limiterReleaseAttachment;
+    // --- Labels ---
+    juce::Label filterTypeLabel, lowcutSlopeLabel, highcutSlopeLabel, postFilterPanelLabel, downSamplePanelLabel;
 
-    // Button attachment
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-//        filterOffAttachment,
-//        filterPreAttachment,
-//        filterPostAttachment,
-        filterLowAttachment,
-        filterBandAttachment,
-        filterHighAttachment,
-    
-        filterBypassAttachment,
-        downsampleBypassAttachment;
-//        limiterBypassAttachment;
+    // Groups of components for easy visibility toggling.
+    juce::Array<juce::Component*> filterComponents;
+    juce::Array<juce::Component*> downsampleComponents;
+    juce::Array<juce::Component*> lowcutKnobs;
+    juce::Array<juce::Component*> peakKnobs;
+    juce::Array<juce::Component*> highcutKnobs;
+    juce::Array<juce::Component*> allControls;
 
-    // ComboBox
-    juce::ComboBox
-        lowcutSlopeMode,
-        highcutSlopeMode;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
-        lowcutModeAttachment,
-        highcutModeAttachment;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GlobalPanel)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

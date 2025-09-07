@@ -390,7 +390,7 @@ public:
 
         float cornerSize = 0.0f; // Default to flat corners
 
-        if (id == "rounded" || id == "low_pass" || id == "high_pass" || id == "band_pass")
+        if (id == "rounded" || id == "low_cut" || id == "high_cut" || id == "band_pass")
         {
             cornerSize = 10.0f * scale; // Apply scaling to corner size
         }
@@ -488,10 +488,10 @@ public:
 
             g.setColour(textColour);
 
-            if (id == "low_pass")
-                drawFilterPath(g, bounds, FilterType::LowPass, textColour);
-            else if (id == "high_pass")
-                drawFilterPath(g, bounds, FilterType::HighPass, textColour);
+            if (id == "low_cut")
+                drawFilterPath(g, bounds, FilterType::LowCut, textColour);
+            else if (id == "high_cut")
+                drawFilterPath(g, bounds, FilterType::HighCut, textColour);
             else if (id == "band_pass")
                 drawFilterPath(g, bounds, FilterType::BandPass, textColour);
         }
@@ -970,8 +970,8 @@ private:
 
     enum class FilterType
     {
-        LowPass,
-        HighPass,
+        LowCut,
+        HighCut,
         BandPass
     };
     void drawFilterPath(juce::Graphics& g, const juce::Rectangle<float>& bounds, FilterType type, const juce::Colour& colour)
@@ -984,15 +984,15 @@ private:
         // 1. Draw the main filter curve (the line itself)
         switch (type)
         {
-            case FilterType::LowPass:
-                p.startNewSubPath(1.0f, h / 2.0f);
-                p.lineTo(w / 2.0f, h / 2.0f);
-                p.lineTo(w * 0.75f, h);
-                break;
-            case FilterType::HighPass:
+            case FilterType::LowCut:
                 p.startNewSubPath(w * 0.25f, h);
                 p.lineTo(w / 2.0f, h / 2.0f);
                 p.lineTo(w - 1.0f, h / 2.0f);
+                break;
+            case FilterType::HighCut:
+                p.startNewSubPath(1.0f, h / 2.0f);
+                p.lineTo(w / 2.0f, h / 2.0f);
+                p.lineTo(w * 0.75f, h);
                 break;
             case FilterType::BandPass:
                 p.startNewSubPath(w * 0.25f, h);
@@ -1019,18 +1019,18 @@ private:
 
         switch (type)
         {
-            case FilterType::LowPass:
-                p2.startNewSubPath(1.0f, h / 2.0f);
-                p2.lineTo(w * 0.75f, h);
-                p2.lineTo(csx, h);
-                p2.cubicTo(cs45x, h, 0, h - cs45y, 0, h - csy);
-                p2.closeSubPath();
-                break;
-            case FilterType::HighPass:
+            case FilterType::LowCut:
                 p2.startNewSubPath(w * 0.25f, h);
                 p2.lineTo(w - 1.0f, h / 2.0f);
                 p2.lineTo(w, h - csy);
                 p2.cubicTo(w, h - cs45y, w - cs45x, h, w - csx, h);
+                p2.closeSubPath();
+                break;
+            case FilterType::HighCut:
+                p2.startNewSubPath(1.0f, h / 2.0f);
+                p2.lineTo(w * 0.75f, h);
+                p2.lineTo(csx, h);
+                p2.cubicTo(cs45x, h, 0, h - cs45y, 0, h - csy);
                 p2.closeSubPath();
                 break;
             case FilterType::BandPass:

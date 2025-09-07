@@ -251,6 +251,25 @@ namespace ParameterIDAndName
         return parameters;
     }
 
+    static const std::vector<ModulatableParameterInfo>& getGlobalParameterInfo()
+    {
+        static const std::vector<ModulatableParameterInfo> params = {
+            { LOWCUT_FREQ_NAME, LOWCUT_FREQ_ID },
+            { LOWCUT_Q_NAME, LOWCUT_Q_ID },
+            { LOWCUT_GAIN_NAME, LOWCUT_GAIN_ID },
+            { HIGHCUT_FREQ_NAME, HIGHCUT_FREQ_ID },
+            { HIGHCUT_Q_NAME, HIGHCUT_Q_ID },
+            { HIGHCUT_GAIN_NAME, HIGHCUT_GAIN_ID },
+            { PEAK_FREQ_NAME, PEAK_FREQ_ID },
+            { PEAK_Q_NAME, PEAK_Q_ID },
+            { PEAK_GAIN_NAME, PEAK_GAIN_ID },
+            { DOWNSAMPLE_NAME, DOWNSAMPLE_ID },
+            { GLOBAL_OUTPUT_NAME, OUTPUT_ID },
+            { GLOBAL_MIX_NAME, MIX_ID }
+        };
+        return params;
+    }
+
     /**
      * @brief Returns a list of all modulation targets.
      *

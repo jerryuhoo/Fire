@@ -15,7 +15,7 @@
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets, p.treeState }, globalPanel(processor.treeState), lfoPanel(p)
+    : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets, p.treeState }, globalPanel(processor), lfoPanel(p)
 {
     // timer
     juce::Timer::startTimerHz(60.0f);

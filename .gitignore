@@ -30,3 +30,5 @@ cmake-build-relwithdebinfo
 packaging/Output/*
 
 tests/RegressionOutput
+
+*.asd

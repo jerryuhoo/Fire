@@ -138,7 +138,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         this->compressor.process(postDistortionContext);
     }
 
-    if (! params.isWidthEnabled && buffer.getNumChannels() == 2)
+    if (params.isWidthEnabled && buffer.getNumChannels() == 2)
     {
         this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, buffer.getNumSamples());
     }

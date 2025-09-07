@@ -469,14 +469,13 @@ void BandPanel::saveBypassStatesToMemory()
 
 void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
 {
-    bool widthBypassState, compBypassState;
     bool widthEnableState = isBandEnabled ? widthBypassTemp[focusBandNum] : false;
     bool compEnableState = isBandEnabled ? compBypassTemp[focusBandNum] : false;
 
     if (! callFromSubBypass)
     {
-        widthBypassButton.setToggleState(widthBypassState, juce::dontSendNotification);
-        compressorBypassButton.setToggleState(compBypassState, juce::dontSendNotification);
+        widthBypassButton.setToggleState(widthEnableState, juce::dontSendNotification);
+        compressorBypassButton.setToggleState(compEnableState, juce::dontSendNotification);
     }
 
     if (isBandEnabled)

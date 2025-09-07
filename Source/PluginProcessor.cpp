@@ -156,7 +156,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     float driveVal = params.driveVal;
     const float biasVal = params.biasVal;
     const float recVal = params.recVal;
-    const int mode = params.mode;
     // We calculate the max value from the 'dryBuffer' which represents the
     // clean, per-band signal right before it enters the distortion loop.
     // This ensures each band's Safe Mode reacts only to its own signal level.

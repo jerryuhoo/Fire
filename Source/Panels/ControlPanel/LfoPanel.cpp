@@ -86,10 +86,33 @@ void LfoEditor::paint(juce::Graphics& g)
 
     // Draw control points
     g.setColour(juce::Colours::yellow);
-    for (const auto& point : activeLfoData->points)
+    for (int i = 0; i < activeLfoData->points.size(); ++i)
     {
-        auto localPoint = fromNormalized(point);
-        g.fillEllipse(localPoint.x - pointRadius, localPoint.y - pointRadius, pointRadius * 2, pointRadius * 2);
+        auto localPoint = fromNormalized(activeLfoData->points[i]);
+
+        // Determine point's appearance based on its state
+        float currentPointRadius = pointRadius; // Use the base radius
+        juce::Colour currentPointColour = juce::Colours::yellow;
+
+        if (i == hoveredPointIndex)
+        {
+            // State: Hovered
+            currentPointRadius = pointRadius * 1.5f; // Make it 50% larger
+            currentPointColour = juce::Colours::yellow.withAlpha(0.5f);
+        }
+
+        if (i == draggingPointIndex)
+        {
+            // State: Being Dragged (overrides hover)
+            currentPointRadius = pointRadius * 1.5f;
+            currentPointColour = juce::Colours::yellow.withAlpha(0.8f);
+        }
+
+        g.setColour(currentPointColour);
+        g.fillEllipse(localPoint.x - currentPointRadius,
+                      localPoint.y - currentPointRadius,
+                      currentPointRadius * 2,
+                      currentPointRadius * 2);
     }
 
     // Draw playhead
@@ -176,14 +199,35 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             currentPos = { juce::roundToInt(snappedX), juce::roundToInt(snappedY) };
         }
 
-        float minX = 0.0f;
-        float maxX = (float) getWidth();
-        if (draggingPointIndex > 0)
-            minX = fromNormalized(activeLfoData->points[draggingPointIndex - 1]).x;
-        if (draggingPointIndex < activeLfoData->points.size() - 1)
-            maxX = fromNormalized(activeLfoData->points[draggingPointIndex + 1]).x;
+        // ================== CORE MODIFICATION START ==================
 
-        currentPos.setX(juce::jlimit(minX, maxX, (float) currentPos.x));
+        // Check if the point being dragged is the first or the last one.
+        bool isFirstPoint = (draggingPointIndex == 0);
+        bool isLastPoint = (draggingPointIndex == activeLfoData->points.size() - 1);
+
+        if (isFirstPoint)
+        {
+            // For the first point, lock its X coordinate to the far left (0.0f).
+            currentPos.setX(0.0f);
+        }
+        else if (isLastPoint)
+        {
+            // For the last point, lock its X coordinate to the far right.
+            currentPos.setX((float) getWidth());
+        }
+        else
+        {
+            // For all middle points, use the original logic to constrain
+            // their horizontal movement between their neighbors.
+            float minX = fromNormalized(activeLfoData->points[draggingPointIndex - 1]).x;
+            float maxX = fromNormalized(activeLfoData->points[draggingPointIndex + 1]).x;
+            currentPos.setX(juce::jlimit(minX, maxX, (float) currentPos.x));
+        }
+
+        // =================== CORE MODIFICATION END ===================
+
+        // The rest of the function remains the same.
+        // It correctly constrains the final position within the bounds and updates the data.
         auto constrainedPos = getLocalBounds().getConstrainedPoint(currentPos);
         activeLfoData->points[draggingPointIndex] = toNormalized(constrainedPos);
 
@@ -191,6 +235,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
     }
     else if (event.mods.isRightButtonDown() && editingCurveIndex != -1)
     {
+        // Curve editing logic is unchanged.
         auto p1_screen = fromNormalized(activeLfoData->points[editingCurveIndex]);
         auto p2_screen = fromNormalized(activeLfoData->points[editingCurveIndex + 1]);
         float dx = p2_screen.x - p1_screen.x;
@@ -254,6 +299,39 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
             removePoint(static_cast<int>(i));
             return;
         }
+    }
+}
+
+void LfoEditor::mouseMove(const juce::MouseEvent& event)
+{
+    // Find if the mouse is currently hovering over any point
+    int newHoveredIndex = -1;
+    for (int i = 0; i < activeLfoData->points.size(); ++i)
+    {
+        auto pointScreen = fromNormalized(activeLfoData->points[i]);
+
+        if (pointScreen.getDistanceFrom(event.getPosition().toFloat()) < 5.0f)
+        {
+            newHoveredIndex = i;
+            break;
+        }
+    }
+
+    // If the hovered status has changed, update and repaint
+    if (newHoveredIndex != hoveredPointIndex)
+    {
+        hoveredPointIndex = newHoveredIndex;
+        repaint(); // Force a repaint to show the highlight/size change
+    }
+}
+
+void LfoEditor::mouseExit(const juce::MouseEvent& event)
+{
+    // When the mouse leaves the component, clear any hovered state and repaint
+    if (hoveredPointIndex != -1)
+    {
+        hoveredPointIndex = -1;
+        repaint(); // Force a repaint to remove the highlight/size change
     }
 }
 

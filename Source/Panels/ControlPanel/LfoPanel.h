@@ -25,7 +25,7 @@ class LfoEditor : public juce::Component
 public:
     LfoEditor();
     ~LfoEditor() override;
-    
+
     // Sets the data model for the editor to point to. This is the safe way to switch LFOs.
     void setDataToDisplay(LfoData* dataToDisplay);
 
@@ -37,6 +37,8 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
@@ -49,14 +51,15 @@ private:
     void addPoint(juce::Point<float> newPoint);
     void removePoint(int index);
     void updateAndSortPoints();
-    
+
     juce::Point<float> toNormalized(juce::Point<int> localPoint);
     juce::Point<float> fromNormalized(juce::Point<float> normalizedPoint);
 
     // State variables for interaction
     int draggingPointIndex = -1;
     int editingCurveIndex = -1;
-    
+    int hoveredPointIndex = -1;
+
     int hGridDivs = 4;
     int vGridDivs = 4;
     float playheadPos = -1.0f;
@@ -65,34 +68,33 @@ private:
     const float pointRadius = 6.0f;
 };
 
-
 //
 //  The LfoPanel is the main "Controller" component.
 //  It owns all the LFO data and all the UI controls.
 //
-class LfoPanel  : public juce::Component,
-                  public juce::Button::Listener,
-                  public juce::Slider::Listener,
-                  public juce::Timer,
-                  public juce::AudioProcessorValueTreeState::Listener
+class LfoPanel : public juce::Component,
+                 public juce::Button::Listener,
+                 public juce::Slider::Listener,
+                 public juce::Timer,
+                 public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     LfoPanel(FireAudioProcessor& p);
     ~LfoPanel() override;
 
-    void paint (juce::Graphics& g) override;
+    void paint(juce::Graphics& g) override;
     void resized() override;
-    
+
     void timerCallback() override;
-    
+
     void setScale(float newScale);
 
 private:
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
-    
+
     FireAudioProcessor& processor;
-    
+
     float scale = 1.0f;
 
     // --- Data Model ---
@@ -103,28 +105,28 @@ private:
     LfoEditor lfoEditor;
 
     std::array<std::unique_ptr<juce::TextButton>, 4> lfoSelectButtons;
-    
+
     juce::TextButton matrixButton { "Matrix" };
     juce::TextButton syncButton;
 
     juce::Slider rateSlider;
-    juce::Label  rateLabel;
-    
+    juce::Label rateLabel;
+
     juce::Slider gridXSlider;
-    juce::Label  gridXLabel;
+    juce::Label gridXLabel;
     juce::Slider gridYSlider;
-    juce::Label  gridYLabel;
+    juce::Label gridYLabel;
 
     // ADD/REPLACE these attachment members
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncButtonAttachment;
     bool isUpdatingRateSlider = false;
-    
+
     // ADD this helper function declaration
     void updateRateSlider();
 
     // ADD THIS override for the parameter listener
-    void parameterChanged (const juce::String& parameterID, float newValue) override;
-    
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LfoPanel)
+    void parameterChanged(const juce::String& parameterID, float newValue) override;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoPanel)
 };

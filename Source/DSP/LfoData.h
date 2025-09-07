@@ -22,8 +22,8 @@ struct LfoData
     // Default constructor to initialize a valid shape
     LfoData()
     {
-        points.push_back({ 0.0f, 0.5f });
-        points.push_back({ 1.0f, 0.5f });
+        points.push_back({ 0.0f, 0.0f });
+        points.push_back({ 1.0f, 0.0f });
         curvatures.push_back(0.0f);
     }
 

@@ -821,6 +821,23 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
     processMultiBand(buffer, sampleRate, lfoOutputBuffer);
+
+    if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
+    {
+        int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
+        if (rateDivide > 1)
+        {
+            for (int channel = 0; channel < totalNumInputChannels; ++channel)
+            {
+                auto* channelData = buffer.getWritePointer(channel);
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+                {
+                    if (sample % rateDivide != 0)
+                        channelData[sample] = channelData[sample - sample % rateDivide];
+                }
+            }
+        }
+    }
     applyGlobalEffects(buffer, sampleRate);
     applyGlobalMix(buffer);
 

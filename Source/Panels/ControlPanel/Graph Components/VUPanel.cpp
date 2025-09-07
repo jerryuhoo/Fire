@@ -12,7 +12,11 @@
 #include "../../../Utility/AudioHelpers.h"
 
 //==============================================================================
-VUPanel::VUPanel(FireAudioProcessor& p) : processor(p), focusBandNum(0), vuMeterIn(&p), vuMeterOut(&p)
+VUPanel::VUPanel(FireAudioProcessor& p) : processor(p),
+                                          focusBandNum(0),
+                                          vuMeterIn(&p),
+                                          vuMeterOut(&p),
+                                          realtimeThresholdDb(-100.0f)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
@@ -67,8 +71,14 @@ void VUPanel::paint(juce::Graphics& g)
     // draw threshold pointer
     if (! isGlobal)
     {
-        float threshValue = *(processor.treeState.getRawParameterValue(threshID));
-        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / VU_METER_RANGE;
+        // Use the realtimeThresholdDb member, which is updated by the editor's timer.
+        float threshValue = realtimeThresholdDb;
+
+        // The rest of the drawing logic remains the same.
+        // NOTE: The range here is from -70 to +12, so the total span is 82.
+        const float vuMeterRange = 82.0f;
+        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * (1.0f - (threshValue + 70.0f) / vuMeterRange);
+
         float pointerX;
         if (processor.getTotalNumInputChannels() == 2)
         {
@@ -79,11 +89,16 @@ void VUPanel::paint(juce::Graphics& g)
             pointerX = VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
         }
 
-        bool compBypassState = *(processor.treeState.getRawParameterValue(compBypassID));
-        if (compBypassState)
+        // We use the parameter directly from treeState to check if the module is enabled.
+        bool compIsEnabled = *processor.treeState.getRawParameterValue(compBypassID);
+        if (compIsEnabled)
         {
             g.setColour(juce::Colours::yellowgreen);
-            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f, compressorLineY, pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f, compressorLineY, 1.0f);
+            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f,
+                       compressorLineY,
+                       pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f,
+                       compressorLineY,
+                       1.0f);
         }
     }
 
@@ -168,4 +183,10 @@ void VUPanel::setFocusBandNum(int num)
 void VUPanel::timerCallback()
 {
     repaint();
+}
+
+void VUPanel::updateRealtimeThreshold(float newThresholdDb)
+{
+    // Store the live value. No need to repaint here, as the timerCallback already does.
+    realtimeThresholdDb = newThresholdDb;
 }

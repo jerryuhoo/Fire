@@ -333,6 +333,10 @@ FireAudioProcessor::FireAudioProcessor()
     // Initialize the band processors in a loop.
     for (int i = 0; i < 4; ++i)
         bands.push_back(std::make_unique<BandProcessor>());
+    
+    for (int i = 0; i < 4; ++i)
+        realtimeModulatedThresholds[i].store(-48.0f);
+
 
     // Set up the properties file options.
     juce::PropertiesFile::Options options;
@@ -1933,6 +1937,8 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.width = juce::jlimit(params.widthRange.start, params.widthRange.end, *treeState.getRawParameterValue(params.widthID) + widthModulationAmount);
                 params.outputVal = juce::jlimit(params.outputRange.start, params.outputRange.end, *treeState.getRawParameterValue(params.outputID) + outputModulationAmount);
                 params.mixVal = juce::jlimit(params.mixRange.start, params.mixRange.end, *treeState.getRawParameterValue(params.mixID) + mixModulationAmount);
+                
+                realtimeModulatedThresholds[i].store(params.compThreshold);
 
                 // Call the process method with the final, modulated parameters
                 band->process(*wetBandBuffers[i], params, lfoOutputBuffer, this->modulationRoutings);
@@ -2099,4 +2105,12 @@ void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, 
     auto& currentRouting = modulationRoutings.getReference(routingIndex);
     currentRouting.sourceLfoIndex = sourceLfoIndex;
     currentRouting.targetParameterID = targetParameterID;
+}
+
+float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
+{
+    if (juce::isPositiveAndBelow(bandIndex, 4))
+        return realtimeModulatedThresholds[bandIndex].load();
+    
+    return -48.0f;
 }

@@ -18,12 +18,12 @@
 class VUMeter : public juce::Component, juce::Timer
 {
 public:
-    VUMeter (FireAudioProcessor* inProcessor);
+    VUMeter(FireAudioProcessor* inProcessor);
     ~VUMeter() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
-    void setParameters (bool isInput, int bandIndex);
+    void setParameters(bool isInput, int bandIndex);
     void timerCallback() override;
     float getLeftChannelLevel();
     float getRightChannelLevel();
@@ -38,5 +38,5 @@ private:
     float mMaxCh1Level;
     int mMaxValueDecayCounter;
     const int MAX_VALUE_HOLD_FRAMES = 60;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VUMeter)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUMeter)
 };

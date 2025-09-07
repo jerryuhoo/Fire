@@ -27,6 +27,7 @@ public:
     void resized() override;
     void setFocusBandNum(int num);
     void timerCallback() override;
+    void updateRealtimeThreshold(float newThresholdDb);
 
 private:
     FireAudioProcessor& processor;
@@ -40,5 +41,6 @@ private:
     float displayOutputValue = 0.0f;
     juce::String threshID = "";
     juce::String compBypassID = "";
+    float realtimeThresholdDb;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUPanel)
 };

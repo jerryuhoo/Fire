@@ -481,6 +481,9 @@ void FireAudioProcessorEditor::timerCallback()
                        ParameterIDAndName::getIDString(SAFE_ID, currentBand),
                        currentBand);
 
+    float realtimeThreshold = processor.getRealtimeModulatedThreshold(currentBand);
+    graphPanel.getVuPanel()->updateRealtimeThreshold(realtimeThreshold);
+
     // bypassed
     if (processor.getBypassedState())
     {

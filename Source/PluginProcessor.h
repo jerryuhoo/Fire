@@ -257,6 +257,7 @@ public:
 
     // VU meters
     float getMeterRMSLevel(bool isInput, int channel, int bandIndex);
+    float getRealtimeModulatedThreshold(int bandIndex) const;
 
     // drive lookandfeel
     float getReductionPrecent(int bandIndex);
@@ -433,6 +434,8 @@ private:
     float mInputRightSmoothedGlobal = 0;
     float mOutputLeftSmoothedGlobal = 0;
     float mOutputRightSmoothedGlobal = 0;
+    
+    std::atomic<float> realtimeModulatedThresholds[4];
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

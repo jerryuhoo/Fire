@@ -131,6 +131,20 @@ void updateCutFilter(ChainType& chain,
 
 namespace ParameterIDAndName
 {
+    // A struct to hold all necessary info for a modulatable parameter.
+    // Defining it inside the namespace keeps our code nicely organized.
+    struct ModulatableParameterInfo
+    {
+        juce::String name; // The UI-facing name, e.g., "Comp Ratio"
+        juce::String idBase; // The processor-facing ID base, e.g., "compRatio"
+    };
+
+    struct ModulationTarget
+    {
+        juce::String displayText; // e.g., "Drive (Band 1)"
+        juce::String parameterID; // e.g., "drive1"
+    };
+
     // Define the parameter version number in one central place.
     const int versionNum = 1;
 
@@ -168,16 +182,6 @@ namespace ParameterIDAndName
         return base + " " + juce::String(index + 1);
     }
 
-    /**
-     * @brief [String] Gets the display name for a global (non-indexed) parameter.
-     * @param base      The parameter name (e.g., "Quality").
-     * @return juce::String Returns the base string itself.
-     */
-    static inline juce::String getName(const juce::String& base)
-    {
-        return base;
-    }
-
     // --- Part 2: Functions that return juce::ParameterID ---
 
     /**
@@ -199,5 +203,75 @@ namespace ParameterIDAndName
     static inline juce::ParameterID getID(const juce::String& base)
     {
         return { base, versionNum };
+    }
+
+    /** * @brief Returns a definitive list of parameter names that are eligible for modulation.
+     *
+     * This static function provides a single source of truth for all parts of the plugin
+     * that need to know which parameters can be targeted by an LFO. This includes:
+     * - The BandPanel, for creating the ModulatableSlider components.
+     * - The PluginEditor, for updating the modulation arcs on the sliders.
+     * - The ModulationMatrixPanel, for populating the target selection dropdown menu.
+     *
+     * @return A constant reference to a vector of juce::String objects.
+     */
+    static const std::vector<juce::String>& getModulatableParameterNames()
+    {
+        // This static vector is initialized only once, the first time this function is called.
+        static const std::vector<juce::String> modulatableNames = {
+            DRIVE_NAME,
+            COMP_RATIO_NAME,
+            COMP_THRESH_NAME,
+            WIDTH_NAME,
+            OUTPUT_NAME,
+            MIX_NAME,
+            BIAS_NAME,
+            REC_NAME
+        };
+        return modulatableNames;
+    }
+
+    /** * @brief Returns a definitive list of all modulatable parameters,
+     * including their UI Name and their ID base.
+     * This is the single source of truth for the entire application.
+     */
+    static const std::vector<ModulatableParameterInfo>& getModulatableParameterInfo()
+    {
+        // This static vector is initialized only once.
+        static const std::vector<ModulatableParameterInfo> parameters = {
+            { DRIVE_NAME, DRIVE_ID },
+            { COMP_RATIO_NAME, COMP_RATIO_ID },
+            { COMP_THRESH_NAME, COMP_THRESH_ID },
+            { WIDTH_NAME, WIDTH_ID },
+            { OUTPUT_NAME, OUTPUT_ID },
+            { MIX_NAME, MIX_ID },
+            { BIAS_NAME, BIAS_ID },
+            { REC_NAME, REC_ID }
+        };
+        return parameters;
+    }
+
+    /**
+     * @brief Returns a list of all modulation targets.
+     *
+     * This function generates a list of all possible modulation targets
+     * by combining each modulatable parameter with each band.
+     *
+     * @return A vector of ModulationTarget objects.
+     */
+    static std::vector<ModulationTarget> getAllModulatableTargets()
+    {
+        std::vector<ModulationTarget> targets;
+        const auto& modulatableParams = getModulatableParameterInfo();
+
+        for (int i = 0; i < 4; ++i)
+        {
+            for (const auto& paramInfo : modulatableParams)
+            {
+                targets.push_back({ paramInfo.name + " (Band " + juce::String(i + 1) + ")",
+                                    getIDString(paramInfo.idBase, i) });
+            }
+        }
+        return targets;
     }
 } // namespace ParameterIDAndName

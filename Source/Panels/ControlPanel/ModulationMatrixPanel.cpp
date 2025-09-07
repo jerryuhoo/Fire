@@ -9,6 +9,7 @@
 */
 
 #include "ModulationMatrixPanel.h"
+#include "../../Utility/AudioHelpers.h" // Include AudioHelpers to access ParameterIDAndName
 
 //==============================================================================
 // ModulationMatrixHeader Implementation
@@ -42,7 +43,6 @@ void ModulationMatrixHeader::resized()
     flex.items.add(juce::FlexItem(amountLabel).withFlex(2.0f));
     flex.items.add(juce::FlexItem(polarityLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(destinationLabel).withFlex(1.0f));
-    // A dummy item for the space where the remove button will be in the rows.
     flex.items.add(juce::FlexItem().withWidth(35));
     flex.performLayout(getLocalBounds());
 }
@@ -69,7 +69,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     amountSlider.setValue(processor.modulationRoutings[index].depth, juce::dontSendNotification);
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
-    amountSlider.setScrollWheelEnabled(false); // Disable mouse wheel interaction.
+    amountSlider.setScrollWheelEnabled(false);
     amountSlider.addListener(this);
 
     // BIPOLAR BUTTON
@@ -83,25 +83,38 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
         processor.modulationRoutings.getReference(index).isBipolar = bipolarButton.getToggleState();
     };
 
-    // DESTINATION MENU
+    // === DESTINATION MENU ===
     addAndMakeVisible(destinationMenu);
-    auto& params = processor.getParameters();
-    for (int i = 0; i < params.size(); ++i)
+
+    // 1. get all possible modulation targets
+    allPossibleTargets = ParameterIDAndName::getAllModulatableTargets();
+
+    // 2. Populate the destination menu
+    destinationMenu.addItem("None", 1);
+    for (int i = 0; i < allPossibleTargets.size(); ++i)
     {
-        if (auto* paramWithId = dynamic_cast<juce::AudioProcessorParameterWithID*>(params.getUnchecked(i)))
-            destinationMenu.addItem(paramWithId->getName(100), i + 1);
+        // Use displayText as the menu item, and the menu ID is the index + 2 (because "None" is 1)
+        destinationMenu.addItem(allPossibleTargets[i].displayText, i + 2);
     }
-    for (int i = 0; i < params.size(); ++i)
+
+    // 3. Set the currently selected destination
+    const auto& currentTargetId = processor.modulationRoutings[index].targetParameterID;
+    if (currentTargetId.isNotEmpty())
     {
-        if (auto* paramWithId = dynamic_cast<juce::AudioProcessorParameterWithID*>(params.getUnchecked(i)))
+        for (int i = 0; i < allPossibleTargets.size(); ++i)
         {
-            if (paramWithId->getParameterID() == processor.modulationRoutings[index].targetParameterID)
+            if (allPossibleTargets[i].parameterID == currentTargetId)
             {
-                destinationMenu.setSelectedId(i + 1, juce::dontSendNotification);
+                destinationMenu.setSelectedId(i + 2, juce::dontSendNotification);
                 break;
             }
         }
     }
+    else
+    {
+        destinationMenu.setSelectedId(1, juce::dontSendNotification); // "None"
+    }
+
     destinationMenu.addListener(this);
     destinationMenu.setColour(juce::ComboBox::backgroundColourId, COLOUR6);
     destinationMenu.setColour(juce::ComboBox::outlineColourId, COLOUR7);
@@ -122,7 +135,6 @@ void ModulationMatrixRow::resized()
     flex.items.add(juce::FlexItem(amountSlider).withFlex(2.0f).withMargin(2));
     flex.items.add(juce::FlexItem(bipolarButton).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(destinationMenu).withFlex(1.0f).withMargin(2));
-    // Add a fixed-size item for the remove button.
     flex.items.add(juce::FlexItem(removeButton).withWidth(35).withMargin(2));
     flex.performLayout(getLocalBounds());
 }
@@ -131,7 +143,6 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 {
     if (button == &removeButton)
     {
-        // If the remove button is clicked, execute the callback provided by the parent.
         if (onDeleteCallback)
             onDeleteCallback();
     }
@@ -146,13 +157,26 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
 {
     if (comboBox == &sourceMenu)
+    {
         processor.modulationRoutings.getReference(index).sourceLfoIndex = sourceMenu.getSelectedId() - 1;
+    }
 
     if (comboBox == &destinationMenu)
     {
-        auto* param = processor.getParameters().getUnchecked(destinationMenu.getSelectedId() - 1);
-        if (auto* paramWithId = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-            processor.modulationRoutings.getReference(index).targetParameterID = paramWithId->getParameterID();
+        int selectedId = destinationMenu.getSelectedId();
+        if (selectedId == 1) // "None" was selected
+        {
+            processor.modulationRoutings.getReference(index).targetParameterID = "";
+        }
+        else
+        {
+            int listIndex = selectedId - 2;
+
+            if (juce::isPositiveAndBelow(listIndex, allPossibleTargets.size()))
+            {
+                processor.modulationRoutings.getReference(index).targetParameterID = allPossibleTargets[listIndex].parameterID;
+            }
+        }
     }
 }
 
@@ -161,23 +185,17 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
 //==============================================================================
 ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(p)
 {
-    // Ensure there are at least 4 routings when the panel is first opened.
     while (processor.modulationRoutings.size() < 4)
         processor.modulationRoutings.add({});
 
     addAndMakeVisible(header);
-
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&contentComponent, false);
-
     addAndMakeVisible(addButton);
     addButton.addListener(this);
-
     addAndMakeVisible(closeButton);
     closeButton.addListener(this);
-
     buildUiFromProcessorState();
-
     setSize(500, 300);
 }
 
@@ -214,7 +232,7 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 {
     if (button == &addButton)
     {
-        processor.modulationRoutings.add({}); // Add a new default routing.
+        processor.modulationRoutings.add({});
         buildUiFromProcessorState();
     }
 

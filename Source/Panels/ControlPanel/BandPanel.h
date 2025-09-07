@@ -13,6 +13,8 @@
 #include "../../GUI/LookAndFeel.h"
 #include "../../PluginProcessor.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <map>
+#include <vector>
 
 //==============================================================================
 /*
@@ -33,18 +35,16 @@ public:
     void handleAsyncUpdate() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
 
-    //    void changeSliderState(int bandNum, bool isPresetChanged);
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
     juce::ToggleButton compressorBypassButton, widthBypassButton;
     int getFocusBandNum() const { return focusBandNum; }
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
     void updateDriveMeter();
-
-    // Handles the logic for the sub-module bypass buttons (Compressor, Width).
     void saveBypassStatesToMemory();
 
-    ModulatableSlider recKnob, biasKnob;
+    // A public list of all modulatable sliders for the editor to access and update.
+    std::vector<ModulatableSlider*> modulatableSliders;
 
 private:
     // Re-attaches all UI components to the parameters of the current focusBandNum.
@@ -61,6 +61,11 @@ private:
     void initFlatButton(juce::TextButton& button, juce::String buttonName);
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
 
+    void createSliders();
+    void createLabels();
+    void createButtons();
+    void setupComponentGroups();
+
     // Sets visibility for a group of components.
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
 
@@ -72,20 +77,30 @@ private:
     juce::Rectangle<int> outputKnobArea;
     juce::Rectangle<int> bottomArea;
 
-    std::vector<std::pair<ModulatableSlider*, juce::String>> modulatableKnobs;
+    // === Refactored UI Component Management ===
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
-    juce::Slider driveKnob, outputKnob, mixKnob,
-        compRatioKnob, compThreshKnob, widthKnob;
+    // A map to own and manage all sliders, keyed by their parameter name.
+    std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
+    std::unique_ptr<juce::Slider> driveKnob; // Drive is a standard slider, managed separately.
 
-    juce::Label driveLabel, CompRatioLabel, CompThreshLabel, widthLabel,
-        outputLabel, recLabel, mixLabel, biasLabel,
-        shapePanelLabel, compressorPanelLabel, widthPanelLabel;
+    // A map to own and manage all labels, keyed by the parameter name they are associated with.
+    std::map<juce::String, std::unique_ptr<juce::Label>> labels;
+
+    // A map to own the attachments, ensuring they are re-created correctly when the band changes.
+    std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
+    std::unique_ptr<SliderAttachment> driveAttachment;
+
+    // --- Unchanged Members ---
+    juce::Label shapePanelLabel, compressorPanelLabel, widthPanelLabel;
 
     juce::TextButton linkedButton, safeButton, extremeButton;
 
-    // Panel switching buttons
-    juce::ToggleButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
+    std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
+        compressorBypassAttachment, widthBypassAttachment;
 
+    juce::ToggleButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
     enum RadioButtonIds
     {
         switchButtons = 1004
@@ -96,21 +111,9 @@ private:
     juce::Array<juce::Component*> widthComponents;
     juce::Array<juce::Component*> compressorComponents;
     juce::Array<juce::Component*> allControls;
-
     juce::Array<juce::Component*> mainControls;
     juce::Array<juce::Slider*> compressorKnobs;
     juce::Array<juce::Slider*> widthKnobs;
-
-    // A single set of attachments, dynamically reassigned.
-    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
-
-    std::unique_ptr<SliderAttachment> driveAttachment, outputAttachment, mixAttachment,
-        recAttachment, biasAttachment, compRatioAttachment,
-        compThreshAttachment, widthAttachment;
-
-    std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
-        compressorBypassAttachment, widthBypassAttachment;
 
     int focusBandNum;
 

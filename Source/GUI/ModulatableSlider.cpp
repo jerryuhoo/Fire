@@ -22,66 +22,6 @@ ModulatableSlider::ModulatableSlider()
     isDraggingMainSlider = false;
 }
 
-// void ModulatableSlider::paint(juce::Graphics& g)
-// {
-//     // First, let the base class draw the slider itself.
-//     juce::Slider::paint(g);
-
-//     // Only draw modulation visuals if the parameter is modulated
-//     if (isModulated)
-//     {
-//         auto bounds = getLocalBounds().toFloat().reduced(10);
-//         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-//         auto centre = bounds.getCentre();
-//         auto rotaryParams = getRotaryParameters();
-
-//         auto valueToAngle = [&](double value)
-//         {
-//             return rotaryParams.startAngleRadians
-//                    + (rotaryParams.endAngleRadians - rotaryParams.startAngleRadians)
-//                          * (float) valueToProportionOfLength(value);
-//         };
-
-//         // Draw modulation range arc (lfoAmount)
-//         // This is your existing logic, which is great.
-//         double range = getMaximum() - getMinimum();
-//         double halfModRange = lfoAmount * range * 0.5;
-//         double currentValue = getValue();
-
-//         auto arcStartValue = juce::jlimit(getMinimum(), getMaximum(), currentValue - halfModRange);
-//         auto arcEndValue = juce::jlimit(getMinimum(), getMaximum(), currentValue + halfModRange);
-
-//         float startAngle = valueToAngle(arcStartValue);
-//         float endAngle = valueToAngle(arcEndValue);
-
-//         juce::Path modulationArc;
-//         // Draw the arc from start to end angle
-//         modulationArc.addCentredArc(centre.x, centre.y, radius, radius, 0.0f, startAngle, endAngle, true);
-
-//         g.setColour(juce::Colours::cyan.withAlpha(0.5f));
-//         g.strokePath(modulationArc, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-//         // NEW: Draw the current LFO value indicator on the arc
-//         if (lfoAmount > 0)
-//         {
-//             // lfoValue is from -1 to 1. Map it to the modulation arc.
-//             double modulatedValue = currentValue + lfoValue * halfModRange;
-//             float indicatorAngle = valueToAngle(juce::jlimit(getMinimum(), getMaximum(), modulatedValue));
-
-//             juce::Point<float> indicatorPoint(centre.x + radius * std::sin(indicatorAngle),
-//                                               centre.y - radius * std::cos(indicatorAngle));
-
-//             g.setColour(juce::Colours::orange);
-//             g.fillEllipse(indicatorPoint.x - 3.5f, indicatorPoint.y - 3.5f, 7.0f, 7.0f);
-//         }
-
-//         // Draw Modulation Handle
-//         auto handleBounds = getModulationHandleBounds();
-//         g.setColour(isModHandleMouseDown ? juce::Colours::white.darker(0.2f) : (isModHandleMouseOver ? juce::Colours::white : juce::Colours::grey));
-//         g.fillEllipse(handleBounds);
-//     }
-// }
-
 bool ModulatableSlider::hitTest(int x, int y)
 {
     auto sliderBounds = getLocalBounds();

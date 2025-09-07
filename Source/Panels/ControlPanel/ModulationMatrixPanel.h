@@ -58,6 +58,8 @@ private:
     juce::TextButton bipolarButton;
     juce::ComboBox destinationMenu;
     juce::TextButton removeButton { "X" };
+
+    std::vector<ParameterIDAndName::ModulationTarget> allPossibleTargets;
 };
 
 //

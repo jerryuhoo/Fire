@@ -43,8 +43,10 @@
 #define WIDTH_NAME              "Width"
 #define OUTPUT_ID               "output"     // Note: globalOutput is "output" itself
 #define OUTPUT_NAME             "Output"
+#define GLOBAL_OUTPUT_NAME      "GlobalOutput"
 #define MIX_ID                  "mix"
 #define MIX_NAME                "Mix"
+#define GLOBAL_MIX_NAME         "GlobalMix"
 #define BIAS_ID                 "bias"
 #define BIAS_NAME               "Bias"
 #define DC_BYPASS_ID            "dcBypass"

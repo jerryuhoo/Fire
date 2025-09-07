@@ -12,22 +12,15 @@
 #include "../../Utility/AudioHelpers.h"
 
 //==============================================================================
-BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
+BandPanel::BandPanel(FireAudioProcessor& p) : processor(p), focusBandNum(0)
 {
-    // auto setParameterIDs = [](std::vector<ModulatableSlider*>& knobs,
-    //                           const juce::String& id1,
-    //                           const juce::String& id2,
-    //                           const juce::String& id3,
-    //                           const juce::String& id4)
-    // {
-    //     knobs[0]->parameterID = id1;
-    //     knobs[1]->parameterID = id2;
-    //     knobs[2]->parameterID = id3;
-    //     knobs[3]->parameterID = id4;
-    // };
+    // Create all UI components using helper methods
+    createSliders();
+    createLabels();
+    createButtons();
 
-    modulatableKnobs.push_back({ &recKnob, REC_ID });
-    modulatableKnobs.push_back({ &biasKnob, BIAS_ID });
+    // Group components for visibility management after they've been created
+    setupComponentGroups();
 
     // We listen directly to the parameters that affect our "link" logic.
     for (int i = 0; i < 4; ++i)
@@ -36,61 +29,88 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
         processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
     }
 
-    // Initialize a single set of sliders
-    initRotarySlider(driveKnob, DRIVE_COLOUR);
-    initRotarySlider(outputKnob, COLOUR1);
-    initRotarySlider(mixKnob, COLOUR1);
-    initRotarySlider(recKnob, SHAPE_COLOUR);
-    initRotarySlider(biasKnob, SHAPE_COLOUR);
-    initRotarySlider(compRatioKnob, COMP_COLOUR);
-    initRotarySlider(compThreshKnob, COMP_COLOUR);
-    initRotarySlider(widthKnob, WIDTH_COLOUR);
-
-    driveKnob.setComponentID("drive");
-
-    outputKnob.setTextValueSuffix(" dB");
-    compThreshKnob.setTextValueSuffix(" dB");
-
-    // Initialize a single set of buttons
-    initFlatButton(linkedButton, "L");
-    initFlatButton(safeButton, "S");
-    initFlatButton(extremeButton, "E");
-    initBypassButton(compressorBypassButton, COMP_COLOUR);
-    initBypassButton(widthBypassButton, WIDTH_COLOUR);
-
-    // Initialize labels
-    auto setupLabel = [this](juce::Label& label, const juce::String& text, juce::Component& attachComp, juce::Colour colour)
+    // Load initial bypass states from the processor's state tree
+    for (int i = 0; i < 4; ++i)
     {
+        compBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i));
+        widthBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i));
+    }
+
+    // Set initial attachments for band 0 and update knob enabled states
+    setFocusBandNum(0, true);
+}
+
+BandPanel::~BandPanel()
+{
+    // Remove all parameter listeners that were added in the constructor.
+    for (int i = 0; i < 4; ++i)
+    {
+        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
+        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
+    }
+}
+
+void BandPanel::createSliders()
+{
+    // === Create Modulatable Sliders in a loop ===
+    for (const auto& paramName : ParameterIDAndName::getModulatableParameterNames())
+    {
+        modulatableSliderComponents[paramName] = std::make_unique<ModulatableSlider>();
+        auto* slider = modulatableSliderComponents.at(paramName).get();
+
+        // Use the generic initRotarySlider for basic setup.
+        // The color will be set specifically below.
+        initRotarySlider(*slider, juce::Colours::white);
+
+        modulatableSliders.push_back(slider);
+    }
+
+    // === Configure specific slider properties ===
+    modulatableSliderComponents.at(REC_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
+    modulatableSliderComponents.at(BIAS_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
+    modulatableSliderComponents.at(COMP_RATIO_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
+    modulatableSliderComponents.at(COMP_THRESH_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
+    modulatableSliderComponents.at(WIDTH_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
+    modulatableSliderComponents.at(OUTPUT_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    modulatableSliderComponents.at(MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+
+    modulatableSliderComponents.at(OUTPUT_NAME)->setTextValueSuffix(" dB");
+    modulatableSliderComponents.at(COMP_THRESH_NAME)->setTextValueSuffix(" dB");
+
+    // === Create the standard Drive slider separately ===
+    driveKnob = std::make_unique<juce::Slider>();
+    initRotarySlider(*driveKnob, DRIVE_COLOUR);
+    driveKnob->setComponentID("drive");
+}
+
+void BandPanel::createLabels()
+{
+    auto setupLabel = [this](const juce::String& paramName, const juce::String& text, juce::Component& attachComp, juce::Colour colour)
+    {
+        labels[paramName] = std::make_unique<juce::Label>();
+        auto* label = labels.at(paramName).get();
         addAndMakeVisible(label);
-        label.setText(text, juce::dontSendNotification);
-        label.setFont(juce::Font {
-            juce::FontOptions()
-                .withName(KNOB_FONT)
-                .withHeight(KNOB_FONT_SIZE)
-                .withStyle("Plain") });
-        label.setColour(juce::Label::textColourId, colour);
-        label.attachToComponent(&attachComp, false);
-        label.setJustificationType(juce::Justification::centred);
+        label->setText(text, juce::dontSendNotification);
+        label->setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
+        label->setColour(juce::Label::textColourId, colour);
+        label->attachToComponent(&attachComp, false);
+        label->setJustificationType(juce::Justification::centred);
     };
 
-    setupLabel(driveLabel, "Drive", driveKnob, DRIVE_COLOUR.withBrightness(0.9f));
-    setupLabel(outputLabel, "Output", outputKnob, KNOB_FONT_COLOUR);
-    setupLabel(mixLabel, "Mix", mixKnob, KNOB_FONT_COLOUR);
-    setupLabel(recLabel, "Rectification", recKnob, SHAPE_COLOUR);
-    setupLabel(biasLabel, "Bias", biasKnob, SHAPE_COLOUR);
-    setupLabel(CompRatioLabel, "Ratio", compRatioKnob, COMP_COLOUR);
-    setupLabel(CompThreshLabel, "Threshold", compThreshKnob, COMP_COLOUR);
-    setupLabel(widthLabel, "Width", widthKnob, WIDTH_COLOUR);
+    setupLabel(DRIVE_NAME, "Drive", *driveKnob, DRIVE_COLOUR.withBrightness(0.9f));
+    setupLabel(OUTPUT_NAME, "Output", *modulatableSliderComponents.at(OUTPUT_NAME), KNOB_FONT_COLOUR);
+    setupLabel(MIX_NAME, "Mix", *modulatableSliderComponents.at(MIX_NAME), KNOB_FONT_COLOUR);
+    setupLabel(REC_NAME, "Rectification", *modulatableSliderComponents.at(REC_NAME), SHAPE_COLOUR);
+    setupLabel(BIAS_NAME, "Bias", *modulatableSliderComponents.at(BIAS_NAME), SHAPE_COLOUR);
+    setupLabel(COMP_RATIO_NAME, "Ratio", *modulatableSliderComponents.at(COMP_RATIO_NAME), COMP_COLOUR);
+    setupLabel(COMP_THRESH_NAME, "Threshold", *modulatableSliderComponents.at(COMP_THRESH_NAME), COMP_COLOUR);
+    setupLabel(WIDTH_NAME, "Width", *modulatableSliderComponents.at(WIDTH_NAME), WIDTH_COLOUR);
 
     auto setupPanelLabel = [this](juce::Label& label, const juce::String& text, juce::Colour colour)
     {
         addAndMakeVisible(label);
         label.setText(text, juce::dontSendNotification);
-        label.setFont(juce::Font {
-            juce::FontOptions()
-                .withName(KNOB_FONT)
-                .withHeight(KNOB_FONT_SIZE)
-                .withStyle("Plain") });
+        label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
         label.setColour(juce::Label::textColourId, colour);
         label.setJustificationType(juce::Justification::centred);
     };
@@ -98,14 +118,21 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
     setupPanelLabel(shapePanelLabel, "Shape", SHAPE_COLOUR);
     setupPanelLabel(compressorPanelLabel, "Compressor", COMP_COLOUR);
     setupPanelLabel(widthPanelLabel, "Stereo", WIDTH_COLOUR);
+}
 
-    // Initialize panel-switching toggles
+void BandPanel::createButtons()
+{
+    initFlatButton(linkedButton, "L");
+    initFlatButton(safeButton, "S");
+    initFlatButton(extremeButton, "E");
+    initBypassButton(compressorBypassButton, COMP_COLOUR);
+    initBypassButton(widthBypassButton, WIDTH_COLOUR);
+
     auto setupSwitch = [this](juce::ToggleButton& btn, juce::Colour colour)
     {
         btn.setComponentID("flat_toggle");
         addAndMakeVisible(btn);
         btn.setRadioGroupId(switchButtons);
-
         btn.setColour(juce::ToggleButton::tickDisabledColourId, colour.withBrightness(0.5f));
         btn.setColour(juce::ToggleButton::tickColourId, colour.withBrightness(0.9f));
         btn.setColour(juce::ComboBox::outlineColourId, COLOUR6);
@@ -117,53 +144,32 @@ BandPanel::BandPanel(FireAudioProcessor& p) : processor(p)
     setupSwitch(compressorSwitch, COMP_COLOUR);
     setupSwitch(widthSwitch, WIDTH_COLOUR);
     oscSwitch.setToggleState(true, juce::dontSendNotification);
+}
 
-    // Group components for visibility management
-    mainControls = { &driveKnob, &outputKnob, &mixKnob, &recKnob, &biasKnob, &linkedButton, &safeButton, &extremeButton };
-    compressorKnobs = { &compThreshKnob, &compRatioKnob };
-    widthKnobs = { &widthKnob };
+void BandPanel::setupComponentGroups()
+{
+    mainControls = { driveKnob.get(), modulatableSliderComponents.at(OUTPUT_NAME).get(), modulatableSliderComponents.at(MIX_NAME).get(), modulatableSliderComponents.at(REC_NAME).get(), modulatableSliderComponents.at(BIAS_NAME).get(), &linkedButton, &safeButton, &extremeButton };
+    compressorKnobs = { modulatableSliderComponents.at(COMP_THRESH_NAME).get(), modulatableSliderComponents.at(COMP_RATIO_NAME).get() };
+    widthKnobs = { modulatableSliderComponents.at(WIDTH_NAME).get() };
 
-    shapeComponents = { &recKnob, &biasKnob, &shapePanelLabel, &recLabel, &biasLabel };
-    compressorComponents = { &compThreshKnob, &compRatioKnob, &compressorBypassButton, &compressorPanelLabel, &CompRatioLabel, &CompThreshLabel };
-    widthComponents = { &widthKnob, &widthBypassButton, &widthPanelLabel, &widthLabel };
+    shapeComponents = { modulatableSliderComponents.at(REC_NAME).get(), modulatableSliderComponents.at(BIAS_NAME).get(), &shapePanelLabel, labels.at(REC_NAME).get(), labels.at(BIAS_NAME).get() };
+    compressorComponents = { modulatableSliderComponents.at(COMP_THRESH_NAME).get(), modulatableSliderComponents.at(COMP_RATIO_NAME).get(), &compressorBypassButton, &compressorPanelLabel, labels.at(COMP_RATIO_NAME).get(), labels.at(COMP_THRESH_NAME).get() };
+    widthComponents = { modulatableSliderComponents.at(WIDTH_NAME).get(), &widthBypassButton, &widthPanelLabel, labels.at(WIDTH_NAME).get() };
 
-    allControls = { &driveKnob, &outputKnob, &mixKnob, &recKnob, &biasKnob, &compRatioKnob, &compThreshKnob, &widthKnob, &linkedButton, &safeButton, &extremeButton, &compressorBypassButton, &widthBypassButton };
+    allControls.addArray(mainControls);
+    allControls.addArray(compressorKnobs);
+    allControls.addArray(widthKnobs);
+    allControls.add(&linkedButton, &safeButton, &extremeButton, &compressorBypassButton, &widthBypassButton);
 
     setVisibility(shapeComponents, false);
     setVisibility(compressorComponents, false);
     setVisibility(widthComponents, false);
-
-    // Load initial bypass states from the processor's state tree
-    for (int i = 0; i < 4; ++i)
-    {
-        compBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i));
-        widthBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i));
-    }
-
-    // Set initial attachments for band 0 and update knob enabled states
-    setFocusBandNum(0, true);
-
-    for (int i = 0; i < 4; ++i)
-    {
-        bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i));
-        setBandKnobsStates(bandEnabled, false);
-    }
 }
 
-BandPanel::~BandPanel()
-{
-    // Remove all parameter listeners that were added in the constructor.
-    for (int i = 0; i < 4; ++i)
-    {
-        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
-        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
-    }
-
-    oscSwitch.removeListener(this);
-    shapeSwitch.removeListener(this);
-    compressorSwitch.removeListener(this);
-    widthSwitch.removeListener(this);
-}
+// ... paint() and resized() methods remain the same as your provided code,
+// but they will now use the maps to access components, for example:
+// modulatableSliderComponents.at(REC_NAME)->setBounds(leftKnobArea);
+// driveKnob->setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
 
 void BandPanel::paint(juce::Graphics& g)
 {
@@ -206,11 +212,11 @@ void BandPanel::resized()
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
-        driveKnob.setBounds(bigDriveArea);
+        driveKnob->setBounds(bigDriveArea);
     }
     else
     {
-        driveKnob.setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+        driveKnob->setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     }
 
     // --- Band Knob Area Layout ---
@@ -219,15 +225,15 @@ void BandPanel::resized()
     juce::Rectangle<int> rightKnobArea = subKnobArea.withLeft(subKnobArea.getCentreX());
 
     // Shape panel
-    recKnob.setBounds(leftKnobArea);
-    biasKnob.setBounds(rightKnobArea);
+    modulatableSliderComponents.at(REC_NAME)->setBounds(leftKnobArea);
+    modulatableSliderComponents.at(BIAS_NAME)->setBounds(rightKnobArea);
 
     // Compressor panel
-    compThreshKnob.setBounds(leftKnobArea);
-    compRatioKnob.setBounds(rightKnobArea);
+    modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(leftKnobArea);
+    modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(rightKnobArea);
 
     // Width panel
-    widthKnob.setBounds(subKnobArea);
+    modulatableSliderComponents.at(WIDTH_NAME)->setBounds(subKnobArea);
 
     // Panel Labels & Bypass Buttons
     bottomArea = bandKnobArea.removeFromBottom(bandKnobArea.getHeight() / 5);
@@ -251,82 +257,72 @@ void BandPanel::resized()
     widthBypassButton.setBounds(bypassButtonArea);
 
     // --- Output Area Layout ---
-    // 1. First, define and set the bounds for the button column on the left.
     juce::Rectangle<int> outputButtonCol = outputKnobArea.removeFromLeft(getWidth() / 25);
     const float buttonHeight = outputButtonCol.getHeight() / 3.0f;
     linkedButton.setBounds(outputButtonCol.removeFromTop(buttonHeight));
     safeButton.setBounds(outputButtonCol.removeFromTop(buttonHeight));
     extremeButton.setBounds(outputButtonCol);
 
-    // 2. Now, the 'outputKnobArea' has been correctly reduced.
-    //    We can proceed with laying out the knobs in the remaining space.
     juce::Rectangle<int> outputSubArea = outputKnobArea.reduced(0, outputKnobArea.getHeight() / 5);
     juce::Rectangle<int> outputLeftArea = outputSubArea.withRight(outputSubArea.getCentreX());
     juce::Rectangle<int> outputRightArea = outputSubArea.withLeft(outputSubArea.getCentreX());
 
-    outputKnob.setBounds(outputLeftArea);
-    mixKnob.setBounds(outputRightArea);
+    modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(outputLeftArea);
+    modulatableSliderComponents.at(MIX_NAME)->setBounds(outputRightArea);
 }
 
-void BandPanel::updateLinkedValue()
+void BandPanel::updateAttachments()
 {
-    // This is called on the message thread after a parameter change.
-    // Check the "linked" state for the currently focused band.
-    if (linkedButton.getToggleState())
-    {
-        float newOutputValue = -driveKnob.getValue() * 0.1f;
+    driveAttachment.reset();
+    driveAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString("drive", focusBandNum), *driveKnob);
 
-        if (std::abs(outputKnob.getValue() - newOutputValue) > 0.001)
+    // Loop through our new definitive list of parameter info
+    for (const auto& paramInfo : ParameterIDAndName::getModulatableParameterInfo())
+    {
+        // Get the slider using its stable Name (e.g., "CompRatio")
+        auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
+
+        // Generate the dynamic parameter ID using the correct idBase (e.g., "compRatio")
+        auto paramID = ParameterIDAndName::getIDString(paramInfo.idBase, focusBandNum);
+
+        sliderAttachments[paramInfo.name].reset();
+
+        auto* parameter = processor.treeState.getParameter(paramID);
+        jassert(parameter != nullptr && "Parameter not found! Check idBase in getModulatableParameterInfo and parameter creation in PluginProcessor.");
+
+        if (parameter)
         {
-            // Use dontSendNotification to prevent a feedback loop.
-            outputKnob.setValue(newOutputValue, juce::dontSendNotification);
+            sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
         }
-    }
-}
 
-void BandPanel::updateDriveMeter()
-{
-    if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&getLookAndFeel()))
-    {
-        lnf->sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
-        lnf->reductionPercent = processor.getReductionPrecent(focusBandNum);
-    }
-}
-
-void BandPanel::buttonClicked(juce::Button* clickedButton)
-{
-    // This handles the main panel switching logic
-    if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
-    {
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, false);
-    }
-    else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
-    {
-        setVisibility(shapeComponents, true);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, false);
-    }
-    else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
-    {
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, true);
-        setVisibility(widthComponents, false);
-    }
-    else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
-    {
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, true);
+        // Configure the slider's modulation logic using its stable Name
+        configureModulatableSlider(*slider, paramInfo.idBase);
     }
 
-    resized(); // Recalculate layout, especially for the drive knob size
-    repaint();
+    // === Unchanged Button Attachment Logic ===
+    linkedAttachment.reset();
+    safeAttachment.reset();
+    extremeAttachment.reset();
+    compressorBypassAttachment.reset();
+    widthBypassAttachment.reset();
+
+    linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
+    safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
+    extremeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(EXTREME_ID, focusBandNum), extremeButton);
+    compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
+    widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
+
+    // Update visual states from memory
+    compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
+    widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
+
+    bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+    setBandKnobsStates(bandEnabled, false);
 }
 
 void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase)
 {
+    // The slider now knows its full, band-specific parameter ID
     slider.parameterID = ParameterIDAndName::getIDString(paramIDBase, focusBandNum);
 
     slider.onModAmountChanged = [this, &slider](double newAmount)
@@ -343,58 +339,6 @@ void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce
     {
         processor.resetModulation(slider.parameterID);
     };
-}
-
-void BandPanel::updateAttachments()
-{
-    // Detach old parameters by resetting unique_ptrs
-    driveAttachment.reset();
-    outputAttachment.reset();
-    mixAttachment.reset();
-    recAttachment.reset();
-    biasAttachment.reset();
-    compRatioAttachment.reset();
-    compThreshAttachment.reset();
-    widthAttachment.reset();
-    linkedAttachment.reset();
-    safeAttachment.reset();
-    extremeAttachment.reset();
-    compressorBypassAttachment.reset();
-    widthBypassAttachment.reset();
-
-    // Attach UI components to the new band's parameters
-    driveAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(DRIVE_ID, focusBandNum), driveKnob);
-    outputAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(OUTPUT_ID, focusBandNum), outputKnob);
-    mixAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(MIX_ID, focusBandNum), mixKnob);
-    recAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(REC_ID, focusBandNum), recKnob);
-    biasAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(BIAS_ID, focusBandNum), biasKnob);
-    compRatioAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_RATIO_ID, focusBandNum), compRatioKnob);
-    compThreshAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_THRESH_ID, focusBandNum), compThreshKnob);
-    widthAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_ID, focusBandNum), widthKnob);
-
-    linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
-    safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
-    extremeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(EXTREME_ID, focusBandNum), extremeButton);
-
-    compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
-    widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
-
-    // Update the visual state of the bypass buttons to match the newly focused band
-    compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
-    widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
-
-    // Apply the correct enabled/disabled states for the new band
-    bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
-    setBandKnobsStates(bandEnabled, false);
-
-    // After attaching, configure the modulatable properties for the current focus band.
-
-    for (auto& knobPair : modulatableKnobs)
-    {
-        // knobPair.first is a pointer to ModulatableSlider
-        // knobPair.second is its parameter ID base (e.g. REC_ID)
-        configureModulatableSlider(*knobPair.first, knobPair.second);
-    }
 }
 
 void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
@@ -421,7 +365,6 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 {
     addAndMakeVisible(bypassButton);
     bypassButton.setColour(juce::ToggleButton::tickColourId, colour);
-    // bypassButton.addListener(this);
 }
 
 void BandPanel::setFocusBandNum(int num, bool forceUpdate)
@@ -433,9 +376,68 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     updateAttachments();
     updateWhenChangingFocus();
 
-    // After switching, immediately sync the UI with the processor's state for the new band
     bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(isBandEnabled, false);
+}
+
+// ... All remaining functions (updateLinkedValue, updateDriveMeter, buttonClicked, etc.)
+// can remain exactly as you provided them, as their logic is sound. They will now
+// correctly access the UI components via their member variables (for buttons) or
+// the maps (for sliders and labels). For example, canEnableSubKnob will now use the map:
+// if ((&component == modulatableSliderComponents.at(COMP_THRESH_NAME).get() || ...
+// I have left them out for brevity but they should be included in the final file.
+
+void BandPanel::updateLinkedValue()
+{
+    if (linkedButton.getToggleState())
+    {
+        float newOutputValue = -driveKnob->getValue() * 0.1f;
+        auto* outputSlider = modulatableSliderComponents.at(OUTPUT_NAME).get();
+        if (std::abs(outputSlider->getValue() - newOutputValue) > 0.001)
+        {
+            outputSlider->setValue(newOutputValue, juce::dontSendNotification);
+        }
+    }
+}
+
+void BandPanel::updateDriveMeter()
+{
+    if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&getLookAndFeel()))
+    {
+        lnf->sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
+        lnf->reductionPercent = processor.getReductionPrecent(focusBandNum);
+    }
+}
+
+void BandPanel::buttonClicked(juce::Button* clickedButton)
+{
+    if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
+    {
+        setVisibility(shapeComponents, false);
+        setVisibility(compressorComponents, false);
+        setVisibility(widthComponents, false);
+    }
+    else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
+    {
+        setVisibility(shapeComponents, true);
+        setVisibility(compressorComponents, false);
+        setVisibility(widthComponents, false);
+    }
+    else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
+    {
+        setVisibility(shapeComponents, false);
+        setVisibility(compressorComponents, true);
+        setVisibility(widthComponents, false);
+    }
+    else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
+    {
+        setVisibility(shapeComponents, false);
+        setVisibility(compressorComponents, false);
+        setVisibility(widthComponents, true);
+    }
+
+    resized();
+    repaint();
 }
 
 void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool isVisible)
@@ -448,58 +450,60 @@ void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool is
 
 bool BandPanel::canEnableSubKnob(juce::Component& component)
 {
-    if ((&component == &compThreshKnob || &component == &compRatioKnob) && ! compressorBypassButton.getToggleState())
+    auto* compThreshPtr = modulatableSliderComponents.at(COMP_THRESH_NAME).get();
+    auto* compRatioPtr = modulatableSliderComponents.at(COMP_RATIO_NAME).get();
+    auto* widthPtr = modulatableSliderComponents.at(WIDTH_NAME).get();
+
+    if ((&component == compThreshPtr || &component == compRatioPtr) && compressorBypassButton.getToggleState())
         return true;
-    if (&component == &widthKnob && ! widthBypassButton.getToggleState())
+    if (&component == widthPtr && widthBypassButton.getToggleState())
         return true;
     return false;
 }
 
-// Method for the editor to command a state save
 void BandPanel::saveBypassStatesToMemory()
 {
     compBypassTemp[focusBandNum] = compressorBypassButton.getToggleState();
     widthBypassTemp[focusBandNum] = widthBypassButton.getToggleState();
 }
 
-// The CORE LOGIC, a direct translation of your original function
 void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
 {
     bool widthBypassState, compBypassState;
-    if (! isBandEnabled)
-    {
-        widthBypassState = false;
-        compBypassState = false;
-    }
-    else
-    {
-        // Restore state from "memory"
-        widthBypassState = widthBypassTemp[focusBandNum];
-        compBypassState = compBypassTemp[focusBandNum];
-    }
+    bool widthEnableState = isBandEnabled ? widthBypassTemp[focusBandNum] : false;
+    bool compEnableState = isBandEnabled ? compBypassTemp[focusBandNum] : false;
 
-    // Update the visual toggle state of bypass buttons
     if (! callFromSubBypass)
     {
         widthBypassButton.setToggleState(widthBypassState, juce::dontSendNotification);
         compressorBypassButton.setToggleState(compBypassState, juce::dontSendNotification);
     }
 
-    // Enable/disable all controls based on the logic
     if (isBandEnabled)
     {
+        // If the band is enabled, we process each control
         for (auto* component : allControls)
         {
-            if (canEnableSubKnob(*component))
+            // Check if this control is a "sub knob"
+            bool isSubKnob = (component == modulatableSliderComponents.at(COMP_THRESH_NAME).get()
+                              || component == modulatableSliderComponents.at(COMP_RATIO_NAME).get()
+                              || component == modulatableSliderComponents.at(WIDTH_NAME).get());
+
+            if (isSubKnob)
             {
-                component->setEnabled(false); // Explicitly disable if sub-bypass is off
-                continue;
+                // If it's a sub knob, its enabled state is determined by canEnableSubKnob
+                component->setEnabled(canEnableSubKnob(*component));
             }
-            component->setEnabled(true);
+            else
+            {
+                // If it's not a sub knob (e.g., Drive, Output, Mix, etc.), it is always enabled
+                component->setEnabled(true);
+            }
         }
     }
     else
     {
+        // If the band is disabled, disable all controls
         for (auto* component : allControls)
         {
             component->setEnabled(false);
@@ -522,6 +526,7 @@ void BandPanel::setSwitch(const int index, bool state)
 void BandPanel::updateWhenChangingFocus()
 {
     updateDriveMeter();
+    // Use the button reference directly, not a pointer
     buttonClicked(&oscSwitch);
     buttonClicked(&shapeSwitch);
     buttonClicked(&compressorSwitch);
@@ -531,14 +536,10 @@ void BandPanel::updateWhenChangingFocus()
 
 void BandPanel::parameterChanged(const juce::String& parameterID, float newValue)
 {
-    // When a relevant parameter changes (on any thread), trigger an async update.
-    // This is lightweight and thread-safe.
     triggerAsyncUpdate();
 }
 
 void BandPanel::handleAsyncUpdate()
 {
-    // This is called safely on the message thread.
-    // We can now update all our linked values.
     updateLinkedValue();
 }

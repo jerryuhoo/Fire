@@ -460,10 +460,15 @@ void FireAudioProcessorEditor::timerCallback()
         slider.isBipolar = modInfo.isBipolar;
     };
 
-    // Update the modulatable knobs in BandPanel
-    // This will automatically update the knobs for whichever band is currently in focus
-    updateSliderState(bandPanel.recKnob);
-    updateSliderState(bandPanel.biasKnob);
+    // Loop through the public list of modulatable sliders from the bandPanel.
+    // This is much cleaner and automatically adapts to any new sliders you add.
+    for (auto* slider : bandPanel.modulatableSliders)
+    {
+        if (slider != nullptr) // A good safety check
+        {
+            updateSliderState(*slider);
+        }
+    }
     // Repaint the entire panel once, which is more efficient than repainting individual sliders.
     bandPanel.repaint();
 

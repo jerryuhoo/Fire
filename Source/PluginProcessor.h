@@ -63,9 +63,9 @@ struct BandProcessingParameters
     float mixVal;
     float compThreshold;
     float compRatio;
-    bool isCompBypassed;
+    bool isCompEnabled;
     float width;
-    bool isWidthBypassed;
+    bool isWidthEnabled;
 
     // Distortion-specific parameters
     bool isSafeModeOn;
@@ -78,11 +78,21 @@ struct BandProcessingParameters
     juce::String driveID;
     juce::String biasID;
     juce::String recID;
+    juce::String compRatioID;
+    juce::String compThreshID;
+    juce::String widthID;
+    juce::String outputID;
+    juce::String mixID;
 
     // Normalisable ranges for parameter modulation
     juce::NormalisableRange<float> driveRange;
     juce::NormalisableRange<float> biasRange;
     juce::NormalisableRange<float> recRange;
+    juce::NormalisableRange<float> compRatioRange;
+    juce::NormalisableRange<float> compThreshRange;
+    juce::NormalisableRange<float> widthRange;
+    juce::NormalisableRange<float> outputRange;
+    juce::NormalisableRange<float> mixRange;
 };
 
 //==============================================================================

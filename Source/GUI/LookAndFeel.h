@@ -255,16 +255,22 @@ public:
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider) override
     {
         // Dispatch to the correct drawing method based on component ID
-        if (slider.getComponentID() == "drive")
+        if (auto* modSlider = dynamic_cast<ModulatableSlider*>(&slider))
         {
-            drawDriveSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
-        }
-        else if (auto* modulatableSlider = dynamic_cast<ModulatableSlider*>(&slider))
-        {
-            drawModulatableSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, *modulatableSlider);
+            if (slider.getComponentID() == "drive")
+            {
+                // If it's the drive knob, call our newly modified function
+                drawDriveSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, *modSlider);
+            }
+            else
+            {
+                // Otherwise, call the standard modulatable slider function
+                drawModulatableSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, *modSlider);
+            }
         }
         else
         {
+            // Fallback for any other standard sliders
             drawDefaultSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
         }
     }
@@ -651,69 +657,49 @@ private:
         g.fillPath(dialTick, juce::AffineTransform::rotation(toAngle).translated(centerX, centerY));
     }
 
-    void drawModulatableSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, ModulatableSlider& slider)
+    // Add this new private function to your LookAndFeel class
+    void drawModulationVisuals(juce::Graphics& g, int x, int y, int width, int height, float rotaryStartAngle, float rotaryEndAngle, ModulatableSlider& slider)
     {
-        // This function no longer needs to worry about the main dial's highlight,
-        // as that is now correctly handled in drawDefaultSlider.
-
-        // First, draw the default slider visuals
-        drawDefaultSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
-
-        auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10 * scale);
-        auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-        auto center = bounds.getCentre();
-        auto lineW = radius * 0.2f;
-        auto arcRadius = radius - lineW * 0.5f;
-
-        // The angle representing the slider's current value (the center of the modulation)
-        auto valueAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-
         // --- Modulation Visualization ---
         if (slider.isModulated && slider.lfoAmount != 0.0 && slider.isEnabled())
         {
-            // Define a new, smaller radius for the modulation arc
+            auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10 * scale);
+            auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+            auto center = bounds.getCentre();
+            auto lineW = radius * 0.2f;
+            auto arcRadius = radius - lineW * 0.5f;
+
             float modulationArcRadius = arcRadius - lineW * 1.2f;
             float modulationArcWidth = lineW * 0.5f;
 
-            // Helper to convert a value to an angle
             auto valueToAngle = [&](double value)
             {
                 return rotaryStartAngle + slider.valueToProportionOfLength(value) * (rotaryEndAngle - rotaryStartAngle);
             };
 
-            // Get slider properties
             const double sliderMin = slider.getMinimum();
             const double sliderMax = slider.getMaximum();
             const double sliderRange = sliderMax - sliderMin;
             const double currentValue = slider.getValue();
-
-            // Calculate the modulation range in terms of value, not angle
             const double modulationValueRange = sliderRange * slider.lfoAmount;
 
             double modStartValue, modEndValue;
-
             if (slider.isBipolar)
             {
-                // BI-POLAR: centered around the current value
                 modStartValue = currentValue - modulationValueRange / 2.0;
                 modEndValue = currentValue + modulationValueRange / 2.0;
             }
             else
             {
-                // UNI-POLAR: starts from the current value
                 modStartValue = currentValue;
                 modEndValue = currentValue + modulationValueRange;
-
-                // Handle negative amount
                 if (modEndValue < modStartValue)
                     std::swap(modStartValue, modEndValue);
             }
 
-            // THE FIX: Clamp the start and end VALUES to the slider's actual min/max
             auto clampedStartValue = juce::jlimit(sliderMin, sliderMax, modStartValue);
             auto clampedEndValue = juce::jlimit(sliderMin, sliderMax, modEndValue);
 
-            // Now, convert the CLAMPED values to angles for drawing
             float modStartAngle = valueToAngle(clampedStartValue);
             float modEndAngle = valueToAngle(clampedEndValue);
 
@@ -723,8 +709,6 @@ private:
             g.setColour(juce::Colours::red.withAlpha(0.5f));
             g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-            // --- Current Value Point ---
-            // We also need to calculate the point's value and clamp it for visual accuracy
             double currentModulatedValue = 0.0;
             if (slider.isBipolar)
             {
@@ -748,26 +732,29 @@ private:
         if (slider.isModulated)
         {
             auto handleBounds = slider.getModulationHandleBounds();
-
             juce::Colour handleColour = COLOUR5;
             if (slider.isModHandleMouseOver || slider.isModHandleMouseDown)
             {
                 handleColour = handleColour.brighter(0.2f);
             }
-
             g.setColour(handleColour);
             g.fillEllipse(handleBounds);
-
             g.setColour(juce::Colours::white);
             g.setFont(getBaseFont(handleBounds.getHeight() * 0.6f));
-
-            // The lfoSource value passed from the timerCallback is already 1-based.
-            // So we can draw it directly. It will correctly show 1, 2, 3, or 4.
             g.drawText(juce::String(slider.lfoSource), handleBounds, juce::Justification::centred);
         }
     }
 
-    void drawDriveSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider)
+    void drawModulatableSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, ModulatableSlider& slider)
+    {
+        // 1. Draw the default slider visuals
+        drawDefaultSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
+
+        // 2. Draw the modulation visuals on top
+        drawModulationVisuals(g, x, y, width, height, rotaryStartAngle, rotaryEndAngle, slider);
+    }
+
+    void drawDriveSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, ModulatableSlider& slider)
     {
         // draw outline
         auto outline = COLOUR6;
@@ -978,6 +965,7 @@ private:
 
         //g.setColour(COLOUR5);
         //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
+        drawModulationVisuals(g, x, y, width, height, rotaryStartAngle, rotaryEndAngle, slider);
     }
 
     enum class FilterType

@@ -83,14 +83,12 @@ private:
 
     // A map to own and manage all sliders, keyed by their parameter name.
     std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
-    std::unique_ptr<juce::Slider> driveKnob; // Drive is a standard slider, managed separately.
 
     // A map to own and manage all labels, keyed by the parameter name they are associated with.
     std::map<juce::String, std::unique_ptr<juce::Label>> labels;
 
     // A map to own the attachments, ensuring they are re-created correctly when the band changes.
     std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
-    std::unique_ptr<SliderAttachment> driveAttachment;
 
     // --- Unchanged Members ---
     juce::Label shapePanelLabel, compressorPanelLabel, widthPanelLabel;

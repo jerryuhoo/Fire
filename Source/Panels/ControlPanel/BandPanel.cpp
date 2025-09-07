@@ -66,6 +66,8 @@ void BandPanel::createSliders()
     }
 
     // === Configure specific slider properties ===
+    modulatableSliderComponents.at(DRIVE_NAME)->setColour(juce::Slider::rotarySliderFillColourId, DRIVE_COLOUR);
+    modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive"); // Assign the ID for LookAndFeel
     modulatableSliderComponents.at(REC_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
     modulatableSliderComponents.at(BIAS_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
     modulatableSliderComponents.at(COMP_RATIO_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
@@ -76,11 +78,6 @@ void BandPanel::createSliders()
 
     modulatableSliderComponents.at(OUTPUT_NAME)->setTextValueSuffix(" dB");
     modulatableSliderComponents.at(COMP_THRESH_NAME)->setTextValueSuffix(" dB");
-
-    // === Create the standard Drive slider separately ===
-    driveKnob = std::make_unique<juce::Slider>();
-    initRotarySlider(*driveKnob, DRIVE_COLOUR);
-    driveKnob->setComponentID("drive");
 }
 
 void BandPanel::createLabels()
@@ -97,7 +94,7 @@ void BandPanel::createLabels()
         label->setJustificationType(juce::Justification::centred);
     };
 
-    setupLabel(DRIVE_NAME, "Drive", *driveKnob, DRIVE_COLOUR.withBrightness(0.9f));
+    setupLabel(DRIVE_NAME, "Drive", *modulatableSliderComponents.at(DRIVE_NAME), DRIVE_COLOUR.withBrightness(0.9f));
     setupLabel(OUTPUT_NAME, "Output", *modulatableSliderComponents.at(OUTPUT_NAME), KNOB_FONT_COLOUR);
     setupLabel(MIX_NAME, "Mix", *modulatableSliderComponents.at(MIX_NAME), KNOB_FONT_COLOUR);
     setupLabel(REC_NAME, "Rectification", *modulatableSliderComponents.at(REC_NAME), SHAPE_COLOUR);
@@ -148,7 +145,7 @@ void BandPanel::createButtons()
 
 void BandPanel::setupComponentGroups()
 {
-    mainControls = { driveKnob.get(), modulatableSliderComponents.at(OUTPUT_NAME).get(), modulatableSliderComponents.at(MIX_NAME).get(), modulatableSliderComponents.at(REC_NAME).get(), modulatableSliderComponents.at(BIAS_NAME).get(), &linkedButton, &safeButton, &extremeButton };
+    mainControls = { modulatableSliderComponents.at(DRIVE_NAME).get(), modulatableSliderComponents.at(OUTPUT_NAME).get(), modulatableSliderComponents.at(MIX_NAME).get(), modulatableSliderComponents.at(REC_NAME).get(), modulatableSliderComponents.at(BIAS_NAME).get(), &linkedButton, &safeButton, &extremeButton };
     compressorKnobs = { modulatableSliderComponents.at(COMP_THRESH_NAME).get(), modulatableSliderComponents.at(COMP_RATIO_NAME).get() };
     widthKnobs = { modulatableSliderComponents.at(WIDTH_NAME).get() };
 
@@ -212,11 +209,11 @@ void BandPanel::resized()
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
-        driveKnob->setBounds(bigDriveArea);
+        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(bigDriveArea);
     }
     else
     {
-        driveKnob->setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
+        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
     }
 
     // --- Band Knob Area Layout ---
@@ -273,9 +270,6 @@ void BandPanel::resized()
 
 void BandPanel::updateAttachments()
 {
-    driveAttachment.reset();
-    driveAttachment = std::make_unique<SliderAttachment>(processor.treeState, ParameterIDAndName::getIDString("drive", focusBandNum), *driveKnob);
-
     // Loop through our new definitive list of parameter info
     for (const auto& paramInfo : ParameterIDAndName::getModulatableParameterInfo())
     {
@@ -391,7 +385,7 @@ void BandPanel::updateLinkedValue()
 {
     if (linkedButton.getToggleState())
     {
-        float newOutputValue = -driveKnob->getValue() * 0.1f;
+        float newOutputValue = -modulatableSliderComponents.at(DRIVE_NAME)->getValue() * 0.1f;
         auto* outputSlider = modulatableSliderComponents.at(OUTPUT_NAME).get();
         if (std::abs(outputSlider->getValue() - newOutputValue) > 0.001)
         {

@@ -215,6 +215,8 @@ public:
         float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
         bool isBipolar = true;
     };
+    
+    void assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID);
 
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;

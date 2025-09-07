@@ -156,26 +156,31 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 
 void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
 {
-    if (comboBox == &sourceMenu)
+    // This function now handles changes from BOTH combo boxes.
+    if (comboBox == &sourceMenu || comboBox == &destinationMenu)
     {
-        processor.modulationRoutings.getReference(index).sourceLfoIndex = sourceMenu.getSelectedId() - 1;
-    }
+        // 1. Get the current selections from both menus.
+        int selectedSourceIndex = sourceMenu.getSelectedId() - 1;
+        juce::String selectedTargetID = "";
 
-    if (comboBox == &destinationMenu)
-    {
-        int selectedId = destinationMenu.getSelectedId();
-        if (selectedId == 1) // "None" was selected
+        int selectedDestinationId = destinationMenu.getSelectedId();
+        if (selectedDestinationId > 1) // i.e., not "None"
         {
-            processor.modulationRoutings.getReference(index).targetParameterID = "";
-        }
-        else
-        {
-            int listIndex = selectedId - 2;
-
+            int listIndex = selectedDestinationId - 2;
             if (juce::isPositiveAndBelow(listIndex, allPossibleTargets.size()))
             {
-                processor.modulationRoutings.getReference(index).targetParameterID = allPossibleTargets[listIndex].parameterID;
+                selectedTargetID = allPossibleTargets[listIndex].parameterID;
             }
+        }
+
+        // 2. Call the new, safe method in the processor to apply the changes.
+        processor.assignModulation(index, selectedSourceIndex, selectedTargetID);
+
+        // 3. IMPORTANT: Tell the parent panel to rebuild its UI.
+        // This ensures that if another row was cleared, it will visually update to "None".
+        if (auto* panel = findParentComponentOfClass<ModulationMatrixPanel>())
+        {
+            panel->buildUiFromProcessorState();
         }
     }
 }

@@ -2066,3 +2066,37 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
         }
     }
 }
+
+void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID)
+{
+    // Ensure the index is valid for the routing we are trying to modify.
+    if (! juce::isPositiveAndBelow(routingIndex, modulationRoutings.size()))
+        return;
+
+    // --- The "Overwrite" Logic ---
+    // If a valid target is being assigned (not "None")...
+    if (targetParameterID.isNotEmpty())
+    {
+        // ...loop through ALL routings to find and clear any duplicates.
+        for (int i = 0; i < modulationRoutings.size(); ++i)
+        {
+            // Don't check against the row we are currently editing.
+            if (i == routingIndex)
+                continue;
+
+            // If we find another row that already targets the same parameter...
+            if (modulationRoutings.getReference(i).targetParameterID == targetParameterID)
+            {
+                // ...clear its target by setting it to an empty string.
+                // This makes it revert to "None" in the UI.
+                modulationRoutings.getReference(i).targetParameterID = "";
+            }
+        }
+    }
+
+    // --- Update the Current Routing ---
+    // After clearing any potential duplicates, update the routing the user actually changed.
+    auto& currentRouting = modulationRoutings.getReference(routingIndex);
+    currentRouting.sourceLfoIndex = sourceLfoIndex;
+    currentRouting.targetParameterID = targetParameterID;
+}

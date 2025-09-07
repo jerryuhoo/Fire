@@ -75,12 +75,11 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-private:
-    void buttonClicked(juce::Button* button) override;
-
     // Rebuilds the UI from the processor's data model
     void buildUiFromProcessorState();
 
+private:
+    void buttonClicked(juce::Button* button) override;
     FireAudioProcessor& processor;
 
     ModulationMatrixHeader header;

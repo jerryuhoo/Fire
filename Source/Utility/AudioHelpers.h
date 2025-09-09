@@ -282,6 +282,7 @@ namespace ParameterIDAndName
     {
         std::vector<ModulationTarget> targets;
         const auto& modulatableParams = getModulatableParameterInfo();
+        const auto& globalParams = getGlobalParameterInfo();
 
         for (int i = 0; i < 4; ++i)
         {
@@ -290,6 +291,12 @@ namespace ParameterIDAndName
                 targets.push_back({ paramInfo.name + " (Band " + juce::String(i + 1) + ")",
                                     getIDString(paramInfo.idBase, i) });
             }
+        }
+
+        for (const auto& paramInfo : globalParams)
+        {
+            // For global parameters, the name is the display text and the ID is the parameter ID
+            targets.push_back({ paramInfo.name, getIDString(paramInfo.idBase) });
         }
         return targets;
     }

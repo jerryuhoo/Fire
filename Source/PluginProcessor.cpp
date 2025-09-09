@@ -333,10 +333,9 @@ FireAudioProcessor::FireAudioProcessor()
     // Initialize the band processors in a loop.
     for (int i = 0; i < 4; ++i)
         bands.push_back(std::make_unique<BandProcessor>());
-    
+
     for (int i = 0; i < 4; ++i)
         realtimeModulatedThresholds[i].store(-48.0f);
-
 
     // Set up the properties file options.
     juce::PropertiesFile::Options options;
@@ -830,9 +829,45 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     processMultiBand(buffer, sampleRate, lfoOutputBuffer);
 
+    for (const auto& paramInfo : ParameterIDAndName::getGlobalParameterInfo())
+    {
+        const auto& paramID = paramInfo.idBase;
+        float modulationAmount = 0.0f;
+
+        for (const auto& routing : this->modulationRoutings)
+        {
+            if (routing.targetParameterID.isEmpty() || routing.targetParameterID != paramID)
+                continue;
+
+            float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
+            const auto range = treeState.getParameterRange(routing.targetParameterID);
+            if (range.start == range.end)
+                continue;
+
+            const float rangeSpan = range.end - range.start;
+            float scalingFactor;
+
+            if (routing.isBipolar)
+            {
+                lfoValue = lfoValue * 2.0f - 1.0f;
+                scalingFactor = rangeSpan * 0.5f;
+            }
+            else
+            {
+                scalingFactor = rangeSpan;
+            }
+
+            modulationAmount += lfoValue * routing.depth * scalingFactor;
+        }
+
+        const float baseValue = *treeState.getRawParameterValue(paramID);
+        const auto range = treeState.getParameterRange(paramID);
+        modulatedGlobalValues[paramID] = juce::jlimit(range.start, range.end, baseValue + modulationAmount);
+    }
+
     if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
     {
-        int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
+        int rateDivide = static_cast<int>(modulatedGlobalValues.at(DOWNSAMPLE_ID));
         if (rateDivide > 1)
         {
             for (int channel = 0; channel < totalNumInputChannels; ++channel)
@@ -846,8 +881,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             }
         }
     }
-    applyGlobalEffects(buffer, sampleRate);
-    applyGlobalMix(buffer);
+    applyGlobalEffects(buffer, sampleRate, modulatedGlobalValues);
+    applyGlobalMix(buffer, modulatedGlobalValues.at(MIX_ID));
 
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
@@ -1012,6 +1047,31 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
     settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load(); // > 0.5f;
     settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load(); // > 0.5f;
     settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load(); // > 0.5f;
+
+    return settings;
+}
+
+ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, const std::map<juce::String, float>& modulatedValues)
+{
+    ChainSettings settings;
+
+    // Use modulated values for parameters that can be modulated
+    settings.lowCutFreq = modulatedValues.at(LOWCUT_FREQ_ID);
+    settings.lowCutQuality = modulatedValues.at(LOWCUT_Q_ID);
+    settings.lowCutGainInDecibels = modulatedValues.at(LOWCUT_GAIN_ID);
+    settings.highCutFreq = modulatedValues.at(HIGHCUT_FREQ_ID);
+    settings.highCutQuality = modulatedValues.at(HIGHCUT_Q_ID);
+    settings.highCutGainInDecibels = modulatedValues.at(HIGHCUT_GAIN_ID);
+    settings.peakFreq = modulatedValues.at(PEAK_FREQ_ID);
+    settings.peakGainInDecibels = modulatedValues.at(PEAK_GAIN_ID);
+    settings.peakQuality = modulatedValues.at(PEAK_Q_ID);
+
+    // These parameters are not modulated, so get them from apvts as before
+    settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
+    settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
+    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load();
+    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load();
+    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load();
 
     return settings;
 }
@@ -1773,52 +1833,55 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     }
 }
 
-void FireAudioProcessor::updateGlobalFilters(double sampleRate)
+void FireAudioProcessor::updateGlobalFilters(double sampleRate, const std::map<juce::String, float>& modulatedValues)
 {
-    // This is your old `updateFilter` function.
-    auto chainSettings = getChainSettings(treeState);
+    auto chainSettings = getChainSettings(treeState, modulatedValues);
     const float minFreq = 20.0f;
-    float maxFreq = sampleRate / 2.0f;
     if (sampleRate <= 0)
         return;
 
+    float maxFreq = sampleRate / 2.0f;
+
     if (maxFreq < minFreq)
-    {
         maxFreq = minFreq;
-    }
 
-    chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
-    chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
-    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
+    // chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    // chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+    // chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
 
-    // Create a new settings object with the smoothed values for this audio block
-    ChainSettings smoothedSettings;
-    smoothedSettings.lowCutFreq = lowcutFreqSmoother.getNextValue();
-    smoothedSettings.lowCutGainInDecibels = lowcutGainSmoother.getNextValue();
-    smoothedSettings.lowCutQuality = lowcutQualitySmoother.getNextValue();
-    smoothedSettings.peakFreq = peakFreqSmoother.getNextValue();
-    smoothedSettings.peakGainInDecibels = peakGainSmoother.getNextValue();
-    smoothedSettings.peakQuality = peakQualitySmoother.getNextValue();
-    // Get the smoothed high-cut frequency value.
-    float highCutFreqValue = highcutFreqSmoother.getNextValue();
-    // Define the Nyquist frequency.
-    const float nyquist = (float) sampleRate / 2.0f;
-    // Clamp the high-cut frequency to ensure it never exceeds the Nyquist frequency.
-    smoothedSettings.highCutFreq = juce::jmin(highCutFreqValue, nyquist);
-    smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
-    smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
+    // // Create a new settings object with the smoothed values for this audio block
+    // ChainSettings smoothedSettings;
+    // smoothedSettings.lowCutFreq = lowcutFreqSmoother.getNextValue();
+    // smoothedSettings.lowCutGainInDecibels = lowcutGainSmoother.getNextValue();
+    // smoothedSettings.lowCutQuality = lowcutQualitySmoother.getNextValue();
+    // smoothedSettings.peakFreq = peakFreqSmoother.getNextValue();
+    // smoothedSettings.peakGainInDecibels = peakGainSmoother.getNextValue();
+    // smoothedSettings.peakQuality = peakQualitySmoother.getNextValue();
+    // // Get the smoothed high-cut frequency value.
+    // float highCutFreqValue = highcutFreqSmoother.getNextValue();
+    // // Define the Nyquist frequency.
+    // const float nyquist = (float) sampleRate / 2.0f;
+    // // Clamp the high-cut frequency to ensure it never exceeds the Nyquist frequency.
+    // smoothedSettings.highCutFreq = juce::jmin(highCutFreqValue, nyquist);
+    // smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
+    // smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
 
-    // Slopes and bypass states don't need smoothing, use them directly
-    smoothedSettings.lowCutSlope = chainSettings.lowCutSlope;
-    smoothedSettings.highCutSlope = chainSettings.highCutSlope;
-    smoothedSettings.lowCutBypassed = chainSettings.lowCutBypassed;
-    smoothedSettings.peakBypassed = chainSettings.peakBypassed;
-    smoothedSettings.highCutBypassed = chainSettings.highCutBypassed;
+    // // Slopes and bypass states don't need smoothing, use them directly
+    // smoothedSettings.lowCutSlope = chainSettings.lowCutSlope;
+    // smoothedSettings.highCutSlope = chainSettings.highCutSlope;
+    // smoothedSettings.lowCutBypassed = chainSettings.lowCutBypassed;
+    // smoothedSettings.peakBypassed = chainSettings.peakBypassed;
+    // smoothedSettings.highCutBypassed = chainSettings.highCutBypassed;
 
-    // Call the modular update functions
-    updateLowCutFilters(smoothedSettings, sampleRate);
-    updatePeakFilter(smoothedSettings, sampleRate);
-    updateHighCutFilters(smoothedSettings, sampleRate);
+    // // Call the modular update functions
+    // updateLowCutFilters(smoothedSettings, sampleRate);
+    // updatePeakFilter(smoothedSettings, sampleRate);
+    // updateHighCutFilters(smoothedSettings, sampleRate);
+
+    // Call the modular update functions with the modulated (and now smoothed) settings
+    updateLowCutFilters(chainSettings, sampleRate);
+    updatePeakFilter(chainSettings, sampleRate);
+    updateHighCutFilters(chainSettings, sampleRate);
 }
 
 float FireAudioProcessor::getTotalLatency() const
@@ -1937,7 +2000,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.width = juce::jlimit(params.widthRange.start, params.widthRange.end, *treeState.getRawParameterValue(params.widthID) + widthModulationAmount);
                 params.outputVal = juce::jlimit(params.outputRange.start, params.outputRange.end, *treeState.getRawParameterValue(params.outputID) + outputModulationAmount);
                 params.mixVal = juce::jlimit(params.mixRange.start, params.mixRange.end, *treeState.getRawParameterValue(params.mixID) + mixModulationAmount);
-                
+
                 realtimeModulatedThresholds[i].store(params.compThreshold);
 
                 // Call the process method with the final, modulated parameters
@@ -1951,11 +2014,11 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
     sumBands(wetBuffer, wetBandBuffers, false);
 }
 
-void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate)
+void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate, const std::map<juce::String, float>& modulatedValues)
 {
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
     {
-        updateGlobalFilters(sampleRate);
+        updateGlobalFilters(sampleRate, modulatedValues);
         auto block = juce::dsp::AudioBlock<float>(buffer);
 
         auto leftBlock = block.getSingleChannelBlock(0);
@@ -1969,13 +2032,14 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, do
     }
 
     auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
-    processGain(juce::dsp::ProcessContextReplacing<float>(globalBlock), OUTPUT_ID, gainProcessorGlobal);
+    // Apply the modulated output gain
+    gainProcessorGlobal.setGainDecibels(modulatedValues.at(OUTPUT_ID));
+    gainProcessorGlobal.setRampDurationSeconds(0.05f);
+    gainProcessorGlobal.process(juce::dsp::ProcessContextReplacing<float>(globalBlock));
 }
 
-void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
+void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer, float mixValue)
 {
-    float mixValue = *treeState.getRawParameterValue(MIX_ID);
-
     if (*treeState.getRawParameterValue(HQ_ID))
     {
         dryWetMixerGlobal.setWetLatency(totalLatency);
@@ -1984,6 +2048,7 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
     {
         dryWetMixerGlobal.setWetLatency(0);
     }
+    // Use the modulated mix value
     dryWetMixerGlobal.setWetMixProportion(mixValue);
     dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
     dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
@@ -2111,6 +2176,6 @@ float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
 {
     if (juce::isPositiveAndBelow(bandIndex, 4))
         return realtimeModulatedThresholds[bandIndex].load();
-    
+
     return -48.0f;
 }

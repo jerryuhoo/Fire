@@ -315,10 +315,12 @@ private:
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
                   bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
-    void updateGlobalFilters(double sampleRate);
+    void updateGlobalFilters(double sampleRate, const std::map<juce::String, float>& modulatedValues);
     void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate, const juce::AudioBuffer<float>& lfoOutputBuffer);
-    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
-    void applyGlobalMix(juce::AudioBuffer<float>& buffer);
+    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate, const std::map<juce::String, float>& modulatedValues);
+    void applyGlobalMix(juce::AudioBuffer<float>& buffer, float mixValue);
+    
+    std::map<juce::String, float> modulatedGlobalValues;
 
     // preset id
     int presetId = 0;

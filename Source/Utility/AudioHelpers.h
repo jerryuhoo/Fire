@@ -52,6 +52,7 @@ struct ChainSettings
 };
 
 ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts);
+ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, const std::map<juce::String, float>& modulatedValues);
 
 enum ChainPositions
 {

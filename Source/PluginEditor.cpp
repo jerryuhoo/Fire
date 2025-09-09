@@ -472,6 +472,15 @@ void FireAudioProcessorEditor::timerCallback()
     // Repaint the entire panel once, which is more efficient than repainting individual sliders.
     bandPanel.repaint();
 
+    for (auto* slider : globalPanel.modulatableSliders)
+    {
+        if (slider != nullptr)
+        {
+            updateSliderState(*slider);
+        }
+    }
+    globalPanel.repaint();
+
     int currentBand = bandPanel.getFocusBandNum();
     setDistortionGraph(ParameterIDAndName::getIDString(MODE_ID, currentBand),
                        ParameterIDAndName::getIDString(DRIVE_ID, currentBand),

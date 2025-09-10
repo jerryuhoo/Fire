@@ -42,5 +42,6 @@ private:
     juce::String threshID = "";
     juce::String compBypassID = "";
     float realtimeThresholdDb;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUPanel)
 };

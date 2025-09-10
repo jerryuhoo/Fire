@@ -210,6 +210,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     setMultiband();
 
+    graphPanel.setLayoutMode(GraphPanel::LayoutMode::Band);
+
     auto& params = processor.getParameters();
     for (auto param : params)
     {
@@ -404,36 +406,62 @@ void FireAudioProcessorEditor::resized()
         bounds.removeFromLeft(juce::roundToInt(getWidth() / 20.0f));
         bounds.removeFromRight(juce::roundToInt(getWidth() / 20.0f));
 
-        // 4. Main Control
-        auto mainControlsAreaForBand = bounds;
+        // =============================================================================
+        // ++ Start of Modifications ++
+        // =============================================================================
+
+        // First, determine the current view state
+        const bool isBandView = windowLeftButton.getToggleState();
+        const bool isGlobalView = windowRightButton.getToggleState();
+
         auto mainControlsArea = bounds;
         mainControlsArea.removeFromBottom(mainControlsArea.getHeight() / 6);
-
-        // Top Section
         auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
 
-        auto lfoArea = mainControlsArea;
+        if (isBandView)
+        {
+            // --- Band View Layout (Your Original Logic) ---
+            auto mainControlsAreaForBand = bounds;
+            // auto mainControlsArea = bounds;
+            // mainControlsArea.removeFromBottom(mainControlsArea.getHeight() / 6);
 
-        // Menu
-        auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
-        distortionModeArea.reduce(0, topSection.getHeight() / 4); // 上下留出1/4的空白
-        distortionMode1.setBounds(distortionModeArea);
-        distortionMode2.setBounds(distortionModeArea);
-        distortionMode3.setBounds(distortionModeArea);
-        distortionMode4.setBounds(distortionModeArea);
+            // auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
 
-        // GraphPanel
-        const int graphPanelWidth = juce::roundToInt(getWidth() / 7.0f * 2.0f);
-        auto graphArea = mainControlsArea.removeFromLeft(graphPanelWidth);
-        mainControlsAreaForBand.removeFromLeft(graphPanelWidth);
-        graphPanel.setBounds(graphArea);
+            auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
+            distortionModeArea.reduce(0, topSection.getHeight() / 4);
+            distortionMode1.setBounds(distortionModeArea);
+            distortionMode2.setBounds(distortionModeArea);
+            distortionMode3.setBounds(distortionModeArea);
+            distortionMode4.setBounds(distortionModeArea);
 
-        // Right Controls
-        auto rightHandPanelsArea = mainControlsArea;
+            const int graphPanelWidth = juce::roundToInt(getWidth() / 7.0f * 2.0f);
+            auto graphArea = mainControlsArea.removeFromLeft(graphPanelWidth);
+            mainControlsAreaForBand.removeFromLeft(graphPanelWidth);
+            graphPanel.setBounds(graphArea);
 
-        bandPanel.setBounds(mainControlsAreaForBand);
-        globalPanel.setBounds(rightHandPanelsArea);
-        lfoPanel.setBounds(lfoArea);
+            bandPanel.setBounds(mainControlsAreaForBand);
+        }
+        else if (isGlobalView)
+        {
+            // --- Global View 布局 ---
+
+            // 设置 GraphPanel (更窄)
+            const int graphPanelWidth = juce::roundToInt(getWidth() / 6.0f);
+            auto graphArea = mainControlsArea;
+            graphArea.removeFromRight(graphArea.getWidth() - graphPanelWidth);
+            graphPanel.setBounds(graphArea);
+
+            // 设置 GlobalPanel
+            auto rightHandPanelsArea = mainControlsArea;
+            rightHandPanelsArea.removeFromLeft(graphPanelWidth);
+            globalPanel.setBounds(rightHandPanelsArea);
+        }
+        else // isLfoView
+        {
+            // --- LFO View 布局 ---
+            // lfoPanel 占据 topSection 下方的全部剩余空间
+            lfoPanel.setBounds(mainControlsArea);
+        }
     }
 
     // Zoom button
@@ -603,16 +631,31 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     }
     if (clickedButton == &windowLeftButton || clickedButton == &windowRightButton || clickedButton == &windowLfoButton)
     {
-        // When any window button is clicked, determine visibility for all panels
-        multiband.setVisible(windowLeftButton.getToggleState());
-        bandPanel.setVisible(windowLeftButton.getToggleState());
-        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
-        graphPanel.setVisible(! windowLfoButton.getToggleState());
+        const bool isBandView = windowLeftButton.getToggleState();
+        const bool isGlobalView = windowRightButton.getToggleState();
+        const bool isLfoView = windowLfoButton.getToggleState();
 
-        filterControl.setVisible(windowRightButton.getToggleState());
-        globalPanel.setVisible(windowRightButton.getToggleState());
+        bandPanel.setVisible(isBandView);
+        globalPanel.setVisible(isGlobalView);
+        lfoPanel.setVisible(isLfoView);
 
-        lfoPanel.setVisible(windowLfoButton.getToggleState());
+        multiband.setVisible(isBandView || isLfoView);
+        filterControl.setVisible(isGlobalView);
+
+        graphPanel.setVisible(isBandView || isGlobalView);
+
+        if (isBandView)
+        {
+            graphPanel.setLayoutMode(GraphPanel::LayoutMode::Band);
+        }
+        else if (isGlobalView)
+        {
+            graphPanel.setLayoutMode(GraphPanel::LayoutMode::Global);
+        }
+
+        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
+
+        resized();
     }
     for (int i = 0; i < 4; i++)
     {
@@ -818,19 +861,24 @@ void FireAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
     if (e.eventComponent == graphPanel.getOscilloscope())
     {
         bandPanel.setSwitch(0, true);
+        graphPanel.toggleZoom(graphPanel.getOscilloscope()); // ++ ADD THIS LINE
     }
-    if (e.eventComponent == graphPanel.getDistortionGraph())
+    else if (e.eventComponent == graphPanel.getDistortionGraph())
     {
         bandPanel.setSwitch(1, true);
+        graphPanel.toggleZoom(graphPanel.getDistortionGraph()); // ++ ADD THIS LINE
     }
-    if (e.eventComponent == graphPanel.getVuPanel())
+    else if (e.eventComponent == graphPanel.getVuPanel())
     {
         bandPanel.setSwitch(2, true);
+        graphPanel.toggleZoom(graphPanel.getVuPanel()); // ++ ADD THIS LINE
     }
-    if (e.eventComponent == graphPanel.getWidthGraph())
+    else if (e.eventComponent == graphPanel.getWidthGraph())
     {
         bandPanel.setSwitch(3, true);
+        graphPanel.toggleZoom(graphPanel.getWidthGraph()); // ++ ADD THIS LINE
     }
+
     if (e.eventComponent == &multiband)
     {
         updateWhenChangingFocus();

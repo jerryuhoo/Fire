@@ -41,35 +41,19 @@ void VUPanel::paint(juce::Graphics& g)
 
     // draw compressor threshold line
     g.setColour(KNOB_SUBFONT_COLOUR);
-
-    bool isGlobal = false;
-    // This call is the same for all cases, so we can do it once at the start.
+    bool isGlobal = (focusBandNum == -1); // 简化判断
     vuMeterIn.setParameters(true, focusBandNum);
     vuMeterOut.setParameters(false, focusBandNum);
 
-    // Check if the focusBandNum corresponds to a valid band (0, 1, 2, or 3).
-    if (juce::isPositiveAndBelow(focusBandNum, 4))
+    if (! isGlobal && juce::isPositiveAndBelow(focusBandNum, 4))
     {
-        // Use arrays to look up the correct parameter IDs based on the index.
-        // This replaces the long if-else chain.
         threshID = ParameterIDAndName::getIDString(COMP_THRESH_ID, focusBandNum);
         compBypassID = ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum);
     }
-    else if (focusBandNum == -1)
-    {
-        // Handle the special case for the global view.
-        isGlobal = true;
-    }
-    else
-    {
-        // Assert if the focusBandNum is an unexpected value (e.g., 4, 5, -2).
-        jassertfalse;
-    }
 
-    // draw threshold pointer
+    // --- (阈值线绘制逻辑更新，使用新的动态布局) ---
     if (! isGlobal)
     {
-        // Use the realtimeThresholdDb member, which is updated by the editor's timer.
         float threshValue = realtimeThresholdDb;
 
         const float vuMeterRange = 82.0f; // Range from -70dB to +12dB
@@ -124,32 +108,40 @@ void VUPanel::paint(juce::Graphics& g)
         // --- Draw Input Levels (Left Side) ---
         g.setColour(juce::Colours::yellowgreen);
 
+        auto fontSizeBig = 20.0f * getHeight() / 150.0f;
+        auto fontSizeSmall = 14.0f * getHeight() / 150.0f;
+        if (isGlobal)
+        {
+            fontSizeBig = 16.0f * getHeight() / 150.0f;
+            fontSizeSmall = 10.0f * getHeight() / 150.0f;
+        }
+
         // Large Text: Peak Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(20.0f * getHeight() / 150.0f).withStyle("Bold") });
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
         g.drawText(juce::String(avgInputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
 
         // Small Text: RMS Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(14.0f * getHeight() / 150.0f).withStyle("Plain") });
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
         g.drawText(juce::String(avgInputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
 
         // Label
         g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-        g.drawText("RMS In", leftArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
+        g.drawFittedText("RMS In", leftArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
 
         // --- Draw Output Levels (Right Side) ---
         g.setColour(juce::Colours::yellowgreen);
 
         // Large Text: Peak Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(20.0f * getHeight() / 150.0f).withStyle("Bold") });
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
         g.drawText(juce::String(avgOutputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
 
         // Small Text: RMS Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(14.0f * getHeight() / 150.0f).withStyle("Plain") });
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
         g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
 
-        // Label
+        // ** 标签 **
         g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-        g.drawText("RMS Out", rightArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
+        g.drawFittedText("RMS Out", rightArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
     }
 
     if (isMouseOn && ! mZoomState)

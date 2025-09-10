@@ -31,93 +31,105 @@ GraphPanel::~GraphPanel()
 {
 }
 
+void GraphPanel::setLayoutMode(LayoutMode newMode)
+{
+    if (currentLayoutMode != newMode)
+    {
+        currentLayoutMode = newMode;
+
+        // Update visibility based on the new mode
+        distortionGraph.setVisible(currentLayoutMode == LayoutMode::Band);
+        oscilloscope.setVisible(true);
+        vuPanel.setVisible(true);
+        widthGraph.setVisible(true);
+
+        // Trigger a call to resized() to apply the new layout
+        resized();
+    }
+}
+
 void GraphPanel::paint(juce::Graphics& g)
 {
-    if (oscilloscope.isVisible())
+}
+
+void GraphPanel::toggleZoom(GraphTemplate* viewToToggle)
+{
+    // If we clicked the currently zoomed view, un-zoom it.
+    if (viewToToggle != nullptr && viewToToggle == zoomedView)
     {
-        if (! oscilloscope.getZoomState())
-        {
-            // zoom out
-            oscilloscope.setBounds(0, 0, getWidth() / 2, getHeight() / 2);
-            vuPanel.setVisible(true);
-            distortionGraph.setVisible(true);
-            widthGraph.setVisible(true);
-        }
-        else
-        {
-            // zoom in
-            oscilloscope.setBounds(0, 0, getWidth(), getHeight());
-            vuPanel.setVisible(false);
-            distortionGraph.setVisible(false);
-            widthGraph.setVisible(false);
-        }
+        zoomedView->setZoomState(false);
+        zoomedView = nullptr;
+    }
+    // Otherwise, zoom the new view (and un-zoom any previous one).
+    else
+    {
+        if (zoomedView)
+            zoomedView->setZoomState(false);
+
+        zoomedView = viewToToggle;
+
+        if (zoomedView)
+            zoomedView->setZoomState(true);
     }
 
-    if (distortionGraph.isVisible())
-    {
-        if (! distortionGraph.getZoomState())
-        {
-            // zoom out
-            distortionGraph.setBounds(getWidth() / 2, 0, getWidth() / 2, getHeight() / 2);
-            oscilloscope.setVisible(true);
-            vuPanel.setVisible(true);
-            widthGraph.setVisible(true);
-        }
-        else
-        {
-            // zoom in
-            distortionGraph.setBounds(0, 0, getWidth(), getHeight());
-            oscilloscope.setVisible(false);
-            vuPanel.setVisible(false);
-            widthGraph.setVisible(false);
-        }
-    }
-
-    if (vuPanel.isVisible())
-    {
-        if (! vuPanel.getZoomState())
-        {
-            // zoom out
-            vuPanel.setBounds(0, getHeight() / 2, getWidth() / 2, getHeight() / 2);
-            oscilloscope.setVisible(true);
-            distortionGraph.setVisible(true);
-            widthGraph.setVisible(true);
-        }
-        else
-        {
-            // zoom in
-            vuPanel.setBounds(0, 0, getWidth(), getHeight());
-            oscilloscope.setVisible(false);
-            distortionGraph.setVisible(false);
-            widthGraph.setVisible(false);
-        }
-    }
-
-    if (widthGraph.isVisible())
-    {
-        if (! widthGraph.getZoomState())
-        {
-            // zoom out
-            widthGraph.setBounds(getWidth() / 2, getHeight() / 2, getWidth() / 2, getHeight() / 2);
-            oscilloscope.setVisible(true);
-            distortionGraph.setVisible(true);
-            vuPanel.setVisible(true);
-        }
-        else
-        {
-            // zoom in
-            widthGraph.setBounds(0, 0, getWidth(), getHeight());
-            oscilloscope.setVisible(false);
-            distortionGraph.setVisible(false);
-            vuPanel.setVisible(false);
-        }
-    }
+    // Trigger a layout update.
+    resized();
 }
 
 void GraphPanel::resized()
 {
-    // This method is where you should set the bounds of any child
-    // components that your component contains..
+    auto bounds = getLocalBounds();
+
+    // === ZOOM LOGIC ===
+    // If a view is zoomed, it takes up the entire panel.
+    if (zoomedView != nullptr)
+    {
+        // Make only the zoomed view visible
+        oscilloscope.setVisible(zoomedView == &oscilloscope);
+        vuPanel.setVisible(zoomedView == &vuPanel);
+        widthGraph.setVisible(zoomedView == &widthGraph);
+
+        // Distortion graph is only available in Band mode
+        distortionGraph.setVisible(zoomedView == &distortionGraph && currentLayoutMode == LayoutMode::Band);
+
+        // Set its bounds to fill the panel
+        zoomedView->setBounds(bounds);
+
+        // IMPORTANT: Stop here so we don't apply the regular layout
+        return;
+    }
+
+    // === REGULAR LAYOUT LOGIC ===
+    // If nothing is zoomed, proceed with the normal layout.
+
+    // First, ensure all standard views are visible again.
+    oscilloscope.setVisible(true);
+    vuPanel.setVisible(true);
+    widthGraph.setVisible(true);
+    distortionGraph.setVisible(currentLayoutMode == LayoutMode::Band);
+
+    if (currentLayoutMode == LayoutMode::Band)
+    {
+        // 2x2 grid layout for Band view
+        auto halfWidth = bounds.getWidth() / 2;
+        auto halfHeight = bounds.getHeight() / 2;
+        auto topRow = bounds.removeFromTop(halfHeight);
+
+        oscilloscope.setBounds(topRow.removeFromLeft(halfWidth));
+        distortionGraph.setBounds(topRow);
+
+        vuPanel.setBounds(bounds.removeFromLeft(halfWidth));
+        widthGraph.setBounds(bounds);
+    }
+    else // currentLayoutMode == LayoutMode::Global
+    {
+        // Vertical stack layout for Global view
+        auto thirdHeight = bounds.getHeight() / 3;
+
+        oscilloscope.setBounds(bounds.removeFromTop(thirdHeight));
+        vuPanel.setBounds(bounds.removeFromTop(thirdHeight));
+        widthGraph.setBounds(bounds);
+    }
 }
 
 Oscilloscope* GraphPanel::getOscilloscope()

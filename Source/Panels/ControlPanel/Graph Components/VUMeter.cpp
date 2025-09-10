@@ -28,68 +28,90 @@ VUMeter::VUMeter(FireAudioProcessor* inProcessor)
 
 VUMeter::~VUMeter()
 {
+    stopTimer();
 }
 
 void VUMeter::paint(juce::Graphics& g)
 {
+    // ++ 关键修复：在使用前，将所有电平值严格限制在 [0, 1] 范围内 ++
+    const auto level0 = juce::jlimit(0.0f, 1.0f, mCh0Level);
+    const auto level1 = juce::jlimit(0.0f, 1.0f, mCh1Level);
+    const auto maxLevel0 = juce::jlimit(0.0f, 1.0f, mMaxCh0Level);
+    const auto maxLevel1 = juce::jlimit(0.0f, 1.0f, mMaxCh1Level);
+
+    // 1. Draw Backgrounds
     g.setColour(COLOUR6);
-    const int meterWidth = getWidth() / 3;
-
     if (mProcessor->getTotalNumInputChannels() == 2)
     {
-        // left
-        g.fillRect(0, 0, meterWidth, getHeight());
-        // right
-        g.fillRect(meterWidth * 2, 0, meterWidth, getHeight());
+        g.fillRect(leftMeterBounds);
+        g.fillRect(rightMeterBounds);
     }
-    else
+    else // Mono
     {
-        g.fillRect(meterWidth, 0, meterWidth, getHeight());
+        g.fillRect(leftMeterBounds);
     }
 
-    int ch0fill = getHeight() - (getHeight() * mCh0Level);
-    int ch1fill = getHeight() - (getHeight() * mCh1Level);
+    // 2. Calculate Fill Heights using the clamped values
+    const auto h = (float) getHeight();
+    const auto ch0fill_y = h - h * level0;
+    const auto ch1fill_y = h - h * level1;
 
-    if (ch0fill < 0)
-    {
-        ch0fill = 0;
-    }
-    if (ch1fill < 0)
-    {
-        ch1fill = 0;
-    }
-
-    // draw VU meter values
+    // 3. Draw VU Meter Values (the moving bars)
     g.setColour(juce::Colours::yellowgreen.withBrightness(0.9));
-
     if (mProcessor->getTotalNumInputChannels() == 2)
     {
-        g.fillRect(0, ch0fill, meterWidth, getHeight());
-        g.fillRect(meterWidth * 2, ch1fill, meterWidth, getHeight());
+        g.fillRect((float) leftMeterBounds.getX(), ch0fill_y, (float) leftMeterBounds.getWidth(), h - ch0fill_y);
+        g.fillRect((float) rightMeterBounds.getX(), ch1fill_y, (float) rightMeterBounds.getWidth(), h - ch1fill_y);
     }
-    else
+    else // Mono
     {
-        g.fillRect(meterWidth, ch0fill, meterWidth, getHeight());
+        g.fillRect((float) leftMeterBounds.getX(), ch0fill_y, (float) leftMeterBounds.getWidth(), h - ch0fill_y);
     }
 
-    // draw max VU meter values
+    // 4. Draw Peak Level Lines using the clamped values
     g.setColour(juce::Colours::yellowgreen.withBrightness(0.5));
-    int maxCh0fill = getHeight() - (getHeight() * mMaxCh0Level);
-    int maxCh1fill = getHeight() - (getHeight() * mMaxCh1Level);
+    const auto maxCh0_y = h - h * maxLevel0;
+    const auto maxCh1_y = h - h * maxLevel1;
+
+    // =============================================================================
+    // ++ 最终修正：只有当峰值大于一个很小的阈值时才绘制峰值线 ++
+    // =============================================================================
+    const float peakLineThreshold = 0.0001f;
 
     if (mProcessor->getTotalNumInputChannels() == 2)
     {
-        g.drawLine(0, maxCh0fill, meterWidth, maxCh0fill, 2.0f);
-        g.drawLine(meterWidth * 2, maxCh1fill, meterWidth * 3, maxCh1fill, 2.0f);
+        if (maxLevel0 > peakLineThreshold)
+            g.drawLine((float) leftMeterBounds.getX(), maxCh0_y, (float) leftMeterBounds.getRight(), maxCh0_y, 2.0f);
+
+        if (maxLevel1 > peakLineThreshold)
+            g.drawLine((float) rightMeterBounds.getX(), maxCh1_y, (float) rightMeterBounds.getRight(), maxCh1_y, 2.0f);
     }
-    else
+    else // Mono
     {
-        g.drawLine(meterWidth, maxCh0fill, meterWidth * 2, maxCh0fill, 2.0f);
+        if (maxLevel0 > peakLineThreshold)
+            g.drawLine((float) leftMeterBounds.getX(), maxCh0_y, (float) leftMeterBounds.getRight(), maxCh0_y, 2.0f);
     }
 }
 
 void VUMeter::resized()
 {
+    // All layout logic now lives here. This is only called when the component size changes.
+    auto bounds = getLocalBounds();
+
+    if (mProcessor->getTotalNumInputChannels() == 2)
+    {
+        // Stereo layout: two bars with a gap in the middle
+        auto meterWidth = bounds.getWidth() / 3;
+        leftMeterBounds = bounds.removeFromLeft(meterWidth);
+        rightMeterBounds = bounds.removeFromRight(meterWidth);
+    }
+    else // Mono layout
+    {
+        // Mono layout: one bar centered in the available space
+        auto meterWidth = bounds.getWidth() / 3;
+        leftMeterBounds = bounds.reduced((bounds.getWidth() - meterWidth) / 2, 0);
+        rightMeterBounds = {}; // Not used in mono, so clear it
+    }
 }
 
 void VUMeter::setParameters(bool isInput, int bandIndex)

@@ -19,15 +19,26 @@
 //==============================================================================
 /*
 */
+class GraphTemplate;
+
 class GraphPanel : public juce::Component
 {
 public:
+    enum class LayoutMode
+    {
+        Band,
+        Global
+    };
+
     GraphPanel(FireAudioProcessor&);
     ~GraphPanel() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
     void setFocusBandNum(int num);
+
+    void setLayoutMode(LayoutMode newMode);
+    void toggleZoom(GraphTemplate* viewToToggle);
 
     Oscilloscope* getOscilloscope();
     VUPanel* getVuPanel();
@@ -48,6 +59,9 @@ private:
 
     // Width Graph
     WidthGraph widthGraph { processor };
+
+    LayoutMode currentLayoutMode = LayoutMode::Band;
+    GraphTemplate* zoomedView = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphPanel)
 };

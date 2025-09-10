@@ -707,6 +707,10 @@ private:
             modulationDepthArc.addCentredArc(center.x, center.y, modulationArcRadius, modulationArcRadius, 0.0f, modStartAngle, modEndAngle, true);
 
             g.setColour(juce::Colours::red.withAlpha(0.5f));
+            if (slider.lfoAmount < 0)
+            {
+                g.setColour(juce::Colours::orange.withAlpha(0.5f));
+            }
             g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
             double currentModulatedValue = 0.0;

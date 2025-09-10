@@ -406,10 +406,6 @@ void FireAudioProcessorEditor::resized()
         bounds.removeFromLeft(juce::roundToInt(getWidth() / 20.0f));
         bounds.removeFromRight(juce::roundToInt(getWidth() / 20.0f));
 
-        // =============================================================================
-        // ++ Start of Modifications ++
-        // =============================================================================
-
         // First, determine the current view state
         const bool isBandView = windowLeftButton.getToggleState();
         const bool isGlobalView = windowRightButton.getToggleState();
@@ -443,23 +439,17 @@ void FireAudioProcessorEditor::resized()
         }
         else if (isGlobalView)
         {
-            // --- Global View 布局 ---
-
-            // 设置 GraphPanel (更窄)
             const int graphPanelWidth = juce::roundToInt(getWidth() / 6.0f);
             auto graphArea = mainControlsArea;
             graphArea.removeFromRight(graphArea.getWidth() - graphPanelWidth);
             graphPanel.setBounds(graphArea);
 
-            // 设置 GlobalPanel
             auto rightHandPanelsArea = mainControlsArea;
             rightHandPanelsArea.removeFromLeft(graphPanelWidth);
             globalPanel.setBounds(rightHandPanelsArea);
         }
         else // isLfoView
         {
-            // --- LFO View 布局 ---
-            // lfoPanel 占据 topSection 下方的全部剩余空间
             lfoPanel.setBounds(mainControlsArea);
         }
     }

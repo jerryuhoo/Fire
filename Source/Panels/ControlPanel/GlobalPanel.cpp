@@ -319,7 +319,7 @@ void GlobalPanel::resized()
 {
     juce::Rectangle<int> controlArea = getLocalBounds();
 
-    globalEffectArea = controlArea.removeFromLeft(getWidth() / 5 * 3);
+    globalEffectArea = controlArea.removeFromLeft(getWidth() / 7 * 5);
     outputKnobArea = controlArea;
 
     juce::Rectangle<int> switchArea = globalEffectArea.removeFromLeft(getWidth() / 50);
@@ -463,6 +463,7 @@ void GlobalPanel::setBypassState(int index, bool state)
         filterLowCutButton.setEnabled(state);
         filterPeakButton.setEnabled(state);
         filterHighCutButton.setEnabled(state);
+        filterTypeLabel.setEnabled(state);
     }
     else if (index == 1)
     {

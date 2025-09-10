@@ -41,7 +41,7 @@ void VUPanel::paint(juce::Graphics& g)
 
     // draw compressor threshold line
     g.setColour(KNOB_SUBFONT_COLOUR);
-    bool isGlobal = (focusBandNum == -1); // 简化判断
+    bool isGlobal = (focusBandNum == -1);
     vuMeterIn.setParameters(true, focusBandNum);
     vuMeterOut.setParameters(false, focusBandNum);
 
@@ -51,7 +51,7 @@ void VUPanel::paint(juce::Graphics& g)
         compBypassID = ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum);
     }
 
-    // --- (阈值线绘制逻辑更新，使用新的动态布局) ---
+    // draw threshold line
     if (! isGlobal)
     {
         float threshValue = realtimeThresholdDb;
@@ -139,7 +139,7 @@ void VUPanel::paint(juce::Graphics& g)
         g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
         g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
 
-        // ** 标签 **
+        // Label
         g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
         g.drawFittedText("RMS Out", rightArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
     }

@@ -33,7 +33,7 @@ VUMeter::~VUMeter()
 
 void VUMeter::paint(juce::Graphics& g)
 {
-    // ++ 关键修复：在使用前，将所有电平值严格限制在 [0, 1] 范围内 ++
+    // Ensure all level values are clamped between [0, 1]
     const auto level0 = juce::jlimit(0.0f, 1.0f, mCh0Level);
     const auto level1 = juce::jlimit(0.0f, 1.0f, mCh1Level);
     const auto maxLevel0 = juce::jlimit(0.0f, 1.0f, mMaxCh0Level);
@@ -73,9 +73,6 @@ void VUMeter::paint(juce::Graphics& g)
     const auto maxCh0_y = h - h * maxLevel0;
     const auto maxCh1_y = h - h * maxLevel1;
 
-    // =============================================================================
-    // ++ 最终修正：只有当峰值大于一个很小的阈值时才绘制峰值线 ++
-    // =============================================================================
     const float peakLineThreshold = 0.0001f;
 
     if (mProcessor->getTotalNumInputChannels() == 2)

@@ -28,11 +28,14 @@ namespace state
 
         // 1. Save LFO Shapes
         auto* lfoState = xml.createNewChildElement("LFO_STATE");
-        for (int i = 0; i < fireProc.lfoData.size(); ++i)
+
+        const auto& lfoDataToSave = fireProc.getLfoData();
+
+        for (int i = 0; i < lfoDataToSave.size(); ++i)
         {
             auto* lfoXml = new juce::XmlElement("LFO");
             lfoXml->setAttribute("index", i);
-            fireProc.lfoData[i].writeToXml(*lfoXml);
+            lfoDataToSave[i].writeToXml(*lfoXml);
             lfoState->addChildElement(lfoXml);
         }
 
@@ -125,12 +128,19 @@ namespace state
 
         // --- Load LFO and Matrix data ---
 
-        // This ensures that loading an old preset correctly clears out the new data.
-        for (auto& lfo : fireProc.lfoData)
+        // Cast to non-const to modify the processor's state
+        auto& mutableFireProc = const_cast<FireAudioProcessor&>(fireProc);
+
+        // Get mutable references to the data containers
+        auto& lfoDataToLoad = mutableFireProc.getLfoData();
+        auto& modRoutingsToLoad = mutableFireProc.getModulationRoutings();
+
+        // Clear the existing data using the new references
+        for (auto& lfo : lfoDataToLoad)
         {
             lfo = LfoData();
         }
-        fireProc.modulationRoutings.clear();
+        modRoutingsToLoad.clear();
 
         // 1. Load LFO Shapes
         if (auto* lfoState = xml.getChildByName("LFO_STATE"))
@@ -138,9 +148,10 @@ namespace state
             for (auto* lfoXml : lfoState->getChildIterator())
             {
                 const int index = lfoXml->getIntAttribute("index", -1);
-                if (juce::isPositiveAndBelow(index, (int) fireProc.lfoData.size()))
+                if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
                 {
-                    fireProc.lfoData[index] = LfoData::readFromXml(*lfoXml);
+                    // Load data into the LfoManager via the reference
+                    lfoDataToLoad[index] = LfoData::readFromXml(*lfoXml);
                 }
             }
         }

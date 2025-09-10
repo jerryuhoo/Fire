@@ -19,8 +19,7 @@
 #include "Utility/AudioHelpers.h"
 #include "DSP/ClippingFunctions.h"
 #include "DSP/DiodeWDF.h"
-#include "DSP/LfoData.h"
-#include "DSP/LfoEngine.h"
+#include "DSP/LfoManager.h"
 
 //==============================================================================
 // Describes a single connection from a source (LFO) to a target (Parameter)
@@ -195,17 +194,26 @@ public:
     //==============================================================================
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
+    
+    juce::AudioProcessorValueTreeState treeState;
+    juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     bool hasUpdateCheckBeenPerformed = false;
     bool isSlient(juce::AudioBuffer<float> buffer);
 
-    // LFO
-    // A publicly accessible list of BPM sync divisions
-    // This allows the GUI to know what text to display for the sync rates.
-    juce::StringArray lfoRateSyncDivisions;
-    std::vector<LfoData> lfoData;
-    float getLfoPhase(int lfoIndex) const;
+    LfoManager& getLfoManager() { return *lfoManager; }
     bool isDawPlaying() const;
+    float getLfoPhase(int lfoIndex) const;
+    std::unique_ptr<LfoManager> lfoManager;
+    const juce::StringArray& getLfoRateSyncDivisions() const;
+
+    // For writing/loading state
+    std::vector<LfoData>& getLfoData() { return lfoManager->getLfoData(); }
+
+    // For reading/saving state (read-only)
+    const std::vector<LfoData>& getLfoData() const { return lfoManager->getLfoData(); }
+
+    juce::Array<ModulationRouting>& getModulationRoutings() { return modulationRoutings; }
 
     struct ModulationInfo
     {
@@ -215,7 +223,7 @@ public:
         float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
         bool isBipolar = true;
     };
-    
+
     void assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID);
 
     // New public method for the editor to call
@@ -226,9 +234,6 @@ public:
 
     // The central list of all modulation connections in the plugin.
     juce::Array<ModulationRouting> modulationRoutings;
-
-    juce::AudioProcessorValueTreeState treeState;
-    juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
     void setHistoryArray(int bandIndex);
     juce::Array<float> getHistoryArrayL();
@@ -266,46 +271,43 @@ public:
 
 private:
     //==============================================================================
-    static float mapRateSyncIndexToBeatMultiplier(int index)
-    {
-        switch (index)
-        {
-            case 0:
-                return 1.0f / 64.0f; // 1/64
-            case 1:
-                return 1.0f / 32.0f * 2.0f / 3.0f; // 1/32T
-            case 2:
-                return 1.0f / 32.0f; // 1/32
-            case 3:
-                return 1.0f / 16.0f * 2.0f / 3.0f; // 1/16T
-            case 4:
-                return 1.0f / 16.0f; // 1/16
-            case 5:
-                return 1.0f / 8.0f * 2.0f / 3.0f; // 1/8T
-            case 6:
-                return 1.0f / 8.0f; // 1/8
-            case 7:
-                return 1.0f / 4.0f * 2.0f / 3.0f; // 1/4T
-            case 8:
-                return 1.0f / 4.0f; // 1/4
-            case 9:
-                return 1.0f / 2.0f * 2.0f / 3.0f; // 1/2T
-            case 10:
-                return 1.0f / 2.0f; // 1/2
-            case 11:
-                return 1.0f; // 1 Bar
-            case 12:
-                return 2.0f; // 2 Bars
-            case 13:
-                return 4.0f; // 4 Bars
-            default:
-                return 1.0f / 4.0f;
-        }
-    }
+    //    static float mapRateSyncIndexToBeatMultiplier(int index)
+    //    {
+    //        switch (index)
+    //        {
+    //            case 0:
+    //                return 1.0f / 64.0f; // 1/64
+    //            case 1:
+    //                return 1.0f / 32.0f * 2.0f / 3.0f; // 1/32T
+    //            case 2:
+    //                return 1.0f / 32.0f; // 1/32
+    //            case 3:
+    //                return 1.0f / 16.0f * 2.0f / 3.0f; // 1/16T
+    //            case 4:
+    //                return 1.0f / 16.0f; // 1/16
+    //            case 5:
+    //                return 1.0f / 8.0f * 2.0f / 3.0f; // 1/8T
+    //            case 6:
+    //                return 1.0f / 8.0f; // 1/8
+    //            case 7:
+    //                return 1.0f / 4.0f * 2.0f / 3.0f; // 1/4T
+    //            case 8:
+    //                return 1.0f / 4.0f; // 1/4
+    //            case 9:
+    //                return 1.0f / 2.0f * 2.0f / 3.0f; // 1/2T
+    //            case 10:
+    //                return 1.0f / 2.0f; // 1/2
+    //            case 11:
+    //                return 1.0f; // 1 Bar
+    //            case 12:
+    //                return 2.0f; // 2 Bars
+    //            case 13:
+    //                return 4.0f; // 4 Bars
+    //            default:
+    //                return 1.0f / 4.0f;
+    //        }
+    //    }
 
-    bool isPlaying = false;
-    bool wasPlaying = false;
-    std::array<LfoEngine, 4> lfoEngines;
     std::vector<std::unique_ptr<BandProcessor>> bands;
     float totalLatency = 0.0f;
 
@@ -319,7 +321,7 @@ private:
     void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate, const juce::AudioBuffer<float>& lfoOutputBuffer);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate, const std::map<juce::String, float>& modulatedValues);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer, float mixValue);
-    
+
     std::map<juce::String, float> modulatedGlobalValues;
 
     // preset id
@@ -436,7 +438,7 @@ private:
     float mInputRightSmoothedGlobal = 0;
     float mOutputLeftSmoothedGlobal = 0;
     float mOutputRightSmoothedGlobal = 0;
-    
+
     std::atomic<float> realtimeModulatedThresholds[4];
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)

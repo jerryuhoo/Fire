@@ -397,7 +397,7 @@ void LfoEditor::updateAndSortPoints()
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
-    lfoEditor.setDataToDisplay(&processor.lfoData[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
     addAndMakeVisible(lfoEditor);
 
     // Create UI Components
@@ -632,7 +632,7 @@ void LfoPanel::buttonClicked(juce::Button* button)
         {
             // ...update the current LFO index and tell the editor to display the new data.
             currentLfoIndex = clickedIndex;
-            lfoEditor.setDataToDisplay(&processor.lfoData[currentLfoIndex]);
+            lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
 
             // Explicitly set the toggle state for all buttons in the group.
             // This is the most robust way to manage radio button states.
@@ -681,8 +681,10 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
         rateSlider.textFromValueFunction = [this](double value)
         {
             const int index = juce::roundToInt(value);
-            if (juce::isPositiveAndBelow(index, processor.lfoRateSyncDivisions.size()))
-                return processor.lfoRateSyncDivisions[index];
+            // Use the new getter function
+            const auto& divisions = processor.getLfoRateSyncDivisions();
+            if (juce::isPositiveAndBelow(index, divisions.size()))
+                return divisions[index];
             return juce::String();
         };
 

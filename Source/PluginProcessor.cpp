@@ -285,6 +285,7 @@ FireAudioProcessor::FireAudioProcessor()
 #endif
                          ),
       treeState(*this, nullptr, "PARAMETERS", createParameters()),
+      lfoManager(std::make_unique<LfoManager>(treeState)),
       stateAB {
           *this
       }
@@ -316,14 +317,6 @@ FireAudioProcessor::FireAudioProcessor()
 
 #endif
 {
-    // This copy is for the UI (LfoPanel) to use, and it is initialized
-    // AFTER the parameters have been safely created.
-    lfoRateSyncDivisions = {
-        "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
-    };
-
-    lfoData.resize(4);
-
     // factor = 2 means 2^2 = 4, 4x oversampling
     for (size_t i = 0; i < 4; i++)
     {
@@ -467,10 +460,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         }
     }
 
-    for (auto& engine : lfoEngines)
-    {
-        engine.prepare(spec);
-    }
+    lfoManager->prepare(spec);
 
     // historyArray init
     for (int i = 0; i < samplesPerBlock; i++)
@@ -651,33 +641,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         isBypassed = false;
     }
 
-    // Check if the DAW is playing, and if so, reset all LFOs
-    isPlaying = false;
-    double currentBpm = 120.0;
-
-    if (auto* playHead = getPlayHead())
-    {
-        if (auto position = playHead->getPosition())
-        {
-            isPlaying = position->getIsPlaying();
-            if (auto bpm = position->getBpm())
-                currentBpm = *bpm;
-        }
-    }
-
-    // Check if the transport has just started playing
-    if (isPlaying && ! wasPlaying)
-    {
-        // If so, reset all LFOs
-        for (auto& engine : lfoEngines)
-        {
-            engine.reset();
-        }
-    }
-
-    // Update the state for the next block
-    wasPlaying = isPlaying;
-
     // report latency
     if (*treeState.getRawParameterValue(HQ_ID))
     {
@@ -698,60 +661,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
     lfoOutputBuffer.clear();
 
-    for (int i = 0; i < 4; ++i)
-    {
-        // Get LFO parameters
-        auto* syncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i));
-        const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
-
-        float phaseDelta = 0.0f;
-
-        if (isInSyncMode && isPlaying)
-        {
-            // --- BPM SYNC CALCULATION ---
-            auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
-            if (rateSyncParam != nullptr)
-            {
-                const int rateIndex = static_cast<int>(rateSyncParam->load());
-                const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
-
-                // How many quarter notes for one full LFO cycle?
-                // Note: Our multiplier is already relative to a full bar (4 beats),
-                // so we multiply by 4 to get it in terms of quarter notes.
-                const float beatsPerCycle = beatMultiplier * 4.0f;
-
-                if (beatsPerCycle > 0.0 && currentBpm > 0.0)
-                {
-                    // How many samples does one full LFO cycle take?
-                    // (Beats / (Beats/Minute)) * (Seconds/Minute) * (Samples/Second)
-                    const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float) sampleRate;
-
-                    if (samplesPerCycle > 0)
-                        phaseDelta = 1.0f / samplesPerCycle;
-                }
-            }
-        }
-        else // --- FREE (HZ) MODE CALCULATION ---
-        {
-            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
-            if (rateHzParam != nullptr)
-            {
-                const float freqInHz = rateHzParam->load();
-                if (sampleRate > 0)
-                    phaseDelta = freqInHz / (float) sampleRate;
-            }
-        }
-
-        lfoEngines[i].setPhaseDelta(phaseDelta);
-        lfoEngines[i].updateShape(lfoData[i]);
-
-        // Generate LFO output for the entire block
-        auto* writer = lfoOutputBuffer.getWritePointer(i);
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            writer[sample] = lfoEngines[i].process();
-        }
-    }
+    lfoManager->process(lfoOutputBuffer, sampleRate, getPlayHead());
 
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
@@ -926,11 +836,12 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
     // 3. Save LFO Shapes
     auto* lfoState = new juce::XmlElement("LFO_STATE");
-    for (int i = 0; i < lfoData.size(); ++i)
+    auto& lfoDataToSave = lfoManager->getLfoData();
+    for (int i = 0; i < lfoDataToSave.size(); ++i)
     {
         auto* lfoXml = new juce::XmlElement("LFO");
         lfoXml->setAttribute("index", i);
-        lfoData[i].writeToXml(*lfoXml);
+        lfoDataToSave[i].writeToXml(*lfoXml);
         lfoState->addChildElement(lfoXml);
     }
     xmlState.insertChildElement(lfoState, xmlIndex++);
@@ -980,14 +891,13 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         // 3. Load LFO Shapes
         if (auto* lfoState = xmlState->getChildByName("LFO_STATE"))
         {
-            // Clear existing data before loading
-            // lfoData vector should already be the correct size (4), so we just overwrite
+            auto& lfoDataToLoad = lfoManager->getLfoData();
             for (auto* lfoXml : lfoState->getChildIterator())
             {
                 const int index = lfoXml->getIntAttribute("index", -1);
-                if (juce::isPositiveAndBelow(index, (int) lfoData.size()))
+                if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
                 {
-                    lfoData[index] = LfoData::readFromXml(*lfoXml);
+                    lfoDataToLoad[index] = LfoData::readFromXml(*lfoXml);
                 }
             }
         }
@@ -1523,7 +1433,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             ParameterIDAndName::getID(LFO_RATE_SYNC_ID, i),
             LFO_RATE_SYNC_NAME,
             lfoRateSyncDivisions,
-            5 // Default index for "1/4"
+            8 // Default index for "1/4"
             ));
 
         parameters.push_back(std::make_unique<PFloat>(
@@ -1539,18 +1449,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
 
 bool FireAudioProcessor::isDawPlaying() const
 {
-    return isPlaying;
+    return lfoManager->isDawPlaying();
 }
 
 float FireAudioProcessor::getLfoPhase(int lfoIndex) const
 {
-    if (juce::isPositiveAndBelow(lfoIndex, (int) lfoEngines.size()))
-    {
-        return lfoEngines[lfoIndex].getPhase();
-    }
-
-    jassertfalse; // Should not happen if lfoIndex is always valid
-    return 0.0f;
+    return lfoManager->getLfoPhase(lfoIndex);
 }
 
 void FireAudioProcessor::updateParameters()
@@ -2060,12 +1964,15 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
     {
         if (routing.targetParameterID == parameterID)
         {
-            if (juce::isPositiveAndBelow(routing.sourceLfoIndex, (int) lfoEngines.size()))
+            // The size check is now implicitly handled by the new getter,
+            // but keeping it here is a good defensive practice.
+            if (juce::isPositiveAndBelow(routing.sourceLfoIndex, 4)) // 4 is the number of LFOs
             {
-                const float unipolarLfoValue = lfoEngines[routing.sourceLfoIndex].getLastOutput();
+                // ✅ MODIFIED LINE: Get the LFO value from the LfoManager
+                const float unipolarLfoValue = lfoManager->getLfoOutput(routing.sourceLfoIndex);
+
                 float finalLfoValue = 0.0f;
 
-                // ======================== NEW LOGIC STARTS HERE ========================
                 if (routing.isBipolar)
                 {
                     // For Bi-polar, map [0, 1] to [-1, 1]
@@ -2079,13 +1986,11 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
 
                 // Return all the data the UI needs, including the isBipolar flag.
                 return { true, routing.sourceLfoIndex + 1, routing.depth, finalLfoValue, routing.isBipolar };
-                // ========================= NEW LOGIC ENDS HERE =========================
             }
         }
     }
 
     // If no routing is found, return the default "not modulated" state.
-    // Defaulting isBipolar to true doesn't matter here as isModulated is false.
     return { false, 0, 0.0f, 0.0f, true };
 }
 
@@ -2178,4 +2083,9 @@ float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
         return realtimeModulatedThresholds[bandIndex].load();
 
     return -48.0f;
+}
+
+const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
+{
+    return lfoManager->getLfoRateSyncDivisions();
 }

@@ -14,6 +14,10 @@
 //  Represents the data model for a single LFO shape.
 //  This ensures that every LFO always starts with a valid default state.
 //
+#include <vector>
+#include <juce_core/juce_core.h>
+#include <juce_graphics/juce_graphics.h>
+
 struct LfoData
 {
     std::vector<juce::Point<float>> points;

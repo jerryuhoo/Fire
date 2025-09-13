@@ -117,6 +117,10 @@
               file="Source/DSP/DistortionLogic.h"/>
         <FILE id="DEFvzA" name="LfoData.h" compile="0" resource="0" file="Source/DSP/LfoData.h"/>
         <FILE id="IEdaZX" name="LfoEngine.h" compile="0" resource="0" file="Source/DSP/LfoEngine.h"/>
+        <FILE id="UFdMj3" name="LfoManager.cpp" compile="1" resource="0" file="Source/DSP/LfoManager.cpp"/>
+        <FILE id="BoNr69" name="LfoManager.h" compile="0" resource="0" file="Source/DSP/LfoManager.h"/>
+        <FILE id="SBXQBa" name="ModulationRouting.h" compile="0" resource="0"
+              file="Source/DSP/ModulationRouting.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>
         <FILE id="K65kzc" name="WidthProcessor.cpp" compile="1" resource="0"
               file="Source/DSP/WidthProcessor.cpp"/>

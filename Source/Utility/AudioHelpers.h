@@ -10,6 +10,7 @@
 
 #pragma once
 #include "juce_dsp/juce_dsp.h"
+#include "../GUI/InterfaceDefines.h"
 
 static inline float dBToNormalizedGain(float inValue)
 {

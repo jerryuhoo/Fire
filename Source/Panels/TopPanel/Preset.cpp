@@ -41,7 +41,7 @@ namespace state
 
         // 2. Save Modulation Matrix Routings
         auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
-        for (const auto& routing : fireProc.modulationRoutings)
+        for (const auto& routing : fireProc.getLfoManager().getModulationRoutings())
         {
             // Only save routings that are actually in use
             if (! routing.targetParameterID.isEmpty())
@@ -133,7 +133,7 @@ namespace state
 
         // Get mutable references to the data containers
         auto& lfoDataToLoad = mutableFireProc.getLfoData();
-        auto& modRoutingsToLoad = mutableFireProc.getModulationRoutings();
+        auto& modRoutingsToLoad = mutableFireProc.getLfoManager().getModulationRoutings();
 
         // Clear the existing data using the new references
         for (auto& lfo : lfoDataToLoad)
@@ -159,10 +159,10 @@ namespace state
         // 2. Load Modulation Matrix Routings
         if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
         {
-            fireProc.modulationRoutings.clear();
+            fireProc.getLfoManager().getModulationRoutings().clear();
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
-                fireProc.modulationRoutings.add(ModulationRouting::readFromXml(*routingXml));
+                fireProc.getLfoManager().getModulationRoutings().add(ModulationRouting::readFromXml(*routingXml));
             }
         }
 

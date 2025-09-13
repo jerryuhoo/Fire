@@ -4,6 +4,8 @@
     LfoManager.cpp
     Created: 10 Sep 2025 11:07:34pm
     Author:  Yifeng Yu
+ 
+    REFACTORED to act as the central modulation controller.
 
   ==============================================================================
 */
@@ -13,8 +15,10 @@
 
 LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(apvts)
 {
+    // Initialize LFO data containers for 4 LFOs
     lfoData.resize(4);
 
+    // Define the string representations for synced LFO rates
     lfoRateSyncDivisions = {
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
     };
@@ -26,6 +30,8 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     {
         engine.prepare(spec);
     }
+    // Ensure the internal buffer is ready
+    lfoOutputBuffer.setSize(4, spec.maximumBlockSize);
 }
 
 void LfoManager::reset()
@@ -35,10 +41,101 @@ void LfoManager::reset()
         engine.reset();
     }
     wasPlaying = false;
+    modulatedValues.clear();
 }
 
-void LfoManager::process(juce::AudioBuffer<float>& lfoOutputBuffer, double sampleRate, juce::AudioPlayHead* playHead)
+// =============================================================================
+// Main Processing Logic
+// =============================================================================
+
+void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
+    // 1. Generate all raw LFO signals for the current block.
+    // This fills the internal 'lfoOutputBuffer'.
+    generateLfoOutput(sampleRate, playHead, numSamples);
+
+    // 2. Clear the map of calculated values from the previous block.
+    modulatedValues.clear();
+
+    // 3. Iterate through all modulation routings to calculate final parameter values.
+    for (const auto& routing : modulationRoutings)
+    {
+        // Skip invalid or unassigned routings
+        if (routing.targetParameterID.isEmpty())
+            continue;
+
+        // Use the first sample of the LFO output as the representative value for the whole block.
+        // This is efficient for block-based modulation.
+        float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
+
+        // Get the parameter's original value (from the GUI knob) and its range.
+        const float baseValue = *treeState.getRawParameterValue(routing.targetParameterID);
+        const auto range = treeState.getParameterRange(routing.targetParameterID);
+
+        // Skip if the parameter has no valid range.
+        if (range.start == range.end)
+            continue;
+
+        const float rangeSpan = range.end - range.start;
+        float scalingFactor;
+
+        // Apply bipolar (-1 to 1) or unipolar (0 to 1) mapping.
+        if (routing.isBipolar)
+        {
+            lfoValue = lfoValue * 2.0f - 1.0f; // Map [0, 1] to [-1, 1]
+            scalingFactor = rangeSpan * 0.5f;
+        }
+        else
+        {
+            scalingFactor = rangeSpan;
+        }
+
+        // Calculate the final modulation offset.
+        const float modulationAmount = lfoValue * routing.depth * scalingFactor;
+
+        // If this parameter hasn't been touched yet in this block, initialize it with its base value.
+        if (modulatedValues.find(routing.targetParameterID) == modulatedValues.end())
+        {
+            modulatedValues[routing.targetParameterID] = baseValue;
+        }
+
+        // Add the modulation amount. This allows multiple LFOs to target the same parameter.
+        modulatedValues[routing.targetParameterID] += modulationAmount;
+    }
+
+    // 4. Final pass: clamp all calculated values to their valid parameter ranges.
+    for (auto const& [paramID, val] : modulatedValues)
+    {
+        const auto range = treeState.getParameterRange(paramID);
+        modulatedValues[paramID] = juce::jlimit(range.start, range.end, val);
+    }
+}
+
+float LfoManager::getModulatedValue(const juce::String& parameterID) const
+{
+    // Check if the parameter ID exists in our map of modulated values for this block.
+    auto it = modulatedValues.find(parameterID);
+
+    if (it != modulatedValues.end())
+    {
+        // If found, return the final, calculated value.
+        return it->second;
+    }
+
+    // If not found, it means the parameter is not being modulated.
+    // Return its original value directly from the APVTS.
+    return *treeState.getRawParameterValue(parameterID);
+}
+
+// =============================================================================
+// Private Helper Functions
+// =============================================================================
+
+void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playHead, int numSamples)
+{
+    // This is the original 'process' function, now repurposed as a private helper.
+    // Its sole responsibility is to generate the raw LFO signals.
+
     // 1. Get Transport State from Host
     isPlaying = false;
     double currentBpm = 120.0;
@@ -64,7 +161,9 @@ void LfoManager::process(juce::AudioBuffer<float>& lfoOutputBuffer, double sampl
     wasPlaying = isPlaying;
 
     // 3. Process each LFO
+    lfoOutputBuffer.setSize(4, numSamples, false, false, true); // Ensure buffer is correct size
     lfoOutputBuffer.clear();
+
     for (int i = 0; i < 4; ++i)
     {
         // Get LFO parameters
@@ -107,17 +206,15 @@ void LfoManager::process(juce::AudioBuffer<float>& lfoOutputBuffer, double sampl
 
         // Generate LFO output for the entire block
         auto* writer = lfoOutputBuffer.getWritePointer(i);
-        for (int sample = 0; sample < lfoOutputBuffer.getNumSamples(); ++sample)
+        for (int sample = 0; sample < numSamples; ++sample)
         {
             writer[sample] = lfoEngines[i].process();
         }
     }
 }
 
-// You need to move this helper function from PluginProcessor.cpp as well
 float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
 {
-    // This mapping should be consistent with the one in your processor
     // "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
     switch (index)
     {
@@ -154,13 +251,17 @@ float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
     }
 }
 
+// =============================================================================
+// Accessors for UI
+// =============================================================================
+
 float LfoManager::getLfoPhase(int lfoIndex) const
 {
     if (juce::isPositiveAndBelow(lfoIndex, (int) lfoEngines.size()))
     {
         return lfoEngines[lfoIndex].getPhase();
     }
-    jassertfalse;
+    jassertfalse; // Invalid LFO index requested
     return 0.0f;
 }
 
@@ -176,6 +277,6 @@ float LfoManager::getLfoOutput(int lfoIndex) const
         return lfoEngines[lfoIndex].getLastOutput();
     }
 
-    jassertfalse; // Should not happen if lfoIndex is always valid
+    jassertfalse; // Invalid LFO index requested
     return 0.0f;
 }

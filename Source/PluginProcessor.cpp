@@ -59,9 +59,7 @@ void BandProcessor::reset()
 // It replaces the old `processOneBand` and `processDistortion` functions.
 //==============================================================================
 void BandProcessor::process(juce::AudioBuffer<float>& buffer,
-                            const BandProcessingParameters& params,
-                            const juce::AudioBuffer<float>& lfoOutputBuffer,
-                            const juce::Array<ModulationRouting>& modulationRoutings)
+                            const BandProcessingParameters& params)
 {
     // Extract parameters for easier access
     const bool isHQ = params.isHQ;
@@ -82,14 +80,14 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         auto oversampledBlock = oversampling->processSamplesUp(block);
 
         // Call the loop to process the upsampled signal in-place
-        processDistortion(oversampledBlock, dryBuffer, params, lfoOutputBuffer, modulationRoutings);
+        processDistortion(oversampledBlock, dryBuffer, params);
 
         oversampling->processSamplesDown(block);
     }
     else
     {
         // Call the loop to process the signal at the original sample rate
-        processDistortion(block, dryBuffer, params, lfoOutputBuffer, modulationRoutings);
+        processDistortion(block, dryBuffer, params);
     }
 
     // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
@@ -146,16 +144,13 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                                       const juce::AudioBuffer<float>& dryBuffer,
-                                      const BandProcessingParameters& params,
-                                      const juce::AudioBuffer<float>& lfoOutputBuffer,
-                                      const juce::Array<ModulationRouting>& modulationRoutings)
+                                      const BandProcessingParameters& params)
 {
     const bool isSafeModeOn = params.isSafeModeOn;
     const bool isExtremeModeOn = params.isExtremeModeOn;
-    // MODULATED: driveVal is the final, LFO-modulated value
     float driveVal = params.driveVal;
-    const float biasVal = params.biasVal;
-    const float recVal = params.recVal;
+    const float biasVal = params.biasVal; // This is now the final value
+    const float recVal = params.recVal; // This is now the final value
     // We calculate the max value from the 'dryBuffer' which represents the
     // clean, per-band signal right before it enters the distortion loop.
     // This ensures each band's Safe Mode reacts only to its own signal level.
@@ -210,38 +205,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // A map to hold the final accumulated modulation amount for any per-sample parameter.
     // This makes the logic generic and ready for future expansion.
     std::map<juce::String, float> perSampleModulationAmounts;
-
-    // --- Pre-calculate modulation amounts for the entire block ---
-    for (const auto& routing : modulationRoutings)
-    {
-        // Check if this routing targets a per-sample parameter for this band.
-        if (routing.targetParameterID == params.biasID || routing.targetParameterID == params.recID)
-        {
-            // Initialize the map entry if it doesn't exist.
-            if (perSampleModulationAmounts.find(routing.targetParameterID) == perSampleModulationAmounts.end())
-            {
-                perSampleModulationAmounts[routing.targetParameterID] = 0.0f;
-            }
-
-            float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0); // Using sample 0 for per-block LFO value
-
-            const auto& range = (routing.targetParameterID == params.biasID) ? params.biasRange : params.recRange;
-            const float rangeSpan = range.end - range.start;
-            float scalingFactor;
-
-            if (routing.isBipolar)
-            {
-                lfoValue = lfoValue * 2.0f - 1.0f; // Map to [-1, 1]
-                scalingFactor = rangeSpan * 0.5f;
-            }
-            else
-            {
-                scalingFactor = rangeSpan;
-            }
-
-            perSampleModulationAmounts[routing.targetParameterID] += lfoValue * routing.depth * scalingFactor;
-        }
-    }
 
     // --- Manual Per-Sample Processing Loop ---
     for (int sample = 0; sample < numSamples; ++sample)
@@ -661,7 +624,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
     lfoOutputBuffer.clear();
 
-    lfoManager->process(lfoOutputBuffer, sampleRate, getPlayHead());
+    lfoManager->processBlock(sampleRate, getPlayHead(), buffer.getNumSamples());
 
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
@@ -737,62 +700,14 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
     mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
-    processMultiBand(buffer, sampleRate, lfoOutputBuffer);
+    processMultiBand(buffer, sampleRate);
 
-    for (const auto& paramInfo : ParameterIDAndName::getGlobalParameterInfo())
-    {
-        const auto& paramID = paramInfo.idBase;
-        float modulationAmount = 0.0f;
+    applyDownsamplingEffect(buffer);
+    // Call the simplified global effects function.
+    applyGlobalEffects(buffer, sampleRate);
 
-        for (const auto& routing : this->modulationRoutings)
-        {
-            if (routing.targetParameterID.isEmpty() || routing.targetParameterID != paramID)
-                continue;
-
-            float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
-            const auto range = treeState.getParameterRange(routing.targetParameterID);
-            if (range.start == range.end)
-                continue;
-
-            const float rangeSpan = range.end - range.start;
-            float scalingFactor;
-
-            if (routing.isBipolar)
-            {
-                lfoValue = lfoValue * 2.0f - 1.0f;
-                scalingFactor = rangeSpan * 0.5f;
-            }
-            else
-            {
-                scalingFactor = rangeSpan;
-            }
-
-            modulationAmount += lfoValue * routing.depth * scalingFactor;
-        }
-
-        const float baseValue = *treeState.getRawParameterValue(paramID);
-        const auto range = treeState.getParameterRange(paramID);
-        modulatedGlobalValues[paramID] = juce::jlimit(range.start, range.end, baseValue + modulationAmount);
-    }
-
-    if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
-    {
-        int rateDivide = static_cast<int>(modulatedGlobalValues.at(DOWNSAMPLE_ID));
-        if (rateDivide > 1)
-        {
-            for (int channel = 0; channel < totalNumInputChannels; ++channel)
-            {
-                auto* channelData = buffer.getWritePointer(channel);
-                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-                {
-                    if (sample % rateDivide != 0)
-                        channelData[sample] = channelData[sample - sample % rateDivide];
-                }
-            }
-        }
-    }
-    applyGlobalEffects(buffer, sampleRate, modulatedGlobalValues);
-    applyGlobalMix(buffer, modulatedGlobalValues.at(MIX_ID));
+    // Call the simplified global mix function.
+    applyGlobalMix(buffer);
 
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
@@ -848,7 +763,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
     // 4. Save Modulation Matrix Routings
     auto* modMatrixState = new juce::XmlElement("MODULATION_STATE");
-    for (const auto& routing : modulationRoutings)
+    for (const auto& routing : lfoManager->getModulationRoutings()) // Get from manager
     {
         auto* routingXml = new juce::XmlElement("ROUTING");
         routing.writeToXml(*routingXml);
@@ -905,11 +820,12 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         // 4. Load Modulation Matrix Routings
         if (auto* modMatrixState = xmlState->getChildByName("MODULATION_STATE"))
         {
-            // Clear existing data before loading
-            modulationRoutings.clear();
+            // Get a reference to the manager's routings array
+            auto& routings = lfoManager->getModulationRoutings();
+            routings.clear(); // Clear existing data before loading
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
-                modulationRoutings.add(ModulationRouting::readFromXml(*routingXml));
+                routings.add(ModulationRouting::readFromXml(*routingXml));
             }
         }
 
@@ -961,27 +877,27 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
     return settings;
 }
 
-ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, const std::map<juce::String, float>& modulatedValues)
+ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, LfoManager& lfoManager)
 {
     ChainSettings settings;
 
-    // Use modulated values for parameters that can be modulated
-    settings.lowCutFreq = modulatedValues.at(LOWCUT_FREQ_ID);
-    settings.lowCutQuality = modulatedValues.at(LOWCUT_Q_ID);
-    settings.lowCutGainInDecibels = modulatedValues.at(LOWCUT_GAIN_ID);
-    settings.highCutFreq = modulatedValues.at(HIGHCUT_FREQ_ID);
-    settings.highCutQuality = modulatedValues.at(HIGHCUT_Q_ID);
-    settings.highCutGainInDecibels = modulatedValues.at(HIGHCUT_GAIN_ID);
-    settings.peakFreq = modulatedValues.at(PEAK_FREQ_ID);
-    settings.peakGainInDecibels = modulatedValues.at(PEAK_GAIN_ID);
-    settings.peakQuality = modulatedValues.at(PEAK_Q_ID);
+    // For each filter parameter, get its final value from the LfoManager.
+    settings.lowCutFreq = lfoManager.getModulatedValue(LOWCUT_FREQ_ID);
+    settings.lowCutQuality = lfoManager.getModulatedValue(LOWCUT_Q_ID);
+    settings.lowCutGainInDecibels = lfoManager.getModulatedValue(LOWCUT_GAIN_ID);
+    settings.highCutFreq = lfoManager.getModulatedValue(HIGHCUT_FREQ_ID);
+    settings.highCutQuality = lfoManager.getModulatedValue(HIGHCUT_Q_ID);
+    settings.highCutGainInDecibels = lfoManager.getModulatedValue(HIGHCUT_GAIN_ID);
+    settings.peakFreq = lfoManager.getModulatedValue(PEAK_FREQ_ID);
+    settings.peakGainInDecibels = lfoManager.getModulatedValue(PEAK_GAIN_ID);
+    settings.peakQuality = lfoManager.getModulatedValue(PEAK_Q_ID);
 
-    // These parameters are not modulated, so get them from apvts as before
+    // These parameters are not modulatable, so we get them directly from the apvts.
     settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
     settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
-    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load();
-    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load();
-    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load();
+    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load() > 0.5f;
+    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load() > 0.5f;
+    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load() > 0.5f;
 
     return settings;
 }
@@ -1737,52 +1653,24 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     }
 }
 
-void FireAudioProcessor::updateGlobalFilters(double sampleRate, const std::map<juce::String, float>& modulatedValues)
+void FireAudioProcessor::updateGlobalFilters(double sampleRate)
 {
-    auto chainSettings = getChainSettings(treeState, modulatedValues);
-    const float minFreq = 20.0f;
-    if (sampleRate <= 0)
-        return;
+    // Get the final, modulated settings for the entire filter chain.
+    auto chainSettings = getChainSettings(treeState, *lfoManager);
 
+    // It's good practice to ensure frequencies are within a valid range.
+    const float minFreq = 20.0f;
     float maxFreq = sampleRate / 2.0f;
 
     if (maxFreq < minFreq)
         maxFreq = minFreq;
 
-    // chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
-    // chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
-    // chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
+    // Clamp frequencies to be safe.
+    chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
+    chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
 
-    // // Create a new settings object with the smoothed values for this audio block
-    // ChainSettings smoothedSettings;
-    // smoothedSettings.lowCutFreq = lowcutFreqSmoother.getNextValue();
-    // smoothedSettings.lowCutGainInDecibels = lowcutGainSmoother.getNextValue();
-    // smoothedSettings.lowCutQuality = lowcutQualitySmoother.getNextValue();
-    // smoothedSettings.peakFreq = peakFreqSmoother.getNextValue();
-    // smoothedSettings.peakGainInDecibels = peakGainSmoother.getNextValue();
-    // smoothedSettings.peakQuality = peakQualitySmoother.getNextValue();
-    // // Get the smoothed high-cut frequency value.
-    // float highCutFreqValue = highcutFreqSmoother.getNextValue();
-    // // Define the Nyquist frequency.
-    // const float nyquist = (float) sampleRate / 2.0f;
-    // // Clamp the high-cut frequency to ensure it never exceeds the Nyquist frequency.
-    // smoothedSettings.highCutFreq = juce::jmin(highCutFreqValue, nyquist);
-    // smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
-    // smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
-
-    // // Slopes and bypass states don't need smoothing, use them directly
-    // smoothedSettings.lowCutSlope = chainSettings.lowCutSlope;
-    // smoothedSettings.highCutSlope = chainSettings.highCutSlope;
-    // smoothedSettings.lowCutBypassed = chainSettings.lowCutBypassed;
-    // smoothedSettings.peakBypassed = chainSettings.peakBypassed;
-    // smoothedSettings.highCutBypassed = chainSettings.highCutBypassed;
-
-    // // Call the modular update functions
-    // updateLowCutFilters(smoothedSettings, sampleRate);
-    // updatePeakFilter(smoothedSettings, sampleRate);
-    // updateHighCutFilters(smoothedSettings, sampleRate);
-
-    // Call the modular update functions with the modulated (and now smoothed) settings
+    // Call the modular update functions with the final settings.
     updateLowCutFilters(chainSettings, sampleRate);
     updatePeakFilter(chainSettings, sampleRate);
     updateHighCutFilters(chainSettings, sampleRate);
@@ -1793,7 +1681,7 @@ float FireAudioProcessor::getTotalLatency() const
     return totalLatency;
 }
 
-void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate, const juce::AudioBuffer<float>& lfoOutputBuffer)
+void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate)
 {
     splitBands(wetBuffer, sampleRate);
 
@@ -1822,93 +1710,20 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, i)) > 0.5f;
                 params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(EXTREME_ID, i)) > 0.5f;
 
-                // Set base values for per-sample modulated parameters
-                params.biasVal = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(BIAS_ID, i));
-                params.recVal = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(REC_ID, i));
-                band->biasSmoother.setTargetValue(params.biasVal);
-                band->recSmoother.setTargetValue(params.recVal);
-
-                // Get parameter info for the current band
-                params.driveID = ParameterIDAndName::getIDString(DRIVE_ID, i);
-                params.biasID = ParameterIDAndName::getIDString(BIAS_ID, i);
-                params.recID = ParameterIDAndName::getIDString(REC_ID, i);
-                params.compRatioID = ParameterIDAndName::getIDString(COMP_RATIO_ID, i);
-                params.compThreshID = ParameterIDAndName::getIDString(COMP_THRESH_ID, i);
-                params.widthID = ParameterIDAndName::getIDString(WIDTH_ID, i);
-                params.outputID = ParameterIDAndName::getIDString(OUTPUT_ID, i);
-                params.mixID = ParameterIDAndName::getIDString(MIX_ID, i);
-
-                params.driveRange = treeState.getParameterRange(params.driveID);
-                params.biasRange = treeState.getParameterRange(params.biasID);
-                params.recRange = treeState.getParameterRange(params.recID);
-                params.compRatioRange = treeState.getParameterRange(params.compRatioID);
-                params.compThreshRange = treeState.getParameterRange(params.compThreshID);
-                params.widthRange = treeState.getParameterRange(params.widthID);
-                params.outputRange = treeState.getParameterRange(params.outputID);
-                params.mixRange = treeState.getParameterRange(params.mixID);
-
-                // === PER-BLOCK MODULATION CALCULATION ===
-                float driveModulationAmount = 0.0f, compRatioModulationAmount = 0.0f, compThreshModulationAmount = 0.0f;
-                float widthModulationAmount = 0.0f, outputModulationAmount = 0.0f, mixModulationAmount = 0.0f;
-
-                for (const auto& routing : this->modulationRoutings)
-                {
-                    if (routing.targetParameterID.isEmpty())
-                        continue;
-
-                    if (routing.targetParameterID != params.driveID && routing.targetParameterID != params.compRatioID && routing.targetParameterID != params.compThreshID && routing.targetParameterID != params.widthID && routing.targetParameterID != params.outputID && routing.targetParameterID != params.mixID)
-                    {
-                        continue;
-                    }
-
-                    float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
-                    const auto range = treeState.getParameterRange(routing.targetParameterID);
-                    if (range.start == range.end)
-                        continue;
-
-                    const float rangeSpan = range.end - range.start;
-                    float scalingFactor;
-
-                    if (routing.isBipolar)
-                    {
-                        lfoValue = lfoValue * 2.0f - 1.0f;
-                        scalingFactor = rangeSpan * 0.5f;
-                    }
-                    else
-                    {
-                        scalingFactor = rangeSpan;
-                    }
-
-                    const float modulationAmount = lfoValue * routing.depth * scalingFactor;
-
-                    if (routing.targetParameterID == params.driveID)
-                        driveModulationAmount += modulationAmount;
-                    else if (routing.targetParameterID == params.compRatioID)
-                        compRatioModulationAmount += modulationAmount;
-                    else if (routing.targetParameterID == params.compThreshID)
-                        compThreshModulationAmount += modulationAmount;
-                    else if (routing.targetParameterID == params.widthID)
-                        widthModulationAmount += modulationAmount;
-                    else if (routing.targetParameterID == params.outputID)
-                        outputModulationAmount += modulationAmount;
-                    else if (routing.targetParameterID == params.mixID)
-                        mixModulationAmount += modulationAmount;
-                }
-
-                // === APPLY MODULATION TO BASE VALUES ===
-                // Get the base (user-set) value and add the final calculated modulation amount.
-                // The result is clamped to the parameter's valid range.
-                params.driveVal = juce::jlimit(params.driveRange.start, params.driveRange.end, *treeState.getRawParameterValue(params.driveID) + driveModulationAmount);
-                params.compRatio = juce::jlimit(params.compRatioRange.start, params.compRatioRange.end, *treeState.getRawParameterValue(params.compRatioID) + compRatioModulationAmount);
-                params.compThreshold = juce::jlimit(params.compThreshRange.start, params.compThreshRange.end, *treeState.getRawParameterValue(params.compThreshID) + compThreshModulationAmount);
-                params.width = juce::jlimit(params.widthRange.start, params.widthRange.end, *treeState.getRawParameterValue(params.widthID) + widthModulationAmount);
-                params.outputVal = juce::jlimit(params.outputRange.start, params.outputRange.end, *treeState.getRawParameterValue(params.outputID) + outputModulationAmount);
-                params.mixVal = juce::jlimit(params.mixRange.start, params.mixRange.end, *treeState.getRawParameterValue(params.mixID) + mixModulationAmount);
+                // === GET FINAL MODULATED VALUES FROM LFO MANAGER ===
+                params.driveVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(DRIVE_ID, i));
+                params.compRatio = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_RATIO_ID, i));
+                params.compThreshold = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_THRESH_ID, i));
+                params.width = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(WIDTH_ID, i));
+                params.outputVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(OUTPUT_ID, i));
+                params.mixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, i));
+                params.biasVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(BIAS_ID, i));
+                params.recVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(REC_ID, i));
 
                 realtimeModulatedThresholds[i].store(params.compThreshold);
 
-                // Call the process method with the final, modulated parameters
-                band->process(*wetBandBuffers[i], params, lfoOutputBuffer, this->modulationRoutings);
+                // Call the simplified process method
+                band->process(*wetBandBuffers[i], params);
             }
 
             setLeftRightMeterRMSValues(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
@@ -1918,11 +1733,11 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
     sumBands(wetBuffer, wetBandBuffers, false);
 }
 
-void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate, const std::map<juce::String, float>& modulatedValues)
+void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate)
 {
-    if (*treeState.getRawParameterValue(FILTER_BYPASS_ID))
+    if (*treeState.getRawParameterValue(FILTER_BYPASS_ID) > 0.5f)
     {
-        updateGlobalFilters(sampleRate, modulatedValues);
+        updateGlobalFilters(sampleRate);
         auto block = juce::dsp::AudioBlock<float>(buffer);
 
         auto leftBlock = block.getSingleChannelBlock(0);
@@ -1936,13 +1751,35 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, do
     }
 
     auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
-    // Apply the modulated output gain
-    gainProcessorGlobal.setGainDecibels(modulatedValues.at(OUTPUT_ID));
+
+    // Get the final modulated output gain from the LfoManager
+    gainProcessorGlobal.setGainDecibels(lfoManager->getModulatedValue(OUTPUT_ID));
     gainProcessorGlobal.setRampDurationSeconds(0.05f);
     gainProcessorGlobal.process(juce::dsp::ProcessContextReplacing<float>(globalBlock));
 }
 
-void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer, float mixValue)
+void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer)
+{
+    if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID) > 0.5f)
+    {
+        const int rateDivide = static_cast<int>(lfoManager->getModulatedValue(DOWNSAMPLE_ID));
+
+        if (rateDivide > 1)
+        {
+            for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
+            {
+                auto* channelData = buffer.getWritePointer(channel);
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+                {
+                    if (sample % rateDivide != 0)
+                        channelData[sample] = channelData[sample - sample % rateDivide];
+                }
+            }
+        }
+    }
+}
+
+void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
 {
     if (*treeState.getRawParameterValue(HQ_ID))
     {
@@ -1952,52 +1789,35 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer, float 
     {
         dryWetMixerGlobal.setWetLatency(0);
     }
-    // Use the modulated mix value
-    dryWetMixerGlobal.setWetMixProportion(mixValue);
+
+    // Get the final modulated mix value from the LfoManager
+    dryWetMixerGlobal.setWetMixProportion(lfoManager->getModulatedValue(MIX_ID));
     dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
     dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }
 
 FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const
 {
-    for (const auto& routing : modulationRoutings)
+    // Find the routing in the manager's list
+    for (const auto& routing : lfoManager->getModulationRoutings())
     {
         if (routing.targetParameterID == parameterID)
         {
-            // The size check is now implicitly handled by the new getter,
-            // but keeping it here is a good defensive practice.
-            if (juce::isPositiveAndBelow(routing.sourceLfoIndex, 4)) // 4 is the number of LFOs
+            if (juce::isPositiveAndBelow(routing.sourceLfoIndex, 4))
             {
-                // ✅ MODIFIED LINE: Get the LFO value from the LfoManager
                 const float unipolarLfoValue = lfoManager->getLfoOutput(routing.sourceLfoIndex);
-
-                float finalLfoValue = 0.0f;
-
-                if (routing.isBipolar)
-                {
-                    // For Bi-polar, map [0, 1] to [-1, 1]
-                    finalLfoValue = unipolarLfoValue * 2.0f - 1.0f;
-                }
-                else
-                {
-                    // For Uni-polar, the value is already correct [0, 1]
-                    finalLfoValue = unipolarLfoValue;
-                }
-
-                // Return all the data the UI needs, including the isBipolar flag.
+                float finalLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
                 return { true, routing.sourceLfoIndex + 1, routing.depth, finalLfoValue, routing.isBipolar };
             }
         }
     }
-
-    // If no routing is found, return the default "not modulated" state.
-    return { false, 0, 0.0f, 0.0f, true };
+    return { false, 0, 0.0f, 0.0f, true }; // Default "not modulated" state
 }
 
 void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
 {
     // Find the matching routing in the modulation array.
-    for (auto& routing : modulationRoutings)
+    for (auto& routing : lfoManager->getModulationRoutings())
     {
         if (routing.targetParameterID == targetParameterID)
         {
@@ -2013,7 +1833,7 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
 void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID)
 {
     // Find the matching routing in the modulation array.
-    for (auto& routing : modulationRoutings)
+    for (auto& routing : lfoManager->getModulationRoutings())
     {
         if (routing.targetParameterID == targetParameterID)
         {
@@ -2029,7 +1849,7 @@ void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID
 void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
 {
     // Find the matching routing in the modulation array.
-    for (auto& routing : modulationRoutings)
+    for (auto& routing : lfoManager->getModulationRoutings())
     {
         if (routing.targetParameterID == targetParameterID)
         {
@@ -2045,34 +1865,24 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
 
 void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID)
 {
-    // Ensure the index is valid for the routing we are trying to modify.
-    if (! juce::isPositiveAndBelow(routingIndex, modulationRoutings.size()))
+    auto& routings = lfoManager->getModulationRoutings();
+    if (! juce::isPositiveAndBelow(routingIndex, routings.size()))
         return;
 
-    // --- The "Overwrite" Logic ---
-    // If a valid target is being assigned (not "None")...
     if (targetParameterID.isNotEmpty())
     {
-        // ...loop through ALL routings to find and clear any duplicates.
-        for (int i = 0; i < modulationRoutings.size(); ++i)
+        for (int i = 0; i < routings.size(); ++i)
         {
-            // Don't check against the row we are currently editing.
             if (i == routingIndex)
                 continue;
-
-            // If we find another row that already targets the same parameter...
-            if (modulationRoutings.getReference(i).targetParameterID == targetParameterID)
+            if (routings.getReference(i).targetParameterID == targetParameterID)
             {
-                // ...clear its target by setting it to an empty string.
-                // This makes it revert to "None" in the UI.
-                modulationRoutings.getReference(i).targetParameterID = "";
+                routings.getReference(i).targetParameterID = "";
             }
         }
     }
 
-    // --- Update the Current Routing ---
-    // After clearing any potential duplicates, update the routing the user actually changed.
-    auto& currentRouting = modulationRoutings.getReference(routingIndex);
+    auto& currentRouting = routings.getReference(routingIndex);
     currentRouting.sourceLfoIndex = sourceLfoIndex;
     currentRouting.targetParameterID = targetParameterID;
 }

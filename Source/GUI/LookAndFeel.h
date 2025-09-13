@@ -672,59 +672,86 @@ private:
             float modulationArcRadius = arcRadius - lineW * 1.2f;
             float modulationArcWidth = lineW * 0.5f;
 
+            // This lambda correctly converts a REAL value to an angle using the slider's non-linear mapping
             auto valueToAngle = [&](double value)
             {
                 return rotaryStartAngle + slider.valueToProportionOfLength(value) * (rotaryEndAngle - rotaryStartAngle);
             };
 
-            const double sliderMin = slider.getMinimum();
-            const double sliderMax = slider.getMaximum();
-            const double sliderRange = sliderMax - sliderMin;
-            const double currentValue = slider.getValue();
-            const double modulationValueRange = sliderRange * slider.lfoAmount;
+            // 1. Get the slider's knob position as a normalized value [0, 1]
+            const double normalizedCurrentValue = slider.valueToProportionOfLength(slider.getValue());
 
-            double modStartValue, modEndValue;
+            // 2. Define modulation depth in normalized space. lfoAmount is [-1, 1], representing the depth.
+            const double normalizedModulationDepth = std::abs(slider.lfoAmount);
+
+            // 3. Calculate modulation range in NORMALIZED space
+            double modStartValueNormalized, modEndValueNormalized;
             if (slider.isBipolar)
             {
-                modStartValue = currentValue - modulationValueRange / 2.0;
-                modEndValue = currentValue + modulationValueRange / 2.0;
+                modStartValueNormalized = normalizedCurrentValue - normalizedModulationDepth / 2.0;
+                modEndValueNormalized = normalizedCurrentValue + normalizedModulationDepth / 2.0;
             }
             else
             {
-                modStartValue = currentValue;
-                modEndValue = currentValue + modulationValueRange;
-                if (modEndValue < modStartValue)
-                    std::swap(modStartValue, modEndValue);
+                // For unipolar, the range depends on the sign of lfoAmount
+                if (slider.lfoAmount > 0)
+                {
+                    modStartValueNormalized = normalizedCurrentValue;
+                    modEndValueNormalized = normalizedCurrentValue + normalizedModulationDepth;
+                }
+                else // lfoAmount < 0
+                {
+                    modStartValueNormalized = normalizedCurrentValue - normalizedModulationDepth;
+                    modEndValueNormalized = normalizedCurrentValue;
+                }
             }
 
-            auto clampedStartValue = juce::jlimit(sliderMin, sliderMax, modStartValue);
-            auto clampedEndValue = juce::jlimit(sliderMin, sliderMax, modEndValue);
+            // Clamp the normalized range
+            modStartValueNormalized = juce::jlimit(0.0, 1.0, modStartValueNormalized);
+            modEndValueNormalized = juce::jlimit(0.0, 1.0, modEndValueNormalized);
 
-            float modStartAngle = valueToAngle(clampedStartValue);
-            float modEndAngle = valueToAngle(clampedEndValue);
+            // 4. Convert the normalized start/end points back to REAL values for the valueToAngle lambda
+            const double realStartValue = slider.proportionOfLengthToValue(modStartValueNormalized);
+            const double realEndValue = slider.proportionOfLengthToValue(modEndValueNormalized);
 
+            // 5. Convert REAL values to angles
+            float modStartAngle = valueToAngle(realStartValue);
+            float modEndAngle = valueToAngle(realEndValue);
+
+            // --- Drawing the modulation depth arc ---
             juce::Path modulationDepthArc;
+            // Ensure the arc is always drawn clockwise
+            if (modEndAngle < modStartAngle)
+                std::swap(modStartAngle, modEndAngle);
             modulationDepthArc.addCentredArc(center.x, center.y, modulationArcRadius, modulationArcRadius, 0.0f, modStartAngle, modEndAngle, true);
 
-            g.setColour(juce::Colours::red.withAlpha(0.5f));
-            if (slider.lfoAmount < 0)
-            {
-                g.setColour(juce::Colours::orange.withAlpha(0.5f));
-            }
+            juce::Colour arcColour = (slider.lfoAmount > 0) ? juce::Colours::red.withAlpha(0.5f) : juce::Colours::orange.withAlpha(0.5f);
+            g.setColour(arcColour);
             g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-            double currentModulatedValue = 0.0;
+            // --- Drawing the current modulated value indicator ---
+
+            // 6. Calculate the current LFO-driven value in NORMALIZED space
+            // slider.lfoValue is the raw LFO output, typically [0, 1] for unipolar, or transformed to [-1, 1] for bipolar
+            double lfoSignal = slider.lfoValue; // Let's assume lfoValue is correctly bipolar/unipolar already
+            double currentModulatedValueNormalized;
+
             if (slider.isBipolar)
             {
-                currentModulatedValue = currentValue + (slider.lfoValue * modulationValueRange / 2.0);
+                // Assuming slider.lfoValue is [-1, 1] for bipolar
+                currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * (normalizedModulationDepth / 2.0);
             }
             else
             {
-                currentModulatedValue = currentValue + (slider.lfoValue * modulationValueRange);
+                // Assuming slider.lfoValue is [0, 1] for unipolar
+                currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * slider.lfoAmount;
             }
 
-            auto clampedModulatedValue = juce::jlimit(sliderMin, sliderMax, currentModulatedValue);
-            float currentModAngle = valueToAngle(clampedModulatedValue);
+            currentModulatedValueNormalized = juce::jlimit(0.0, 1.0, currentModulatedValueNormalized);
+
+            // 7. Convert back to REAL value and then to angle for drawing
+            const double realModulatedValue = slider.proportionOfLengthToValue(currentModulatedValueNormalized);
+            float currentModAngle = valueToAngle(realModulatedValue);
 
             juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
                                              center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
@@ -737,10 +764,18 @@ private:
         {
             auto handleBounds = slider.getModulationHandleBounds();
             juce::Colour handleColour = COLOUR5;
-            if (slider.isModHandleMouseOver || slider.isModHandleMouseDown)
+
+            if (! slider.isEnabled())
             {
+                // If slider is disabled, use a darker, less saturated color
+                handleColour = handleColour.darker(0.6f);
+            }
+            else if (slider.isModHandleMouseOver || slider.isModHandleMouseDown)
+            {
+                // Only show hover/click effect if enabled
                 handleColour = handleColour.brighter(0.2f);
             }
+
             g.setColour(handleColour);
             g.fillEllipse(handleBounds);
             g.setColour(juce::Colours::white);

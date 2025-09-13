@@ -297,7 +297,7 @@ private:
     using GainProcessor = juce::dsp::Gain<float>;
 
     GainProcessor gainProcessorGlobal;
-    juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 100 };
+    juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
 
     // oversampling
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4]; // HQ use 4x

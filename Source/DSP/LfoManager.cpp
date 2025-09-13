@@ -55,6 +55,7 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
     generateLfoOutput(sampleRate, playHead, numSamples);
 
     // 2. Clear the map of calculated values from the previous block.
+    // MODIFICATION: We now store normalized values.
     modulatedValues.clear();
 
     // 3. Iterate through all modulation routings to calculate final parameter values.
@@ -65,66 +66,72 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
-        // This is efficient for block-based modulation.
         float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
 
-        // Get the parameter's original value (from the GUI knob) and its range.
-        const float baseValue = *treeState.getRawParameterValue(routing.targetParameterID);
-        const auto range = treeState.getParameterRange(routing.targetParameterID);
-
-        // Skip if the parameter has no valid range.
-        if (range.start == range.end)
+        // Get the RangedAudioParameter for conversions
+        auto* parameter = treeState.getParameter(routing.targetParameterID);
+        if (parameter == nullptr)
             continue;
 
-        const float rangeSpan = range.end - range.start;
-        float scalingFactor;
+        // --- MODIFICATION START: Operate in NORMALIZED space ---
 
-        // Apply bipolar (-1 to 1) or unipolar (0 to 1) mapping.
+        // Get the parameter's original NORMALIZED value (from the GUI knob)
+        const float normalizedBaseValue = parameter->getValue();
+
+        // Apply bipolar (-1 to 1) or unipolar (0 to 1) mapping to the LFO signal.
         if (routing.isBipolar)
         {
-            lfoValue = lfoValue * 2.0f - 1.0f; // Map [0, 1] to [-1, 1]
-            scalingFactor = rangeSpan * 0.5f;
-        }
-        else
-        {
-            scalingFactor = rangeSpan;
+            lfoValue = lfoValue * 2.0f - 1.0f; // Map LFO from [0, 1] to [-1, 1]
         }
 
-        // Calculate the final modulation offset.
-        const float modulationAmount = lfoValue * routing.depth * scalingFactor;
+        // The modulation amount is now a simple multiplication in the normalized space.
+        // The depth parameter scales the LFO output directly.
+        const float normalizedModulationAmount = lfoValue * routing.depth;
 
-        // If this parameter hasn't been touched yet in this block, initialize it with its base value.
+        // If this parameter hasn't been touched yet in this block, initialize it with its base normalized value.
         if (modulatedValues.find(routing.targetParameterID) == modulatedValues.end())
         {
-            modulatedValues[routing.targetParameterID] = baseValue;
+            modulatedValues[routing.targetParameterID] = normalizedBaseValue;
         }
 
-        // Add the modulation amount. This allows multiple LFOs to target the same parameter.
-        modulatedValues[routing.targetParameterID] += modulationAmount;
+        // Add the normalized modulation amount. This allows multiple LFOs to target the same parameter.
+        modulatedValues[routing.targetParameterID] += normalizedModulationAmount;
+
+        // --- MODIFICATION END ---
     }
 
-    // 4. Final pass: clamp all calculated values to their valid parameter ranges.
+    // 4. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
     for (auto const& [paramID, val] : modulatedValues)
     {
-        const auto range = treeState.getParameterRange(paramID);
-        modulatedValues[paramID] = juce::jlimit(range.start, range.end, val);
+        modulatedValues[paramID] = juce::jlimit(0.0f, 1.0f, val);
     }
 }
 
 float LfoManager::getModulatedValue(const juce::String& parameterID) const
 {
-    // Check if the parameter ID exists in our map of modulated values for this block.
+    // Check if the parameter ID exists in our map of modulated normalized values.
     auto it = modulatedValues.find(parameterID);
 
     if (it != modulatedValues.end())
     {
-        // If found, return the final, calculated value.
-        return it->second;
+        // --- MODIFICATION START: Convert normalized value to real value ---
+        auto* parameter = treeState.getParameter(parameterID);
+        if (parameter)
+        {
+            // If found, convert the final normalized value back to the parameter's real value.
+            return parameter->convertFrom0to1(it->second);
+        }
+        // --- MODIFICATION END ---
     }
 
     // If not found, it means the parameter is not being modulated.
     // Return its original value directly from the APVTS.
-    return *treeState.getRawParameterValue(parameterID);
+    // NOTE: It's safer to get the parameter and ask for its real value.
+    if (auto* param = treeState.getRawParameterValue(parameterID))
+        return *param;
+
+    jassertfalse; // Parameter not found
+    return 0.0f;
 }
 
 // =============================================================================

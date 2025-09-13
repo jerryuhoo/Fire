@@ -16,9 +16,10 @@
 
 #include "LfoData.h"
 #include "LfoEngine.h"
+#include "ModulationRouting.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <map>
-#include "ModulationRouting.h" 
+
 
 class LfoManager
 {

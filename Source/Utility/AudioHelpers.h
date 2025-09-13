@@ -9,8 +9,9 @@
 */
 
 #pragma once
-#include "juce_dsp/juce_dsp.h"
+#include "../DSP/LfoManager.h"
 #include "../GUI/InterfaceDefines.h"
+#include "juce_dsp/juce_dsp.h"
 
 static inline float dBToNormalizedGain(float inValue)
 {
@@ -53,7 +54,7 @@ struct ChainSettings
 };
 
 ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts);
-ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, const std::map<juce::String, float>& modulatedValues);
+ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, LfoManager& lfoManager);
 
 enum ChainPositions
 {

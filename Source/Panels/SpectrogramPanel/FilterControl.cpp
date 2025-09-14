@@ -24,7 +24,7 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel) : proces
     addAndMakeVisible(draggableLowButton);
     addAndMakeVisible(draggablePeakButton);
     addAndMakeVisible(draggableHighButton);
-    startTimerHz(30);
+    startTimerHz(60);
 }
 
 FilterControl::~FilterControl()
@@ -56,7 +56,7 @@ void FilterControl::paint(juce::Graphics& g)
         g.fillPath(responseCurve);
 
         g.setColour(juce::Colours::red.withAlpha(0.5f));
-        g.strokePath(lfoResponseCurve, juce::PathStrokeType(2.0f));
+        g.strokePath(lfoResponseCurve, juce::PathStrokeType(1.0f));
     }
     else
     {

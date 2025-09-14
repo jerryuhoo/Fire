@@ -73,20 +73,23 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
         if (parameter == nullptr)
             continue;
 
-        // --- MODIFICATION START: Operate in NORMALIZED space ---
-
         // Get the parameter's original NORMALIZED value (from the GUI knob)
         const float normalizedBaseValue = parameter->getValue();
+
+        // For bipolar mode, the effective modulation depth should be halved to match
+        // the perceived range of unipolar mode.
+        float effectiveDepth = routing.depth;
 
         // Apply bipolar (-1 to 1) or unipolar (0 to 1) mapping to the LFO signal.
         if (routing.isBipolar)
         {
             lfoValue = lfoValue * 2.0f - 1.0f; // Map LFO from [0, 1] to [-1, 1]
+            effectiveDepth *= 0.5f; // Halve the depth for bipolar
         }
 
         // The modulation amount is now a simple multiplication in the normalized space.
         // The depth parameter scales the LFO output directly.
-        const float normalizedModulationAmount = lfoValue * routing.depth;
+        const float normalizedModulationAmount = lfoValue * effectiveDepth;
 
         // If this parameter hasn't been touched yet in this block, initialize it with its base normalized value.
         if (modulatedValues.find(routing.targetParameterID) == modulatedValues.end())

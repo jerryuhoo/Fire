@@ -304,3 +304,31 @@ namespace ParameterIDAndName
         return targets;
     }
 } // namespace ParameterIDAndName
+
+struct ModulatedFilterValues
+{
+    float lowCutFreq;
+    float lowCutGain;
+    float lowCutQ;
+    float highCutFreq;
+    float highCutGain;
+    float highCutQ;
+    float peakFreq;
+    float peakGain;
+    float peakQ;
+};
+
+struct MeterValues
+{
+    // Global Meters
+    float inputLeftGlobal;
+    float inputRightGlobal;
+    float outputLeftGlobal;
+    float outputRightGlobal;
+
+    // Per-Band Meters (using a std::array for clean access)
+    std::array<float, 4> inputLeftBands;
+    std::array<float, 4> inputRightBands;
+    std::array<float, 4> outputLeftBands;
+    std::array<float, 4> outputRightBands;
+};

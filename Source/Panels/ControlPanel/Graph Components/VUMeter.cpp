@@ -119,30 +119,57 @@ void VUMeter::setParameters(bool isInput, int bandIndex)
 
 void VUMeter::timerCallback()
 {
-    float updatedCh0Level = 0.0f;
-    float updatedCh1Level = 0.0f;
+    float rawCh0Level = 0.0f; // Default to 0.0f linear, which is -inf dB
+    float rawCh1Level = 0.0f;
 
-    if (mIsInput) // input
+    // 1. Safely fetch the latest meter data from the processor via public getters.
+    // This call is thread-safe because the processor's getters read from std::atomic variables.
+    if (mIsInput) // This meter is displaying the input signal
     {
-        updatedCh0Level = mProcessor->getMeterRMSLevel(true, 0, mBandIndex);
-        updatedCh1Level = mProcessor->getMeterRMSLevel(true, 1, mBandIndex);
+        if (mBandIndex == -1) // Global meter
+        {
+            rawCh0Level = mProcessor->getGlobalInputMeterLevel(0);
+            rawCh1Level = mProcessor->getGlobalInputMeterLevel(1);
+        }
+        else // Per-band meter
+        {
+            rawCh0Level = mProcessor->getBandInputMeterLevel(mBandIndex, 0);
+            rawCh1Level = mProcessor->getBandInputMeterLevel(mBandIndex, 1);
+        }
     }
-    else // output
+    else // This meter is displaying the output signal
     {
-        updatedCh0Level = mProcessor->getMeterRMSLevel(false, 0, mBandIndex);
-        updatedCh1Level = mProcessor->getMeterRMSLevel(false, 1, mBandIndex);
+        if (mBandIndex == -1) // Global meter
+        {
+            rawCh0Level = mProcessor->getGlobalOutputMeterLevel(0);
+            rawCh1Level = mProcessor->getGlobalOutputMeterLevel(1);
+        }
+        else // Per-band meter
+        {
+            rawCh0Level = mProcessor->getBandOutputMeterLevel(mBandIndex, 0);
+            rawCh1Level = mProcessor->getBandOutputMeterLevel(mBandIndex, 1);
+        }
     }
 
-    // update max values
+    // 2. Convert the raw linear RMS values to normalized [0, 1] values suitable for the UI.
+    float updatedCh0Level = dBToNormalizedGain(rawCh0Level);
+    float updatedCh1Level = dBToNormalizedGain(rawCh1Level);
+
+    // 3. Update the peak level display.
+    // jmax ensures we always hold the highest value seen so far.
     mMaxCh0Level = juce::jmax(mMaxCh0Level, updatedCh0Level);
     mMaxCh1Level = juce::jmax(mMaxCh1Level, updatedCh1Level);
 
+    // 4. Apply smoothing to the real-time level for a better visual experience.
     if (updatedCh0Level > mCh0Level)
     {
+        // If the new level is higher, jump to it immediately (Fast Attack).
         mCh0Level = updatedCh0Level;
     }
     else
     {
+        // If the new level is lower, fall to it slowly (Slow Release).
+        // SMOOTH_COEFF controls the decay speed.
         mCh0Level = SMOOTH_COEFF * (mCh0Level - updatedCh0Level) + updatedCh0Level;
     }
 
@@ -155,10 +182,12 @@ void VUMeter::timerCallback()
         mCh1Level = SMOOTH_COEFF * (mCh1Level - updatedCh1Level) + updatedCh1Level;
     }
 
+    // 5. Prevent denormalization issues where values become too small.
     mCh0Level = helper_denormalize(mCh0Level);
     mCh1Level = helper_denormalize(mCh1Level);
 
-    // decay max values
+    // 6. Handle the decay logic for the peak level line.
+    // The peak line holds for a set number of frames before starting to fall.
     if (mMaxCh0Level > mCh0Level || mMaxCh1Level > mCh1Level)
     {
         if (mMaxValueDecayCounter < MAX_VALUE_HOLD_FRAMES)
@@ -167,15 +196,18 @@ void VUMeter::timerCallback()
         }
         else
         {
+            // After the hold time, the peak line starts to decay slowly.
             mMaxCh0Level -= 0.01f;
             mMaxCh1Level -= 0.01f;
         }
     }
     else
     {
+        // If the real-time level catches up to the peak, reset the hold counter.
         mMaxValueDecayCounter = 0;
     }
 
+    // 7. Trigger a repaint to update the component on screen.
     repaint();
 }
 

@@ -22,6 +22,21 @@
 #include "DSP/LfoManager.h"
 #include "DSP/ModulationRouting.h"
 
+/**
+ * Calculates the RMS level for the left and right channels of a buffer
+ * and atomically stores them in the provided atomic float variables.
+*/
+static inline void calculateAndStoreRMS(const juce::AudioBuffer<float>& buffer,
+                                        std::atomic<float>& leftAtomic,
+                                        std::atomic<float>& rightAtomic)
+{
+    const float rmsL = buffer.getRMSLevel(0, 0, buffer.getNumSamples());
+    const float rmsR = (buffer.getNumChannels() > 1) ? buffer.getRMSLevel(1, 0, buffer.getNumSamples()) : rmsL;
+
+    leftAtomic.store(rmsL);
+    rightAtomic.store(rmsR);
+}
+
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
@@ -98,9 +113,10 @@ struct BandProcessor
 
     std::function<float(float)> waveshaperFunction;
 
-    // Per-band meter values
-    float mInputLeftSmoothed = 0, mInputRightSmoothed = 0;
-    float mOutputLeftSmoothed = 0, mOutputRightSmoothed = 0;
+    std::atomic<float> mInputLeftSmoothed { 0.0f };
+    std::atomic<float> mInputRightSmoothed { 0.0f };
+    std::atomic<float> mOutputLeftSmoothed { 0.0f };
+    std::atomic<float> mOutputRightSmoothed { 0.0f };
 
     // Per-band state for Safe Mode
     float mReductionPercent = 1.0f;
@@ -162,7 +178,7 @@ public:
     //==============================================================================
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
-    
+
     juce::AudioProcessorValueTreeState treeState;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameters();
 
@@ -225,13 +241,20 @@ public:
     bool getBypassedState();
 
     // VU meters
-    float getMeterRMSLevel(bool isInput, int channel, int bandIndex);
     float getRealtimeModulatedThreshold(int bandIndex) const;
 
     // drive lookandfeel
     float getReductionPrecent(int bandIndex);
     float getSampleMaxValue(int bandIndex);
     float getTotalLatency() const;
+
+    bool getLatestModulatedFilterValues(ModulatedFilterValues& values);
+    bool getLatestMeterValues(MeterValues& values);
+    
+    float getGlobalInputMeterLevel(int channel) const;
+    float getGlobalOutputMeterLevel(int channel) const;
+    float getBandInputMeterLevel(int band, int channel) const;
+    float getBandOutputMeterLevel(int band, int channel) const;
 
 private:
     std::vector<std::unique_ptr<BandProcessor>> bands;
@@ -357,14 +380,22 @@ private:
     bool isBypassed = false;
 
     // VU meters
-
-    void setLeftRightMeterRMSValues(juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue);
-    float mInputLeftSmoothedGlobal = 0;
-    float mInputRightSmoothedGlobal = 0;
-    float mOutputLeftSmoothedGlobal = 0;
-    float mOutputRightSmoothedGlobal = 0;
+    std::atomic<float> mInputLeftSmoothedGlobal { 0.0f };
+    std::atomic<float> mInputRightSmoothedGlobal { 0.0f };
+    std::atomic<float> mOutputLeftSmoothedGlobal { 0.0f };
+    std::atomic<float> mOutputRightSmoothedGlobal { 0.0f };
 
     std::atomic<float> realtimeModulatedThresholds[4];
+
+    // 1. For FilterControl
+    juce::AbstractFifo filterFifo { 1024 };
+    std::vector<ModulatedFilterValues> filterFifoBuffer;
+    int filterFifoWritePos = 0;
+
+    // 2. For VUMeter
+    juce::AbstractFifo meterFifo { 1024 };
+    std::vector<MeterValues> meterFifoBuffer;
+    int meterFifoWritePos = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

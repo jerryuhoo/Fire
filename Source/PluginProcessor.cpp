@@ -293,6 +293,9 @@ FireAudioProcessor::FireAudioProcessor()
     for (int i = 0; i < 4; ++i)
         realtimeModulatedThresholds[i].store(-48.0f);
 
+    filterFifoBuffer.resize(filterFifo.getTotalSize());
+    meterFifoBuffer.resize(meterFifo.getTotalSize());
+
     // Set up the properties file options.
     juce::PropertiesFile::Options options;
     options.applicationName = JucePlugin_Name;
@@ -637,7 +640,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     updateParameters();
 
-    setLeftRightMeterRMSValues(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
+    calculateAndStoreRMS(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
 
     // 1. GET PARAMETERS & SMOOTH FREQUENCIES
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
@@ -712,7 +715,30 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
     pushDataToFFT(delayMatchedDryBuffer, originalSpecProcessor);
-    setLeftRightMeterRMSValues(buffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
+    calculateAndStoreRMS(mWetBuffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
+
+    // --- 1. Push Modulated Filter Data to its FIFO ---
+    if (filterFifo.getFreeSpace() >= 1)
+    {
+        // Get the final, modulated values for this block
+        auto chainSettings = getChainSettings(treeState, *lfoManager);
+
+        ModulatedFilterValues filterVals;
+        filterVals.lowCutFreq = chainSettings.lowCutFreq;
+        filterVals.lowCutGain = chainSettings.lowCutGainInDecibels;
+        filterVals.lowCutQ = chainSettings.lowCutQuality;
+        filterVals.highCutFreq = chainSettings.highCutFreq;
+        filterVals.highCutGain = chainSettings.highCutGainInDecibels;
+        filterVals.highCutQ = chainSettings.highCutQuality;
+        filterVals.peakFreq = chainSettings.peakFreq;
+        filterVals.peakGain = chainSettings.peakGainInDecibels;
+        filterVals.peakQ = chainSettings.peakQuality;
+
+        // Write the data packet to the buffer and notify the FIFO
+        filterFifoBuffer[filterFifoWritePos] = filterVals;
+        filterFifo.finishedWrite(1);
+        filterFifoWritePos = (filterFifoWritePos + 1) % filterFifo.getTotalSize();
+    }
 }
 
 //==============================================================================
@@ -1177,65 +1203,6 @@ bool FireAudioProcessor::getBypassedState()
     return isBypassed;
 }
 
-// VU meters
-void FireAudioProcessor::setLeftRightMeterRMSValues(juce::AudioBuffer<float> buffer, float& leftOutValue, float& rightOutValue)
-{
-    float absInputLeftValue;
-    float absInputRightValue;
-    if (getTotalNumInputChannels() == 2)
-    {
-        absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-        absInputRightValue = fabs(buffer.getRMSLevel(1, 0, buffer.getNumSamples()));
-    }
-    else
-    {
-        absInputLeftValue = fabs(buffer.getRMSLevel(0, 0, buffer.getNumSamples()));
-        absInputRightValue = absInputLeftValue;
-    }
-    // smooth value
-    leftOutValue = SMOOTH_COEFF * (leftOutValue - absInputLeftValue) + absInputLeftValue;
-    rightOutValue = SMOOTH_COEFF * (rightOutValue - absInputRightValue) + absInputRightValue;
-}
-
-float FireAudioProcessor::getMeterRMSLevel(bool isInput, int channel, int bandIndex)
-{
-    // A bandIndex of -1 is a convention we'll use to signify the global meters.
-    if (bandIndex == -1)
-    {
-        if (isInput)
-        {
-            // For global input, use the dedicated global smoothed values.
-            return dBToNormalizedGain(channel == 0 ? mInputLeftSmoothedGlobal : mInputRightSmoothedGlobal);
-        }
-        else // isOutput
-        {
-            return dBToNormalizedGain(channel == 0 ? mOutputLeftSmoothedGlobal : mOutputRightSmoothedGlobal);
-        }
-    }
-
-    // For per-band meters, we access the data inside the correct BandProcessor instance.
-    // juce::isPositiveAndBelow is a safe way to check if the index is valid for our vector.
-    if (juce::isPositiveAndBelow(bandIndex, bands.size()))
-    {
-        if (auto* band = bands[bandIndex].get())
-        {
-            if (isInput)
-            {
-                // Get the value directly from the BandProcessor member.
-                return dBToNormalizedGain(channel == 0 ? band->mInputLeftSmoothed : band->mInputRightSmoothed);
-            }
-            else // isOutput
-            {
-                return dBToNormalizedGain(channel == 0 ? band->mOutputLeftSmoothed : band->mOutputRightSmoothed);
-            }
-        }
-    }
-
-    // If the bandIndex is invalid for any reason, assert in debug builds and return 0.
-    jassertfalse;
-    return 0.0f;
-}
-
 // drive lookandfeel
 float FireAudioProcessor::getReductionPrecent(int bandIndex)
 {
@@ -1696,7 +1663,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
     {
         if (auto* band = bands[i].get())
         {
-            setLeftRightMeterRMSValues(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
+            calculateAndStoreRMS(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
 
             if (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i)))
             {
@@ -1725,8 +1692,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 // Call the simplified process method
                 band->process(*wetBandBuffers[i], params);
             }
-
-            setLeftRightMeterRMSValues(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
+            calculateAndStoreRMS(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
         }
     }
 
@@ -1898,4 +1864,102 @@ float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
 const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
 {
     return lfoManager->getLfoRateSyncDivisions();
+}
+
+bool FireAudioProcessor::getLatestMeterValues(MeterValues& values)
+{
+    // Check how many complete data packets are ready to be read.
+    int numAvailable = meterFifo.getNumReady();
+
+    // If there's at least one, we can proceed.
+    if (numAvailable > 0)
+    {
+        // We want to get the most recent value. If there are multiple values
+        // queued up, we'll read them all but only copy the last one.
+        // This prevents the GUI from lagging behind the audio thread.
+
+        int start1, size1, start2, size2;
+        meterFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+
+        // The fifo might wrap around, so it gives us two contiguous blocks.
+        // We just need to find the last element across these two blocks.
+        if (size2 > 0)
+        {
+            // The latest element is at the end of the second block.
+            values = meterFifoBuffer[start2 + size2 - 1];
+        }
+        else
+        {
+            // The latest element is at the end of the first block.
+            values = meterFifoBuffer[start1 + size1 - 1];
+        }
+
+        // Tell the fifo that we've now "consumed" all the available data.
+        meterFifo.finishedRead(numAvailable);
+
+        // Return true to indicate that we successfully updated the 'values' object.
+        return true;
+    }
+
+    // If no new data was available, return false.
+    return false;
+}
+
+bool FireAudioProcessor::getLatestModulatedFilterValues(ModulatedFilterValues& values)
+{
+    int numAvailable = filterFifo.getNumReady();
+
+    if (numAvailable > 0)
+    {
+        int start1, size1, start2, size2;
+        filterFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+
+        if (size2 > 0)
+        {
+            values = filterFifoBuffer[start2 + size2 - 1];
+        }
+        else
+        {
+            values = filterFifoBuffer[start1 + size1 - 1];
+        }
+        filterFifo.finishedRead(numAvailable);
+        return true;
+    }
+    return false;
+}
+
+float FireAudioProcessor::getGlobalInputMeterLevel(int channel) const
+{
+    return channel == 0 ? mInputLeftSmoothedGlobal.load() : mInputRightSmoothedGlobal.load();
+}
+
+float FireAudioProcessor::getGlobalOutputMeterLevel(int channel) const
+{
+    return channel == 0 ? mOutputLeftSmoothedGlobal.load() : mOutputRightSmoothedGlobal.load();
+}
+
+float FireAudioProcessor::getBandInputMeterLevel(int band, int channel) const
+{
+    if (juce::isPositiveAndBelow(band, bands.size()))
+    {
+        if (auto* bandProcessor = bands[band].get())
+        {
+            return channel == 0 ? bandProcessor->mInputLeftSmoothed.load() : bandProcessor->mInputRightSmoothed.load();
+        }
+    }
+    jassertfalse; // Invalid band index
+    return 0.0f;
+}
+
+float FireAudioProcessor::getBandOutputMeterLevel(int band, int channel) const
+{
+    if (juce::isPositiveAndBelow(band, bands.size()))
+    {
+        if (auto* bandProcessor = bands[band].get())
+        {
+            return channel == 0 ? bandProcessor->mOutputLeftSmoothed.load() : bandProcessor->mOutputRightSmoothed.load();
+        }
+    }
+    jassertfalse; // Invalid band index
+    return 0.0f;
 }

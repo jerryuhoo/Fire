@@ -34,13 +34,17 @@ private:
     FireAudioProcessor* mProcessor;
     bool mIsInput;
     int mBandIndex;
+
     float mCh0Level;
     float mCh1Level;
     float mMaxCh0Level;
     float mMaxCh1Level;
+
     int mMaxValueDecayCounter;
     const int MAX_VALUE_HOLD_FRAMES = 60;
+
     juce::Rectangle<int> leftMeterBounds;
     juce::Rectangle<int> rightMeterBounds;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUMeter)
 };

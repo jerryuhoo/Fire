@@ -24,10 +24,12 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel) : proces
     addAndMakeVisible(draggableLowButton);
     addAndMakeVisible(draggablePeakButton);
     addAndMakeVisible(draggableHighButton);
+    startTimerHz(30);
 }
 
 FilterControl::~FilterControl()
 {
+    stopTimer();
     const auto& params = processor.getParameters();
     for (auto param : params)
     {
@@ -52,6 +54,9 @@ void FilterControl::paint(juce::Graphics& g)
 
         g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
         g.fillPath(responseCurve);
+
+        g.setColour(juce::Colours::red.withAlpha(0.5f));
+        g.strokePath(lfoResponseCurve, juce::PathStrokeType(2.0f));
     }
     else
     {
@@ -117,14 +122,14 @@ void FilterControl::paint(juce::Graphics& g)
         currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
         currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
 
-        // FIX: Set the parameter values directly
+        // Set the parameter values directly
         setParameterValue(PEAK_FREQ_ID, currentFreq);
         setParameterValue(PEAK_GAIN_ID, currentGain);
     }
     if (draggableHighButton.isMouseButtonDown() && isFilterEnabled)
     {
         isDragging = true;
-        // FIX: Set the parameter for the High-pass filter type
+        // Set the parameter for the High-pass filter type
         processor.treeState.getParameter(HIGH_ID)->setValueNotifyingHost(1.0f);
 
         draggableHighButton.setBounds(buttonX, buttonY, size, size);
@@ -132,7 +137,7 @@ void FilterControl::paint(juce::Graphics& g)
         currentFreq = juce::mapToLog10(static_cast<double>(mousePos.x / static_cast<double>(getWidth())), 20.0, 20000.0);
         currentGain = 15.0f * (getHeight() / 2.0f - mousePos.y) / (getHeight() / 48.0f * 15.0f);
 
-        // FIX: Set the parameter values directly
+        // Set the parameter values directly
         setParameterValue(HIGHCUT_FREQ_ID, currentFreq);
         setParameterValue(HIGHCUT_GAIN_ID, currentGain);
     }
@@ -169,6 +174,22 @@ void FilterControl::paint(juce::Graphics& g)
         g.setColour(juce::Colours::white);
         g.setFont(14.0f);
         g.drawFittedText(textToShow, textBox, juce::Justification::centred, 2);
+    }
+}
+
+void FilterControl::timerCallback()
+{
+    ModulatedFilterValues modulatedValues;
+
+    // Safely pull the latest data packet from the FIFO queue.
+    if (processor.getLatestModulatedFilterValues(modulatedValues))
+    {
+        // If we got new data, update the LFO chain and its response curve.
+        updateLfoChain(modulatedValues);
+        updateLfoResponseCurve();
+
+        // Trigger a repaint to show the changes on screen.
+        repaint();
     }
 }
 
@@ -340,4 +361,114 @@ void FilterControl::handleAsyncUpdate()
     updateResponseCurve();
     setDraggableButtonBounds();
     repaint();
+}
+
+void FilterControl::updateLfoChain(const ModulatedFilterValues& modulatedValues)
+{
+    // Create a temporary ChainSettings struct and populate it with the
+    // modulated values received from the audio thread.
+    ChainSettings settings;
+    settings.lowCutFreq = modulatedValues.lowCutFreq;
+    settings.lowCutGainInDecibels = modulatedValues.lowCutGain;
+    settings.lowCutQuality = modulatedValues.lowCutQ;
+    settings.highCutFreq = modulatedValues.highCutFreq;
+    settings.highCutGainInDecibels = modulatedValues.highCutGain;
+    settings.highCutQuality = modulatedValues.highCutQ;
+    settings.peakFreq = modulatedValues.peakFreq;
+    settings.peakGainInDecibels = modulatedValues.peakGain;
+    settings.peakQuality = modulatedValues.peakQ;
+
+    // Get non-modulated settings directly from the processor's state tree.
+    auto& apvts = processor.treeState;
+    settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
+    settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
+    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load() > 0.5f;
+    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load() > 0.5f;
+    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load() > 0.5f;
+
+    auto sampleRate = processor.getSampleRate();
+    if (sampleRate <= 0)
+        return;
+
+    // The rest of this logic is identical to updateChain, but for lfoMonoChain.
+    auto peakCoefficients = makePeakFilter(settings, sampleRate);
+    updateCoefficients(lfoMonoChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
+
+    auto lowCutCoefficients = makeLowCutFilter(settings, sampleRate);
+    auto highCutCoefficients = makeHighCutFilter(settings, sampleRate);
+
+    auto lowCutQCoefficients = makeLowcutQFilter(settings, sampleRate);
+    updateCoefficients(lfoMonoChain.get<ChainPositions::LowCutQ>().coefficients, lowCutQCoefficients);
+    auto highCutQCoefficients = makeHighcutQFilter(settings, sampleRate);
+    updateCoefficients(lfoMonoChain.get<ChainPositions::HighCutQ>().coefficients, highCutQCoefficients);
+
+    updateCutFilter(lfoMonoChain.get<ChainPositions::LowCut>(), lowCutCoefficients, settings.lowCutSlope);
+    updateCutFilter(lfoMonoChain.get<ChainPositions::HighCut>(), highCutCoefficients, settings.highCutSlope);
+}
+
+void FilterControl::updateLfoResponseCurve()
+{
+    auto& lowcut = lfoMonoChain.get<ChainPositions::LowCut>();
+    auto& peak = lfoMonoChain.get<ChainPositions::Peak>();
+    auto& highcut = lfoMonoChain.get<ChainPositions::HighCut>();
+    auto& lowcutQ = lfoMonoChain.get<ChainPositions::LowCutQ>();
+    auto& highcutQ = lfoMonoChain.get<ChainPositions::HighCutQ>();
+
+    auto sampleRate = processor.getSampleRate();
+    if (sampleRate <= 0)
+        return;
+
+    std::vector<double> mags;
+    mags.resize(getWidth());
+
+    for (int i = 0; i < getWidth(); ++i)
+    {
+        double mag = 1.0;
+        auto freq = juce::mapToLog10(double(i) / double(getWidth()), 20.0, 20000.0);
+
+        if (! lfoMonoChain.isBypassed<ChainPositions::Peak>())
+            mag *= peak.coefficients->getMagnitudeForFrequency(freq, sampleRate);
+
+        if (! lfoMonoChain.isBypassed<ChainPositions::LowCut>())
+        {
+            if (! lowcut.isBypassed<0>())
+                mag *= lowcut.get<0>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            if (! lowcut.isBypassed<1>())
+                mag *= lowcut.get<1>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            if (! lowcut.isBypassed<2>())
+                mag *= lowcut.get<2>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            if (! lowcut.isBypassed<3>())
+                mag *= lowcut.get<3>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            mag *= lowcutQ.coefficients->getMagnitudeForFrequency(freq, sampleRate);
+        }
+
+        if (! lfoMonoChain.isBypassed<ChainPositions::HighCut>())
+        {
+            if (! highcut.isBypassed<0>())
+                mag *= highcut.get<0>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            if (! highcut.isBypassed<1>())
+                mag *= highcut.get<1>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            if (! highcut.isBypassed<2>())
+                mag *= highcut.get<2>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            if (! highcut.isBypassed<3>())
+                mag *= highcut.get<3>().coefficients->getMagnitudeForFrequency(freq, sampleRate);
+            mag *= highcutQ.coefficients->getMagnitudeForFrequency(freq, sampleRate);
+        }
+
+        mags[i] = juce::Decibels::gainToDecibels(mag);
+    }
+
+    lfoResponseCurve.clear();
+    const double outputMin = getHeight();
+    const double outputMax = 0;
+    auto map = [outputMin, outputMax](double input)
+    {
+        return juce::jmap(input, -24.0, 24.0, outputMin, outputMax);
+    };
+
+    lfoResponseCurve.startNewSubPath(0, map(mags.front()));
+    for (size_t i = 1; i < mags.size(); ++i)
+    {
+        lfoResponseCurve.lineTo(i, map(mags[i]));
+    }
 }

@@ -12,6 +12,7 @@
 
 #include "../../PluginProcessor.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include "../../Utility/Parameters.h"
 
 //
 //  A header component to display titles for the matrix columns.
@@ -59,7 +60,7 @@ private:
     juce::ComboBox destinationMenu;
     juce::TextButton removeButton { "X" };
 
-    std::vector<ParameterIDAndName::ModulationTarget> allPossibleTargets;
+    std::vector<ModulationTarget> allPossibleTargets;
 };
 
 //

@@ -94,6 +94,8 @@
       </GROUP>
       <GROUP id="{0204F696-B0DF-CD89-2550-E45618BFEF7E}" name="Utility">
         <FILE id="A4Ogfw" name="AudioHelpers.h" compile="0" resource="0" file="Source/Utility/AudioHelpers.h"/>
+        <FILE id="SBsuX3" name="FiltersUtil.h" compile="0" resource="0" file="Source/Utility/FiltersUtil.h"/>
+        <FILE id="I9GGUn" name="Parameters.h" compile="0" resource="0" file="Source/Utility/Parameters.h"/>
         <FILE id="iNAOxz" name="VersionInfo.cpp" compile="1" resource="0" file="Source/Utility/VersionInfo.cpp"/>
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
@@ -116,6 +118,7 @@
         <FILE id="pm8EEh" name="DistortionLogic.h" compile="0" resource="0"
               file="Source/DSP/DistortionLogic.h"/>
         <FILE id="DEFvzA" name="LfoData.h" compile="0" resource="0" file="Source/DSP/LfoData.h"/>
+        <FILE id="prvJVo" name="LfoEngine.cpp" compile="1" resource="0" file="Source/DSP/LfoEngine.cpp"/>
         <FILE id="IEdaZX" name="LfoEngine.h" compile="0" resource="0" file="Source/DSP/LfoEngine.h"/>
         <FILE id="UFdMj3" name="LfoManager.cpp" compile="1" resource="0" file="Source/DSP/LfoManager.cpp"/>
         <FILE id="BoNr69" name="LfoManager.h" compile="0" resource="0" file="Source/DSP/LfoManager.h"/>

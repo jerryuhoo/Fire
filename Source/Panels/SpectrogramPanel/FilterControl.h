@@ -11,7 +11,7 @@
 #pragma once
 
 #include "../../PluginProcessor.h"
-#include "../../Utility/AudioHelpers.h"
+#include "../../Utility/Parameters.h"
 #include "../ControlPanel/GlobalPanel.h"
 #include "DraggableButton.h"
 //==============================================================================

@@ -17,6 +17,7 @@
 #include "Panels/SpectrogramPanel/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
 #include "Utility/AudioHelpers.h"
+#include "Utility/FiltersUtil.h"
 #include "DSP/ClippingFunctions.h"
 #include "DSP/DiodeWDF.h"
 #include "DSP/LfoManager.h"

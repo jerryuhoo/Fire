@@ -1,4 +1,5 @@
 #include "LfoPanel.h"
+#include "../../DSP/LfoShapeGenerator.h"
 #include "../../PluginProcessor.h"
 
 //==============================================================================
@@ -146,48 +147,59 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     if (activeLfoData == nullptr)
         return; // Safety check
 
-    if (event.mods.isLeftButtonDown())
+    switch (currentMode)
     {
-        draggingPointIndex = -1;
-        for (size_t i = 0; i < activeLfoData->points.size(); ++i)
+        case LfoEditMode::PointEdit:
         {
-            if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
+            if (event.mods.isLeftButtonDown())
             {
-                draggingPointIndex = static_cast<int>(i);
-                return;
-            }
-        }
+                draggingPointIndex = -1;
+                for (size_t i = 0; i < activeLfoData->points.size(); ++i)
+                {
+                    if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
+                    {
+                        draggingPointIndex = static_cast<int>(i);
+                        return;
+                    }
+                }
 
-        if (activeLfoData->points.size() < maxPoints)
-        {
-            addPoint(toNormalized(event.getPosition()));
-            auto it = std::find(activeLfoData->points.begin(), activeLfoData->points.end(), toNormalized(event.getPosition()));
-            if (it != activeLfoData->points.end())
-                draggingPointIndex = static_cast<int>(std::distance(activeLfoData->points.begin(), it));
-        }
-    }
-    else if (event.mods.isRightButtonDown())
-    {
-        editingCurveIndex = -1;
-        for (int i = (int) activeLfoData->points.size() - 2; i >= 0; --i)
-        {
-            auto p1 = fromNormalized(activeLfoData->points[i]);
-            auto p2 = fromNormalized(activeLfoData->points[i + 1]);
-            auto segmentBounds = juce::Rectangle<float>(std::min(p1.x, p2.x), std::min(p1.y, p2.y), std::abs(p1.x - p2.x), std::abs(p1.y - p2.y));
-            segmentBounds = segmentBounds.expanded(0, 15.0f);
-            if (segmentBounds.contains(event.position.toFloat()))
-            {
-                editingCurveIndex = i;
-                break;
+                if (activeLfoData->points.size() < maxPoints)
+                {
+                    addPoint(toNormalized(event.getPosition()));
+                    auto it = std::find(activeLfoData->points.begin(), activeLfoData->points.end(), toNormalized(event.getPosition()));
+                    if (it != activeLfoData->points.end())
+                        draggingPointIndex = static_cast<int>(std::distance(activeLfoData->points.begin(), it));
+                }
             }
+            else if (event.mods.isRightButtonDown())
+            {
+                editingCurveIndex = -1;
+                for (int i = (int) activeLfoData->points.size() - 2; i >= 0; --i)
+                {
+                    auto p1 = fromNormalized(activeLfoData->points[i]);
+                    auto p2 = fromNormalized(activeLfoData->points[i + 1]);
+                    auto segmentBounds = juce::Rectangle<float>(std::min(p1.x, p2.x), std::min(p1.y, p2.y), std::abs(p1.x - p2.x), std::abs(p1.y - p2.y));
+                    segmentBounds = segmentBounds.expanded(0, 15.0f);
+                    if (segmentBounds.contains(event.position.toFloat()))
+                    {
+                        editingCurveIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+        case LfoEditMode::BrushPaint:
+        {
+            // Action for brush mode happens on mouseUp to feel like a "stamp"
+            break;
         }
     }
 }
 
 void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 {
-    if (activeLfoData == nullptr)
-        return; // Safety check
+    if (activeLfoData == nullptr || currentMode != LfoEditMode::PointEdit)
+        return;
 
     if (event.mods.isLeftButtonDown() && draggingPointIndex != -1)
     {
@@ -255,11 +267,29 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     if (activeLfoData == nullptr || activeLfoData->points.empty())
         return;
 
-    activeLfoData->points.front().x = 0.0f;
-    activeLfoData->points.back().x = 1.0f;
-
-    draggingPointIndex = -1;
-    editingCurveIndex = -1;
+    switch (currentMode)
+    {
+        case LfoEditMode::PointEdit:
+        {
+            activeLfoData->points.front().x = 0.0f;
+            activeLfoData->points.back().x = 1.0f;
+            if (draggingPointIndex != -1 || editingCurveIndex != -1)
+            {
+                updateAndSortPoints(); // Final sort after dragging
+            }
+            draggingPointIndex = -1;
+            editingCurveIndex = -1;
+            break;
+        }
+        case LfoEditMode::BrushPaint:
+        {
+            if (event.mouseWasClicked()) // Only apply on a click, not a drag
+            {
+                applyBrushShape(event.getPosition());
+            }
+            break;
+        }
+    }
     repaint();
 }
 
@@ -337,38 +367,54 @@ void LfoEditor::mouseExit(const juce::MouseEvent& event)
 
 void LfoEditor::addPoint(juce::Point<float> newPoint)
 {
-    if (activeLfoData == nullptr || activeLfoData->points.size() >= maxPoints)
+    if (! activeLfoData || activeLfoData->points.size() >= maxPoints)
         return;
 
+    // English: Add the point and sort the list to find its correct position.
     activeLfoData->points.push_back(newPoint);
     updateAndSortPoints();
 
-    auto it = std::find(activeLfoData->points.begin(), activeLfoData->points.end(), newPoint);
-    int insertIndex = static_cast<int>(std::distance(activeLfoData->points.begin(), it));
+    // English: Find the index of the point we just added.
+    auto it = std::find_if(activeLfoData->points.begin(), activeLfoData->points.end(), [&](const auto& p)
+                           { return juce::approximatelyEqual(p.x, newPoint.x) && juce::approximatelyEqual(p.y, newPoint.y); });
 
-    if (insertIndex > 0)
+    if (it != activeLfoData->points.end())
     {
-        activeLfoData->curvatures.insert(activeLfoData->curvatures.begin() + insertIndex - 1, 0.0f);
-        if (insertIndex < activeLfoData->curvatures.size())
-            activeLfoData->curvatures[insertIndex] = 0.0f;
+        int insertedAtIndex = (int) std::distance(activeLfoData->points.begin(), it);
+
+        // English: A new point splits a segment, so we need one more curvature value.
+        // We insert a new 0.0f (linear) curvature for the new segment being created.
+        // All other curvatures are preserved.
+        if (insertedAtIndex > 0)
+        {
+            activeLfoData->curvatures.insert(activeLfoData->curvatures.begin() + insertedAtIndex - 1, 0.0f);
+        }
+        else
+        {
+            // English: This should only happen if adding a point before the second point, very rare.
+            activeLfoData->curvatures.insert(activeLfoData->curvatures.begin(), 0.0f);
+        }
     }
-    else
-    {
-        activeLfoData->curvatures.insert(activeLfoData->curvatures.begin(), 0.0f);
-    }
+
     repaint();
 }
 
 void LfoEditor::removePoint(int index)
 {
-    if (activeLfoData == nullptr || index <= 0 || index >= activeLfoData->points.size() - 1)
+    if (! activeLfoData || index <= 0 || index >= activeLfoData->points.size() - 1)
         return;
 
     activeLfoData->points.erase(activeLfoData->points.begin() + index);
 
+    // English: Removing a point merges two segments. We must remove one curvature value.
+    // We remove the curvature of the first of the two merged segments.
     activeLfoData->curvatures.erase(activeLfoData->curvatures.begin() + index - 1);
+
+    // English: We then set the curvature of the new, merged segment to 0.0 (linear).
     if (index - 1 < activeLfoData->curvatures.size())
+    {
         activeLfoData->curvatures[index - 1] = 0.0f;
+    }
 
     repaint();
 }
@@ -386,10 +432,151 @@ juce::Point<float> LfoEditor::fromNormalized(juce::Point<float> normalizedPoint)
 
 void LfoEditor::updateAndSortPoints()
 {
-    if (activeLfoData == nullptr)
+    if (! activeLfoData)
         return;
-    std::sort(activeLfoData->points.begin(), activeLfoData->points.end(), [](const auto& a, const auto& b)
-              { return a.x < b.x; });
+    // English: Use stable_sort to preserve the order of points with the same x-coordinate.
+    std::stable_sort(activeLfoData->points.begin(), activeLfoData->points.end(), [](const auto& a, const auto& b)
+                     { return a.x < b.x; });
+
+    if (activeLfoData->points.empty())
+        activeLfoData->resetToDefault();
+    else
+    {
+        activeLfoData->points.front().x = 0.0f;
+        activeLfoData->points.back().x = 1.0f;
+    }
+}
+
+int LfoEditor::getOrCreatePointAtX(float targetX)
+{
+    if (activeLfoData == nullptr)
+        return -1;
+
+    // English: 1. Check if a point already exists at (or very close to) the target X.
+    for (size_t i = 0; i < activeLfoData->points.size(); ++i)
+    {
+        if (juce::approximatelyEqual(activeLfoData->points[i].x, targetX))
+            return static_cast<int>(i);
+    }
+
+    // English: 2. If not, find which segment the targetX falls into.
+    for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
+    {
+        auto& p1 = activeLfoData->points[i];
+        auto& p2 = activeLfoData->points[i + 1];
+
+        if (targetX > p1.x && targetX < p2.x)
+        {
+            // English: 3. Calculate the Y value on the segment at targetX.
+            // For simplicity, this uses linear interpolation. A more advanced version could calculate the curved position.
+            float segmentWidth = p2.x - p1.x;
+            float t = (segmentWidth > 0) ? (targetX - p1.x) / segmentWidth : 0.0f;
+            float newY = p1.y + (p2.y - p1.y) * t;
+
+            // English: 4. Create and add the new point.
+            addPoint({ targetX, newY });
+
+            // English: 5. After adding, the points are re-sorted. We need to find the new point's index again.
+            for (size_t j = 0; j < activeLfoData->points.size(); ++j)
+            {
+                if (juce::approximatelyEqual(activeLfoData->points[j].x, targetX))
+                    return static_cast<int>(j);
+            }
+        }
+    }
+    return -1; // English: Should not happen on a valid curve.
+}
+
+void LfoEditor::rebuildCurvatures()
+{
+    if (! activeLfoData)
+        return;
+    size_t numSegments = activeLfoData->points.size() > 1 ? activeLfoData->points.size() - 1 : 0;
+    activeLfoData->curvatures.assign(numSegments, 0.0f);
+}
+
+void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
+{
+    if (! activeLfoData)
+        return;
+
+    // 1. Identify grid cell and its boundaries.
+    const float gridW = 1.0f / (float) hGridDivs;
+    const float gridH = 1.0f / (float) vGridDivs;
+    const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) clickPosition.x / (float) getWidth() / gridW));
+    const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) clickPosition.y / (float) getHeight() / gridH));
+
+    const float startX = (float) gridX * gridW;
+    const float endX = (float) (gridX + 1) * gridW;
+    const float bottomY = 1.0f - ((float) (gridY + 1) * gridH);
+    const float topY = 1.0f - ((float) gridY * gridH);
+    const juce::Rectangle<float> cellBounds(startX, bottomY, endX - startX, topY - bottomY);
+
+    // 2. Generate the new shape. Assuming LfoShapeGenerator provides points exactly on boundaries.
+    auto newPoints = LfoShapeGenerator::generateShape(currentBrush, cellBounds);
+    if (newPoints.empty())
+        return;
+
+    // 3. CLEANUP: Remove all points that are ON or WITHIN the target cell's X-range.
+    activeLfoData->points.erase(
+        std::remove_if(activeLfoData->points.begin(), activeLfoData->points.end(), [&](const auto& p)
+                       {
+                           // This predicate is now simplified: remove any point within the horizontal span.
+                           return p.x >= startX && p.x <= endX; }),
+        activeLfoData->points.end());
+
+    // 4. ADD the new points to the list.
+    activeLfoData->points.insert(activeLfoData->points.end(), newPoints.begin(), newPoints.end());
+
+    // 5. Finalize by sorting all points and completely rebuilding the curvatures list.
+    // This is the most robust way to handle the data after such a destructive edit.
+    updateAndSortPoints();
+    rebuildCurvatures();
+
+    repaint();
+}
+
+int LfoEditor::findSegmentIndexAt(const juce::Point<int>& position) const
+{
+    // Safety checks: ensure there is data and at least one segment to check.
+    if (activeLfoData == nullptr || activeLfoData->points.size() < 2)
+        return -1;
+
+    // Convert the mouse's X position to a normalized value [0, 1]
+    const float clickXNormalized = (float) position.x / (float) getWidth();
+
+    // Iterate through all the points that define the start of a segment
+    for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
+    {
+        // A segment is defined by point 'i' and point 'i + 1'.
+        const auto& p1 = activeLfoData->points[i];
+        const auto& p2 = activeLfoData->points[i + 1];
+
+        // Check if the normalized click position falls horizontally between the two points.
+        if (clickXNormalized >= p1.x && clickXNormalized <= p2.x)
+        {
+            // If it does, we've found our segment. Return its starting index.
+            return static_cast<int>(i);
+        }
+    }
+
+    // If the loop completes, no segment was found at that X position.
+    return -1;
+}
+
+void LfoEditor::setEditMode(LfoEditMode newMode)
+{
+    currentMode = newMode;
+
+    // Reset any interaction state when changing modes
+    draggingPointIndex = -1;
+    editingCurveIndex = -1;
+    hoveredPointIndex = -1;
+}
+
+void LfoEditor::setCurrentBrush(LfoPresetShape newBrush)
+{
+    currentBrush = newBrush;
 }
 
 //==============================================================================
@@ -415,6 +602,29 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         lfoSelectButtons[i]->setToggleState(false, juce::dontSendNotification);
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
+
+    // --- Setup Mode Buttons ---
+    addAndMakeVisible(editModeButton);
+    addAndMakeVisible(brushModeButton);
+    editModeButton.setRadioGroupId(1002);
+    brushModeButton.setRadioGroupId(1002);
+    editModeButton.setClickingTogglesState(true);
+    brushModeButton.setClickingTogglesState(true);
+    editModeButton.addListener(this);
+    brushModeButton.addListener(this);
+
+    // --- Setup Brush Selector ---
+    addAndMakeVisible(brushSelector);
+    brushSelector.addItem("Saw Up", (int) LfoPresetShape::SawUp);
+    brushSelector.addItem("Saw Down", (int) LfoPresetShape::SawDown);
+    brushSelector.addItem("Sine Convex", (int) LfoPresetShape::SineConvex);
+    brushSelector.addItem("Sine Concave", (int) LfoPresetShape::SineConcave);
+    brushSelector.addItem("Square High", (int) LfoPresetShape::SquareHigh);
+    brushSelector.addItem("Square Low", (int) LfoPresetShape::SquareLow);
+    brushSelector.onChange = [this]
+    { lfoEditor.setCurrentBrush(static_cast<LfoPresetShape>(brushSelector.getSelectedId())); };
+
+    setEditMode(LfoEditMode::PointEdit); // Set initial state
 
     addAndMakeVisible(matrixButton);
     matrixButton.addListener(this);
@@ -567,12 +777,21 @@ void LfoPanel::resized()
         gridYSlider.setBounds(gridYArea);
     }
 
+    auto topStrip = bounds.removeFromTop(30);
+    auto controlsStrip = topStrip.removeFromLeft(topStrip.getWidth() / 2);
+    auto lfoSelectStrip = topStrip;
+
     // Layout for the main columns using FlexBox for the buttons.
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
     for (const auto& button : lfoSelectButtons)
         lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(2 * scale)));
     lfoSelectBox.performLayout(leftColumn);
+
+    editModeButton.setBounds(controlsStrip.removeFromLeft(80));
+    brushModeButton.setBounds(controlsStrip.removeFromLeft(80));
+    controlsStrip.removeFromLeft(10);
+    brushSelector.setBounds(controlsStrip.removeFromLeft(100));
 
     // Center the rate slider in the right column with a scaled size.
     const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.9f); // 90%
@@ -599,6 +818,18 @@ void LfoPanel::timerCallback()
 
 void LfoPanel::buttonClicked(juce::Button* button)
 {
+    // Mode Switching
+    if (button == &editModeButton)
+    {
+        setEditMode(LfoEditMode::PointEdit);
+        return;
+    }
+    if (button == &brushModeButton)
+    {
+        setEditMode(LfoEditMode::BrushPaint);
+        return;
+    }
+
     if (button == &matrixButton)
     {
         // This opens our new panel in a non-modal dialog window.
@@ -732,4 +963,36 @@ void LfoPanel::setScale(float newScale)
 {
     scale = newScale;
     //    flatLnf.scale = newScale; // Pass the scale to the LookAndFeel if it needs it.
+}
+
+void LfoPanel::setEditMode(LfoEditMode newMode)
+{
+    // 1. Update the internal state of the LfoPanel
+    // currentMode = newMode; // Assuming you add a currentMode member to LfoPanel
+
+    if (newMode == LfoEditMode::PointEdit)
+    {
+        // 2. Set the toggle state of the mode buttons
+        editModeButton.setToggleState(true, juce::dontSendNotification);
+        brushModeButton.setToggleState(false, juce::dontSendNotification);
+
+        // 3. Hide the brush selector UI
+        brushSelector.setVisible(false);
+    }
+    else // newMode == LfoEditMode::BrushPaint
+    {
+        // 2. Set the toggle state of the mode buttons
+        editModeButton.setToggleState(false, juce::dontSendNotification);
+        brushModeButton.setToggleState(true, juce::dontSendNotification);
+
+        // 3. Show the brush selector UI
+        brushSelector.setVisible(true);
+
+        // 4. Ensure a valid brush is selected when entering brush mode
+        if (brushSelector.getSelectedId() == 0) // Check if nothing is selected
+            brushSelector.setSelectedId(1, juce::dontSendNotification);
+    }
+
+    // 5. IMPORTANT: Tell the LfoEditor view to change its behavior
+    lfoEditor.setEditMode(newMode);
 }

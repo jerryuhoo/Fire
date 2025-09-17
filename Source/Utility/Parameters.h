@@ -18,15 +18,23 @@
 // SHARED ENUMS
 // =============================================================================
 
-// Enum for LFO waveform types.
-enum class LfoWaveform
+// Enum for LFO editing tool/mode.
+enum class LfoEditMode
 {
-    Sine,
-    Triangle,
-    SawtoothDown, // "Saw"
-    SawtoothUp, // "Ramp"
-    Square,
-    User // For user-drawn shapes
+    PointEdit, // Mode for editing points and curvatures
+    BrushPaint // Mode for painting preset shapes
+};
+
+// Enum for LFO preset shapes, used as "brushes" in BrushPaint mode.
+enum class LfoPresetShape
+{
+    SawUp = 1,
+    SawDown,
+    SineConvex,
+    SineConcave,
+    SquareHigh,
+    SquareLow,
+    UserDraw
 };
 
 // Enum for filter slope steepness.

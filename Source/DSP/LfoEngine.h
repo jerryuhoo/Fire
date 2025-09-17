@@ -30,9 +30,6 @@ public:
     void reset();
     void prepare(const juce::dsp::ProcessSpec& spec);
 
-    /** Sets the LFO to generate one of the built-in waveforms. */
-    void setWaveform(LfoWaveform waveformType);
-
     /** Updates the LFO shape from user-drawn points and curvatures. 
         This automatically sets the waveform type to User.
     */
@@ -52,7 +49,6 @@ private:
     float phase = 0.0f;
     float phaseDelta = 0.0f;
     float lastOutput = 0.0f;
-    LfoWaveform currentWaveform = LfoWaveform::User;
 
     juce::dsp::LookupTable<float> wavetable;
 };

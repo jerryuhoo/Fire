@@ -16,7 +16,6 @@ LfoEngine::LfoEngine()
     wavetable.initialise([](float x)
                          { return 0.0f; },
                          1024); // Initialize with silence
-    setWaveform(LfoWaveform::Sine); // Default to Sine wave on startup
 }
 
 void LfoEngine::reset()
@@ -29,69 +28,8 @@ void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
     sampleRate = spec.sampleRate;
 }
 
-void LfoEngine::setWaveform(LfoWaveform waveformType)
-{
-    currentWaveform = waveformType;
-    const auto numPoints = wavetable.getNumPoints();
-
-    // A lambda function to pass to wavetable.initialise
-    std::function<float(size_t)> wave_function;
-
-    switch (currentWaveform)
-    {
-        case LfoWaveform::Sine:
-            wave_function = [numPoints](size_t i)
-            {
-                // Generates a sine wave and maps its range from [-1, 1] to [0, 1]
-                return 0.5f * (std::sin((double) i / (double) numPoints * juce::MathConstants<double>::twoPi) + 1.0f);
-            };
-            break;
-
-        case LfoWaveform::Triangle:
-            wave_function = [numPoints](size_t i)
-            {
-                double phase = (double) i / (double) numPoints;
-                if (phase < 0.5)
-                    return (float) (2.0 * phase); // Ramp up 0 -> 1
-                else
-                    return (float) (2.0 * (1.0 - phase)); // Ramp down 1 -> 0
-            };
-            break;
-
-        case LfoWaveform::SawtoothDown: // "Saw" - 斜下
-            wave_function = [numPoints](size_t i)
-            {
-                return 1.0f - ((float) i / (float) numPoints);
-            };
-            break;
-
-        case LfoWaveform::SawtoothUp: // "Ramp" - 斜上
-            wave_function = [numPoints](size_t i)
-            {
-                return (float) i / (float) numPoints;
-            };
-            break;
-
-        case LfoWaveform::Square:
-            wave_function = [numPoints](size_t i)
-            {
-                return ((double) i / (double) numPoints < 0.5) ? 1.0f : 0.0f;
-            };
-            break;
-
-        case LfoWaveform::User:
-            // For User mode, the wavetable is updated via updateUserShape(), so we do nothing here.
-            return;
-    }
-
-    wavetable.initialise(wave_function, numPoints);
-}
-
 void LfoEngine::updateShape(const LfoData& shapeData)
 {
-    // When this function is called, we know the user is editing the shape.
-    currentWaveform = LfoWaveform::User;
-
     const auto& points = shapeData.points;
     const auto& curvatures = shapeData.curvatures;
 

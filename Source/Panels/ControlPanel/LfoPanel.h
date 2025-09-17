@@ -50,6 +50,9 @@ public:
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
 
+    std::function<void()> onDataChanged;
+    void setOnDataChangedCallback(std::function<void()> callback);
+
 private:
     // This pointer holds the currently active LFO data. It does not own the data.
     LfoData* activeLfoData = nullptr;
@@ -107,6 +110,7 @@ public:
     void timerCallback() override;
 
     void setScale(float newScale);
+    void setOnDataChangedCallback(std::function<void()> callback);
 
 private:
     void buttonClicked(juce::Button* button) override;

@@ -20,6 +20,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // timer
     juce::Timer::startTimerHz(60.0f);
 
+    lfoPanel.setOnDataChangedCallback([this]
+                                      { processor.lfoDataHasChanged(); });
+
     // This is not a perfect fix for Vst3 plugins
     // Vst3 calls constructor before setStateInformation in processor,
     // however, AU plugin calls constructor after setStateInformation/
@@ -269,6 +272,11 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     bandPanel.widthBypassButton.removeListener(this);
 
     setLookAndFeel(nullptr);
+}
+
+void FireAudioProcessorEditor::markPresetAsDirty()
+{
+    stateComponent.markAsDirty();
 }
 
 void FireAudioProcessorEditor::initEditor()

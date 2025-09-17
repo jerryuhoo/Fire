@@ -126,6 +126,11 @@ void LfoEditor::paint(juce::Graphics& g)
 
 void LfoEditor::resized() {} // No layout logic needed in the editor itself.
 
+void LfoEditor::setOnDataChangedCallback(std::function<void()> callback)
+{
+    onDataChanged = callback;
+}
+
 void LfoEditor::setGridDivisions(int horizontal, int vertical)
 {
     hGridDivs = juce::jmax(1, horizontal);
@@ -267,6 +272,8 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     if (activeLfoData == nullptr || activeLfoData->points.empty())
         return;
 
+    bool dataWasChanged = false;
+
     switch (currentMode)
     {
         case LfoEditMode::PointEdit:
@@ -276,6 +283,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
             if (draggingPointIndex != -1 || editingCurveIndex != -1)
             {
                 updateAndSortPoints(); // Final sort after dragging
+                dataWasChanged = true;
             }
             draggingPointIndex = -1;
             editingCurveIndex = -1;
@@ -286,11 +294,17 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
             if (event.mouseWasClicked()) // Only apply on a click, not a drag
             {
                 applyBrushShape(event.getPosition());
+                dataWasChanged = true;
             }
             break;
         }
     }
     repaint();
+
+    if (dataWasChanged && onDataChanged)
+    {
+        onDataChanged();
+    }
 }
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
@@ -316,6 +330,8 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
         {
             activeLfoData->curvatures[curveToReset] = 0.0f;
             repaint();
+            if (onDataChanged)
+                onDataChanged();
         }
         return;
     }
@@ -885,6 +901,13 @@ void LfoPanel::buttonClicked(juce::Button* button)
             updateRateSlider();
         }
     }
+}
+
+void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)
+{
+    // English: Here we connect the LfoPanel's callback to the LfoEditor's callback.
+    // This completes the chain from the innermost component to the outermost.
+    lfoEditor.setOnDataChangedCallback(callback);
 }
 
 void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()

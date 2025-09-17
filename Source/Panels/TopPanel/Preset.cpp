@@ -29,7 +29,8 @@ namespace state
         // 1. Save LFO Shapes
         auto* lfoState = xml.createNewChildElement("LFO_STATE");
 
-        const auto& lfoDataToSave = fireProc.getLfoData();
+        auto& mutableProc = const_cast<FireAudioProcessor&>(fireProc);
+        const auto& lfoDataToSave = mutableProc.getLfoData();
 
         for (int i = 0; i < lfoDataToSave.size(); ++i)
         {
@@ -256,22 +257,22 @@ namespace state
     public:
         int compareElements(juce::XmlElement* first, juce::XmlElement* second) const
         {
-            // 检查元素是否为预设（有 presetName 属性）
+            // Check if the elements are presets (i.e., they have a "presetName" attribute).
             bool firstIsPreset = first->hasAttribute("presetName");
             bool secondIsPreset = second->hasAttribute("presetName");
 
-            // 两个都是预设，按 presetName 排序
+            // If both are presets, sort them by presetName.
             if (firstIsPreset && secondIsPreset)
             {
                 return first->getStringAttribute("presetName")
                     .compareNatural(second->getStringAttribute("presetName"));
             }
-            // 两个都是文件夹，按文件夹名 (TagName) 排序
+            // If both are folders, sort them by folder name (TagName).
             else if (! firstIsPreset && ! secondIsPreset)
             {
                 return first->getTagName().compareNatural(second->getTagName());
             }
-            // 一个是预设，一个是文件夹，让文件夹排在前面
+            // If one is a preset and the other is a folder, put the folder first.
             else if (firstIsPreset && ! secondIsPreset)
             {
                 return 1; // first (preset) > second (folder)
@@ -356,7 +357,7 @@ namespace state
 
         for (auto* child : parent->getChildIterator())
         {
-            // 如果子元素是一个文件夹 (即没有 presetName 属性)，则对其进行递归排序
+            // If the child element is a folder (i.e., it doesn't have a "presetName" attribute), sort it recursively.
             if (! child->hasAttribute("presetName"))
             {
                 recursiveSort(child);
@@ -533,6 +534,18 @@ namespace state
                 p->setValueNotifyingHost(p->getDefaultValue());
         // set preset combobox to 0
         statePresetName = "";
+
+        auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
+        for (auto& lfo : fireProc.getLfoManager().getLfoData())
+        {
+            lfo.resetToDefault();
+        }
+
+        // --- ADDED: Notify the editor to update its display ---
+        if (auto* editor = fireProc.getActiveEditor())
+        {
+            editor->repaint();
+        }
     }
 
     //==============================================================================
@@ -704,18 +717,18 @@ namespace state
 
     void StateComponent::markAsDirty()
     {
-        // 只有在当前有一个“干净”的预设被选中时 (ID > 0 且不带 *)，才执行操作
+        // Only perform the operation if a "clean" preset is currently selected (ID > 0 and does not have a *).
         if (presetBox.getSelectedId() > 0 && ! presetBox.getText().endsWith("*"))
         {
             const auto currentText = presetBox.getText();
 
-            // *** 关键修复：调换顺序 ***
-
-            // 1. 先在后台将 selectedId 设置为 0。
-            //    这会让 ComboBox 内部认为“无选择”，并为下一步选择同一个项目时触发 onChange 做好准备。
+            // 1. First, set the selectedId to 0 in the background.
+            //    This makes the ComboBox's internal state believe "nothing is selected," preparing it to fire onChange
+            //    for the next step when we select the same item.
             presetBox.setSelectedId(0, juce::dontSendNotification);
 
-            // 2. 然后，立即用我们想要的“脏”文本覆盖掉因ID为0而可能显示的默认文本("- Init -")。
+            // 2. Then, immediately overwrite the default text ("- Init -") that might appear due to ID=0
+            //    with our desired "dirty" text.
             presetBox.setText(currentText + "*", juce::dontSendNotification);
         }
     }
@@ -751,7 +764,6 @@ namespace state
         {
             auto* presetManager = &procStatePresets;
 
-            // *** 修改：通过映射表查找正确的 TagName ***
             const juce::String internalIdToLoad = presetManager->comboBoxIdToTagNameMap[selectedId];
 
             if (internalIdToLoad.isNotEmpty())
@@ -771,8 +783,7 @@ namespace state
             }
             else
             {
-                // 如果在映射表中找不到ID，这是一个错误，可以在此处理
-                jassertfalse; // 调试时中断
+                jassertfalse;
             }
         }
     }

@@ -257,6 +257,8 @@ public:
     float getBandInputMeterLevel(int band, int channel) const;
     float getBandOutputMeterLevel(int band, int channel) const;
 
+    void lfoDataHasChanged();
+
 private:
     std::vector<std::unique_ptr<BandProcessor>> bands;
     float totalLatency = 0.0f;

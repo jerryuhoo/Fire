@@ -47,6 +47,7 @@ public:
     void setMultiband();
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
+    void markPresetAsDirty();
 
 private:
     // This reference is provided as a quick way for your editor to
@@ -66,7 +67,7 @@ private:
 
     // init editor
     void initEditor();
-    
+
     // Top Area
     juce::Rectangle<int> logoArea;
     juce::Rectangle<int> wingsArea;

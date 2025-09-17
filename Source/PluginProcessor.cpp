@@ -1866,6 +1866,14 @@ const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
     return lfoManager->getLfoRateSyncDivisions();
 }
 
+void FireAudioProcessor::lfoDataHasChanged()
+{
+    if (auto* editor = dynamic_cast<FireAudioProcessorEditor*>(getActiveEditor()))
+    {
+        editor->markPresetAsDirty();
+    }
+}
+
 bool FireAudioProcessor::getLatestMeterValues(MeterValues& values)
 {
     // Check how many complete data packets are ready to be read.

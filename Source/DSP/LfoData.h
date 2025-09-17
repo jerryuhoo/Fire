@@ -36,7 +36,7 @@ struct LfoData
         points.clear();
         curvatures.clear();
         points.push_back({ 0.0f, 0.0f });
-        points.push_back({ 1.0f, 1.0f });
+        points.push_back({ 1.0f, 0.0f });
         curvatures.push_back(0.0f); // English: One segment, so one curvature value.
     }
 

@@ -17,68 +17,71 @@ class LfoShapeGenerator
 {
 public:
     static std::vector<juce::Point<float>> generateShape(LfoPresetShape shape,
-                                                         juce::Rectangle<float> cellBounds,
-                                                         int numPoints = 16)
+                                                         juce::Rectangle<float> cellBounds)
     {
         std::vector<juce::Point<float>> points;
-        const float epsilon = 0.00001f; // A very small offset
+        const float epsilon = 0.00001f;
 
-        // English: Adjust the start and end X coordinates to be slightly inside the cell,
-        // ONLY if they are NOT at the global boundaries.
         float effectiveStartX = cellBounds.getX();
-        if (effectiveStartX > 0.0f) // This condition correctly handles the leftmost boundary
+        if (effectiveStartX > 0.0f)
             effectiveStartX += epsilon;
 
         float effectiveEndX = cellBounds.getRight();
-        if (effectiveEndX < 1.0f) // This condition correctly handles the rightmost boundary
+        if (effectiveEndX < 1.0f)
             effectiveEndX -= epsilon;
 
-        // English: Ensure start is always before end, even with epsilon.
         if (effectiveStartX >= effectiveEndX)
             effectiveEndX = effectiveStartX + epsilon;
 
         const float bottomY = cellBounds.getY();
         const float topY = cellBounds.getBottom();
+        const float midX = effectiveStartX + (effectiveEndX - effectiveStartX) * 0.5f;
 
-        auto calculatePoint = [&](float t)
+        // Sine shapes now generate 3 points
+        bool isSineShape = (shape == LfoPresetShape::SineConvex || shape == LfoPresetShape::SineConcave);
+
+        if (isSineShape)
         {
-            float x = effectiveStartX + t * (effectiveEndX - effectiveStartX);
-            float y = 0.0f;
-            switch (shape)
+            if (shape == LfoPresetShape::SineConvex)
             {
-                case LfoPresetShape::SawUp:
-                    y = bottomY + t * (topY - bottomY);
-                    break;
-                case LfoPresetShape::SawDown:
-                    y = topY - t * (topY - bottomY);
-                    break;
-                case LfoPresetShape::SineConvex:
-                    y = bottomY + std::sin(t * juce::MathConstants<float>::pi) * (topY - bottomY);
-                    break;
-                case LfoPresetShape::SineConcave:
-                    y = topY - std::sin(t * juce::MathConstants<float>::pi) * (topY - bottomY);
-                    break;
-                case LfoPresetShape::SquareHigh:
-                    y = topY;
-                    break;
-                case LfoPresetShape::SquareLow:
-                    y = bottomY;
-                    break;
+                points.push_back({ effectiveStartX, bottomY });
+                points.push_back({ midX, topY });
+                points.push_back({ effectiveEndX, bottomY });
             }
-            return juce::Point<float> { x, y };
-        };
-
-        bool isLinearShape = (shape == LfoPresetShape::SawUp || shape == LfoPresetShape::SawDown || shape == LfoPresetShape::SquareHigh || shape == LfoPresetShape::SquareLow);
-
-        if (isLinearShape)
+            else // SineConcave
+            {
+                points.push_back({ effectiveStartX, topY });
+                points.push_back({ midX, bottomY });
+                points.push_back({ effectiveEndX, topY });
+            }
+        }
+        else // All other shapes are linear and only need two points
         {
+            auto calculatePoint = [&](float t)
+            {
+                float x = effectiveStartX + t * (effectiveEndX - effectiveStartX);
+                float y = 0.0f;
+                switch (shape)
+                {
+                    case LfoPresetShape::SawUp:
+                        y = bottomY + t * (topY - bottomY);
+                        break;
+                    case LfoPresetShape::SawDown:
+                        y = topY - t * (topY - bottomY);
+                        break;
+                    case LfoPresetShape::SquareHigh:
+                        y = topY;
+                        break;
+                    case LfoPresetShape::SquareLow:
+                        y = bottomY;
+                        break;
+                    default:
+                        break; // Should not happen for linear shapes
+                }
+                return juce::Point<float> { x, y };
+            };
             points.push_back(calculatePoint(0.0f));
             points.push_back(calculatePoint(1.0f));
-        }
-        else
-        {
-            for (int i = 0; i < numPoints; ++i)
-                points.push_back(calculatePoint((float) i / (float) (numPoints - 1)));
         }
 
         return points;

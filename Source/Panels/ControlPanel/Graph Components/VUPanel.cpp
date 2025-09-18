@@ -32,6 +32,7 @@ VUPanel::VUPanel(FireAudioProcessor& p) : processor(p),
 
 VUPanel::~VUPanel()
 {
+    stopTimer();
 }
 
 void VUPanel::paint(juce::Graphics& g)

@@ -11,23 +11,24 @@
 #include "Oscilloscope.h"
 
 //==============================================================================
-Oscilloscope::Oscilloscope (FireAudioProcessor& p) : processor (p)
+Oscilloscope::Oscilloscope(FireAudioProcessor& p) : processor(p)
 {
-    startTimerHz (60);
+    startTimerHz(60);
 }
 
 Oscilloscope::~Oscilloscope()
 {
+    stopTimer();
 }
 
-void Oscilloscope::paint (juce::Graphics& g)
+void Oscilloscope::paint(juce::Graphics& g)
 {
     // draw outline
-    g.setColour (COLOUR6);
-    g.drawRect (getLocalBounds(), 1);
+    g.setColour(COLOUR6);
+    g.drawRect(getLocalBounds(), 1);
 
-    juce::ColourGradient grad (juce::Colours::red.withBrightness (0.9f), getWidth() / 2, getHeight() / 2, juce::Colours::red.withAlpha (0.0f), 0, getHeight() / 2, true);
-    g.setGradientFill (grad);
+    juce::ColourGradient grad(juce::Colours::red.withBrightness(0.9f), getWidth() / 2, getHeight() / 2, juce::Colours::red.withAlpha(0.0f), 0, getHeight() / 2, true);
+    g.setGradientFill(grad);
 
     bool monoChannel = false;
     historyL = processor.getHistoryArrayL();
@@ -66,7 +67,7 @@ void Oscilloscope::paint (juce::Graphics& g)
 
     for (int i = 0; i < getWidth(); i++)
     {
-        int scaledIndex = static_cast<int> (i * (float) historyL.size() / (float) getWidth());
+        int scaledIndex = static_cast<int>(i * (float) historyL.size() / (float) getWidth());
 
         valL = historyL[scaledIndex];
         if (! monoChannel)
@@ -80,32 +81,32 @@ void Oscilloscope::paint (juce::Graphics& g)
                 valR = valR / maxValue * 0.6f;
         }
 
-        valL = juce::jlimit<float> (-1, 1, valL);
+        valL = juce::jlimit<float>(-1, 1, valL);
         if (! monoChannel)
-            valR = juce::jlimit<float> (-1, 1, valR);
+            valR = juce::jlimit<float>(-1, 1, valR);
 
         if (i == 0)
         {
-            pathL.startNewSubPath (0, amp);
+            pathL.startNewSubPath(0, amp);
             if (! monoChannel)
-                pathR.startNewSubPath (0, amp * 3);
+                pathR.startNewSubPath(0, amp * 3);
         }
         else
         {
-            pathL.lineTo (i, amp - valL * amp);
+            pathL.lineTo(i, amp - valL * amp);
             if (! monoChannel)
-                pathR.lineTo (i, amp * 3 - valR * amp);
+                pathR.lineTo(i, amp * 3 - valR * amp);
         }
     }
 
-    g.strokePath (pathL, juce::PathStrokeType (2.0));
+    g.strokePath(pathL, juce::PathStrokeType(2.0));
     if (! monoChannel)
-        g.strokePath (pathR, juce::PathStrokeType (2.0));
+        g.strokePath(pathR, juce::PathStrokeType(2.0));
 
     // set color when mouse on
     if (isMouseOn && ! mZoomState)
     {
-        g.setColour (DRIVE_COLOUR.withAlpha (0.05f));
+        g.setColour(DRIVE_COLOUR.withAlpha(0.05f));
         g.fillAll();
     }
 }

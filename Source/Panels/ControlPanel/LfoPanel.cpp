@@ -271,8 +271,28 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
     if (editingCurveIndex != -1 && event.mods.isRightButtonDown())
     {
-        float deltaY = (float) (initialDragY - event.y);
-        activeLfoData->curvatures[editingCurveIndex] = juce::jlimit(-1.0f, 1.0f, initialCurvature + deltaY * 0.005f);
+        // Get the start and end points of the segment in screen coordinates to calculate the visual slope.
+        auto p1_screen = fromNormalized(activeLfoData->points[editingCurveIndex]);
+        auto p2_screen = fromNormalized(activeLfoData->points[editingCurveIndex + 1]);
+
+        float dx = p2_screen.x - p1_screen.x;
+        // Note: in screen coordinates, a smaller Y is higher up.
+        float dy = p2_screen.y - p1_screen.y;
+
+        float slope = (dx != 0.0f) ? (dy / dx) : 0.0f;
+
+        // getDistanceFromDragStartY() returns (currentY - startY). Dragging down is positive.
+        float dragDistY = event.getDistanceFromDragStartY();
+
+        const float sensitivity = 0.01f; // Controls how much effect the drag has.
+
+        // The core logic: we want UP drag (negative distance) to always produce an UPWARD bulge (negative curvature).
+        // To achieve this, we make the curvature change proportional to the drag distance,
+        // but we invert it if the line is visually sloping downwards on the screen (positive slope).
+        float curvatureChange = (slope > 0.0f) ? -dragDistY * sensitivity : dragDistY * sensitivity;
+
+        activeLfoData->curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
+
         repaint();
         return;
     }
@@ -622,33 +642,102 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
     const float gridH = 1.0f / (float) vGridDivs;
     const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) clickPosition.x / (float) getWidth() / gridW));
     const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) clickPosition.y / (float) getHeight() / gridH));
-
     const float startX = (float) gridX * gridW;
     const float endX = (float) (gridX + 1) * gridW;
     const float bottomY = 1.0f - ((float) (gridY + 1) * gridH);
     const float topY = 1.0f - ((float) gridY * gridH);
     const juce::Rectangle<float> cellBounds(startX, bottomY, endX - startX, topY - bottomY);
 
-    // 2. Generate the new shape. Assuming LfoShapeGenerator provides points exactly on boundaries.
-    auto newPoints = LfoShapeGenerator::generateShape(currentBrush, cellBounds);
-    if (newPoints.empty())
-        return;
+    const auto oldPoints = activeLfoData->points;
 
-    // 3. CLEANUP: Remove all points that are ON or WITHIN the target cell's X-range.
+    // 2. Cleanup old points with smarter boundary logic.
     activeLfoData->points.erase(
-        std::remove_if(activeLfoData->points.begin(), activeLfoData->points.end(), [&](const auto& p)
+        std::remove_if(activeLfoData->points.begin(),
+                       activeLfoData->points.end(),
+                       [&](const auto& p)
                        {
-                           // This predicate is now simplified: remove any point within the horizontal span.
-                           return p.x >= startX && p.x <= endX; }),
+                           // Check if the point is at the absolute start or end of the LFO.
+                           bool isPointAtStartBoundary = juce::approximatelyEqual(p.x, 0.0f);
+                           bool isPointAtEndBoundary = juce::approximatelyEqual(p.x, 1.0f);
+
+                           // Check if the brush is painting over the start or end cell.
+                           bool isBrushAtStartBoundary = juce::approximatelyEqual(startX, 0.0f);
+                           bool isBrushAtEndBoundary = juce::approximatelyEqual(endX, 1.0f);
+
+                           // Protect the boundary points ONLY if the brush is NOT painting over them.
+                           if ((isPointAtStartBoundary && ! isBrushAtStartBoundary) || (isPointAtEndBoundary && ! isBrushAtEndBoundary))
+                           {
+                               return false; // Keep this point.
+                           }
+
+                           // For all other points, remove them if they fall within the brush's horizontal range.
+                           return p.x >= startX && p.x <= endX;
+                       }),
         activeLfoData->points.end());
 
-    // 4. ADD the new points to the list.
+    // 3. Generate the new shape's points.
+    auto newPoints = LfoShapeGenerator::generateShape(currentBrush, cellBounds);
+
     activeLfoData->points.insert(activeLfoData->points.end(), newPoints.begin(), newPoints.end());
 
-    // 5. Finalize by sorting all points and completely rebuilding the curvatures list.
-    // This is the most robust way to handle the data after such a destructive edit.
     updateAndSortPoints();
-    rebuildCurvatures();
+
+    // 4. Intelligently rebuild the curvatures vector to preserve old values.
+    std::vector<float> newCurvatures;
+    const auto& currentPoints = activeLfoData->points;
+
+    for (size_t i = 0; i < currentPoints.size() - 1; ++i)
+    {
+        const auto& p1 = currentPoints[i];
+        const auto& p2 = currentPoints[i + 1];
+
+        bool isNewlyCreatedSineSegment = false;
+
+        // Check if this segment is part of our newly added sine wave.
+        bool isSineBrush = (currentBrush == LfoPresetShape::SineConvex || currentBrush == LfoPresetShape::SineConcave);
+        if (isSineBrush && newPoints.size() == 3)
+        {
+            // Assign a predefined curvature for the two halves of the sine shape.
+            float curvature = 0.0f;
+            float sineCurvature = 0.55f;
+            // Check if the current segment matches the first half of the generated sine points.
+            if (juce::approximatelyEqual(p1.x, newPoints[0].x) && juce::approximatelyEqual(p2.x, newPoints[1].x))
+            {
+                curvature = -sineCurvature; // First half curves up.
+            }
+            // Check if the current segment matches the second half.
+            else if (juce::approximatelyEqual(p1.x, newPoints[1].x) && juce::approximatelyEqual(p2.x, newPoints[2].x))
+            {
+                curvature = sineCurvature; // Second half curves down to complete the shape.
+            }
+
+            // If a curvature was set, add it and mark the segment as handled.
+            if (curvature != 0.0f)
+            {
+                newCurvatures.push_back(curvature);
+                isNewlyCreatedSineSegment = true;
+            }
+        }
+
+        if (! isNewlyCreatedSineSegment)
+        {
+            float oldCurvature = 0.0f;
+            for (size_t j = 0; j < oldPoints.size() - 1; ++j)
+            {
+                if (juce::approximatelyEqual(oldPoints[j].x, p1.x) && juce::approximatelyEqual(oldPoints[j + 1].x, p2.x))
+                {
+                    if (j < activeLfoData->curvatures.size())
+                    {
+                        oldCurvature = activeLfoData->curvatures[j];
+                        break;
+                    }
+                }
+            }
+            newCurvatures.push_back(oldCurvature);
+        }
+    }
+
+    activeLfoData->curvatures.swap(newCurvatures);
 
     repaint();
 }

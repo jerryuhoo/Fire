@@ -46,6 +46,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
+    bool keyPressed(const juce::KeyPress& key) override;
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
@@ -71,6 +72,8 @@ private:
     juce::Point<float> toNormalized(juce::Point<int> localPoint);
     juce::Point<float> fromNormalized(juce::Point<float> normalizedPoint);
 
+    void deleteSelectedPoints();
+
     // --- State variables for interaction ---
     LfoEditMode currentMode = LfoEditMode::PointEdit;
     LfoPresetShape currentBrush = LfoPresetShape::SawUp;
@@ -88,6 +91,22 @@ private:
 
     const int maxPoints = 16;
     const float pointRadius = 6.0f;
+
+    std::vector<int> selectedPointIndices;
+    juce::Rectangle<int> selectionRectangle;
+
+    enum class DraggingState
+    {
+        None,
+        Point,
+        Selection,
+        Marquee
+    };
+    DraggingState draggingState = DraggingState::None;
+
+    // Used for dragging single or multiple points
+    juce::Point<float> dragAnchor; // The normalized position of the main point being dragged
+    std::vector<juce::Point<float>> initialDragPositions; // Store original positions of all selected points
 };
 
 //

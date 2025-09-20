@@ -597,7 +597,20 @@ namespace state
         { updatePresetBox(presetBox.getSelectedId()); };
 
         refreshPresetBox();
-        ifPresetActiveShowInBox();
+
+        const int currentPresetId = procStatePresets.getCurrentPresetId();
+        const int numPresets = procStatePresets.getNumPresets();
+        if (1 <= currentPresetId && currentPresetId <= numPresets)
+        {
+            presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
+
+            juce::String presetName = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
+            presetBox.setText(presetName, juce::dontSendNotification);
+        }
+        else
+        {
+            presetBox.setTextWhenNothingSelected("- Init -");
+        }
 
         addAndMakeVisible(savePresetButton);
         savePresetButton.addListener(this);
@@ -792,14 +805,6 @@ namespace state
     {
         presetBox.clear();
         procStatePresets.setPresetAndFolderNames(presetBox);
-    }
-
-    void StateComponent::ifPresetActiveShowInBox()
-    {
-        const int currentPresetId { procStatePresets.getCurrentPresetId() };
-        const int numPresets { procStatePresets.getNumPresets() };
-        if (1 <= currentPresetId && currentPresetId <= numPresets)
-            presetBox.setSelectedId(currentPresetId);
     }
 
     void StateComponent::deletePresetAndRefresh()

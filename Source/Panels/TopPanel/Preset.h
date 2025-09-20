@@ -63,7 +63,7 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
     public:
         StatePresets(juce::AudioProcessor& proc, const juce::String& presetFileLocation);
         ~StatePresets();
-        
+
         juce::HashMap<int, juce::String> comboBoxIdToTagNameMap;
 
         juce::String savePreset(juce::File savePath);
@@ -118,7 +118,7 @@ PluginProcessor).
         void resized() override;
         void markAsDirty();
         void parameterChanged(const juce::String& parameterID, float newValue) override;
-        
+
         juce::String getPresetName();
         /*juce::TextButton& getNextButton();
     juce::TextButton& getPreviousButton();*/
@@ -137,9 +137,9 @@ PluginProcessor).
     private:
         StateAB& procStateAB;
         StatePresets& procStatePresets;
-        
+
         juce::AudioProcessorValueTreeState& valueTreeState;
-        
+
         bool isProgrammaticChange = false;
         //Multiband multiband{};
         //FireAudioProcessorEditor& editor;
@@ -167,7 +167,6 @@ PluginProcessor).
         void comboBoxChanged(juce::ComboBox* changedComboBox) override;
 
         void refreshPresetBox();
-        void ifPresetActiveShowInBox();
         void deletePresetAndRefresh();
         void savePresetAlertWindow();
         void openPresetFolder();

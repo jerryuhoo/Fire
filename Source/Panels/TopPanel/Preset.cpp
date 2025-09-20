@@ -660,17 +660,17 @@ namespace state
 
     void StateComponent::parameterChanged(const juce::String& parameterID, float newValue)
     {
-        // 这个函数会在任何参数变化时被调用，包括：
-        // a) 用户拖动UI控件
-        // b) Host发送自动化数据
-        // c) 我们自己加载预设 (loadPreset)
+        // This function is called whenever any parameter changes, including:
+        // a) User interaction with the UI controls
+        // b) Host sending automation data
+        // c) We load a preset ourselves
 
-        // 如果变化是由于我们加载预设引起的，我们不应该标记为“脏”
-        // 所以我们使用 isProgrammaticChange 标志位来忽略这些变化
+        // If the change is caused by a programmatic preset load, we should not mark it as "dirty"
+        // So we use the isProgrammaticChange flag to ignore these changes
         if (isProgrammaticChange)
             return;
 
-        // 否则，这个变化就是用户操作引起的，调用 markAsDirty
+        // Otherwise, the change is user-initiated, so we call markAsDirty
         markAsDirty();
     }
 

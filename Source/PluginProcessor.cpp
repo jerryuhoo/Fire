@@ -1988,3 +1988,16 @@ void FireAudioProcessor::assignLfoToTarget(int sourceLfoIndex, const juce::Strin
         }
     }
 }
+
+void FireAudioProcessor::clearModulationForParameter(const juce::String& targetParameterID)
+{
+    lfoManager->clearModulationForTarget(targetParameterID);
+
+    if (auto* editor = getActiveEditor())
+    {
+        if (auto* fireEditor = dynamic_cast<FireAudioProcessorEditor*>(editor))
+        {
+            fireEditor->triggerAsyncUpdate();
+        }
+    }
+}

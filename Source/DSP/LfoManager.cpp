@@ -333,3 +333,20 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
     newRouting.targetParameterID = targetParameterID;
     newRouting.depth = 0.5f; // Set a sensible default depth.
 }
+
+void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
+{
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            // Unbind by clearing the target ID
+            routing.targetParameterID = juce::String();
+
+            // (Optional) Reset other parameters to their default values to maintain a clean state
+            routing.depth = 0.5f;
+            routing.isBipolar = true;
+            return; // Exit after finding and clearing
+        }
+    }
+}

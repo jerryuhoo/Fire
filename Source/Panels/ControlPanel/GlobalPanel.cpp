@@ -274,6 +274,11 @@ void GlobalPanel::configureModulatableSlider(ModulatableSlider& slider, const ju
     {
         processor.resetModulation(slider.parameterID);
     };
+
+    slider.onModulationCleared = [this, &slider]()
+    {
+        processor.clearModulationForParameter(slider.parameterID);
+    };
 }
 
 void GlobalPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)

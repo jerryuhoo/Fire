@@ -333,6 +333,11 @@ void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce
     {
         processor.resetModulation(slider.parameterID);
     };
+
+    slider.onModulationCleared = [this, &slider]()
+    {
+        processor.clearModulationForParameter(slider.parameterID);
+    };
 }
 
 void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)

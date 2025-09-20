@@ -177,6 +177,29 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 {
+    if (event.mods.isRightButtonDown() && isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
+    {
+        juce::PopupMenu menu;
+        menu.addItem(1, "Clear LFO");
+
+        // Use SafePointer to ensure the component still exists during the asynchronous callback
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+                           [this, weakThis = juce::Component::SafePointer(this)](int result)
+                           {
+                               if (weakThis == nullptr)
+                                   return; // The component has been deleted
+
+                               if (result == 1) // "Clear LFO" was selected
+                               {
+                                   if (onModulationCleared)
+                                   {
+                                       onModulationCleared();
+                                   }
+                               }
+                           });
+        return; // Do not execute the following logic after a right-click
+    }
+
     // Always call the base class mouseUp to ensure proper state cleanup
     juce::Slider::mouseUp(event);
 

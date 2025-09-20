@@ -48,6 +48,7 @@ public:
     std::function<void()> onBipolarModeToggled;
     std::function<void()> onModulationReset;
     std::function<void(const juce::String&)> onClickInAssignMode;
+    std::function<void()> onModulationCleared;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;

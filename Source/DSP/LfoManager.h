@@ -67,6 +67,7 @@ public:
     const juce::StringArray& getLfoRateSyncDivisions() const;
     float getLfoOutput(int lfoIndex) const;
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
+    void clearModulationForTarget(const juce::String& targetParameterID);
 
 private:
     /**

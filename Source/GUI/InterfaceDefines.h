@@ -12,7 +12,7 @@
 
 //#include "../../JuceLibraryCode/JucePluginDefines.h"
 
-#define VERSION                 "1.0.2"
+#define VERSION                 "1.5.0b"
 #define GITHUB_LINK             "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK         "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION       ".fire"

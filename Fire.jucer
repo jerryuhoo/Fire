@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
-              version="1.0.2" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
+              version="1.5.0b" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"
@@ -122,6 +122,8 @@
         <FILE id="IEdaZX" name="LfoEngine.h" compile="0" resource="0" file="Source/DSP/LfoEngine.h"/>
         <FILE id="UFdMj3" name="LfoManager.cpp" compile="1" resource="0" file="Source/DSP/LfoManager.cpp"/>
         <FILE id="BoNr69" name="LfoManager.h" compile="0" resource="0" file="Source/DSP/LfoManager.h"/>
+        <FILE id="f8ecdJ" name="LfoShapeGenerator.h" compile="0" resource="0"
+              file="Source/DSP/LfoShapeGenerator.h"/>
         <FILE id="SBXQBa" name="ModulationRouting.h" compile="0" resource="0"
               file="Source/DSP/ModulationRouting.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>

@@ -1,105 +1,128 @@
 // GenerateGoldenMasters.cpp
-#include <catch2/catch_test_macros.hpp>
+// This is a utility for generating the "golden master" audio files that the regression tests will compare against.
+// It should be run manually whenever a change is made that intentionally alters the audio output.
 #include "../Source/PluginProcessor.h"
-#include <juce_audio_formats/juce_audio_formats.h>
-#include <juce_dsp/juce_dsp.h> // Include for dsp::Oversampling
+#include <catch2/catch_test_macros.hpp>
 #include <iostream>
+#include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_dsp/juce_dsp.h>
 
-juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
+namespace GoldenMasterHelpers
 {
-    juce::AudioBuffer<float> buffer(numChannels, numSamples);
-    double currentAngle = 0.0;
-    double angleDelta = 2.0 * juce::MathConstants<double>::pi * frequency / sampleRate;
 
-    for (int sample = 0; sample < numSamples; ++sample)
+    /**
+ * @brief Finds the project root directory by navigating up from the executable's location.
+ */
+    juce::File findProjectRoot()
     {
-        float currentSample = (float)std::sin(currentAngle);
-        for (int channel = 0; channel < numChannels; ++channel)
-        {
-            buffer.setSample(channel, sample, currentSample);
-        }
-        currentAngle += angleDelta;
+        auto executableFile = juce::File::getSpecialLocation(juce::File::currentApplicationFile);
+        auto projectRoot = executableFile.getParentDirectory().getParentDirectory();
+        jassert(projectRoot.getChildFile("tests").isDirectory());
+        return projectRoot;
     }
-    return buffer;
-}
 
-TEST_CASE("Golden Master Generation")
-{
-    juce::AudioFormatManager formatManager;
-    formatManager.registerBasicFormats();
-
-    // Define a standard block size, similar to what a DAW would use.
-    const int standardBlockSize = 512;
-
-    // --- 1. Load Input Audio File ---
-    juce::File inputFile { "/Users/yyf/Documents/GitHub/Fire/tests/TestAudioFiles/drum.wav" };
-    REQUIRE(inputFile.existsAsFile());
-    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
-    REQUIRE(reader != nullptr);
-    
-    // This buffer will hold the original, clean input audio.
-    juce::AudioBuffer<float> originalInputBuffer(reader->numChannels, (int)reader->lengthInSamples);
-    reader->read(&originalInputBuffer, 0, (int)reader->lengthInSamples, 0, true, true);
-    std::cout << "Input audio loaded successfully." << std::endl;
-
-    // --- 2. Iterate Through Preset Files ---
-    juce::File presetsDir { "/Users/yyf/Library/Audio/Presets/Wings/Fire/User" };
-    REQUIRE(presetsDir.isDirectory());
-    const juce::String filePattern = "*.fire";
-    int numPresetsFound = presetsDir.getNumberOfChildFiles(juce::File::TypesOfFileToFind::findFiles, filePattern);
-    REQUIRE(numPresetsFound > 0);
-    std::cout << "Found " << numPresetsFound << " preset files. Processing..." << std::endl;
-
-    for (const auto& entry : juce::RangedDirectoryIterator(presetsDir, false, filePattern))
+    /**
+ * @brief Generates an AudioBuffer containing a sine wave.
+ */
+    juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
     {
-        auto presetFile = entry.getFile();
-        juce::String presetName = presetFile.getFileNameWithoutExtension();
-        std::cout << "  Processing preset: " << presetName << std::endl;
-        
-        FireAudioProcessor processor;
+        juce::AudioBuffer<float> buffer(numChannels, numSamples);
+        double currentAngle = 0.0;
+        const double angleDelta = 2.0 * juce::MathConstants<double>::pi * frequency / sampleRate;
 
-        // --- 3. Load Preset ---
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            const float currentSample = (float) std::sin(currentAngle);
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                buffer.setSample(channel, sample, currentSample);
+            }
+            currentAngle += angleDelta;
+        }
+        return buffer;
+    }
+
+    /**
+ * @brief Safely reads audio data from an AudioFormatReader into a buffer.
+ */
+    bool safeReadFromReader(juce::AudioFormatReader* reader, juce::AudioBuffer<float>& buffer)
+    {
+        if (reader == nullptr)
+            return false;
+        buffer.clear();
+        const int64_t readerLength = reader->lengthInSamples;
+        const int bufferSamples = buffer.getNumSamples();
+        if (readerLength <= 0 || bufferSamples <= 0)
+            return false;
+        const int samplesToRead = static_cast<int>(std::min<int64_t>(readerLength, bufferSamples));
+        return reader->read(&buffer, 0, samplesToRead, 0, true, true);
+    }
+
+    /**
+ * @brief Applies latency compensation to an audio buffer by shifting its content.
+ */
+    juce::AudioBuffer<float> applyLatencyCompensation(const juce::AudioBuffer<float>& rawOutput, int latencySamples)
+    {
+        juce::AudioBuffer<float> compensatedOutput(rawOutput.getNumChannels(), rawOutput.getNumSamples());
+        compensatedOutput.clear();
+
+        if (latencySamples > 0)
+        {
+            const int numSamplesToCopy = rawOutput.getNumSamples() - latencySamples;
+            if (numSamplesToCopy > 0)
+            {
+                for (int channel = 0; channel < rawOutput.getNumChannels(); ++channel)
+                {
+                    compensatedOutput.copyFrom(channel, 0, rawOutput, channel, latencySamples, numSamplesToCopy);
+                }
+            }
+        }
+        else
+        {
+            compensatedOutput.makeCopyOf(rawOutput);
+        }
+        return compensatedOutput;
+    }
+
+    /**
+ * @brief Core logic for processing an input buffer with a preset and saving the result.
+ */
+    void generateMasterFileForPreset(const juce::File& presetFile,
+                                     const juce::AudioBuffer<float>& inputBuffer,
+                                     double sampleRate,
+                                     const juce::String& testIdentifier)
+    {
+        juce::String presetName = presetFile.getFileNameWithoutExtension();
+        std::cout << "  Processing preset: " << presetName << " for " << testIdentifier << "..." << std::endl;
+
+        // --- 1. Setup Processor and Load Preset ---
+        FireAudioProcessor processor;
         std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
         REQUIRE(xml != nullptr);
-
         for (int i = 0; i < xml->getNumAttributes(); ++i)
         {
             auto attributeName = xml->getAttributeName(i);
             auto attributeValue = xml->getAttributeValue(i);
-            
             if (auto* parameter = processor.treeState.getParameter(attributeName))
-            {
                 parameter->setValueNotifyingHost(attributeValue.getFloatValue());
-            }
         }
 
-        // --- 4. Process Audio in Blocks ---
-        juce::MidiBuffer midi;
-        
-        // Prepare the processor with the audio file's sample rate and the standard block size.
-        processor.prepareToPlay(reader->sampleRate, standardBlockSize);
+        const int blockSize = 512;
+        processor.prepareToPlay(sampleRate, blockSize);
 
-        // This buffer will hold the raw, uncompensated output from the plugin.
-        juce::AudioBuffer<float> rawOutputBuffer(originalInputBuffer.getNumChannels(), originalInputBuffer.getNumSamples());
+        // --- 2. Process Audio in Blocks ---
+        juce::AudioBuffer<float> rawOutputBuffer(inputBuffer.getNumChannels(), inputBuffer.getNumSamples());
         rawOutputBuffer.clear();
+        juce::MidiBuffer midi;
 
-        // This loop iterates through the entire input buffer in chunks of 'standardBlockSize'.
-        for (int startSample = 0; startSample < originalInputBuffer.getNumSamples(); startSample += standardBlockSize)
+        for (int startSample = 0; startSample < inputBuffer.getNumSamples(); startSample += blockSize)
         {
-            // Determine the number of samples for the current block.
-            // This handles the final block, which might be shorter than standardBlockSize.
-            int numSamplesThisBlock = std::min(standardBlockSize, originalInputBuffer.getNumSamples() - startSample);
-
-            // Create a temporary buffer for the current processing block.
-            juce::AudioBuffer<float> blockToProcess(originalInputBuffer.getNumChannels(), numSamplesThisBlock);
-
-            // Copy the current slice of audio from the original input into our temporary block.
-            for (int channel = 0; channel < originalInputBuffer.getNumChannels(); ++channel)
+            int numSamplesThisBlock = std::min(blockSize, inputBuffer.getNumSamples() - startSample);
+            juce::AudioBuffer<float> blockToProcess(inputBuffer.getNumChannels(), numSamplesThisBlock);
+            for (int channel = 0; channel < inputBuffer.getNumChannels(); ++channel)
             {
-                blockToProcess.copyFrom(channel, 0, originalInputBuffer, channel, startSample, numSamplesThisBlock);
+                blockToProcess.copyFrom(channel, 0, inputBuffer, channel, startSample, numSamplesThisBlock);
             }
-
-            // Process the small block.
             processor.processBlock(blockToProcess, midi);
             for (int channel = 0; channel < rawOutputBuffer.getNumChannels(); ++channel)
             {
@@ -107,151 +130,90 @@ TEST_CASE("Golden Master Generation")
             }
         }
 
-        // === NEW: DETERMINE PLUGIN LATENCY FOR THIS PRESET ===
+        // --- 3. Apply Latency Compensation for HQ Mode ---
         int latencySamples = 0;
         if (auto* hqParam = processor.treeState.getParameter("hq"))
         {
-            if (hqParam->getValue() > 0.5f) // Check if HQ mode is ON
-            {
+            if (hqParam->getValue() > 0.5f)
                 latencySamples = static_cast<int>(processor.getTotalLatency());
-            }
         }
+        auto compensatedOutputBuffer = applyLatencyCompensation(rawOutputBuffer, latencySamples);
 
-        // === NEW: SIMULATE HOST LATENCY COMPENSATION ===
-        // The host shifts the plugin's output backwards by the reported latency.
-        juce::AudioBuffer<float> compensatedOutputBuffer(rawOutputBuffer.getNumChannels(), rawOutputBuffer.getNumSamples());
-        compensatedOutputBuffer.clear();
-
-        if (latencySamples > 0)
-        {
-            const int numSamplesToCopy = rawOutputBuffer.getNumSamples() - latencySamples;
-            if (numSamplesToCopy > 0)
-            {
-                for (int channel = 0; channel < rawOutputBuffer.getNumChannels(); ++channel)
-                {
-                    // Copy from the raw buffer, skipping the initial latency-induced samples,
-                    // into the start of the compensated buffer.
-                    compensatedOutputBuffer.copyFrom(channel, 0,                  // Dest
-                                                     rawOutputBuffer, channel, latencySamples, // Source
-                                                     numSamplesToCopy);          // Num Samples
-                }
-            }
-        }
-        else // If no latency, just copy the whole buffer.
-        {
-            compensatedOutputBuffer.makeCopyOf(rawOutputBuffer);
-        }
-
-        // --- 5. Write *Compensated* Output File ---
-        juce::File outputDir { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" };
-        if (!outputDir.isDirectory()) {
+        // --- 4. Write Compensated Output File ---
+        auto projectRoot = findProjectRoot();
+        juce::File outputDir { projectRoot.getChildFile("tests/GoldenMasters") };
+        if (! outputDir.isDirectory())
             REQUIRE(outputDir.createDirectory().wasOk());
-        }
 
-        juce::File outputFile = outputDir.getChildFile(presetName + "_drums_output.wav");
+        juce::File outputFile = outputDir.getChildFile(presetName + "_" + testIdentifier + "_output.wav");
         outputFile.deleteFile();
 
+        juce::AudioFormatManager formatManager;
+        formatManager.registerBasicFormats();
         std::unique_ptr<juce::AudioFormatWriter> writer(
             formatManager.findFormatForFileExtension("wav")->createWriterFor(
-                new juce::FileOutputStream(outputFile),
-                reader->sampleRate,
-                compensatedOutputBuffer.getNumChannels(), // Use compensated buffer
-                24, {}, 0
-            )
-        );
+                new juce::FileOutputStream(outputFile), sampleRate, compensatedOutputBuffer.getNumChannels(), 24, {}, 0));
         REQUIRE(writer != nullptr);
-        
         bool writeOk = writer->writeFromAudioSampleBuffer(compensatedOutputBuffer, 0, compensatedOutputBuffer.getNumSamples());
         REQUIRE(writeOk);
     }
-}
 
+} // namespace GoldenMasterHelpers
+
+TEST_CASE("Golden Master Generation (Drums)")
+{
+    // --- 1. Setup ---
+    juce::AudioFormatManager formatManager;
+    formatManager.registerBasicFormats();
+    auto projectRoot = GoldenMasterHelpers::findProjectRoot();
+
+    // --- 2. Load Input Audio ---
+    juce::File inputFile { projectRoot.getChildFile("tests/TestAudioFiles/drum.wav") };
+    REQUIRE(inputFile.existsAsFile());
+    std::unique_ptr<juce::AudioFormatReader> reader(formatManager.createReaderFor(inputFile));
+    REQUIRE(reader != nullptr);
+
+    juce::AudioBuffer<float> originalInputBuffer((int) reader->numChannels, (int) reader->lengthInSamples);
+    REQUIRE(GoldenMasterHelpers::safeReadFromReader(reader.get(), originalInputBuffer));
+    std::cout << "Input audio loaded: " << inputFile.getFileName() << std::endl;
+
+    // --- 3. Iterate Through Presets and Generate Masters ---
+    juce::File presetsDir { projectRoot.getChildFile("tests/Presets") };
+    REQUIRE(presetsDir.isDirectory());
+    int numPresetsFound = presetsDir.getNumberOfChildFiles(juce::File::TypesOfFileToFind::findFiles, "*.fire");
+    REQUIRE(numPresetsFound > 0);
+    std::cout << "Found " << numPresetsFound << " preset files. Generating drum masters..." << std::endl;
+
+    for (const auto& entry : juce::RangedDirectoryIterator(presetsDir, false, "*.fire"))
+    {
+        GoldenMasterHelpers::generateMasterFileForPreset(entry.getFile(), originalInputBuffer, reader->sampleRate, "drums");
+    }
+    std::cout << "Drum master generation complete." << std::endl;
+}
 
 TEST_CASE("Golden Master Generation (Sine Wave)")
 {
-    // This test processes a single block and doesn't need latency compensation logic
-    // as it's not generating a continuous, time-aligned audio file.
-    // It remains unchanged.
-    
-    // --- Setup ---
-    juce::AudioFormatManager formatManager;
-    formatManager.registerBasicFormats();
-
-    // --- Test Signal Parameters ---
+    // --- 1. Setup ---
+    auto projectRoot = GoldenMasterHelpers::findProjectRoot();
     const double sampleRate = 48000.0;
-    const int    blockSize = 512;
-    const int    numChannels = 2; // Stereo
-    const float  frequency = 440.0f; // A4 note
+    const int blockSize = 512;
+    const int numChannels = 2;
+    const float frequency = 440.0f;
 
-    // --- 1. Generate Input Audio Signal ---
-    auto originalBuffer = createSineWaveBuffer(sampleRate, numChannels, blockSize, frequency);
+    // --- 2. Generate Input Signal ---
+    auto sineBuffer = GoldenMasterHelpers::createSineWaveBuffer(sampleRate, numChannels, blockSize, frequency);
     std::cout << "Generated 440Hz sine wave test signal." << std::endl;
 
-    // --- 2. Iterate Through Preset Files ---
-    juce::File presetsDir { "/Users/yyf/Library/Audio/Presets/Wings/Fire/User" };
+    // --- 3. Iterate Through Presets and Generate Masters ---
+    juce::File presetsDir { projectRoot.getChildFile("tests/Presets") };
     REQUIRE(presetsDir.isDirectory());
-    const juce::String filePattern = "*.fire";
-    int numPresetsFound = presetsDir.getNumberOfChildFiles(juce::File::TypesOfFileToFind::findFiles, filePattern);
+    int numPresetsFound = presetsDir.getNumberOfChildFiles(juce::File::TypesOfFileToFind::findFiles, "*.fire");
     REQUIRE(numPresetsFound > 0);
-    std::cout << "Found " << numPresetsFound << " preset files. Processing..." << std::endl;
+    std::cout << "Found " << numPresetsFound << " preset files. Generating sine wave masters..." << std::endl;
 
-    for (const auto& entry : juce::RangedDirectoryIterator(presetsDir, false, filePattern))
+    for (const auto& entry : juce::RangedDirectoryIterator(presetsDir, false, "*.fire"))
     {
-        auto presetFile = entry.getFile();
-        juce::String presetName = presetFile.getFileNameWithoutExtension();
-        std::cout << "  Processing preset: " << presetName << std::endl;
-
-        // Create a fresh processor for each preset.
-        FireAudioProcessor processor;
-
-        // Create a deep copy of the original signal for processing.
-        auto bufferToProcess = originalBuffer;
-
-        // --- 3. Load Preset ---
-        std::unique_ptr<juce::XmlElement> xml = juce::XmlDocument::parse(presetFile);
-        REQUIRE(xml != nullptr);
-
-        for (int i = 0; i < xml->getNumAttributes(); ++i)
-        {
-            auto attributeName = xml->getAttributeName(i);
-            auto attributeValue = xml->getAttributeValue(i);
-            if (auto* parameter = processor.treeState.getParameter(attributeName))
-            {
-                parameter->setValueNotifyingHost(attributeValue.getFloatValue());
-            }
-        }
-
-        // --- 4. Process Audio ---
-        juce::MidiBuffer midi;
-        processor.prepareToPlay(sampleRate, blockSize);
-        processor.processBlock(bufferToProcess, midi);
-
-        // --- 5. Write Output File ---
-        juce::File tempOutputFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                        .getChildFile("temp_golden_sine_output.wav");
-        tempOutputFile.deleteFile();
-
-        {
-            std::unique_ptr<juce::AudioFormatWriter> tempWriter(
-                formatManager.findFormatForFileExtension("wav")->createWriterFor(
-                    new juce::FileOutputStream(tempOutputFile),
-                    sampleRate,
-                    bufferToProcess.getNumChannels(),
-                    24, {}, 0
-                )
-            );
-            REQUIRE(tempWriter != nullptr);
-            REQUIRE(tempWriter->writeFromAudioSampleBuffer(bufferToProcess, 0, bufferToProcess.getNumSamples()));
-        }
-
-        juce::File outputDir { "/Users/yyf/Documents/GitHub/Fire/tests/GoldenMasters/" };
-        if (!outputDir.isDirectory()) {
-            REQUIRE(outputDir.createDirectory().wasOk());
-        }
-
-        // Use a new naming convention for these sine-based tests.
-        juce::File finalOutputFile = outputDir.getChildFile(presetName + "_sine_output.wav");
-        finalOutputFile.deleteFile();
-        REQUIRE(tempOutputFile.moveFileTo(finalOutputFile));
+        GoldenMasterHelpers::generateMasterFileForPreset(entry.getFile(), sineBuffer, sampleRate, "sine");
     }
+    std::cout << "Sine wave master generation complete." << std::endl;
 }

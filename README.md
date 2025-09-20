@@ -1,8 +1,10 @@
-# Fire (Version 1.0.2) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 1.5.0 Beta) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
 ![Alt text](Fire2.png?raw=true "Title")
+
+![Alt text](Fire3.png?raw=true "Title")
 
 ## 1. Introduce
 
@@ -23,7 +25,6 @@ Hope you like it!
 ### OPTION 1 - Download from Release Page
 
 [Download here](https://github.com/jerryuhoo/Fire/releases/latest)
-
 
 ### macOS Installation Guide for Fire Plugin
 
@@ -119,9 +120,9 @@ Thank you for your understanding!
 
 If you don't have Projucer:
 
-* You can build it from source at:
+- You can build it from source at:
   `JUCE/extras/Projucer/Builds/...`
-* Or download it from the [JUCE latest release](https://www.juce.com)
+- Or download it from the [JUCE latest release](https://www.juce.com)
 
 ---
 
@@ -148,51 +149,51 @@ Builds/Fire_artefacts/Release/
 
 ### 3.1. Top panel
 
-* HQ: 4x oversampling for high quality audio.
-* A/B: switch between A/B to compare.
-* Copy: copy current preset parameters to another(A/B) panel.
-* Preset bar: choose your current preset.
-* Save: save your preset to user folder.
-* Menu: other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
+- HQ: 4x oversampling for high quality audio.
+- A/B: switch between A/B to compare.
+- Copy: copy current preset parameters to another(A/B) panel.
+- Preset bar: choose your current preset.
+- Save: save your preset to user folder.
+- Menu: other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
 
 ### 3.2. Spectrogram
 
-* You can split up frequency to four bands for multiband distortion.
+- You can split up frequency to four bands for multiband distortion.
 
 ### 3.3. Graph Visualizer
 
-* There are four graph visualizers. You can click on each graph to zoom in or zoom out.
-* Top left is oscilloscope.
-* Top right is distortion graph.
-* Buttom Left is VU meters.
-* Buttom right is Width graph.
+- There are four graph visualizers. You can click on each graph to zoom in or zoom out.
+- Top left is oscilloscope.
+- Top right is distortion graph.
+- Buttom Left is VU meters.
+- Buttom right is Width graph.
 
 ### 3.4. Band Effect
 
-* You can click four switches on the right side of graphs.
+- You can click four switches on the right side of graphs.
 
-* Drive:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme". 
-    * "L" (Link): When your turn up drive knob, the output knob value will automatically reduce. 
-    * "S" (Safe): If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
-    * "E" (Extreme): It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
+- Drive:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme".
+  - "L" (Link): When your turn up drive knob, the output knob value will automatically reduce.
+  - "S" (Safe): If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
+  - "E" (Extreme): It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
 
-* Retification and bias: Change your distortion shape.
+- Retification and bias: Change your distortion shape.
 
-* Compressor: you can change threshold and ratio for each band.
+- Compressor: you can change threshold and ratio for each band.
 
-* Width: change audio width.
+- Width: change audio width.
 
-* Output and mix: for band control.
+- Output and mix: for band control.
 
 ### 3.5. Global Effect
 
-* Filter: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
+- Filter: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
 
-* Downsample: downsample your audio.
+- Downsample: downsample your audio.
 
-* Limiter: add a limiter after distortion.
+- Limiter: add a limiter after distortion.
 
-* Output and mix: for global control.
+- Output and mix: for global control.
 
 ## 4. Support the author
 
@@ -212,7 +213,6 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 [Other Softwares by Blue Wings Music](https://www.bluewingsmusic.com/)
 
-
 ## 5. References
 
 5.1. A great example of using XML by [johnflynnjohnflynn](https://github.com/johnflynnjohnflynn/TestParameters02) to save presets to file example. I changed the code to save presets as mutiple files.
@@ -225,6 +225,26 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
+### 2025-9-20 (version 1.5.0b)
+
+This is a major feature update that introduces a comprehensive LFO modulation system and involves a significant refactoring of the plugin's core architecture.
+
+1. **New Feature: LFO Modulation System** 🚀
+    - **Four Independent LFOs**: Added a new LFO panel with four fully customizable LFOs that can modulate most parameters in the plugin.
+    - **Customizable LFO Shapes**: Includes a powerful graphical editor to create custom LFO shapes. You can add, remove, and drag points, as well as adjust the curvature of segments between points.
+    - **Brush & Edit Modes**: Two distinct editing modes for flexible workflow. Use "Edit Mode" for precise point-based editing and "Brush Mode" to quickly paint preset shapes (Saw, Sine, Square) onto the grid.
+    - **Modulation Matrix**: A dedicated matrix panel to manage all modulation routings in one place.
+    - **BPM Sync & Free (Hz) Modes**: Each LFO can be synchronized to the host's BPM or run freely in Hz.
+    - **Quick Modulation Assignment**: A new "Assign" mode allows you to click any knob to instantly map it as a modulation target.
+
+2. **Major Code Refactoring**:
+    - I refactored both UI and DSP code of this plugin so it is easier to modify and understand now.
+
+3. **Bug Fixes**:
+    - Fixed a critical bug where the plugin might not load presets correctly.
+
+> ⚠️ **Breaking Change Notice:** This is a significant update that fundamentally changes how parameters are processed. Due to the addition of the LFO system and the extensive code refactoring, it might have hidden bugs. So it is a **BETA** version. If you find any bugs, please create an issue so I can solve it. Have fun!
+
 ### 2025-7-3 (version 1.0.2)
 
 1. Add real-time value display on the global filter.
@@ -233,8 +253,8 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 4. Add a new setting to disable auto-update.
 5. Fix phase issues in multiband mode:
 
-   * Frequency response is now flatter and more phase-coherent across bands.
-   * Fix phase shift issues when the Mix value is less than 1.
+   - Frequency response is now flatter and more phase-coherent across bands.
+   - Fix phase shift issues when the Mix value is less than 1.
 
    > ⚠️ **Note:** These improvements may slightly alter the sound of older sessions. Please **freeze your audio** if you are using a previous version of the plugin.
 
@@ -242,16 +262,14 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 6. For long-term product consistency, the manufacturer name has been changed to **Blue Wings Music**.
 
-   * The new plugin will **not** appear under the old "Wings" manufacturer in your DAW.
-   * You may need to **manually remove** the old version.
-   * Whether the new version automatically replaces the old one **has not been fully tested**.
-   * If it fails to replace the old plugin, please **save your presets** and re-import them in the new version.
+   - The new plugin will **not** appear under the old "Wings" manufacturer in your DAW.
+   - You may need to **manually remove** the old version.
+   - Whether the new version automatically replaces the old one **has not been fully tested**.
+   - If it fails to replace the old plugin, please **save your presets** and re-import them in the new version.
 
 7. Global Filter EQ gain range expanded from ±15 dB to ±24 dB. Add smoother to prevent noise when moving the global filter.
    > ⚠️ **Note:** Important: This is a breaking change.
 Due to how DAWs store normalized parameter values, old presets and projects will sound different after the update if you used the global filter. I'm sorry about that 😭.
-
-
 
 ### 2024-5-22 (version 1.0.1)
 
@@ -288,7 +306,7 @@ Due to how DAWs store normalized parameter values, old presets and projects will
 1. Fix phasing issue in HQ mode.
 2. Fix low frequency drop in HQ mode.
 
-* v0.9.3 - v0.9.7 has those bugs
+- v0.9.3 - v0.9.7 has those bugs
 
 ### 2022-6-22 (version 0.9.7)
 
@@ -353,13 +371,14 @@ From v.0.9.4, I changed the license to AGPL-3.0.
 
 ### What can you do with the source
 
-* Currently, up to version 0.9.4 is free for music producers, audio programmers who start to learn JUCE. You can fork, modify my code, but projects that used my code must be open-source.
+- Currently, up to version 0.9.4 is free for music producers, audio programmers who start to learn JUCE. You can fork, modify my code, but projects that used my code must be open-source.
 
 ### Things you can't do with this source
 
-* Do not create an app and distribute it on the iOS app store.
+- Do not create an app and distribute it on the iOS app store.
 
-* Do not use the name "Fire", "Wings", or "羽翼深蓝Wings" for marketing or to name any distribution of binaries built with this source. This source code does not give you rights to infringe on trademarks. If you wanna use it for commercial, please send me an email. Otherwise, your software has to be open-source.
+- Do not use the name "Fire", "Wings", or "羽翼深蓝Wings" for marketing or to name any distribution of binaries built with this source. This source code does not give you rights to infringe on trademarks. If you wanna use it for commercial, please send me an email. Otherwise, your software has to be open-source.
 
 ## 8. Acknowledgement
+
 @[IcyLeaves](https://github.com/IcyLeaves)

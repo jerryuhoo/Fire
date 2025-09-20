@@ -33,7 +33,6 @@ public:
     
     void setFreq (float f);
     int getFreq ();
-    void setScale (float scale);
 
     void clicked(const juce::ModifierKeys& modifiers) override;
 
@@ -59,7 +58,6 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     
     FreqTextLabel freqTextLabel;
-    OtherLookAndFeel otherLookAndFeel;
     
 //    juce::ComponentDragger dragger;
 //    juce::ComponentBoundsConstrainer boundsConstrainer;

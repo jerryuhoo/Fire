@@ -43,19 +43,33 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
     }
 
-    multiEnableAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID1, *bandUIs[0].enableButton);
-    multiEnableAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID2, *bandUIs[1].enableButton);
-    multiEnableAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID3, *bandUIs[2].enableButton);
-    multiEnableAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_ENABLE_ID4, *bandUIs[3].enableButton);
+    // Initialize parameter arrays for each band
+    paramsArrays.resize(4);
+    for (int i = 0; i < 4; ++i)
+    {
+        paramsArrays[i] = {
+            ParameterIDAndName::getName(MODE_NAME, i), ParameterIDAndName::getName(LINKED_NAME, i), ParameterIDAndName::getName(SAFE_NAME, i), ParameterIDAndName::getName(DRIVE_NAME, i), ParameterIDAndName::getName(COMP_RATIO_NAME, i), ParameterIDAndName::getName(COMP_THRESH_NAME, i), ParameterIDAndName::getName(WIDTH_NAME, i), ParameterIDAndName::getName(OUTPUT_NAME, i), ParameterIDAndName::getName(MIX_NAME, i), ParameterIDAndName::getName(BIAS_NAME, i), ParameterIDAndName::getName(REC_NAME, i), ParameterIDAndName::getName(COMP_BYPASS_NAME, i), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, i)
+        };
+    }
 
-    multiSoloAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID1, *bandUIs[0].soloButton);
-    multiSoloAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID2, *bandUIs[1].soloButton);
-    multiSoloAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID3, *bandUIs[2].soloButton);
-    multiSoloAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, BAND_SOLO_ID4, *bandUIs[3].soloButton);
+    // Initialize attachments using loops
+    multiEnableAttachments.resize(4);
+    multiSoloAttachments.resize(4);
+    for (int i = 0; i < 4; ++i)
+    {
+        multiEnableAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+            processor.treeState, ParameterIDAndName::getIDString(BAND_ENABLE_ID, i), *bandUIs[i].enableButton);
 
-    freqDividerGroupAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID1, *freqDividerGroup[0]);
-    freqDividerGroupAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID2, *freqDividerGroup[1]);
-    freqDividerGroupAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, LINE_STATE_ID3, *freqDividerGroup[2]);
+        multiSoloAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+            processor.treeState, ParameterIDAndName::getIDString(BAND_SOLO_ID, i), *bandUIs[i].soloButton);
+    }
+
+    freqDividerGroupAttachments.resize(3);
+    for (int i = 0; i < 3; ++i)
+    {
+        freqDividerGroupAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+            processor.treeState, ParameterIDAndName::getIDString(LINE_STATE_ID, i), *freqDividerGroup[i]);
+    }
 }
 
 Multiband::~Multiband()
@@ -183,48 +197,25 @@ bool Multiband::shouldSetBlackMask(int index)
 
 void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
 {
-    //if (toIndex == 0)
-    std::unique_ptr<std::vector<juce::String>> fromArray;
-    std::unique_ptr<std::vector<juce::String>> toArray;
-
-    if (fromIndex == 0)
-        fromArray = std::make_unique<std::vector<juce::String>>(paramsArray1);
-    if (fromIndex == 1)
-        fromArray = std::make_unique<std::vector<juce::String>>(paramsArray2);
-    if (fromIndex == 2)
-        fromArray = std::make_unique<std::vector<juce::String>>(paramsArray3);
-    if (fromIndex == 3)
-        fromArray = std::make_unique<std::vector<juce::String>>(paramsArray4);
-
-    if (toIndex == 0)
-        toArray = std::make_unique<std::vector<juce::String>>(paramsArray1);
-    if (toIndex == 1)
-        toArray = std::make_unique<std::vector<juce::String>>(paramsArray2);
-    if (toIndex == 2)
-        toArray = std::make_unique<std::vector<juce::String>>(paramsArray3);
-    if (toIndex == 3)
-        toArray = std::make_unique<std::vector<juce::String>>(paramsArray4);
+    const auto& fromArray = paramsArrays[fromIndex];
+    const auto& toArray = paramsArrays[toIndex];
 
     for (const auto& param : processor.getParameters())
     {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
         {
-            // from array
-            float paramFromValue = p->getValue();
             juce::String paramFromName = p->name;
+            float paramFromValue = p->getValue();
 
-            for (int i = 0; i < fromArray->size(); i++)
+            for (size_t i = 0; i < fromArray.size(); ++i)
             {
-                if (fromArray.get()[0][i] == paramFromName)
+                if (fromArray[i] == paramFromName)
                 {
-                    // to array
                     for (const auto& paramTo : processor.getParameters())
                     {
                         if (auto* pTo = dynamic_cast<juce::AudioProcessorParameterWithID*>(paramTo))
                         {
-                            juce::String paramToName = pTo->name;
-
-                            if (toArray.get()[0][i] == paramToName)
+                            if (toArray[i] == pTo->name)
                             {
                                 pTo->setValueNotifyingHost(paramFromValue);
                                 break;
@@ -238,41 +229,29 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
     }
 }
 
-bool Multiband::isParamInArray(juce::String paramName, std::vector<juce::String> paramArray)
+bool Multiband::isParamInArray(juce::String paramName, const std::vector<juce::String>& paramArray)
 {
-    bool isInArray = false;
-
-    for (int i = 0; i < paramArray.size(); i++)
+    for (const auto& name : paramArray)
     {
-        if (paramName == paramArray[i])
+        if (paramName == name)
         {
-            isInArray = true;
-            break;
+            return true;
         }
     }
-
-    return isInArray;
+    return false;
 }
 
 void Multiband::initParameters(int bandindex)
 {
+    if (bandindex < 0 || bandindex >= paramsArrays.size())
+        return;
+
+    const auto& paramArray = paramsArrays[bandindex];
     for (const auto& param : processor.getParameters())
     {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
         {
-            if (bandindex == 0 && isParamInArray(p->name, paramsArray1))
-            {
-                p->setValueNotifyingHost(p->getDefaultValue());
-            }
-            if (bandindex == 1 && isParamInArray(p->name, paramsArray2))
-            {
-                p->setValueNotifyingHost(p->getDefaultValue());
-            }
-            if (bandindex == 2 && isParamInArray(p->name, paramsArray3))
-            {
-                p->setValueNotifyingHost(p->getDefaultValue());
-            }
-            if (bandindex == 3 && isParamInArray(p->name, paramsArray4))
+            if (isParamInArray(p->name, paramArray))
             {
                 p->setValueNotifyingHost(p->getDefaultValue());
             }
@@ -430,6 +409,10 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
             {
                 float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
                 dragLines(targetXPercent, i);
+
+                sortLines();
+                setLineRelatedBoundsByX();
+                setSoloRelatedBounds();
             }
         }
     }
@@ -579,6 +562,11 @@ int Multiband::getFocusIndex()
     return focusIndex;
 }
 
+void Multiband::setFocusIndex(int index)
+{
+    focusIndex = index;
+}
+
 void Multiband::sliderValueChanged(juce::Slider* slider)
 {
     lineNum = countLines();
@@ -625,14 +613,6 @@ EnableButton& Multiband::getEnableButton(const int index)
     return *bandUIs[index].enableButton; // <--- MODIFIED
 }
 
-void Multiband::setScale(float scale)
-{
-    for (int i = 0; i < 3; i++)
-    {
-        freqDividerGroup[i]->setScale(scale);
-    }
-}
-
 void Multiband::setBandBypassStates(int index, bool state)
 {
     bandUIs[index].enableButton->setToggleState(state, juce::NotificationType::dontSendNotification); // <--- MODIFIED
@@ -657,7 +637,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
                                   (float) (y + height * 0.1f),
                                   false);
         g.setGradientFill(grad);
-        g.fillRect(x, y, width, height);
+        g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
     }
 
     // set mouse enter white mask
@@ -666,7 +646,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
         if (focusIndex != index)
         {
             g.setColour(COLOUR_MASK_WHITE);
-            g.fillRect(x, y, width, height);
+            g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
         }
         bandUIs[index].closeButton->setVisible(true);
     }
@@ -675,7 +655,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
     if (lineNum > lineNumLimit && shouldSetBlackMask(index))
     {
         g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(x, y, width, height);
+        g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
     }
 }
 

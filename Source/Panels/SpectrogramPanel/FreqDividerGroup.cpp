@@ -14,62 +14,48 @@
 /** FreqDividerGroup is a component that contains FreqTextLabel, VerticalLine, and CloseButton
  */
 //==============================================================================
-FreqDividerGroup::FreqDividerGroup (FireAudioProcessor& p, int index) : processor (p), freqTextLabel (verticalLine)
+FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor(p), freqTextLabel(verticalLine)
 {
     margin = getHeight() / 20.0f;
 
-    addAndMakeVisible (verticalLine);
+    addAndMakeVisible(verticalLine);
 
-    verticalLine.addListener (this);
+    verticalLine.addListener(this);
 
-    if (index == 0)
-    {
-        lineStatelId = LINE_STATE_ID1;
-        sliderFreqId = FREQ_ID1;
-    }
-    if (index == 1)
-    {
-        lineStatelId = LINE_STATE_ID2;
-        sliderFreqId = FREQ_ID2;
-    }
-    if (index == 2)
-    {
-        lineStatelId = LINE_STATE_ID3;
-        sliderFreqId = FREQ_ID3;
-    }
+    lineStatelId = ParameterIDAndName::getIDString(LINE_STATE_ID, index);
+    sliderFreqId = ParameterIDAndName::getIDString(FREQ_ID, index);
 
-    multiFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (processor.treeState, sliderFreqId, verticalLine);
+    multiFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, sliderFreqId, verticalLine);
 
-    addAndMakeVisible (freqTextLabel);
+    addAndMakeVisible(freqTextLabel);
     // The parent component WON'T respond to mouse clicks,
     // while child components WILL respond to mouse clicks!
-    setInterceptsMouseClicks (false, true);
-    freqTextLabel.setLookAndFeel (&otherLookAndFeel);
+    setInterceptsMouseClicks(false, true);
 }
 
 FreqDividerGroup::~FreqDividerGroup()
 {
-    freqTextLabel.setLookAndFeel (nullptr);
+    freqTextLabel.setLookAndFeel(nullptr);
 }
 
-void FreqDividerGroup::paint (juce::Graphics& g)
+void FreqDividerGroup::paint(juce::Graphics& g)
 {
     if (getToggleState())
     {
         if (verticalLine.isMouseOverOrDragging() || freqTextLabel.isMouseOverCustom())
         {
-            freqTextLabel.setFade (true, true);
-            freqTextLabel.setVisible (true);
+            freqTextLabel.setFade(true, true);
+            freqTextLabel.setVisible(true);
         }
         else
         {
-            freqTextLabel.setFade (true, false);
+            freqTextLabel.setFade(true, false);
         }
     }
     else
     {
-        freqTextLabel.setFreq (-1);
-        verticalLine.setXPercent (0);
+        freqTextLabel.setFreq(-1);
+        verticalLine.setXPercent(0);
     }
     //    g.setColour(juce::Colours::green.withAlpha(0.2f));
     //    g.fillAll();
@@ -80,18 +66,18 @@ void FreqDividerGroup::resized()
     margin = getHeight() / 20.0f;
     size = getWidth() / 100.0f * 15;
     width = verticalLine.getWidth() / 2.0f;
-    verticalLine.setBounds (0, 0, getWidth() / 10.0f, getHeight());
-    freqTextLabel.setBounds (width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
+    verticalLine.setBounds(0, 0, getWidth() / 10.0f, getHeight());
+    freqTextLabel.setBounds(width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
 }
 
-void FreqDividerGroup::setDeleteState (bool deleteState)
+void FreqDividerGroup::setDeleteState(bool deleteState)
 {
-    verticalLine.setDeleteState (deleteState);
+    verticalLine.setDeleteState(deleteState);
 }
 
-void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
+void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
 {
-    if (!getToggleState())
+    if (! getToggleState())
         return;
     float leftLimit;
     float rightLimit;
@@ -109,15 +95,15 @@ void FreqDividerGroup::moveToX (int lineNum, float newXPercent, float margin, st
     }
 
     verticalLine.setXPercent(newXPercent);
-    verticalLine.setValue (SpectrumComponent::transformFromLog (newXPercent)); // * (44100 / 2.0)
-    
+    verticalLine.setValue(SpectrumComponent::transformFromLog(newXPercent)); // * (44100 / 2.0)
+
     if (verticalLine.getLeft() >= 0 && freqDividerGroup[verticalLine.getLeft()]->getToggleState() && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
-        freqDividerGroup[verticalLine.getLeft()]->moveToX (lineNum, newXPercent - margin, margin, freqDividerGroup);
+        freqDividerGroup[verticalLine.getLeft()]->moveToX(lineNum, newXPercent - margin, margin, freqDividerGroup);
     }
     if (verticalLine.getRight() > 0 && verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->getToggleState() && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
     {
-        freqDividerGroup[verticalLine.getRight()]->moveToX (lineNum, newXPercent + margin, margin, freqDividerGroup);
+        freqDividerGroup[verticalLine.getRight()]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup);
     }
 }
 
@@ -126,20 +112,20 @@ VerticalLine& FreqDividerGroup::getVerticalLine()
     return verticalLine;
 }
 
-void FreqDividerGroup::buttonClicked (juce::Button* button)
+void FreqDividerGroup::buttonClicked(juce::Button* button)
 {
 }
 
-void FreqDividerGroup::clicked (const juce::ModifierKeys& modifiers)
+void FreqDividerGroup::clicked(const juce::ModifierKeys& modifiers)
 {
     // called by changing toggle state
     if (getToggleState())
-        setVisible (true);
+        setVisible(true);
     else
-        setVisible (false);
+        setVisible(false);
 }
 
-void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
+void FreqDividerGroup::sliderValueChanged(juce::Slider* slider)
 {
     // TODO: maybe i don't need this
     // ableton move sliders
@@ -147,36 +133,30 @@ void FreqDividerGroup::sliderValueChanged (juce::Slider* slider)
     {
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();
-        freqTextLabel.setFreq (freq);
+        freqTextLabel.setFreq(freq);
         float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
         verticalLine.setXPercent(xPercent); // set freq -> set X percent
     }
 }
 
-void FreqDividerGroup::mouseDoubleClick (const juce::MouseEvent& e)
+void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent& e)
 {
     // do nothing, override the silder function, which will reset value.
 }
 
-void FreqDividerGroup::setFreq (float f)
+void FreqDividerGroup::setFreq(float f)
 {
-    verticalLine.setValue (f);
-    verticalLine.setXPercent (static_cast<float> (SpectrumComponent::transformToLog (f)));
-    freqTextLabel.setFreq (f);
+    verticalLine.setValue(f);
+    verticalLine.setXPercent(static_cast<float>(SpectrumComponent::transformToLog(f)));
+    freqTextLabel.setFreq(f);
 }
 
 int FreqDividerGroup::getFreq()
 {
     return verticalLine.getValue();
 }
-void FreqDividerGroup::mouseUp (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseEnter (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseExit (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDown (const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDrag (const juce::MouseEvent& e) {}
-
-void FreqDividerGroup::setScale (float scale)
-{
-    otherLookAndFeel.scale = scale;
-    freqTextLabel.setScale (scale);
-}
+void FreqDividerGroup::mouseUp(const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseEnter(const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseExit(const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseDown(const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseDrag(const juce::MouseEvent& e) {}

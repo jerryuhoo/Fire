@@ -66,7 +66,7 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         
         juce::HashMap<int, juce::String> comboBoxIdToTagNameMap;
 
-        bool savePreset(juce::File savePath);
+        juce::String savePreset(juce::File savePath);
         void loadPreset(juce::String selectedName);
         void deletePreset();
         juce::AudioProcessor& getProcessor() { return pluginProcessor; }
@@ -148,7 +148,7 @@ PluginProcessor).
         std::unique_ptr<VersionInfo> versionInfo;
         juce::String version;
 
-        OtherLookAndFeel otherLookAndFeel;
+        FireLookAndFeel fireLookAndFeel;
 
         juce::TextButton toggleABButton;
         juce::TextButton copyABButton;

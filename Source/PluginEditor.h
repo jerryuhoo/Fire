@@ -20,6 +20,7 @@
 #include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
 #include "Panels/ControlPanel/Graph Components/VUPanel.h"
 #include "Panels/ControlPanel/Graph Components/WidthGraph.h"
+#include "Panels/ControlPanel/LfoPanel.h"
 #include "Panels/SpectrogramPanel/FilterControl.h"
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
@@ -46,6 +47,7 @@ public:
     void setMultiband();
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
+    void markPresetAsDirty();
 
 private:
     // This reference is provided as a quick way for your editor to
@@ -54,17 +56,26 @@ private:
     state::StateComponent stateComponent;
 
     // create own knob style
-    OtherLookAndFeel otherLookAndFeel;
-    ZoomLookAndFeel zoomLookAndFeel;
+    FireLookAndFeel fireLookAndFeel;
+
+    bool isLfoAssignMode = false;
+    int lfoSourceForAssignment = 0;
+    float assignModePulseAlpha = 0.0f;
+    float assignModePulseAngle = 0.0f;
 
     int focusIndex = 0;
     void updateWhenChangingFocus();
+    void updateMainPanelVisibility();
 
     void buttonClicked(juce::Button* clickedButton) override;
     void mouseDown(const juce::MouseEvent& e) override;
 
     // init editor
     void initEditor();
+
+    // Top Area
+    juce::Rectangle<int> logoArea;
+    juce::Rectangle<int> wingsArea;
 
     // Graph panel
     GraphPanel graphPanel { processor };
@@ -77,6 +88,9 @@ private:
 
     // Global
     GlobalPanel globalPanel;
+
+    // LFO
+    LfoPanel lfoPanel;
 
     // Filter Control
     FilterControl filterControl { processor, globalPanel };
@@ -94,6 +108,7 @@ private:
         hqButton,
         windowLeftButton,
         windowRightButton,
+        windowLfoButton,
         zoomButton;
 
     // group toggle buttons
@@ -107,9 +122,9 @@ private:
 
     void setLinearSlider(juce::Slider& slider);
 
-    void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId);
+    void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex);
 
-    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum);
+    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible);
 
     // override listener functions
 
@@ -120,6 +135,8 @@ private:
     //    void sliderDragStarted (juce::Slider*) override;
     //    void sliderDragEnded (juce::Slider*) override;
     //    void changeSliderState(juce::ComboBox *combobox);
+
+    void exitAssignMode();
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>

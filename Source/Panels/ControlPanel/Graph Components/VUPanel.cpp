@@ -9,156 +9,143 @@
 */
 
 #include "VUPanel.h"
+#include "../../../Utility/AudioHelpers.h"
 
 //==============================================================================
-VUPanel::VUPanel(FireAudioProcessor &p) : processor(p), focusBandNum(0), vuMeterIn(&p), vuMeterOut(&p)
+VUPanel::VUPanel(FireAudioProcessor& p) : processor(p),
+                                          focusBandNum(0),
+                                          vuMeterIn(&p),
+                                          vuMeterOut(&p),
+                                          realtimeThresholdDb(-100.0f)
 {
     // In your constructor, you should add any child components, and
     // initialise any special settings that your component needs.
-    
-    vuMeterIn.setParameters(true, "Band1");
-    vuMeterOut.setParameters(false, "Band1");
-    
+
+    vuMeterIn.setParameters(true, 0);
+    vuMeterOut.setParameters(false, 0);
+
     addAndMakeVisible(vuMeterIn);
     addAndMakeVisible(vuMeterOut);
-    
+
     startTimerHz(60);
 }
 
 VUPanel::~VUPanel()
 {
+    stopTimer();
 }
 
-void VUPanel::paint (juce::Graphics& g)
+void VUPanel::paint(juce::Graphics& g)
 {
     g.setColour(COLOUR6);
-    g.drawRect (getLocalBounds(), 1);   // draw an outline around the component
-    
+    g.drawRect(getLocalBounds(), 1); // draw an outline around the component
+
     // draw compressor threshold line
     g.setColour(KNOB_SUBFONT_COLOUR);
+    bool isGlobal = (focusBandNum == -1);
+    vuMeterIn.setParameters(true, focusBandNum);
+    vuMeterOut.setParameters(false, focusBandNum);
 
-    bool isGlobal = false;
-    if (focusBandNum == 0)
+    if (! isGlobal && juce::isPositiveAndBelow(focusBandNum, 4))
     {
-        vuMeterIn.setParameters(true, "Band1");
-        vuMeterOut.setParameters(false, "Band1");
-        threshID = COMP_THRESH_ID1;
-        compBypassID = COMP_BYPASS_ID1;
+        threshID = ParameterIDAndName::getIDString(COMP_THRESH_ID, focusBandNum);
+        compBypassID = ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum);
     }
-    else if (focusBandNum == 1)
+
+    // draw threshold line
+    if (! isGlobal)
     {
-        vuMeterIn.setParameters(true, "Band2");
-        vuMeterOut.setParameters(false, "Band2");
-        threshID = COMP_THRESH_ID2;
-        compBypassID = COMP_BYPASS_ID2;
-    }
-    else if (focusBandNum == 2)
-    {
-        vuMeterIn.setParameters(true, "Band3");
-        vuMeterOut.setParameters(false, "Band3");
-        threshID = COMP_THRESH_ID3;
-        compBypassID = COMP_BYPASS_ID3;
-    }
-    else if (focusBandNum == 3)
-    {
-        vuMeterIn.setParameters(true, "Band4");
-        vuMeterOut.setParameters(false, "Band4");
-        threshID = COMP_THRESH_ID4;
-        compBypassID = COMP_BYPASS_ID4;
-    }
-    else if (focusBandNum == -1)
-    {
-        vuMeterIn.setParameters(true, "Global");
-        vuMeterOut.setParameters(false, "Global");
-        isGlobal = true;
-    }
-    else jassertfalse;
-    
-    // draw threshold pointer
-    if (!isGlobal)
-    {
-        float threshValue = *(processor.treeState.getRawParameterValue(threshID));
-        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * -threshValue / VU_METER_RANGE;
-        float pointerX;
-        if (processor.getTotalNumInputChannels() == 2)
-        {
-            pointerX = VU_METER_X_1;
-        }
-        else
-        {
-            pointerX = VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
-        }
-        
-        bool compBypassState = *(processor.treeState.getRawParameterValue(compBypassID));
-        if (compBypassState) 
+        float threshValue = realtimeThresholdDb;
+
+        const float vuMeterRange = 82.0f; // Range from -70dB to +12dB
+        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * (1.0f - (threshValue + 70.0f) / vuMeterRange);
+
+        float pointerX = (processor.getTotalNumInputChannels() == 2) ? VU_METER_X_1 : VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
+
+        bool compIsEnabled = *processor.treeState.getRawParameterValue(compBypassID);
+        if (compIsEnabled)
         {
             g.setColour(juce::Colours::yellowgreen);
-            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f, compressorLineY, pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f, compressorLineY, 1.0f);
+            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f,
+                       compressorLineY,
+                       pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f,
+                       compressorLineY,
+                       1.0f);
         }
     }
-    
+
     if (mZoomState)
     {
         // show db meter scale text
         float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
-        float text20Y = VU_METER_Y + 20.0f / VU_METER_RANGE * VU_METER_HEIGHT;
-        float text40Y = VU_METER_Y + 40.0f / VU_METER_RANGE * VU_METER_HEIGHT;
-        float text60Y = VU_METER_Y + 60.0f / VU_METER_RANGE * VU_METER_HEIGHT;
-        float text80Y = VU_METER_Y + 80.0f / VU_METER_RANGE * VU_METER_HEIGHT;
         float textWidth = getWidth() / 5;
         float textHeight = getHeight() / 10;
-//        g.drawText("  0", textX, VU_METER_Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.setFont(juce::Font{
+        g.setFont(juce::Font {
             juce::FontOptions()
-                .withName(KNOB_FONT)  // 指定 Futura 字体
+                .withName(KNOB_FONT)
                 .withHeight(14.0f * getHeight() / 150.0f)
-                .withStyle("Plain")
-        });
-        g.drawText("-20", textX, text20Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.drawText("-40", textX, text40Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.drawText("-60", textX, text60Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.drawText("-80", textX, text80Y - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        
-        // show input/output db
-        g.setColour(juce::Colours::yellowgreen);
-        float inputValue = ((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) / 2.0f) * VU_METER_RANGE - VU_METER_RANGE;
-        float outputValue = ((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) / 2.0f) * VU_METER_RANGE - VU_METER_RANGE;
-        
-        if (updateCounter == 5)
-        {
-            displayInputValue = inputValue;
-            displayOutputValue = outputValue;
-            updateCounter = 0;
-        }
-        else
-        {
-            updateCounter++;
-        }
-        
+                .withStyle("Plain") });
+        g.drawText("-20", textX, VU_METER_Y + 20.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-40", textX, VU_METER_Y + 40.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-60", textX, VU_METER_Y + 60.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+        g.drawText("-80", textX, VU_METER_Y + 80.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+
+        // --- Calculate RMS & Peak values in dB ---
+        // Note: The VUMeter returns a normalized linear value [0, 1]. We must convert it to dB.
+        auto toDB = [](float linear)
+        { return juce::Decibels::gainToDecibels(linear, -96.0f); };
+
+        float avgInputRmsDb = toDB((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) * 0.5f);
+        float avgInputPeakDb = toDB((vuMeterIn.getLeftChannelPeakLevel() + vuMeterIn.getRightChannelPeakLevel()) * 0.5f);
+
+        float avgOutputRmsDb = toDB((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) * 0.5f);
+        float avgOutputPeakDb = toDB((vuMeterOut.getLeftChannelPeakLevel() + vuMeterOut.getRightChannelPeakLevel()) * 0.5f);
+
+        // --- Define drawing areas ---
         juce::Rectangle<int> localBounds = getLocalBounds();
         juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
         juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
-        g.setFont(juce::Font{
-            juce::FontOptions()
-                .withName(KNOB_FONT)
-                .withHeight(20.0f * getHeight() / 150.0f)
-                .withStyle("Bold")
-        });
-        g.drawText(juce::String(displayInputValue, 1), leftArea, juce::Justification::centred);
-        g.drawText(juce::String(displayOutputValue, 1), rightArea, juce::Justification::centred);
-        
+
+        // --- Draw Input Levels (Left Side) ---
+        g.setColour(juce::Colours::yellowgreen);
+
+        auto fontSizeBig = 20.0f * getHeight() / 150.0f;
+        auto fontSizeSmall = 14.0f * getHeight() / 150.0f;
+        if (isGlobal)
+        {
+            fontSizeBig = 16.0f * getHeight() / 150.0f;
+            fontSizeSmall = 10.0f * getHeight() / 150.0f;
+        }
+
+        // Large Text: Peak Value
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
+        g.drawText(juce::String(avgInputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
+
+        // Small Text: RMS Value
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
+        g.drawText(juce::String(avgInputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
+
+        // Label
         g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-        g.setFont(juce::Font{
-            juce::FontOptions()
-                .withName(KNOB_FONT)
-                .withHeight(14.0f * getHeight() / 150.0f)
-                .withStyle("Plain")
-        });
-        g.drawText("RMS Input", leftArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
-        g.drawText("RMS Output", rightArea.removeFromBottom(getHeight() / 3), juce::Justification::centredTop);
+        g.drawFittedText("RMS In", leftArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
+
+        // --- Draw Output Levels (Right Side) ---
+        g.setColour(juce::Colours::yellowgreen);
+
+        // Large Text: Peak Value
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
+        g.drawText(juce::String(avgOutputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
+
+        // Small Text: RMS Value
+        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
+        g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
+
+        // Label
+        g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
+        g.drawFittedText("RMS Out", rightArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
     }
-    
-    if (isMouseOn && !mZoomState)
+
+    if (isMouseOn && ! mZoomState)
     {
         g.setColour(COMP_COLOUR.withAlpha(0.05f));
         g.fillAll();
@@ -181,4 +168,10 @@ void VUPanel::setFocusBandNum(int num)
 void VUPanel::timerCallback()
 {
     repaint();
+}
+
+void VUPanel::updateRealtimeThreshold(float newThresholdDb)
+{
+    // Store the live value. No need to repaint here, as the timerCallback already does.
+    realtimeThresholdDb = newThresholdDb;
 }

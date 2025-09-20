@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
-              version="1.0.2" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
+              version="1.5.0b" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"
@@ -80,6 +80,12 @@
           <FILE id="jnhFBw" name="BandPanel.h" compile="0" resource="0" file="Source/Panels/ControlPanel/BandPanel.h"/>
           <FILE id="zk1lM4" name="GlobalPanel.cpp" compile="1" resource="0" file="Source/Panels/ControlPanel/GlobalPanel.cpp"/>
           <FILE id="gY3gqe" name="GlobalPanel.h" compile="0" resource="0" file="Source/Panels/ControlPanel/GlobalPanel.h"/>
+          <FILE id="VXARUu" name="LfoPanel.cpp" compile="1" resource="0" file="Source/Panels/ControlPanel/LfoPanel.cpp"/>
+          <FILE id="dyKJOr" name="LfoPanel.h" compile="0" resource="0" file="Source/Panels/ControlPanel/LfoPanel.h"/>
+          <FILE id="sxp0YQ" name="ModulationMatrixPanel.cpp" compile="1" resource="0"
+                file="Source/Panels/ControlPanel/ModulationMatrixPanel.cpp"/>
+          <FILE id="bPv4s8" name="ModulationMatrixPanel.h" compile="0" resource="0"
+                file="Source/Panels/ControlPanel/ModulationMatrixPanel.h"/>
         </GROUP>
         <GROUP id="{995D5DE9-21F2-8C23-FD7F-A46997F360E4}" name="TopPanel">
           <FILE id="By9zs9" name="Preset.cpp" compile="1" resource="0" file="Source/Panels/TopPanel/Preset.cpp"/>
@@ -88,6 +94,8 @@
       </GROUP>
       <GROUP id="{0204F696-B0DF-CD89-2550-E45618BFEF7E}" name="Utility">
         <FILE id="A4Ogfw" name="AudioHelpers.h" compile="0" resource="0" file="Source/Utility/AudioHelpers.h"/>
+        <FILE id="SBsuX3" name="FiltersUtil.h" compile="0" resource="0" file="Source/Utility/FiltersUtil.h"/>
+        <FILE id="I9GGUn" name="Parameters.h" compile="0" resource="0" file="Source/Utility/Parameters.h"/>
         <FILE id="iNAOxz" name="VersionInfo.cpp" compile="1" resource="0" file="Source/Utility/VersionInfo.cpp"/>
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
@@ -95,6 +103,10 @@
         <FILE id="rznrv4" name="InterfaceDefines.h" compile="0" resource="0"
               file="Source/GUI/InterfaceDefines.h"/>
         <FILE id="NKA4fO" name="LookAndFeel.h" compile="0" resource="0" file="Source/GUI/LookAndFeel.h"/>
+        <FILE id="Xpmn00" name="ModulatableSlider.cpp" compile="1" resource="0"
+              file="Source/GUI/ModulatableSlider.cpp"/>
+        <FILE id="p1LFw2" name="ModulatableSlider.h" compile="0" resource="0"
+              file="Source/GUI/ModulatableSlider.h"/>
         <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
               file="Source/GUI/SettingsComponent.h"/>
       </GROUP>
@@ -103,6 +115,17 @@
               file="Source/DSP/ClippingFunctions.h"/>
         <FILE id="fGPNaV" name="Delay.h" compile="0" resource="0" file="Source/DSP/Delay.h"/>
         <FILE id="TPnhKC" name="DiodeWDF.h" compile="0" resource="0" file="Source/DSP/DiodeWDF.h"/>
+        <FILE id="pm8EEh" name="DistortionLogic.h" compile="0" resource="0"
+              file="Source/DSP/DistortionLogic.h"/>
+        <FILE id="DEFvzA" name="LfoData.h" compile="0" resource="0" file="Source/DSP/LfoData.h"/>
+        <FILE id="prvJVo" name="LfoEngine.cpp" compile="1" resource="0" file="Source/DSP/LfoEngine.cpp"/>
+        <FILE id="IEdaZX" name="LfoEngine.h" compile="0" resource="0" file="Source/DSP/LfoEngine.h"/>
+        <FILE id="UFdMj3" name="LfoManager.cpp" compile="1" resource="0" file="Source/DSP/LfoManager.cpp"/>
+        <FILE id="BoNr69" name="LfoManager.h" compile="0" resource="0" file="Source/DSP/LfoManager.h"/>
+        <FILE id="f8ecdJ" name="LfoShapeGenerator.h" compile="0" resource="0"
+              file="Source/DSP/LfoShapeGenerator.h"/>
+        <FILE id="SBXQBa" name="ModulationRouting.h" compile="0" resource="0"
+              file="Source/DSP/ModulationRouting.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>
         <FILE id="K65kzc" name="WidthProcessor.cpp" compile="1" resource="0"
               file="Source/DSP/WidthProcessor.cpp"/>

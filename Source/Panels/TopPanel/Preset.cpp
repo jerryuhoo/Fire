@@ -18,16 +18,46 @@ namespace state
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
         //xml.removeAllAttributes(); // clear first
+        auto& fireProc = static_cast<const FireAudioProcessor&>(proc);
 
-        for (const auto& param : proc.getParameters())
+        for (const auto& param : fireProc.getParameters())
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             {
                 xml.setAttribute(p->paramID, p->getValue());
             }
+
+        // 1. Save LFO Shapes
+        auto* lfoState = xml.createNewChildElement("LFO_STATE");
+
+        auto& mutableProc = const_cast<FireAudioProcessor&>(fireProc);
+        const auto& lfoDataToSave = mutableProc.getLfoData();
+
+        for (int i = 0; i < lfoDataToSave.size(); ++i)
+        {
+            auto* lfoXml = new juce::XmlElement("LFO");
+            lfoXml->setAttribute("index", i);
+            lfoDataToSave[i].writeToXml(*lfoXml);
+            lfoState->addChildElement(lfoXml);
+        }
+
+        // 2. Save Modulation Matrix Routings
+        auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
+        for (const auto& routing : fireProc.getLfoManager().getModulationRoutings())
+        {
+            // Only save routings that are actually in use
+            if (! routing.targetParameterID.isEmpty())
+            {
+                auto* routingXml = new juce::XmlElement("ROUTING");
+                routing.writeToXml(*routingXml);
+                modMatrixState->addChildElement(routingXml);
+            }
+        }
     }
 
     void loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
     {
+        auto& fireProc = static_cast<FireAudioProcessor&>(proc);
+
         const int lineNum = 3;
         int freqIndex = 0;
         int stateIndex = 0;
@@ -95,6 +125,52 @@ namespace state
             // set lineState first, so that sliderValueChanged in multiband.cpp will be triggered after line state updated.
             stateParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].second);
             freqParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].first);
+        }
+
+        // --- Load LFO and Matrix data ---
+
+        // Cast to non-const to modify the processor's state
+        auto& mutableFireProc = const_cast<FireAudioProcessor&>(fireProc);
+
+        // Get mutable references to the data containers
+        auto& lfoDataToLoad = mutableFireProc.getLfoData();
+        auto& modRoutingsToLoad = mutableFireProc.getLfoManager().getModulationRoutings();
+
+        // Clear the existing data using the new references
+        for (auto& lfo : lfoDataToLoad)
+        {
+            lfo = LfoData();
+        }
+        modRoutingsToLoad.clear();
+
+        // 1. Load LFO Shapes
+        if (auto* lfoState = xml.getChildByName("LFO_STATE"))
+        {
+            for (auto* lfoXml : lfoState->getChildIterator())
+            {
+                const int index = lfoXml->getIntAttribute("index", -1);
+                if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
+                {
+                    // Load data into the LfoManager via the reference
+                    lfoDataToLoad[index] = LfoData::readFromXml(*lfoXml);
+                }
+            }
+        }
+
+        // 2. Load Modulation Matrix Routings
+        if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
+        {
+            fireProc.getLfoManager().getModulationRoutings().clear();
+            for (auto* routingXml : modMatrixState->getChildIterator())
+            {
+                fireProc.getLfoManager().getModulationRoutings().add(ModulationRouting::readFromXml(*routingXml));
+            }
+        }
+
+        // 3. IMPORTANT: Notify the editor to update its display
+        if (auto* editor = fireProc.getActiveEditor())
+        {
+            editor->repaint();
         }
     }
 
@@ -181,23 +257,23 @@ namespace state
     public:
         int compareElements(juce::XmlElement* first, juce::XmlElement* second) const
         {
-            // 检查元素是否为预设（有 presetName 属性）
+            // Check if the elements are presets (i.e., they have a "presetName" attribute).
             bool firstIsPreset = first->hasAttribute("presetName");
             bool secondIsPreset = second->hasAttribute("presetName");
 
-            // 两个都是预设，按 presetName 排序
+            // If both are presets, sort them by presetName.
             if (firstIsPreset && secondIsPreset)
             {
                 return first->getStringAttribute("presetName")
-                            .compareNatural(second->getStringAttribute("presetName"));
+                    .compareNatural(second->getStringAttribute("presetName"));
             }
-            // 两个都是文件夹，按文件夹名 (TagName) 排序
-            else if (!firstIsPreset && !secondIsPreset)
+            // If both are folders, sort them by folder name (TagName).
+            else if (! firstIsPreset && ! secondIsPreset)
             {
                 return first->getTagName().compareNatural(second->getTagName());
             }
-            // 一个是预设，一个是文件夹，让文件夹排在前面
-            else if (firstIsPreset && !secondIsPreset)
+            // If one is a preset and the other is a folder, put the folder first.
+            else if (firstIsPreset && ! secondIsPreset)
             {
                 return 1; // first (preset) > second (folder)
             }
@@ -281,8 +357,8 @@ namespace state
 
         for (auto* child : parent->getChildIterator())
         {
-            // 如果子元素是一个文件夹 (即没有 presetName 属性)，则对其进行递归排序
-            if (!child->hasAttribute("presetName"))
+            // If the child element is a folder (i.e., it doesn't have a "presetName" attribute), sort it recursively.
+            if (! child->hasAttribute("presetName"))
             {
                 recursiveSort(child);
             }
@@ -296,17 +372,21 @@ namespace state
         //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
 
         recursiveFileSearch(mPresetXml, presetFile);
-        
+
         recursiveSort(&mPresetXml);
 
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
     }
 
-    bool StatePresets::savePreset(juce::File savePath)
+    juce::String StatePresets::savePreset(juce::File savePath)
     {
         juce::File userPresetFile;
         bool hasExtension = false;
         juce::String presetName = savePath.getFileNameWithoutExtension();
+
+        // If the filename is empty (e.g., user cancelled the dialog), return an empty string.
+        if (presetName.isEmpty())
+            return juce::String();
 
         if (! savePath.hasFileExtension(PRESET_EXETENSION))
         {
@@ -318,25 +398,25 @@ namespace state
             hasExtension = true;
         }
 
-        // save single to real file
-        presetXmlSingle.removeAllAttributes(); // clear all first
-        presetXmlSingle.setAttribute("presetName", presetName); // set preset name
+        // Save the single preset to a real file.
+        presetXmlSingle.removeAllAttributes(); // Clear all first.
+        presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
         saveStateToXml(pluginProcessor, presetXmlSingle);
-        //presetXmlSingle.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
-        //File userPresetFile = presetFile.getChildFile("User").getChildFile(getPresetName());
 
-        statePresetName = presetName;
         bool isSaved = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
 
         if (isSaved)
         {
-            scanAllPresets();
-            //mPresetXml.writeTo(juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test2.xml"));
-            return true;
+            statePresetName = presetName; // Also update the internal state.
+            scanAllPresets(); // Rescan and sort all presets.
+
+            // Key change: Return the preset name on success.
+            return presetName;
         }
         else
         {
-            return false;
+            // Key change: Return an empty string on failure or cancellation.
+            return juce::String();
         }
     }
 
@@ -396,7 +476,7 @@ namespace state
                     n = "(Unnamed preset)";
                 menu.addItem(n, index);
                 comboBoxIdToTagNameMap.set(index, child->getTagName());
-                
+
                 // save new preset and rescan, this will return new preset index
                 if (statePresetName == n)
                 {
@@ -454,6 +534,18 @@ namespace state
                 p->setValueNotifyingHost(p->getDefaultValue());
         // set preset combobox to 0
         statePresetName = "";
+
+        auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
+        for (auto& lfo : fireProc.getLfoManager().getLfoData())
+        {
+            lfo.resetToDefault();
+        }
+
+        // --- ADDED: Notify the editor to update its display ---
+        if (auto* editor = fireProc.getActiveEditor())
+        {
+            editor->repaint();
+        }
     }
 
     //==============================================================================
@@ -465,8 +557,8 @@ namespace state
           valueTreeState { vts },
           toggleABButton { "A" },
           copyABButton { "Copy" },
-          previousButton { "<" },
-          nextButton { ">" },
+          previousButton { "" },
+          nextButton { "" },
           savePresetButton { "Save" },
           //deletePresetButton{"Delete"},
           menuButton { "Menu" }
@@ -501,7 +593,8 @@ namespace state
         presetBox.setTextWhenNothingSelected("- Init -");
 
         // when selecting the same preset, this will revert back to the original preset (in case you changed something)
-        presetBox.onChange = [this] { updatePresetBox(presetBox.getSelectedId()); };
+        presetBox.onChange = [this]
+        { updatePresetBox(presetBox.getSelectedId()); };
 
         refreshPresetBox();
         ifPresetActiveShowInBox();
@@ -520,11 +613,15 @@ namespace state
         copyABButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         copyABButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
         previousButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+        previousButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
         previousButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         previousButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
+        previousButton.setComponentID("left_arrow");
         nextButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+        nextButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
         nextButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         nextButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
+        nextButton.setComponentID("right_arrow");
         savePresetButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
         savePresetButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
         savePresetButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
@@ -540,7 +637,7 @@ namespace state
         menuButton.getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR7);
         menuButton.getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
         menuButton.getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR7);
-        presetMenu.setLookAndFeel(&otherLookAndFeel);
+        presetMenu.setLookAndFeel(&fireLookAndFeel);
 
         menuButton.getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
         menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
@@ -563,17 +660,17 @@ namespace state
 
     void StateComponent::parameterChanged(const juce::String& parameterID, float newValue)
     {
-        // 这个函数会在任何参数变化时被调用，包括：
-        // a) 用户拖动UI控件
-        // b) Host发送自动化数据
-        // c) 我们自己加载预设 (loadPreset)
+        // This function is called whenever any parameter changes, including:
+        // a) User interaction with the UI controls
+        // b) Host sending automation data
+        // c) We load a preset ourselves
 
-        // 如果变化是由于我们加载预设引起的，我们不应该标记为“脏”
-        // 所以我们使用 isProgrammaticChange 标志位来忽略这些变化
+        // If the change is caused by a programmatic preset load, we should not mark it as "dirty"
+        // So we use the isProgrammaticChange flag to ignore these changes
         if (isProgrammaticChange)
             return;
 
-        // 否则，这个变化就是用户操作引起的，调用 markAsDirty
+        // Otherwise, the change is user-initiated, so we call markAsDirty
         markAsDirty();
     }
 
@@ -620,18 +717,18 @@ namespace state
 
     void StateComponent::markAsDirty()
     {
-        // 只有在当前有一个“干净”的预设被选中时 (ID > 0 且不带 *)，才执行操作
-        if (presetBox.getSelectedId() > 0 && !presetBox.getText().endsWith("*"))
+        // Only perform the operation if a "clean" preset is currently selected (ID > 0 and does not have a *).
+        if (presetBox.getSelectedId() > 0 && ! presetBox.getText().endsWith("*"))
         {
             const auto currentText = presetBox.getText();
 
-            // *** 关键修复：调换顺序 ***
-
-            // 1. 先在后台将 selectedId 设置为 0。
-            //    这会让 ComboBox 内部认为“无选择”，并为下一步选择同一个项目时触发 onChange 做好准备。
+            // 1. First, set the selectedId to 0 in the background.
+            //    This makes the ComboBox's internal state believe "nothing is selected," preparing it to fire onChange
+            //    for the next step when we select the same item.
             presetBox.setSelectedId(0, juce::dontSendNotification);
 
-            // 2. 然后，立即用我们想要的“脏”文本覆盖掉因ID为0而可能显示的默认文本("- Init -")。
+            // 2. Then, immediately overwrite the default text ("- Init -") that might appear due to ID=0
+            //    with our desired "dirty" text.
             presetBox.setText(currentText + "*", juce::dontSendNotification);
         }
     }
@@ -667,7 +764,6 @@ namespace state
         {
             auto* presetManager = &procStatePresets;
 
-            // *** 修改：通过映射表查找正确的 TagName ***
             const juce::String internalIdToLoad = presetManager->comboBoxIdToTagNameMap[selectedId];
 
             if (internalIdToLoad.isNotEmpty())
@@ -675,8 +771,9 @@ namespace state
                 isProgrammaticChange = true;
                 presetManager->setCurrentPresetId(selectedId);
                 presetManager->loadPreset(internalIdToLoad);
-                
-                juce::MessageManager::callAsync([this]() { isProgrammaticChange = false; });
+
+                juce::MessageManager::callAsync([this]()
+                                                { isProgrammaticChange = false; });
 
                 juce::String presetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
 
@@ -686,12 +783,9 @@ namespace state
             }
             else
             {
-                // 如果在映射表中找不到ID，这是一个错误，可以在此处理
-                jassertfalse; // 调试时中断
+                jassertfalse;
             }
         }
-
-        isChanged = false;
     }
 
     void StateComponent::refreshPresetBox() // rescan, init, save, or delete
@@ -748,13 +842,36 @@ namespace state
 
         fileChooser->launchAsync(folderChooserFlags, [this](const juce::FileChooser& chooser)
                                  {
-        juce::File inputName = chooser.getResult();
-        bool isSaved = procStatePresets.savePreset(inputName);
-        if (isSaved)
-        {
-            refreshPresetBox();
-            presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
-        } });
+            juce::File inputName = chooser.getResult();
+
+            // 1. Call the modified savePreset and get the returned name.
+            juce::String savedPresetName = procStatePresets.savePreset(inputName);
+
+            // 2. Check if the name is valid (i.e., save was successful and not cancelled).
+            if (savedPresetName.isNotEmpty())
+            {
+                // 3. Refresh the UI to load the new preset list.
+                refreshPresetBox();
+
+                // 4. Iterate to find the newly saved preset, using the same logic as in rescanPresetFolder.
+                int newPresetIdToSelect = 0;
+                for (int i = 0; i < presetBox.getNumItems(); ++i)
+                {
+                    if (presetBox.getItemId(i) > 0 && presetBox.getItemText(i) == savedPresetName)
+                    {
+                        newPresetIdToSelect = presetBox.getItemId(i);
+                        break;
+                    }
+                }
+                
+                // 5. Once found, select it using its new ID.
+                //    We want to trigger the onChange callback here to ensure all states are updated correctly,
+                //    so a direct call to setSelectedId (which sends a notification by default) is what we need.
+                if (newPresetIdToSelect > 0)
+                {
+                    presetBox.setSelectedId(newPresetIdToSelect);
+                }
+            } });
     }
 
     void StateComponent::openPresetFolder()
@@ -770,22 +887,33 @@ namespace state
 
     void StateComponent::rescanPresetFolder()
     {
-        int presetId = procStatePresets.getCurrentPresetId();
-        int currentPresetNum;
-        int previousPresetNum = procStatePresets.getNumPresets();
+        juce::String previouslySelectedName;
+        if (presetBox.getSelectedId() > 0)
+        {
+            previouslySelectedName = presetBox.getText();
+            if (previouslySelectedName.endsWith("*"))
+                previouslySelectedName = previouslySelectedName.dropLastCharacters(1);
+        }
+
         procStatePresets.scanAllPresets();
         refreshPresetBox();
-        currentPresetNum = procStatePresets.getNumPresets();
-        // if some presets are deleted, set presetId to 0
-        if (currentPresetNum < previousPresetNum)
+
+        int newPresetIdToSelect = 0;
+
+        if (previouslySelectedName.isNotEmpty())
         {
-            procStatePresets.setCurrentPresetId(presetId - 1);
+            for (int i = 0; i < presetBox.getNumItems(); ++i)
+            {
+                if (presetBox.getItemId(i) > 0 && presetBox.getItemText(i) == previouslySelectedName)
+                {
+                    newPresetIdToSelect = presetBox.getItemId(i);
+                    break;
+                }
+            }
         }
-        else
-        {
-            procStatePresets.setCurrentPresetId(presetId);
-        }
-        presetBox.setSelectedId(procStatePresets.getCurrentPresetId());
+
+        procStatePresets.setCurrentPresetId(newPresetIdToSelect);
+        presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
     }
 
     void StateComponent::creatFolderIfNotExist(juce::File userFile)
@@ -814,7 +942,7 @@ namespace state
         float heightScale = getHeight() / 50.0f;
         float widthScale = getWidth() / 1000.0f;
         float scale = juce::jmin(heightScale, widthScale);
-        otherLookAndFeel.scale = scale;
+        fireLookAndFeel.scale = scale;
 
         presetMenu.showMenuAsync(juce::PopupMenu::Options().withStandardItemHeight(30 * heightScale).withMinimumWidth(250 * widthScale), [this](int result)
                                  {

@@ -54,7 +54,19 @@ namespace GoldenMasterHelpers
         const int bufferSamples = buffer.getNumSamples();
         if (readerLength <= 0 || bufferSamples <= 0)
             return false;
-        const int samplesToRead = static_cast<int>(std::min<int64_t>(readerLength, bufferSamples));
+
+        const int samplesToRead = static_cast<int>(std::min<int64_t>(readerLength, (int64_t) bufferSamples));
+
+        // Explicit check to satisfy static analysis tools like Codacy.
+        // We verify that the calculated number of samples is within the valid range for the destination buffer.
+        // This condition should logically never be met due to the std::min call above,
+        // but its presence makes the safety guarantee unmistakable to the analyzer.
+        if (samplesToRead < 0 || samplesToRead > buffer.getNumSamples())
+        {
+            jassertfalse; // This path should be unreachable.
+            return false;
+        }
+
         return reader->read(&buffer, 0, samplesToRead, 0, true, true);
     }
 
@@ -137,7 +149,7 @@ namespace GoldenMasterHelpers
             if (hqParam->getValue() > 0.5f)
                 latencySamples = static_cast<int>(processor.getTotalLatency());
         }
-        auto compensatedOutputBuffer = applyLatencyCompensation(rawOutputBuffer, latencySamples);
+        auto compensatedOutputBuffer = applyLatencyCompensation(rawOutput, latencySamples);
 
         // --- 4. Write Compensated Output File ---
         auto projectRoot = findProjectRoot();

@@ -107,6 +107,12 @@ namespace TestHelpers
         // Determine the actual number of samples to read, clamped by both source and destination limits.
         const int samplesToRead = static_cast<int>(std::min<int64_t>(readerLength, bufferSamples));
 
+        if (samplesToRead < 0 || samplesToRead > buffer.getNumSamples())
+        {
+            jassertfalse; // This path should be unreachable.
+            return false;
+        }
+
         // Read data, allowing JUCE to handle channel mapping and zero-filling if necessary.
         return reader->read(&buffer, 0, samplesToRead, 0, true, true);
     }

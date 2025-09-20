@@ -115,7 +115,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
     // +++ CONTROL VARIABLE +++
     // Set this to 'true' to generate .wav files in the RegressionOutput folder for manual inspection.
     // Set to 'false' for standard automated testing where temporary files are deleted.
-    constexpr bool keepRegressionOutputFiles = false;
+    constexpr bool keepRegressionOutputFiles = true;
 
     juce::AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
@@ -299,7 +299,7 @@ TEST_CASE("Regression Test: Verify output against Golden Masters")
 TEST_CASE("Regression Test (Sine Wave)")
 {
     // This test remains unchanged as it's not for continuous time-aligned file comparison.
-    constexpr bool keepRegressionOutputFiles = false;
+    constexpr bool keepRegressionOutputFiles = true;
 
     // --- Setup ---
     juce::AudioFormatManager formatManager;

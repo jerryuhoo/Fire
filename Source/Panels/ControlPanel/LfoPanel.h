@@ -107,6 +107,9 @@ private:
     // Used for dragging single or multiple points
     juce::Point<float> dragAnchor; // The normalized position of the main point being dragged
     std::vector<juce::Point<float>> initialDragPositions; // Store original positions of all selected points
+
+    bool isBrushing = false;
+    juce::Point<int> lastBrushCell { -1, -1 };
 };
 
 //

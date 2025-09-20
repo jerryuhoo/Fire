@@ -180,6 +180,19 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
         return;
     grabKeyboardFocus();
 
+    if (currentMode == LfoEditMode::BrushPaint)
+    {
+        isBrushing = true;
+        applyBrushShape(event.getPosition());
+
+        const float gridW = 1.0f / (float) hGridDivs;
+        const float gridH = 1.0f / (float) vGridDivs;
+        const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) event.x / (float) getWidth() / gridW));
+        const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) event.y / (float) getHeight() / gridH));
+        lastBrushCell = { gridX, gridY };
+        return;
+    }
+
     if (currentMode != LfoEditMode::PointEdit)
         return;
 
@@ -266,6 +279,24 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 {
+    // First, handle the brush drag if it's active.
+    if (isBrushing)
+    {
+        const float gridW = 1.0f / (float) hGridDivs;
+        const float gridH = 1.0f / (float) vGridDivs;
+        const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) event.x / (float) getWidth() / gridW));
+        const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) event.y / (float) getHeight() / gridH));
+        const juce::Point<int> currentCell { gridX, gridY };
+
+        if (currentCell != lastBrushCell)
+        {
+            applyBrushShape(event.getPosition());
+            lastBrushCell = currentCell;
+        }
+        return; // Brush drag is handled, so we exit here.
+    }
+
+    // If not brushing, proceed with the point editing logic.
     if (! activeLfoData || currentMode != LfoEditMode::PointEdit)
         return;
 
@@ -426,9 +457,10 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     draggingState = DraggingState::None;
     editingCurveIndex = -1;
 
-    if (currentMode == LfoEditMode::BrushPaint && event.mouseWasClicked())
+    if (isBrushing)
     {
-        applyBrushShape(event.getPosition());
+        isBrushing = false;
+        lastBrushCell = { -1, -1 };
         dataWasChanged = true;
     }
 

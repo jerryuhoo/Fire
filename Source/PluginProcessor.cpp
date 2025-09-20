@@ -1789,6 +1789,8 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
         {
             // Found it. Update its depth value, ensuring it stays within the [0, 1] range.
             routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
+            
+            lfoDataHasChanged();
 
             // For now, we only handle the first match.
             return;
@@ -1805,6 +1807,8 @@ void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID
         {
             // Found it. Flip the boolean state.
             routing.isBipolar = ! routing.isBipolar;
+            
+            lfoDataHasChanged();
 
             // For now, we only handle the first match.
             return;
@@ -1822,6 +1826,8 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
             // Reset depth to 0.5 and mode to the default (bipolar)
             routing.depth = 0.5f;
             routing.isBipolar = true;
+            
+            lfoDataHasChanged();
 
             // We found the routing and reset it, so we can exit the function.
             return;
@@ -1851,6 +1857,8 @@ void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, 
     auto& currentRouting = routings.getReference(routingIndex);
     currentRouting.sourceLfoIndex = sourceLfoIndex;
     currentRouting.targetParameterID = targetParameterID;
+    
+    lfoDataHasChanged();
 }
 
 float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
@@ -1987,6 +1995,7 @@ void FireAudioProcessor::assignLfoToTarget(int sourceLfoIndex, const juce::Strin
             fireEditor->triggerAsyncUpdate();
         }
     }
+    lfoDataHasChanged();
 }
 
 void FireAudioProcessor::clearModulationForParameter(const juce::String& targetParameterID)
@@ -2000,9 +2009,11 @@ void FireAudioProcessor::clearModulationForParameter(const juce::String& targetP
             fireEditor->triggerAsyncUpdate();
         }
     }
+    lfoDataHasChanged();
 }
 
 void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& targetParameterID)
 {
     lfoManager->invertModulationDepth(targetParameterID);
+    lfoDataHasChanged();
 }

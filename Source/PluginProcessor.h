@@ -217,7 +217,7 @@ public:
     void resetModulation(const juce::String& targetParameterID);
     void clearModulationForParameter(const juce::String& targetParameterID);
     void invertModulationDepthForParameter(const juce::String& targetParameterID);
-    
+
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
 
     void setHistoryArray(int bandIndex);

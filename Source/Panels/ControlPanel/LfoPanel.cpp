@@ -294,6 +294,8 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         activeLfoData->curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
 
         repaint();
+        if (onDataChanged)
+            onDataChanged();
         return;
     }
 
@@ -415,7 +417,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
         selectionRectangle.setSize(0, 0);
     }
 
-    if (draggingState == DraggingState::Point)
+    if (draggingState == DraggingState::Point || draggingState == DraggingState::Selection)
     {
         updateAndSortPoints();
         dataWasChanged = true;

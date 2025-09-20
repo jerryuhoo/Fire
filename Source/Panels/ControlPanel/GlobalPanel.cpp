@@ -279,6 +279,11 @@ void GlobalPanel::configureModulatableSlider(ModulatableSlider& slider, const ju
     {
         processor.clearModulationForParameter(slider.parameterID);
     };
+
+    slider.onModulationInverted = [this, &slider]()
+    {
+        processor.invertModulationDepthForParameter(slider.parameterID);
+    };
 }
 
 void GlobalPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)

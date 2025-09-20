@@ -181,6 +181,11 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Clear LFO");
+        menu.addItem(2, "Invert Depth");
+        // menu.addSeparator();
+
+        juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
+        menu.addItem(3, bipolarToggleText);
 
         // Use SafePointer to ensure the component still exists during the asynchronous callback
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
@@ -189,12 +194,22 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
                                if (weakThis == nullptr)
                                    return; // The component has been deleted
 
-                               if (result == 1) // "Clear LFO" was selected
+                               switch (result)
                                {
-                                   if (onModulationCleared)
-                                   {
-                                       onModulationCleared();
-                                   }
+                                   case 1: // Clear LFO
+                                       if (onModulationCleared)
+                                           onModulationCleared();
+                                       break;
+                                   case 2: // Invert Depth
+                                       if (onModulationInverted)
+                                           onModulationInverted();
+                                       break;
+                                   case 3: // Switch Bi/Uni Mode
+                                       if (onBipolarModeToggled)
+                                           onBipolarModeToggled();
+                                       break;
+                                   default:
+                                       break;
                                }
                            });
         return; // Do not execute the following logic after a right-click

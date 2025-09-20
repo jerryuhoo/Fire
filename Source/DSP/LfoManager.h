@@ -68,6 +68,7 @@ public:
     float getLfoOutput(int lfoIndex) const;
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
     void clearModulationForTarget(const juce::String& targetParameterID);
+    void invertModulationDepth(const juce::String& targetParameterID);
 
 private:
     /**

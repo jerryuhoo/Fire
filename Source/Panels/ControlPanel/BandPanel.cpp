@@ -338,6 +338,11 @@ void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce
     {
         processor.clearModulationForParameter(slider.parameterID);
     };
+
+    slider.onModulationInverted = [this, &slider]()
+    {
+        processor.invertModulationDepthForParameter(slider.parameterID);
+    };
 }
 
 void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)

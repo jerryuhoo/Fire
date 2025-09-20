@@ -350,3 +350,15 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
         }
     }
 }
+
+void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
+{
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            routing.depth *= -1.0f;
+            return;
+        }
+    }
+}

@@ -2001,3 +2001,8 @@ void FireAudioProcessor::clearModulationForParameter(const juce::String& targetP
         }
     }
 }
+
+void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& targetParameterID)
+{
+    lfoManager->invertModulationDepth(targetParameterID);
+}

@@ -41,7 +41,7 @@ public:
     bool isBipolar = true;
     juce::String parameterID;
 
-    bool isFlashing = false;
+    float assignModeGlowAlpha = 0.0f;
 
     // Callback to notify when the modulation amount changes via UI drag
     std::function<void(double)> onModAmountChanged;

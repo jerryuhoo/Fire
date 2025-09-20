@@ -60,7 +60,8 @@ private:
 
     bool isLfoAssignMode = false;
     int lfoSourceForAssignment = 0;
-    bool flashingState = false;
+    float assignModePulseAlpha = 0.0f;
+    float assignModePulseAngle = 0.0f;
 
     int focusIndex = 0;
     void updateWhenChangingFocus();

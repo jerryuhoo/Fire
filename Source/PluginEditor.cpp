@@ -505,24 +505,27 @@ void FireAudioProcessorEditor::resized()
 
 void FireAudioProcessorEditor::timerCallback()
 {
-    static int flashCounter = 0;
     if (isLfoAssignMode)
     {
-        flashCounter++;
-        if (flashCounter > 15) // Toggle flash state every 15 frames (approx. 0.25 seconds).
-        {
-            flashingState = ! flashingState;
-            flashCounter = 0;
+        // Increment the angle for the sine wave animation
+        assignModePulseAngle += 0.05f;
+        if (assignModePulseAngle > juce::MathConstants<float>::twoPi)
+            assignModePulseAngle -= juce::MathConstants<float>::twoPi;
 
-            for (auto* slider : bandPanel.modulatableSliders)
-                slider->isFlashing = flashingState;
-            for (auto* slider : globalPanel.modulatableSliders)
-                slider->isFlashing = flashingState;
+        // Calculate a smooth alpha value using a sine wave, mapped to a pleasant range (e.g., 0.1 to 0.4)
+        float minAlpha = 0.1f;
+        float maxAlpha = 0.4f;
+        assignModePulseAlpha = minAlpha + (maxAlpha - minAlpha) * ((std::sin(assignModePulseAngle) + 1.0f) / 2.0f);
 
-            // Repaint only when the state changes to improve efficiency.
-            bandPanel.repaint();
-            globalPanel.repaint();
-        }
+        // Pass the new alpha value to all modulatable sliders
+        for (auto* slider : bandPanel.modulatableSliders)
+            slider->assignModeGlowAlpha = assignModePulseAlpha;
+        for (auto* slider : globalPanel.modulatableSliders)
+            slider->assignModeGlowAlpha = assignModePulseAlpha;
+
+        // Repaint the panels on every frame to ensure smooth animation
+        bandPanel.repaint();
+        globalPanel.repaint();
     }
 
     auto updateSliderState = [&](ModulatableSlider& slider)
@@ -1011,11 +1014,11 @@ void FireAudioProcessorEditor::exitAssignMode()
     for (auto* slider : bandPanel.modulatableSliders)
     {
         slider->onClickInAssignMode = nullptr;
-        slider->isFlashing = false;
+        slider->assignModeGlowAlpha = 0.0f;
     }
     for (auto* slider : globalPanel.modulatableSliders)
     {
         slider->onClickInAssignMode = nullptr;
-        slider->isFlashing = false;
+        slider->assignModeGlowAlpha = 0.0f;
     }
 }

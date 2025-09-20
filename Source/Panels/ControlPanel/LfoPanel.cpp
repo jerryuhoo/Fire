@@ -827,25 +827,18 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         lfoSelectButtons[i] = std::make_unique<juce::TextButton>("LFO " + juce::String(i + 1));
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
-        lfoSelectButtons[i]->addListener(this);
-        lfoSelectButtons[i]->setColour(juce::TextButton::buttonColourId, COLOUR7);
-        lfoSelectButtons[i]->setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
-        lfoSelectButtons[i]->setColour(juce::ComboBox::outlineColourId, COLOUR6);
-        lfoSelectButtons[i]->setColour(juce::TextButton::textColourOnId, COLOUR1);
-        lfoSelectButtons[i]->setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
-        lfoSelectButtons[i]->setToggleState(false, juce::dontSendNotification);
+        styleButton(*lfoSelectButtons[i], true); // It's a toggle button
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
 
     // --- Setup Mode Buttons ---
     addAndMakeVisible(editModeButton);
-    addAndMakeVisible(brushModeButton);
     editModeButton.setRadioGroupId(1002);
+    styleButton(editModeButton, true);
+
+    addAndMakeVisible(brushModeButton);
     brushModeButton.setRadioGroupId(1002);
-    editModeButton.setClickingTogglesState(true);
-    brushModeButton.setClickingTogglesState(true);
-    editModeButton.addListener(this);
-    brushModeButton.addListener(this);
+    styleButton(brushModeButton, true);
 
     // --- Setup Brush Selector ---
     addAndMakeVisible(brushSelector);
@@ -862,30 +855,14 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     addAndMakeVisible(assignButton);
     assignButton.setButtonText("Assign");
-    assignButton.setClickingTogglesState(true);
-    assignButton.addListener(this);
-    assignButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
-    assignButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6);
-    assignButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    assignButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    assignButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+    styleButton(assignButton, true);
 
     addAndMakeVisible(matrixButton);
-    matrixButton.addListener(this);
-    matrixButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
-    matrixButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
-    matrixButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    matrixButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    matrixButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+    styleButton(matrixButton, false);
 
     addAndMakeVisible(syncButton);
-    syncButton.setClickingTogglesState(true);
-    syncButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
-    syncButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
-    syncButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    syncButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    syncButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
     syncButton.setButtonText("BPM");
+    styleButton(syncButton, true);
 
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -974,14 +951,13 @@ void LfoPanel::resized()
         if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&editor->getLookAndFeel()))
             scale = lnf->scale;
 
-    // Define layout constants based on an initial design size.
+    // --- Define layout constants ---
+    // These remain largely the same, but we only need one width for all top buttons now.
     constexpr int initialMargin = 10;
     constexpr int initialLeftColWidth = 60;
     constexpr int initialRightColWidth = 120;
     constexpr int initialTopRowHeight = 30;
-    constexpr int initialMatrixWidth = 150;
-    constexpr int initialSyncWidth = 100;
-    constexpr int initialGridLabelWidth = 50;
+    constexpr int initialVerticalPadding = 4;
 
     // Create a working area, scaled from the initial margin.
     juce::Rectangle<int> bounds = getLocalBounds();
@@ -998,51 +974,66 @@ void LfoPanel::resized()
     auto topRow = bounds.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
     bounds.removeFromTop(juce::roundToInt(initialMargin * scale)); // Spacing below top row
 
-    // Layout the top row with scaled dimensions.
+    // --- MODIFICATION: Use FlexBox for top row layout ---
     {
-        auto matrixButtonArea = topRow.removeFromLeft(juce::roundToInt(initialMatrixWidth * scale));
-        matrixButton.setBounds(matrixButtonArea.reduced(0, juce::roundToInt(4 * scale)));
+        juce::FlexBox flexBox;
+        flexBox.flexDirection = juce::FlexBox::Direction::row;
+        flexBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround; // Use spaceAround for better spacing with flex
+        flexBox.alignItems = juce::FlexBox::AlignItems::stretch;
 
-        auto syncButtonArea = topRow.removeFromRight(juce::roundToInt(initialSyncWidth * scale));
-        syncButton.setBounds(syncButtonArea.reduced(juce::roundToInt(10 * scale), juce::roundToInt(4 * scale)));
+        // A list of controls to be laid out.
+        std::vector<juce::Component*> topRowControls = {
+            &matrixButton,
+            &syncButton,
+            &assignButton,
+            &editModeButton,
+            &brushModeButton,
+            &brushSelector
+        };
 
-        auto gridControlsArea = topRow;
-        auto gridXArea = gridControlsArea.removeFromLeft(gridControlsArea.getWidth() / 2);
-        auto gridYArea = gridControlsArea;
+        const float scaledPadding = initialVerticalPadding * scale;
 
-        // Add some spacing between the grid controls
-        gridXArea.removeFromRight(juce::roundToInt(5 * scale));
-        gridYArea.removeFromLeft(juce::roundToInt(5 * scale));
+        // Add each control to the FlexBox as a FlexItem.
+        for (auto* control : topRowControls)
+        {
+            flexBox.items.add(juce::FlexItem(*control)
+                                  .withFlex(1.0f) // Let the FlexBox decide the width, distributing space equally.
+                                  .withMargin({ scaledPadding, 2.0f * scale, scaledPadding, 2.0f * scale })); // Add some horizontal margin too
+        }
 
-        gridXLabel.setBounds(gridXArea.removeFromLeft(juce::roundToInt(initialGridLabelWidth * scale)).reduced(juce::roundToInt(2 * scale)));
-        gridXSlider.setBounds(gridXArea);
-
-        gridYLabel.setBounds(gridYArea.removeFromLeft(juce::roundToInt(initialGridLabelWidth * scale)).reduced(juce::roundToInt(2 * scale)));
-        gridYSlider.setBounds(gridYArea);
+        // Perform the layout within the topRow rectangle.
+        flexBox.performLayout(topRow);
     }
 
-    auto topStrip = bounds.removeFromTop(30);
-    auto controlsStrip = topStrip.removeFromLeft(topStrip.getWidth() / 2);
-    auto lfoSelectStrip = topStrip;
-
-    // Layout for the main columns using FlexBox for the buttons.
+    // Layout for the left column (LFO 1-4 buttons) remains the same.
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
     for (const auto& button : lfoSelectButtons)
-        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(2 * scale)));
+        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(juce::roundToInt(2 * scale))));
     lfoSelectBox.performLayout(leftColumn);
 
-    editModeButton.setBounds(controlsStrip.removeFromLeft(80));
-    brushModeButton.setBounds(controlsStrip.removeFromLeft(80));
-    controlsStrip.removeFromLeft(10);
-    brushSelector.setBounds(controlsStrip.removeFromLeft(100));
-    assignButton.setBounds(controlsStrip.removeFromLeft(80));
+    // Right column layout remains untouched.
+    {
+        const int gridAreaHeight = juce::roundToInt(50 * scale);
+        const int gridLabelWidth = juce::roundToInt(45 * scale);
+        const int rowHeight = gridAreaHeight / 2;
 
-    // Center the rate slider in the right column with a scaled size.
-    const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.9f); // 90%
-    rateSlider.setBounds(rightColumn.withSizeKeepingCentre(sliderSize, sliderSize));
+        auto gridArea = rightColumn.removeFromBottom(gridAreaHeight);
+        rightColumn.removeFromBottom(juce::roundToInt(5 * scale));
 
-    // The LFO editor takes the remaining central space.
+        const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.7f);
+        rateSlider.setBounds(rightColumn.withSizeKeepingCentre(sliderSize, sliderSize));
+
+        auto gridXRow = gridArea.removeFromTop(rowHeight);
+        auto gridYRow = gridArea;
+
+        gridXLabel.setBounds(gridXRow.removeFromLeft(gridLabelWidth).reduced(juce::roundToInt(scale)));
+        gridXSlider.setBounds(gridXRow);
+
+        gridYLabel.setBounds(gridYRow.removeFromLeft(gridLabelWidth).reduced(juce::roundToInt(scale)));
+        gridYSlider.setBounds(gridYRow);
+    }
+
     lfoEditor.setBounds(bounds);
 }
 
@@ -1253,4 +1244,21 @@ void LfoPanel::setEditMode(LfoEditMode newMode)
 
     // 5. IMPORTANT: Tell the LfoEditor view to change its behavior
     lfoEditor.setEditMode(newMode);
+}
+
+void LfoPanel::styleButton(juce::Button& button, bool isToggle)
+{
+    // Common style for all buttons
+    button.addListener(this);
+    button.setColour(juce::TextButton::buttonColourId, COLOUR7);
+    button.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
+    button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    button.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+
+    // Specific style for toggle buttons
+    if (isToggle)
+    {
+        button.setClickingTogglesState(true);
+    }
 }

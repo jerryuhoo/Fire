@@ -138,6 +138,7 @@ private:
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
     void setEditMode(LfoEditMode newMode);
+    void styleButton(juce::Button& button, bool isToggle);
 
     FireAudioProcessor& processor;
 

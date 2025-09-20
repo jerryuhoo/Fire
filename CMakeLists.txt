@@ -38,7 +38,8 @@ set(BUNDLE_ID "com.bluewingsmusic.Fire")
 set(FORMATS AU VST3)
 
 # For simplicity, the name of the CMake project is also the name of the target
-project(${PROJECT_NAME} VERSION ${CURRENT_VERSION})
+string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" PROJECT_VERSION_NUMERIC "${CURRENT_VERSION}")
+project(${PROJECT_NAME} VERSION ${PROJECT_VERSION_NUMERIC})
 
 # JUCE is setup as a submodule in the /JUCE folder
 # Locally, you must run `git submodule update --init --recursive` once

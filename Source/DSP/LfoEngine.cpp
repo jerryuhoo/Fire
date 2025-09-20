@@ -52,14 +52,22 @@ void LfoEngine::updateShape(const LfoData& shapeData)
 
                 if (phase >= p1.x && phase <= p2.x)
                 {
+                    const float segmentWidth = p2.x - p1.x;
+
                     // Fallback to linear interpolation if curvatures data is missing
                     if (p >= curvaturesCopy.size())
-                        return p1.y + (p2.y - p1.y) * ((phase - p1.x) / (p2.x - p1.x));
+                    {
+                        // Prevent division by zero if points have the same x coordinate
+                        if (std::abs(segmentWidth) < 1e-9f)
+                            return p1.y;
+
+                        return p1.y + (p2.y - p1.y) * ((phase - p1.x) / segmentWidth);
+                    }
 
                     const float curvature = curvaturesCopy[p];
                     
-                    const float segmentWidth = p2.x - p1.x;
-                    const float tx = (segmentWidth > 0.0f) ? (phase - p1.x) / segmentWidth : 0.0f;
+                    // Use the already calculated segmentWidth and prevent division by zero
+                    const float tx = (segmentWidth > 1e-9f) ? (phase - p1.x) / segmentWidth : 0.0f;
                     
                     const float absExp = std::pow(4.0f, std::abs(curvature));
                     float ty;

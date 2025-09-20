@@ -21,7 +21,9 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
     gain.prepare(spec);
-    dryWetMixer.prepare(spec);
+    juce::dsp::ProcessSpec mixerSpec = spec;
+    mixerSpec.maximumBlockSize = spec.maximumBlockSize * 4 + 64;
+    dryWetMixer.prepare(mixerSpec);
 
     // Some processors need extra setup.
     compressor.setAttack(80.0f);
@@ -539,7 +541,10 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessorGlobal.prepare(spec);
 
     // dry wet
-    dryWetMixerGlobal.prepare(spec);
+    juce::dsp::ProcessSpec globalMixerSpec = spec;
+    globalMixerSpec.maximumBlockSize = spec.maximumBlockSize * 20; // set 20 to pass PluginVal
+    dryWetMixerGlobal.prepare(globalMixerSpec);
+
     dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     reset();
 }
@@ -1089,6 +1094,9 @@ void FireAudioProcessor::setHistoryArray(int bandIndex)
     const int bufferSamples = sourceBuffer->getNumSamples();
     const int numChannels = sourceBuffer->getNumChannels();
 
+    if (numChannels == 0 || bufferSamples == 0)
+        return;
+
     // --- The processing loop is now much cleaner ---
     // We only need to get the channel data once.
     const float* channelDataL = sourceBuffer->getReadPointer(0);
@@ -1591,14 +1599,18 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
         if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
         {
             float k = f2 / f1;
-            float centerFreq = std::sqrt(f1 * f2);
-            float Q = std::sqrt(k) / (k - 1.0f);
-            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+            const float denominator = k - 1.0f;
+            if (std::abs(denominator) > 1e-6f)
+            {
+                float centerFreq = std::sqrt(f1 * f2);
+                float Q = std::sqrt(k) / denominator;
+                float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
 
-            *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
-            auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-            auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-            compensatorEQ1.process(context2);
+                *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+                auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
+                auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
+                compensatorEQ1.process(context2);
+            }
         }
     }
     // For Band 3
@@ -1608,14 +1620,18 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
         if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
         {
             float k = f2 / f1;
-            float centerFreq = std::sqrt(f1 * f2);
-            float Q = std::sqrt(k) / (k - 1.0f);
-            float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
+            const float denominator = k - 1.0f;
+            if (std::abs(denominator) > 1e-6f)
+            {
+                float centerFreq = std::sqrt(f1 * f2);
+                float Q = std::sqrt(k) / denominator;
+                float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
 
-            *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
-            auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
-            auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
-            compensatorEQ2.process(context3);
+                *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
+                auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
+                auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
+                compensatorEQ2.process(context3);
+            }
         }
     }
 }
@@ -1789,7 +1805,7 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
         {
             // Found it. Update its depth value, ensuring it stays within the [0, 1] range.
             routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
-            
+
             lfoDataHasChanged();
 
             // For now, we only handle the first match.
@@ -1807,7 +1823,7 @@ void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID
         {
             // Found it. Flip the boolean state.
             routing.isBipolar = ! routing.isBipolar;
-            
+
             lfoDataHasChanged();
 
             // For now, we only handle the first match.
@@ -1826,7 +1842,7 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
             // Reset depth to 0.5 and mode to the default (bipolar)
             routing.depth = 0.5f;
             routing.isBipolar = true;
-            
+
             lfoDataHasChanged();
 
             // We found the routing and reset it, so we can exit the function.
@@ -1857,7 +1873,7 @@ void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, 
     auto& currentRouting = routings.getReference(routingIndex);
     currentRouting.sourceLfoIndex = sourceLfoIndex;
     currentRouting.targetParameterID = targetParameterID;
-    
+
     lfoDataHasChanged();
 }
 

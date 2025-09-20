@@ -409,6 +409,10 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
             {
                 float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
                 dragLines(targetXPercent, i);
+
+                sortLines();
+                setLineRelatedBoundsByX();
+                setSoloRelatedBounds();
             }
         }
     }
@@ -633,7 +637,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
                                   (float) (y + height * 0.1f),
                                   false);
         g.setGradientFill(grad);
-        g.fillRect(x, y, width, height);
+        g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
     }
 
     // set mouse enter white mask
@@ -642,7 +646,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
         if (focusIndex != index)
         {
             g.setColour(COLOUR_MASK_WHITE);
-            g.fillRect(x, y, width, height);
+            g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
         }
         bandUIs[index].closeButton->setVisible(true);
     }
@@ -651,7 +655,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
     if (lineNum > lineNumLimit && shouldSetBlackMask(index))
     {
         g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(x, y, width, height);
+        g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
     }
 }
 

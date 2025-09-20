@@ -262,6 +262,7 @@ public:
     float getBandOutputMeterLevel(int band, int channel) const;
 
     void lfoDataHasChanged();
+    bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
 
 private:
     std::vector<std::unique_ptr<BandProcessor>> bands;

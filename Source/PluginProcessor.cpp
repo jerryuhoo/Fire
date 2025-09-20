@@ -2033,3 +2033,12 @@ void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& t
     lfoManager->invertModulationDepth(targetParameterID);
     lfoDataHasChanged();
 }
+
+bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml)
+{
+    auto presetTree = juce::ValueTree::fromXml(presetXml);
+    if (!presetTree.isValid())
+        return false;
+
+    return treeState.state.isEquivalentTo(presetTree);
+}

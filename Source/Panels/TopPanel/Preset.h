@@ -84,6 +84,7 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         void recursiveFileSearch(juce::XmlElement& parentXML, juce::File dir);
         void recursivePresetLoad(juce::XmlElement parentXml, juce::String presetId);
         void recursivePresetNameAdd(juce::XmlElement parentXml, juce::ComboBox& menu, int& index);
+        const juce::XmlElement& getPresetXml() const;
 
     private:
         juce::AudioProcessor& pluginProcessor;

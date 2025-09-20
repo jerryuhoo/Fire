@@ -526,6 +526,11 @@ namespace state
         return presetFile;
     }
 
+    const juce::XmlElement& StatePresets::getPresetXml() const
+    {
+        return mPresetXml;
+    }
+
     void StatePresets::initPreset()
     {
         for (const auto& param : pluginProcessor.getParameters())
@@ -598,18 +603,59 @@ namespace state
 
         refreshPresetBox();
 
+        // 1. 获取宿主保存的预设ID和名称
         const int currentPresetId = procStatePresets.getCurrentPresetId();
+        juce::String presetNameFromHost = procStatePresets.getPresetName();
         const int numPresets = procStatePresets.getNumPresets();
-        if (1 <= currentPresetId && currentPresetId <= numPresets)
-        {
-            presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
 
-            juce::String presetName = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
-            presetBox.setText(presetName, juce::dontSendNotification);
-        }
-        else
+        if (currentPresetId > 0 && currentPresetId <= numPresets)
         {
-            presetBox.setTextWhenNothingSelected("- Init -");
+            juce::String presetNameFromHost = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
+            juce::XmlElement* presetXml = nullptr;
+
+            // 关键修复：将 lambda 参数改为 const juce::XmlElement&
+            std::function<juce::XmlElement*(const juce::XmlElement&, const juce::String&)> findPresetInXml =
+                [&](const juce::XmlElement& parentXml, const juce::String& nameToFind) -> juce::XmlElement*
+            {
+                for (auto* child : parentXml.getChildIterator())
+                {
+                    if (child->hasAttribute("presetName") && child->getStringAttribute("presetName") == nameToFind)
+                    {
+                        return const_cast<juce::XmlElement*>(child);
+                    }
+
+                    if (child->getNumChildElements() > 0)
+                    {
+                        if (auto* foundChild = findPresetInXml(*child, nameToFind))
+                        {
+                            return foundChild;
+                        }
+                    }
+                }
+                return nullptr;
+            };
+
+            presetXml = findPresetInXml(procStatePresets.getPresetXml(), presetNameFromHost);
+
+            if (presetXml != nullptr)
+            {
+                auto& fireProc = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
+                bool areParametersEqual = fireProc.isCurrentStateEquivalentToPreset(*presetXml);
+
+                if (! areParametersEqual)
+                {
+                    isChanged = true;
+                    const juce::String nameToDisplay = presetNameFromHost + "*";
+                    presetBox.setText(nameToDisplay, juce::dontSendNotification);
+                    presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
+                    markAsDirty();
+                }
+                else
+                {
+                    presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
+                    presetBox.setText(presetNameFromHost, juce::dontSendNotification);
+                }
+            }
         }
 
         addAndMakeVisible(savePresetButton);
@@ -775,6 +821,16 @@ namespace state
 
         if (selectedId > 0)
         {
+            // Get preset name
+            juce::String presetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
+
+            // If the name ends with '*', it means the user is trying to restore a preset
+            if (presetName.endsWith("*"))
+            {
+                // Remove '*' to get the actual preset name
+                presetName = presetName.dropLastCharacters(1);
+            }
+
             auto* presetManager = &procStatePresets;
 
             const juce::String internalIdToLoad = presetManager->comboBoxIdToTagNameMap[selectedId];

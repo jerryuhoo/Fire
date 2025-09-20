@@ -20,6 +20,40 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // timer
     juce::Timer::startTimerHz(60.0f);
 
+    lfoPanel.onAssignButtonClicked = [this](int lfoIndex)
+    {
+        if (isLfoAssignMode)
+        {
+            // If already in assignment mode, exit directly.
+            // (The cleanup logic has been moved to a separate function for reusability).
+            exitAssignMode();
+        }
+        else
+        {
+            // --- Enter assignment mode ---
+            isLfoAssignMode = true;
+            lfoSourceForAssignment = lfoIndex;
+            lfoPanel.assignButton.setToggleState(true, juce::dontSendNotification);
+
+            // Define the callback function to be executed when a slider is clicked.
+            auto sliderClickCallback = [this](const juce::String& parameterID)
+            {
+                // This callback now does only one thing: tell the processor to assign the LFO.
+                // It no longer handles any UI state changes.
+                if (isLfoAssignMode) // Check again just in case.
+                {
+                    processor.assignLfoToTarget(lfoSourceForAssignment, parameterID);
+                }
+            };
+
+            // Assign the callback function to all modulatable sliders.
+            for (auto* slider : bandPanel.modulatableSliders)
+                slider->onClickInAssignMode = sliderClickCallback;
+            for (auto* slider : globalPanel.modulatableSliders)
+                slider->onClickInAssignMode = sliderClickCallback;
+        }
+    };
+
     lfoPanel.setOnDataChangedCallback([this]
                                       { processor.lfoDataHasChanged(); });
 
@@ -471,6 +505,26 @@ void FireAudioProcessorEditor::resized()
 
 void FireAudioProcessorEditor::timerCallback()
 {
+    static int flashCounter = 0;
+    if (isLfoAssignMode)
+    {
+        flashCounter++;
+        if (flashCounter > 15) // Toggle flash state every 15 frames (approx. 0.25 seconds).
+        {
+            flashingState = ! flashingState;
+            flashCounter = 0;
+
+            for (auto* slider : bandPanel.modulatableSliders)
+                slider->isFlashing = flashingState;
+            for (auto* slider : globalPanel.modulatableSliders)
+                slider->isFlashing = flashingState;
+
+            // Repaint only when the state changes to improve efficiency.
+            bandPanel.repaint();
+            globalPanel.repaint();
+        }
+    }
+
     auto updateSliderState = [&](ModulatableSlider& slider)
     {
         if (slider.parameterID.isEmpty())
@@ -930,7 +984,38 @@ void FireAudioProcessorEditor::parameterChanged(const juce::String& parameterID,
 
 void FireAudioProcessorEditor::handleAsyncUpdate()
 {
-    // safe to call repaint() here
-    // because this function is called on the message thread.
+    // This function is now the single entry point after a successful assignment.
+
+    // 1. First, formally exit the assignment mode and clean up all related states.
+    exitAssignMode();
+
+    // 2. Then, repaint all panels.
+    //    Since the modulation relationship has now been established in the Processor,
+    //    updateSliderState in timerCallback will get the latest state and display it correctly.
+    bandPanel.repaint();
+    globalPanel.repaint();
+
+    // 3. Finally, repaint the entire editor to ensure all UI elements are synchronized.
     repaint();
+}
+
+void FireAudioProcessorEditor::exitAssignMode()
+{
+    if (! isLfoAssignMode)
+        return;
+
+    isLfoAssignMode = false;
+    lfoPanel.assignButton.setToggleState(false, juce::dontSendNotification);
+
+    // Iterate through all modulatable sliders, clear their callback functions and stop flashing.
+    for (auto* slider : bandPanel.modulatableSliders)
+    {
+        slider->onClickInAssignMode = nullptr;
+        slider->isFlashing = false;
+    }
+    for (auto* slider : globalPanel.modulatableSliders)
+    {
+        slider->onClickInAssignMode = nullptr;
+        slider->isFlashing = false;
+    }
 }

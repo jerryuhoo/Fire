@@ -117,6 +117,11 @@ void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 {
+    if (onClickInAssignMode)
+    {
+        onClickInAssignMode(parameterID);
+        return;
+    }
     // Check for Cmd+Click (macOS) or Ctrl+Click (Windows) on the handle
     if (isModulated && (event.mods.isCommandDown() || event.mods.isCtrlDown()) && getModulationHandleBounds().contains(event.getPosition().toFloat()))
     {

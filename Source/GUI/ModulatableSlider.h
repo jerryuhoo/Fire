@@ -41,10 +41,13 @@ public:
     bool isBipolar = true;
     juce::String parameterID;
 
+    bool isFlashing = false;
+
     // Callback to notify when the modulation amount changes via UI drag
     std::function<void(double)> onModAmountChanged;
     std::function<void()> onBipolarModeToggled;
     std::function<void()> onModulationReset;
+    std::function<void(const juce::String&)> onClickInAssignMode;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;

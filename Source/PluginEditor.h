@@ -58,6 +58,10 @@ private:
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
 
+    bool isLfoAssignMode = false;
+    int lfoSourceForAssignment = 0;
+    bool flashingState = false;
+
     int focusIndex = 0;
     void updateWhenChangingFocus();
     void updateMainPanelVisibility();
@@ -130,6 +134,8 @@ private:
     //    void sliderDragStarted (juce::Slider*) override;
     //    void sliderDragEnded (juce::Slider*) override;
     //    void changeSliderState(juce::ComboBox *combobox);
+
+    void exitAssignMode();
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>

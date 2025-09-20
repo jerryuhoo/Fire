@@ -131,6 +131,9 @@ public:
     void setScale(float newScale);
     void setOnDataChangedCallback(std::function<void()> callback);
 
+    std::function<void(int lfoIndex)> onAssignButtonClicked;
+    juce::TextButton assignButton;
+
 private:
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;

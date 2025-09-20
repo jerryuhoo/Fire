@@ -190,9 +190,6 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
 //==============================================================================
 ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(p)
 {
-    while (processor.getLfoManager().getModulationRoutings().size() < 4)
-        processor.getLfoManager().getModulationRoutings().add({});
-
     addAndMakeVisible(header);
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&contentComponent, false);

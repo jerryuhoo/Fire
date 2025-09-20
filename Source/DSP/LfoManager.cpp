@@ -22,6 +22,9 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
     lfoRateSyncDivisions = {
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
     };
+
+    for (int i = 0; i < 4; ++i)
+        modulationRoutings.add({});
 }
 
 void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
@@ -289,4 +292,44 @@ float LfoManager::getLfoOutput(int lfoIndex) const
 
     jassertfalse; // Invalid LFO index requested
     return 0.0f;
+}
+
+void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
+{
+    // 1. First, check if the target parameter is already being modulated.
+    //    If so, just update its LFO source.
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            routing.sourceLfoIndex = sourceLfoIndex;
+            return; // Assignment complete.
+        }
+    }
+
+    // 2. If the target is not modulated, find the first available empty slot.
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID.isEmpty())
+        {
+            routing.sourceLfoIndex = sourceLfoIndex;
+            routing.targetParameterID = targetParameterID;
+            if (juce::approximatelyEqual(routing.depth, 0.0f))
+                routing.depth = 0.5f; // Set a sensible default depth.
+            return; // Assignment complete.
+        }
+    }
+
+    // 3. If all existing slots are full, dynamically add a new one.
+
+    // Step 1: Add a new, default-constructed ModulationRouting object to the array.
+    modulationRoutings.add({});
+
+    // Step 2: Get a reference to the last element.
+    auto& newRouting = modulationRoutings.getReference(modulationRoutings.size() - 1);
+
+    // Step 3: Configure the new routing slot.
+    newRouting.sourceLfoIndex = sourceLfoIndex;
+    newRouting.targetParameterID = targetParameterID;
+    newRouting.depth = 0.5f; // Set a sensible default depth.
 }

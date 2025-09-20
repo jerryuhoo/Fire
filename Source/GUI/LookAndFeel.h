@@ -267,6 +267,14 @@ public:
                 // Otherwise, call the standard modulatable slider function
                 drawModulatableSlider(g, x, y, width, height, sliderPos, rotaryStartAngle, rotaryEndAngle, *modSlider);
             }
+            if (modSlider->isFlashing)
+            {
+                auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10.0f);
+                auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
+
+                g.setColour(juce::Colours::yellow.withAlpha(0.4f));
+                g.fillEllipse(bounds.getCentreX() - radius, bounds.getCentreY() - radius, radius * 2.0f, radius * 2.0f);
+            }
         }
         else
         {

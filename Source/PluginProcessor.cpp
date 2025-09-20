@@ -1971,3 +1971,20 @@ float FireAudioProcessor::getBandOutputMeterLevel(int band, int channel) const
     jassertfalse; // Invalid band index
     return 0.0f;
 }
+
+void FireAudioProcessor::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
+{
+    lfoManager->assignLfoToTarget(sourceLfoIndex, targetParameterID);
+
+    // When the modulation assignment changes, notify the active editor to update its UI
+    if (auto* editor = getActiveEditor())
+    {
+        // We must cast the generic editor pointer to our specific FireAudioProcessorEditor
+        // type to access the triggerAsyncUpdate() method from its AsyncUpdater base class.
+        // A dynamic_cast is used for type safety.
+        if (auto* fireEditor = dynamic_cast<FireAudioProcessorEditor*>(editor))
+        {
+            fireEditor->triggerAsyncUpdate();
+        }
+    }
+}

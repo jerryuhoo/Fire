@@ -858,6 +858,16 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     setEditMode(LfoEditMode::PointEdit); // Set initial state
 
+    addAndMakeVisible(assignButton);
+    assignButton.setButtonText("Assign");
+    assignButton.setClickingTogglesState(true);
+    assignButton.addListener(this);
+    assignButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
+    assignButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6);
+    assignButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    assignButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    assignButton.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+
     addAndMakeVisible(matrixButton);
     matrixButton.addListener(this);
     matrixButton.setColour(juce::TextButton::buttonColourId, COLOUR7);
@@ -1024,6 +1034,7 @@ void LfoPanel::resized()
     brushModeButton.setBounds(controlsStrip.removeFromLeft(80));
     controlsStrip.removeFromLeft(10);
     brushSelector.setBounds(controlsStrip.removeFromLeft(100));
+    assignButton.setBounds(controlsStrip.removeFromLeft(80));
 
     // Center the rate slider in the right column with a scaled size.
     const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.9f); // 90%
@@ -1051,6 +1062,12 @@ void LfoPanel::timerCallback()
 void LfoPanel::buttonClicked(juce::Button* button)
 {
     // Mode Switching
+    if (button == &assignButton)
+    {
+        if (onAssignButtonClicked)
+            onAssignButtonClicked(currentLfoIndex);
+        return;
+    }
     if (button == &editModeButton)
     {
         setEditMode(LfoEditMode::PointEdit);

@@ -20,7 +20,6 @@
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <map>
 
-
 class LfoManager
 {
 public:
@@ -67,6 +66,7 @@ public:
     bool isDawPlaying() const { return isPlaying; }
     const juce::StringArray& getLfoRateSyncDivisions() const;
     float getLfoOutput(int lfoIndex) const;
+    void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
 
 private:
     /**

@@ -1751,10 +1751,21 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
             for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
             {
                 auto* channelData = buffer.getWritePointer(channel);
+                int samplesToHold = 0;
+                float sampleToHold = 0.0f;
+
                 for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
                 {
-                    if (sample % rateDivide != 0)
-                        channelData[sample] = channelData[sample - sample % rateDivide];
+                    if (samplesToHold == 0)
+                    {
+                        sampleToHold = channelData[sample];
+                        samplesToHold = rateDivide - 1;
+                    }
+                    else
+                    {
+                        channelData[sample] = sampleToHold;
+                        samplesToHold--;
+                    }
                 }
             }
         }
@@ -2037,7 +2048,7 @@ void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& t
 bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml)
 {
     auto presetTree = juce::ValueTree::fromXml(presetXml);
-    if (!presetTree.isValid())
+    if (! presetTree.isValid())
         return false;
 
     return treeState.state.isEquivalentTo(presetTree);

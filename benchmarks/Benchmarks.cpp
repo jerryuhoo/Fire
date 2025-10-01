@@ -89,26 +89,91 @@ TEST_CASE("Real-time performance")
     };
 }
 
-TEST_CASE("UI performance")
+// TEST_CASE("UI performance")
+// {
+//     // Create an instance of the plugin processor and its editor
+//     FireAudioProcessor processor;
+//     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+
+//     // Set a typical size for the editor
+//     editor->setSize(800, 600);
+
+//     // Create a dummy image to render onto. This prevents anything from actually
+//     // appearing on screen, but allows us to measure the drawing operations.
+//     juce::Image dummyImage(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+//     juce::Graphics g(dummyImage);
+
+//     BENCHMARK("Editor paint() call")
+//     {
+//         // We measure how long it takes to execute one full paint of the editor
+//         editor->paint(g);
+//     };
+
+//     // It's also good practice to clean up the editor properly
+//     processor.editorBeingDeleted(editor.get());
+// }
+
+TEST_CASE("Modular DSP Performance")
 {
-    // Create an instance of the plugin processor and its editor
-    FireAudioProcessor processor;
-    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    // Common setup for all modular tests
+    FireAudioProcessor plugin;
+    const double sampleRate = 44100.0;
+    const int blockSize = 1024;
+    plugin.prepareToPlay(sampleRate, blockSize);
 
-    // Set a typical size for the editor
-    editor->setSize(800, 600);
-
-    // Create a dummy image to render onto. This prevents anything from actually
-    // appearing on screen, but allows us to measure the drawing operations.
-    juce::Image dummyImage(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
-    juce::Graphics g(dummyImage);
-
-    BENCHMARK("Editor paint() call")
+    // Create a reusable dummy audio buffer
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
     {
-        // We measure how long it takes to execute one full paint of the editor
-        editor->paint(g);
-    };
+        auto* channelData = buffer.getWritePointer(channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            // Using a sine wave is slightly more realistic than a constant value
+            channelData[sample] = std::sin(2.0f * juce::MathConstants<float>::pi * 440.0f * sample / sampleRate);
+        }
+    }
 
-    // It's also good practice to clean up the editor properly
-    processor.editorBeingDeleted(editor.get());
+    // --- Benchmark for Downsampling Effect ---
+    // Section to isolate and test only the applyDownsamplingEffect function
+    SECTION("Downsampling Effect")
+    {
+        // Get the parameter state tree to control the plugin's behavior
+        auto& treeState = plugin.treeState;
+
+        // Enable the downsampling effect and set a ratio
+        treeState.getParameter(DOWNSAMPLE_BYPASS_ID)->setValueNotifyingHost(true);
+        treeState.getParameter(DOWNSAMPLE_ID)->setValueNotifyingHost(16.0f);
+
+        // This is a direct copy of the buffer to avoid the benchmarked function
+        // modifying the original data for subsequent tests.
+        auto bufferCopy = buffer;
+
+        BENCHMARK("applyDownsamplingEffect (Rate: 16)")
+        {
+            plugin.applyDownsamplingEffect(bufferCopy);
+        };
+    }
+
+    // --- Benchmark for MultiBand Processing ---
+    // Section to isolate and test the core multiband splitting, processing, and summing
+    SECTION("MultiBand Processing")
+    {
+        auto& treeState = plugin.treeState;
+
+        // Configure the plugin for 4-band processing
+        treeState.getParameter(NUM_BANDS_ID)->setValueNotifyingHost(4);
+
+        // Ensure other effects are disabled to isolate the multiband logic
+        treeState.getParameter(DOWNSAMPLE_BYPASS_ID)->setValueNotifyingHost(false);
+        treeState.getParameter(FILTER_BYPASS_ID)->setValueNotifyingHost(false);
+
+        auto bufferCopy = buffer;
+
+        BENCHMARK("processMultiBand (4 Bands)")
+        {
+            plugin.processMultiBand(bufferCopy, sampleRate);
+        };
+    }
+
+    // You can add more SECTIONS here to test other specific functions like applyGlobalEffects etc.
 }

@@ -263,12 +263,7 @@ public:
 
     void lfoDataHasChanged();
     bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
-
-private:
-    std::vector<std::unique_ptr<BandProcessor>> bands;
-    float totalLatency = 0.0f;
-
-    void updateParameters();
+    
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer,
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
@@ -279,6 +274,13 @@ private:
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
+
+private:
+    std::vector<std::unique_ptr<BandProcessor>> bands;
+    float totalLatency = 0.0f;
+
+    void updateParameters();
+    
 
     // preset id
     int presetId = 0;

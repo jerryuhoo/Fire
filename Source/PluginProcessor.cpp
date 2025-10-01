@@ -632,7 +632,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
     lfoOutputBuffer.clear();
 
-    lfoManager->processBlock(sampleRate, getPlayHead(), buffer.getNumSamples());
+    if (lfoManager->isModulationActive())
+    {
+        lfoManager->processBlock(sampleRate, getPlayHead(), buffer.getNumSamples());
+    }
 
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't

@@ -28,6 +28,8 @@ public:
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
 
+    bool isModulationActive() const;
+
     /**
      * @brief The new main processing function for the modulation system.
      * Call this ONCE per processBlock. It will:

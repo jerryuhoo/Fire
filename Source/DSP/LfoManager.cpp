@@ -47,6 +47,24 @@ void LfoManager::reset()
     modulatedValues.clear();
 }
 
+bool LfoManager::isModulationActive() const
+{
+    // Iterate through all modulation routings.
+    for (const auto& routing : modulationRoutings)
+    {
+        // If we find any routing with a valid target parameter,
+        // it means modulation is active.
+        if (routing.targetParameterID.isNotEmpty())
+        {
+            return true;
+        }
+    }
+
+    // If we get through the whole loop without finding an active routing,
+    // then no modulation is active.
+    return false;
+}
+
 // =============================================================================
 // Main Processing Logic
 // =============================================================================
@@ -58,7 +76,7 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
     generateLfoOutput(sampleRate, playHead, numSamples);
 
     // 2. Clear the map of calculated values from the previous block.
-    // MODIFICATION: We now store normalized values.
+    // We now store normalized values.
     modulatedValues.clear();
 
     // 3. Iterate through all modulation routings to calculate final parameter values.
@@ -102,8 +120,6 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
 
         // Add the normalized modulation amount. This allows multiple LFOs to target the same parameter.
         modulatedValues[routing.targetParameterID] += normalizedModulationAmount;
-
-        // --- MODIFICATION END ---
     }
 
     // 4. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
@@ -120,14 +136,13 @@ float LfoManager::getModulatedValue(const juce::String& parameterID) const
 
     if (it != modulatedValues.end())
     {
-        // --- MODIFICATION START: Convert normalized value to real value ---
+        // Convert normalized value to real value ---
         auto* parameter = treeState.getParameter(parameterID);
         if (parameter)
         {
             // If found, convert the final normalized value back to the parameter's real value.
             return parameter->convertFrom0to1(it->second);
         }
-        // --- MODIFICATION END ---
     }
 
     // If not found, it means the parameter is not being modulated.

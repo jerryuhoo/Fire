@@ -208,6 +208,9 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // This makes the logic generic and ready for future expansion.
     std::map<juce::String, float> perSampleModulationAmounts;
 
+    DistortionLogic::State currentState;
+    auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(currentState.mode);
+
     // --- Manual Per-Sample Processing Loop ---
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -223,7 +226,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         float modulatedBias = juce::jlimit(params.biasRange.start, params.biasRange.end, smoothedBias + finalBiasModAmount);
         float modulatedRec = juce::jlimit(params.recRange.start, params.recRange.end, smoothedRec + finalRecModAmount);
 
-        DistortionLogic::State currentState;
         currentState.drive = smoothedDrive;
         currentState.bias = modulatedBias;
         currentState.rec = modulatedRec;
@@ -231,9 +233,20 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
         for (int channel = 0; channel < numChannels; ++channel)
         {
-            float inputSample = blockToProcess.getSample(channel, sample);
-            float wetSample = DistortionLogic::processSample(inputSample, currentState);
-            blockToProcess.setSample(channel, sample, wetSample);
+            // The reason we don't use processSample in DistortionLogic.h
+            // is because we don't need to call getWaveshaperForMode in every for loop
+            float currentSample = blockToProcess.getSample(channel, sample);
+            currentSample *= currentState.drive; // 1. Drive Gain
+            currentSample += currentState.bias; // 2. Pre-Bias
+
+            currentSample = waveshaperFunction(currentSample); // 3. Waveshaper
+
+            if (currentSample < 0.0f)
+                currentSample *= (0.5f - currentState.rec) * 2.0f; // 4. Rectifier
+
+            currentSample -= currentState.bias; // 5. Post-Bias
+
+            blockToProcess.setSample(channel, sample, currentSample);
         }
     }
 }

@@ -153,6 +153,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     float driveVal = params.driveVal;
     const float biasVal = params.biasVal; // This is now the final value
     const float recVal = params.recVal; // This is now the final value
+    const int currentMode = params.mode;
     // We calculate the max value from the 'dryBuffer' which represents the
     // clean, per-band signal right before it enters the distortion loop.
     // This ensures each band's Safe Mode reacts only to its own signal level.
@@ -209,7 +210,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     std::map<juce::String, float> perSampleModulationAmounts;
 
     DistortionLogic::State currentState;
-    auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(currentState.mode);
+    currentState.mode = currentMode;
+    auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(currentMode);
 
     // --- Manual Per-Sample Processing Loop ---
     for (int sample = 0; sample < numSamples; ++sample)

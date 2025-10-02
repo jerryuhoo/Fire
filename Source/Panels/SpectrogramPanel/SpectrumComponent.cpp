@@ -44,18 +44,27 @@ SpectrumComponent::~SpectrumComponent()
 
 void SpectrumComponent::timerCallback()
 {
-    // This is called on the message thread at 60 FPS
-    // We interpolate the displayData towards the latest spectrumData
     {
         juce::ScopedLock locker(dataLock);
+        // 1. Interpolate the main spectrum line (no change here)
         for (int i = 0; i < numberOfBins; ++i)
         {
-            // Linear interpolation for smooth animation
             displayData[i] += (spectrumData[i] - displayData[i]) * interpolationFactor;
+        }
+
+        // 2. NEW LOGIC for peak line decay
+        // If mouse is NOT over, the peak line should fall towards zero.
+        if (! mouseOver)
+        {
+            for (int i = 0; i < numberOfBins; ++i)
+            {
+                // Decay towards zero using the SAME interpolation factor.
+                // This is equivalent to: maxData[i] *= (1.0f - interpolationFactor);
+                maxData[i] += (0.0f - maxData[i]) * interpolationFactor;
+            }
         }
     }
 
-    // Since timerCallback is on the message thread, we can call repaint() directly.
     repaint();
 }
 
@@ -89,71 +98,53 @@ void SpectrumComponent::paint(juce::Graphics& g)
     auto mindB = -100.0f;
     auto maxdB = 0.0f;
 
-    // Mouse detection is more reliable when checked inside paint()
-    auto mousePos = getMouseXYRelative();
-    mouseOver = getLocalBounds().contains(mousePos);
-
+    // mouseOver state is updated in paint(), which is more robust
+    mouseOver = getLocalBounds().contains(getMouseXYRelative());
     maxDecibelValue = -100.0f;
-
-    if (mDrawPeak && ! mouseOver)
-    {
-        // Reset peak data when mouse leaves the component area
-        resetPeakData();
-    }
 
     juce::Path currentSpecPath, maxSpecPath;
     currentSpecPath.startNewSubPath(0, (float) height);
     if (mDrawPeak)
         maxSpecPath.startNewSubPath(0, (float) height);
 
-    // Create a temporary buffer for spatial smoothing of the curve
     std::array<float, 1024> smoothedDisplayData;
 
     {
         juce::ScopedLock locker(dataLock);
 
-        // --- SPATIAL SMOOTHING ---
-        // Apply a simple moving average to the display data before drawing
         for (int i = 0; i < numberOfBins; ++i)
         {
             if (i == 0 || i == numberOfBins - 1)
-            {
                 smoothedDisplayData[i] = displayData[i];
-            }
             else
-            {
-                // Simple 3-point average for a smoother curve
                 smoothedDisplayData[i] = (displayData[i - 1] + displayData[i] + displayData[i + 1]) / 3.0f;
-            }
         }
 
         for (int i = 1; i < numberOfBins; ++i)
         {
-            // Update peak-hold data using the latest smoothed data
-            if (mDrawPeak && smoothedDisplayData[i] > maxData[i])
+            // --- CRITICAL CHANGE HERE ---
+            // Only capture new peaks when the mouse is hovering over the component.
+            if (mDrawPeak && mouseOver && smoothedDisplayData[i] > maxData[i])
             {
                 maxData[i] = smoothedDisplayData[i];
             }
 
-            // Use the spatially smoothed data for all drawing calculations
             float currentDecibel = juce::Decibels::gainToDecibels(smoothedDisplayData[i] / (float) numberOfBins);
             float maxDecibel = juce::Decibels::gainToDecibels(maxData[i] / (float) numberOfBins);
 
+            // ... (rest of path building logic is unchanged) ...
             float yPercent = juce::jmap(juce::jlimit(mindB, maxdB, currentDecibel), mindB, maxdB, 0.0f, 1.0f);
             float yMaxPercent = juce::jmap(juce::jlimit(mindB, maxdB, maxDecibel), mindB, maxdB, 0.0f, 1.0f);
-
             double currentFreq = i * mBinWidth.load();
             float currentX = transformToLog(currentFreq) * width;
             float currentY = juce::jmap(yPercent, 0.0f, 1.0f, (float) height, 0.0f);
             float maxY = juce::jmap(yMaxPercent, 0.0f, 1.0f, (float) height, 0.0f);
-
             if (! std::isnan(currentX) && ! std::isinf(currentX))
             {
                 currentSpecPath.lineTo(currentX, currentY);
                 if (mDrawPeak)
                     maxSpecPath.lineTo(currentX, maxY);
             }
-
             if (maxDecibel > maxDecibelValue)
             {
                 maxDecibelValue = maxDecibel;
@@ -161,29 +152,30 @@ void SpectrumComponent::paint(juce::Graphics& g)
                 maxDecibelPoint.setXY(currentX, maxY);
             }
         }
-    } // ScopedLock ends here
+    }
 
-    // --- Drawing Paths ---
     auto roundedCurrentPath = currentSpecPath.createPathWithRoundedCorners(5.0f);
     roundedCurrentPath.lineTo((float) width, (float) height);
     roundedCurrentPath.lineTo(0.0f, (float) height);
     roundedCurrentPath.closeSubPath();
-
     juce::ColourGradient grad;
     if (mStyle == 1)
         grad = juce::ColourGradient(juce::Colours::red.withAlpha(specAlpha), 0, 0, COLOUR1.withAlpha(specAlpha), 0, (float) height, false);
     else
         grad = juce::ColourGradient(juce::Colours::white.withAlpha(0.2f), 0, 0, juce::Colours::grey.withAlpha(0.2f), 0, (float) height, false);
-
     g.setGradientFill(grad);
     g.fillPath(roundedCurrentPath);
 
+    // Drawing of maxSpecPath and its text
     if (mDrawPeak)
     {
+        // We always draw the path, because we want to see the decay animation
+        // when the mouse leaves. It will naturally become flat at the bottom when decayed.
         auto roundedMaxPath = maxSpecPath.createPathWithRoundedCorners(5.0f);
         g.setColour(juce::Colours::white.withAlpha(0.8f));
         g.strokePath(roundedMaxPath, juce::PathStrokeType(1.5f));
 
+        // The text, however, should only be visible when hovering.
         if (mouseOver && maxDecibelValue > -99.9f)
         {
             float boxWidth = 100.0f;
@@ -206,7 +198,12 @@ void SpectrumComponent::setSpecAlpha(const float alp)
 
 void SpectrumComponent::mouseEnter(const juce::MouseEvent& /*event*/)
 {
-    // Mouse over state is now handled inside paint() for better reliability.
+    // When the mouse enters, we want to start a fresh peak-hold session.
+    // Calling resetPeakData() clears the old values.
+    if (mDrawPeak)
+    {
+        resetPeakData();
+    }
 }
 
 void SpectrumComponent::mouseExit(const juce::MouseEvent& /*event*/)

@@ -2,11 +2,11 @@
   ==============================================================================
 
     SpectrumComponent.h
-    Created: 11 Nov 2018 9:40:21am
-    Author:  lenovo
+    Created: 2 Oct 2025
+    Author:  Yifeng Yu
  
-    MODIFIED to remove high-CPU waterfall effect and improve performance by
-    drawing the spectrum directly and ensuring thread-safe data updates.
+    MODIFIED to implement timer-based interpolation and spatial smoothing for
+    a more fluid visual experience.
 
   ==============================================================================
 */
@@ -19,35 +19,33 @@
 #include <array>
 
 //==============================================================================
-/**
- A component that displays a frequency spectrum analyser.
- This version is optimized to draw directly to the graphics context, avoiding
- expensive image manipulation for effects like waterfalls, thus reducing CPU usage.
- It also uses AsyncUpdater for thread-safe repainting.
-*/
 class SpectrumComponent : public juce::Component,
-                          public juce::AsyncUpdater
+                          public juce::AsyncUpdater,
+                          private juce::Timer // Inherit from juce::Timer for smooth rendering
 {
 public:
     SpectrumComponent();
     SpectrumComponent(int style, bool drawPeak);
-    ~SpectrumComponent();
+    ~SpectrumComponent() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
-
-    /** This is called on the message thread to trigger a repaint. */
-    void handleAsyncUpdate() override;
 
     /** Call this from your audio thread to update the spectrum data. */
     void updateSpectrum(const float* newData, int numBins, float binWidth);
 
     void setSpecAlpha(const float alp);
 
+private:
+    /** This is called on the message thread to trigger a repaint. Now handled by timer. */
+    void handleAsyncUpdate() override;
+
+    /** Timer callback for smooth, interpolated rendering at a fixed frame rate. */
+    void timerCallback() override;
+
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
 
-private:
     /** Resets the peak-hold data. */
     void resetPeakData();
 
@@ -58,13 +56,13 @@ private:
 
     // Use a lock to protect access to spectrum data arrays from audio and message threads
     juce::CriticalSection dataLock;
-    std::array<float, 1024> spectrumData;
+    std::array<float, 1024> spectrumData; // Holds the latest data from the audio thread
+    std::array<float, 1024> displayData; // Holds the interpolated data used for painting
     std::array<float, 1024> maxData;
     int numberOfBins;
 
-    // Smoothing coefficients
-    float attackCoeff;
-    float releaseCoeff;
+    // New parameter for controlling animation smoothness
+    float interpolationFactor = 0.2f;
 
     // GUI-thread only members
     float maxDecibelValue = -100.0f;

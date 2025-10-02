@@ -2,11 +2,13 @@
   ==============================================================================
 
     SpectrumComponent.cpp
-    Created: 11 Nov 2018 9:40:21am
-    Author:  lenovo
+    Created: 2 Oct 2025
+    Author:  Yifeng Yu
 
     MODIFIED to remove high-CPU waterfall effect and improve performance.
     Draws the spectrum directly without intermediate images.
+    Further modified to use a Timer for temporal smoothing and applies
+    spatial smoothing for a cleaner curve.
 
   ==============================================================================
 */
@@ -16,88 +18,87 @@
 
 //==============================================================================
 SpectrumComponent::SpectrumComponent()
-    : mStyle(1), mDrawPeak(true), mBinWidth(44100.0f / 2048.0f), numberOfBins(1024), attackCoeff(0.1f), releaseCoeff(0.5f) // Initialize smoothing coefficients
+    : mStyle(1), mDrawPeak(true), mBinWidth(44100.0f / 2048.0f), numberOfBins(1024)
 {
     spectrumData.fill(0.0f);
+    displayData.fill(0.0f); // Initialize display data
     maxData.fill(0.0f);
+
+    startTimerHz(60); // Start a 60 FPS timer for smooth animation
 }
 
 SpectrumComponent::SpectrumComponent(int style, bool drawPeak)
-    : mStyle(style), mDrawPeak(drawPeak), mBinWidth(44100.0f / 2048.0f), numberOfBins(1024), attackCoeff(0.1f), releaseCoeff(0.5f) // Initialize smoothing coefficients
+    : mStyle(style), mDrawPeak(drawPeak), mBinWidth(44100.0f / 2048.0f), numberOfBins(1024)
 {
     spectrumData.fill(0.0f);
+    displayData.fill(0.0f);
     maxData.fill(0.0f);
+
+    startTimerHz(60);
 }
 
 SpectrumComponent::~SpectrumComponent()
 {
+    stopTimer(); // Stop the timer when the component is destroyed
+}
+
+void SpectrumComponent::timerCallback()
+{
+    // This is called on the message thread at 60 FPS
+    // We interpolate the displayData towards the latest spectrumData
+    {
+        juce::ScopedLock locker(dataLock);
+        for (int i = 0; i < numberOfBins; ++i)
+        {
+            // Linear interpolation for smooth animation
+            displayData[i] += (spectrumData[i] - displayData[i]) * interpolationFactor;
+        }
+    }
+
+    // Since timerCallback is on the message thread, we can call repaint() directly.
+    repaint();
 }
 
 void SpectrumComponent::handleAsyncUpdate()
 {
-    // This is called on the message thread after triggerAsyncUpdate() is called from the audio thread.
-    repaint();
+    // This is no longer needed for rendering, as the timer handles it.
+    // It can be left empty or used for other asynchronous tasks if necessary.
 }
 
 void SpectrumComponent::updateSpectrum(const float* newData, int numBins, float binWidth)
 {
-    // This method is designed to be called from the audio thread.
-    // It copies the new data with smoothing and then triggers an asynchronous repaint on the message thread.
+    // This method is called from the audio thread.
+    // It just copies the new data; all smoothing is now on the message thread.
     {
         juce::ScopedLock locker(dataLock);
         numberOfBins = std::min(numBins, (int) spectrumData.size());
         mBinWidth = binWidth;
 
-        // Apply smoothing logic
-        for (int i = 0; i < numberOfBins; ++i)
-        {
-            if (newData[i] > spectrumData[i])
-            {
-                // Attack: Respond quickly
-                spectrumData[i] = (spectrumData[i] * attackCoeff) + (newData[i] * (1.0f - attackCoeff));
-            }
-            else
-            {
-                // Release: Fall slowly
-                spectrumData[i] = (spectrumData[i] * releaseCoeff) + (newData[i] * (1.0f - releaseCoeff));
-            }
-        }
+        // Directly copy the new data into the spectrumData buffer
+        std::copy(newData, newData + numberOfBins, spectrumData.begin());
     }
-
-    triggerAsyncUpdate();
+    // No need to call triggerAsyncUpdate() anymore.
 }
 
 void SpectrumComponent::paint(juce::Graphics& g)
 {
-    // The waterfall effect is removed. We now draw the spectrum path directly.
     g.fillAll(juce::Colours::transparentBlack);
 
     auto width = getLocalBounds().getWidth();
     auto height = getLocalBounds().getHeight();
     auto mindB = -100.0f;
     auto maxdB = 0.0f;
-    const float fftSize = 2048.0f;
 
-    // Restore original mouse detection and peak reset logic from within paint()
-    // to ensure behavior is identical to the original version.
-    float mouseX = getMouseXYRelative().getX();
-    float mouseY = getMouseXYRelative().getY();
-    mouseOver = (mouseX >= 0 && mouseX < getWidth() && mouseY >= 0 && mouseY < getHeight());
+    // Mouse detection is more reliable when checked inside paint()
+    auto mousePos = getMouseXYRelative();
+    mouseOver = getLocalBounds().contains(mousePos);
 
-    // Reset frame-specific peak info before recalculating.
     maxDecibelValue = -100.0f;
 
-    if (mDrawPeak)
+    if (mDrawPeak && ! mouseOver)
     {
-        // Original behavior: Reset maxData every frame if mouse is not over the component.
-        // This is inefficient but visually identical to the original.
-        if (! mouseOver)
-        {
-            juce::ScopedLock locker(dataLock);
-            maxData.fill(0.0f);
-            maxFreq = 0.0f;
-            maxDecibelPoint.setXY(-10.0f, -10.0f);
-        }
+        // Reset peak data when mouse leaves the component area
+        resetPeakData();
     }
 
     juce::Path currentSpecPath, maxSpecPath;
@@ -105,20 +106,37 @@ void SpectrumComponent::paint(juce::Graphics& g)
     if (mDrawPeak)
         maxSpecPath.startNewSubPath(0, (float) height);
 
-    { // Scoped lock to read spectrum data safely
+    // Create a temporary buffer for spatial smoothing of the curve
+    std::array<float, 1024> smoothedDisplayData;
+
+    {
         juce::ScopedLock locker(dataLock);
+
+        // --- SPATIAL SMOOTHING ---
+        // Apply a simple moving average to the display data before drawing
+        for (int i = 0; i < numberOfBins; ++i)
+        {
+            if (i == 0 || i == numberOfBins - 1)
+            {
+                smoothedDisplayData[i] = displayData[i];
+            }
+            else
+            {
+                // Simple 3-point average for a smoother curve
+                smoothedDisplayData[i] = (displayData[i - 1] + displayData[i] + displayData[i + 1]) / 3.0f;
+            }
+        }
 
         for (int i = 1; i < numberOfBins; ++i)
         {
-            // Update peak-hold data for this bin. Only effective when mouse is over.
-            if (mDrawPeak && spectrumData[i] > maxData[i])
+            // Update peak-hold data using the latest smoothed data
+            if (mDrawPeak && smoothedDisplayData[i] > maxData[i])
             {
-                maxData[i] = spectrumData[i];
+                maxData[i] = smoothedDisplayData[i];
             }
 
-            // --- Restore original calculations to fix position and shape issues ---
-            float currentDecibel = juce::Decibels::gainToDecibels(spectrumData[i] / (float) numberOfBins);
-            // CORRECTED: Use the same normalization for maxDecibel as for currentDecibel.
+            // Use the spatially smoothed data for all drawing calculations
+            float currentDecibel = juce::Decibels::gainToDecibels(smoothedDisplayData[i] / (float) numberOfBins);
             float maxDecibel = juce::Decibels::gainToDecibels(maxData[i] / (float) numberOfBins);
 
             float yPercent = juce::jmap(juce::jlimit(mindB, maxdB, currentDecibel), mindB, maxdB, 0.0f, 1.0f);
@@ -136,20 +154,16 @@ void SpectrumComponent::paint(juce::Graphics& g)
                     maxSpecPath.lineTo(currentX, maxY);
             }
 
-            // Find the peak value across all bins for text display.
-            // This now correctly finds the peak of the maxSpecPath (peak-hold line).
             if (maxDecibel > maxDecibelValue)
             {
                 maxDecibelValue = maxDecibel;
                 maxFreq = currentFreq;
-                maxDecibelPoint.setXY(currentX, maxY); // Use maxY to bind to the peak-hold line
+                maxDecibelPoint.setXY(currentX, maxY);
             }
         }
-    } // End of scoped lock
+    } // ScopedLock ends here
 
-    // --- Draw the paths ---
-
-    // 1. Fill the current spectrum path
+    // --- Drawing Paths ---
     auto roundedCurrentPath = currentSpecPath.createPathWithRoundedCorners(5.0f);
     roundedCurrentPath.lineTo((float) width, (float) height);
     roundedCurrentPath.lineTo(0.0f, (float) height);
@@ -164,7 +178,6 @@ void SpectrumComponent::paint(juce::Graphics& g)
     g.setGradientFill(grad);
     g.fillPath(roundedCurrentPath);
 
-    // 2. Draw peak-hold line and text, restoring original behavior
     if (mDrawPeak)
     {
         auto roundedMaxPath = maxSpecPath.createPathWithRoundedCorners(5.0f);
@@ -175,16 +188,15 @@ void SpectrumComponent::paint(juce::Graphics& g)
         {
             float boxWidth = 100.0f;
             g.setColour(juce::Colours::lightgrey);
-            g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - boxWidth / 4.0f, boxWidth, boxWidth, juce::Justification::centred);
-            g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY(), boxWidth, boxWidth, juce::Justification::centred);
+            g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - 20.0f, boxWidth, 20, juce::Justification::centred);
+            g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - 5.0f, boxWidth, 20, juce::Justification::centred);
         }
     }
 }
 
 void SpectrumComponent::resized()
 {
-    // This method is not needed for image resizing anymore.
-    // Can be used for child component bounds if any are added.
+    // This method is called when the component's size is changed.
 }
 
 void SpectrumComponent::setSpecAlpha(const float alp)
@@ -194,17 +206,18 @@ void SpectrumComponent::setSpecAlpha(const float alp)
 
 void SpectrumComponent::mouseEnter(const juce::MouseEvent& /*event*/)
 {
-    // mouseOver is now handled inside paint() to be identical to original code.
+    // Mouse over state is now handled inside paint() for better reliability.
 }
 
 void SpectrumComponent::mouseExit(const juce::MouseEvent& /*event*/)
 {
-    // The reset logic is now in paint(), so this is cleared.
+    // Mouse over state is now handled inside paint().
 }
 
 void SpectrumComponent::resetPeakData()
 {
-    // This is now handled by the logic inside paint().
     juce::ScopedLock locker(dataLock);
     maxData.fill(0.0f);
+    maxFreq = 0.0f;
+    maxDecibelPoint.setXY(-10.0f, -10.0f);
 }

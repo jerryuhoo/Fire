@@ -125,8 +125,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     bandPanel.widthBypassButton.addListener(this);
 
     processedSpectrum.setInterceptsMouseClicks(false, false);
-    processedSpectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(1), processor.getSampleRate() / (float) processor.getFFTSize());
-    originalSpectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(0), processor.getSampleRate() / (float) processor.getFFTSize());
+    processedSpectrum.updateSpectrum(processor.getFFTData(1), processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
+    originalSpectrum.updateSpectrum(processor.getFFTData(0), processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
 
     // presets
     addAndMakeVisible(stateComponent);
@@ -600,8 +600,8 @@ void FireAudioProcessorEditor::timerCallback()
         float specAlpha = static_cast<float>(*processor.treeState.getRawParameterValue(MIX_ID));
         processedSpectrum.setSpecAlpha(specAlpha);
         originalSpectrum.setSpecAlpha(specAlpha);
-        processedSpectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTDataProcessed, processor.getSampleRate() / (float) processor.getFFTSize());
-        originalSpectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTDataOriginal, processor.getSampleRate() / (float) processor.getFFTSize());
+        processedSpectrum.updateSpectrum(tempFFTDataProcessed, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
+        originalSpectrum.updateSpectrum(tempFFTDataOriginal, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
         bandPanel.updateDriveMeter();
         graphPanel.repaint();
         processedSpectrum.repaint();

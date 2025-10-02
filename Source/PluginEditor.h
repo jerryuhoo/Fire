@@ -57,6 +57,9 @@ private:
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
 
+    juce::Image backgroundCache;
+    float currentDisplayScale = 1.0f;
+
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
 

@@ -36,8 +36,20 @@ SpectrumBackground::~SpectrumBackground()
 
 void SpectrumBackground::paint(juce::Graphics& g)
 {
-    // The paint method now simply draws the pre-rendered image.
-    // This is extremely fast and efficient.
+    // 1. Get the real physical scale factor for this paint cycle
+    const float currentDisplayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+
+    // 2. Check if the scale has changed (or if it's the first time painting)
+    if (currentDisplayScale != lastDisplayScale)
+    {
+        // If it changed, update our stored value and regenerate the background image
+        lastDisplayScale = currentDisplayScale;
+        createBackgroundImage();
+
+        // Return immediately. The regeneration will trigger a new paint call.
+        return;
+    }
+    // 3. If scale is unchanged, just draw the pre-rendered cache.
     g.drawImage(cachedBackground, getLocalBounds().toFloat());
 }
 
@@ -61,10 +73,13 @@ void SpectrumBackground::createBackgroundImage()
         return;
 
     // Create a new image with the current component size.
-    cachedBackground = juce::Image(juce::Image::PixelFormat::ARGB, bounds.getWidth(), bounds.getHeight(), true);
-
+    cachedBackground = juce::Image(juce::Image::ARGB,
+                                   juce::roundToInt(getWidth() * lastDisplayScale),
+                                   juce::roundToInt(getHeight() * lastDisplayScale),
+                                   true);
     // Create a graphics context to draw onto our new image.
     juce::Graphics g(cachedBackground);
+    g.addTransform(juce::AffineTransform::scale(lastDisplayScale));
 
     // --- All original painting logic is moved here ---
 

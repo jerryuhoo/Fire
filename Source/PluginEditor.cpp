@@ -328,58 +328,30 @@ void FireAudioProcessorEditor::initEditor()
 //==============================================================================
 void FireAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    float part1 = getHeight() / 10.0f;
-    float part2 = part1 * 3.0f;
+    const float newDisplayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
 
-    // background
-    g.setColour(COLOUR7);
-    g.fillRect(0.0f, getHeight() * 3.0f / 10.0f, static_cast<float>(getWidth()), getHeight() * 7.0f / 10.0f);
+    if (newDisplayScale != currentDisplayScale)
+    {
+        currentDisplayScale = newDisplayScale;
+        resized();
+        return;
+    }
+    g.drawImage(backgroundCache, getLocalBounds().toFloat());
 
-    // title
-    g.setColour(COLOUR5);
-    const float scale = getWidth() / (float) INIT_WIDTH;
-    const auto topBarHeight = juce::roundToInt(50.0f * scale);
-    g.fillRect(0, 0, getWidth(), topBarHeight);
-
-    // draw version
-    g.setColour(COLOUR5);
-    g.setFont(juce::Font {
-        juce::FontOptions()
-            .withName("Times New Roman")
-            .withHeight(18.0f)
-            .withStyle("Bold") });
-    juce::String version = (juce::String) VERSION;
-    juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
-    g.drawFittedText(version, area, juce::Justification::topLeft, 1);
-
-    // set logo "Fire"
-    juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
-    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(), juce::RectanglePlacement::centred);
-
-    // set logo "Wings"
-    juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
-    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(), juce::RectanglePlacement::centred);
-
-    auto frame = getLocalBounds();
-    frame.setBounds(0, part1, getWidth(), part2);
-
-    int focusIndex = 0;
-    focusIndex = multiband.getFocusIndex();
-
-    // TODO: change it to mouse click
+    int focusIndex = multiband.getFocusIndex();
     setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
 
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
 
     if (left)
-    { // if you select the left window, you will see audio wave and distortion function graphs.
+    {
         bandPanel.setFocusBandNum(focusIndex);
         graphPanel.setFocusBandNum(focusIndex);
     }
     else if (right)
     {
-        graphPanel.setFocusBandNum(-1); // -1 means global
+        graphPanel.setFocusBandNum(-1);
     }
 }
 
@@ -503,6 +475,45 @@ void FireAudioProcessorEditor::resized()
                          multiband.getY() + multiband.getHeight() - 30.0f * scale,
                          getHeight() / 25.0f,
                          getHeight() / 25.0f);
+
+    float part1 = getHeight() / 10.0f;
+    float part2 = part1 * 3.0f;
+
+    const float displayScale = currentDisplayScale;
+
+    backgroundCache = juce::Image(juce::Image::ARGB,
+                                  juce::roundToInt(getWidth() * displayScale),
+                                  juce::roundToInt(getHeight() * displayScale),
+                                  true);
+    juce::Graphics g(backgroundCache);
+    g.addTransform(juce::AffineTransform::scale(displayScale));
+    // background
+    g.setColour(COLOUR7);
+    g.fillRect(0.0f, getHeight() * 3.0f / 10.0f, static_cast<float>(getWidth()), getHeight() * 7.0f / 10.0f);
+
+    // title
+    g.setColour(COLOUR5);
+    ;
+    g.fillRect(0, 0, getWidth(), topBarHeight);
+
+    // draw version
+    g.setColour(COLOUR5);
+    g.setFont(juce::Font {
+        juce::FontOptions()
+            .withName("Times New Roman")
+            .withHeight(18.0f)
+            .withStyle("Bold") });
+    juce::String version = (juce::String) VERSION;
+    juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
+    g.drawFittedText(version, area, juce::Justification::topLeft, 1);
+
+    // set logo "Fire"
+    juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
+    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(), juce::RectanglePlacement::centred);
+
+    // set logo "Wings"
+    juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
+    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(), juce::RectanglePlacement::centred);
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -601,17 +612,16 @@ void FireAudioProcessorEditor::timerCallback()
         // prepare to paint the spectrum
         float specAlpha = static_cast<float>(*processor.treeState.getRawParameterValue(MIX_ID));
         processedSpectrum.setSpecAlpha(specAlpha);
-        originalSpectrum.setSpecAlpha(specAlpha);
+        originalSpectrum.setSpecAlpha(1.0f - specAlpha);
         processedSpectrum.updateSpectrum(tempFFTDataProcessed, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
         originalSpectrum.updateSpectrum(tempFFTDataOriginal, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
         bandPanel.updateDriveMeter();
-        graphPanel.repaint();
         processedSpectrum.repaint();
         originalSpectrum.repaint();
         multiband.repaint();
-        bandPanel.repaint();
+
         globalPanel.repaint();
-        lfoPanel.repaint();
+        // lfoPanel.repaint();
     }
 }
 

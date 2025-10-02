@@ -10,6 +10,7 @@
 
 #include "SpectrumBackground.h"
 #include "SpectrumComponent.h"
+#include "../../Utility/AudioHelpers.h"
 
 const int SpectrumBackground::frequenciesForLines[] = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000 };
 const int SpectrumBackground::numberOfLines = 28;
@@ -38,7 +39,7 @@ void SpectrumBackground::paint (juce::Graphics& g)
     for (int i = 0; i < numberOfLines; ++i)
     {
         const double proportion = frequenciesForLines[i] / 20000.0;
-        int xPos = SpectrumComponent::transformToLog (proportion * 20000) * (getWidth());
+        int xPos = transformToLog (proportion * 20000) * (getWidth());
         g.drawVerticalLine (xPos, getHeight() / 5, getHeight());
         
         const int scaledWidth = (int)(60 * scale);

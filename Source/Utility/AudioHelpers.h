@@ -31,3 +31,15 @@ inline float helper_denormalize(float inValue)
         return inValue;
     }
 }
+
+static inline float transformToLog(double valueToTransform)
+{
+    auto value = juce::mapFromLog10(valueToTransform, 20.0, 20000.0);
+    return static_cast<float>(value);
+}
+
+static inline float transformFromLog(double between0and1)
+{
+    auto value = juce::mapToLog10(between0and1, 20.0, 20000.0);
+    return static_cast<float>(value);
+}

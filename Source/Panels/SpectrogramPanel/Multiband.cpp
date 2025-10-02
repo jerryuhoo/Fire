@@ -39,7 +39,7 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         (freqDividerGroup[i]->getVerticalLine()).addMouseListener(this, true);
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
-        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freqValue));
+        float xPercent = static_cast<float>(transformToLog(freqValue));
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
     }
 
@@ -445,7 +445,7 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                     if (! freqDividerGroup[i]->getToggleState())
                     {
                         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-                        int freq = static_cast<int>(SpectrumComponent::transformFromLog(xPercent));
+                        int freq = static_cast<int>(transformFromLog(xPercent));
                         freqDividerGroup[i]->setFreq(freq);
                         freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
                         int changeIndex = sortLines();

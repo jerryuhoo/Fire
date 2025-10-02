@@ -9,6 +9,7 @@
  */
 
 #include "FreqTextLabel.h"
+#include "../../Utility/AudioHelpers.h"
 
 //==============================================================================
 FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
@@ -78,7 +79,7 @@ void FreqTextLabel::paint(juce::Graphics& g)
     {
         mFrequency = freqLabel.getText().getIntValue();
         verticalLine.setValue(mFrequency);
-        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(mFrequency));
+        float xPercent = static_cast<float>(transformToLog(mFrequency));
         verticalLine.setXPercent(xPercent); // set freq -> set X percent
         // trigger silderValueChanged in FreqDividerGroup?
     };

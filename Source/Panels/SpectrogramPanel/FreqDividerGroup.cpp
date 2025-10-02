@@ -95,7 +95,7 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     }
 
     verticalLine.setXPercent(newXPercent);
-    verticalLine.setValue(SpectrumComponent::transformFromLog(newXPercent)); // * (44100 / 2.0)
+    verticalLine.setValue(transformFromLog(newXPercent)); // * (44100 / 2.0)
 
     if (verticalLine.getLeft() >= 0 && freqDividerGroup[verticalLine.getLeft()]->getToggleState() && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
@@ -134,7 +134,7 @@ void FreqDividerGroup::sliderValueChanged(juce::Slider* slider)
         //dragLinesByFreq(freqDividerGroup[0].getValue(), getSortedIndex(0));
         int freq = slider->getValue();
         freqTextLabel.setFreq(freq);
-        float xPercent = static_cast<float>(SpectrumComponent::transformToLog(freq));
+        float xPercent = static_cast<float>(transformToLog(freq));
         verticalLine.setXPercent(xPercent); // set freq -> set X percent
     }
 }
@@ -147,7 +147,7 @@ void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent& e)
 void FreqDividerGroup::setFreq(float f)
 {
     verticalLine.setValue(f);
-    verticalLine.setXPercent(static_cast<float>(SpectrumComponent::transformToLog(f)));
+    verticalLine.setXPercent(static_cast<float>(transformToLog(f)));
     freqTextLabel.setFreq(f);
 }
 

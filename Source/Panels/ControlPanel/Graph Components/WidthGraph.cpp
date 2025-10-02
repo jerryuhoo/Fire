@@ -24,57 +24,10 @@ WidthGraph::~WidthGraph()
 
 void WidthGraph::paint(juce::Graphics& g)
 {
-    float pi = juce::MathConstants<float>::pi;
-    float rotateAngle = pi / 4.0f;
-    // draw outline
+    // The paint() function remains unchanged, still extremely simple and fast
     g.setColour(COLOUR6);
     g.drawRect(getLocalBounds(), 1);
-
-    // get history array values
-    historyL = processor.getHistoryArrayL();
-    if (processor.getTotalNumInputChannels() == 2)
-    {
-        historyR = processor.getHistoryArrayR();
-    }
-    else if (processor.getTotalNumInputChannels() == 1)
-    {
-        historyR = processor.getHistoryArrayL();
-    }
-
-    // This is Lissajous Graph
-
-    // revert xy coordinates
-    g.addTransform(juce::AffineTransform::scale(-1, -1, getWidth() / 2.0f, getHeight() / 2.0f));
-    // rotate 45 degrees
-    g.addTransform(juce::AffineTransform::rotation(rotateAngle, getWidth() / 2.0f, getHeight() / 2.0f));
-
-    // find max value
-    float maxValue = 0.0f;
-
-    for (int i = 0; i < historyL.size(); i++)
-    {
-        if (historyL[i] > maxValue || historyR[i] > maxValue)
-        {
-            maxValue = historyL[i] > historyR[i] ? historyL[i] : historyR[i];
-        }
-    }
-
-    g.setColour(juce::Colours::skyblue.withAlpha(0.2f));
-    for (int i = 0; i < historyL.size(); i += 2)
-    {
-        float x = historyL[i] * getHeight() / 4.0f;
-        float y = historyR[i] * getHeight() / 4.0f;
-
-        // normalize
-        if (maxValue > 0.00001f)
-        {
-            x = x / maxValue;
-            y = y / maxValue;
-        }
-
-        //        g.fillEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 1.0f, 1.0f);
-        g.fillEllipse(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 2.0f * getScale(), 2.0f * getScale());
-    }
+    g.drawImage(pointCloudCache, getLocalBounds().toFloat());
 
     if (isMouseOn && ! mZoomState)
     {
@@ -85,10 +38,78 @@ void WidthGraph::paint(juce::Graphics& g)
 
 void WidthGraph::timerCallback()
 {
+    if (! pointCloudCache.isValid())
+        return;
+
+    // --- Key Step 1: Directly manipulate pixel data to achieve a transparent fade-out ---
+    juce::Image::BitmapData bitmapData(pointCloudCache, juce::Image::BitmapData::readWrite);
+
+    const int width = pointCloudCache.getWidth();
+    const int height = pointCloudCache.getHeight();
+    const float fadeFactor = 0.8f; // Controls the fade-out speed, a smaller value fades out faster
+
+    for (int y = 0; y < height; ++y)
+    {
+        for (int x = 0; x < width; ++x)
+        {
+            // Get the color of the current pixel
+            juce::Colour pixelColour = bitmapData.getPixelColour(x, y);
+
+            // If this pixel is not completely transparent
+            if (pixelColour.getAlpha() > 0)
+            {
+                // Lower its Alpha value
+                juce::uint8 newAlpha = static_cast<juce::uint8>(pixelColour.getAlpha() * fadeFactor);
+
+                // Set the new pixel color (only changing the Alpha)
+                bitmapData.setPixelColour(x, y, pixelColour.withAlpha(newAlpha));
+            }
+        }
+    }
+
+    // --- Key Step 2: Draw the new points ---
+    // Create a graphics context for our cached image
+    juce::Graphics g(pointCloudCache);
+
+    // Get the latest audio data
+    historyL = processor.getHistoryArrayL();
+    historyR = processor.getTotalNumInputChannels() == 2 ? processor.getHistoryArrayR() : historyL;
+
+    // Apply coordinate transformations
+    float pi = juce::MathConstants<float>::pi;
+    float rotateAngle = pi / 4.0f;
+    g.addTransform(juce::AffineTransform::scale(-1, -1, getWidth() / 2.0f, getHeight() / 2.0f));
+    g.addTransform(juce::AffineTransform::rotation(rotateAngle, getWidth() / 2.0f, getHeight() / 2.0f));
+
+    // Find the maximum value for normalization
+    float maxValue = 0.0f;
+    for (size_t i = 0; i < historyL.size(); i++)
+    {
+        maxValue = std::max({ maxValue, std::abs(historyL[i]), std::abs(historyR[i]) });
+    }
+
+    // Draw the new points with a fully opaque color
+    g.setColour(juce::Colours::skyblue);
+    if (maxValue > 0.00001f)
+    {
+        const float scaleFactor = getHeight() / (4.0f * maxValue);
+        for (size_t i = 0; i < historyL.size(); i += 2)
+        {
+            float x = historyL[i] * scaleFactor;
+            float y = historyR[i] * scaleFactor;
+            g.fillRect(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 1.0f, 1.0f);
+        }
+    }
+
+    // Trigger a repaint
     repaint();
 }
 
 void WidthGraph::resized()
 {
-    // TODO: resize
+    // When the component is resized, recreate a transparent cached image that matches the new dimensions
+    if (getWidth() > 0 && getHeight() > 0)
+    {
+        pointCloudCache = juce::Image(juce::Image::ARGB, getWidth(), getHeight(), true);
+    }
 }

@@ -551,6 +551,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
 void FireAudioProcessor::reset()
 {
+    needsReset = true;
+}
+
+void FireAudioProcessor::performReset()
+{
     lowpass1.reset();
     lowpass2.reset();
     lowpass3.reset();
@@ -610,6 +615,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (isBypassed)
     {
         isBypassed = false;
+    }
+
+    if (needsReset.exchange(false))
+    {
+        performReset();
     }
 
     // report latency
@@ -872,6 +882,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             // For more complex updates, you'd call specific update functions on the editor.
             editor->repaint();
         }
+
+        sendChangeMessage();
     }
 }
 
@@ -1906,6 +1918,7 @@ const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
 
 void FireAudioProcessor::lfoDataHasChanged()
 {
+    lfoManager->onLfoShapeChanged(-1);
     if (auto* editor = dynamic_cast<FireAudioProcessorEditor*>(getActiveEditor()))
     {
         editor->markPresetAsDirty();

@@ -292,6 +292,8 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         {
             applyBrushShape(event.getPosition());
             lastBrushCell = currentCell;
+            if (onDataChanged)
+                onDataChanged();
         }
         return; // Brush drag is handled, so we exit here.
     }
@@ -422,8 +424,13 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
                 }
             }
             repaint();
+
+            if (onDataChanged)
+                onDataChanged();
+
             break;
         }
+
         case DraggingState::None:
         default:
             break;
@@ -1293,4 +1300,9 @@ void LfoPanel::styleButton(juce::Button& button, bool isToggle)
     {
         button.setClickingTogglesState(true);
     }
+}
+
+void LfoPanel::refreshLfoDisplay()
+{
+    lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
 }

@@ -25,6 +25,11 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
 
     for (int i = 0; i < 4; ++i)
         modulationRoutings.add({});
+
+    for (int i = 0; i < 4; ++i)
+    {
+        shapeUpdateFlags[i] = true;
+    }
 }
 
 void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
@@ -194,7 +199,19 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     for (int i = 0; i < 4; ++i)
     {
-        // Get LFO parameters
+        // !! MOVED LOGIC !!
+        // Check if the shape for this LFO needs updating.
+        // This is a "test-and-set" operation, it atomically checks and sets the flag to false.
+        bool needsUpdate = true;
+        if (shapeUpdateFlags[i].compare_exchange_strong(needsUpdate, false))
+        {
+            // The flag was true, so we update the shape and it's now set to false.
+            lfoEngines[i].updateShape(lfoData[i]);
+        }
+
+        // --- The rest of the logic calculates phaseDelta and generates samples ---
+
+        // Get LFO parameters (sync mode, rate, etc.)
         auto* syncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i));
         const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
 
@@ -230,7 +247,6 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
         }
 
         lfoEngines[i].setPhaseDelta(phaseDelta);
-        lfoEngines[i].updateShape(lfoData[i]);
 
         // Generate LFO output for the entire block
         auto* writer = lfoOutputBuffer.getWritePointer(i);
@@ -276,6 +292,19 @@ float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
             return 4.0f; // 4 Bars
         default:
             return 1.0f / 4.0f;
+    }
+}
+
+void LfoManager::onLfoShapeChanged(int lfoIndex)
+{
+    if (lfoIndex < 0)
+    {
+        for (int i = 0; i < 4; ++i)
+            shapeUpdateFlags[i] = true;
+    }
+    else if (juce::isPositiveAndBelow(lfoIndex, 4))
+    {
+        shapeUpdateFlags[lfoIndex] = true;
     }
 }
 

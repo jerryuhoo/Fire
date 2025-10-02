@@ -34,7 +34,8 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::Timer,
                                  public juce::Button::Listener,
                                  public juce::AudioProcessorValueTreeState::Listener,
-                                 public juce::AsyncUpdater
+                                 public juce::AsyncUpdater,
+                                 public juce::ChangeListener
 {
 public:
     FireAudioProcessorEditor(FireAudioProcessor&);
@@ -48,6 +49,7 @@ public:
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
     void markPresetAsDirty();
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
 private:
     // This reference is provided as a quick way for your editor to

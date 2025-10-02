@@ -172,6 +172,9 @@ namespace state
         {
             editor->repaint();
         }
+
+        fireProc.sendChangeMessage();
+        fireProc.getLfoManager().onLfoShapeChanged(-1);
     }
 
     //==============================================================================
@@ -539,6 +542,7 @@ namespace state
                 p->setValueNotifyingHost(p->getDefaultValue());
         // set preset combobox to 0
         statePresetName = "";
+        mCurrentPresetId = 0;
 
         auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
         for (auto& lfo : fireProc.getLfoManager().getLfoData())
@@ -546,7 +550,12 @@ namespace state
             lfo.resetToDefault();
         }
 
-        // --- ADDED: Notify the editor to update its display ---
+        auto& routings = fireProc.getLfoManager().getModulationRoutings();
+        routings.clear();
+
+        fireProc.getLfoManager().onLfoShapeChanged(-1);
+
+        // Notify the editor to update its display
         if (auto* editor = fireProc.getActiveEditor())
         {
             editor->repaint();

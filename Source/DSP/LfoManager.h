@@ -71,6 +71,7 @@ public:
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
     void clearModulationForTarget(const juce::String& targetParameterID);
     void invertModulationDepth(const juce::String& targetParameterID);
+    void onLfoShapeChanged(int lfoIndex);
 
 private:
     /**
@@ -102,4 +103,5 @@ private:
     bool wasPlaying { false };
 
     juce::StringArray lfoRateSyncDivisions;
+    std::array<std::atomic<bool>, 4> shapeUpdateFlags;
 };

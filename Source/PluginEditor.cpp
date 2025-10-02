@@ -17,6 +17,7 @@
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets, p.treeState }, globalPanel(processor), lfoPanel(p)
 {
+    processor.addChangeListener(this);
     // timer
     juce::Timer::startTimerHz(60.0f);
 
@@ -306,6 +307,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     bandPanel.widthBypassButton.removeListener(this);
 
     setLookAndFeel(nullptr);
+    processor.removeChangeListener(this);
 }
 
 void FireAudioProcessorEditor::markPresetAsDirty()
@@ -1020,5 +1022,15 @@ void FireAudioProcessorEditor::exitAssignMode()
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
+    }
+}
+
+void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source == &processor)
+    {
+        lfoPanel.refreshLfoDisplay();
+        // globalPanel.repaint();
+        // bandPanel.repaint();
     }
 }

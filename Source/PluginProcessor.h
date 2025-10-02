@@ -137,7 +137,8 @@ private:
 
 //==============================================================================
 
-class FireAudioProcessor : public juce::AudioProcessor
+class FireAudioProcessor : public juce::AudioProcessor,
+                           public juce::ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -276,6 +277,10 @@ public:
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
 
 private:
+    // reset parameters
+    void performReset();
+    std::atomic<bool> needsReset { false };
+    
     std::vector<std::unique_ptr<BandProcessor>> bands;
     float totalLatency = 0.0f;
 

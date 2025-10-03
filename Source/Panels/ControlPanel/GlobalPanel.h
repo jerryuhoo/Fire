@@ -117,5 +117,7 @@ private:
     juce::Array<juce::Component*> highcutKnobs;
     juce::Array<juce::Component*> allControls;
 
+    juce::Rectangle<int> bottomArea;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

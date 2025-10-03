@@ -121,10 +121,10 @@ void GlobalPanel::createLabels()
     setupPanelLabel(highcutSlopeLabel, "Slope", FILTER_COLOUR.withBrightness(0.8f));
 
     filterTypeLabel.attachToComponent(&filterLowCutButton, false);
-    lowcutSlopeLabel.attachToComponent(&lowcutSlopeMode, true);
-    lowcutSlopeLabel.setJustificationType(juce::Justification::left);
-    highcutSlopeLabel.attachToComponent(&highcutSlopeMode, true);
-    highcutSlopeLabel.setJustificationType(juce::Justification::left);
+    lowcutSlopeLabel.attachToComponent(&lowcutSlopeMode, false);
+    lowcutSlopeLabel.setJustificationType(juce::Justification::centred);
+    highcutSlopeLabel.attachToComponent(&highcutSlopeMode, false);
+    highcutSlopeLabel.setJustificationType(juce::Justification::centred);
 }
 
 void GlobalPanel::createButtons()
@@ -213,7 +213,7 @@ void GlobalPanel::setupComponentGroups()
         &highcutSlopeMode
     };
 
-    filterComponents = { &filterLowCutButton, &filterPeakButton, &filterHighCutButton, &postFilterPanelLabel };
+    filterComponents = { &filterLowCutButton, &filterPeakButton, &filterHighCutButton, &postFilterPanelLabel, &lowcutSlopeLabel, &highcutSlopeLabel };
     filterComponents.addArray(lowcutKnobs);
     filterComponents.addArray(peakKnobs);
     filterComponents.addArray(highcutKnobs);
@@ -323,6 +323,14 @@ void GlobalPanel::paint(juce::Graphics& g)
     g.setColour(COLOUR6);
     g.drawRect(globalEffectArea);
     g.drawRect(outputKnobArea);
+
+    // Fill the bottom area with a darker background color for visual separation
+    g.setColour(COLOUR6.darker());
+    g.fillRect(bottomArea);
+
+    // Draw a border around the bottom area with the original border color
+    g.setColour(COLOUR6);
+    g.drawRect(bottomArea);
 }
 
 void GlobalPanel::resized()
@@ -332,69 +340,141 @@ void GlobalPanel::resized()
     globalEffectArea = controlArea.removeFromLeft(getWidth() / 7 * 5);
     outputKnobArea = controlArea;
 
-    juce::Rectangle<int> switchArea = globalEffectArea.removeFromLeft(getWidth() / 50);
-    filterSwitch.setBounds(switchArea.removeFromTop(globalEffectArea.getHeight() / 2));
-    downsampleSwitch.setBounds(switchArea.removeFromTop(globalEffectArea.getHeight() / 2));
-
-    juce::Rectangle<int> filterKnobArea = globalEffectArea;
-    juce::Rectangle<int> filterTypeArea = filterKnobArea.removeFromLeft(globalEffectArea.getWidth() / 4);
-
-    juce::Rectangle<int> filterTypeAreaReduced = filterTypeArea.reduced(0, getHeight() / 6);
-    juce::Rectangle<int> filterTypeAreaReducedRest = filterTypeAreaReduced;
-
-    juce::Rectangle<int> filterTypeAreaTop = filterTypeAreaReducedRest.removeFromTop(filterTypeAreaReduced.getHeight() / 3).reduced(globalEffectArea.getWidth() / 20, getHeight() / 30);
-    juce::Rectangle<int> filterTypeAreaMid = filterTypeAreaReducedRest.removeFromTop(filterTypeAreaReduced.getHeight() / 3).reduced(globalEffectArea.getWidth() / 20, getHeight() / 30);
-    juce::Rectangle<int> filterTypeAreaButtom = filterTypeAreaReducedRest.removeFromTop(filterTypeAreaReduced.getHeight() / 3).reduced(globalEffectArea.getWidth() / 20, getHeight() / 30);
-
-    juce::Rectangle<int> bypassButtonArea = globalEffectArea;
-    bypassButtonArea = bypassButtonArea.removeFromBottom(globalEffectArea.getHeight() / 5).reduced(globalEffectArea.getWidth() / 2 - globalEffectArea.getHeight() / 10, 0);
-    filterBypassButton->setBounds(bypassButtonArea);
-    downsampleBypassButton->setBounds(bypassButtonArea);
-
-    juce::Rectangle<int> filterKnobAreaLeft = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 3);
-    juce::Rectangle<int> filterKnobAreaMid = filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 2);
-    juce::Rectangle<int> filterKnobAreaRight = filterKnobArea;
-    juce::Rectangle<int> filterMenuArea = filterKnobAreaMid;
-    filterKnobAreaLeft = filterKnobAreaLeft.reduced(0, getHeight() / 5);
-    filterKnobAreaMid = filterKnobAreaMid.reduced(0, getHeight() / 5);
-    filterKnobAreaRight = filterKnobAreaRight.reduced(0, getHeight() / 5);
-
-    juce::Rectangle<int> panelLabelArea = globalEffectArea;
-    panelLabelArea = panelLabelArea.removeFromLeft(globalEffectArea.getWidth() / 4);
-    panelLabelArea = panelLabelArea.removeFromBottom(globalEffectArea.getHeight() / 5);
-    postFilterPanelLabel.setBounds(panelLabelArea);
-    downSamplePanelLabel.setBounds(panelLabelArea);
-
-    modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(globalEffectArea.reduced(getHeight() / 15, getHeight() / 5));
-
-    modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(filterKnobAreaLeft);
-    modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(filterKnobAreaMid);
-    modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(filterKnobAreaRight);
-    modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(filterKnobAreaLeft);
-    modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(filterKnobAreaMid);
-    modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(filterKnobAreaRight);
-    modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(filterKnobAreaLeft);
-    modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(filterKnobAreaRight);
-    modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(filterKnobAreaMid);
-
-    juce::Rectangle<int> filterModeArea = filterMenuArea.removeFromBottom(getHeight() / 4);
-    filterModeArea.removeFromBottom(getHeight() / 15);
-    filterModeArea.setX(filterModeArea.getX() + filterModeArea.getWidth() / 1.3);
-
-    lowcutSlopeMode.setBounds(filterModeArea);
-    highcutSlopeMode.setBounds(filterModeArea);
-
-    filterLowCutButton.setBounds(filterTypeAreaTop);
-    filterPeakButton.setBounds(filterTypeAreaMid);
-    filterHighCutButton.setBounds(filterTypeAreaButtom);
-
     juce::Rectangle<int> outputKnobAreaLeft = outputKnobArea;
     juce::Rectangle<int> outputKnobAreaRight = outputKnobAreaLeft.removeFromRight(outputKnobArea.getWidth() / 2);
     outputKnobAreaLeft = outputKnobAreaLeft.reduced(0, outputKnobAreaLeft.getHeight() / 5);
     outputKnobAreaRight = outputKnobAreaRight.reduced(0, outputKnobAreaRight.getHeight() / 5);
-
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(outputKnobAreaLeft);
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(outputKnobAreaRight);
+
+    juce::Rectangle<int> switchArea = globalEffectArea.removeFromLeft(getWidth() / 50);
+    filterSwitch.setBounds(switchArea.removeFromTop(globalEffectArea.getHeight() / 2));
+    downsampleSwitch.setBounds(switchArea.removeFromTop(globalEffectArea.getHeight() / 2));
+
+    juce::Rectangle<int> fiveColumnArea = globalEffectArea;
+
+    // 1. Define the geometry of our grid
+    const int numColumns = 5;
+    const int numGaps = numColumns - 1; // 5列之間有4個間隔
+    const int gapWidth = 10; // 每個間隔的寬度
+
+    // 2. Calculate the total width available for content (columns)
+    //    總寬度減去所有間隔的總寬度
+    const float totalContentWidth = fiveColumnArea.getWidth() - (numGaps * gapWidth);
+
+    // 3. Calculate the width of each column based on proportions
+    //    第一列佔 1/6，其餘四列佔 5/6，我們按這個比例分配剩餘的內容寬度
+    const float narrowColumnProportion = 1.0f / 6.0f;
+    const float wideColumnsTotalProportion = 5.0f / 6.0f;
+
+    int col1Width = static_cast<int>(totalContentWidth * narrowColumnProportion);
+    int otherColumnTotalWidth = static_cast<int>(totalContentWidth * wideColumnsTotalProportion);
+    int otherColumnWidth = otherColumnTotalWidth / 4;
+
+    // 4. Create the column rectangles by placing them sequentially with gaps
+    juce::Array<juce::Rectangle<int>> columns;
+    juce::Rectangle<int> placementArea = fiveColumnArea;
+
+    columns.add(placementArea.removeFromLeft(col1Width));
+    const int shiftRightAmount = 10;
+    columns.getReference(0).setX(columns.getReference(0).getX() + shiftRightAmount);
+    placementArea.removeFromLeft(gapWidth); // Add gap after column 1
+
+    columns.add(placementArea.removeFromLeft(otherColumnWidth));
+    placementArea.removeFromLeft(gapWidth); // Add gap after column 2
+
+    columns.add(placementArea.removeFromLeft(otherColumnWidth));
+    placementArea.removeFromLeft(gapWidth); // Add gap after column 3
+
+    columns.add(placementArea.removeFromLeft(otherColumnWidth));
+    placementArea.removeFromLeft(gapWidth); // Add gap after column 4
+
+    columns.add(placementArea); // The last column fills the remaining space
+
+    // Now the `columns` array holds perfectly spaced, clean rectangles.
+    // The rest of the layout logic can proceed as before.
+
+    // Define the vertical area for the knobs first
+    juce::Rectangle<int> knob_yBasis = globalEffectArea.reduced(0, getHeight() / 5);
+
+    // --- Button Column Layout ---
+    auto buttonArea = columns[0];
+    buttonArea.setY(knob_yBasis.getY());
+    buttonArea.setHeight(knob_yBasis.getHeight());
+
+    const int extraSideMargin = 10;
+    buttonArea.reduce(extraSideMargin, 0);
+
+    const int verticalPadding = 10;
+    const int horizontalPadding = 0;
+    auto layoutArea = buttonArea;
+    const int totalPaddingHeight = verticalPadding * 2;
+    const int singleButtonHeight = (layoutArea.getHeight() - totalPaddingHeight) / 3;
+
+    filterLowCutButton.setBounds(layoutArea.removeFromTop(singleButtonHeight).reduced(horizontalPadding, 0));
+    layoutArea.removeFromTop(verticalPadding);
+    filterPeakButton.setBounds(layoutArea.removeFromTop(singleButtonHeight).reduced(horizontalPadding, 0));
+    layoutArea.removeFromTop(verticalPadding);
+    filterHighCutButton.setBounds(layoutArea.reduced(horizontalPadding, 0));
+
+    // --- Knobs Layout ---
+    modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(columns[2].getX(), knob_yBasis.getY(), columns[2].getWidth(), knob_yBasis.getHeight());
+    modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(columns[2].getX(), knob_yBasis.getY(), columns[2].getWidth(), knob_yBasis.getHeight());
+    modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(columns[2].getX(), knob_yBasis.getY(), columns[2].getWidth(), knob_yBasis.getHeight());
+
+    modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(columns[3].getX(), knob_yBasis.getY(), columns[3].getWidth(), knob_yBasis.getHeight());
+    modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(columns[3].getX(), knob_yBasis.getY(), columns[3].getWidth(), knob_yBasis.getHeight());
+    modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(columns[3].getX(), knob_yBasis.getY(), columns[3].getWidth(), knob_yBasis.getHeight());
+
+    modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(columns[4].getX(), knob_yBasis.getY(), columns[4].getWidth(), knob_yBasis.getHeight());
+    modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(columns[4].getX(), knob_yBasis.getY(), columns[4].getWidth(), knob_yBasis.getHeight());
+    modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(columns[4].getX(), knob_yBasis.getY(), columns[4].getWidth(), knob_yBasis.getHeight());
+
+    // --- ComboBox Column Layout ---
+    const int comboBoxY = knob_yBasis.getY();
+    const int comboBoxHeight = TEXTBOX_HEIGHT;
+    const int comboBoxWidth = TEXTBOX_WIDTH;
+
+    auto col2 = columns[1]; // Use the clean rectangle from our new calculation
+    // Create a temporary, reduced area for placement to add horizontal margin
+    auto comboBoxPlacementArea = col2.reduced(extraSideMargin, 5);
+    // Center the ComboBox horizontally within the NEW reduced placement area
+    const int comboBoxX = comboBoxPlacementArea.getCentreX() - (comboBoxWidth / 2);
+
+    juce::Rectangle<int> comboBoxBounds(comboBoxX, comboBoxY, comboBoxWidth * 1.2f, comboBoxHeight);
+    lowcutSlopeMode.setBounds(comboBoxBounds);
+    highcutSlopeMode.setBounds(comboBoxBounds);
+    // =====================================================================
+
+    modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(globalEffectArea.reduced(getHeight() / 15, getHeight() / 5));
+
+    // 1. Define a shared bottom area for the labels and bypass buttons.
+    const int sliceHeight = globalEffectArea.getHeight() / 5;
+    bottomArea = juce::Rectangle<int>(globalEffectArea.getX(),
+                                      globalEffectArea.getBottom() - sliceHeight,
+                                      globalEffectArea.getWidth(),
+                                      sliceHeight);
+
+    bottomArea.reduce(globalEffectArea.getWidth() / 4, 0);
+
+    // 2. Define sizing constants. The button will be a square.
+    const int buttonSize = bottomArea.getHeight();
+    const int labelWidth = 100; // A suitable width for "Post Filter" / "DownSample"
+    const int gap = 4; // Gap between button and label
+
+    // 3. Create the label area, centered horizontally within the bottom area.
+    juce::Rectangle<int> labelArea = bottomArea.withSizeKeepingCentre(labelWidth, buttonSize);
+
+    // 4. Create the bypass button area by translating the label area to the left.
+    juce::Rectangle<int> bypassButtonArea = labelArea.translated(-buttonSize - gap, 0)
+                                                .withSize(buttonSize, buttonSize);
+
+    // 5. Set the bounds for both filter and downsample components, as they share the same space.
+    postFilterPanelLabel.setBounds(labelArea);
+    downSamplePanelLabel.setBounds(labelArea);
+
+    filterBypassButton->setBounds(bypassButtonArea);
+    downsampleBypassButton->setBounds(bypassButtonArea);
 }
 
 void GlobalPanel::buttonClicked(juce::Button* clickedButton)

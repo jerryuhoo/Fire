@@ -355,15 +355,13 @@ void GlobalPanel::resized()
 
     // 1. Define the geometry of our grid
     const int numColumns = 5;
-    const int numGaps = numColumns - 1; // 5列之間有4個間隔
-    const int gapWidth = 10; // 每個間隔的寬度
+    const int numGaps = numColumns - 1;
+    const int gapWidth = 10;
 
     // 2. Calculate the total width available for content (columns)
-    //    總寬度減去所有間隔的總寬度
     const float totalContentWidth = fiveColumnArea.getWidth() - (numGaps * gapWidth);
 
     // 3. Calculate the width of each column based on proportions
-    //    第一列佔 1/6，其餘四列佔 5/6，我們按這個比例分配剩餘的內容寬度
     const float narrowColumnProportion = 1.0f / 6.0f;
     const float wideColumnsTotalProportion = 5.0f / 6.0f;
 
@@ -432,8 +430,9 @@ void GlobalPanel::resized()
 
     // --- ComboBox Column Layout ---
     const int comboBoxY = knob_yBasis.getY();
-    const int comboBoxHeight = TEXTBOX_HEIGHT;
-    const int comboBoxWidth = TEXTBOX_WIDTH;
+
+    const int comboBoxHeight = TEXTBOX_HEIGHT * scale;
+    const int comboBoxWidth = TEXTBOX_WIDTH * scale;
 
     auto col2 = columns[1]; // Use the clean rectangle from our new calculation
     // Create a temporary, reduced area for placement to add horizontal margin

@@ -368,6 +368,7 @@ void FireAudioProcessorEditor::resized()
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
     // set look and feel scale
     fireLookAndFeel.scale = scale;
+    globalPanel.scale = scale;
 
     juce::Rectangle<int> bounds(getLocalBounds());
 
@@ -477,7 +478,7 @@ void FireAudioProcessorEditor::resized()
                          getHeight() / 25.0f);
 
     float part1 = getHeight() / 10.0f;
-//    float part2 = part1 * 3.0f;
+    //    float part2 = part1 * 3.0f;
 
     const float displayScale = currentDisplayScale;
 

@@ -915,7 +915,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     rateLabel.attachToComponent(&rateSlider, false);
-    rateLabel.setColour(juce::Label::textColourId, SHAPE_COLOUR);
+    rateLabel.setColour(juce::Label::textColourId, COLOUR1);
     rateLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(gridXSlider);

@@ -42,6 +42,7 @@ public:
     ModulatableSlider& getHighcutGainKnob();
 
     void setToggleButtonState(juce::String toggleButton);
+    float scale = 1.0f;
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

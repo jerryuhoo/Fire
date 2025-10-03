@@ -54,13 +54,22 @@ void SpectrumComponent::timerCallback()
 
         // 2. NEW LOGIC for peak line decay
         // If mouse is NOT over, the peak line should fall towards zero.
-        if (! mouseOver)
+        if (! mouseOver && isPeakLineVisible)
         {
+            float maxPeakValue = 0.0f;
             for (int i = 0; i < numberOfBins; ++i)
             {
-                // Decay towards zero using the SAME interpolation factor.
-                // This is equivalent to: maxData[i] *= (1.0f - interpolationFactor);
-                maxData[i] += (0.0f - maxData[i]) * interpolationFactor;
+                // Decay towards a small negative value to ensure it goes below the bottom of the graph
+                maxData[i] += (-0.1f - maxData[i]) * interpolationFactor;
+
+                // Keep track of the highest peak value during decay
+                if (maxData[i] > maxPeakValue)
+                    maxPeakValue = maxData[i];
+            }
+
+            if (maxPeakValue < 0.001f)
+            {
+                isPeakLineVisible = false;
             }
         }
     }
@@ -102,6 +111,13 @@ void SpectrumComponent::paint(juce::Graphics& g)
     mouseOver = getLocalBounds().contains(getMouseXYRelative());
     maxDecibelValue = -100.0f;
 
+    if (mouseOver && ! wasMouseOver)
+    {
+        isPeakLineVisible = true;
+        resetPeakData();
+    }
+    wasMouseOver = mouseOver;
+
     juce::Path currentSpecPath, maxSpecPath;
     currentSpecPath.startNewSubPath(0, (float) height);
     if (mDrawPeak)
@@ -132,7 +148,6 @@ void SpectrumComponent::paint(juce::Graphics& g)
             float currentDecibel = juce::Decibels::gainToDecibels(smoothedDisplayData[i] / (float) numberOfBins);
             float maxDecibel = juce::Decibels::gainToDecibels(maxData[i] / (float) numberOfBins);
 
-            // ... (rest of path building logic is unchanged) ...
             float yPercent = juce::jmap(juce::jlimit(mindB, maxdB, currentDecibel), mindB, maxdB, 0.0f, 1.0f);
             float yMaxPercent = juce::jmap(juce::jlimit(mindB, maxdB, maxDecibel), mindB, maxdB, 0.0f, 1.0f);
             double currentFreq = i * mBinWidth.load();
@@ -167,7 +182,7 @@ void SpectrumComponent::paint(juce::Graphics& g)
     g.fillPath(roundedCurrentPath);
 
     // Drawing of maxSpecPath and its text
-    if (mDrawPeak)
+    if (mDrawPeak && isPeakLineVisible)
     {
         // We always draw the path, because we want to see the decay animation
         // when the mouse leaves. It will naturally become flat at the bottom when decayed.

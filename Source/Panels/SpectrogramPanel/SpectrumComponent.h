@@ -70,6 +70,8 @@ private:
     bool mouseOver = false;
     juce::Point<float> maxDecibelPoint;
     float specAlpha = 0.8f;
+    bool isPeakLineVisible = false;
+    bool wasMouseOver = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SpectrumComponent)
 };

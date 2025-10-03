@@ -21,16 +21,18 @@ public:
     DraggableButton();
     ~DraggableButton() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void resized() override;
 
-    void mouseEnter (const juce::MouseEvent& e) override;
-    void mouseExit (const juce::MouseEvent& e) override;
-    void setState (const bool state);
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void setState(const bool state);
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
+    std::function<void(float)> onQValueChanged;
 
 private:
     bool isEntered = false;
     juce::Colour getColour();
     bool mState = true;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DraggableButton)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DraggableButton)
 };

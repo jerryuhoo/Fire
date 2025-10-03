@@ -33,6 +33,31 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel) : proces
 
     // Initial check for modulation status on startup
     checkAnimationStatus();
+
+    // Add these lines to connect mouse wheel events to Q parameters
+    auto setupQControl = [this](DraggableButton& button, const juce::String& paramID)
+    {
+        button.onQValueChanged = [this, paramID](float delta)
+        {
+            if (auto* param = processor.treeState.getParameter(paramID))
+            {
+                // Increase sensitivity for finer control
+                float sensitivity = 0.5f;
+                float currentValue = param->getValue();
+                float newValue = currentValue + delta * sensitivity;
+
+                // Clamp the value between 0.0 and 1.0
+                newValue = juce::jlimit(0.0f, 1.0f, newValue);
+
+                param->setValueNotifyingHost(newValue);
+            }
+        };
+    };
+
+    // Assuming you have these parameter IDs defined in Parameters.h
+    setupQControl(draggableLowButton, LOWCUT_Q_ID);
+    setupQControl(draggablePeakButton, PEAK_Q_ID);
+    setupQControl(draggableHighButton, HIGHCUT_Q_ID);
 }
 
 FilterControl::~FilterControl()

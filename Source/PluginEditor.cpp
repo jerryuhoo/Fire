@@ -477,8 +477,8 @@ void FireAudioProcessorEditor::resized()
                          getHeight() / 25.0f,
                          getHeight() / 25.0f);
 
-    float part1 = getHeight() / 10.0f;
-    //    float part2 = part1 * 3.0f;
+    // float part1 = getHeight() / 10.0f;
+    // float part2 = part1 * 3.0f;
 
     const float displayScale = currentDisplayScale;
 
@@ -494,19 +494,7 @@ void FireAudioProcessorEditor::resized()
 
     // title
     g.setColour(COLOUR5);
-    ;
     g.fillRect(0, 0, getWidth(), topBarHeight);
-
-    // draw version
-    g.setColour(COLOUR5);
-    g.setFont(juce::Font {
-        juce::FontOptions()
-            .withName("Times New Roman")
-            .withHeight(18.0f)
-            .withStyle("Bold") });
-    juce::String version = (juce::String) VERSION;
-    juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
-    g.drawFittedText(version, area, juce::Justification::topLeft, 1);
 
     // set logo "Fire"
     juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);

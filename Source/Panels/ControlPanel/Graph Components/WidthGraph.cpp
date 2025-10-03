@@ -83,7 +83,7 @@ void WidthGraph::timerCallback()
 
     // Find the maximum value for normalization
     float maxValue = 0.0f;
-    for (size_t i = 0; i < historyL.size(); i++)
+    for (int i = 0; i < (int)historyL.size(); i++)
     {
         maxValue = std::max({ maxValue, std::abs(historyL[i]), std::abs(historyR[i]) });
     }
@@ -93,7 +93,7 @@ void WidthGraph::timerCallback()
     if (maxValue > 0.00001f)
     {
         const float scaleFactor = getHeight() / (4.0f * maxValue);
-        for (size_t i = 0; i < historyL.size(); i += 2)
+        for (int i = 0; i < (int)historyL.size(); i += 2)
         {
             float x = historyL[i] * scaleFactor;
             float y = historyR[i] * scaleFactor;

@@ -477,7 +477,7 @@ void FireAudioProcessorEditor::resized()
                          getHeight() / 25.0f);
 
     float part1 = getHeight() / 10.0f;
-    float part2 = part1 * 3.0f;
+//    float part2 = part1 * 3.0f;
 
     const float displayScale = currentDisplayScale;
 

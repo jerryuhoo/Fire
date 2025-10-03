@@ -10,9 +10,10 @@
 
 #pragma once
 
+#include "../../GUI/LookAndFeel.h"
 #include "../../PluginProcessor.h"
-#include "juce_gui_basics/juce_gui_basics.h"
 #include "../../Utility/Parameters.h"
+#include "juce_gui_basics/juce_gui_basics.h"
 
 //
 //  A header component to display titles for the matrix columns.
@@ -51,6 +52,7 @@ private:
     void comboBoxChanged(juce::ComboBox* comboBox) override;
 
     FireAudioProcessor& processor;
+    FireLookAndFeel fireLookAndFeel;
     int index; // The index of the routing this row represents in the processor's array
     std::function<void()> onDeleteCallback; // The function to call when the delete button is pressed.
 
@@ -58,7 +60,7 @@ private:
     juce::Slider amountSlider;
     juce::TextButton bipolarButton;
     juce::ComboBox destinationMenu;
-    juce::TextButton removeButton { "X" };
+    juce::TextButton removeButton;
 
     std::vector<ModulationTarget> allPossibleTargets;
 };
@@ -85,7 +87,7 @@ private:
 
     ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
-    juce::TextButton addButton { "Add New" };
+    juce::TextButton addButton { "+" };
     juce::TextButton closeButton { "Close" };
 
     juce::Viewport viewport;

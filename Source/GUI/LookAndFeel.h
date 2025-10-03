@@ -399,7 +399,7 @@ public:
 
         float cornerSize = 0.0f; // Default to flat corners
 
-        if (id == "rounded" || id == "low_cut" || id == "high_cut" || id == "band_pass")
+        if (id == "rounded" || id == "low_cut" || id == "high_cut" || id == "band_pass" || id == "remove_button")
         {
             cornerSize = 10.0f * scale; // Apply scaling to corner size
         }
@@ -506,6 +506,56 @@ public:
         }
     }
 
+    void drawButtonText(juce::Graphics& g, juce::TextButton& button, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+        // --- Style for the custom Remove button ---
+        if (button.getComponentID() == "remove_button")
+        {
+            // 1. Define the color for the cross symbol
+            auto crossColour = juce::Colours::red.brighter(0.3f);
+            if (shouldDrawButtonAsHighlighted)
+                crossColour = crossColour.brighter(0.2f);
+
+            g.setColour(crossColour);
+
+            // 2. Get the button's full bounds.
+            auto bounds = button.getLocalBounds().toFloat();
+
+            // 3. Find the smaller dimension (width or height) to define the side of our square.
+            float sideLength = juce::jmin(bounds.getWidth(), bounds.getHeight());
+
+            // 4. Create a perfect square area, centered within the button's bounds.
+            auto squareArea = juce::Rectangle<float>(sideLength, sideLength).withCentre(bounds.getCentre());
+
+            // 5. Reduce this square area to create a nice margin for the cross.
+            auto crossArea = squareArea.reduced(sideLength * 0.38f);
+
+            // 6. Define the path for the cross (this part remains the same).
+            juce::Path crossPath;
+            crossPath.startNewSubPath(crossArea.getTopLeft());
+            crossPath.lineTo(crossArea.getBottomRight());
+            crossPath.startNewSubPath(crossArea.getTopRight());
+            crossPath.lineTo(crossArea.getBottomLeft());
+
+            // 7. Draw the cross (this part also remains the same).
+            g.strokePath(crossPath, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        // --- Style for other TextButtons (e.g., the bold button) ---
+        else if (button.getComponentID() == "bold_rounded_button")
+        {
+            g.setColour(juce::Colours::yellow);
+            juce::Font font(getTextButtonFont(button, button.getHeight()));
+            g.setFont(font);
+            g.drawFittedText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, 1);
+        }
+        // --- Default JUCE Style Fallback ---
+        else
+        {
+            // This ensures any other standard buttons draw their text normally.
+            LookAndFeel_V4::drawButtonText(g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+        }
+    }
+
     void drawTickBox(juce::Graphics& g, juce::Component& component, float x, float y, float w, float h, const bool ticked, const bool isEnabled, const bool shouldDrawButtonAsHighlighted, const bool shouldDrawButtonAsDown) override
     {
         juce::ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
@@ -572,6 +622,7 @@ public:
 
     void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
     {
+        // --- Style 1: Flat Toggle ---
         if (button.getComponentID() == "flat_toggle")
         {
             g.setColour(COLOUR6);
@@ -580,6 +631,7 @@ public:
         }
         else
         {
+            // This is the default behavior if no specific ID is set
             drawTickBox(g, button, button.getWidth() / 4.0f, button.getHeight() / 4.0f, button.getWidth() / 2.0f, button.getHeight() / 2.0f, button.getToggleState(), button.isEnabled(), shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
         }
     }

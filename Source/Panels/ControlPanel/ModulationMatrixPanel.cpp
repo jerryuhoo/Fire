@@ -9,7 +9,7 @@
 */
 
 #include "ModulationMatrixPanel.h"
-#include "../../Utility/AudioHelpers.h" // Include AudioHelpers to access ParameterIDAndName
+#include "../../Utility/AudioHelpers.h"
 
 //==============================================================================
 // ModulationMatrixHeader Implementation
@@ -53,6 +53,7 @@ void ModulationMatrixHeader::resized()
 ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex, std::function<void()> onDelete)
     : processor(p), index(routingIndex), onDeleteCallback(onDelete)
 {
+    setLookAndFeel(&fireLookAndFeel);
     // SOURCE MENU
     addAndMakeVisible(sourceMenu);
     for (int i = 1; i <= 4; ++i)
@@ -74,6 +75,12 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
 
     // BIPOLAR BUTTON
     addAndMakeVisible(bipolarButton);
+    bipolarButton.setComponentID("rounded");
+    bipolarButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    bipolarButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6);
+    bipolarButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    bipolarButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    bipolarButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     bipolarButton.setClickingTogglesState(true);
     bipolarButton.setToggleState(processor.getLfoManager().getModulationRoutings()[index].isBipolar, juce::dontSendNotification);
     bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
@@ -122,10 +129,18 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
 
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
+    removeButton.setComponentID("remove_button");
+    removeButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    removeButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    removeButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    removeButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     removeButton.addListener(this);
 }
 
-ModulationMatrixRow::~ModulationMatrixRow() {}
+ModulationMatrixRow::~ModulationMatrixRow()
+{
+    setLookAndFeel(nullptr);
+}
 
 void ModulationMatrixRow::resized()
 {
@@ -195,10 +210,17 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     viewport.setViewedComponent(&contentComponent, false);
     addAndMakeVisible(addButton);
     addButton.addListener(this);
+    addButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    addButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    addButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    addButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     addAndMakeVisible(closeButton);
     closeButton.addListener(this);
+    closeButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    closeButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    closeButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    closeButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     buildUiFromProcessorState();
-    setSize(500, 300);
 }
 
 ModulationMatrixPanel::~ModulationMatrixPanel() {}

@@ -1076,21 +1076,15 @@ namespace state
             // 3. Configure DialogWindow launch options
             juce::DialogWindow::LaunchOptions options;
             options.content.setOwned(settingsPanel);
-            options.content->setSize(300, 200);
+            options.content->setSize(400, 300);
             options.dialogTitle = "Settings";
             options.dialogBackgroundColour = COLOUR6;
             options.escapeKeyTriggersCloseButton = true;
             options.useNativeTitleBar = true;
             options.resizable = true;
-
+            options.componentToCentreAround = this;
             // 4. Launch dialog asynchronously
-            auto* dialog = options.launchAsync();
-
-            // 5. (Optional) Make it behave modally by entering modal state
-            if (dialog != nullptr)
-            {
-                dialog->enterModalState(true, nullptr, true); // block until closed
-            }
+            options.launchAsync();
         } });
     }
 

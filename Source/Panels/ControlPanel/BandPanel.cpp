@@ -205,7 +205,7 @@ void BandPanel::resized()
     compressorSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
     widthSwitch.setBounds(area);
 
-    juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
+//    juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);

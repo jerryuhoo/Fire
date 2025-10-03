@@ -200,14 +200,18 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
     graphPanel.setVisible(isBandView || isGlobalView);
-    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
+    updateDistortionModeVisibility();
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 
-    setMenu(&distortionMode1);
-    setMenu(&distortionMode2);
-    setMenu(&distortionMode3);
-    setMenu(&distortionMode4);
+    for (int i = 0; i < 4; ++i)
+    {
+        setMenu(&distortionModes[i]);
+        modeAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+            processor.treeState,
+            ParameterIDAndName::getIDString(MODE_ID, i),
+            distortionModes[i]);
+    }
 
     // zoom button
     addAndMakeVisible(zoomButton);
@@ -233,11 +237,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
     getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
-
-    modeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 0), distortionMode1);
-    modeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 1), distortionMode2);
-    modeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 2), distortionMode3);
-    modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 3), distortionMode4);
 
     // set resize
     setResizable(true, true);
@@ -290,10 +289,8 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     windowLfoButton.removeListener(this);
 
     // Distortion Mode ComboBox Listeners
-    distortionMode1.removeListener(this);
-    distortionMode2.removeListener(this);
-    distortionMode3.removeListener(this);
-    distortionMode4.removeListener(this);
+    for (auto& modeBox : distortionModes)
+        modeBox.removeListener(this);
 
     // Other Button Listeners
     zoomButton.removeListener(this);
@@ -339,7 +336,7 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawImage(backgroundCache, getLocalBounds().toFloat());
 
     int focusIndex = multiband.getFocusIndex();
-    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
+    updateDistortionModeVisibility();
 
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
@@ -442,10 +439,8 @@ void FireAudioProcessorEditor::resized()
 
             auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
             distortionModeArea.reduce(0, topSection.getHeight() / 4);
-            distortionMode1.setBounds(distortionModeArea);
-            distortionMode2.setBounds(distortionModeArea);
-            distortionMode3.setBounds(distortionModeArea);
-            distortionMode4.setBounds(distortionModeArea);
+            for (auto& modeBox : distortionModes)
+                modeBox.setBounds(distortionModeArea);
 
             const int graphPanelWidth = juce::roundToInt(getWidth() / 7.0f * 2.0f);
             auto graphArea = mainControlsArea.removeFromLeft(graphPanelWidth);
@@ -661,9 +656,12 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         const bool isNowZoomed = zoomButton.getToggleState();
 
         // Define all components that are hidden when zoomed.
-        std::array<juce::Component*, 7> componentsToHideOnZoom = {
-            &windowLeftButton, &windowRightButton, &windowLfoButton, &distortionMode1, &distortionMode2, &distortionMode3, &distortionMode4
-        };
+        std::vector<juce::Component*> componentsToHideOnZoom;
+        componentsToHideOnZoom.push_back(&windowLeftButton);
+        componentsToHideOnZoom.push_back(&windowRightButton);
+        componentsToHideOnZoom.push_back(&windowLfoButton);
+        for (auto& modeBox : distortionModes)
+            componentsToHideOnZoom.push_back(&modeBox);
 
         // Set visibility for the top-level controls.
         // If we are zoomed, these are NOT visible. If not zoomed, they ARE visible.
@@ -709,7 +707,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             graphPanel.setLayoutMode(GraphPanel::LayoutMode::Global);
         }
 
-        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
+        updateDistortionModeVisibility();
 
         resized();
     }
@@ -882,14 +880,15 @@ void FireAudioProcessorEditor::setMultiband()
     //    processor.setLineNum(multiband.getLineNum());
 }
 
-void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible)
+void FireAudioProcessorEditor::updateDistortionModeVisibility()
 {
-    const bool shouldShowAny = ! zoomButton.getToggleState() && isComboboxVisible;
+    const bool shouldShowAny = ! zoomButton.getToggleState() && windowLeftButton.getToggleState();
+    const int focusIndex = multiband.getFocusIndex();
 
-    component1.setVisible(shouldShowAny && (bandNum == 0));
-    component2.setVisible(shouldShowAny && (bandNum == 1));
-    component3.setVisible(shouldShowAny && (bandNum == 2));
-    component4.setVisible(shouldShowAny && (bandNum == 3));
+    for (int i = 0; i < distortionModes.size(); ++i)
+    {
+        distortionModes[i].setVisible(shouldShowAny && (focusIndex == i));
+    }
 }
 
 //void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)

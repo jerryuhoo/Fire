@@ -129,7 +129,7 @@ private:
 
     void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex);
 
-    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible);
+    void updateDistortionModeVisibility();
 
     // override listener functions
 
@@ -148,15 +148,8 @@ private:
         hqAttachment;
 
     // ComboBox attachment
-    juce::ComboBox distortionMode1;
-    juce::ComboBox distortionMode2;
-    juce::ComboBox distortionMode3;
-    juce::ComboBox distortionMode4;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
+    std::array<juce::ComboBox, 4> distortionModes;
+    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>, 4> modeAttachments;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

@@ -194,6 +194,8 @@ namespace state
 
     void StateAB::copyAB()
     {
+        ab.removeAllAttributes();
+        ab.deleteAllChildElements();
         saveStateToXml(pluginProcessor, ab);
     }
 

@@ -732,3 +732,13 @@ void Multiband::mouseExit(const juce::MouseEvent& event)
     // This ensures that any lingering hover effects (like the preview line) are erased.
     repaint();
 }
+
+void Multiband::resortAndRedrawLines()
+{
+    // This sequence correctly sorts the underlying parameters and
+    // ensures the UI is updated to reflect the new, canonical state.
+    sortLines();
+    setLineRelatedBoundsByX();
+    setSoloRelatedBounds();
+    repaint();
+}

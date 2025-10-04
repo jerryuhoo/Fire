@@ -45,7 +45,6 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
-    void setMultiband();
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
     void markPresetAsDirty();

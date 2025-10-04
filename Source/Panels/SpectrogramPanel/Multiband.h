@@ -47,6 +47,7 @@ public:
 
     int sortLines();
     void setLineRelatedBoundsByX();
+    void resortAndRedrawLines();
 
 private:
     struct BandUIs

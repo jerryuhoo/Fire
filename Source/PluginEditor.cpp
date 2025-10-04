@@ -245,7 +245,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     getConstrainer()->setFixedAspectRatio(2); // set fixed resize rate
 
-    setMultiband();
+    multiband.resortAndRedrawLines();
 
     graphPanel.setLayoutMode(GraphPanel::LayoutMode::Band);
 
@@ -639,8 +639,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             clickedButton->setButtonText("B");
         else
             clickedButton->setButtonText("A");
-        //        initState();
-        setMultiband();
+        multiband.resortAndRedrawLines();
     }
     if (multiband.getStateComponent().getChangedState())
     {
@@ -756,7 +755,7 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
         {
             stateComponent.updatePresetBox(selectedId);
         }
-        setMultiband();
+        multiband.resortAndRedrawLines();
     }
 }
 
@@ -868,16 +867,6 @@ void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::Str
         rateDivide = 1;
 
     graphPanel.getDistortionGraph()->setState(mode, finalRec, mix, finalBias, drive, rateDivide);
-}
-
-void FireAudioProcessorEditor::setMultiband()
-{
-    //multiband.updateLines(1);
-    multiband.sortLines();
-    multiband.setLineRelatedBoundsByX();
-    multiband.setSoloRelatedBounds();
-    //    multiband.resetFocus();
-    //    processor.setLineNum(multiband.getLineNum());
 }
 
 void FireAudioProcessorEditor::updateDistortionModeVisibility()
@@ -1030,5 +1019,6 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
         lfoPanel.refreshLfoDisplay();
         // globalPanel.repaint();
         // bandPanel.repaint();
+        multiband.resortAndRedrawLines();
     }
 }

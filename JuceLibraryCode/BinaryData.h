@@ -8,6 +8,9 @@
 
 namespace BinaryData
 {
+    extern const char*   fire_anime_png;
+    const int            fire_anime_pngSize = 713474;
+
     extern const char*   firelogo_png;
     const int            firelogo_pngSize = 9722;
 
@@ -15,7 +18,7 @@ namespace BinaryData
     const int            firewingslogo_pngSize = 11396;
 
     // Number of elements in the namedResourceList and originalFileNames arrays.
-    const int namedResourceListSize = 2;
+    const int namedResourceListSize = 3;
 
     // Points to the start of a list of resource names.
     extern const char* namedResourceList[];

@@ -275,6 +275,9 @@ public:
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
+    
+    void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
+    void clearLfoModulationForBand(int bandIndex);
 
 private:
     // reset parameters

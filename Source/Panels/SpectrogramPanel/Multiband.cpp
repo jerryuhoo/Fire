@@ -45,11 +45,14 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
 
     // Initialize parameter arrays for each band
     paramsArrays.resize(4);
+    const auto& bandParams = ParameterIDAndName::getBandParameterInfo();
     for (int i = 0; i < 4; ++i)
     {
-        paramsArrays[i] = {
-            ParameterIDAndName::getName(MODE_NAME, i), ParameterIDAndName::getName(LINKED_NAME, i), ParameterIDAndName::getName(SAFE_NAME, i), ParameterIDAndName::getName(DRIVE_NAME, i), ParameterIDAndName::getName(COMP_RATIO_NAME, i), ParameterIDAndName::getName(COMP_THRESH_NAME, i), ParameterIDAndName::getName(WIDTH_NAME, i), ParameterIDAndName::getName(OUTPUT_NAME, i), ParameterIDAndName::getName(MIX_NAME, i), ParameterIDAndName::getName(BIAS_NAME, i), ParameterIDAndName::getName(REC_NAME, i), ParameterIDAndName::getName(COMP_BYPASS_NAME, i), ParameterIDAndName::getName(WIDTH_BYPASS_NAME, i)
-        };
+        paramsArrays[i].clear();
+        for (const auto& paramInfo : bandParams)
+        {
+            paramsArrays[i].push_back(ParameterIDAndName::getIDString(paramInfo.idBase, i));
+        }
     }
 
     // Initialize attachments using loops
@@ -74,7 +77,6 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
 
 Multiband::~Multiband()
 {
-    // 从所有子组件中注销 this 作为监听器
     for (int i = 0; i < 4; ++i)
     {
         if (bandUIs[i].soloButton)
@@ -204,18 +206,18 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
     {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
         {
-            juce::String paramFromName = p->name;
+            juce::String paramFromID = p->getParameterID();
             float paramFromValue = p->getValue();
 
             for (size_t i = 0; i < fromArray.size(); ++i)
             {
-                if (fromArray[i] == paramFromName)
+                if (fromArray[i] == paramFromID)
                 {
                     for (const auto& paramTo : processor.getParameters())
                     {
                         if (auto* pTo = dynamic_cast<juce::AudioProcessorParameterWithID*>(paramTo))
                         {
-                            if (toArray[i] == pTo->name)
+                            if (toArray[i] == pTo->getParameterID())
                             {
                                 pTo->setValueNotifyingHost(paramFromValue);
                                 break;
@@ -251,7 +253,7 @@ void Multiband::initParameters(int bandindex)
     {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
         {
-            if (isParamInArray(p->name, paramArray))
+            if (isParamInArray(p->getParameterID(), paramArray))
             {
                 p->setValueNotifyingHost(p->getDefaultValue());
             }
@@ -281,6 +283,8 @@ void Multiband::setStatesWhenAdd(int insertionIndex)
     {
         copyBandSettings(i + 1, i);
     }
+    // Also shift LFO targets for the same range of bands
+    processor.shiftLfoModulationTargets(insertionIndex, 2, 1);
 
     // 4. Place the old and new bands correctly based on the exact user-defined logic.
     if (clickedOnTheLeft)
@@ -291,6 +295,7 @@ void Multiband::setStatesWhenAdd(int insertionIndex)
         // The "Make Space" step has already moved the OLD band's settings to insertionIndex + 1. This is perfect.
         // We just need to reset the band at the original insertionIndex to its default state, creating the NEW band on the LEFT.
         resetBandToDefault(insertionIndex);
+        processor.clearLfoModulationForBand(insertionIndex); // Clear LFOs for the new default band
     }
     else // Clicked on the RIGHT side
     {
@@ -300,9 +305,11 @@ void Multiband::setStatesWhenAdd(int insertionIndex)
         // The "Make Space" step moved the OLD settings to insertionIndex + 1. We need them back.
         // So, we copy the temporarily stored settings from (insertionIndex + 1) back to the original position.
         copyBandSettings(insertionIndex, insertionIndex + 1);
+        processor.shiftLfoModulationTargets(insertionIndex + 1, insertionIndex + 1, -1);
 
         // Now, we reset the band to the right to be a new, default band.
         resetBandToDefault(insertionIndex + 1);
+        processor.clearLfoModulationForBand(insertionIndex + 1); // Clear LFOs for the new default band
     }
 }
 
@@ -325,6 +332,10 @@ void Multiband::setStatesWhenDelete(int deletedIndex)
     {
         focusIndex -= 1;
     }
+    else if (deletedIndex == focusIndex && focusIndex == lineNum)
+    {
+        focusIndex -= 1;
+    }
 
     // 3. Shift all bands that came after the deleted one forward.
     // e.g., if index 1 is deleted, copy settings from 2 to 1, and from 3 to 2.
@@ -332,9 +343,14 @@ void Multiband::setStatesWhenDelete(int deletedIndex)
     {
         copyBandSettings(i, i + 1);
     }
+    // Also shift LFO targets for the same range
+    processor.shiftLfoModulationTargets(deletedIndex + 1, 3, -1);
 
     // 4. Clean up the state of the last band, as it is now redundant.
+    resetBandToDefault(3);
     setBandState(3, { true, false }, juce::NotificationType::dontSendNotification);
+
+    processor.clearLfoModulationForBand(3);
 
     // NOTE: We no longer need to call setSoloRelatedBounds() manually here,
     // as it will be handled automatically later in the call chain

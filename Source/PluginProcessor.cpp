@@ -567,6 +567,24 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 void FireAudioProcessor::reset()
 {
     needsReset = true;
+
+    std::vector<std::pair<float, bool>> freqAndStateVector;
+    for (int i = 0; i < 3; ++i)
+    {
+        float freq = *treeState.getRawParameterValue(ParameterIDAndName::getIDString("freq", i));
+        bool state = *treeState.getRawParameterValue(ParameterIDAndName::getIDString("lineState", i)) > 0.5f;
+        freqAndStateVector.push_back({ freq, state });
+    }
+
+    // Sort by frequency
+    std::sort(freqAndStateVector.begin(), freqAndStateVector.end());
+
+    // Re-assign the sorted values back to the parameters
+    for (int i = 0; i < 3; ++i)
+    {
+        treeState.getParameter(ParameterIDAndName::getIDString("freq", i))->setValueNotifyingHost(treeState.getParameter(ParameterIDAndName::getIDString("freq", i))->convertTo0to1(freqAndStateVector[i].first));
+        treeState.getParameter(ParameterIDAndName::getIDString("lineState", i))->setValueNotifyingHost(freqAndStateVector[i].second ? 1.0f : 0.0f);
+    }
 }
 
 void FireAudioProcessor::performReset()
@@ -2083,4 +2101,88 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
         return false;
 
     return treeState.state.isEquivalentTo(presetTree);
+}
+
+/**
+ * @brief Shifts the band index for any LFO modulation routing target within a specified range.
+ *
+ * This function iterates through all modulation routings. If a routing's target parameter
+ * has a band index between startIndex and endIndex (inclusive), it adjusts that index
+ * by shiftAmount. This is crucial for keeping modulation assignments correct when bands
+ * are added or removed.
+ *
+ * @param startIndex The starting band index of the range to affect.
+ * @param endIndex The ending band index of the range to affect.
+ * @param shiftAmount The amount to add to the band index (can be positive or negative).
+ */
+void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount)
+{
+    auto& routings = lfoManager->getModulationRoutings();
+    const auto& bandParamBases = ParameterIDAndName::getBandParameterInfo();
+
+    for (auto& routing : routings)
+    {
+        if (routing.targetParameterID.isEmpty())
+            continue;
+
+        for (const auto& paramInfo : bandParamBases)
+        {
+            // Check if the target ID starts with a known band parameter ID base
+            if (routing.targetParameterID.startsWith(paramInfo.idBase))
+            {
+                // Extract the number part of the ID
+                juce::String indexStr = routing.targetParameterID.substring(paramInfo.idBase.length());
+
+                if (! indexStr.containsOnly("0123456789"))
+                    continue;
+
+                int currentBandIndex = indexStr.getIntValue() - 1; // Convert to 0-based
+
+                // Check if the current band is within the range we need to shift
+                if (currentBandIndex >= startIndex && currentBandIndex <= endIndex)
+                {
+                    int newBandIndex = currentBandIndex + shiftAmount;
+                    routing.targetParameterID = paramInfo.idBase + juce::String(newBandIndex + 1);
+
+                    // Found a match and processed it, no need to check other bases for this routing
+                    goto next_routing;
+                }
+            }
+        }
+    next_routing:; // Label to jump to for the next iteration of the outer loop
+    }
+    lfoDataHasChanged();
+}
+
+/**
+ * @brief Clears (un-assigns) any LFO modulation that targets a specific band.
+ *
+ * This is used to clean up modulation routings when a band is being reset to its
+ * default state, for example, when a new band is created.
+ *
+ * @param bandIndex The 0-based index of the band whose modulation targets should be cleared.
+ */
+void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
+{
+    auto& routings = lfoManager->getModulationRoutings();
+    const auto& bandParamBases = ParameterIDAndName::getBandParameterInfo();
+    const juce::String bandSuffix = juce::String(bandIndex + 1);
+
+    for (auto& routing : routings)
+    {
+        if (routing.targetParameterID.isEmpty())
+            continue;
+
+        for (const auto& paramInfo : bandParamBases)
+        {
+            // Check if the target is an exact match for a parameter in the specified band
+            if (routing.targetParameterID == (paramInfo.idBase + bandSuffix))
+            {
+                routing.targetParameterID = ""; // Set target to "None"
+                goto next_routing_clear;
+            }
+        }
+    next_routing_clear:;
+    }
+    lfoDataHasChanged();
 }

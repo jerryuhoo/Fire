@@ -58,73 +58,25 @@ namespace state
     {
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
 
-        const int lineNum = 3;
-        int freqIndex = 0;
-        int stateIndex = 0;
-        std::vector<std::pair<float, bool>> freqAndStateVector(lineNum);
-        std::vector<juce::AudioProcessorParameter*> freqParamPointers(lineNum);
-        std::vector<juce::AudioProcessorParameter*> stateParamPointers(lineNum);
-
+        // This loop now handles ALL parameters directly, restoring the correct, stable logic.
         for (const auto& param : proc.getParameters())
         {
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             {
-                if (p->paramID == "lineState1" || p->paramID == "lineState2" || p->paramID == "lineState3")
-                {
-                    bool stateValue = xml.getIntAttribute(p->paramID, p->getValue());
-                    jassert(freqIndex < 3);
-                    freqAndStateVector[freqIndex].second = stateValue;
-                    stateParamPointers[freqIndex] = p;
-                    freqIndex++;
-                    // DBG (xml.getIntAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
-                    continue;
-                }
-                if (p->paramID == "freq1" || p->paramID == "freq2" || p->paramID == "freq3")
-                {
-                    float freqValue = xml.getDoubleAttribute(p->paramID, p->getValue());
-                    jassert(stateIndex < 3);
-                    freqAndStateVector[stateIndex].first = freqValue;
-                    freqParamPointers[stateIndex] = p;
-                    stateIndex++;
-                    // DBG ((float) xml.getDoubleAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
-                    continue;
-                }
-                // Set param value. If param not in xml, set default value
+                // Check if the preset XML has an attribute with this parameter's ID.
                 if (xml.hasAttribute(p->paramID))
                 {
+                    // If it exists, load the value from the XML.
+                    // Note: We use getDoubleAttribute as it safely covers both float and int parameters.
                     p->setValueNotifyingHost((float) xml.getDoubleAttribute(p->paramID, p->getValue()));
                 }
                 else
                 {
+                    // If the parameter is not in the preset (e.g., an older preset),
+                    // set it to its default value to ensure a predictable state.
                     p->setValueNotifyingHost(p->getDefaultValue());
                 }
             }
-        }
-
-        // sort activated lines
-        std::sort(freqAndStateVector.begin(), freqAndStateVector.end(), [](auto& a, auto& b)
-                  {
-        if (! a.second && ! b.second)
-            return a.first < b.first;
-        else if (a.second && ! b.second) // only a is available
-            return true; // move b after a, a < b
-        else if (! a.second && b.second) // only b is available
-            return false; // move a after b, b < a
-        else
-            return a.first < b.first; });
-
-        // DBG("after freq1:"<<freqAndStateVector[0].first<<"freq2:"<<freqAndStateVector[1].first<<"freq3:"<<freqAndStateVector[2].first);
-
-        // reassign freq and linestate
-        for (int i = 0; i < lineNum; i++)
-        {
-            if (freqAndStateVector[i].second == false)
-            {
-                freqAndStateVector[i].first = 0;
-            }
-            // set lineState first, so that sliderValueChanged in multiband.cpp will be triggered after line state updated.
-            stateParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].second);
-            freqParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].first);
         }
 
         // --- Load LFO and Matrix data ---

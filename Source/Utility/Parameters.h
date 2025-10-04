@@ -257,4 +257,33 @@ namespace ParameterIDAndName
         }
         return targets;
     }
+
+    /**
+     * @brief Returns a definitive list of all per-band parameters,
+     * including their UI Name and their ID base.
+     * This is the single source of truth for band parameter copying logic.
+     */
+    static const std::vector<ModulatableParameterInfo>& getBandParameterInfo()
+    {
+        // This static vector is initialized only once.
+        static const std::vector<ModulatableParameterInfo> params = {
+            { MODE_NAME, MODE_ID },
+            { LINKED_NAME, LINKED_ID },
+            { SAFE_NAME, SAFE_ID },
+            { EXTREME_NAME, EXTREME_ID },
+            { DRIVE_NAME, DRIVE_ID },
+            { COMP_RATIO_NAME, COMP_RATIO_ID },
+            { COMP_THRESH_NAME, COMP_THRESH_ID },
+            { WIDTH_NAME, WIDTH_ID },
+            { OUTPUT_NAME, OUTPUT_ID },
+            { MIX_NAME, MIX_ID },
+            { BIAS_NAME, BIAS_ID },
+            { REC_NAME, REC_ID },
+            { BAND_ENABLE_NAME, BAND_ENABLE_ID },
+            { BAND_SOLO_NAME, BAND_SOLO_ID },
+            { COMP_BYPASS_NAME, COMP_BYPASS_ID },
+            { WIDTH_BYPASS_NAME, WIDTH_BYPASS_ID }
+        };
+        return params;
+    }
 } // namespace ParameterIDAndName

@@ -567,24 +567,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 void FireAudioProcessor::reset()
 {
     needsReset = true;
-
-    std::vector<std::pair<float, bool>> freqAndStateVector;
-    for (int i = 0; i < 3; ++i)
-    {
-        float freq = *treeState.getRawParameterValue(ParameterIDAndName::getIDString("freq", i));
-        bool state = *treeState.getRawParameterValue(ParameterIDAndName::getIDString("lineState", i)) > 0.5f;
-        freqAndStateVector.push_back({ freq, state });
-    }
-
-    // Sort by frequency
-    std::sort(freqAndStateVector.begin(), freqAndStateVector.end());
-
-    // Re-assign the sorted values back to the parameters
-    for (int i = 0; i < 3; ++i)
-    {
-        treeState.getParameter(ParameterIDAndName::getIDString("freq", i))->setValueNotifyingHost(treeState.getParameter(ParameterIDAndName::getIDString("freq", i))->convertTo0to1(freqAndStateVector[i].first));
-        treeState.getParameter(ParameterIDAndName::getIDString("lineState", i))->setValueNotifyingHost(freqAndStateVector[i].second ? 1.0f : 0.0f);
-    }
 }
 
 void FireAudioProcessor::performReset()

@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
-              version="1.5.0b" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
+              version="1.5.0" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"

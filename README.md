@@ -225,7 +225,7 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2025-9-20 (version 1.5.0b)
+### 2025-10-04 (version 1.5.0)
 
 This is a major feature update that introduces a comprehensive LFO modulation system and involves a significant refactoring of the plugin's core architecture.
 
@@ -242,8 +242,16 @@ This is a major feature update that introduces a comprehensive LFO modulation sy
 
 3. **Bug Fixes**:
     - Fixed a critical bug where the plugin might not load presets correctly.
+    - Fixed a bug to correct parameter and LFO state when adding/deleting bands.
 
-> ⚠️ **Breaking Change Notice:** This is a significant update that fundamentally changes how parameters are processed. Due to the addition of the LFO system and the extensive code refactoring, it might have hidden bugs. So it is a **BETA** version. If you find any bugs, please create an issue so I can solve it. Have fun!
+4. **Performance Improvement**
+    - Highly improved performance compared to v1.5.0b.
+      - Refactored signal processing chain for significantly lower CPU usage.
+      - Optimized Waterfall Spectrogram with smooth animation and minimal CPU load.
+    - UI Improvements
+      - Mouse Wheel Q-Control: Adjust filter Q values by hovering over nodes and scrolling.
+      - Redesigned UI: A more logical layout with intuitive controls for a seamless workflow.
+      - Unified Color Scheme: New professional look with improved visual comfort during long sessions.
 
 ### 2025-7-3 (version 1.0.2)
 

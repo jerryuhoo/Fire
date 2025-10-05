@@ -659,7 +659,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     if (lfoManager->isModulationActive())
     {
-        lfoManager->processBlock(sampleRate, getPlayHead(), buffer.getNumSamples());
+        lfoManager->processBlock(lfoOutputBuffer, sampleRate, getPlayHead(), buffer.getNumSamples());
     }
 
     // In case we have more outputs than inputs, this code clears any output
@@ -740,7 +740,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     applyDownsamplingEffect(buffer);
     // Call the simplified global effects function.
-    applyGlobalEffects(buffer, sampleRate);
+    applyGlobalEffects(buffer, lfoOutputBuffer, sampleRate);
 
     // Call the simplified global mix function.
     applyGlobalMix(buffer);
@@ -1745,8 +1745,11 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
     sumBands(wetBuffer, wetBandBuffers, false);
 }
 
-void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate)
+void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
 {
+    // ==============================================================================
+    // 1. Global Filter Processing (Block-based)
+    // ==============================================================================
     if (*treeState.getRawParameterValue(FILTER_BYPASS_ID) > 0.5f)
     {
         updateGlobalFilters(sampleRate);
@@ -1762,12 +1765,60 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, do
         }
     }
 
-    auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
+    // ==============================================================================
+    // 2. Global Gain Processing (New Sample-by-Sample approach)
+    // ==============================================================================
+    auto modInfo = getModulationInfoForParameter(OUTPUT_ID);
+    float baseGainDb = *treeState.getRawParameterValue(OUTPUT_ID);
 
-    // Get the final modulated output gain from the LfoManager
-    gainProcessorGlobal.setGainDecibels(lfoManager->getModulatedValue(OUTPUT_ID));
-    gainProcessorGlobal.setRampDurationSeconds(0.05f);
-    gainProcessorGlobal.process(juce::dsp::ProcessContextReplacing<float>(globalBlock));
+    // If not modulated by an LFO, use the original, efficient block-based processing.
+    if (! modInfo.isModulated)
+    {
+        auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
+        gainProcessorGlobal.setGainDecibels(baseGainDb);
+        gainProcessorGlobal.setRampDurationSeconds(0.05f); // Keep smoothing for manual adjustments.
+        gainProcessorGlobal.process(juce::dsp::ProcessContextReplacing<float>(globalBlock));
+    }
+    else // If modulated by an LFO, perform sample-accurate processing.
+    {
+        int lfoIndex = modInfo.sourceLfoIndex - 1; // lfoSource is 1-based.
+        if (! juce::isPositiveAndBelow(lfoIndex, lfoOutputs.getNumChannels()))
+            return; // Safety check.
+
+        auto* lfoData = lfoOutputs.getReadPointer(lfoIndex);
+        float depth = modInfo.depth;
+        bool isBipolar = modInfo.isBipolar;
+
+        auto* param = treeState.getParameter(OUTPUT_ID);
+        auto range = param->getNormalisableRange();
+
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {
+            auto* channelData = buffer.getWritePointer(channel);
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                // 1. Get the LFO value for the current sample.
+                float unipolarLfoValue = lfoData[sample]; // Range [0, 1]
+                float lfoValue = isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue; // Range [-1, 1] or [0, 1]
+
+                // 2. Calculate the modulation amount.
+                float scaledModulation = lfoValue * depth;
+
+                // 3. Apply the modulation in the normalized range [0, 1].
+                float baseParamNormalized = range.convertTo0to1(baseGainDb);
+                float modulatedParamNormalized = baseParamNormalized + scaledModulation;
+
+                // 4. Clamp the result to the valid [0, 1] range.
+                modulatedParamNormalized = juce::jlimit(0.0f, 1.0f, modulatedParamNormalized);
+
+                // 5. Convert the normalized value back to the actual dB value.
+                float finalGainDb = range.convertFrom0to1(modulatedParamNormalized);
+
+                // 6. Apply the gain.
+                channelData[sample] *= juce::Decibels::decibelsToGain(finalGainDb);
+            }
+        }
+    }
 }
 
 void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer)

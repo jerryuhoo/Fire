@@ -39,7 +39,7 @@ public:
      * @param playHead Optional pointer to the host's playhead for BPM sync.
      * @param numSamples The number of samples in the current block.
      */
-    void processBlock(double sampleRate, juce::AudioPlayHead* playHead, int numSamples);
+    void processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples);
 
     /**
      * @brief Gets the final, possibly modulated, value for a given parameter.

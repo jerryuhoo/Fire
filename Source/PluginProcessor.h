@@ -272,7 +272,7 @@ public:
     void updateFilter(double sampleRate);
     void updateGlobalFilters(double sampleRate);
     void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate);
-    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
+    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
     

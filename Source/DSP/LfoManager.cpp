@@ -74,17 +74,26 @@ bool LfoManager::isModulationActive() const
 // Main Processing Logic
 // =============================================================================
 
-void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, int numSamples)
+void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
     // 1. Generate all raw LFO signals for the current block.
     // This fills the internal 'lfoOutputBuffer'.
     generateLfoOutput(sampleRate, playHead, numSamples);
 
-    // 2. Clear the map of calculated values from the previous block.
+    // 2. Copy the generated LFO signals to the output buffer.
+    jassert(outputBuffer.getNumSamples() == lfoOutputBuffer.getNumSamples());
+    jassert(outputBuffer.getNumChannels() >= lfoOutputBuffer.getNumChannels());
+
+    for (int channel = 0; channel < lfoOutputBuffer.getNumChannels(); ++channel)
+    {
+        outputBuffer.copyFrom(channel, 0, lfoOutputBuffer, channel, 0, numSamples);
+    }
+
+    // 3. Clear the map of calculated values from the previous block.
     // We now store normalized values.
     modulatedValues.clear();
 
-    // 3. Iterate through all modulation routings to calculate final parameter values.
+    // 4. Iterate through all modulation routings to calculate final parameter values.
     for (const auto& routing : modulationRoutings)
     {
         // Skip invalid or unassigned routings
@@ -127,7 +136,7 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
         modulatedValues[routing.targetParameterID] += normalizedModulationAmount;
     }
 
-    // 4. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
+    // 5. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
     for (auto const& [paramID, val] : modulatedValues)
     {
         modulatedValues[paramID] = juce::jlimit(0.0f, 1.0f, val);

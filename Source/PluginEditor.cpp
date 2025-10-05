@@ -15,8 +15,28 @@
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets, p.treeState }, globalPanel(processor), lfoPanel(p)
+    : AudioProcessorEditor(&p),
+      processor(p),
+      stateComponent { p.stateAB, p.statePresets, p.treeState },
+      // Initialize bandPanel and globalPanel with the popup callbacks
+      bandPanel(p, [this](ModulatableSlider* s)
+                { showValuePopupForSlider(s); },
+                [this](ModulatableSlider* s)
+                { updateValuePopupForSlider(s); },
+                [this](ModulatableSlider* s)
+                { hideValuePopup(); }),
+      globalPanel(processor, [this](ModulatableSlider* s)
+                  { showValuePopupForSlider(s); },
+                  [this](ModulatableSlider* s)
+                  { updateValuePopupForSlider(s); },
+                  [this](ModulatableSlider* s)
+                  { hideValuePopup(); }),
+      lfoPanel(p)
 {
+    addAndMakeVisible(valuePopup);
+    valuePopup.setAlwaysOnTop(true);
+    valuePopup.setVisible(false);
+
     processor.addChangeListener(this);
     // timer
     juce::Timer::startTimerHz(60.0f);
@@ -1021,4 +1041,69 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
         // bandPanel.repaint();
         multiband.resortAndRedrawLines();
     }
+}
+
+void FireAudioProcessorEditor::showValuePopupForSlider(ModulatableSlider* slider)
+{
+    valuePopup.setVisible(true);
+    updateValuePopupForSlider(slider);
+}
+
+void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slider)
+{
+    if (!slider)
+        return;
+
+    auto paramID = slider->getParamID();
+    auto* param = processor.treeState.getParameter(paramID);
+    if (!param)
+        return;
+
+    // --- LOGIC FOR EXTREME VALUE DISPLAY ---
+    // 1. Get the parameter's base value in its real-world units (e.g., -6.0f for -6dB)
+    float baseValue = *processor.treeState.getRawParameterValue(paramID);
+
+    // 2. Get all modulation data from the processor
+    auto modInfo = processor.getModulationInfoForParameter(paramID);
+    float extremeValue = baseValue; // Start with the base value
+
+    // 3. If it's being modulated, calculate the extreme value in real-world units
+    if (modInfo.isModulated)
+    {
+        auto range = param->getNormalisableRange();
+        float parameterRange = range.end - range.start;
+        float maxOffset = 0.0f;
+
+        // We use 1.0f as the LFO value to calculate the maximum possible offset
+        if (modInfo.isBipolar)
+            maxOffset = 1.0f * modInfo.depth * parameterRange * 0.5f;
+        else
+            maxOffset = 1.0f * modInfo.depth * parameterRange;
+        
+        extremeValue += maxOffset;
+        extremeValue = juce::jlimit(range.start, range.end, extremeValue);
+    }
+
+    // 4. Convert the final extreme value back to a normalized value [0, 1] that getText() expects
+    float finalNormalizedValue = param->convertTo0to1(extremeValue);
+    valuePopup.setText(param->getText(finalNormalizedValue, 0));
+
+
+    // --- FIX FOR VISIBILITY (remains the same) ---
+    // 5. Get slider's absolute screen bounds
+    auto sliderBounds = slider->getScreenBounds();
+
+    // 6. Convert the screen coordinates to be local to this editor component
+    auto localBounds = getLocalArea(nullptr, sliderBounds);
+
+    int popupWidth = 80;
+    int popupHeight = 20;
+    
+    // 7. Set the popup's bounds using the converted local coordinates
+    valuePopup.setBounds(localBounds.getCentreX() - popupWidth / 2, localBounds.getY() - popupHeight, popupWidth, popupHeight);
+}
+
+void FireAudioProcessorEditor::hideValuePopup()
+{
+    valuePopup.setVisible(false);
 }

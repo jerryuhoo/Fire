@@ -12,12 +12,25 @@
 #include "../../Utility/AudioHelpers.h"
 
 //==============================================================================
-BandPanel::BandPanel(FireAudioProcessor& p) : processor(p), focusBandNum(0)
+BandPanel::BandPanel(FireAudioProcessor& p,
+                     std::function<void(ModulatableSlider*)> onDragStart,
+                     std::function<void(ModulatableSlider*)> onDragMove,
+                     std::function<void(ModulatableSlider*)> onDragEnd)
+    : processor(p), focusBandNum(0)
 {
     // Create all UI components using helper methods
     createSliders();
     createLabels();
     createButtons();
+
+    // Assign callbacks to all modulatable sliders in this panel
+    for (auto& sliderPair : modulatableSliderComponents)
+    {
+        auto* slider = sliderPair.second.get();
+        slider->onDragStart = onDragStart;
+        slider->onDragMove = onDragMove;
+        slider->onDragEnd = onDragEnd;
+    }
 
     // Group components for visibility management after they've been created
     setupComponentGroups();
@@ -205,7 +218,7 @@ void BandPanel::resized()
     compressorSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
     widthSwitch.setBounds(area);
 
-//    juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
+    //    juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);

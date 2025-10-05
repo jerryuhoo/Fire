@@ -25,7 +25,10 @@ class GlobalPanel : public juce::Component,
                     public juce::Button::Listener
 {
 public:
-    GlobalPanel(FireAudioProcessor& p);
+    GlobalPanel(FireAudioProcessor& p,
+                std::function<void(ModulatableSlider*)> onDragStart,
+                std::function<void(ModulatableSlider*)> onDragMove,
+                std::function<void(ModulatableSlider*)> onDragEnd);
     ~GlobalPanel() override;
 
     void paint(juce::Graphics&) override;

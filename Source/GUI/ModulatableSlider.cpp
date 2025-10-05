@@ -143,6 +143,10 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     {
         isModHandleMouseDown = true;
         initialLfoAmount = lfoAmount;
+
+        if (onDragStart)
+            onDragStart(this);
+
         repaint();
     }
 }
@@ -169,6 +173,9 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
         {
             onModAmountChanged(lfoAmount);
         }
+
+        if (onDragMove)
+            onDragMove(this);
 
         // This will update the UI
         repaint();
@@ -227,6 +234,9 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 
     if (isModHandleMouseDown)
     {
+        if (onDragEnd)
+            onDragEnd(this);
+
         isModHandleMouseDown = false;
         repaint();
     }

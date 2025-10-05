@@ -155,7 +155,7 @@
  #define JucePlugin_ARAFactoryID           "com.BlueWingsMusic.Fire.factory"
 #endif
 #ifndef  JucePlugin_ARADocumentArchiveID
- #define JucePlugin_ARADocumentArchiveID   "com.BlueWingsMusic.Fire.aradocumentarchive.1.5.0b"
+ #define JucePlugin_ARADocumentArchiveID   "com.BlueWingsMusic.Fire.aradocumentarchive.1.5.0"
 #endif
 #ifndef  JucePlugin_ARACompatibleArchiveIDs
  #define JucePlugin_ARACompatibleArchiveIDs  ""

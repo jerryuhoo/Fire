@@ -13,6 +13,7 @@
 #include "BinaryData.h"
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
+#include "GUI/ValuePopup.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
 #include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
@@ -50,11 +51,17 @@ public:
     void markPresetAsDirty();
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
+    void showValuePopupForSlider(ModulatableSlider* slider);
+    void updateValuePopupForSlider(ModulatableSlider* slider);
+    void hideValuePopup();
+
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
+
+    ValuePopup valuePopup;
 
     juce::Image backgroundCache;
     float currentDisplayScale = 1.0f;
@@ -88,7 +95,7 @@ private:
     Multiband multiband { processor, stateComponent };
 
     // Band
-    BandPanel bandPanel { processor };
+    BandPanel bandPanel;
 
     // Global
     GlobalPanel globalPanel;

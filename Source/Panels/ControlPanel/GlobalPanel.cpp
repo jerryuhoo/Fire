@@ -12,12 +12,25 @@
 #include "../../Utility/AudioHelpers.h"
 
 //==============================================================================
-GlobalPanel::GlobalPanel(FireAudioProcessor& p) : processor(p)
+GlobalPanel::GlobalPanel(FireAudioProcessor& p,
+                         std::function<void(ModulatableSlider*)> onDragStart,
+                         std::function<void(ModulatableSlider*)> onDragMove,
+                         std::function<void(ModulatableSlider*)> onDragEnd)
+    : processor(p)
 {
     createSliders();
     createLabels();
     createButtons();
     createComboBoxes();
+
+    // Assign callbacks to all modulatable sliders in this panel
+    for (auto& sliderPair : modulatableSliderComponents)
+    {
+        auto* slider = sliderPair.second.get();
+        slider->onDragStart = onDragStart;
+        slider->onDragMove = onDragMove;
+        slider->onDragEnd = onDragEnd;
+    }
 
     setupComponentGroups();
 

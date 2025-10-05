@@ -25,7 +25,10 @@ class BandPanel : public juce::Component,
                   public juce::Button::Listener
 {
 public:
-    BandPanel(FireAudioProcessor&);
+    BandPanel(FireAudioProcessor&,
+              std::function<void(ModulatableSlider*)> onDragStart,
+              std::function<void(ModulatableSlider*)> onDragMove,
+              std::function<void(ModulatableSlider*)> onDragEnd);
     ~BandPanel() override;
 
     void paint(juce::Graphics&) override;

@@ -60,6 +60,13 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
 
+    std::function<void(ModulatableSlider*)> onDragStart;
+    std::function<void(ModulatableSlider*)> onDragMove;
+    std::function<void(ModulatableSlider*)> onDragEnd;
+
+    const juce::String& getParamID() const { return parameterID; }
+    float getLfoValue() const { return lfoValue; }
+
 private:
     bool isDraggingMainSlider;
 

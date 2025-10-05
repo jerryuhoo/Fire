@@ -110,6 +110,8 @@
               file="Source/GUI/ModulatableSlider.h"/>
         <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
               file="Source/GUI/SettingsComponent.h"/>
+        <FILE id="g4Ar29" name="ValuePopup.cpp" compile="1" resource="0" file="Source/GUI/ValuePopup.cpp"/>
+        <FILE id="h6WIOb" name="ValuePopup.h" compile="0" resource="0" file="Source/GUI/ValuePopup.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
         <FILE id="kfZ8qg" name="ClippingFunctions.h" compile="0" resource="0"

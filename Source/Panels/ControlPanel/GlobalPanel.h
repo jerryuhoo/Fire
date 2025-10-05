@@ -28,7 +28,9 @@ public:
     GlobalPanel(FireAudioProcessor& p,
                 std::function<void(ModulatableSlider*)> onDragStart,
                 std::function<void(ModulatableSlider*)> onDragMove,
-                std::function<void(ModulatableSlider*)> onDragEnd);
+                std::function<void(ModulatableSlider*)> onDragEnd,
+                std::function<void(ModulatableSlider*)> onHoverStart,
+                std::function<void(ModulatableSlider*)> onHoverEnd);
     ~GlobalPanel() override;
 
     void paint(juce::Graphics&) override;

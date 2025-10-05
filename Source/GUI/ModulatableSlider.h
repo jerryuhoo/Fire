@@ -63,6 +63,8 @@ public:
     std::function<void(ModulatableSlider*)> onDragStart;
     std::function<void(ModulatableSlider*)> onDragMove;
     std::function<void(ModulatableSlider*)> onDragEnd;
+    std::function<void(ModulatableSlider*)> onHoverStart;
+    std::function<void(ModulatableSlider*)> onHoverEnd;
 
     const juce::String& getParamID() const { return parameterID; }
     float getLfoValue() const { return lfoValue; }

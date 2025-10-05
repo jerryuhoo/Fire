@@ -15,7 +15,9 @@
 BandPanel::BandPanel(FireAudioProcessor& p,
                      std::function<void(ModulatableSlider*)> onDragStart,
                      std::function<void(ModulatableSlider*)> onDragMove,
-                     std::function<void(ModulatableSlider*)> onDragEnd)
+                     std::function<void(ModulatableSlider*)> onDragEnd,
+                     std::function<void(ModulatableSlider*)> onHoverStart,
+                     std::function<void(ModulatableSlider*)> onHoverEnd)
     : processor(p), focusBandNum(0)
 {
     // Create all UI components using helper methods
@@ -30,6 +32,8 @@ BandPanel::BandPanel(FireAudioProcessor& p,
         slider->onDragStart = onDragStart;
         slider->onDragMove = onDragMove;
         slider->onDragEnd = onDragEnd;
+        slider->onHoverStart = onHoverStart;
+        slider->onHoverEnd = onHoverEnd;
     }
 
     // Group components for visibility management after they've been created

@@ -73,6 +73,16 @@ void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
     if (isOverHandleNow != isModHandleMouseOver)
     {
         isModHandleMouseOver = isOverHandleNow;
+        if (isModHandleMouseOver)
+        {
+            if (onHoverStart)
+                onHoverStart(this);
+        }
+        else
+        {
+            if (onHoverEnd)
+                onHoverEnd(this);
+        }
         repaint();
     }
 
@@ -92,6 +102,8 @@ void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
     if (isModHandleMouseOver)
     {
         isModHandleMouseOver = false;
+        if (onHoverEnd)
+            onHoverEnd(this);
         repaint();
     }
 }

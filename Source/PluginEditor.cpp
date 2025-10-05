@@ -19,16 +19,30 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
       processor(p),
       stateComponent { p.stateAB, p.statePresets, p.treeState },
       // Initialize bandPanel and globalPanel with the popup callbacks
-      bandPanel(p, [this](ModulatableSlider* s)
+      bandPanel(p,
+                // Drag callbacks
+                [this](ModulatableSlider* s)
                 { showValuePopupForSlider(s); },
                 [this](ModulatableSlider* s)
                 { updateValuePopupForSlider(s); },
                 [this](ModulatableSlider* s)
+                { hideValuePopup(); },
+                // Hover callbacks
+                [this](ModulatableSlider* s)
+                { showValuePopupForSlider(s); },
+                [this](ModulatableSlider* s)
                 { hideValuePopup(); }),
-      globalPanel(processor, [this](ModulatableSlider* s)
+      globalPanel(processor,
+                  // Drag callbacks
+                  [this](ModulatableSlider* s)
                   { showValuePopupForSlider(s); },
                   [this](ModulatableSlider* s)
                   { updateValuePopupForSlider(s); },
+                  [this](ModulatableSlider* s)
+                  { hideValuePopup(); },
+                  // Hover callbacks
+                  [this](ModulatableSlider* s)
+                  { showValuePopupForSlider(s); },
                   [this](ModulatableSlider* s)
                   { hideValuePopup(); }),
       lfoPanel(p)
@@ -1051,12 +1065,12 @@ void FireAudioProcessorEditor::showValuePopupForSlider(ModulatableSlider* slider
 
 void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slider)
 {
-    if (!slider)
+    if (! slider)
         return;
 
     auto paramID = slider->getParamID();
     auto* param = processor.treeState.getParameter(paramID);
-    if (!param)
+    if (! param)
         return;
 
     // --- LOGIC FOR EXTREME VALUE DISPLAY ---
@@ -1079,7 +1093,7 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
             maxOffset = 1.0f * modInfo.depth * parameterRange * 0.5f;
         else
             maxOffset = 1.0f * modInfo.depth * parameterRange;
-        
+
         extremeValue += maxOffset;
         extremeValue = juce::jlimit(range.start, range.end, extremeValue);
     }
@@ -1087,7 +1101,6 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
     // 4. Convert the final extreme value back to a normalized value [0, 1] that getText() expects
     float finalNormalizedValue = param->convertTo0to1(extremeValue);
     valuePopup.setText(param->getText(finalNormalizedValue, 0));
-
 
     // --- FIX FOR VISIBILITY (remains the same) ---
     // 5. Get slider's absolute screen bounds
@@ -1098,7 +1111,7 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
 
     int popupWidth = 80;
     int popupHeight = 20;
-    
+
     // 7. Set the popup's bounds using the converted local coordinates
     valuePopup.setBounds(localBounds.getCentreX() - popupWidth / 2, localBounds.getY() - popupHeight, popupWidth, popupHeight);
 }

@@ -1,3 +1,6 @@
+#include "../Source/DSP/LfoManager.h" // <-- Add this line
+#include "../Source/DSP/ModulationRouting.h" // <-- And this line
+
 TEST_CASE("Boot performance")
 {
     BENCHMARK_ADVANCED("Processor constructor")
@@ -139,19 +142,57 @@ TEST_CASE("Modular DSP Performance")
     {
         // Get the parameter state tree to control the plugin's behavior
         auto& treeState = plugin.treeState;
+        auto& lfoManager = plugin.getLfoManager(); // Get a reference to the LfoManager
 
-        // Enable the downsampling effect and set a ratio
-        treeState.getParameter(DOWNSAMPLE_BYPASS_ID)->setValueNotifyingHost(true);
-        treeState.getParameter(DOWNSAMPLE_ID)->setValueNotifyingHost(16.0f);
-
-        // This is a direct copy of the buffer to avoid the benchmarked function
-        // modifying the original data for subsequent tests.
-        auto bufferCopy = buffer;
-
-        BENCHMARK("applyDownsamplingEffect (Rate: 16)")
+        // --- Test Case 1: Not Modulated (Block-based processing) ---
         {
-            plugin.applyDownsamplingEffect(bufferCopy);
-        };
+            // Enable the downsampling effect and set a static ratio
+            treeState.getParameter(DOWNSAMPLE_BYPASS_ID)->setValueNotifyingHost(true);
+            treeState.getParameter(DOWNSAMPLE_ID)->setValueNotifyingHost(16.0f);
+
+            auto bufferCopy = buffer;
+            juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
+            lfoOutputBuffer.clear(); // Empty buffer, as no modulation is active
+
+            BENCHMARK("applyDownsamplingEffect (Not Modulated, Rate: 16)")
+            {
+                plugin.applyDownsamplingEffect(bufferCopy, lfoOutputBuffer);
+            };
+        }
+
+        // --- Test Case 2: Modulated (Sample-accurate processing) ---
+        {
+            // Enable the effect
+            treeState.getParameter(DOWNSAMPLE_BYPASS_ID)->setValueNotifyingHost(true);
+
+            // Manually create a routing from LFO 1 to the Downsample parameter
+            ModulationRouting routing;
+            routing.sourceLfoIndex = 0; // LFO 1 (0-based)
+            routing.targetParameterID = DOWNSAMPLE_ID;
+            routing.depth = 1.0f; // Full depth
+            routing.isBipolar = false; // Unipolar
+
+            // Add the routing to the manager
+            lfoManager.getModulationRoutings().add(routing);
+
+            auto bufferCopy = buffer;
+            juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
+
+            // Fill the LFO buffer with a simple ramping signal to simulate a saw wave
+            auto* lfoData = lfoOutputBuffer.getWritePointer(routing.sourceLfoIndex);
+            for (int i = 0; i < lfoOutputBuffer.getNumSamples(); ++i)
+            {
+                lfoData[i] = (float) i / (float) lfoOutputBuffer.getNumSamples();
+            }
+
+            BENCHMARK("applyDownsamplingEffect (Modulated)")
+            {
+                plugin.applyDownsamplingEffect(bufferCopy, lfoOutputBuffer);
+            };
+
+            // Clean up by removing the routing after the test
+            lfoManager.getModulationRoutings().clear();
+        }
     }
 
     // --- Benchmark for MultiBand Processing ---

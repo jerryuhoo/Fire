@@ -89,7 +89,7 @@ private:
     int vGridDivs = 4;
     float playheadPos = -1.0f;
 
-    const int maxPoints = 16;
+    const int maxPoints = 64;
     const float pointRadius = 6.0f;
 
     std::vector<int> selectedPointIndices;

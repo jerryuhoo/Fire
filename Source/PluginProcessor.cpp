@@ -100,7 +100,10 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
 
     // Apply the final output gain to the wet signal
     gain.setGainDecibels(outputVal);
-    gain.setRampDurationSeconds(0.05f);
+    if (params.isOutputModulated)
+        gain.setRampDurationSeconds(0.0f);
+    else
+        gain.setRampDurationSeconds(0.05f);
     gain.process(finalContext);
 
     if (isHQ)
@@ -738,7 +741,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     processMultiBand(buffer, sampleRate);
 
-    applyDownsamplingEffect(buffer);
+    applyDownsamplingEffect(buffer, lfoOutputBuffer);
     // Call the simplified global effects function.
     applyGlobalEffects(buffer, lfoOutputBuffer, sampleRate);
 
@@ -1715,6 +1718,8 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
             {
                 BandProcessingParameters params;
 
+                params.isOutputModulated = getModulationInfoForParameter(ParameterIDAndName::getIDString(OUTPUT_ID, i)).isModulated;
+
                 // Populate non-modulated parameters
                 params.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, i));
                 params.isHQ = *treeState.getRawParameterValue(HQ_ID);
@@ -1821,32 +1826,90 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     }
 }
 
-void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer)
+void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs)
 {
-    if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID) > 0.5f)
+    if (! (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID) > 0.5f))
+        return;
+
+    auto modInfo = getModulationInfoForParameter(DOWNSAMPLE_ID);
+
+    // ==============================================================================
+    // Block-based processing (if not modulated)
+    // ==============================================================================
+    if (! modInfo.isModulated)
     {
-        const int rateDivide = static_cast<int>(lfoManager->getModulatedValue(DOWNSAMPLE_ID));
+        const int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
+        if (rateDivide <= 1)
+            return;
 
-        if (rateDivide > 1)
+        for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
         {
-            for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
-            {
-                auto* channelData = buffer.getWritePointer(channel);
-                int samplesToHold = 0;
-                float sampleToHold = 0.0f;
+            auto* channelData = buffer.getWritePointer(channel);
+            int samplesToHold = 0;
+            float sampleToHold = 0.0f;
 
-                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                if (samplesToHold == 0)
                 {
-                    if (samplesToHold == 0)
-                    {
-                        sampleToHold = channelData[sample];
-                        samplesToHold = rateDivide - 1;
-                    }
-                    else
-                    {
-                        channelData[sample] = sampleToHold;
-                        samplesToHold--;
-                    }
+                    sampleToHold = channelData[sample];
+                    samplesToHold = rateDivide - 1;
+                }
+                else
+                {
+                    channelData[sample] = sampleToHold;
+                    samplesToHold--;
+                }
+            }
+        }
+    }
+    // ==============================================================================
+    // Sample-accurate processing (if modulated)
+    // ==============================================================================
+    else
+    {
+        int lfoIndex = modInfo.sourceLfoIndex - 1;
+        if (! juce::isPositiveAndBelow(lfoIndex, lfoOutputs.getNumChannels()))
+            return; // Safety check
+
+        auto* lfoData = lfoOutputs.getReadPointer(lfoIndex);
+        float depth = modInfo.depth;
+        bool isBipolar = modInfo.isBipolar;
+
+        auto* param = treeState.getParameter(DOWNSAMPLE_ID);
+        auto range = param->getNormalisableRange();
+        float baseValue = *treeState.getRawParameterValue(DOWNSAMPLE_ID);
+
+        for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
+        {
+            auto* channelData = buffer.getWritePointer(channel);
+            int samplesToHold = 0;
+            float sampleToHold = 0.0f;
+
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                if (samplesToHold == 0)
+                {
+                    // // Get the LFO value for the current sample.
+                    float unipolarLfoValue = lfoData[sample];
+                    float lfoValue = isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
+
+                    // // Calculate the modulated parameter value for this specific sample.
+                    float scaledModulation = lfoValue * depth;
+                    float baseParamNormalized = range.convertTo0to1(baseValue);
+                    float modulatedParamNormalized = juce::jlimit(0.0f, 1.0f, baseParamNormalized + scaledModulation);
+                    float finalValue = range.convertFrom0to1(modulatedParamNormalized);
+
+                    // // The downsampling rate is determined at the start of a new hold segment.
+                    int rateDivide = static_cast<int>(finalValue);
+
+                    sampleToHold = channelData[sample];
+                    samplesToHold = juce::jmax(0, rateDivide - 1); // Ensure it's not negative
+                }
+                else
+                {
+                    channelData[sample] = sampleToHold;
+                    samplesToHold--;
                 }
             }
         }

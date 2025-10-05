@@ -43,6 +43,7 @@ static inline void calculateAndStoreRMS(const juce::AudioBuffer<float>& buffer,
 //==============================================================================
 struct BandProcessingParameters
 {
+    bool isOutputModulated = false;
     // Main process parameters
     int mode;
     bool isHQ;
@@ -256,7 +257,7 @@ public:
 
     bool getLatestModulatedFilterValues(ModulatedFilterValues& values);
     bool getLatestMeterValues(MeterValues& values);
-    
+
     float getGlobalInputMeterLevel(int channel) const;
     float getGlobalOutputMeterLevel(int channel) const;
     float getBandInputMeterLevel(int band, int channel) const;
@@ -264,7 +265,7 @@ public:
 
     void lfoDataHasChanged();
     bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
-    
+
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer,
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
@@ -274,8 +275,8 @@ public:
     void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
-    void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
-    
+    void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs);
+
     void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
     void clearLfoModulationForBand(int bandIndex);
 
@@ -283,12 +284,11 @@ private:
     // reset parameters
     void performReset();
     std::atomic<bool> needsReset { false };
-    
+
     std::vector<std::unique_ptr<BandProcessor>> bands;
     float totalLatency = 0.0f;
 
     void updateParameters();
-    
 
     // preset id
     int presetId = 0;

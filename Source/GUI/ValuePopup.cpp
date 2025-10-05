@@ -14,7 +14,7 @@ ValuePopup::ValuePopup()
 {
     // Style the label for the popup window
     valueLabel.setColour(juce::Label::backgroundColourId, juce::Colours::black.withAlpha(0.85f));
-    valueLabel.setColour(juce::Label::textColourId, COLOUR1);
+    valueLabel.setColour(juce::Label::textColourId, COLOUR4);
     valueLabel.setBorderSize({ 1, 1, 1, 1 });
     valueLabel.setColour(juce::Label::outlineColourId, COLOUR6);
     valueLabel.setJustificationType(juce::Justification::centred);

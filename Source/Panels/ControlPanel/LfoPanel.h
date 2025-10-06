@@ -18,6 +18,8 @@
 
 class FireAudioProcessor;
 
+static LfoData lfoClipboard;
+
 //
 //  The LfoEditor is now a pure "View" component.
 //  It holds a pointer to the data it should display and modify.
@@ -53,6 +55,16 @@ public:
 
     std::function<void()> onDataChanged;
     void setOnDataChangedCallback(std::function<void()> callback);
+
+    enum CommandIDs
+    {
+        selectAll = 1,
+        clear,
+        copy,
+        paste,
+        invertX,
+        invertY
+    };
 
 private:
     // This pointer holds the currently active LFO data. It does not own the data.
@@ -110,6 +122,12 @@ private:
 
     bool isBrushing = false;
     juce::Point<int> lastBrushCell { -1, -1 };
+
+    void selectAllPoints();
+    void clearAllPoints();
+    void copyShape();
+    void pasteShape();
+    void invertShape(bool invertX, bool invertY);
 };
 
 //

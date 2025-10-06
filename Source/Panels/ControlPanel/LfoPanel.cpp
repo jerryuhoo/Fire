@@ -439,6 +439,60 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
 void LfoEditor::mouseUp(const juce::MouseEvent& event)
 {
+    if (event.mods.isRightButtonDown())
+    {
+        juce::PopupMenu m;
+        m.addItem(CommandIDs::selectAll, "Select All");
+        m.addItem(CommandIDs::clear, "Clear");
+        m.addSeparator();
+        m.addItem(CommandIDs::copy, "Copy", activeLfoData && activeLfoData->points.size() > 2);
+        m.addItem(CommandIDs::paste, "Paste", lfoClipboard.points.size() > 0);
+        m.addSeparator();
+        m.addItem(CommandIDs::invertX, "Invert Horizontally", activeLfoData && activeLfoData->points.size() > 2);
+        m.addItem(CommandIDs::invertY, "Invert Vertically", activeLfoData && activeLfoData->points.size() > 2);
+
+        auto callback = [this](int result)
+        {
+            switch (result)
+            {
+                case CommandIDs::selectAll:
+                    selectAllPoints();
+                    break;
+                case CommandIDs::clear:
+                    clearAllPoints();
+                    if (onDataChanged)
+                        onDataChanged();
+                    break;
+                case CommandIDs::copy:
+                    copyShape();
+                    break;
+                case CommandIDs::paste:
+                    pasteShape();
+                    if (onDataChanged)
+                        onDataChanged();
+                    break;
+                case CommandIDs::invertX:
+                    invertShape(true, false);
+                    if (onDataChanged)
+                        onDataChanged();
+                    break;
+                case CommandIDs::invertY:
+                    invertShape(false, true);
+                    if (onDataChanged)
+                        onDataChanged();
+                    break;
+                default:
+                    // This case is hit if the user clicks away from the menu (result is 0)
+                    break;
+            }
+        };
+
+        const auto screenArea = juce::Rectangle<int>(event.getScreenX(), event.getScreenY(), 1, 1);
+        m.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea), callback);
+
+        return; // We've handled the right-click, so we exit here.
+    }
+
     if (! activeLfoData)
         return;
     bool dataWasChanged = false;
@@ -828,6 +882,29 @@ void LfoEditor::setCurrentBrush(LfoPresetShape newBrush)
 
 bool LfoEditor::keyPressed(const juce::KeyPress& key)
 {
+    if (key.getModifiers().isCommandDown()) // Command for macOS, Ctrl for Windows/Linux
+    {
+        if (key.getTextCharacter() == 'c' || key.getTextCharacter() == 'C')
+        {
+            copyShape();
+            return true;
+        }
+
+        if (key.getTextCharacter() == 'v' || key.getTextCharacter() == 'V')
+        {
+            pasteShape();
+            if (onDataChanged)
+                onDataChanged();
+            return true;
+        }
+
+        if (key.getTextCharacter() == 'a' || key.getTextCharacter() == 'A')
+        {
+            selectAllPoints();
+            return true;
+        }
+    }
+
     if (! selectedPointIndices.empty() && (key.isKeyCurrentlyDown(juce::KeyPress::deleteKey) || key.isKeyCurrentlyDown(juce::KeyPress::backspaceKey)))
     {
         deleteSelectedPoints();
@@ -1305,4 +1382,77 @@ void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 void LfoPanel::refreshLfoDisplay()
 {
     lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
+}
+
+void LfoEditor::selectAllPoints()
+{
+    if (! activeLfoData)
+        return;
+
+    selectedPointIndices.clear();
+    for (int i = 0; i < activeLfoData->points.size(); ++i)
+    {
+        selectedPointIndices.push_back(i);
+    }
+    repaint();
+}
+
+void LfoEditor::clearAllPoints()
+{
+    if (! activeLfoData)
+        return;
+
+    activeLfoData->resetToDefault();
+    selectedPointIndices.clear();
+    repaint();
+}
+
+void LfoEditor::copyShape()
+{
+    if (! activeLfoData)
+        return;
+
+    lfoClipboard = *activeLfoData; // This performs a deep copy of the LfoData object
+}
+
+void LfoEditor::pasteShape()
+{
+    if (! activeLfoData || lfoClipboard.points.empty())
+        return;
+
+    *activeLfoData = lfoClipboard; // Paste the data
+    selectedPointIndices.clear(); // Clear selection after pasting
+    repaint();
+}
+
+void LfoEditor::invertShape(bool invertX, bool invertY)
+{
+    if (! activeLfoData || activeLfoData->points.size() < 2)
+        return;
+
+    for (auto& point : activeLfoData->points)
+    {
+        if (invertX)
+        {
+            // We don't invert the first and last points on the x-axis
+            // because they are fixed at 0.0 and 1.0.
+            if (! juce::approximatelyEqual(point.x, 0.0f) && ! juce::approximatelyEqual(point.x, 1.0f))
+            {
+                point.x = 1.0f - point.x;
+            }
+        }
+
+        if (invertY)
+        {
+            point.y = 1.0f - point.y;
+        }
+    }
+
+    // Inverting X will mess up the order, so we need to sort again.
+    if (invertX)
+    {
+        updateAndSortPoints();
+    }
+
+    repaint();
 }

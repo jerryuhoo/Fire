@@ -127,6 +127,8 @@
         <FILE id="BoNr69" name="LfoManager.h" compile="0" resource="0" file="Source/DSP/LfoManager.h"/>
         <FILE id="f8ecdJ" name="LfoShapeGenerator.h" compile="0" resource="0"
               file="Source/DSP/LfoShapeGenerator.h"/>
+        <FILE id="sbKeYA" name="ModulatedValueProvider.h" compile="0" resource="0"
+              file="Source/DSP/ModulatedValueProvider.h"/>
         <FILE id="SBXQBa" name="ModulationRouting.h" compile="0" resource="0"
               file="Source/DSP/ModulationRouting.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>

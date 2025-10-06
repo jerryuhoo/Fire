@@ -209,10 +209,11 @@ TEST_CASE("Modular DSP Performance")
         treeState.getParameter(FILTER_BYPASS_ID)->setValueNotifyingHost(false);
 
         auto bufferCopy = buffer;
+        juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
 
         BENCHMARK("processMultiBand (4 Bands)")
         {
-            plugin.processMultiBand(bufferCopy, sampleRate);
+            plugin.processMultiBand(bufferCopy, lfoOutputBuffer, sampleRate);
         };
     }
 

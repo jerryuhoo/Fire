@@ -11,6 +11,34 @@
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
 
+static void applyGain(juce::AudioBuffer<float>& buffer, const ModulatedValueProvider& gainProvider)
+{
+    // If the gain is not modulated, we can use the efficient block-based JUCE gain processor.
+    if (gainProvider.lfoSignal == nullptr)
+    {
+        juce::dsp::Gain<float> gain;
+        gain.setGainDecibels(gainProvider.baseValue);
+        gain.setRampDurationSeconds(0.05f); // Apply smoothing for manual changes
+
+        auto block = juce::dsp::AudioBlock<float>(buffer);
+        auto context = juce::dsp::ProcessContextReplacing<float>(block);
+        gain.process(context);
+    }
+    else // If gain is modulated, we must apply it sample-by-sample.
+    {
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {
+            auto* channelData = buffer.getWritePointer(channel);
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                // The provider does all the complex calculation for us!
+                const float gainDb = gainProvider.get(sample);
+                channelData[sample] *= juce::Decibels::decibelsToGain(gainDb);
+            }
+        }
+    }
+}
+
 //==============================================================================
 // BandProcessor Implementation
 //==============================================================================
@@ -34,7 +62,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     // *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
 
     // The oversampling object also needs to be prepared.
-    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
+    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     oversampling->initProcessing(spec.maximumBlockSize);
 
     // Reset all smoothed values with the current sample rate and a ramp time.
@@ -61,86 +89,96 @@ void BandProcessor::reset()
 // It replaces the old `processOneBand` and `processDistortion` functions.
 //==============================================================================
 void BandProcessor::process(juce::AudioBuffer<float>& buffer,
-                            const BandProcessingParameters& params)
+                            const BandProcessingParameters& params,
+                            const juce::AudioBuffer<float>& lfoOutputs)
 {
-    // Extract parameters for easier access
-    const bool isHQ = params.isHQ;
-    // MODULATED: outputVal is the final, LFO-modulated value
-    const float outputVal = params.outputVal;
-    // MODULATED: mixVal is the final, LFO-modulated value
+    // 1. Preparation
     const float mixVal = params.mixVal;
-
-    // Create a copy of the clean signal for the final dry/wet mix
     juce::AudioBuffer<float> dryBuffer;
     dryBuffer.makeCopyOf(buffer);
-
-    // Core Processing (with correct Oversampling)
     auto block = juce::dsp::AudioBlock<float>(buffer);
+    auto paramsForProcessing = params; // Create a mutable copy
 
-    if (isHQ)
+    // 2. Core Distortion Processing
+    if (params.isHQ)
     {
         auto oversampledBlock = oversampling->processSamplesUp(block);
 
-        // Call the loop to process the upsampled signal in-place
-        processDistortion(oversampledBlock, dryBuffer, params);
+        // --- LFO Upsampling ---
+        juce::AudioBuffer<float> upsampledLfoOutputs(lfoOutputs.getNumChannels(), oversampledBlock.getNumSamples());
+        if (lfoOutputs.getNumSamples() > 1 && upsampledLfoOutputs.getNumSamples() > 1)
+        {
+            for (int channel = 0; channel < lfoOutputs.getNumChannels(); ++channel)
+            {
+                auto* dest = upsampledLfoOutputs.getWritePointer(channel);
+                const auto* src = lfoOutputs.getReadPointer(channel);
+                const float step = (float) (lfoOutputs.getNumSamples() - 1) / (float) (upsampledLfoOutputs.getNumSamples() - 1);
+                for (int i = 0; i < upsampledLfoOutputs.getNumSamples(); ++i)
+                {
+                    const float sourcePos = (float) i * step;
+                    const int index0 = (int) sourcePos;
+                    const int index1 = juce::jmin(index0 + 1, lfoOutputs.getNumSamples() - 1);
+                    const float frac = sourcePos - (float) index0;
+                    dest[i] = src[index0] * (1.0f - frac) + src[index1] * frac;
+                }
+            }
+        }
 
+        // Bind the upsampled LFO signals to the providers
+        if (params.driveLfoSourceIndex != -1)
+            paramsForProcessing.driveVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.driveLfoSourceIndex);
+        if (params.biasLfoSourceIndex != -1)
+            paramsForProcessing.biasVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.biasLfoSourceIndex);
+        if (params.recLfoSourceIndex != -1)
+            paramsForProcessing.recVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.recLfoSourceIndex);
+        if (params.outputLfoSourceIndex != -1)
+            paramsForProcessing.outputVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.outputLfoSourceIndex);
+
+        processDistortion(oversampledBlock, dryBuffer, paramsForProcessing);
         oversampling->processSamplesDown(block);
     }
     else
     {
-        // Call the loop to process the signal at the original sample rate
-        processDistortion(block, dryBuffer, params);
+        // Bind the original LFO signals to the providers
+        if (params.driveLfoSourceIndex != -1)
+            paramsForProcessing.driveVal.lfoSignal = lfoOutputs.getReadPointer(params.driveLfoSourceIndex);
+        if (params.biasLfoSourceIndex != -1)
+            paramsForProcessing.biasVal.lfoSignal = lfoOutputs.getReadPointer(params.biasLfoSourceIndex);
+        if (params.recLfoSourceIndex != -1)
+            paramsForProcessing.recVal.lfoSignal = lfoOutputs.getReadPointer(params.recLfoSourceIndex);
+        if (params.outputLfoSourceIndex != -1)
+            paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex);
+
+        processDistortion(block, dryBuffer, paramsForProcessing);
     }
 
-    // auto dcFilterContext = juce::dsp::ProcessContextReplacing<float>(block);
-    // dcFilter.process(dcFilterContext);
+    // 3. Post-Distortion Effects
+    // Per-sample Output Gain
+    applyGain(buffer, paramsForProcessing.outputVal);
 
-    // Final Gain and Dry/Wet Mix at block level
-    auto finalContext = juce::dsp::ProcessContextReplacing<float>(block);
-
-    // Apply the final output gain to the wet signal
-    gain.setGainDecibels(outputVal);
-    if (params.isOutputModulated)
-        gain.setRampDurationSeconds(0.0f);
-    else
-        gain.setRampDurationSeconds(0.05f);
-    gain.process(finalContext);
-
-    if (isHQ)
-    {
+    // 4. Final Dry/Wet Mix
+    if (params.isHQ)
         dryWetMixer.setWetLatency(oversampling->getLatencyInSamples());
-    }
     else
-    {
         dryWetMixer.setWetLatency(0.0f);
-    }
 
-    // Apply the dry/wet mix
     if (mixVal <= 0.0f)
-    {
         buffer.makeCopyOf(dryBuffer);
-    }
     else if (mixVal < 1.0f)
     {
-        // Only perform the mix operation if it's between 0 and 1
         dryWetMixer.setWetMixProportion(mixVal);
         dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
         dryWetMixer.mixWetSamples(block);
     }
 
-    //==============================================================================
-    // 2. POST-DISTORTION BLOCK-BASED EFFECTS
-    //==============================================================================
-    auto postDistortionBlock = juce::dsp::AudioBlock<float>(buffer);
-    auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(postDistortionBlock);
-
+    // 5. Block-wise Compressor and Width
+    auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
     if (params.isCompEnabled)
     {
         this->compressor.setThreshold(params.compThreshold);
         this->compressor.setRatio(params.compRatio);
         this->compressor.process(postDistortionContext);
     }
-
     if (params.isWidthEnabled && buffer.getNumChannels() == 2)
     {
         this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, buffer.getNumSamples());
@@ -151,105 +189,101 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
                                       const juce::AudioBuffer<float>& dryBuffer,
                                       const BandProcessingParameters& params)
 {
-    const bool isSafeModeOn = params.isSafeModeOn;
-    const bool isExtremeModeOn = params.isExtremeModeOn;
-    float driveVal = params.driveVal;
-    const float biasVal = params.biasVal; // This is now the final value
-    const float recVal = params.recVal; // This is now the final value
-    const int currentMode = params.mode;
-    // We calculate the max value from the 'dryBuffer' which represents the
-    // clean, per-band signal right before it enters the distortion loop.
-    // This ensures each band's Safe Mode reacts only to its own signal level.
-    this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
-    // --- Start per-sample processing loop ---
-    if (isExtremeModeOn)
-    {
-        driveVal = log2f(10.0f) * driveVal;
-    }
-
-    // --- Safe Mode logic (calculates the final drive gain) ---
-    const float driveForCalc = driveVal * 6.5f / 100.0f;
-    float powerDrive = std::pow(2.0f, driveForCalc);
-
-    if (isSafeModeOn && this->mSampleMaxValue * powerDrive > 2.0f)
-        this->newDrive = 2.0f / this->mSampleMaxValue + 0.1f * driveForCalc;
-    else
-        this->newDrive = powerDrive;
-
-    // Update the reduction percent for the UI to read
-    if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
-        this->mReductionPercent = 1.0f;
-    else
-        this->mReductionPercent = std::log2(this->newDrive) / driveForCalc;
-
-    // --- Initial value handling for smoothers ---
-    if (isFirstBlock)
-    {
-        // If it's the first block, forcibly set the current and target values
-        driveSmoother.setCurrentAndTargetValue(this->newDrive);
-
-        float finalBias = (this->mSampleMaxValue < 0.000001f) ? 0.0f : biasVal;
-        biasSmoother.setCurrentAndTargetValue(finalBias);
-        recSmoother.setCurrentAndTargetValue(recVal);
-
-        isFirstBlock = false; // Disable this for subsequent blocks
-    }
-    else
-    {
-        // For all other blocks, use setTargetValue for smooth transitions
-        driveSmoother.setTargetValue(this->newDrive);
-
-        float finalBias = (this->mSampleMaxValue < 0.000001f) ? 0.0f : biasVal;
-        biasSmoother.setTargetValue(finalBias);
-        recSmoother.setTargetValue(recVal);
-    }
-
-    // Manual Per-Sample Processing Loop
+    // This function is now pure and fully decoupled, as it should be.
     const int numSamples = (int) blockToProcess.getNumSamples();
     const int numChannels = (int) blockToProcess.getNumChannels();
 
-    // A map to hold the final accumulated modulation amount for any per-sample parameter.
-    // This makes the logic generic and ready for future expansion.
-    std::map<juce::String, float> perSampleModulationAmounts;
+    this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
+    auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(params.mode);
+
+    // The providers are now correctly prepared with LFO signals (if any)
+    auto driveProvider = params.driveVal;
+    auto biasProvider = params.biasVal;
+    auto recProvider = params.recVal;
 
     DistortionLogic::State currentState;
-    currentState.mode = currentMode;
-    auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(currentMode);
+    currentState.mode = params.mode;
 
-    // --- Manual Per-Sample Processing Loop ---
+    if (isFirstBlock)
+    {
+        // On the first block, calculate the FINAL gain for the *first sample*
+        // to properly initialize the smoothers and prevent clicks.
+
+        // Calculate initial Drive gain including Safe Mode
+        float initialDrive = driveProvider.get(0); // Get LFO-modulated value for sample 0
+        if (params.isExtremeModeOn)
+            initialDrive = log2f(10.0f) * initialDrive;
+        const float initialDriveForCalc = initialDrive * 6.5f / 100.0f;
+        float initialPowerDrive = std::pow(2.0f, initialDriveForCalc);
+        float initialFinalDriveGain;
+        if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * initialPowerDrive > 2.0f)
+            initialFinalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * initialDriveForCalc;
+        else
+            initialFinalDriveGain = initialPowerDrive;
+        driveSmoother.setCurrentAndTargetValue(initialFinalDriveGain);
+
+        // Initialize Bias and Rec smoothers with their final modulated value for sample 0
+        biasSmoother.setCurrentAndTargetValue(biasProvider.get(0));
+        recSmoother.setCurrentAndTargetValue(recProvider.get(0));
+
+        isFirstBlock = false; // This logic will not run again until reset() is called.
+    }
+    // The 'else' block for setting targets is removed.
+    // Targets are now updated per-sample inside the loop to smooth the final signal.
+
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        const float smoothedDrive = driveSmoother.getNextValue();
-        const float smoothedBias = biasSmoother.getNextValue();
-        const float smoothedRec = recSmoother.getNextValue();
+        // 1. Get the final, LFO-modulated value for each parameter for the CURRENT sample.
+        float currentDrive = driveProvider.get(sample);
+        const float currentBias = biasProvider.get(sample);
+        const float currentRec = recProvider.get(sample);
 
-        // Apply the pre-calculated modulation amounts.
-        // The '? 0.0f' is a safe fallback in case no modulation is active for that parameter.
-        float finalBiasModAmount = perSampleModulationAmounts.count(params.biasID) ? perSampleModulationAmounts.at(params.biasID) : 0.0f;
-        float finalRecModAmount = perSampleModulationAmounts.count(params.recID) ? perSampleModulationAmounts.at(params.recID) : 0.0f;
+        // 2. Calculate the final drive gain, including Extreme and Safe modes. This is the potentially "blocky" signal.
+        if (params.isExtremeModeOn)
+            currentDrive = log2f(10.0f) * currentDrive;
 
-        float modulatedBias = juce::jlimit(params.biasRange.start, params.biasRange.end, smoothedBias + finalBiasModAmount);
-        float modulatedRec = juce::jlimit(params.recRange.start, params.recRange.end, smoothedRec + finalRecModAmount);
+        const float driveForCalc = currentDrive * 6.5f / 100.0f;
+        float powerDrive = std::pow(2.0f, driveForCalc);
 
-        currentState.drive = smoothedDrive;
-        currentState.bias = modulatedBias;
-        currentState.rec = modulatedRec;
-        currentState.mode = params.mode;
+        float finalDriveGain;
+        if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * powerDrive > 2.0f)
+            finalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * driveForCalc;
+        else
+            finalDriveGain = powerDrive;
 
+        // 3. Set the smoothers' targets to these final, per-sample values.
+        // This makes the smoothers act like a one-pole filter, restoring the old behavior
+        // where the output of the complex logic was smoothed.
+        driveSmoother.setTargetValue(finalDriveGain);
+        biasSmoother.setTargetValue(currentBias);
+        recSmoother.setTargetValue(currentRec);
+
+        // 4. Get the NEXT smoothed value from the smoother and use it for processing.
+        currentState.drive = driveSmoother.getNextValue();
+        currentState.bias = biasSmoother.getNextValue();
+        currentState.rec = recSmoother.getNextValue();
+
+        // Update reduction meter (can be done once per block)
+        if (sample == 0)
+        {
+            if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
+                this->mReductionPercent = 1.0f;
+            else
+                // Use the smoothed value for a more stable meter reading
+                this->mReductionPercent = std::log2(currentState.drive) / driveForCalc;
+        }
+
+        // 5. Apply audio processing using the correctly smoothed values
         for (int channel = 0; channel < numChannels; ++channel)
         {
-            // The reason we don't use processSample in DistortionLogic.h
-            // is because we don't need to call getWaveshaperForMode in every for loop
             float currentSample = blockToProcess.getSample(channel, sample);
-            currentSample *= currentState.drive; // 1. Drive Gain
-            currentSample += currentState.bias; // 2. Pre-Bias
 
-            currentSample = waveshaperFunction(currentSample); // 3. Waveshaper
-
+            currentSample *= currentState.drive;
+            currentSample += currentState.bias;
+            currentSample = waveshaperFunction(currentSample);
             if (currentSample < 0.0f)
-                currentSample *= (0.5f - currentState.rec) * 2.0f; // 4. Rectifier
-
-            currentSample -= currentState.bias; // 5. Post-Bias
+                currentSample *= (0.5f - currentState.rec) * 2.0f;
+            currentSample -= currentState.bias;
 
             blockToProcess.setSample(channel, sample, currentSample);
         }
@@ -303,7 +337,7 @@ FireAudioProcessor::FireAudioProcessor()
     // factor = 2 means 2^2 = 4, 4x oversampling
     for (size_t i = 0; i < 4; i++)
     {
-        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels(), 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
+        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels(), oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     }
 
     // Initialize the band processors in a loop.
@@ -739,7 +773,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
     mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
 
-    processMultiBand(buffer, sampleRate);
+    processMultiBand(buffer, lfoOutputBuffer, sampleRate);
 
     applyDownsamplingEffect(buffer, lfoOutputBuffer);
     // Call the simplified global effects function.
@@ -1478,7 +1512,7 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
                 // This is a safety check.
                 if (channel < currentBandBuffer->getNumChannels())
                 {
-                    // FIX: Use the number of samples from the *source* buffer, not the destination.
+                    // Use the number of samples from the *source* buffer, not the destination.
                     outputBuffer.addFrom(channel, 0, *currentBandBuffer, channel, 0, numSamples);
                 }
             }
@@ -1697,7 +1731,7 @@ float FireAudioProcessor::getTotalLatency() const
     return totalLatency;
 }
 
-void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate)
+void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
 {
     splitBands(wetBuffer, sampleRate);
 
@@ -1718,9 +1752,8 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
             {
                 BandProcessingParameters params;
 
+                // 1. Fill General Settings
                 params.isOutputModulated = getModulationInfoForParameter(ParameterIDAndName::getIDString(OUTPUT_ID, i)).isModulated;
-
-                // Populate non-modulated parameters
                 params.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, i));
                 params.isHQ = *treeState.getRawParameterValue(HQ_ID);
                 params.isCompEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i)) > 0.5f;
@@ -1728,20 +1761,40 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, d
                 params.isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, i)) > 0.5f;
                 params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(EXTREME_ID, i)) > 0.5f;
 
-                // === GET FINAL MODULATED VALUES FROM LFO MANAGER ===
-                params.driveVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(DRIVE_ID, i));
+                // 2. Setup ModulatedValueProviders AND their LFO source indices
+                auto setupProvider = [&](ModulatedValueProvider& provider, int& lfoIndex, const juce::String& paramID)
+                {
+                    auto* param = treeState.getParameter(paramID);
+                    if (! param)
+                        return;
+
+                    provider.baseValue = *treeState.getRawParameterValue(paramID);
+                    provider.range = param->getNormalisableRange();
+
+                    auto modInfo = getModulationInfoForParameter(paramID);
+                    if (modInfo.isModulated)
+                    {
+                        provider.modulationDepth = modInfo.depth;
+                        provider.isBipolar = modInfo.isBipolar;
+                        lfoIndex = modInfo.sourceLfoIndex - 1; // Store the 0-based index
+                    }
+                };
+
+                setupProvider(params.driveVal, params.driveLfoSourceIndex, ParameterIDAndName::getIDString(DRIVE_ID, i));
+                setupProvider(params.biasVal, params.biasLfoSourceIndex, ParameterIDAndName::getIDString(BIAS_ID, i));
+                setupProvider(params.recVal, params.recLfoSourceIndex, ParameterIDAndName::getIDString(REC_ID, i));
+                setupProvider(params.outputVal, params.outputLfoSourceIndex, ParameterIDAndName::getIDString(OUTPUT_ID, i));
+
+                // 3. Get final values for Block-wise parameters
                 params.compRatio = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_RATIO_ID, i));
                 params.compThreshold = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_THRESH_ID, i));
                 params.width = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(WIDTH_ID, i));
-                params.outputVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(OUTPUT_ID, i));
                 params.mixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, i));
-                params.biasVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(BIAS_ID, i));
-                params.recVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(REC_ID, i));
 
                 realtimeModulatedThresholds[i].store(params.compThreshold);
 
-                // Call the simplified process method
-                band->process(*wetBandBuffers[i], params);
+                // 4. Call BandProcessor
+                band->process(*wetBandBuffers[i], params, lfoOutputs);
             }
             calculateAndStoreRMS(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
         }
@@ -1771,59 +1824,28 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     }
 
     // ==============================================================================
-    // 2. Global Gain Processing (New Sample-by-Sample approach)
+    // 2. Global Gain Processing
     // ==============================================================================
+
+    // a. Prepare the "recipe" for the global output gain.
+    ModulatedValueProvider globalGainProvider;
+    auto* param = treeState.getParameter(OUTPUT_ID);
+    if (! param)
+        return;
+
+    globalGainProvider.baseValue = *treeState.getRawParameterValue(OUTPUT_ID);
+    globalGainProvider.range = param->getNormalisableRange();
+
     auto modInfo = getModulationInfoForParameter(OUTPUT_ID);
-    float baseGainDb = *treeState.getRawParameterValue(OUTPUT_ID);
-
-    // If not modulated by an LFO, use the original, efficient block-based processing.
-    if (! modInfo.isModulated)
+    if (modInfo.isModulated)
     {
-        auto globalBlock = juce::dsp::AudioBlock<float>(buffer);
-        gainProcessorGlobal.setGainDecibels(baseGainDb);
-        gainProcessorGlobal.setRampDurationSeconds(0.05f); // Keep smoothing for manual adjustments.
-        gainProcessorGlobal.process(juce::dsp::ProcessContextReplacing<float>(globalBlock));
+        globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(modInfo.sourceLfoIndex - 1);
+        globalGainProvider.modulationDepth = modInfo.depth;
+        globalGainProvider.isBipolar = modInfo.isBipolar;
     }
-    else // If modulated by an LFO, perform sample-accurate processing.
-    {
-        int lfoIndex = modInfo.sourceLfoIndex - 1; // lfoSource is 1-based.
-        if (! juce::isPositiveAndBelow(lfoIndex, lfoOutputs.getNumChannels()))
-            return; // Safety check.
 
-        auto* lfoData = lfoOutputs.getReadPointer(lfoIndex);
-        float depth = modInfo.depth;
-        bool isBipolar = modInfo.isBipolar;
-
-        auto* param = treeState.getParameter(OUTPUT_ID);
-        auto range = param->getNormalisableRange();
-
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-        {
-            auto* channelData = buffer.getWritePointer(channel);
-            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-            {
-                // 1. Get the LFO value for the current sample.
-                float unipolarLfoValue = lfoData[sample]; // Range [0, 1]
-                float lfoValue = isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue; // Range [-1, 1] or [0, 1]
-
-                // 2. Calculate the modulation amount.
-                float scaledModulation = lfoValue * depth;
-
-                // 3. Apply the modulation in the normalized range [0, 1].
-                float baseParamNormalized = range.convertTo0to1(baseGainDb);
-                float modulatedParamNormalized = baseParamNormalized + scaledModulation;
-
-                // 4. Clamp the result to the valid [0, 1] range.
-                modulatedParamNormalized = juce::jlimit(0.0f, 1.0f, modulatedParamNormalized);
-
-                // 5. Convert the normalized value back to the actual dB value.
-                float finalGainDb = range.convertFrom0to1(modulatedParamNormalized);
-
-                // 6. Apply the gain.
-                channelData[sample] *= juce::Decibels::decibelsToGain(finalGainDb);
-            }
-        }
-    }
+    // b. Apply the gain using our new, clean helper function.
+    applyGain(buffer, globalGainProvider);
 }
 
 void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs)

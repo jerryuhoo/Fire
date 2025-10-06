@@ -22,6 +22,7 @@
 #include "DSP/DiodeWDF.h"
 #include "DSP/LfoManager.h"
 #include "DSP/ModulationRouting.h"
+#include "DSP/ModulatedValueProvider.h"
 
 /**
  * Calculates the RMS level for the left and right channels of a buffer
@@ -47,7 +48,8 @@ struct BandProcessingParameters
     // Main process parameters
     int mode;
     bool isHQ;
-    float outputVal;
+    
+    ModulatedValueProvider outputVal;
     float mixVal;
     float compThreshold;
     float compRatio;
@@ -58,9 +60,15 @@ struct BandProcessingParameters
     // Distortion-specific parameters
     bool isSafeModeOn;
     bool isExtremeModeOn;
-    float driveVal;
-    float biasVal;
-    float recVal;
+    ModulatedValueProvider driveVal;
+    ModulatedValueProvider biasVal;
+    ModulatedValueProvider recVal;
+    
+    // LFO source indices for the above parameters (-1 if not modulated)
+    int driveLfoSourceIndex = -1;
+    int biasLfoSourceIndex = -1;
+    int recLfoSourceIndex = -1;
+    int outputLfoSourceIndex = -1;
 
     // Parameter IDs for modulation
     juce::String driveID;
@@ -128,7 +136,10 @@ struct BandProcessor
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
     void process(juce::AudioBuffer<float>& buffer,
-                 const BandProcessingParameters& params);
+                 const BandProcessingParameters& params,
+                 const juce::AudioBuffer<float>& lfoOutputs);
+    
+    const int oversampleFactor = 2;
 
 private:
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
@@ -272,7 +283,7 @@ public:
                   bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
     void updateGlobalFilters(double sampleRate);
-    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate);
+    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs);
@@ -341,9 +352,9 @@ private:
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
 
     // oversampling
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4]; // HQ use 4x
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4];
 
-    int oversampleFactor = 1;
+    int oversampleFactor = 2;
 
     // oversampling delay, set to dry buffer
     Delay mDelay { 0 };

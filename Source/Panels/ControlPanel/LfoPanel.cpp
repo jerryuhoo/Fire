@@ -1000,10 +1000,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridXSlider.setRange(2, 16, 1);
     gridXSlider.setValue(4);
     gridXSlider.addListener(this);
-    gridXSlider.setColour(juce::Slider::backgroundColourId, COLOUR6);
     gridXSlider.setColour(juce::Slider::thumbColourId, COLOUR1); // For the arrow
     gridXSlider.setColour(juce::Slider::textBoxOutlineColourId, COLOUR6.withAlpha(0.5f)); // Border color
-    gridXSlider.setColour(juce::Slider::textBoxHighlightColourId, COLOUR1);
+    gridXSlider.setColour(juce::Slider::textBoxHighlightColourId, COLOUR8);
     gridXSlider.setColour(juce::TextButton::textColourOnId, COLOUR1);
 
     addAndMakeVisible(gridXLabel);
@@ -1014,11 +1013,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridYSlider.setRange(2, 16, 1);
     gridYSlider.setValue(4);
     gridYSlider.addListener(this);
-    gridYSlider.setColour(juce::Slider::backgroundColourId, COLOUR6);
     gridYSlider.setColour(juce::Slider::thumbColourId, COLOUR1); // For the arrow
-    // Add these two lines:
     gridYSlider.setColour(juce::Slider::textBoxOutlineColourId, COLOUR6.withAlpha(0.5f)); // Border color
-    gridYSlider.setColour(juce::Slider::textBoxHighlightColourId, COLOUR1);
+    gridYSlider.setColour(juce::Slider::textBoxHighlightColourId, COLOUR8);
     gridYSlider.setColour(juce::TextButton::textColourOnId, COLOUR1);
 
     addAndMakeVisible(gridYLabel);

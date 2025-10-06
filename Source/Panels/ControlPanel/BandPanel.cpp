@@ -136,9 +136,9 @@ void BandPanel::createLabels()
 
 void BandPanel::createButtons()
 {
-    initFlatButton(linkedButton, "L");
-    initFlatButton(safeButton, "S");
-    initFlatButton(extremeButton, "E");
+    initFlatButton(linkedButton, "Link");
+    initFlatButton(safeButton, "Safe");
+    initFlatButton(extremeButton, "Extreme");
     initBypassButton(compressorBypassButton, COMP_COLOUR);
     initBypassButton(widthBypassButton, WIDTH_COLOUR);
 
@@ -270,14 +270,22 @@ void BandPanel::resized()
     compressorBypassButton.setBounds(bypassButtonArea);
     widthBypassButton.setBounds(bypassButtonArea);
 
-    // --- Output Area Layout ---
-    juce::Rectangle<int> outputButtonCol = outputKnobArea.removeFromLeft(getWidth() / 25);
-    const float buttonHeight = outputButtonCol.getHeight() / 3.0f;
-    linkedButton.setBounds(outputButtonCol.removeFromTop(buttonHeight));
-    safeButton.setBounds(outputButtonCol.removeFromTop(buttonHeight));
-    extremeButton.setBounds(outputButtonCol);
+    // --- Output Area Layout (FINAL CORRECTED VERSION) ---
 
-    juce::Rectangle<int> outputSubArea = outputKnobArea.reduced(0, outputKnobArea.getHeight() / 5);
+    const int bottomAreaHeight = outputKnobArea.getHeight() / 5;
+
+    juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(),
+                                          outputKnobArea.getBottom() - bottomAreaHeight,
+                                          outputKnobArea.getWidth(),
+                                          bottomAreaHeight);
+
+    juce::Rectangle<int> tempButtonArea = outputBottomArea;
+    const int buttonWidth = tempButtonArea.getWidth() / 3;
+    linkedButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
+    safeButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
+    extremeButton.setBounds(tempButtonArea);
+
+    juce::Rectangle<int> outputSubArea = outputKnobArea.reduced(0, bottomAreaHeight);
     juce::Rectangle<int> outputLeftArea = outputSubArea.withRight(outputSubArea.getCentreX());
     juce::Rectangle<int> outputRightArea = outputSubArea.withLeft(outputSubArea.getCentreX());
 

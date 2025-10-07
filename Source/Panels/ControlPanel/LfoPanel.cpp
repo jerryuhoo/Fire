@@ -1053,7 +1053,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     setLfo(currentLfoIndex); // Call helper to set up all attachments for the initial LFO.
 
     // Set up the rate slider based on the initial state
-    updateRateSlider();
+    triggerAsyncUpdate();
 
     startTimerHz(60);
 }
@@ -1337,7 +1337,7 @@ void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
     {
         // If they match, it means the sync mode for the visible LFO has changed
         // (likely via automation or a preset load), so we must update the UI.
-        updateRateSlider();
+        triggerAsyncUpdate();
         return;
     }
 
@@ -1498,4 +1498,11 @@ void LfoEditor::invertShape(bool invertX, bool invertY)
     }
 
     repaint();
+}
+
+void LfoPanel::handleAsyncUpdate()
+{
+    // This function is guaranteed to be called on the main UI thread.
+    // It is now safe to update the slider and its attachment here.
+    updateRateSlider();
 }

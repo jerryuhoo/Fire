@@ -138,7 +138,8 @@ class LfoPanel : public juce::Component,
                  public juce::Button::Listener,
                  public juce::Slider::Listener,
                  public juce::Timer,
-                 public juce::AudioProcessorValueTreeState::Listener
+                 public juce::AudioProcessorValueTreeState::Listener,
+                 public juce::AsyncUpdater
 {
 public:
     LfoPanel(FireAudioProcessor& p);
@@ -157,6 +158,7 @@ public:
     juce::TextButton assignButton;
 
     void refreshLfoDisplay();
+    void handleAsyncUpdate() override;
 
 private:
     void buttonClicked(juce::Button* button) override;

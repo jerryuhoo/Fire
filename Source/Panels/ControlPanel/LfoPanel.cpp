@@ -182,14 +182,17 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
     if (currentMode == LfoEditMode::BrushPaint)
     {
-        isBrushing = true;
-        applyBrushShape(event.getPosition());
+        if (event.mods.isLeftButtonDown())
+        {
+            isBrushing = true;
+            applyBrushShape(event.getPosition());
 
-        const float gridW = 1.0f / (float) hGridDivs;
-        const float gridH = 1.0f / (float) vGridDivs;
-        const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) event.x / (float) getWidth() / gridW));
-        const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) event.y / (float) getHeight() / gridH));
-        lastBrushCell = { gridX, gridY };
+            const float gridW = 1.0f / (float) hGridDivs;
+            const float gridH = 1.0f / (float) vGridDivs;
+            const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) event.x / (float) getWidth() / gridW));
+            const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) event.y / (float) getHeight() / gridH));
+            lastBrushCell = { gridX, gridY };
+        }
         return;
     }
 
@@ -199,12 +202,6 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     // --- Right-click is always for curvature ---
     if (event.mods.isRightButtonDown())
     {
-        editingCurveIndex = findSegmentIndexAt(event.getPosition());
-        if (editingCurveIndex != -1)
-        {
-            initialCurvature = activeLfoData->curvatures[editingCurveIndex];
-            initialDragY = event.y;
-        }
         return;
     }
 
@@ -248,20 +245,11 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     }
     else // Clicked on empty space: create a new point and prepare to drag it.
     {
-        draggingState = DraggingState::Point;
-        selectedPointIndices.clear();
-        if (activeLfoData->points.size() < maxPoints)
+        editingCurveIndex = findSegmentIndexAt(event.getPosition());
+        if (editingCurveIndex != -1)
         {
-            addPoint(toNormalized(event.getPosition()));
-            // Find the newly added point to start dragging it
-            for (size_t i = 0; i < activeLfoData->points.size(); ++i)
-            {
-                if (juce::approximatelyEqual(activeLfoData->points[i].x, toNormalized(event.getPosition()).x))
-                {
-                    selectedPointIndices.push_back((int) i);
-                    break;
-                }
-            }
+            initialCurvature = activeLfoData->curvatures[editingCurveIndex];
+            initialDragY = event.y;
         }
     }
 
@@ -280,7 +268,7 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 {
     // First, handle the brush drag if it's active.
-    if (isBrushing)
+    if (isBrushing && event.mods.isLeftButtonDown())
     {
         const float gridW = 1.0f / (float) hGridDivs;
         const float gridH = 1.0f / (float) vGridDivs;
@@ -302,7 +290,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
     if (! activeLfoData || currentMode != LfoEditMode::PointEdit)
         return;
 
-    if (editingCurveIndex != -1 && event.mods.isRightButtonDown())
+    if (editingCurveIndex != -1)
     {
         // Get the start and end points of the segment in screen coordinates to calculate the visual slope.
         auto p1_screen = fromNormalized(activeLfoData->points[editingCurveIndex]);
@@ -329,7 +317,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         repaint();
         if (onDataChanged)
             onDataChanged();
-        return;
+        return; // Curvature drag is handled, so we exit here.
     }
 
     switch (draggingState)
@@ -538,30 +526,32 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
     if (! activeLfoData || currentMode != LfoEditMode::PointEdit)
         return;
 
-    if (event.mods.isRightButtonDown())
-    {
-        int segIdx = findSegmentIndexAt(event.getPosition());
-        if (segIdx != -1)
-        {
-            activeLfoData->curvatures[segIdx] = 0.0f;
-            if (onDataChanged)
-                onDataChanged();
-        }
-    }
-    else if (activeLfoData->points.size() > 2)
+    // First, check if double-clicking on an existing point to delete it.
+    // We check from the second to the second-to-last point, as the ends cannot be deleted.
+    if (activeLfoData->points.size() > 2)
     {
         for (size_t i = 1; i < activeLfoData->points.size() - 1; ++i)
         {
-            if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius)
+            if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
             {
                 removePoint((int) i);
                 if (onDataChanged)
                     onDataChanged();
-                return;
+                repaint();
+                return; // Point was found and removed, so we're done.
             }
         }
     }
-    repaint();
+
+    // If we reach here, it means we didn't double-click on an existing point.
+    // So, we create a new point at the double-click location.
+    if (activeLfoData->points.size() < maxPoints)
+    {
+        addPoint(toNormalized(event.getPosition()));
+        if (onDataChanged)
+            onDataChanged();
+        // addPoint already calls repaint().
+    }
 }
 
 void LfoEditor::mouseMove(const juce::MouseEvent& event)

@@ -101,9 +101,34 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // Use the new helper function to get all sliders and assign the callback in a single loop
     for (auto* slider : getAllModulatableSliders())
     {
-        slider->onBypassToggled = [bypassCallback, paramID = slider->getParamID()]()
+        slider->onBypassToggled = [slider, bypassCallback]()
         {
-            bypassCallback(paramID);
+            bypassCallback(slider->getParamID());
+        };
+
+        slider->onModulationCleared = [this, slider]()
+        {
+            processor.clearModulationForParameter(slider->getParamID());
+        };
+
+        slider->onModulationInverted = [this, slider]()
+        {
+            processor.invertModulationDepthForParameter(slider->getParamID());
+        };
+
+        slider->onBipolarModeToggled = [this, slider]()
+        {
+            processor.toggleBipolarMode(slider->getParamID());
+        };
+
+        slider->onModAmountChanged = [this, slider](float newDepth)
+        {
+            processor.setModulationDepth(slider->getParamID(), newDepth);
+        };
+
+        slider->onModulationReset = [this, slider]()
+        {
+            processor.resetModulation(slider->getParamID());
         };
     }
 

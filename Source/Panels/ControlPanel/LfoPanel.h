@@ -152,6 +152,7 @@ public:
     void setScale(float newScale);
     void setOnDataChangedCallback(std::function<void()> callback);
 
+    std::function<void()> onDataChanged;
     std::function<void(int lfoIndex)> onAssignButtonClicked;
     juce::TextButton assignButton;
 
@@ -162,6 +163,7 @@ private:
     void sliderValueChanged(juce::Slider* slider) override;
     void setEditMode(LfoEditMode newMode);
     void styleButton(juce::Button& button, bool isToggle);
+    void setLfo(int newIndex);
 
     FireAudioProcessor& processor;
 
@@ -192,8 +194,12 @@ private:
     juce::Slider gridYSlider;
     juce::Label gridYLabel;
 
+    juce::Slider lfoSmoothSlider;
+    juce::Label lfoSmoothLabel;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncButtonAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoSmoothAttachment;
     bool isUpdatingRateSlider = false;
 
     void updateRateSlider();

@@ -1432,6 +1432,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
             juce::NormalisableRange<float>(0.01f, 100.0f, 0.01f, 0.3f),
             1.0f,
             "Hz"));
+
+        parameters.push_back(std::make_unique<PFloat>(
+            ParameterIDAndName::getID(LFO_SMOOTH_ID, i),
+            LFO_SMOOTH_NAME,
+            juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f),
+            0.0f));
     }
 
     return { parameters.begin(), parameters.end() };

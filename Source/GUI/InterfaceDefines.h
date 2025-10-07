@@ -140,6 +140,8 @@
 #define LFO_RATE_SYNC_NAME      "LfoRateSync"
 #define LFO_RATE_HZ_ID          "lfoRateHz"
 #define LFO_RATE_HZ_NAME        "LfoRateHz"
+#define LFO_SMOOTH_ID           "lfoSmooth"
+#define LFO_SMOOTH_NAME         "LfoSmooth"
 
 
 // Define Font

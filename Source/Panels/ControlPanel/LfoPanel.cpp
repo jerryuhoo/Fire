@@ -937,6 +937,10 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
     addAndMakeVisible(lfoEditor);
 
+    // Forward the callback from the editor to the panel's own public callback.
+    lfoEditor.setOnDataChangedCallback([this]
+                                       { if (onDataChanged) onDataChanged(); });
+
     // Create UI Components
     for (int i = 0; i < 4; ++i)
     {
@@ -974,6 +978,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     styleButton(assignButton, true);
 
     addAndMakeVisible(matrixButton);
+    matrixButton.setButtonText("Matrix"); // Set button text
     styleButton(matrixButton, false);
 
     addAndMakeVisible(syncButton);
@@ -1006,7 +1011,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridXSlider.setColour(juce::TextButton::textColourOnId, COLOUR1);
 
     addAndMakeVisible(gridXLabel);
-    gridXLabel.setText("Grid X", juce::dontSendNotification);
+    gridXLabel.setText("X", juce::dontSendNotification);
 
     addAndMakeVisible(gridYSlider);
     gridYSlider.setSliderStyle(juce::Slider::IncDecButtons);
@@ -1019,20 +1024,33 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridYSlider.setColour(juce::TextButton::textColourOnId, COLOUR1);
 
     addAndMakeVisible(gridYLabel);
-    gridYLabel.setText("Grid Y", juce::dontSendNotification);
+    gridYLabel.setText("Y", juce::dontSendNotification);
 
-    // ADD THIS: Register as a parameter listener for each of the LFO sync mode parameters.
+    // Register as a parameter listener for each of the LFO sync mode parameters.
     for (int i = 0; i < 4; ++i)
     {
-        // Use the ParameterID helper function to get the correct ID.
-        // The loop now correctly runs from 0 to 3 to match the array indices.
         processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);
+        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i), this);
     }
 
-    // --- ADD Attachments ---
-    // Attach the sync button to the first LFO's sync mode parameter
-    syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        processor.treeState, ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0), syncButton);
+    // Initialize the smooth slider and label.
+    addAndMakeVisible(lfoSmoothSlider);
+    lfoSmoothSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    lfoSmoothSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+
+    addAndMakeVisible(lfoSmoothLabel);
+    lfoSmoothLabel.setText("Smooth", juce::dontSendNotification);
+    lfoSmoothLabel.setFont(juce::Font {
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain") });
+    lfoSmoothLabel.attachToComponent(&lfoSmoothSlider, false);
+    lfoSmoothLabel.setColour(juce::Label::textColourId, COLOUR1);
+    lfoSmoothLabel.setJustificationType(juce::Justification::centred);
+
+    // Attachments
+    setLfo(currentLfoIndex); // Call helper to set up all attachments for the initial LFO.
 
     // Set up the rate slider based on the initial state
     updateRateSlider();
@@ -1046,8 +1064,8 @@ LfoPanel::~LfoPanel()
 
     for (int i = 0; i < 4; ++i)
     {
-        // Use the same helper function to ensure we remove the correct listener.
         processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);
+        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i), this);
     }
 }
 
@@ -1060,94 +1078,101 @@ void LfoPanel::paint(juce::Graphics& g)
 void LfoPanel::resized()
 {
     // First, get the scale factor from the parent editor
+    float scale = 1.0f;
     if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
         if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&editor->getLookAndFeel()))
             scale = lnf->scale;
 
     // --- Define layout constants ---
-    // These remain largely the same, but we only need one width for all top buttons now.
     constexpr int initialMargin = 10;
-    constexpr int initialLeftColWidth = 60;
-    constexpr int initialRightColWidth = 120;
-    constexpr int initialTopRowHeight = 30;
-    constexpr int initialVerticalPadding = 4;
+    constexpr int initialRightColWidth = 200; // Keep the right side spacious for the 2 sliders
+    constexpr int initialLeftColWidth = 60; // For the LFO 1-4 buttons
+    constexpr int initialTopRowHeight = 30; // For matrix, sync, etc. buttons
 
-    // Create a working area, scaled from the initial margin.
+    // Create a working area
     juce::Rectangle<int> bounds = getLocalBounds();
     bounds.reduce(juce::roundToInt(initialMargin * scale), juce::roundToInt(initialMargin * scale));
 
-    // Calculate scaled dimensions for the main columns and rows.
-    auto leftColumn = bounds.removeFromLeft(juce::roundToInt(initialLeftColWidth * scale));
-    auto rightColumn = bounds.removeFromRight(juce::roundToInt(initialRightColWidth * scale));
+    // --- Create the main Left and Right areas ---
+    auto rightArea = bounds.removeFromRight(juce::roundToInt(initialRightColWidth * scale));
+    bounds.removeFromRight(juce::roundToInt(initialMargin * scale)); // Spacer
+    auto leftArea = bounds;
 
-    // Add some spacing between columns and the central editor
-    bounds.removeFromLeft(juce::roundToInt(initialMargin * scale));
-    bounds.removeFromRight(juce::roundToInt(initialMargin * scale));
-
-    auto topRow = bounds.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
-    bounds.removeFromTop(juce::roundToInt(initialMargin * scale)); // Spacing below top row
-
-    // --- MODIFICATION: Use FlexBox for top row layout ---
+    // --- Layout Left Area (LFO Select, Top Buttons, Editor) ---
     {
-        juce::FlexBox flexBox;
-        flexBox.flexDirection = juce::FlexBox::Direction::row;
-        flexBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround; // Use spaceAround for better spacing with flex
-        flexBox.alignItems = juce::FlexBox::AlignItems::stretch;
+        // Carve out a column for the LFO select buttons from the far left.
+        auto lfoSelectColumn = leftArea.removeFromLeft(juce::roundToInt(initialLeftColWidth * scale));
+        leftArea.removeFromLeft(juce::roundToInt(initialMargin * scale)); // Spacer
 
-        // A list of controls to be laid out.
+        // From the rest of leftArea, take the top row for mode buttons.
+        auto topRow = leftArea.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
+        leftArea.removeFromTop(juce::roundToInt(initialMargin * scale)); // Spacer
+
+        // The main LFO editor takes the remaining space.
+        lfoEditor.setBounds(leftArea);
+
+        // Use FlexBox to lay out the LFO select buttons vertically.
+        juce::FlexBox lfoSelectBox;
+        lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
+        for (const auto& button : lfoSelectButtons)
+            lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(juce::roundToInt(2 * scale))));
+        lfoSelectBox.performLayout(lfoSelectColumn);
+
+        // Use FlexBox to lay out the top row controls horizontally.
+        juce::FlexBox topRowFlexBox;
+        topRowFlexBox.flexDirection = juce::FlexBox::Direction::row;
+        topRowFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+        topRowFlexBox.alignItems = juce::FlexBox::AlignItems::stretch;
         std::vector<juce::Component*> topRowControls = {
-            &matrixButton,
-            &syncButton,
-            &assignButton,
-            &editModeButton,
-            &brushModeButton,
-            &brushSelector
+            &matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton, &brushSelector
         };
-
-        const float scaledPadding = initialVerticalPadding * scale;
-
-        // Add each control to the FlexBox as a FlexItem.
+        const float scaledPadding = 4 * scale;
         for (auto* control : topRowControls)
         {
-            flexBox.items.add(juce::FlexItem(*control)
-                                  .withFlex(1.0f) // Let the FlexBox decide the width, distributing space equally.
-                                  .withMargin({ scaledPadding, 2.0f * scale, scaledPadding, 2.0f * scale })); // Add some horizontal margin too
+            topRowFlexBox.items.add(juce::FlexItem(*control)
+                                        .withFlex(1.0f)
+                                        .withMargin({ scaledPadding, 2.0f * scale, scaledPadding, 2.0f * scale }));
         }
-
-        // Perform the layout within the topRow rectangle.
-        flexBox.performLayout(topRow);
+        topRowFlexBox.performLayout(topRow);
     }
 
-    // Layout for the left column (LFO 1-4 buttons) remains the same.
-    juce::FlexBox lfoSelectBox;
-    lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
-    for (const auto& button : lfoSelectButtons)
-        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(juce::roundToInt(2 * scale))));
-    lfoSelectBox.performLayout(leftColumn);
-
-    // Right column layout remains untouched.
+    // --- Layout Right Area (Keeping it simple and unchanged) ---
+    // --- Layout Right Area (Your specified slider layout + forced Grid row at bottom) ---
     {
-        const int gridAreaHeight = juce::roundToInt(50 * scale);
-        const int gridLabelWidth = juce::roundToInt(45 * scale);
-        const int rowHeight = gridAreaHeight / 2;
+        // --- 1. Define and populate the Grid Area at the absolute bottom ---
+        // We do this first to reserve the space.
+        const int gridAreaHeight = juce::roundToInt(30 * scale);
+        auto gridArea = rightArea.removeFromBottom(gridAreaHeight);
 
-        auto gridArea = rightColumn.removeFromBottom(gridAreaHeight);
-        rightColumn.removeFromBottom(juce::roundToInt(5 * scale));
+        juce::FlexBox gridBox;
+        gridBox.flexDirection = juce::FlexBox::Direction::row;
+        gridBox.alignItems = juce::FlexBox::AlignItems::stretch;
+        gridBox.items.add(juce::FlexItem(gridXLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
+        gridBox.items.add(juce::FlexItem(gridXSlider).withFlex(1.0f));
+        gridBox.items.add(juce::FlexItem().withWidth(5 * scale)); // Spacer
+        gridBox.items.add(juce::FlexItem(gridYLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
+        gridBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
+        gridBox.performLayout(gridArea);
 
-        const int sliderSize = juce::roundToInt(juce::jmin(rightColumn.getWidth(), rightColumn.getHeight()) * 0.7f);
-        rateSlider.setBounds(rightColumn.withSizeKeepingCentre(sliderSize, sliderSize));
+        // --- 2. Use your specified code to lay out the sliders in the remaining space above ---
+        // This code now operates on a rightArea that is already shorter because the grid is gone.
 
-        auto gridXRow = gridArea.removeFromTop(rowHeight);
-        auto gridYRow = gridArea;
+        // Reduce the height of the remaining rightArea from top and bottom.
+        rightArea.reduce(0, juce::roundToInt(initialMargin * scale));
 
-        gridXLabel.setBounds(gridXRow.removeFromLeft(gridLabelWidth).reduced(juce::roundToInt(scale)));
-        gridXSlider.setBounds(gridXRow);
+        // Divide the vertically-reduced rightArea into two slices.
+        auto leftSliderArea = rightArea.removeFromLeft(rightArea.getWidth() / 2);
+        auto rightSliderArea = rightArea;
 
-        gridYLabel.setBounds(gridYRow.removeFromLeft(gridLabelWidth).reduced(juce::roundToInt(scale)));
-        gridYSlider.setBounds(gridYRow);
+        // Apply some horizontal and vertical padding for aesthetics.
+        int padding = 10;
+        leftSliderArea = leftSliderArea.reduced(juce::roundToInt(padding * scale), juce::roundToInt(padding * scale));
+        rightSliderArea = rightSliderArea.reduced(juce::roundToInt(padding * scale), juce::roundToInt(padding * scale));
+
+        // Assign each slider to its final, smaller area.
+        rateSlider.setBounds(leftSliderArea);
+        lfoSmoothSlider.setBounds(rightSliderArea);
     }
-
-    lfoEditor.setBounds(bounds);
 }
 
 void LfoPanel::timerCallback()
@@ -1195,15 +1220,12 @@ void LfoPanel::buttonClicked(juce::Button* button)
     }
     else if (button == &syncButton)
     {
-        // Handle BPM sync logic here
+        // This button's state is managed by the ButtonAttachment, so we don't need to do anything here.
+        // The parameterChanged callback will handle the UI update.
     }
     else
     {
-        // --- NEW LOGIC ---
-        // Variable to hold the index of the button that was clicked.
         int clickedIndex = -1;
-
-        // First, find which of our LFO buttons was the one that was clicked.
         for (int i = 0; i < lfoSelectButtons.size(); ++i)
         {
             if (button == lfoSelectButtons[i].get())
@@ -1213,43 +1235,48 @@ void LfoPanel::buttonClicked(juce::Button* button)
             }
         }
 
-        // If one of the LFO select buttons was clicked...
         if (clickedIndex != -1)
         {
-            // ...update the current LFO index and tell the editor to display the new data.
-            currentLfoIndex = clickedIndex;
-            lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
-
-            // Explicitly set the toggle state for all buttons in the group.
-            // This is the most robust way to manage radio button states.
-            for (int i = 0; i < lfoSelectButtons.size(); ++i)
-            {
-                // If the button's index matches the one we just clicked, set its state to true.
-                // Otherwise, set it to false.
-                // The 'dontSendNotification' flag is crucial to prevent this action from triggering
-                // another call to buttonClicked, which would cause an infinite loop.
-                lfoSelectButtons[i]->setToggleState(i == clickedIndex, juce::dontSendNotification);
-            }
-
-            // Re-attach the sync button to the newly selected LFO's sync parameter
-            auto syncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, clickedIndex);
-            syncButtonAttachment.reset();
-            syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-                processor.treeState, syncModeID, syncButton);
-
-            updateRateSlider();
+            setLfo(clickedIndex); // Call the new helper function
         }
     }
+}
+
+void LfoPanel::setLfo(int newIndex)
+{
+    // Update the current LFO index and tell the editor to display the new data.
+    currentLfoIndex = newIndex;
+    lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
+
+    // Explicitly set the toggle state for all buttons in the group.
+    for (int i = 0; i < lfoSelectButtons.size(); ++i)
+    {
+        lfoSelectButtons[i]->setToggleState(i == currentLfoIndex, juce::dontSendNotification);
+    }
+
+    // Reset and re-create all attachments to point to the new LFO's parameters.
+    syncButtonAttachment.reset();
+    rateSliderAttachment.reset();
+    lfoSmoothAttachment.reset();
+
+    syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.treeState, ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex), syncButton);
+
+    lfoSmoothAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processor.treeState, ParameterIDAndName::getIDString(LFO_SMOOTH_ID, currentLfoIndex), lfoSmoothSlider);
+
+    // This must be called after attachments are updated.
+    updateRateSlider();
 }
 
 void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)
 {
     // Here we connect the LfoPanel's callback to the LfoEditor's callback.
     // This completes the chain from the innermost component to the outermost.
-    lfoEditor.setOnDataChangedCallback(callback);
+    onDataChanged = callback;
 }
 
-void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
+void LfoPanel::updateRateSlider()
 {
     // --- Get Parameter IDs using the robust ParameterID namespace ---
     // The currentLfoIndex is 0-based, which matches our arrays perfectly.
@@ -1261,7 +1288,7 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
     // We use .getParamID() to get the string from the juce::ParameterID object.
     auto* param = processor.treeState.getParameter(syncModeID);
     jassert(param != nullptr);
-    bool isInSyncMode = param->getValue();
+    bool isInSyncMode = param->getValue() > 0.5f;
 
     // First, always destroy the old attachment before creating a new one.
     rateSliderAttachment.reset();
@@ -1288,7 +1315,7 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
         rateSliderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
             processor.treeState, rateSyncID, rateSlider);
     }
-    else // --- HZ (FREE) MODE (Continuous) ---
+    else // HZ (FREE) MODE
     {
         // Revert to default behavior.
         rateSlider.textFromValueFunction = nullptr;
@@ -1300,7 +1327,6 @@ void LfoPanel::updateRateSlider() // Or void LfoPanel::updateRateControls()
     }
 }
 
-// ADD THIS NEW FUNCTION
 void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
 {
     // Get the authoritative ParameterID for the currently active LFO's sync mode.
@@ -1312,6 +1338,26 @@ void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
         // If they match, it means the sync mode for the visible LFO has changed
         // (likely via automation or a preset load), so we must update the UI.
         updateRateSlider();
+        return;
+    }
+
+    // We must check all 4 LFOs, not just the currently visible one,
+    // so that automation or preset loads work correctly in the background.
+    for (int i = 0; i < 4; ++i)
+    {
+        auto smoothParamID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
+        if (parameterID == smoothParamID)
+        {
+            // Update the correct LfoData object in the manager.
+            processor.getLfoManager().getLfoData()[i].smoothness = newValue;
+
+            // Trigger a shape recalculation for all LFOs.
+            // This will cause LfoEngine::updateShape to be called with the new data.
+            if (onDataChanged)
+                onDataChanged();
+
+            return; // We handled it, so we can exit.
+        }
     }
 }
 
@@ -1324,7 +1370,7 @@ void LfoPanel::sliderValueChanged(juce::Slider* slider)
 void LfoPanel::setScale(float newScale)
 {
     scale = newScale;
-    //    flatLnf.scale = newScale; // Pass the scale to the LookAndFeel if it needs it.
+    resized(); // Call resized to apply the new scale
 }
 
 void LfoPanel::setEditMode(LfoEditMode newMode)

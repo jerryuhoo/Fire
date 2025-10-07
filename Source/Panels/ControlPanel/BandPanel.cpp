@@ -401,6 +401,8 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     if (focusBandNum == num && ! forceUpdate)
         return;
 
+    processor.setUiFocusBand(num);
+
     focusBandNum = num;
     updateAttachments();
     updateWhenChangingFocus();

@@ -79,6 +79,16 @@ struct MeterValues
     std::array<float, 4> outputRightBands;
 };
 
+struct DistortionGraphValues
+{
+    int mode = 0;
+    float rec = 0.0f;
+    float mix = 1.0f;
+    float bias = 0.0f;
+    float drive = 1.0f; // This will be the final value AFTER safe mode
+    float rateDivide = 1.0f;
+};
+
 struct ModulatedFilterValues
 {
     float lowCutFreq;

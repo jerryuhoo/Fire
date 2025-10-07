@@ -97,7 +97,7 @@ void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float samp
     for (const auto& routing : modulationRoutings)
     {
         // Skip invalid or unassigned routings
-        if (routing.targetParameterID.isEmpty())
+        if (routing.isBypassed || routing.targetParameterID.isEmpty())
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
@@ -412,6 +412,18 @@ void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
         {
             routing.depth *= -1.0f;
             return;
+        }
+    }
+}
+
+void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
+{
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            routing.isBypassed = ! routing.isBypassed;
+            return; // Assuming one routing per target for now
         }
     }
 }

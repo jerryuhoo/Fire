@@ -92,6 +92,21 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.setOnDataChangedCallback([this]
                                       { processor.lfoDataHasChanged(); });
 
+    auto bypassCallback = [this](const juce::String& parameterID)
+    {
+        processor.getLfoManager().toggleBypassForRouting(parameterID);
+        updateModulationStates();
+    };
+
+    // Use the new helper function to get all sliders and assign the callback in a single loop
+    for (auto* slider : getAllModulatableSliders())
+    {
+        slider->onBypassToggled = [bypassCallback, paramID = slider->getParamID()]()
+        {
+            bypassCallback(paramID);
+        };
+    }
+
     // This is not a perfect fix for Vst3 plugins
     // Vst3 calls constructor before setStateInformation in processor,
     // however, AU plugin calls constructor after setStateInformation/
@@ -596,13 +611,6 @@ void FireAudioProcessorEditor::timerCallback()
     globalPanel.repaint();
 
     int currentBand = bandPanel.getFocusBandNum();
-    setDistortionGraph(ParameterIDAndName::getIDString(MODE_ID, currentBand),
-                       ParameterIDAndName::getIDString(DRIVE_ID, currentBand),
-                       ParameterIDAndName::getIDString(REC_ID, currentBand),
-                       ParameterIDAndName::getIDString(MIX_ID, currentBand),
-                       ParameterIDAndName::getIDString(BIAS_ID, currentBand),
-                       ParameterIDAndName::getIDString(SAFE_ID, currentBand),
-                       currentBand);
 
     float realtimeThreshold = processor.getRealtimeModulatedThreshold(currentBand);
     graphPanel.getVuPanel()->updateRealtimeThreshold(realtimeThreshold);
@@ -640,6 +648,20 @@ void FireAudioProcessorEditor::timerCallback()
 
         globalPanel.repaint();
         // lfoPanel.repaint();
+    }
+
+    updateModulationStates();
+
+    DistortionGraphValues latestValues;
+    if (processor.getLatestDistortionGraphValues(latestValues))
+    {
+        graphPanel.getDistortionGraph()->setState(
+            latestValues.mode,
+            latestValues.rec,
+            latestValues.mix,
+            latestValues.bias,
+            latestValues.drive,
+            latestValues.rateDivide);
     }
 }
 
@@ -844,65 +866,6 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
     slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
-void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex)
-{
-    // paint distortion function
-    int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
-    float drive = *processor.treeState.getRawParameterValue(driveId);
-    float rec = *processor.treeState.getRawParameterValue(recId);
-    float mix = *processor.treeState.getRawParameterValue(mixId);
-    float bias = *processor.treeState.getRawParameterValue(biasId);
-    bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
-
-    // protection
-    drive = drive * 6.5f / 100.0f;
-    float powerDrive = powf(2, drive);
-    float sampleMaxValue = processor.getSampleMaxValue(bandIndex);
-
-    if (isSafeModeOn && sampleMaxValue * powerDrive > 2.0f)
-    {
-        drive = 2.0f / sampleMaxValue + 0.1 * std::log2f(powerDrive);
-    }
-    else
-    {
-        drive = powerDrive;
-    }
-
-    // get modulated value
-    auto getModulatedValue = [&](const juce::String& paramId, float baseValue) -> float
-    {
-        auto modInfo = processor.getModulationInfoForParameter(paramId);
-        if (! modInfo.isModulated)
-            return baseValue;
-
-        if (auto* parameter = processor.treeState.getParameter(paramId))
-        {
-            auto range = parameter->getNormalisableRange();
-            float parameterRange = range.end - range.start;
-            float modulationOffset = 0.0f;
-
-            if (modInfo.isBipolar)
-                modulationOffset = modInfo.currentValue * modInfo.depth * parameterRange * 0.5f;
-            else
-                modulationOffset = modInfo.currentValue * modInfo.depth * parameterRange;
-
-            return juce::jlimit(range.start, range.end, baseValue + modulationOffset);
-        }
-        return baseValue;
-    };
-
-    // apply modulation
-    float finalRec = getModulatedValue(recId, rec);
-    float finalBias = getModulatedValue(biasId, bias);
-
-    // apply downsampling
-    float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
-    if (! *processor.treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
-        rateDivide = 1;
-
-    graphPanel.getDistortionGraph()->setState(mode, finalRec, mix, finalBias, drive, rateDivide);
-}
-
 void FireAudioProcessorEditor::updateDistortionModeVisibility()
 {
     const bool shouldShowAny = ! zoomButton.getToggleState() && windowLeftButton.getToggleState();
@@ -966,28 +929,6 @@ void FireAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
 void FireAudioProcessorEditor::updateWhenChangingFocus()
 {
     focusIndex = multiband.getFocusIndex();
-
-    //    if (focusIndex == 0)
-    //    {
-    //        setDistortionGraph(MODE_ID1, DRIVE_ID1,
-    //            REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1);
-    //    }
-    //    else if (focusIndex == 1)
-    //    {
-    //        setDistortionGraph(MODE_ID2, DRIVE_ID2,
-    //            REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2);
-    //    }
-    //    else if (focusIndex == 2)
-    //    {
-    //        setDistortionGraph(MODE_ID3, DRIVE_ID3,
-    //            REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3);
-    //    }
-    //    else if (focusIndex == 3)
-    //    {
-    //        setDistortionGraph(MODE_ID4, DRIVE_ID4,
-    //            REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
-    //    }
-
     bool left = windowLeftButton.getToggleState();
     bool right = windowRightButton.getToggleState();
     if (left)
@@ -1119,4 +1060,46 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
 void FireAudioProcessorEditor::hideValuePopup()
 {
     valuePopup.setVisible(false);
+}
+
+std::vector<ModulatableSlider*> FireAudioProcessorEditor::getAllModulatableSliders()
+{
+    std::vector<ModulatableSlider*> allSliders;
+
+    // Get sliders from BandPanel
+    allSliders.insert(allSliders.end(), bandPanel.modulatableSliders.begin(), bandPanel.modulatableSliders.end());
+
+    // Get sliders from GlobalPanel
+    allSliders.insert(allSliders.end(), globalPanel.modulatableSliders.begin(), globalPanel.modulatableSliders.end());
+
+    return allSliders;
+}
+
+void FireAudioProcessorEditor::updateModulationStates()
+{
+    auto& routings = processor.getLfoManager().getModulationRoutings();
+
+    for (auto* slider : getAllModulatableSliders()) // Assuming you have a way to get all sliders
+    {
+        bool isModulated = false;
+        for (const auto& routing : routings)
+        {
+            if (routing.targetParameterID == slider->getParamID())
+            {
+                slider->isModulated = true;
+                slider->lfoSource = routing.sourceLfoIndex + 1;
+                slider->lfoAmount = routing.depth;
+                slider->isBipolar = routing.isBipolar;
+                slider->isBypassed = routing.isBypassed; // Sync the bypass state!
+                isModulated = true;
+                break;
+            }
+        }
+
+        if (! isModulated)
+        {
+            slider->isModulated = false;
+            slider->isBypassed = false;
+        }
+    }
 }

@@ -349,6 +349,7 @@ FireAudioProcessor::FireAudioProcessor()
 
     filterFifoBuffer.resize(filterFifo.getTotalSize());
     meterFifoBuffer.resize(meterFifo.getTotalSize());
+    graphFifoBuffer.resize(graphFifo.getTotalSize());
 
     // Set up the properties file options.
     juce::PropertiesFile::Options options;
@@ -808,6 +809,37 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         filterFifoBuffer[filterFifoWritePos] = filterVals;
         filterFifo.finishedWrite(1);
         filterFifoWritePos = (filterFifoWritePos + 1) % filterFifo.getTotalSize();
+    }
+
+    if (graphFifo.getFreeSpace() >= 1)
+    {
+        DistortionGraphValues vals;
+        const int bandIndex = uiFocusBand.load();
+
+        vals.rec = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(REC_ID, bandIndex));
+        vals.mix = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, bandIndex));
+        vals.bias = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(BIAS_ID, bandIndex));
+        float driveBase = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(DRIVE_ID, bandIndex));
+
+        vals.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, bandIndex));
+        bool isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, bandIndex));
+
+        float driveForCalc = driveBase * 6.5f / 100.0f;
+        float powerDrive = powf(2, driveForCalc);
+        float sampleMaxValue = getSampleMaxValue(bandIndex);
+
+        if (isSafeModeOn && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f)
+            vals.drive = 2.0f / sampleMaxValue + 0.1f * driveForCalc;
+        else
+            vals.drive = powerDrive;
+
+        vals.rateDivide = lfoManager->getModulatedValue(DOWNSAMPLE_ID);
+        if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
+            vals.rateDivide = 1.0f;
+
+        graphFifoBuffer[graphFifoWritePos] = vals;
+        graphFifo.finishedWrite(1);
+        graphFifoWritePos = (graphFifoWritePos + 1) % graphFifo.getTotalSize();
     }
 }
 
@@ -1772,7 +1804,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                     provider.range = param->getNormalisableRange();
 
                     auto modInfo = getModulationInfoForParameter(paramID);
-                    if (modInfo.isModulated)
+                    if (modInfo.isModulated && ! modInfo.isBypassed)
                     {
                         provider.modulationDepth = modInfo.depth;
                         provider.isBipolar = modInfo.isBipolar;
@@ -1837,7 +1869,7 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     globalGainProvider.range = param->getNormalisableRange();
 
     auto modInfo = getModulationInfoForParameter(OUTPUT_ID);
-    if (modInfo.isModulated)
+    if (modInfo.isModulated && ! modInfo.isBypassed)
     {
         globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(modInfo.sourceLfoIndex - 1);
         globalGainProvider.modulationDepth = modInfo.depth;
@@ -1858,7 +1890,7 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
     // ==============================================================================
     // Block-based processing (if not modulated)
     // ==============================================================================
-    if (! modInfo.isModulated)
+    if (! modInfo.isModulated || modInfo.isBypassed)
     {
         const int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
         if (rateDivide <= 1)
@@ -1966,11 +1998,11 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
             {
                 const float unipolarLfoValue = lfoManager->getLfoOutput(routing.sourceLfoIndex);
                 float finalLfoValue = routing.isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
-                return { true, routing.sourceLfoIndex + 1, routing.depth, finalLfoValue, routing.isBipolar };
+                return { true, routing.sourceLfoIndex + 1, routing.depth, finalLfoValue, routing.isBipolar, routing.isBypassed };
             }
         }
     }
-    return { false, 0, 0.0f, 0.0f, true }; // Default "not modulated" state
+    return { false, 0, 0.0f, 0.0f, true, false }; // Default "not modulated" state
 }
 
 void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
@@ -2303,4 +2335,31 @@ void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
     next_routing_clear:;
     }
     lfoDataHasChanged();
+}
+
+bool FireAudioProcessor::getLatestDistortionGraphValues(DistortionGraphValues& values)
+{
+    int numAvailable = graphFifo.getNumReady();
+    if (numAvailable > 0)
+    {
+        int start1, size1, start2, size2;
+        graphFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+
+        if (size2 > 0)
+            values = graphFifoBuffer[start2 + size2 - 1];
+        else
+            values = graphFifoBuffer[start1 + size1 - 1];
+
+        graphFifo.finishedRead(numAvailable);
+        return true;
+    }
+    return false;
+}
+
+void FireAudioProcessor::setUiFocusBand(int bandIndex)
+{
+    if (juce::isPositiveAndBelow(bandIndex, 4))
+    {
+        uiFocusBand.store(bandIndex);
+    }
 }

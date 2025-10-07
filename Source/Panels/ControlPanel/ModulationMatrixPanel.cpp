@@ -29,6 +29,10 @@ ModulationMatrixHeader::ModulationMatrixHeader()
     polarityLabel.setText("Polarity", juce::dontSendNotification);
     polarityLabel.setJustificationType(juce::Justification::centred);
 
+    addAndMakeVisible(bypassLabel);
+    bypassLabel.setText("Bypass", juce::dontSendNotification);
+    bypassLabel.setJustificationType(juce::Justification::centred);
+
     addAndMakeVisible(destinationLabel);
     destinationLabel.setText("Destination", juce::dontSendNotification);
     destinationLabel.setJustificationType(juce::Justification::centred);
@@ -42,6 +46,7 @@ void ModulationMatrixHeader::resized()
     flex.items.add(juce::FlexItem(sourceLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(amountLabel).withFlex(2.0f));
     flex.items.add(juce::FlexItem(polarityLabel).withFlex(1.0f));
+    flex.items.add(juce::FlexItem(bypassLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(destinationLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem().withWidth(35));
     flex.performLayout(getLocalBounds());
@@ -88,6 +93,23 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     {
         bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
         processor.getLfoManager().getModulationRoutings().getReference(index).isBipolar = bipolarButton.getToggleState();
+    };
+
+    // BYPASS BUTTON
+    addAndMakeVisible(bypassButton);
+    bypassButton.setComponentID("rounded");
+    bypassButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    bypassButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6);
+    bypassButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    bypassButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    bypassButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    bypassButton.setClickingTogglesState(true);
+    bypassButton.setToggleState(processor.getLfoManager().getModulationRoutings()[index].isBypassed, juce::dontSendNotification);
+    bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+    bypassButton.onStateChange = [this]
+    {
+        bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+        processor.getLfoManager().getModulationRoutings().getReference(index).isBypassed = bypassButton.getToggleState();
     };
 
     // === DESTINATION MENU ===
@@ -149,6 +171,7 @@ void ModulationMatrixRow::resized()
     flex.items.add(juce::FlexItem(sourceMenu).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(amountSlider).withFlex(2.0f).withMargin(2));
     flex.items.add(juce::FlexItem(bipolarButton).withFlex(1.0f).withMargin(2));
+    flex.items.add(juce::FlexItem(bypassButton).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(destinationMenu).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(removeButton).withWidth(35).withMargin(2));
     flex.performLayout(getLocalBounds());

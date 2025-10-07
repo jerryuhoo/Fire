@@ -791,7 +791,16 @@ private:
                 std::swap(modStartAngle, modEndAngle);
             modulationDepthArc.addCentredArc(center.x, center.y, modulationArcRadius, modulationArcRadius, 0.0f, modStartAngle, modEndAngle, true);
 
-            juce::Colour arcColour = (slider.lfoAmount > 0) ? juce::Colours::red.withAlpha(0.5f) : juce::Colours::orange.withAlpha(0.5f);
+            juce::Colour arcColour;
+            if (slider.isBypassed)
+            {
+                arcColour = juce::Colours::darkgrey;
+            }
+            else
+            {
+                arcColour = (slider.lfoAmount > 0) ? juce::Colours::red.withAlpha(0.5f) : juce::Colours::orange.withAlpha(0.5f);
+            }
+
             g.setColour(arcColour);
             g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
@@ -802,28 +811,36 @@ private:
             double lfoSignal = slider.lfoValue; // Let's assume lfoValue is correctly bipolar/unipolar already
             double currentModulatedValueNormalized;
 
-            if (slider.isBipolar)
+            if (! slider.isBypassed)
             {
-                // Assuming slider.lfoValue is [-1, 1] for bipolar
-                currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * (normalizedModulationDepth / 2.0);
+                // 6. Calculate the current LFO-driven value in NORMALIZED space
+                // slider.lfoValue is the raw LFO output, typically [0, 1] for unipolar, or transformed to [-1, 1] for bipolar
+                double lfoSignal = slider.lfoValue; // Let's assume lfoValue is correctly bipolar/unipolar already
+                double currentModulatedValueNormalized;
+
+                if (slider.isBipolar)
+                {
+                    // Assuming slider.lfoValue is [-1, 1] for bipolar
+                    currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * (normalizedModulationDepth / 2.0);
+                }
+                else
+                {
+                    // Assuming slider.lfoValue is [0, 1] for unipolar
+                    currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * slider.lfoAmount;
+                }
+
+                currentModulatedValueNormalized = juce::jlimit(0.0, 1.0, currentModulatedValueNormalized);
+
+                // 7. Convert back to REAL value and then to angle for drawing
+                const double realModulatedValue = slider.proportionOfLengthToValue(currentModulatedValueNormalized);
+                float currentModAngle = valueToAngle(realModulatedValue);
+
+                juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
+                                                 center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
+
+                g.setColour(juce::Colours::red);
+                g.fillEllipse(juce::Rectangle<float>(modulationArcWidth * 1.5f, modulationArcWidth * 1.5f).withCentre(modThumbPoint));
             }
-            else
-            {
-                // Assuming slider.lfoValue is [0, 1] for unipolar
-                currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * slider.lfoAmount;
-            }
-
-            currentModulatedValueNormalized = juce::jlimit(0.0, 1.0, currentModulatedValueNormalized);
-
-            // 7. Convert back to REAL value and then to angle for drawing
-            const double realModulatedValue = slider.proportionOfLengthToValue(currentModulatedValueNormalized);
-            float currentModAngle = valueToAngle(realModulatedValue);
-
-            juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
-                                             center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
-
-            g.setColour(juce::Colours::red);
-            g.fillEllipse(juce::Rectangle<float>(modulationArcWidth * 1.5f, modulationArcWidth * 1.5f).withCentre(modThumbPoint));
         }
 
         if (slider.isModulated)

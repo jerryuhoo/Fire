@@ -39,6 +39,7 @@ public:
     bool isMouseOverMainSlider() const;
     bool isModulated = false;
     bool isBipolar = true;
+    bool isBypassed = false;
     juce::String parameterID;
 
     float assignModeGlowAlpha = 0.0f;
@@ -50,6 +51,7 @@ public:
     std::function<void(const juce::String&)> onClickInAssignMode;
     std::function<void()> onModulationCleared;
     std::function<void()> onModulationInverted;
+    std::function<void()> onBypassToggled;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;

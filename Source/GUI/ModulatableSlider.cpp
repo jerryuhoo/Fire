@@ -201,10 +201,12 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         juce::PopupMenu menu;
         menu.addItem(1, "Clear LFO");
         menu.addItem(2, "Invert Depth");
-        // menu.addSeparator();
 
         juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
         menu.addItem(3, bipolarToggleText);
+
+        juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
+        menu.addItem(4, bypassToggleText);
 
         // Use SafePointer to ensure the component still exists during the asynchronous callback
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
@@ -226,6 +228,10 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
                                    case 3: // Switch Bi/Uni Mode
                                        if (onBipolarModeToggled)
                                            onBipolarModeToggled();
+                                       break;
+                                   case 4: // Toggle Bypass
+                                       if (onBypassToggled)
+                                           onBypassToggled();
                                        break;
                                    default:
                                        break;

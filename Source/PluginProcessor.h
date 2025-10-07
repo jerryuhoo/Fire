@@ -219,6 +219,7 @@ public:
         float depth = 0.0f;
         float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
         bool isBipolar = true;
+        bool isBypassed = false;
     };
 
     void assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID);
@@ -290,8 +291,12 @@ public:
 
     void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
     void clearLfoModulationForBand(int bandIndex);
+    
+    bool getLatestDistortionGraphValues(DistortionGraphValues& values);
+    void setUiFocusBand(int bandIndex);
 
 private:
+    std::atomic<int> uiFocusBand { 0 };
     // reset parameters
     void performReset();
     std::atomic<bool> needsReset { false };
@@ -425,6 +430,11 @@ private:
     juce::AbstractFifo meterFifo { 1024 };
     std::vector<MeterValues> meterFifoBuffer;
     int meterFifoWritePos = 0;
+    
+    // 3. For Distortion Graph
+    juce::AbstractFifo graphFifo { 1024 };
+    std::vector<DistortionGraphValues> graphFifoBuffer;
+    int graphFifoWritePos = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

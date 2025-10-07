@@ -133,8 +133,6 @@ private:
 
     void setLinearSlider(juce::Slider& slider);
 
-    void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex);
-
     void updateDistortionModeVisibility();
 
     // override listener functions
@@ -148,6 +146,9 @@ private:
     //    void changeSliderState(juce::ComboBox *combobox);
 
     void exitAssignMode();
+
+    void updateModulationStates();
+    std::vector<ModulatableSlider*> getAllModulatableSliders();
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>

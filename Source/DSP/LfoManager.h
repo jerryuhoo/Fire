@@ -72,6 +72,7 @@ public:
     void clearModulationForTarget(const juce::String& targetParameterID);
     void invertModulationDepth(const juce::String& targetParameterID);
     void onLfoShapeChanged(int lfoIndex);
+    void toggleBypassForRouting(const juce::String& targetParameterID);
 
 private:
     /**

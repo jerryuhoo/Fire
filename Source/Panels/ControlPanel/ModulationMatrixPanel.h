@@ -28,6 +28,7 @@ private:
     juce::Label sourceLabel;
     juce::Label amountLabel;
     juce::Label polarityLabel;
+    juce::Label bypassLabel;
     juce::Label destinationLabel;
 };
 
@@ -59,6 +60,7 @@ private:
     juce::ComboBox sourceMenu;
     juce::Slider amountSlider;
     juce::TextButton bipolarButton;
+    juce::TextButton bypassButton;
     juce::ComboBox destinationMenu;
     juce::TextButton removeButton;
 

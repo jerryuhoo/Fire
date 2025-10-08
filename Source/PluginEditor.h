@@ -27,6 +27,65 @@
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
 
+struct Version
+{
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+    juce::String preRelease;
+
+    // Parses a version string, e.g., "v1.5.0-beta" or "1.0.2"
+    Version(juce::String versionString)
+    {
+        // Remove the optional 'v' prefix
+        if (versionString.startsWith("v"))
+            versionString = versionString.substring(1);
+
+        // Separate the pre-release identifier (e.g., "-beta", "-rc1")
+        int preReleaseIndex = versionString.indexOf("-");
+        if (preReleaseIndex != -1)
+        {
+            preRelease = versionString.substring(preReleaseIndex + 1);
+            versionString = versionString.substring(0, preReleaseIndex);
+        }
+
+        // Split the major, minor, and patch version numbers
+        juce::StringArray parts;
+        parts.addTokens(versionString, ".", "");
+
+        if (parts.size() > 0)
+            major = parts[0].getIntValue();
+        if (parts.size() > 1)
+            minor = parts[1].getIntValue();
+        if (parts.size() > 2)
+            patch = parts[2].getIntValue();
+    }
+
+    // Overload the less-than operator "<" to implement version comparison
+    bool operator<(const Version& other) const
+    {
+        if (major != other.major)
+            return major < other.major;
+        if (minor != other.minor)
+            return minor < other.minor;
+        if (patch != other.patch)
+            return patch < other.patch;
+
+        // SemVer rule: A stable version is greater than a pre-release version.
+        // If this version has a pre-release tag and the other does not, this one is smaller.
+        if (! preRelease.isEmpty() && other.preRelease.isEmpty())
+            return true;
+
+        // If this version does not have a pre-release tag and the other one does, this one is greater.
+        if (preRelease.isEmpty() && ! other.preRelease.isEmpty())
+            return false;
+
+        // If both have or both lack a pre-release tag, compare them numerically.
+        // (Note: full SemVer pre-release comparison is more complex, but this is sufficient for this use case)
+        return preRelease < other.preRelease;
+    }
+};
+
 //==============================================================================
 /**
 */

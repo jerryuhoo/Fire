@@ -190,24 +190,35 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         // 2. If not, check the user's preference from the now-loaded state.
         if (shouldCheckForUpdate)
         {
-            // 3. If enabled, schedule the check on a background thread.
-            juce::Timer::callAfterDelay(1000, [this]()
+            // Schedule the check on a background thread.
+            juce::Timer::callAfterDelay(1000, []()
                                         {
                 std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-                if (versionInfo != nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
+                // We must use the static VERSION macro from JucePluginDefines.h here, not a member variable.
+                if (versionInfo != nullptr)
                 {
-                    juce::String version = versionInfo->versionString;
-                    const auto callback = juce::ModalCallbackFunction::create([version](int result) {
-                        if (result == 1)
-                        {
-                            juce::URL(GITHUB_TAG_LINK + version).launchInDefaultBrowser();
-                        }
-                    });
-                    
-                    juce::MessageManager::callAsync([callback, version]() {
-                        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-                    });
+                    // ==============================================================
+                    // ** 2. Use the new Version struct for comparison **
+                    // ==============================================================
+                    Version currentVersion(juce::String(VERSION));
+                    Version fetchedVersion(versionInfo->versionString);
+
+                    // Only prompt for an update if the fetched version is strictly greater than the current one.
+                    if (currentVersion < fetchedVersion)
+                    {
+                        juce::String version = versionInfo->versionString;
+                        const auto callback = juce::ModalCallbackFunction::create([version](int result) {
+                            if (result == 1)
+                            {
+                                juce::URL(GITHUB_TAG_LINK + version).launchInDefaultBrowser();
+                            }
+                        });
+                        
+                        juce::MessageManager::callAsync([callback, version]() {
+                            juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                                "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
+                        });
+                    }
                 } });
         }
 

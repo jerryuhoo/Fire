@@ -51,6 +51,27 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     valuePopup.setAlwaysOnTop(true);
     valuePopup.setVisible(false);
 
+    addAndMakeVisible(valueEntryPopup);
+    valueEntryPopup.setAlwaysOnTop(true);
+    valueEntryPopup.setVisible(false);
+
+    valueEntryPopup.onOk = [this](double value)
+    {
+        if (sliderForValueEntry != nullptr)
+        {
+            processor.setModulationValue(sliderForValueEntry->getParamID(), (float) value);
+        }
+
+        valueEntryPopup.setVisible(false);
+        sliderForValueEntry = nullptr;
+    };
+
+    valueEntryPopup.onCancel = [this]()
+    {
+        valueEntryPopup.setVisible(false);
+        sliderForValueEntry = nullptr;
+    };
+
     processor.addChangeListener(this);
     // timer
     juce::Timer::startTimerHz(60.0f);
@@ -101,6 +122,27 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // Use the new helper function to get all sliders and assign the callback in a single loop
     for (auto* slider : getAllModulatableSliders())
     {
+        slider->onModAmountSetValue = [this, slider](double newValue)
+        {
+            processor.setModulationValue(slider->getParamID(), (float) newValue);
+        };
+
+        slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit)
+        {
+            sliderForValueEntry = sliderToEdit;
+
+            auto sliderBounds = sliderToEdit->getScreenBounds();
+
+            auto localBounds = getLocalArea(nullptr, sliderBounds);
+
+            valueEntryPopup.setBounds(localBounds.getCentreX() - 80,
+                                      localBounds.getCentreY() - 30,
+                                      160,
+                                      60);
+            valueEntryPopup.setVisible(true);
+            valueEntryPopup.grabKeyboardFocus();
+        };
+
         slider->onBypassToggled = [slider, bypassCallback]()
         {
             bypassCallback(slider->getParamID());

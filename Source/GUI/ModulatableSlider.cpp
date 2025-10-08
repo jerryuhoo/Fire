@@ -199,45 +199,51 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
     if (event.mods.isRightButtonDown() && isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
     {
         juce::PopupMenu menu;
-        menu.addItem(1, "Clear LFO");
-        menu.addItem(2, "Invert Depth");
+        menu.addItem(1, "Set Value");
+        menu.addItem(2, "Clear LFO");
+        menu.addItem(3, "Invert Depth");
 
         juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
-        menu.addItem(3, bipolarToggleText);
+        menu.addItem(4, bipolarToggleText);
 
         juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
-        menu.addItem(4, bypassToggleText);
+        menu.addItem(5, bypassToggleText);
 
-        // Use SafePointer to ensure the component still exists during the asynchronous callback
+        // This is the outer lambda. We create 'safeThis' here.
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
-                           [this, weakThis = juce::Component::SafePointer(this)](int result)
+                           [safeThis = juce::Component::SafePointer(this)](int result)
                            {
-                               if (weakThis == nullptr)
-                                   return; // The component has been deleted
+                               if (! safeThis)
+                                   return;
 
                                switch (result)
                                {
-                                   case 1: // Clear LFO
-                                       if (onModulationCleared)
-                                           onModulationCleared();
+                                   case 1: // Set Value
+                                   {
+                                       if (safeThis->onSetValueRequested)
+                                           safeThis->onSetValueRequested(safeThis);
                                        break;
-                                   case 2: // Invert Depth
-                                       if (onModulationInverted)
-                                           onModulationInverted();
+                                   }
+                                   case 2: // Clear LFO
+                                       if (safeThis->onModulationCleared)
+                                           safeThis->onModulationCleared();
                                        break;
-                                   case 3: // Switch Bi/Uni Mode
-                                       if (onBipolarModeToggled)
-                                           onBipolarModeToggled();
+                                   case 3: // Invert Depth
+                                       if (safeThis->onModulationInverted)
+                                           safeThis->onModulationInverted();
                                        break;
-                                   case 4: // Toggle Bypass
-                                       if (onBypassToggled)
-                                           onBypassToggled();
+                                   case 4: // Switch Bi/Uni Mode
+                                       if (safeThis->onBipolarModeToggled)
+                                           safeThis->onBipolarModeToggled();
+                                       break;
+                                   case 5: // Toggle Bypass
+                                       if (safeThis->onBypassToggled)
+                                           safeThis->onBypassToggled();
                                        break;
                                    default:
                                        break;
                                }
                            });
-        return; // Do not execute the following logic after a right-click
     }
 
     // Always call the base class mouseUp to ensure proper state cleanup

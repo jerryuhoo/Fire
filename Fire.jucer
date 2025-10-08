@@ -110,6 +110,10 @@
               file="Source/GUI/ModulatableSlider.h"/>
         <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
               file="Source/GUI/SettingsComponent.h"/>
+        <FILE id="C3EVC1" name="ValueEntryPopup.cpp" compile="1" resource="0"
+              file="Source/GUI/ValueEntryPopup.cpp"/>
+        <FILE id="LhmYR1" name="ValueEntryPopup.h" compile="0" resource="0"
+              file="Source/GUI/ValueEntryPopup.h"/>
         <FILE id="g4Ar29" name="ValuePopup.cpp" compile="1" resource="0" file="Source/GUI/ValuePopup.cpp"/>
         <FILE id="h6WIOb" name="ValuePopup.h" compile="0" resource="0" file="Source/GUI/ValuePopup.h"/>
       </GROUP>

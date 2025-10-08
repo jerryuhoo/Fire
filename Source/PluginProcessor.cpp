@@ -2011,6 +2011,51 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
     return { false, 0, 0.0f, 0.0f, true, false }; // Default "not modulated" state
 }
 
+void FireAudioProcessor::setModulationValue(const juce::String& targetParameterID, float newValue)
+{
+    // Find the matching routing in the LFO manager.
+    for (auto& routing : lfoManager->getModulationRoutings())
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            // Get the parameter object to access its properties, especially the range.
+            auto* parameter = treeState.getParameter(targetParameterID);
+            if (parameter == nullptr)
+                return; // Exit if the parameter is not found.
+
+            const auto range = parameter->getNormalisableRange();
+
+            // Get the parameter's current base value (without modulation).
+            float baseValue = *treeState.getRawParameterValue(targetParameterID);
+
+            // Convert both the target value and the base value to the normalized [0, 1] range.
+            float valueNormalized = range.convertTo0to1(newValue);
+            float baseNormalized = range.convertTo0to1(baseValue);
+
+            // The new depth is the difference between the target value's normalized position
+            // and the base value's normalized position.
+            float newDepth = valueNormalized - baseNormalized;
+
+            // In Bipolar mode, the DSP logic effectively halves the depth's impact
+            // to create a symmetrical swing. To make our `newValue` the actual extreme
+            // of that swing, we must pre-emptively double the calculated depth.
+            if (routing.isBipolar)
+            {
+                newDepth *= 2.0f;
+            }
+
+            // Clamp the final depth to the valid range [-1.0, 1.0] and update the routing.
+            routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
+
+            // Notify that LFO data has changed to ensure UI and state are updated.
+            lfoDataHasChanged();
+
+            // We've found and updated the routing, so we can exit the function.
+            return;
+        }
+    }
+}
+
 void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
 {
     // Find the matching routing in the modulation array.

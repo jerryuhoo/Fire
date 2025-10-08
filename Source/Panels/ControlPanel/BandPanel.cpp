@@ -78,6 +78,7 @@ void BandPanel::createSliders()
         // Use the generic initRotarySlider for basic setup.
         // The color will be set specifically below.
         initRotarySlider(*slider, juce::Colours::white);
+        setupSliderCallbacks(*slider);
 
         modulatableSliders.push_back(slider);
     }
@@ -304,6 +305,8 @@ void BandPanel::updateAttachments()
         // Generate the dynamic parameter ID using the correct idBase (e.g., "compRatio")
         auto paramID = ParameterIDAndName::getIDString(paramInfo.idBase, focusBandNum);
 
+        slider->parameterID = paramID;
+
         sliderAttachments[paramInfo.name].reset();
 
         auto* parameter = processor.treeState.getParameter(paramID);
@@ -313,9 +316,6 @@ void BandPanel::updateAttachments()
         {
             sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
         }
-
-        // Configure the slider's modulation logic using its stable Name
-        configureModulatableSlider(*slider, paramInfo.idBase);
     }
 
     // === Unchanged Button Attachment Logic ===
@@ -339,34 +339,51 @@ void BandPanel::updateAttachments()
     setBandKnobsStates(bandEnabled, false);
 }
 
-void BandPanel::configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase)
+void BandPanel::setupSliderCallbacks(ModulatableSlider& slider)
 {
-    // The slider now knows its full, band-specific parameter ID
-    slider.parameterID = ParameterIDAndName::getIDString(paramIDBase, focusBandNum);
+    auto safeSlider = juce::Component::SafePointer<ModulatableSlider>(&slider);
 
-    slider.onModAmountChanged = [this, &slider](double newAmount)
+    safeSlider->onModAmountSetValue = [this, safeSlider](double newValue)
     {
-        processor.setModulationDepth(slider.parameterID, (float) newAmount);
+        if (! safeSlider)
+            return;
+        DBG("onModAmountSetValue triggered for " + safeSlider->parameterID + " with value: " + juce::String(newValue));
+        processor.setModulationValue(safeSlider->parameterID, (float) newValue);
     };
 
-    slider.onBipolarModeToggled = [this, &slider]()
+    safeSlider->onModAmountChanged = [this, safeSlider](double newAmount)
     {
-        processor.toggleBipolarMode(slider.parameterID);
+        if (! safeSlider)
+            return;
+        processor.setModulationDepth(safeSlider->parameterID, (float) newAmount);
     };
 
-    slider.onModulationReset = [this, &slider]()
+    safeSlider->onBipolarModeToggled = [this, safeSlider]()
     {
-        processor.resetModulation(slider.parameterID);
+        if (! safeSlider)
+            return;
+        processor.toggleBipolarMode(safeSlider->parameterID);
     };
 
-    slider.onModulationCleared = [this, &slider]()
+    safeSlider->onModulationReset = [this, safeSlider]()
     {
-        processor.clearModulationForParameter(slider.parameterID);
+        if (! safeSlider)
+            return;
+        processor.resetModulation(safeSlider->parameterID);
     };
 
-    slider.onModulationInverted = [this, &slider]()
+    safeSlider->onModulationCleared = [this, safeSlider]()
     {
-        processor.invertModulationDepthForParameter(slider.parameterID);
+        if (! safeSlider)
+            return;
+        processor.clearModulationForParameter(safeSlider->parameterID);
+    };
+
+    safeSlider->onModulationInverted = [this, safeSlider]()
+    {
+        if (! safeSlider)
+            return;
+        processor.invertModulationDepthForParameter(safeSlider->parameterID);
     };
 }
 

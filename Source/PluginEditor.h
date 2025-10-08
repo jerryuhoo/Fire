@@ -13,6 +13,7 @@
 #include "BinaryData.h"
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
+#include "GUI/ValueEntryPopup.h"
 #include "GUI/ValuePopup.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
@@ -62,6 +63,8 @@ private:
     state::StateComponent stateComponent;
 
     ValuePopup valuePopup;
+    ValueEntryPopup valueEntryPopup;
+    ModulatableSlider* sliderForValueEntry = nullptr;
 
     juce::Image backgroundCache;
     float currentDisplayScale = 1.0f;

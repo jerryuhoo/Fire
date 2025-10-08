@@ -54,8 +54,7 @@ public:
 private:
     // Re-attaches all UI components to the parameters of the current focusBandNum.
     void updateAttachments();
-
-    void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase);
+    void setupSliderCallbacks(ModulatableSlider& slider);
 
     void updateLinkedValue();
     bool canEnableSubKnob(juce::Component& component);

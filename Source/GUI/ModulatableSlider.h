@@ -45,6 +45,8 @@ public:
     float assignModeGlowAlpha = 0.0f;
 
     // Callback to notify when the modulation amount changes via UI drag
+    std::function<void(double)> onModAmountSetValue;
+    std::function<void(ModulatableSlider*)> onSetValueRequested;
     std::function<void(double)> onModAmountChanged;
     std::function<void()> onBipolarModeToggled;
     std::function<void()> onModulationReset;

@@ -42,6 +42,51 @@ struct LfoData
         smoothness = 0.0f; // Reset smoothness to default.
     }
 
+    /**
+     * @brief Removes duplicate or very close points to clean up the LFO shape.
+     * It uses an epsilon for robust floating-point comparison and also ensures
+     * the 'curvatures' array remains synchronized with the 'points' array.
+    */
+    void mergeDuplicatePoints()
+    {
+        // Do nothing if there are not enough points to have duplicates.
+        if (points.size() < 2)
+            return;
+
+        // A small tolerance to consider two float values as equal.
+        constexpr float epsilon = 0.0001f;
+
+        // Create new vectors to store the unique points and their corresponding curvatures.
+        std::vector<juce::Point<float>> uniquePoints;
+        std::vector<float> updatedCurvatures;
+
+        // Always add the first point.
+        uniquePoints.push_back(points.front());
+
+        // Iterate through the rest of the points, starting from the second one.
+        for (int i = 1; i < points.size(); ++i)
+        {
+            // Compare the distance from the current point to the last unique point found.
+            if (points[i].getDistanceFrom(uniquePoints.back()) > epsilon)
+            {
+                // If the point is not a duplicate, add it to the unique list.
+                uniquePoints.push_back(points[i]);
+
+                // IMPORTANT: Also add the curvature of the segment *preceding* this new point.
+                // The number of curvatures is always one less than the number of points.
+                // So, the curvature at index i-1 corresponds to the segment between point i-1 and i.
+                if (i - 1 < curvatures.size())
+                {
+                    updatedCurvatures.push_back(curvatures[i - 1]);
+                }
+            }
+        }
+
+        // After checking all points, replace the old data with the cleaned-up versions.
+        points = uniquePoints;
+        curvatures = updatedCurvatures;
+    }
+
     // Writes the current LfoData to an XmlElement.
     void writeToXml(juce::XmlElement& xml) const
     {

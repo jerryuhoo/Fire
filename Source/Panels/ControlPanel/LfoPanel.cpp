@@ -517,6 +517,8 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
     if (dataWasChanged && onDataChanged)
     {
+        if (activeLfoData)
+            activeLfoData->mergeDuplicatePoints();
         onDataChanged();
     }
 }

@@ -141,6 +141,12 @@ void LfoEngine::setPhaseDelta(float newPhaseDelta)
     phaseDelta = newPhaseDelta;
 }
 
+void LfoEngine::setPhase(float newPhase)
+{
+    // Directly sets the internal phase, ensuring it stays within the valid [0, 1] range.
+    phase = juce::jlimit(0.0f, 1.0f, newPhase);
+}
+
 float LfoEngine::getPhase() const
 {
     return phase;

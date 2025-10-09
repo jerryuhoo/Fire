@@ -179,27 +179,21 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
     // Its sole responsibility is to generate the raw LFO signals.
 
     // 1. Get Transport State from Host
+    juce::Optional<juce::AudioPlayHead::PositionInfo> positionInfo;
     isPlaying = false;
     double currentBpm = 120.0;
 
     if (playHead)
     {
-        if (auto position = playHead->getPosition())
+        positionInfo = playHead->getPosition();
+        if (positionInfo)
         {
-            isPlaying = position->getIsPlaying();
-            if (auto bpm = position->getBpm())
+            isPlaying = positionInfo->getIsPlaying();
+            if (auto bpm = positionInfo->getBpm())
                 currentBpm = *bpm;
         }
     }
 
-    // 2. Reset LFOs on transport start
-    if (isPlaying && ! wasPlaying)
-    {
-        for (auto& engine : lfoEngines)
-        {
-            engine.reset();
-        }
-    }
     wasPlaying = isPlaying;
 
     // 3. Process each LFO
@@ -208,56 +202,76 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     for (int i = 0; i < 4; ++i)
     {
-        // !! MOVED LOGIC !!
-        // Check if the shape for this LFO needs updating.
-        // This is a "test-and-set" operation, it atomically checks and sets the flag to false.
+        // Shape update logic (unchanged)
         bool needsUpdate = true;
         if (shapeUpdateFlags[i].compare_exchange_strong(needsUpdate, false))
         {
-            // The flag was true, so we update the shape and it's now set to false.
             lfoEngines[i].updateShape(lfoData[i]);
         }
 
-        // --- The rest of the logic calculates phaseDelta and generates samples ---
-
-        // Get LFO parameters (sync mode, rate, etc.)
         auto* syncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i));
         const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
-
         float phaseDelta = 0.0f;
 
-        if (isInSyncMode && isPlaying)
+        // 1. Calculate phaseDelta for advancing phase within the block (or for free-running when stopped)
+        if (isInSyncMode)
         {
-            // --- BPM SYNC CALCULATION ---
             auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
-            if (rateSyncParam != nullptr)
+            const int rateIndex = static_cast<int>(rateSyncParam->load());
+            const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
+            const float beatsPerCycle = beatMultiplier * 4.0f;
+            if (beatsPerCycle > 0.0 && currentBpm > 0.0)
             {
-                const int rateIndex = static_cast<int>(rateSyncParam->load());
-                const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
-                const float beatsPerCycle = beatMultiplier * 4.0f;
+                const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float) sampleRate;
+                if (samplesPerCycle > 0)
+                    phaseDelta = 1.0f / samplesPerCycle;
+            }
+        }
+        else // Free (Hz) mode
+        {
+            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
+            const float freqInHz = rateHzParam->load();
+            if (sampleRate > 0)
+                phaseDelta = freqInHz / (float) sampleRate;
+        }
 
-                if (beatsPerCycle > 0.0 && currentBpm > 0.0)
+        // 2. If playing, calculate and set the absolute start phase for the block.
+        //    Otherwise, the LFO continues from its last phase (free-running).
+        if (isPlaying && positionInfo)
+        {
+            if (isInSyncMode)
+            {
+                if (auto ppq = positionInfo->getPpqPosition())
                 {
-                    const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float) sampleRate;
-                    if (samplesPerCycle > 0)
-                        phaseDelta = 1.0f / samplesPerCycle;
+                    const double ppqAtStartOfBlock = *ppq;
+                    auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
+                    const int rateIndex = static_cast<int>(rateSyncParam->load());
+                    const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
+                    const float cycleLengthInBeats = beatMultiplier * 4.0f;
+
+                    if (cycleLengthInBeats > 0.0f)
+                    {
+                        const float startPhase = std::fmod((float) ppqAtStartOfBlock, cycleLengthInBeats) / cycleLengthInBeats;
+                        lfoEngines[i].setPhase(startPhase); // Here we use the new method
+                    }
+                }
+            }
+            else // Hz mode
+            {
+                if (auto timeSec = positionInfo->getTimeInSeconds())
+                {
+                    const double timeAtStartOfBlock = *timeSec;
+                    auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
+                    const float freqInHz = rateHzParam->load();
+                    const float startPhase = std::fmod((float) timeAtStartOfBlock * freqInHz, 1.0f);
+                    lfoEngines[i].setPhase(startPhase); // Here we use the new method
                 }
             }
         }
-        else // --- FREE (HZ) MODE CALCULATION ---
-        {
-            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
-            if (rateHzParam != nullptr)
-            {
-                const float freqInHz = rateHzParam->load();
-                if (sampleRate > 0)
-                    phaseDelta = freqInHz / (float) sampleRate;
-            }
-        }
 
+        // 3. Set the delta and generate samples for the block (unchanged)
         lfoEngines[i].setPhaseDelta(phaseDelta);
 
-        // Generate LFO output for the entire block
         auto* writer = lfoOutputBuffer.getWritePointer(i);
         for (int sample = 0; sample < numSamples; ++sample)
         {

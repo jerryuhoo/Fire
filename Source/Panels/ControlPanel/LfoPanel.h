@@ -52,6 +52,7 @@ public:
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
+    void setPhaseOffsetLinePosition(float position);
 
     std::function<void()> onDataChanged;
     void setOnDataChangedCallback(std::function<void()> callback);
@@ -100,6 +101,7 @@ private:
     int hGridDivs = 4;
     int vGridDivs = 4;
     float playheadPos = -1.0f;
+    float phaseOffsetPosition = -1.0f;
 
     const int maxPoints = 64;
     const float pointRadius = 6.0f;
@@ -163,6 +165,8 @@ public:
 private:
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
+    void sliderDragStarted(juce::Slider* slider) override;
+    void sliderDragEnded(juce::Slider* slider) override;
     void setEditMode(LfoEditMode newMode);
     void styleButton(juce::Button& button, bool isToggle);
     void setLfo(int newIndex);
@@ -199,10 +203,15 @@ private:
     juce::Slider lfoSmoothSlider;
     juce::Label lfoSmoothLabel;
 
+    juce::Slider lfoPhaseSlider;
+    juce::Label lfoPhaseLabel;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncButtonAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoSmoothAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoPhaseAttachment;
     bool isUpdatingRateSlider = false;
+    bool isDraggingPhaseSlider = false;
 
     void updateRateSlider();
 

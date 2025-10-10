@@ -149,6 +149,13 @@ void LfoEditor::paint(juce::Graphics& g)
         g.setColour(juce::Colours::white.withAlpha(0.7f));
         g.drawVerticalLine(juce::roundToInt(getWidth() * playheadPos), 0.0f, (float) getHeight());
     }
+
+    // Draw phase offset line when dragging
+    if (phaseOffsetPosition >= 0.0f)
+    {
+        g.setColour(COLOUR5.withAlpha(0.5f));
+        g.drawVerticalLine(juce::roundToInt(getWidth() * phaseOffsetPosition), 0.0f, (float) getHeight());
+    }
 }
 
 void LfoEditor::resized() {} // No layout logic needed in the editor itself.
@@ -170,6 +177,15 @@ void LfoEditor::setPlayheadPosition(float position)
     if (! juce::approximatelyEqual(playheadPos, position))
     {
         playheadPos = position;
+        repaint();
+    }
+}
+
+void LfoEditor::setPhaseOffsetLinePosition(float position)
+{
+    if (! juce::approximatelyEqual(phaseOffsetPosition, position))
+    {
+        phaseOffsetPosition = position;
         repaint();
     }
 }
@@ -1041,6 +1057,23 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     lfoSmoothLabel.setColour(juce::Label::textColourId, COLOUR1);
     lfoSmoothLabel.setJustificationType(juce::Justification::centred);
 
+    // Initialize the phase slider and label.
+    addAndMakeVisible(lfoPhaseSlider);
+    lfoPhaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    lfoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    lfoPhaseSlider.addListener(this);
+
+    addAndMakeVisible(lfoPhaseLabel);
+    lfoPhaseLabel.setText("Phase", juce::dontSendNotification);
+    lfoPhaseLabel.setFont(juce::Font {
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(KNOB_FONT_SIZE)
+            .withStyle("Plain") });
+    lfoPhaseLabel.attachToComponent(&lfoPhaseSlider, false);
+    lfoPhaseLabel.setColour(juce::Label::textColourId, COLOUR1);
+    lfoPhaseLabel.setJustificationType(juce::Justification::centred);
+
     // Attachments
     setLfo(currentLfoIndex); // Call helper to set up all attachments for the initial LFO.
 
@@ -1077,7 +1110,8 @@ void LfoPanel::resized()
 
     // --- Define layout constants ---
     constexpr int initialMargin = 10;
-    constexpr int initialRightColWidth = 200; // Keep the right side spacious for the 2 sliders
+    // MODIFIED: Increased right column width to fit 3 sliders and shrink the LFO editor.
+    constexpr int initialRightColWidth = 270;
     constexpr int initialLeftColWidth = 60; // For the LFO 1-4 buttons
     constexpr int initialTopRowHeight = 30; // For matrix, sync, etc. buttons
 
@@ -1100,7 +1134,7 @@ void LfoPanel::resized()
         auto topRow = leftArea.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
         leftArea.removeFromTop(juce::roundToInt(initialMargin * scale)); // Spacer
 
-        // The main LFO editor takes the remaining space.
+        // The main LFO editor takes the remaining space, which is now narrower.
         lfoEditor.setBounds(leftArea);
 
         // Use FlexBox to lay out the LFO select buttons vertically.
@@ -1128,11 +1162,9 @@ void LfoPanel::resized()
         topRowFlexBox.performLayout(topRow);
     }
 
-    // --- Layout Right Area (Keeping it simple and unchanged) ---
-    // --- Layout Right Area (Your specified slider layout + forced Grid row at bottom) ---
+    // --- MODIFIED: Layout Right Area (3 sliders side-by-side + Grid row at bottom) ---
     {
-        // --- 1. Define and populate the Grid Area at the absolute bottom ---
-        // We do this first to reserve the space.
+        // 1. Define and populate the Grid Area at the absolute bottom (unchanged).
         const int gridAreaHeight = juce::roundToInt(30 * scale);
         auto gridArea = rightArea.removeFromBottom(gridAreaHeight);
 
@@ -1146,24 +1178,20 @@ void LfoPanel::resized()
         gridBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
         gridBox.performLayout(gridArea);
 
-        // --- 2. Use your specified code to lay out the sliders in the remaining space above ---
-        // This code now operates on a rightArea that is already shorter because the grid is gone.
+        // 2. Lay out the 3 sliders in the remaining space above the grid.
+        rightArea.reduce(0, juce::roundToInt(initialMargin * scale)); // Vertical padding
 
-        // Reduce the height of the remaining rightArea from top and bottom.
-        rightArea.reduce(0, juce::roundToInt(initialMargin * scale));
+        // Divide the remaining area into 3 vertical columns for the sliders.
+        int sliderWidth = rightArea.getWidth() / 3;
+        auto rateSliderArea = rightArea.removeFromLeft(sliderWidth);
+        auto smoothSliderArea = rightArea.removeFromLeft(sliderWidth);
+        auto phaseSliderArea = rightArea; // Takes the rest
 
-        // Divide the vertically-reduced rightArea into two slices.
-        auto leftSliderArea = rightArea.removeFromLeft(rightArea.getWidth() / 2);
-        auto rightSliderArea = rightArea;
-
-        // Apply some horizontal and vertical padding for aesthetics.
+        // Assign each slider to its column with some padding.
         int padding = 10;
-        leftSliderArea = leftSliderArea.reduced(juce::roundToInt(padding * scale), juce::roundToInt(padding * scale));
-        rightSliderArea = rightSliderArea.reduced(juce::roundToInt(padding * scale), juce::roundToInt(padding * scale));
-
-        // Assign each slider to its final, smaller area.
-        rateSlider.setBounds(leftSliderArea);
-        lfoSmoothSlider.setBounds(rightSliderArea);
+        rateSlider.setBounds(rateSliderArea.reduced(juce::roundToInt(padding * scale)));
+        lfoSmoothSlider.setBounds(smoothSliderArea.reduced(juce::roundToInt(padding * scale)));
+        lfoPhaseSlider.setBounds(phaseSliderArea.reduced(juce::roundToInt(padding * scale)));
     }
 }
 
@@ -1250,6 +1278,7 @@ void LfoPanel::setLfo(int newIndex)
     syncButtonAttachment.reset();
     rateSliderAttachment.reset();
     lfoSmoothAttachment.reset();
+    lfoPhaseAttachment.reset();
 
     syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processor.treeState, ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex), syncButton);
@@ -1257,6 +1286,8 @@ void LfoPanel::setLfo(int newIndex)
     lfoSmoothAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processor.treeState, ParameterIDAndName::getIDString(LFO_SMOOTH_ID, currentLfoIndex), lfoSmoothSlider);
 
+    lfoPhaseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processor.treeState, ParameterIDAndName::getIDString(LFO_PHASE_ID, currentLfoIndex), lfoPhaseSlider);
     // This must be called after attachments are updated.
     updateRateSlider();
 }
@@ -1356,7 +1387,34 @@ void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
 void LfoPanel::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == &gridXSlider || slider == &gridYSlider)
+    {
         lfoEditor.setGridDivisions((int) gridXSlider.getValue(), (int) gridYSlider.getValue());
+    }
+    else if (slider == &lfoPhaseSlider)
+    {
+        if (isDraggingPhaseSlider)
+        {
+            lfoEditor.setPhaseOffsetLinePosition(lfoPhaseSlider.getValue());
+        }
+    }
+}
+
+void LfoPanel::sliderDragStarted(juce::Slider* slider)
+{
+    if (slider == &lfoPhaseSlider)
+    {
+        isDraggingPhaseSlider = true;
+        lfoEditor.setPhaseOffsetLinePosition(lfoPhaseSlider.getValue());
+    }
+}
+
+void LfoPanel::sliderDragEnded(juce::Slider* slider)
+{
+    if (slider == &lfoPhaseSlider)
+    {
+        isDraggingPhaseSlider = false;
+        lfoEditor.setPhaseOffsetLinePosition(-1.0f);
+    }
 }
 
 void LfoPanel::setScale(float newScale)

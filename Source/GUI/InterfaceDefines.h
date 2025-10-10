@@ -142,6 +142,8 @@
 #define LFO_RATE_HZ_NAME        "LfoRateHz"
 #define LFO_SMOOTH_ID           "lfoSmooth"
 #define LFO_SMOOTH_NAME         "LfoSmooth"
+#define LFO_PHASE_ID            "lfoPhase"
+#define LFO_PHASE_NAME          "LfoPhase"
 
 
 // Define Font

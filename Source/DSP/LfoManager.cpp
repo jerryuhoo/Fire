@@ -235,6 +235,10 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
                 phaseDelta = freqInHz / (float) sampleRate;
         }
 
+        // Get the phase offset value from the new parameter we created
+        auto* phaseOffsetParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_PHASE_ID, i));
+        const float phaseOffset = (phaseOffsetParam != nullptr) ? phaseOffsetParam->load() : 0.0f;
+
         // 2. If playing, calculate and set the absolute start phase for the block.
         //    Otherwise, the LFO continues from its last phase (free-running).
         if (isPlaying && positionInfo)
@@ -251,8 +255,13 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
                     if (cycleLengthInBeats > 0.0f)
                     {
-                        const float startPhase = std::fmod((float) ppqAtStartOfBlock, cycleLengthInBeats) / cycleLengthInBeats;
-                        lfoEngines[i].setPhase(startPhase); // Here we use the new method
+                        // Calculate phase from timeline
+                        float startPhase = std::fmod((float) ppqAtStartOfBlock, cycleLengthInBeats) / cycleLengthInBeats;
+
+                        // Apply the user-defined phase offset and wrap around 1.0
+                        startPhase = std::fmod(startPhase + phaseOffset, 1.0f);
+
+                        lfoEngines[i].setPhase(startPhase); // Set the final, offset phase
                     }
                 }
             }
@@ -263,8 +272,14 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
                     const double timeAtStartOfBlock = *timeSec;
                     auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
                     const float freqInHz = rateHzParam->load();
-                    const float startPhase = std::fmod((float) timeAtStartOfBlock * freqInHz, 1.0f);
-                    lfoEngines[i].setPhase(startPhase); // Here we use the new method
+
+                    // Calculate phase from timeline
+                    float startPhase = std::fmod((float) timeAtStartOfBlock * freqInHz, 1.0f);
+
+                    // Apply the user-defined phase offset and wrap around 1.0
+                    startPhase = std::fmod(startPhase + phaseOffset, 1.0f);
+
+                    lfoEngines[i].setPhase(startPhase); // Set the final, offset phase
                 }
             }
         }

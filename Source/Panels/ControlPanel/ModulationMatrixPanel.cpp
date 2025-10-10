@@ -161,6 +161,10 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
 
 ModulationMatrixRow::~ModulationMatrixRow()
 {
+    sourceMenu.removeListener(this);
+    amountSlider.removeListener(this);
+    destinationMenu.removeListener(this);
+    removeButton.removeListener(this);
     setLookAndFeel(nullptr);
 }
 
@@ -246,7 +250,11 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     buildUiFromProcessorState();
 }
 
-ModulationMatrixPanel::~ModulationMatrixPanel() {}
+ModulationMatrixPanel::~ModulationMatrixPanel()
+{
+    addButton.removeListener(this);
+    closeButton.removeListener(this);
+}
 
 void ModulationMatrixPanel::paint(juce::Graphics& g)
 {

@@ -52,6 +52,7 @@ ValueEntryPopup::ValueEntryPopup()
 
 ValueEntryPopup::~ValueEntryPopup()
 {
+    editor.removeListener(this);
 }
 
 void ValueEntryPopup::resized()

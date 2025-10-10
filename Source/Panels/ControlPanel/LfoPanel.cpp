@@ -1087,6 +1087,21 @@ LfoPanel::~LfoPanel()
 {
     stopTimer();
 
+    // Remove listeners from all buttons styled with styleButton()
+    for (auto& button : lfoSelectButtons)
+        button->removeListener(this);
+
+    editModeButton.removeListener(this);
+    brushModeButton.removeListener(this);
+    assignButton.removeListener(this);
+    matrixButton.removeListener(this);
+    syncButton.removeListener(this);
+
+    // Remove listeners from sliders
+    gridXSlider.removeListener(this);
+    gridYSlider.removeListener(this);
+    lfoPhaseSlider.removeListener(this);
+
     for (int i = 0; i < 4; ++i)
     {
         processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);

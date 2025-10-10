@@ -65,6 +65,20 @@ BandPanel::~BandPanel()
         processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
         processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
     }
+
+    // Remove listeners that were added in the setupSwitch lambda
+    oscSwitch.removeListener(this);
+    shapeSwitch.removeListener(this);
+    compressorSwitch.removeListener(this);
+    widthSwitch.removeListener(this);
+
+    // Also remove listeners from any other buttons if they were added in their init functions.
+    // Assuming initFlatButton and initBypassButton also add 'this' as a listener.
+    linkedButton.removeListener(this);
+    safeButton.removeListener(this);
+    extremeButton.removeListener(this);
+    compressorBypassButton.removeListener(this);
+    widthBypassButton.removeListener(this);
 }
 
 void BandPanel::createSliders()

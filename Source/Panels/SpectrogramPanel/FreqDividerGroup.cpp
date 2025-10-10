@@ -36,6 +36,7 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor
 FreqDividerGroup::~FreqDividerGroup()
 {
     freqTextLabel.setLookAndFeel(nullptr);
+    verticalLine.removeListener(this);
 }
 
 void FreqDividerGroup::paint(juce::Graphics& g)

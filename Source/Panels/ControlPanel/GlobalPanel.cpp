@@ -58,6 +58,8 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
 
 GlobalPanel::~GlobalPanel()
 {
+    filterSwitch.removeListener(this);
+    downsampleSwitch.removeListener(this);
 }
 
 void GlobalPanel::createSliders()

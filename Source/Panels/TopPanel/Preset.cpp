@@ -566,7 +566,6 @@ namespace state
 
         refreshPresetBox();
 
-        // 1. 获取宿主保存的预设ID和名称
         const int currentPresetId = procStatePresets.getCurrentPresetId();
         juce::String presetNameFromHost = procStatePresets.getPresetName();
         const int numPresets = procStatePresets.getNumPresets();
@@ -576,7 +575,6 @@ namespace state
             juce::String presetNameFromHost = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
             juce::XmlElement* presetXml = nullptr;
 
-            // 关键修复：将 lambda 参数改为 const juce::XmlElement&
             std::function<juce::XmlElement*(const juce::XmlElement&, const juce::String&)> findPresetInXml =
                 [&](const juce::XmlElement& parentXml, const juce::String& nameToFind) -> juce::XmlElement*
             {
@@ -670,6 +668,14 @@ namespace state
 
     StateComponent::~StateComponent()
     {
+        // Remove listeners from all buttons that had them added in the constructor
+        toggleABButton.removeListener(this);
+        copyABButton.removeListener(this);
+        previousButton.removeListener(this);
+        nextButton.removeListener(this);
+        savePresetButton.removeListener(this);
+        menuButton.removeListener(this);
+
         auto& params = procStatePresets.getProcessor().getParameters();
         for (auto param : params)
         {

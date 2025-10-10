@@ -940,21 +940,24 @@ private:
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         auto lineW = radius * 0.2f;
         auto arcRadius = radius - lineW * 0.5f;
-        float reductAngle = toAngle - (1.0f - reductionPercent) * 2 * M_PI;
 
-        if (reductAngle < rotaryStartAngle)
-            reductAngle = rotaryStartAngle;
+        // The original calculation for reductAngle depended on 'toAngle', causing it to oscillate with the LFO.
+        // This corrected calculation creates a stable limit based on 'reductionPercent' and the total angle range of the slider.
+        const float angleRange = rotaryEndAngle - rotaryStartAngle;
+        float reductAngle = rotaryStartAngle + (angleRange * reductionPercent);
+
+        // 'effectiveAngle' is the end angle for the main, "safe" part of the arc. It's capped by the reduction limit.
+        auto effectiveAngle = juce::jmin(toAngle, reductAngle);
 
         if (slider.isEnabled())
         {
-            // Draw real drive path with moving gradient
+            // Your animation logic for the moving gradient is unchanged.
             juce::Path valueArc;
-            valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, reductAngle, true);
+            valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, effectiveAngle, true);
 
             juce::Path circlePath;
             circlePath.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, 0, 2 * M_PI, true);
 
-            // This animation logic seems to be from your original code
             if (sampleMaxValue > 0.00001f)
             {
                 if (changePos < circlePath.getLength())
@@ -968,12 +971,14 @@ private:
             x2 = p1.x + 100 * scale;
             y2 = p1.y + 100 * scale;
 
+            // Draw the "safe" part of the drive path using the calculated effectiveAngle.
             juce::ColourGradient grad(juce::Colours::red, x1, y1, COLOUR1, x2, y2, true);
             g.setGradientFill(grad);
             g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-            // Draw reduced path if needed
-            if (reductionPercent != 1)
+            // Draw the "reduced" (unsafe) part only if the current value exceeds the limit.
+            // This replaces the old `if (reductionPercent != 1)` condition.
+            if (toAngle > reductAngle)
             {
                 juce::Path valueArcReduce;
                 valueArcReduce.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, reductAngle - 0.02f, toAngle, true);
@@ -1004,7 +1009,7 @@ private:
         dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
         if (sampleMaxValue > 0.00001f && slider.isEnabled())
         {
-            g.setColour(juce::Colour(255, juce::jmax(255 - sampleMaxValue * 2000, 0.0f), 0));
+            g.setColour(juce::Colour(255, (juce::uint8) juce::jmax(255 - sampleMaxValue * 2000, 0.0f), 0));
         }
         else
         {

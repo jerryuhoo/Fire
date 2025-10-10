@@ -1250,7 +1250,7 @@ void LfoPanel::buttonClicked(juce::Button* button)
         // This opens our new panel in a non-modal dialog window.
         juce::DialogWindow::LaunchOptions launchOptions;
         launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
-        launchOptions.content->setSize(600, 400);
+        launchOptions.content->setSize(800, 400);
         launchOptions.launchAsync();
     }
     else if (button == &syncButton)

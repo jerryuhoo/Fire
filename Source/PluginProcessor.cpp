@@ -152,11 +152,24 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         processDistortion(block, dryBuffer, paramsForProcessing);
     }
 
-    // 3. Post-Distortion Effects
+    // 3. Block-wise Compressor and Width
+    auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
+    if (params.isCompEnabled)
+    {
+        this->compressor.setThreshold(params.compThreshold);
+        this->compressor.setRatio(params.compRatio);
+        this->compressor.process(postDistortionContext);
+    }
+    if (params.isWidthEnabled && buffer.getNumChannels() == 2)
+    {
+        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, buffer.getNumSamples());
+    }
+
+    // 4. Post-Distortion Effects
     // Per-sample Output Gain
     applyGain(buffer, paramsForProcessing.outputVal);
 
-    // 4. Final Dry/Wet Mix
+    // 5. Final Dry/Wet Mix
     if (params.isHQ)
         dryWetMixer.setWetLatency(oversampling->getLatencyInSamples());
     else
@@ -169,19 +182,6 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         dryWetMixer.setWetMixProportion(mixVal);
         dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
         dryWetMixer.mixWetSamples(block);
-    }
-
-    // 5. Block-wise Compressor and Width
-    auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
-    if (params.isCompEnabled)
-    {
-        this->compressor.setThreshold(params.compThreshold);
-        this->compressor.setRatio(params.compRatio);
-        this->compressor.process(postDistortionContext);
-    }
-    if (params.isWidthEnabled && buffer.getNumChannels() == 2)
-    {
-        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, buffer.getNumSamples());
     }
 }
 

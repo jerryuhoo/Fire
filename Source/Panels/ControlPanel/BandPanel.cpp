@@ -218,14 +218,27 @@ void BandPanel::resized()
 {
     juce::Rectangle<int> controlArea = getLocalBounds();
 
-    bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 2);
-    driveKnobArea = controlArea.removeFromLeft(getWidth() / 5);
+    // Conditionally define the layout areas based on which switch is active.
+    if (! oscSwitch.getToggleState())
+    {
+        // If Shape, Comp, or Width is active:
+        // The main knob area takes up the full left 3/5ths of the panel.
+        bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 3);
+        driveKnobArea = {}; // Drive area is not used, so we create an empty rectangle.
+    }
+    else
+    {
+        // If OSC (Drive) is active, use the original layout definition.
+        bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 2);
+        driveKnobArea = controlArea.removeFromLeft(getWidth() / 5);
+    }
 
+    // The rest of the area is for the Output section, this remains unchanged.
     outputKnobArea = controlArea;
     const int verticalMargin = getHeight() / 6;
 
     outputKnobArea = controlArea.reduced(0, verticalMargin);
-    driveKnobArea = driveKnobArea.reduced(0, verticalMargin);
+    driveKnobArea = driveKnobArea.reduced(0, verticalMargin); // Reduces an empty rect, which is fine.
     bandKnobArea = bandKnobArea.reduced(0, verticalMargin);
 
     juce::Rectangle<int> switchArea = bandKnobArea.removeFromLeft(getWidth() / 50);
@@ -237,18 +250,16 @@ void BandPanel::resized()
     compressorSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
     widthSwitch.setBounds(area);
 
-    //    juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
+    // Set bounds only for the big Drive knob when OSC is active.
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
         modulatableSliderComponents.at(DRIVE_NAME)->setBounds(bigDriveArea);
     }
-    else
-    {
-        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-    }
+    // The 'else' block for the small drive knob is now completely removed.
 
     // --- Band Knob Area Layout ---
+    // This part now works correctly on the expanded bandKnobArea for Shape/Comp/Width views.
     juce::Rectangle<int> subKnobArea = bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5);
     juce::Rectangle<int> leftKnobArea = subKnobArea.withRight(subKnobArea.getCentreX());
     juce::Rectangle<int> rightKnobArea = subKnobArea.withLeft(subKnobArea.getCentreX());
@@ -285,8 +296,7 @@ void BandPanel::resized()
     compressorBypassButton.setBounds(bypassButtonArea);
     widthBypassButton.setBounds(bypassButtonArea);
 
-    // --- Output Area Layout (FINAL CORRECTED VERSION) ---
-
+    // --- Output Area Layout --- (This part remains unchanged)
     const int bottomAreaHeight = outputKnobArea.getHeight() / 5;
 
     juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(),
@@ -473,31 +483,56 @@ void BandPanel::updateDriveMeter()
 
 void BandPanel::buttonClicked(juce::Button* clickedButton)
 {
+    // Get pointers to the Drive knob and its label
+    auto* driveComponent = modulatableSliderComponents.at(DRIVE_NAME).get();
+    auto* driveLabel = labels.at(DRIVE_NAME).get();
+
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
     {
+        // If the OSC switch is activated, show the Drive components.
+        driveComponent->setVisible(true);
+        driveLabel->setVisible(true);
+
+        // Hide all other component groups.
         setVisibility(shapeComponents, false);
         setVisibility(compressorComponents, false);
         setVisibility(widthComponents, false);
     }
     else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
     {
+        // If any other switch is activated, hide the Drive components.
+        driveComponent->setVisible(false);
+        driveLabel->setVisible(false);
+
+        // Show only the Shape components.
         setVisibility(shapeComponents, true);
         setVisibility(compressorComponents, false);
         setVisibility(widthComponents, false);
     }
     else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
     {
+        // Hide the Drive components.
+        driveComponent->setVisible(false);
+        driveLabel->setVisible(false);
+
+        // Show only the Compressor components.
         setVisibility(shapeComponents, false);
         setVisibility(compressorComponents, true);
         setVisibility(widthComponents, false);
     }
     else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
     {
+        // Hide the Drive components.
+        driveComponent->setVisible(false);
+        driveLabel->setVisible(false);
+
+        // Show only the Width components.
         setVisibility(shapeComponents, false);
         setVisibility(compressorComponents, false);
         setVisibility(widthComponents, true);
     }
 
+    // Call resized() and repaint() to apply layout and visibility changes.
     resized();
     repaint();
 }

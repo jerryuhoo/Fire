@@ -286,6 +286,31 @@ public:
 
     juce::Slider::SliderLayout getSliderLayout(juce::Slider& slider) override
     {
+        juce::Slider::SliderLayout layout;
+        auto localBounds = slider.getLocalBounds();
+
+        // --- Step 1: Determine the Textbox Dimensions ---
+
+        // For our ModulatableSlider, we want a fixed-size, centered textbox.
+        // For other sliders, we respect their settings.
+        auto textBoxWidth = slider.getTextBoxWidth();
+        auto textBoxHeight = TEXTBOX_HEIGHT;
+
+        if (dynamic_cast<ModulatableSlider*>(&slider))
+        {
+            // The textbox area is ALWAYS the top portion of the component.
+            layout.textBoxBounds = localBounds.removeFromTop(textBoxHeight);
+
+            // Center the textbox within that top area.
+            layout.textBoxBounds.setWidth(textBoxWidth);
+            layout.textBoxBounds.setX((localBounds.getWidth() - textBoxWidth) / 2);
+
+            // The slider knob area is ALWAYS what remains at the bottom.
+            layout.sliderBounds = localBounds;
+
+            return layout;
+        }
+
         // 1. compute the actually visible textBox size from the slider textBox size and some additional constraints
         int minXSpace = 0;
         int minYSpace = 0;
@@ -297,12 +322,8 @@ public:
         else
             minYSpace = 15;
 
-        auto localBounds = slider.getLocalBounds();
-
-        auto textBoxWidth = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
-        auto textBoxHeight = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
-
-        juce::Slider::SliderLayout layout;
+        textBoxWidth = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
+        textBoxHeight = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
 
         // 2. set the textBox bounds
         if (textBoxPos != juce::Slider::NoTextBox)

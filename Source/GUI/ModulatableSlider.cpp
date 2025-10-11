@@ -20,6 +20,11 @@ ModulatableSlider::ModulatableSlider()
     isModHandleMouseOver = false;
     isModHandleMouseDown = false;
     isDraggingMainSlider = false;
+
+    addAndMakeVisible(label);
+    label.setJustificationType(juce::Justification::centred);
+    label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
+    setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
 }
 
 bool ModulatableSlider::hitTest(int x, int y)
@@ -94,6 +99,8 @@ void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
 {
     juce::Slider::mouseEnter(event);
     mouseMove(event);
+    label.setVisible(false);
+    setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
 void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
@@ -105,6 +112,20 @@ void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
         if (onHoverEnd)
             onHoverEnd(this);
         repaint();
+    }
+
+    // Get the global screen position of the mouse cursor
+    auto screenPosition = event.originalComponent->localPointToGlobal(event.getPosition());
+
+    // Find what component is now at that screen position
+    auto* componentUnderMouse = juce::Desktop::getInstance().findComponentAt(screenPosition);
+
+    // If the component under the mouse is NOT a child of this slider,
+    // it means the mouse has truly left our slider and its textbox.
+    if (! isParentOf(componentUnderMouse))
+    {
+        label.setVisible(true);
+        setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     }
 }
 
@@ -264,4 +285,20 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         isModHandleMouseDown = false;
         repaint();
     }
+}
+
+void ModulatableSlider::setLabel(const juce::String& text, juce::Colour colour)
+{
+    label.setText(text, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, colour);
+}
+
+void ModulatableSlider::resized()
+{
+    // First, call the base class's resized() to let it draw the slider itself.
+    juce::Slider::resized();
+
+    // Then, place our label in the area designated for the textbox.
+    // This ensures it's perfectly aligned above the knob.
+    label.setBounds(0, 0, getWidth(), TEXTBOX_HEIGHT);
 }

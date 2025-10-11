@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
 //==============================================================================
@@ -73,7 +74,14 @@ public:
     const juce::String& getParamID() const { return parameterID; }
     float getLfoValue() const { return lfoValue; }
 
+    // Add a public method to set up the label.
+    void setLabel(const juce::String& text, juce::Colour colour);
+
+    // Override component methods for layout and mouse events.
+    void resized() override;
+
 private:
+    juce::Label label;
     bool isDraggingMainSlider;
 
     // Store the initial LFO amount when a drag starts for smoother interaction

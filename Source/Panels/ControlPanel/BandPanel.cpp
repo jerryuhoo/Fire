@@ -84,68 +84,85 @@ BandPanel::~BandPanel()
 void BandPanel::createSliders()
 {
     // === Create Modulatable Sliders in a loop ===
-    for (const auto& paramName : ParameterIDAndName::getModulatableParameterNames())
+    auto createAndConfigureSlider =
+        [this](const juce::String& paramName, const juce::String& labelText, juce::Colour sliderColour, const juce::String& suffix = "")
     {
+        // Create the slider instance.
         modulatableSliderComponents[paramName] = std::make_unique<ModulatableSlider>();
         auto* slider = modulatableSliderComponents.at(paramName).get();
 
-        // Use the generic initRotarySlider for basic setup.
-        // The color will be set specifically below.
-        initRotarySlider(*slider, juce::Colours::white);
+        // Basic setup using your existing helper.
+        initRotarySlider(*slider, sliderColour);
+
+        // *** The key step: Tell the slider what its label should be. ***
+        slider->setLabel(labelText, sliderColour.withBrightness(0.9f));
+
+        // Set the value suffix if one is provided.
+        if (suffix.isNotEmpty())
+            slider->setTextValueSuffix(suffix);
+
+        // Assign callbacks and add to the public list.
         setupSliderCallbacks(*slider);
-
         modulatableSliders.push_back(slider);
-    }
+    };
 
-    // === Configure specific slider properties ===
-    modulatableSliderComponents.at(DRIVE_NAME)->setColour(juce::Slider::rotarySliderFillColourId, DRIVE_COLOUR);
-    modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive"); // Assign the ID for LookAndFeel
-    modulatableSliderComponents.at(REC_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
-    modulatableSliderComponents.at(BIAS_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
-    modulatableSliderComponents.at(SHAPE_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
-    modulatableSliderComponents.at(COMP_RATIO_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
-    modulatableSliderComponents.at(COMP_THRESH_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
-    modulatableSliderComponents.at(COMP_ATTACK_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
-    modulatableSliderComponents.at(COMP_RELEASE_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
-    modulatableSliderComponents.at(COMP_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
-    modulatableSliderComponents.at(WIDTH_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
-    modulatableSliderComponents.at(PAN_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
-    modulatableSliderComponents.at(WIDTH_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
-    modulatableSliderComponents.at(OUTPUT_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
-    modulatableSliderComponents.at(MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
+    // === Now, create all sliders using our new helper ===
 
-    modulatableSliderComponents.at(OUTPUT_NAME)->setTextValueSuffix(" dB");
-    modulatableSliderComponents.at(COMP_THRESH_NAME)->setTextValueSuffix(" dB");
+    // Main Panel
+    createAndConfigureSlider(DRIVE_NAME, "Drive", DRIVE_COLOUR);
+    createAndConfigureSlider(OUTPUT_NAME, "Output", COLOUR1, " dB");
+    createAndConfigureSlider(MIX_NAME, "Mix", COLOUR1);
+
+    // Shape Panel
+    createAndConfigureSlider(REC_NAME, "Rectification", SHAPE_COLOUR);
+    createAndConfigureSlider(BIAS_NAME, "Bias", SHAPE_COLOUR);
+    createAndConfigureSlider(SHAPE_MIX_NAME, "Mix", SHAPE_COLOUR);
+
+    // Compressor Panel
+    createAndConfigureSlider(COMP_THRESH_NAME, "Threshold", COMP_COLOUR, " dB");
+    createAndConfigureSlider(COMP_RATIO_NAME, "Ratio", COMP_COLOUR);
+    createAndConfigureSlider(COMP_ATTACK_NAME, "Attack", COMP_COLOUR, " ms");
+    createAndConfigureSlider(COMP_RELEASE_NAME, "Release", COMP_COLOUR, " ms");
+    createAndConfigureSlider(COMP_MIX_NAME, "Mix", COMP_COLOUR);
+
+    // Width Panel
+    createAndConfigureSlider(WIDTH_NAME, "Width", WIDTH_COLOUR);
+    createAndConfigureSlider(PAN_NAME, "Pan", WIDTH_COLOUR);
+    createAndConfigureSlider(WIDTH_MIX_NAME, "Mix", WIDTH_COLOUR);
+
+    // === Final specific configurations ===
+    // Assign special component ID for the custom LookAndFeel.
+    modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive");
 }
 
 void BandPanel::createLabels()
 {
-    auto setupLabel = [this](const juce::String& paramName, const juce::String& text, juce::Component& attachComp, juce::Colour colour)
-    {
-        labels[paramName] = std::make_unique<juce::Label>();
-        auto* label = labels.at(paramName).get();
-        addAndMakeVisible(label);
-        label->setText(text, juce::dontSendNotification);
-        label->setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-        label->setColour(juce::Label::textColourId, colour);
-        label->attachToComponent(&attachComp, false);
-        label->setJustificationType(juce::Justification::centred);
-    };
+    // auto setupLabel = [this](const juce::String& paramName, const juce::String& text, juce::Component& attachComp, juce::Colour colour)
+    // {
+    //     labels[paramName] = std::make_unique<juce::Label>();
+    //     auto* label = labels.at(paramName).get();
+    //     addAndMakeVisible(label);
+    //     label->setText(text, juce::dontSendNotification);
+    //     label->setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
+    //     label->setColour(juce::Label::textColourId, colour);
+    //     label->attachToComponent(&attachComp, false);
+    //     label->setJustificationType(juce::Justification::centred);
+    // };
 
-    setupLabel(DRIVE_NAME, "Drive", *modulatableSliderComponents.at(DRIVE_NAME), DRIVE_COLOUR.withBrightness(0.9f));
-    setupLabel(OUTPUT_NAME, "Output", *modulatableSliderComponents.at(OUTPUT_NAME), KNOB_FONT_COLOUR);
-    setupLabel(MIX_NAME, "Mix", *modulatableSliderComponents.at(MIX_NAME), KNOB_FONT_COLOUR);
-    setupLabel(REC_NAME, "Rectification", *modulatableSliderComponents.at(REC_NAME), SHAPE_COLOUR);
-    setupLabel(BIAS_NAME, "Bias", *modulatableSliderComponents.at(BIAS_NAME), SHAPE_COLOUR);
-    setupLabel(COMP_RATIO_NAME, "Ratio", *modulatableSliderComponents.at(COMP_RATIO_NAME), COMP_COLOUR);
-    setupLabel(COMP_THRESH_NAME, "Threshold", *modulatableSliderComponents.at(COMP_THRESH_NAME), COMP_COLOUR);
-    setupLabel(WIDTH_NAME, "Width", *modulatableSliderComponents.at(WIDTH_NAME), WIDTH_COLOUR);
-    setupLabel(COMP_ATTACK_NAME, "Attack", *modulatableSliderComponents.at(COMP_ATTACK_NAME), COMP_COLOUR);
-    setupLabel(COMP_RELEASE_NAME, "Release", *modulatableSliderComponents.at(COMP_RELEASE_NAME), COMP_COLOUR);
-    setupLabel(PAN_NAME, "Pan", *modulatableSliderComponents.at(PAN_NAME), WIDTH_COLOUR);
-    setupLabel(SHAPE_MIX_NAME, "Mix", *modulatableSliderComponents.at(SHAPE_MIX_NAME), SHAPE_COLOUR);
-    setupLabel(COMP_MIX_NAME, "Mix", *modulatableSliderComponents.at(COMP_MIX_NAME), COMP_COLOUR);
-    setupLabel(WIDTH_MIX_NAME, "Mix", *modulatableSliderComponents.at(WIDTH_MIX_NAME), WIDTH_COLOUR);
+    // setupLabel(DRIVE_NAME, "Drive", *modulatableSliderComponents.at(DRIVE_NAME), DRIVE_COLOUR.withBrightness(0.9f));
+    // setupLabel(OUTPUT_NAME, "Output", *modulatableSliderComponents.at(OUTPUT_NAME), KNOB_FONT_COLOUR);
+    // setupLabel(MIX_NAME, "Mix", *modulatableSliderComponents.at(MIX_NAME), KNOB_FONT_COLOUR);
+    // setupLabel(REC_NAME, "Rectification", *modulatableSliderComponents.at(REC_NAME), SHAPE_COLOUR);
+    // setupLabel(BIAS_NAME, "Bias", *modulatableSliderComponents.at(BIAS_NAME), SHAPE_COLOUR);
+    // setupLabel(COMP_RATIO_NAME, "Ratio", *modulatableSliderComponents.at(COMP_RATIO_NAME), COMP_COLOUR);
+    // setupLabel(COMP_THRESH_NAME, "Threshold", *modulatableSliderComponents.at(COMP_THRESH_NAME), COMP_COLOUR);
+    // setupLabel(WIDTH_NAME, "Width", *modulatableSliderComponents.at(WIDTH_NAME), WIDTH_COLOUR);
+    // setupLabel(COMP_ATTACK_NAME, "Attack", *modulatableSliderComponents.at(COMP_ATTACK_NAME), COMP_COLOUR);
+    // setupLabel(COMP_RELEASE_NAME, "Release", *modulatableSliderComponents.at(COMP_RELEASE_NAME), COMP_COLOUR);
+    // setupLabel(PAN_NAME, "Pan", *modulatableSliderComponents.at(PAN_NAME), WIDTH_COLOUR);
+    // setupLabel(SHAPE_MIX_NAME, "Mix", *modulatableSliderComponents.at(SHAPE_MIX_NAME), SHAPE_COLOUR);
+    // setupLabel(COMP_MIX_NAME, "Mix", *modulatableSliderComponents.at(COMP_MIX_NAME), COMP_COLOUR);
+    // setupLabel(WIDTH_MIX_NAME, "Mix", *modulatableSliderComponents.at(WIDTH_MIX_NAME), WIDTH_COLOUR);
 
     auto setupPanelLabel = [this](juce::Label& label, const juce::String& text, juce::Colour colour)
     {
@@ -219,9 +236,6 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(BIAS_NAME).get(),
         modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
         &shapePanelLabel,
-        labels.at(REC_NAME).get(),
-        labels.at(BIAS_NAME).get(),
-        labels.at(SHAPE_MIX_NAME).get()
     };
 
     compressorComponents = {
@@ -232,11 +246,6 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(COMP_MIX_NAME).get(),
         &compressorBypassButton,
         &compressorPanelLabel,
-        labels.at(COMP_RATIO_NAME).get(),
-        labels.at(COMP_THRESH_NAME).get(),
-        labels.at(COMP_ATTACK_NAME).get(),
-        labels.at(COMP_RELEASE_NAME).get(),
-        labels.at(COMP_MIX_NAME).get()
     };
 
     widthComponents = {
@@ -245,9 +254,6 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(WIDTH_MIX_NAME).get(),
         &widthBypassButton,
         &widthPanelLabel,
-        labels.at(WIDTH_NAME).get(),
-        labels.at(PAN_NAME).get(),
-        labels.at(WIDTH_MIX_NAME).get()
     };
 
     allControls.addArray(mainControls);
@@ -495,7 +501,7 @@ void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
 {
     addAndMakeVisible(slider);
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, 0, 0);
     slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
 }
 
@@ -565,13 +571,13 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 {
     // Get pointers to the Drive knob and its label
     auto* driveComponent = modulatableSliderComponents.at(DRIVE_NAME).get();
-    auto* driveLabel = labels.at(DRIVE_NAME).get();
+    // auto* driveLabel = labels.at(DRIVE_NAME).get();
 
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
     {
         // If the OSC switch is activated, show the Drive components.
         driveComponent->setVisible(true);
-        driveLabel->setVisible(true);
+        // driveLabel->setVisible(true);
 
         // Hide all other component groups.
         setVisibility(shapeComponents, false);
@@ -582,7 +588,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     {
         // If any other switch is activated, hide the Drive components.
         driveComponent->setVisible(false);
-        driveLabel->setVisible(false);
+        // driveLabel->setVisible(false);
 
         // Show only the Shape components.
         setVisibility(shapeComponents, true);
@@ -593,7 +599,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     {
         // Hide the Drive components.
         driveComponent->setVisible(false);
-        driveLabel->setVisible(false);
+        // driveLabel->setVisible(false);
 
         // Show only the Compressor components.
         setVisibility(shapeComponents, false);
@@ -604,7 +610,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     {
         // Hide the Drive components.
         driveComponent->setVisible(false);
-        driveLabel->setVisible(false);
+        // driveLabel->setVisible(false);
 
         // Show only the Width components.
         setVisibility(shapeComponents, false);

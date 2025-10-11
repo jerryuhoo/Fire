@@ -102,9 +102,15 @@ void BandPanel::createSliders()
     modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive"); // Assign the ID for LookAndFeel
     modulatableSliderComponents.at(REC_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
     modulatableSliderComponents.at(BIAS_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
+    modulatableSliderComponents.at(SHAPE_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, SHAPE_COLOUR);
     modulatableSliderComponents.at(COMP_RATIO_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
     modulatableSliderComponents.at(COMP_THRESH_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
+    modulatableSliderComponents.at(COMP_ATTACK_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
+    modulatableSliderComponents.at(COMP_RELEASE_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
+    modulatableSliderComponents.at(COMP_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COMP_COLOUR);
     modulatableSliderComponents.at(WIDTH_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
+    modulatableSliderComponents.at(PAN_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
+    modulatableSliderComponents.at(WIDTH_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, WIDTH_COLOUR);
     modulatableSliderComponents.at(OUTPUT_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
     modulatableSliderComponents.at(MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
 
@@ -134,6 +140,12 @@ void BandPanel::createLabels()
     setupLabel(COMP_RATIO_NAME, "Ratio", *modulatableSliderComponents.at(COMP_RATIO_NAME), COMP_COLOUR);
     setupLabel(COMP_THRESH_NAME, "Threshold", *modulatableSliderComponents.at(COMP_THRESH_NAME), COMP_COLOUR);
     setupLabel(WIDTH_NAME, "Width", *modulatableSliderComponents.at(WIDTH_NAME), WIDTH_COLOUR);
+    setupLabel(COMP_ATTACK_NAME, "Attack", *modulatableSliderComponents.at(COMP_ATTACK_NAME), COMP_COLOUR);
+    setupLabel(COMP_RELEASE_NAME, "Release", *modulatableSliderComponents.at(COMP_RELEASE_NAME), COMP_COLOUR);
+    setupLabel(PAN_NAME, "Pan", *modulatableSliderComponents.at(PAN_NAME), WIDTH_COLOUR);
+    setupLabel(SHAPE_MIX_NAME, "Mix", *modulatableSliderComponents.at(SHAPE_MIX_NAME), SHAPE_COLOUR);
+    setupLabel(COMP_MIX_NAME, "Mix", *modulatableSliderComponents.at(COMP_MIX_NAME), COMP_COLOUR);
+    setupLabel(WIDTH_MIX_NAME, "Mix", *modulatableSliderComponents.at(WIDTH_MIX_NAME), WIDTH_COLOUR);
 
     auto setupPanelLabel = [this](juce::Label& label, const juce::String& text, juce::Colour colour)
     {
@@ -177,13 +189,66 @@ void BandPanel::createButtons()
 
 void BandPanel::setupComponentGroups()
 {
-    mainControls = { modulatableSliderComponents.at(DRIVE_NAME).get(), modulatableSliderComponents.at(OUTPUT_NAME).get(), modulatableSliderComponents.at(MIX_NAME).get(), modulatableSliderComponents.at(REC_NAME).get(), modulatableSliderComponents.at(BIAS_NAME).get(), &linkedButton, &safeButton, &extremeButton };
-    compressorKnobs = { modulatableSliderComponents.at(COMP_THRESH_NAME).get(), modulatableSliderComponents.at(COMP_RATIO_NAME).get() };
-    widthKnobs = { modulatableSliderComponents.at(WIDTH_NAME).get() };
+    mainControls = {
+        modulatableSliderComponents.at(DRIVE_NAME).get(),
+        modulatableSliderComponents.at(OUTPUT_NAME).get(),
+        modulatableSliderComponents.at(MIX_NAME).get(),
+        modulatableSliderComponents.at(REC_NAME).get(),
+        modulatableSliderComponents.at(BIAS_NAME).get(),
+        &linkedButton,
+        &safeButton,
+        &extremeButton
+    };
 
-    shapeComponents = { modulatableSliderComponents.at(REC_NAME).get(), modulatableSliderComponents.at(BIAS_NAME).get(), &shapePanelLabel, labels.at(REC_NAME).get(), labels.at(BIAS_NAME).get() };
-    compressorComponents = { modulatableSliderComponents.at(COMP_THRESH_NAME).get(), modulatableSliderComponents.at(COMP_RATIO_NAME).get(), &compressorBypassButton, &compressorPanelLabel, labels.at(COMP_RATIO_NAME).get(), labels.at(COMP_THRESH_NAME).get() };
-    widthComponents = { modulatableSliderComponents.at(WIDTH_NAME).get(), &widthBypassButton, &widthPanelLabel, labels.at(WIDTH_NAME).get() };
+    compressorKnobs = {
+        modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
+        modulatableSliderComponents.at(COMP_RATIO_NAME).get(),
+        modulatableSliderComponents.at(COMP_ATTACK_NAME).get(),
+        modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
+        modulatableSliderComponents.at(COMP_MIX_NAME).get()
+    };
+
+    widthKnobs = {
+        modulatableSliderComponents.at(WIDTH_NAME).get(),
+        modulatableSliderComponents.at(PAN_NAME).get(),
+        modulatableSliderComponents.at(WIDTH_MIX_NAME).get()
+    };
+
+    shapeComponents = {
+        modulatableSliderComponents.at(REC_NAME).get(),
+        modulatableSliderComponents.at(BIAS_NAME).get(),
+        modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
+        &shapePanelLabel,
+        labels.at(REC_NAME).get(),
+        labels.at(BIAS_NAME).get(),
+        labels.at(SHAPE_MIX_NAME).get()
+    };
+
+    compressorComponents = {
+        modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
+        modulatableSliderComponents.at(COMP_RATIO_NAME).get(),
+        modulatableSliderComponents.at(COMP_ATTACK_NAME).get(),
+        modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
+        modulatableSliderComponents.at(COMP_MIX_NAME).get(),
+        &compressorBypassButton,
+        &compressorPanelLabel,
+        labels.at(COMP_RATIO_NAME).get(),
+        labels.at(COMP_THRESH_NAME).get(),
+        labels.at(COMP_ATTACK_NAME).get(),
+        labels.at(COMP_RELEASE_NAME).get(),
+        labels.at(COMP_MIX_NAME).get()
+    };
+
+    widthComponents = {
+        modulatableSliderComponents.at(WIDTH_NAME).get(),
+        modulatableSliderComponents.at(PAN_NAME).get(),
+        modulatableSliderComponents.at(WIDTH_MIX_NAME).get(),
+        &widthBypassButton,
+        &widthPanelLabel,
+        labels.at(WIDTH_NAME).get(),
+        labels.at(PAN_NAME).get(),
+        labels.at(WIDTH_MIX_NAME).get()
+    };
 
     allControls.addArray(mainControls);
     allControls.addArray(compressorKnobs);
@@ -237,9 +302,9 @@ void BandPanel::resized()
     outputKnobArea = controlArea;
     const int verticalMargin = getHeight() / 6;
 
-    outputKnobArea = controlArea.reduced(0, verticalMargin);
-    driveKnobArea = driveKnobArea.reduced(0, verticalMargin); // Reduces an empty rect, which is fine.
-    bandKnobArea = bandKnobArea.reduced(0, verticalMargin);
+    outputKnobArea.reduce(0, verticalMargin);
+    driveKnobArea.reduce(0, verticalMargin); // Reduces an empty rect, which is fine.
+    bandKnobArea.reduce(0, verticalMargin);
 
     juce::Rectangle<int> switchArea = bandKnobArea.removeFromLeft(getWidth() / 50);
     const float switchButtonHeight = switchArea.getHeight() / 4.0f;
@@ -256,24 +321,39 @@ void BandPanel::resized()
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
         modulatableSliderComponents.at(DRIVE_NAME)->setBounds(bigDriveArea);
     }
-    // The 'else' block for the small drive knob is now completely removed.
 
+    // === MODIFIED BLOCK START ===
     // --- Band Knob Area Layout ---
-    // This part now works correctly on the expanded bandKnobArea for Shape/Comp/Width views.
+    // This section is now replaced with a flexible grid layout to accommodate all new knobs.
     juce::Rectangle<int> subKnobArea = bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5);
-    juce::Rectangle<int> leftKnobArea = subKnobArea.withRight(subKnobArea.getCentreX());
-    juce::Rectangle<int> rightKnobArea = subKnobArea.withLeft(subKnobArea.getCentreX());
 
-    // Shape panel
-    modulatableSliderComponents.at(REC_NAME)->setBounds(leftKnobArea);
-    modulatableSliderComponents.at(BIAS_NAME)->setBounds(rightKnobArea);
+    // --- Shape Panel Layout (3 knobs in 1 row) ---
+    auto shapeArea = subKnobArea;
+    int shapeKnobWidth = shapeArea.getWidth() / 3;
+    modulatableSliderComponents.at(REC_NAME)->setBounds(shapeArea.removeFromLeft(shapeKnobWidth));
+    modulatableSliderComponents.at(BIAS_NAME)->setBounds(shapeArea.removeFromLeft(shapeKnobWidth));
+    modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(shapeArea);
 
-    // Compressor panel
-    modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(leftKnobArea);
-    modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(rightKnobArea);
+    // --- Compressor Panel Layout (5 knobs in 2 rows) ---
+    auto compArea = subKnobArea;
+    auto compTopRow = compArea.removeFromTop(compArea.getHeight() / 2);
+    auto compBottomRow = compArea;
+    int compTopKnobWidth = compTopRow.getWidth() / 3;
+    // Center the 2 knobs on the bottom row to align with the 3 on top
+    auto centeredBottomRow = compBottomRow.withSizeKeepingCentre(compTopKnobWidth * 2, compBottomRow.getHeight());
+    modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(compTopRow.removeFromLeft(compTopKnobWidth));
+    modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(compTopRow.removeFromLeft(compTopKnobWidth));
+    modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(compTopRow);
+    modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(centeredBottomRow.removeFromLeft(compTopKnobWidth));
+    modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(centeredBottomRow);
 
-    // Width panel
-    modulatableSliderComponents.at(WIDTH_NAME)->setBounds(subKnobArea);
+    // --- Width Panel Layout (3 knobs in 1 row) ---
+    auto widthArea = subKnobArea;
+    int widthKnobWidth = widthArea.getWidth() / 3;
+    modulatableSliderComponents.at(WIDTH_NAME)->setBounds(widthArea.removeFromLeft(widthKnobWidth));
+    modulatableSliderComponents.at(PAN_NAME)->setBounds(widthArea.removeFromLeft(widthKnobWidth));
+    modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(widthArea);
+    // === MODIFIED BLOCK END ===
 
     // Panel Labels & Bypass Buttons
     bottomArea = bandKnobArea.removeFromBottom(bandKnobArea.getHeight() / 5);
@@ -296,7 +376,7 @@ void BandPanel::resized()
     compressorBypassButton.setBounds(bypassButtonArea);
     widthBypassButton.setBounds(bypassButtonArea);
 
-    // --- Output Area Layout --- (This part remains unchanged)
+    // --- Output Area Layout --- (This part remains unchanged and correct)
     const int bottomAreaHeight = outputKnobArea.getHeight() / 5;
 
     juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(),

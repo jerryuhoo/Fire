@@ -1361,11 +1361,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(DRIVE_ID, i), DRIVE_NAME, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_RATIO_ID, i), COMP_RATIO_NAME, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_THRESH_ID, i), COMP_THRESH_NAME, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_ATTACK_ID, i), COMP_ATTACK_NAME, juce::NormalisableRange<float>(0.1f, 200.0f, 0.01f, 0.3f), 10.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_RELEASE_ID, i), COMP_RELEASE_NAME, juce::NormalisableRange<float>(10.0f, 2000.0f, 1.f, 0.3f), 100.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_MIX_ID, i), COMP_MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(WIDTH_ID, i), WIDTH_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(PAN_ID, i), PAN_NAME, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(WIDTH_MIX_ID, i), WIDTH_MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(OUTPUT_ID, i), OUTPUT_NAME, juce::NormalisableRange<float>(-48.0f, 6.0f, 0.1f), 0.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(MIX_ID, i), MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(BIAS_ID, i), BIAS_NAME, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(REC_ID, i), REC_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(SHAPE_MIX_ID, i), SHAPE_MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_ENABLE_ID, i), BAND_ENABLE_NAME, true));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_SOLO_ID, i), BAND_SOLO_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(COMP_BYPASS_ID, i), COMP_BYPASS_NAME, false));

@@ -189,11 +189,17 @@ namespace ParameterIDAndName
             DRIVE_NAME,
             COMP_RATIO_NAME,
             COMP_THRESH_NAME,
+            COMP_ATTACK_NAME,
+            COMP_RELEASE_NAME,
+            COMP_MIX_NAME,
             WIDTH_NAME,
+            PAN_NAME,
+            WIDTH_MIX_NAME,
             OUTPUT_NAME,
             MIX_NAME,
             BIAS_NAME,
-            REC_NAME
+            REC_NAME,
+            SHAPE_MIX_NAME,
         };
         return modulatableNames;
     }
@@ -207,9 +213,15 @@ namespace ParameterIDAndName
         // This static vector is initialized only once.
         static const std::vector<ModulatableParameterInfo> parameters = {
             { DRIVE_NAME, DRIVE_ID },
+            { SHAPE_MIX_NAME, SHAPE_MIX_ID },
             { COMP_RATIO_NAME, COMP_RATIO_ID },
             { COMP_THRESH_NAME, COMP_THRESH_ID },
+            { COMP_ATTACK_NAME, COMP_ATTACK_ID },
+            { COMP_RELEASE_NAME, COMP_RELEASE_ID },
+            { COMP_MIX_NAME, COMP_MIX_ID },
             { WIDTH_NAME, WIDTH_ID },
+            { PAN_NAME, PAN_ID },
+            { WIDTH_MIX_NAME, WIDTH_MIX_ID },
             { OUTPUT_NAME, OUTPUT_ID },
             { MIX_NAME, MIX_ID },
             { BIAS_NAME, BIAS_ID },

@@ -103,9 +103,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             };
 
             // Assign the callback function to all modulatable sliders.
-            for (auto* slider : bandPanel.modulatableSliders)
+            for (auto* slider : bandPanel.getModulatableSliders())
                 slider->onClickInAssignMode = sliderClickCallback;
-            for (auto* slider : globalPanel.modulatableSliders)
+            for (auto* slider : globalPanel.getModulatableSliders())
                 slider->onClickInAssignMode = sliderClickCallback;
         }
     };
@@ -642,9 +642,9 @@ void FireAudioProcessorEditor::timerCallback()
         assignModePulseAlpha = minAlpha + (maxAlpha - minAlpha) * ((std::sin(assignModePulseAngle) + 1.0f) / 2.0f);
 
         // Pass the new alpha value to all modulatable sliders
-        for (auto* slider : bandPanel.modulatableSliders)
+        for (auto* slider : bandPanel.getModulatableSliders())
             slider->assignModeGlowAlpha = assignModePulseAlpha;
-        for (auto* slider : globalPanel.modulatableSliders)
+        for (auto* slider : globalPanel.getModulatableSliders())
             slider->assignModeGlowAlpha = assignModePulseAlpha;
 
         // Repaint the panels on every frame to ensure smooth animation
@@ -669,7 +669,7 @@ void FireAudioProcessorEditor::timerCallback()
 
     // Loop through the public list of modulatable sliders from the bandPanel.
     // This is much cleaner and automatically adapts to any new sliders you add.
-    for (auto* slider : bandPanel.modulatableSliders)
+    for (auto* slider : bandPanel.getModulatableSliders())
     {
         if (slider != nullptr) // A good safety check
         {
@@ -679,7 +679,7 @@ void FireAudioProcessorEditor::timerCallback()
     // Repaint the entire panel once, which is more efficient than repainting individual sliders.
     bandPanel.repaint();
 
-    for (auto* slider : globalPanel.modulatableSliders)
+    for (auto* slider : globalPanel.getModulatableSliders())
     {
         if (slider != nullptr)
         {
@@ -1053,12 +1053,12 @@ void FireAudioProcessorEditor::exitAssignMode()
     lfoPanel.assignButton.setToggleState(false, juce::dontSendNotification);
 
     // Iterate through all modulatable sliders, clear their callback functions and stop flashing.
-    for (auto* slider : bandPanel.modulatableSliders)
+    for (auto* slider : bandPanel.getModulatableSliders())
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
     }
-    for (auto* slider : globalPanel.modulatableSliders)
+    for (auto* slider : globalPanel.getModulatableSliders())
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
@@ -1145,10 +1145,10 @@ std::vector<ModulatableSlider*> FireAudioProcessorEditor::getAllModulatableSlide
     std::vector<ModulatableSlider*> allSliders;
 
     // Get sliders from BandPanel
-    allSliders.insert(allSliders.end(), bandPanel.modulatableSliders.begin(), bandPanel.modulatableSliders.end());
+    allSliders.insert(allSliders.end(), bandPanel.getModulatableSliders().begin(), bandPanel.getModulatableSliders().end());
 
     // Get sliders from GlobalPanel
-    allSliders.insert(allSliders.end(), globalPanel.modulatableSliders.begin(), globalPanel.modulatableSliders.end());
+    allSliders.insert(allSliders.end(), globalPanel.getModulatableSliders().begin(), globalPanel.getModulatableSliders().end());
 
     return allSliders;
 }

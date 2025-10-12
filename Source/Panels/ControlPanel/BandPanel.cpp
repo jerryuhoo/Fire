@@ -18,7 +18,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
                      std::function<void(ModulatableSlider*)> onDragEnd,
                      std::function<void(ModulatableSlider*)> onHoverStart,
                      std::function<void(ModulatableSlider*)> onHoverEnd)
-    : processor(p), focusBandNum(0)
+    : PanelBase(p), focusBandNum(0)
 {
     // Create all UI components using helper methods
     createSliders();
@@ -83,30 +83,8 @@ BandPanel::~BandPanel()
 
 void BandPanel::createSliders()
 {
-    // === Create Modulatable Sliders in a loop ===
-    auto createAndConfigureSlider =
-        [this](const juce::String& paramName, const juce::String& labelText, juce::Colour sliderColour, const juce::String& suffix = "")
-    {
-        // Create the slider instance.
-        modulatableSliderComponents[paramName] = std::make_unique<ModulatableSlider>();
-        auto* slider = modulatableSliderComponents.at(paramName).get();
-
-        // Basic setup using your existing helper.
-        initRotarySlider(*slider, sliderColour);
-
-        // *** The key step: Tell the slider what its label should be. ***
-        slider->setLabel(labelText, sliderColour.withBrightness(0.9f));
-
-        // Set the value suffix if one is provided.
-        if (suffix.isNotEmpty())
-            slider->setTextValueSuffix(suffix);
-
-        // Assign callbacks and add to the public list.
-        setupSliderCallbacks(*slider);
-        modulatableSliders.push_back(slider);
-    };
-
-    // === Now, create all sliders using our new helper ===
+    // [MODIFIED] This function is now much simpler.
+    // It just calls the helper from the base class for each slider.
 
     // Main Panel
     createAndConfigureSlider(DRIVE_NAME, "Drive", DRIVE_COLOUR);
@@ -137,33 +115,6 @@ void BandPanel::createSliders()
 
 void BandPanel::createLabels()
 {
-    // auto setupLabel = [this](const juce::String& paramName, const juce::String& text, juce::Component& attachComp, juce::Colour colour)
-    // {
-    //     labels[paramName] = std::make_unique<juce::Label>();
-    //     auto* label = labels.at(paramName).get();
-    //     addAndMakeVisible(label);
-    //     label->setText(text, juce::dontSendNotification);
-    //     label->setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-    //     label->setColour(juce::Label::textColourId, colour);
-    //     label->attachToComponent(&attachComp, false);
-    //     label->setJustificationType(juce::Justification::centred);
-    // };
-
-    // setupLabel(DRIVE_NAME, "Drive", *modulatableSliderComponents.at(DRIVE_NAME), DRIVE_COLOUR.withBrightness(0.9f));
-    // setupLabel(OUTPUT_NAME, "Output", *modulatableSliderComponents.at(OUTPUT_NAME), KNOB_FONT_COLOUR);
-    // setupLabel(MIX_NAME, "Mix", *modulatableSliderComponents.at(MIX_NAME), KNOB_FONT_COLOUR);
-    // setupLabel(REC_NAME, "Rectification", *modulatableSliderComponents.at(REC_NAME), SHAPE_COLOUR);
-    // setupLabel(BIAS_NAME, "Bias", *modulatableSliderComponents.at(BIAS_NAME), SHAPE_COLOUR);
-    // setupLabel(COMP_RATIO_NAME, "Ratio", *modulatableSliderComponents.at(COMP_RATIO_NAME), COMP_COLOUR);
-    // setupLabel(COMP_THRESH_NAME, "Threshold", *modulatableSliderComponents.at(COMP_THRESH_NAME), COMP_COLOUR);
-    // setupLabel(WIDTH_NAME, "Width", *modulatableSliderComponents.at(WIDTH_NAME), WIDTH_COLOUR);
-    // setupLabel(COMP_ATTACK_NAME, "Attack", *modulatableSliderComponents.at(COMP_ATTACK_NAME), COMP_COLOUR);
-    // setupLabel(COMP_RELEASE_NAME, "Release", *modulatableSliderComponents.at(COMP_RELEASE_NAME), COMP_COLOUR);
-    // setupLabel(PAN_NAME, "Pan", *modulatableSliderComponents.at(PAN_NAME), WIDTH_COLOUR);
-    // setupLabel(SHAPE_MIX_NAME, "Mix", *modulatableSliderComponents.at(SHAPE_MIX_NAME), SHAPE_COLOUR);
-    // setupLabel(COMP_MIX_NAME, "Mix", *modulatableSliderComponents.at(COMP_MIX_NAME), COMP_COLOUR);
-    // setupLabel(WIDTH_MIX_NAME, "Mix", *modulatableSliderComponents.at(WIDTH_MIX_NAME), WIDTH_COLOUR);
-
     auto setupPanelLabel = [this](juce::Label& label, const juce::String& text, juce::Colour colour)
     {
         addAndMakeVisible(label);
@@ -447,62 +398,6 @@ void BandPanel::updateAttachments()
 
     bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(bandEnabled, false);
-}
-
-void BandPanel::setupSliderCallbacks(ModulatableSlider& slider)
-{
-    auto safeSlider = juce::Component::SafePointer<ModulatableSlider>(&slider);
-
-    safeSlider->onModAmountSetValue = [this, safeSlider](double newValue)
-    {
-        if (! safeSlider)
-            return;
-        DBG("onModAmountSetValue triggered for " + safeSlider->parameterID + " with value: " + juce::String(newValue));
-        processor.setModulationValue(safeSlider->parameterID, (float) newValue);
-    };
-
-    safeSlider->onModAmountChanged = [this, safeSlider](double newAmount)
-    {
-        if (! safeSlider)
-            return;
-        processor.setModulationDepth(safeSlider->parameterID, (float) newAmount);
-    };
-
-    safeSlider->onBipolarModeToggled = [this, safeSlider]()
-    {
-        if (! safeSlider)
-            return;
-        processor.toggleBipolarMode(safeSlider->parameterID);
-    };
-
-    safeSlider->onModulationReset = [this, safeSlider]()
-    {
-        if (! safeSlider)
-            return;
-        processor.resetModulation(safeSlider->parameterID);
-    };
-
-    safeSlider->onModulationCleared = [this, safeSlider]()
-    {
-        if (! safeSlider)
-            return;
-        processor.clearModulationForParameter(safeSlider->parameterID);
-    };
-
-    safeSlider->onModulationInverted = [this, safeSlider]()
-    {
-        if (! safeSlider)
-            return;
-        processor.invertModulationDepthForParameter(safeSlider->parameterID);
-    };
-}
-
-void BandPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
-{
-    addAndMakeVisible(slider);
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, 0, 0);
-    slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
 }
 
 void BandPanel::initFlatButton(juce::TextButton& button, juce::String buttonName)

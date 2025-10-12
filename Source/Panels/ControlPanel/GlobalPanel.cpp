@@ -18,7 +18,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
                          std::function<void(ModulatableSlider*)> onDragEnd,
                          std::function<void(ModulatableSlider*)> onHoverStart,
                          std::function<void(ModulatableSlider*)> onHoverEnd)
-    : processor(p)
+    : PanelBase(p)
 {
     createSliders();
     createLabels();
@@ -64,66 +64,28 @@ GlobalPanel::~GlobalPanel()
 
 void GlobalPanel::createSliders()
 {
-    // === Create Modulatable Sliders in a loop ===
-    for (const auto& paramInfo : ParameterIDAndName::getGlobalParameterInfo())
-    {
-        modulatableSliderComponents[paramInfo.name] = std::make_unique<ModulatableSlider>();
-        auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
+    // Global Knobs
+    createAndConfigureSlider(GLOBAL_OUTPUT_NAME, "Output", COLOUR1, " dB");
+    createAndConfigureSlider(GLOBAL_MIX_NAME, "Mix", COLOUR1);
 
-        initRotarySlider(*slider, juce::Colours::white); // Color will be set below
-        modulatableSliders.push_back(slider);
-    }
+    // Downsample Knobs
+    createAndConfigureSlider(DOWNSAMPLE_NAME, "Downsample", DOWNSAMPLE_COLOUR.withBrightness(0.8f));
 
-    // === Configure specific slider properties ===
-    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
-    modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setColour(juce::Slider::rotarySliderFillColourId, COLOUR1);
-    modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setColour(juce::Slider::rotarySliderFillColourId, DOWNSAMPLE_COLOUR.withBrightness(0.8f));
-
-    auto setFilterKnobColour = [&](const juce::String& name)
-    {
-        modulatableSliderComponents.at(name)->setColour(juce::Slider::rotarySliderFillColourId, FILTER_COLOUR.withBrightness(0.8f));
-    };
-
-    setFilterKnobColour(LOWCUT_FREQ_NAME);
-    setFilterKnobColour(LOWCUT_Q_NAME);
-    setFilterKnobColour(LOWCUT_GAIN_NAME);
-    setFilterKnobColour(HIGHCUT_FREQ_NAME);
-    setFilterKnobColour(HIGHCUT_Q_NAME);
-    setFilterKnobColour(HIGHCUT_GAIN_NAME);
-    setFilterKnobColour(PEAK_FREQ_NAME);
-    setFilterKnobColour(PEAK_Q_NAME);
-    setFilterKnobColour(PEAK_GAIN_NAME);
-
-    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setTextValueSuffix(" dB");
+    // Filter Knobs
+    const auto filterColour = FILTER_COLOUR.withBrightness(0.8f);
+    createAndConfigureSlider(LOWCUT_FREQ_NAME, "Frequency", filterColour);
+    createAndConfigureSlider(LOWCUT_Q_NAME, "Q", filterColour);
+    createAndConfigureSlider(LOWCUT_GAIN_NAME, "Gain", filterColour);
+    createAndConfigureSlider(HIGHCUT_FREQ_NAME, "Frequency", filterColour);
+    createAndConfigureSlider(HIGHCUT_Q_NAME, "Q", filterColour);
+    createAndConfigureSlider(HIGHCUT_GAIN_NAME, "Gain", filterColour);
+    createAndConfigureSlider(PEAK_FREQ_NAME, "Frequency", filterColour);
+    createAndConfigureSlider(PEAK_Q_NAME, "Q", filterColour);
+    createAndConfigureSlider(PEAK_GAIN_NAME, "Gain", filterColour);
 }
 
 void GlobalPanel::createLabels()
 {
-    auto setupLabel = [this](const juce::String& paramName, const juce::String& text, juce::Colour colour, bool attachToLeft = false)
-    {
-        labels[paramName] = std::make_unique<juce::Label>();
-        auto* label = labels.at(paramName).get();
-        addAndMakeVisible(label);
-        label->setText(text, juce::dontSendNotification);
-        label->setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
-        label->setColour(juce::Label::textColourId, colour);
-        label->attachToComponent(modulatableSliderComponents.at(paramName).get(), attachToLeft);
-        label->setJustificationType(juce::Justification::centred);
-    };
-
-    setupLabel(GLOBAL_OUTPUT_NAME, "Output", KNOB_FONT_COLOUR);
-    setupLabel(GLOBAL_MIX_NAME, "Mix", KNOB_FONT_COLOUR);
-    setupLabel(DOWNSAMPLE_NAME, "Downsample", DOWNSAMPLE_COLOUR.withBrightness(0.8f));
-    setupLabel(LOWCUT_FREQ_NAME, "Frequency", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(LOWCUT_Q_NAME, "Q", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(LOWCUT_GAIN_NAME, "Gain", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(HIGHCUT_FREQ_NAME, "Frequency", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(HIGHCUT_Q_NAME, "Q", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(HIGHCUT_GAIN_NAME, "Gain", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(PEAK_FREQ_NAME, "Frequency", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(PEAK_Q_NAME, "Q", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(PEAK_GAIN_NAME, "Gain", FILTER_COLOUR.withBrightness(0.8f));
-
     auto setupPanelLabel = [this](juce::Label& label, const juce::String& text, juce::Colour colour)
     {
         addAndMakeVisible(label);
@@ -207,9 +169,6 @@ void GlobalPanel::setupComponentGroups()
         modulatableSliderComponents.at(LOWCUT_FREQ_NAME).get(),
         modulatableSliderComponents.at(LOWCUT_Q_NAME).get(),
         modulatableSliderComponents.at(LOWCUT_GAIN_NAME).get(),
-        labels.at(LOWCUT_FREQ_NAME).get(),
-        labels.at(LOWCUT_Q_NAME).get(),
-        labels.at(LOWCUT_GAIN_NAME).get(),
         &lowcutSlopeMode
     };
 
@@ -217,18 +176,12 @@ void GlobalPanel::setupComponentGroups()
         modulatableSliderComponents.at(PEAK_FREQ_NAME).get(),
         modulatableSliderComponents.at(PEAK_Q_NAME).get(),
         modulatableSliderComponents.at(PEAK_GAIN_NAME).get(),
-        labels.at(PEAK_FREQ_NAME).get(),
-        labels.at(PEAK_Q_NAME).get(),
-        labels.at(PEAK_GAIN_NAME).get()
     };
 
     highcutKnobs = {
         modulatableSliderComponents.at(HIGHCUT_FREQ_NAME).get(),
         modulatableSliderComponents.at(HIGHCUT_Q_NAME).get(),
         modulatableSliderComponents.at(HIGHCUT_GAIN_NAME).get(),
-        labels.at(HIGHCUT_FREQ_NAME).get(),
-        labels.at(HIGHCUT_Q_NAME).get(),
-        labels.at(HIGHCUT_GAIN_NAME).get(),
         &highcutSlopeMode
     };
 
@@ -237,7 +190,7 @@ void GlobalPanel::setupComponentGroups()
     filterComponents.addArray(peakKnobs);
     filterComponents.addArray(highcutKnobs);
 
-    downsampleComponents = { modulatableSliderComponents.at(DOWNSAMPLE_NAME).get(), &downSamplePanelLabel, labels.at(DOWNSAMPLE_NAME).get() };
+    downsampleComponents = { modulatableSliderComponents.at(DOWNSAMPLE_NAME).get(), &downSamplePanelLabel };
 
     allControls.addArray(filterComponents);
     allControls.addArray(downsampleComponents);
@@ -260,8 +213,6 @@ void GlobalPanel::updateAttachments()
         {
             sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
         }
-
-        configureModulatableSlider(*slider, paramID);
     }
 
     filterLowAttachment = std::make_unique<ButtonAttachment>(processor.treeState, LOW_ID, filterLowCutButton);
@@ -273,44 +224,6 @@ void GlobalPanel::updateAttachments()
 
     lowcutModeAttachment = std::make_unique<ComboBoxAttachment>(processor.treeState, LOWCUT_SLOPE_ID, lowcutSlopeMode);
     highcutModeAttachment = std::make_unique<ComboBoxAttachment>(processor.treeState, HIGHCUT_SLOPE_ID, highcutSlopeMode);
-}
-
-void GlobalPanel::configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramID)
-{
-    slider.parameterID = paramID;
-
-    slider.onModAmountChanged = [this, &slider](double newAmount)
-    {
-        processor.setModulationDepth(slider.parameterID, (float) newAmount);
-    };
-
-    slider.onBipolarModeToggled = [this, &slider]()
-    {
-        processor.toggleBipolarMode(slider.parameterID);
-    };
-
-    slider.onModulationReset = [this, &slider]()
-    {
-        processor.resetModulation(slider.parameterID);
-    };
-
-    slider.onModulationCleared = [this, &slider]()
-    {
-        processor.clearModulationForParameter(slider.parameterID);
-    };
-
-    slider.onModulationInverted = [this, &slider]()
-    {
-        processor.invertModulationDepthForParameter(slider.parameterID);
-    };
-}
-
-void GlobalPanel::initRotarySlider(juce::Slider& slider, juce::Colour colour)
-{
-    addAndMakeVisible(slider);
-    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
-    slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
 }
 
 void GlobalPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour)

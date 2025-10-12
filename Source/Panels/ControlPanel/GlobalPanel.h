@@ -11,16 +11,14 @@
 #pragma once
 
 #include "../../GUI/LookAndFeel.h"
-#include "../../GUI/ModulatableSlider.h"
-#include "../../PluginProcessor.h"
+#include "PanelBase.h"
 #include "juce_gui_basics/juce_gui_basics.h"
-#include <map>
 #include <vector>
 
 //==============================================================================
 /*
 */
-class GlobalPanel : public juce::Component,
+class GlobalPanel : public PanelBase,
                     public juce::ComboBox::Listener,
                     public juce::Button::Listener
 {
@@ -35,9 +33,6 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
-
-    // A public list of all modulatable sliders for the editor to access and update.
-    std::vector<ModulatableSlider*> modulatableSliders;
 
     ModulatableSlider& getLowcutFreqKnob();
     ModulatableSlider& getPeakFreqKnob();
@@ -61,14 +56,13 @@ private:
     void createComboBoxes();
     void setupComponentGroups();
 
-    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
-    void initFlatButton(juce::TextButton& button, juce::String buttonName);
+    // initRotarySlider is now in PanelBase.
+    void initFlatButton(juce::TextButton& button, juce::String buttonName); // This seems to be missing, keeping for consistency.
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
 
     // Re-attaches all UI components to their parameters.
     void updateAttachments();
-    void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramID);
 
     // UI update helpers
     void updateFilterKnobVisibility();
@@ -89,16 +83,9 @@ private:
         switchButtonsGlobal = 1005
     };
 
-    FireAudioProcessor& processor;
-
     // UI layout areas
     juce::Rectangle<int> globalEffectArea;
     juce::Rectangle<int> outputKnobArea;
-
-    // === UI Component Management ===
-    std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
-    std::map<juce::String, std::unique_ptr<juce::Label>> labels;
-    std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
 
     // --- Buttons ---
     juce::TextButton filterLowCutButton, filterPeakButton, filterHighCutButton;

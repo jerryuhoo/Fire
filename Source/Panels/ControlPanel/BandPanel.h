@@ -11,15 +11,14 @@
 #pragma once
 
 #include "../../GUI/LookAndFeel.h"
-#include "../../PluginProcessor.h"
+#include "PanelBase.h" // [MODIFIED] Include the new base class
 #include "juce_gui_basics/juce_gui_basics.h"
-#include <map>
 #include <vector>
 
 //==============================================================================
 /*
 */
-class BandPanel : public juce::Component,
+class BandPanel : public PanelBase, // [MODIFIED] Inherit from PanelBase
                   public juce::AudioProcessorValueTreeState::Listener,
                   public juce::AsyncUpdater,
                   public juce::Button::Listener
@@ -48,20 +47,22 @@ public:
     void updateDriveMeter();
     void saveBypassStatesToMemory();
 
-    // A public list of all modulatable sliders for the editor to access and update.
-    std::vector<ModulatableSlider*> modulatableSliders;
+    // [REMOVED] The public list of sliders is now in PanelBase.
+    // The editor can access it via a public getter in PanelBase if needed,
+    // or by casting the component to PanelBase*. For now we assume internal access is sufficient.
 
 private:
     // Re-attaches all UI components to the parameters of the current focusBandNum.
     void updateAttachments();
-    void setupSliderCallbacks(ModulatableSlider& slider);
+
+    // [REMOVED] setupSliderCallbacks is now in PanelBase as setupModulationCallbacks
 
     void updateLinkedValue();
     bool canEnableSubKnob(juce::Component& component);
 
     void buttonClicked(juce::Button* clickedButton) override;
     // Initialization helpers
-    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
+    // [REMOVED] initRotarySlider is now in PanelBase.
     void initFlatButton(juce::TextButton& button, juce::String buttonName);
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
 
@@ -73,8 +74,6 @@ private:
     // Sets visibility for a group of components.
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
 
-    FireAudioProcessor& processor;
-
     // UI layout areas
     juce::Rectangle<int> bandKnobArea;
     juce::Rectangle<int> driveKnobArea;
@@ -85,14 +84,8 @@ private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
-    // A map to own and manage all sliders, keyed by their parameter name.
-    std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
-
     // A map to own and manage all labels, keyed by the parameter name they are associated with.
     std::map<juce::String, std::unique_ptr<juce::Label>> labels;
-
-    // A map to own the attachments, ensuring they are re-created correctly when the band changes.
-    std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
 
     // --- Unchanged Members ---
     juce::Label shapePanelLabel, compressorPanelLabel, widthPanelLabel;

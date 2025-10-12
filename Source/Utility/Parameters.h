@@ -314,7 +314,8 @@ namespace ParameterIDAndName
             { BAND_SOLO_NAME, BAND_SOLO_ID },
             { COMP_BYPASS_NAME, COMP_BYPASS_ID },
             { WIDTH_BYPASS_NAME, WIDTH_BYPASS_ID },
-            { SHAPE_BYPASS_NAME, SHAPE_BYPASS_ID }
+            { SHAPE_BYPASS_NAME, SHAPE_BYPASS_ID },
+            { DC_FILTER_NAME, DC_FILTER_ID }
         };
         return params;
     }

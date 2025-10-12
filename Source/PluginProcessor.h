@@ -62,6 +62,7 @@ struct BandProcessingParameters
     float widthMixVal;
     bool isWidthEnabled;
     bool isShapeEnabled;
+    bool isDcFilterEnabled;
 
     // Distortion-specific parameters
     bool isSafeModeOn;
@@ -104,13 +105,13 @@ struct BandProcessingParameters
 struct BandProcessor
 {
     using GainProcessor = juce::dsp::Gain<float>;
-    // using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
+    using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
 
     // Each band has its own set of processors.
     CompressorProcessor compressor;
     WidthProcessor widthProcessor;
-    // DCFilter dcFilter;
+    DCFilter dcFilter;
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
     juce::dsp::DryWetMixer<float> shapeMixer;

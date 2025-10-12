@@ -61,8 +61,8 @@
 #define GLOBAL_MIX_NAME         "GlobalMix"
 #define BIAS_ID                 "bias"
 #define BIAS_NAME               "Bias"
-#define DC_BYPASS_ID            "dcBypass"
-#define DC_BYPASS_NAME          "DcBypass"
+#define DC_FILTER_ID            "dcFilter"
+#define DC_FILTER_NAME          "DcFilter"
 #define REC_ID                  "rec"
 #define REC_NAME                "Rec"
 

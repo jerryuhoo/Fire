@@ -40,6 +40,7 @@ public:
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
 
     juce::ToggleButton shapeBypassButton, compressorBypassButton, widthBypassButton;
+    juce::ToggleButton dcFilterButton;
 
     int getFocusBandNum() const { return focusBandNum; }
     void setSwitch(const int index, bool state);
@@ -70,11 +71,12 @@ private:
 
     std::map<juce::String, std::unique_ptr<juce::Label>> labels;
     juce::Label shapePanelLabel, compressorPanelLabel, widthPanelLabel;
+    juce::Label dcFilterLabel;
 
     juce::TextButton linkedButton, safeButton, extremeButton;
 
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
-        shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment;
+        shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment;
 
     juce::ToggleButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
     enum RadioButtonIds
@@ -99,6 +101,7 @@ private:
     bool shapeBypassTemp[4] = { false };
     bool compBypassTemp[4] = { false };
     bool widthBypassTemp[4] = { false };
+    bool dcFilterBypassTemp[4] = { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

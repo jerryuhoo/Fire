@@ -81,6 +81,7 @@ BandPanel::~BandPanel()
     compressorBypassButton.removeListener(this);
     widthBypassButton.removeListener(this);
     shapeBypassButton.removeListener(this);
+    dcFilterButton.removeListener(this);
 }
 
 void BandPanel::createSliders()
@@ -125,6 +126,7 @@ void BandPanel::createLabels()
     setupPanelLabel(shapePanelLabel, "Shape", SHAPE_COLOUR);
     setupPanelLabel(compressorPanelLabel, "Compressor", COMP_COLOUR);
     setupPanelLabel(widthPanelLabel, "Stereo", WIDTH_COLOUR);
+    setupPanelLabel(dcFilterLabel, "DC", SHAPE_COLOUR.withBrightness(0.8f));
 }
 
 void BandPanel::createButtons()
@@ -136,6 +138,8 @@ void BandPanel::createButtons()
     initBypassButton(shapeBypassButton, SHAPE_COLOUR);
     initBypassButton(compressorBypassButton, COMP_COLOUR);
     initBypassButton(widthBypassButton, WIDTH_COLOUR);
+
+    initBypassButton(dcFilterButton, SHAPE_COLOUR);
 
     auto setupSwitch = [this](juce::ToggleButton& btn, juce::Colour colour)
     {
@@ -163,7 +167,9 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(BIAS_NAME).get(),
         modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
         &shapePanelLabel,
-        &shapeBypassButton
+        &shapeBypassButton,
+        &dcFilterButton,
+        &dcFilterLabel
     };
 
     compressorComponents = {
@@ -189,7 +195,9 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(REC_NAME).get(),
         modulatableSliderComponents.at(BIAS_NAME).get(),
         modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
-        &shapePanelLabel
+        &shapePanelLabel,
+        &dcFilterButton,
+        &dcFilterLabel
     };
 
     compressorSubControls = {
@@ -288,12 +296,33 @@ void BandPanel::resized()
     const int fixedKnobWidth = subKnobArea.getWidth() / 3;
     const int fixedKnobHeight = subKnobArea.getHeight() / 2;
 
-    // --- Shape Panel Layout (3 knobs in 1 row) ---
-    // Create a single row area with the fixed height, and center it vertically.
-    auto shapeRowArea = subKnobArea.withSizeKeepingCentre(subKnobArea.getWidth(), fixedKnobHeight);
+    // --- Shape Panel Layout (3 knobs + 1 button) ---
+    auto shapeContentArea = subKnobArea;
+    auto shapeKnobArea = shapeContentArea.removeFromTop(shapeContentArea.getHeight() * 0.8);
+    auto dcFilterArea = shapeContentArea;
+
+    auto shapeRowArea = shapeKnobArea.withSizeKeepingCentre(shapeKnobArea.getWidth(), fixedKnobHeight);
     modulatableSliderComponents.at(REC_NAME)->setBounds(shapeRowArea.removeFromLeft(fixedKnobWidth));
     modulatableSliderComponents.at(BIAS_NAME)->setBounds(shapeRowArea.removeFromLeft(fixedKnobWidth));
     modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(shapeRowArea);
+
+    // 1. Define the size of the button and label.
+    const int dcButtonSize = dcFilterArea.getHeight() * 0.7; // Make the button a bit smaller than the row height
+    const int dcLabelWidth = 35;
+    const int dcGroupWidth = dcButtonSize + dcLabelWidth;
+
+    // 2. Create a single area for the button-label group and center it horizontally
+    //    under the middle knob.
+    auto middleColumnX = subKnobArea.getX() + fixedKnobWidth;
+    juce::Rectangle<int> dcGroupArea;
+    dcGroupArea.setSize(dcGroupWidth, dcFilterArea.getHeight());
+    dcGroupArea.setCentre(middleColumnX + (fixedKnobWidth / 2), dcFilterArea.getCentreY());
+    dcGroupArea.translate(0, -30);
+
+    // 3. Place the button on the left of the group area, and the label on the right.
+    dcFilterButton.setBounds(dcGroupArea.removeFromLeft(dcButtonSize).withSizeKeepingCentre(dcButtonSize, dcButtonSize));
+    dcFilterLabel.setBounds(dcGroupArea);
+    dcFilterLabel.setJustificationType(juce::Justification::centredLeft); // Align text to the left
 
     // --- Compressor Panel Layout (2 knobs on top, 3 on bottom) ---
     auto compArea = subKnobArea;
@@ -384,6 +413,7 @@ void BandPanel::updateAttachments()
     shapeBypassAttachment.reset();
     compressorBypassAttachment.reset();
     widthBypassAttachment.reset();
+    dcFilterAttachment.reset();
 
     linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
     safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
@@ -393,10 +423,13 @@ void BandPanel::updateAttachments()
     compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
     widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
 
+    dcFilterAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(DC_FILTER_ID, focusBandNum), dcFilterButton);
+
     // Update visual states from memory
     shapeBypassButton.setToggleState(shapeBypassTemp[focusBandNum], juce::dontSendNotification);
     compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
     widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
+    dcFilterButton.setToggleState(dcFilterBypassTemp[focusBandNum], juce::dontSendNotification);
 
     bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(bandEnabled, false);
@@ -419,7 +452,7 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
     addAndMakeVisible(bypassButton);
     bypassButton.setColour(juce::ToggleButton::tickColourId, colour);
 
-    // [FIX 1] Add the panel as a listener to the button.
+    // Add the panel as a listener to the button.
     // This is the crucial step to make sure we can react to clicks.
     bypassButton.addListener(this);
 }
@@ -546,6 +579,7 @@ void BandPanel::saveBypassStatesToMemory()
     shapeBypassTemp[focusBandNum] = shapeBypassButton.getToggleState();
     compBypassTemp[focusBandNum] = compressorBypassButton.getToggleState();
     widthBypassTemp[focusBandNum] = widthBypassButton.getToggleState();
+    dcFilterBypassTemp[focusBandNum] = dcFilterButton.getToggleState();
 }
 
 void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)

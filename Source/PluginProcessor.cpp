@@ -57,8 +57,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     widthMixer.prepare(mixerSpec);
 
     // The DC filter needs its coefficients to be calculated.
-    // dcFilter.prepare(spec);
-    // *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
+    dcFilter.prepare(spec);
+    *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
 
     // The oversampling object also needs to be prepared.
     oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
@@ -80,7 +80,7 @@ void BandProcessor::reset()
     shapeMixer.reset();
     compressorMixer.reset();
     widthMixer.reset();
-    // dcFilter.reset();
+    dcFilter.reset();
 
     if (oversampling)
         oversampling->reset();
@@ -317,6 +317,12 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     }
 
     shapeMixer.mixWetSamples(blockToProcess);
+
+    if (params.isDcFilterEnabled)
+    {
+        auto dcContext = juce::dsp::ProcessContextReplacing<float>(blockToProcess);
+        dcFilter.process(dcContext);
+    }
 }
 
 //==============================================================================
@@ -1412,6 +1418,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(COMP_BYPASS_ID, i), COMP_BYPASS_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(WIDTH_BYPASS_ID, i), WIDTH_BYPASS_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(SHAPE_BYPASS_ID, i), SHAPE_BYPASS_NAME, false));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(DC_FILTER_ID, i), DC_FILTER_NAME, true));
     }
 
     // --- Crossover Parameters ---
@@ -1847,6 +1854,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 params.isWidthEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i)) > 0.5f;
                 params.isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, i)) > 0.5f;
                 params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(EXTREME_ID, i)) > 0.5f;
+                params.isDcFilterEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(DC_FILTER_ID, i)) > 0.5f;
 
                 // 2. Setup ModulatedValueProviders AND their LFO source indices
                 auto setupProvider = [&](ModulatedValueProvider& provider, int& lfoIndex, const juce::String& paramID)

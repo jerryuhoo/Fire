@@ -69,6 +69,12 @@
 // global params
 #define DOWNSAMPLE_ID           "downSample"
 #define DOWNSAMPLE_NAME         "DownSample"
+#define BIT_DEPTH_ID            "bitDepth"
+#define BIT_DEPTH_NAME          "BitDepth"
+#define JITTER_ID               "jitter"
+#define JITTER_NAME             "Jitter"
+#define DOWNSAMPLE_MIX_ID       "downsampleMix"
+#define DOWNSAMPLE_MIX_NAME     "DownsampleMix"
 #define LOWCUT_FREQ_ID          "lowcutFreq"
 #define LOWCUT_FREQ_NAME        "LowcutFreq"
 #define HIGHCUT_FREQ_ID         "highcutFreq"
@@ -172,7 +178,7 @@
 // Define Components size
 #define TEXTBOX_WIDTH       60
 #define TEXTBOX_HEIGHT      30
-#define KNOBSIZE            100
+#define KNOB_SIZE            100
 #define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
 
 

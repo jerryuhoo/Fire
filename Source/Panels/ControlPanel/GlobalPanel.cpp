@@ -68,8 +68,12 @@ void GlobalPanel::createSliders()
     createAndConfigureSlider(GLOBAL_OUTPUT_NAME, "Output", COLOUR1, " dB");
     createAndConfigureSlider(GLOBAL_MIX_NAME, "Mix", COLOUR1);
 
-    // Downsample Knobs
-    createAndConfigureSlider(DOWNSAMPLE_NAME, "Downsample", DOWNSAMPLE_COLOUR.withBrightness(0.8f));
+    // [MODIFIED] Create sliders for the new Lo-fi section
+    const auto lofiColour = DOWNSAMPLE_COLOUR.withBrightness(0.8f);
+    createAndConfigureSlider(DOWNSAMPLE_NAME, "Rate", lofiColour);
+    createAndConfigureSlider(BIT_DEPTH_NAME, "Bits", lofiColour);
+    createAndConfigureSlider(JITTER_NAME, "Jitter", lofiColour);
+    createAndConfigureSlider(DOWNSAMPLE_MIX_NAME, "Mix", lofiColour);
 
     // Filter Knobs
     const auto filterColour = FILTER_COLOUR.withBrightness(0.8f);
@@ -96,7 +100,10 @@ void GlobalPanel::createLabels()
     };
 
     setupPanelLabel(postFilterPanelLabel, "Post Filter", FILTER_COLOUR);
-    setupPanelLabel(downSamplePanelLabel, "DownSample", DOWNSAMPLE_COLOUR);
+
+    // [MODIFIED] Update label for the new section name
+    setupPanelLabel(downSamplePanelLabel, "Lo-Fi", DOWNSAMPLE_COLOUR);
+
     setupPanelLabel(filterTypeLabel, "Type", FILTER_COLOUR.withBrightness(0.8f));
     setupPanelLabel(lowcutSlopeLabel, "Slope", FILTER_COLOUR.withBrightness(0.8f));
     setupPanelLabel(highcutSlopeLabel, "Slope", FILTER_COLOUR.withBrightness(0.8f));
@@ -190,7 +197,14 @@ void GlobalPanel::setupComponentGroups()
     filterComponents.addArray(peakKnobs);
     filterComponents.addArray(highcutKnobs);
 
-    downsampleComponents = { modulatableSliderComponents.at(DOWNSAMPLE_NAME).get(), &downSamplePanelLabel };
+    // [MODIFIED] Add all new knobs to the downsample (now Lo-fi) component group
+    downsampleComponents = {
+        modulatableSliderComponents.at(DOWNSAMPLE_NAME).get(),
+        modulatableSliderComponents.at(BIT_DEPTH_NAME).get(),
+        modulatableSliderComponents.at(JITTER_NAME).get(),
+        modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME).get(),
+        &downSamplePanelLabel
+    };
 
     allControls.addArray(filterComponents);
     allControls.addArray(downsampleComponents);
@@ -203,18 +217,28 @@ void GlobalPanel::updateAttachments()
     sliderAttachments.clear();
     for (const auto& paramInfo : ParameterIDAndName::getGlobalParameterInfo())
     {
-        auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
-        auto paramID = paramInfo.idBase; // Global parameters don't have band index
-
-        auto* parameter = processor.treeState.getParameter(paramID);
-        jassert(parameter != nullptr && "Global Parameter not found!");
-
-        if (parameter)
+        // Check if a slider for this parameter name was actually created
+        if (modulatableSliderComponents.count(paramInfo.name))
         {
-            sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
+            auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
+            auto paramID = paramInfo.idBase;
+
+            // [FIX] This is the crucial missing line.
+            // Assign the parameter ID to the slider instance so it knows
+            // which parameter it's connected to for modulation UI updates.
+            slider->parameterID = paramID;
+
+            auto* parameter = processor.treeState.getParameter(paramID);
+            jassert(parameter != nullptr && "Global Parameter not found!");
+
+            if (parameter)
+            {
+                sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
+            }
         }
     }
 
+    // Button and ComboBox attachments remain the same
     filterLowAttachment = std::make_unique<ButtonAttachment>(processor.treeState, LOW_ID, filterLowCutButton);
     filterBandAttachment = std::make_unique<ButtonAttachment>(processor.treeState, BAND_ID, filterPeakButton);
     filterHighAttachment = std::make_unique<ButtonAttachment>(processor.treeState, HIGH_ID, filterHighCutButton);
@@ -283,127 +307,96 @@ void GlobalPanel::resized()
     filterSwitch.setBounds(switchArea.removeFromTop(globalEffectArea.getHeight() / 2));
     downsampleSwitch.setBounds(switchArea.removeFromTop(globalEffectArea.getHeight() / 2));
 
+    // --- Filter Panel Layout ---
     juce::Rectangle<int> fiveColumnArea = globalEffectArea;
 
-    // 1. Define the geometry of our grid
+    // (The complex 5-column layout logic for the filter panel remains unchanged)
     const int numColumns = 5;
     const int numGaps = numColumns - 1;
     const int gapWidth = 10;
-
-    // 2. Calculate the total width available for content (columns)
     const float totalContentWidth = fiveColumnArea.getWidth() - (numGaps * gapWidth);
-
-    // 3. Calculate the width of each column based on proportions
     const float narrowColumnProportion = 1.0f / 6.0f;
     const float wideColumnsTotalProportion = 5.0f / 6.0f;
-
     int col1Width = static_cast<int>(totalContentWidth * narrowColumnProportion);
     int otherColumnTotalWidth = static_cast<int>(totalContentWidth * wideColumnsTotalProportion);
     int otherColumnWidth = otherColumnTotalWidth / 4;
-
-    // 4. Create the column rectangles by placing them sequentially with gaps
     juce::Array<juce::Rectangle<int>> columns;
     juce::Rectangle<int> placementArea = fiveColumnArea;
-
     columns.add(placementArea.removeFromLeft(col1Width));
     const int shiftRightAmount = 10;
     columns.getReference(0).setX(columns.getReference(0).getX() + shiftRightAmount);
-    placementArea.removeFromLeft(gapWidth); // Add gap after column 1
-
+    placementArea.removeFromLeft(gapWidth);
     columns.add(placementArea.removeFromLeft(otherColumnWidth));
-    placementArea.removeFromLeft(gapWidth); // Add gap after column 2
-
+    placementArea.removeFromLeft(gapWidth);
     columns.add(placementArea.removeFromLeft(otherColumnWidth));
-    placementArea.removeFromLeft(gapWidth); // Add gap after column 3
-
+    placementArea.removeFromLeft(gapWidth);
     columns.add(placementArea.removeFromLeft(otherColumnWidth));
-    placementArea.removeFromLeft(gapWidth); // Add gap after column 4
-
-    columns.add(placementArea); // The last column fills the remaining space
-
-    // Now the `columns` array holds perfectly spaced, clean rectangles.
-    // The rest of the layout logic can proceed as before.
-
-    // Define the vertical area for the knobs first
+    placementArea.removeFromLeft(gapWidth);
+    columns.add(placementArea);
     juce::Rectangle<int> knob_yBasis = globalEffectArea.reduced(0, getHeight() / 5);
-
-    // --- Button Column Layout ---
     auto buttonArea = columns[0];
     buttonArea.setY(knob_yBasis.getY());
     buttonArea.setHeight(knob_yBasis.getHeight());
-
     const int extraSideMargin = 10;
     buttonArea.reduce(extraSideMargin, 0);
-
     const int verticalPadding = 10;
     const int horizontalPadding = 0;
     auto layoutArea = buttonArea;
     const int totalPaddingHeight = verticalPadding * 2;
     const int singleButtonHeight = (layoutArea.getHeight() - totalPaddingHeight) / 3;
-
     filterLowCutButton.setBounds(layoutArea.removeFromTop(singleButtonHeight).reduced(horizontalPadding, 0));
     layoutArea.removeFromTop(verticalPadding);
     filterPeakButton.setBounds(layoutArea.removeFromTop(singleButtonHeight).reduced(horizontalPadding, 0));
     layoutArea.removeFromTop(verticalPadding);
     filterHighCutButton.setBounds(layoutArea.reduced(horizontalPadding, 0));
-
-    // --- Knobs Layout ---
     modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(columns[2].getX(), knob_yBasis.getY(), columns[2].getWidth(), knob_yBasis.getHeight());
     modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(columns[2].getX(), knob_yBasis.getY(), columns[2].getWidth(), knob_yBasis.getHeight());
     modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(columns[2].getX(), knob_yBasis.getY(), columns[2].getWidth(), knob_yBasis.getHeight());
-
     modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(columns[3].getX(), knob_yBasis.getY(), columns[3].getWidth(), knob_yBasis.getHeight());
     modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(columns[3].getX(), knob_yBasis.getY(), columns[3].getWidth(), knob_yBasis.getHeight());
     modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(columns[3].getX(), knob_yBasis.getY(), columns[3].getWidth(), knob_yBasis.getHeight());
-
     modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(columns[4].getX(), knob_yBasis.getY(), columns[4].getWidth(), knob_yBasis.getHeight());
     modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(columns[4].getX(), knob_yBasis.getY(), columns[4].getWidth(), knob_yBasis.getHeight());
     modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(columns[4].getX(), knob_yBasis.getY(), columns[4].getWidth(), knob_yBasis.getHeight());
-
-    // --- ComboBox Column Layout ---
     const int comboBoxY = knob_yBasis.getY();
-
     const int comboBoxHeight = TEXTBOX_HEIGHT * scale;
     const int comboBoxWidth = TEXTBOX_WIDTH * scale;
-
-    auto col2 = columns[1]; // Use the clean rectangle from our new calculation
-    // Create a temporary, reduced area for placement to add horizontal margin
+    auto col2 = columns[1];
     auto comboBoxPlacementArea = col2.reduced(extraSideMargin, 5);
-    // Center the ComboBox horizontally within the NEW reduced placement area
     const int comboBoxX = comboBoxPlacementArea.getCentreX() - (comboBoxWidth / 2);
-
     juce::Rectangle<int> comboBoxBounds(comboBoxX, comboBoxY, comboBoxWidth * 1.2f, comboBoxHeight);
     lowcutSlopeMode.setBounds(comboBoxBounds);
     highcutSlopeMode.setBounds(comboBoxBounds);
-    // =====================================================================
 
-    modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(globalEffectArea.reduced(getHeight() / 15, getHeight() / 5));
+    // ============================= MODIFICATION START =============================
+    // --- Lo-Fi Panel Layout (New single row with 4 knobs) ---
+    auto lofiArea = globalEffectArea.reduced(0, globalEffectArea.getHeight() / 5);
+    int knobWidth = lofiArea.getWidth() / 4; // 4 knobs in a single row
 
-    // 1. Define a shared bottom area for the labels and bypass buttons.
+    modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(lofiArea.removeFromLeft(knobWidth));
+    modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(lofiArea.removeFromLeft(knobWidth));
+    modulatableSliderComponents.at(JITTER_NAME)->setBounds(lofiArea.removeFromLeft(knobWidth));
+    modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME)->setBounds(lofiArea); // The last one takes the remaining space
+    // ============================== MODIFICATION END ==============================
+
+    // --- Shared Bottom Area Layout ---
     const int sliceHeight = globalEffectArea.getHeight() / 5;
     bottomArea = juce::Rectangle<int>(globalEffectArea.getX(),
                                       globalEffectArea.getBottom() - sliceHeight,
                                       globalEffectArea.getWidth(),
                                       sliceHeight);
-
     bottomArea.reduce(globalEffectArea.getWidth() / 4, 0);
 
-    // 2. Define sizing constants. The button will be a square.
     const int buttonSize = bottomArea.getHeight();
-    const int labelWidth = 100; // A suitable width for "Post Filter" / "DownSample"
-    const int gap = 4; // Gap between button and label
+    const int labelWidth = 100;
+    const int gap = 4;
 
-    // 3. Create the label area, centered horizontally within the bottom area.
     juce::Rectangle<int> labelArea = bottomArea.withSizeKeepingCentre(labelWidth, buttonSize);
-
-    // 4. Create the bypass button area by translating the label area to the left.
     juce::Rectangle<int> bypassButtonArea = labelArea.translated(-buttonSize - gap, 0)
                                                 .withSize(buttonSize, buttonSize);
 
-    // 5. Set the bounds for both filter and downsample components, as they share the same space.
     postFilterPanelLabel.setBounds(labelArea);
     downSamplePanelLabel.setBounds(labelArea);
-
     filterBypassButton->setBounds(bypassButtonArea);
     downsampleBypassButton->setBounds(bypassButtonArea);
 }

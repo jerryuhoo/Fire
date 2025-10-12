@@ -366,6 +366,9 @@ private:
 
     GainProcessor gainProcessorGlobal;
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
+    
+    juce::dsp::DryWetMixer<float> lofiMixer { 2048 };
+    juce::Random random;
 
     // oversampling
     std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4];

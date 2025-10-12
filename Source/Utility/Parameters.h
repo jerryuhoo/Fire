@@ -243,6 +243,9 @@ namespace ParameterIDAndName
             { PEAK_Q_NAME, PEAK_Q_ID },
             { PEAK_GAIN_NAME, PEAK_GAIN_ID },
             { DOWNSAMPLE_NAME, DOWNSAMPLE_ID },
+            { BIT_DEPTH_NAME, BIT_DEPTH_ID },
+            { JITTER_NAME, JITTER_ID },
+            { DOWNSAMPLE_MIX_NAME, DOWNSAMPLE_MIX_ID },
             { GLOBAL_OUTPUT_NAME, OUTPUT_ID },
             { GLOBAL_MIX_NAME, MIX_ID }
         };

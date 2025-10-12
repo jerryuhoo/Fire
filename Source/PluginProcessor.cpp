@@ -632,6 +632,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     dryWetMixerGlobal.prepare(globalMixerSpec);
 
     dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+
+    lofiMixer.prepare(globalMixerSpec);
+    lofiMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     reset();
 }
 
@@ -1382,6 +1385,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
     parameters.push_back(std::make_unique<PInt>(ParameterIDAndName::getID(NUM_BANDS_ID), NUM_BANDS_NAME, 1, 4, 1));
     parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(FILTER_BYPASS_ID), FILTER_BYPASS_NAME, false));
     parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(DOWNSAMPLE_ID), DOWNSAMPLE_NAME, juce::NormalisableRange<float>(1.0f, 64.0f, 0.01f), 1.0f));
+    parameters.push_back(std::make_unique<PInt>(ParameterIDAndName::getID(BIT_DEPTH_ID), BIT_DEPTH_NAME, 4, 32, 32));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(JITTER_ID), JITTER_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.0f));
+    parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(DOWNSAMPLE_MIX_ID), DOWNSAMPLE_MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
     parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(DOWNSAMPLE_BYPASS_ID), DOWNSAMPLE_BYPASS_NAME, false));
 
     // --- Per-Band Parameters (created in a loop) ---
@@ -1941,92 +1947,76 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
 void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs)
 {
+    // First, check if the entire effect is bypassed.
     if (! (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID) > 0.5f))
         return;
 
-    auto modInfo = getModulationInfoForParameter(DOWNSAMPLE_ID);
+    // --- 1. Prepare Dry Signal & Mixer ---
+    // A copy of the original signal is needed for the dry/wet mix.
+    juce::AudioBuffer<float> dryBuffer;
+    dryBuffer.makeCopyOf(buffer);
 
-    // ==============================================================================
-    // Block-based processing (if not modulated)
-    // ==============================================================================
-    if (! modInfo.isModulated || modInfo.isBypassed)
+    // Set up the mixer with the correct wet proportion from its parameter.
+    lofiMixer.setWetMixProportion(lfoManager->getModulatedValue(DOWNSAMPLE_MIX_ID));
+    lofiMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
+
+    // --- 2. Get All Parameter Values Once Per Block ---
+    const int bits = static_cast<int>(lfoManager->getModulatedValue(BIT_DEPTH_ID));
+    const float jitter = lfoManager->getModulatedValue(JITTER_ID);
+    const float rateReduceValue = lfoManager->getModulatedValue(DOWNSAMPLE_ID);
+
+    // --- 3. Process Audio ---
+    for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
     {
-        const int rateDivide = static_cast<int>(*treeState.getRawParameterValue(DOWNSAMPLE_ID));
-        if (rateDivide <= 1)
-            return;
+        auto* channelData = buffer.getWritePointer(channel);
+        int samplesToHold = 0;
+        float sampleToHold = 0.0f;
 
-        for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            auto* channelData = buffer.getWritePointer(channel);
-            int samplesToHold = 0;
-            float sampleToHold = 0.0f;
-
-            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            // --- Rate Reduction (Sample & Hold) ---
+            if (samplesToHold <= 0)
             {
-                if (samplesToHold == 0)
+                // It's time to grab a new sample.
+                sampleToHold = channelData[sample];
+
+                // Determine the hold duration for this new sample.
+                float currentRateReduce = rateReduceValue;
+
+                // Apply Jitter if the parameter is active.
+                if (jitter > 0.0f)
                 {
-                    sampleToHold = channelData[sample];
-                    samplesToHold = rateDivide - 1;
+                    // Introduce a random variation to the hold time.
+                    // random.nextFloat() returns [0, 1]. We map it to [-1, 1].
+                    float randomFactor = 1.0f + (random.nextFloat() * 2.0f - 1.0f) * jitter;
+                    currentRateReduce *= randomFactor;
                 }
-                else
-                {
-                    channelData[sample] = sampleToHold;
-                    samplesToHold--;
-                }
+
+                // Set how many samples we need to hold for. Must be at least 1.
+                samplesToHold = juce::jmax(1, static_cast<int>(currentRateReduce));
+            }
+
+            // Output the held sample.
+            channelData[sample] = sampleToHold;
+            samplesToHold--;
+
+            // --- Bit Crushing ---
+            // Apply this effect after the sample has been selected (or held).
+            if (bits < 32)
+            {
+                // Calculate the number of possible amplitude levels.
+                float numLevels = std::pow(2.0f, bits);
+                // Calculate the size of each amplitude "step".
+                float step = 2.0f / numLevels;
+                // Quantize the sample's amplitude to the nearest step.
+                channelData[sample] = step * std::floor(channelData[sample] / step + 0.5f);
             }
         }
     }
-    // ==============================================================================
-    // Sample-accurate processing (if modulated)
-    // ==============================================================================
-    else
-    {
-        int lfoIndex = modInfo.sourceLfoIndex - 1;
-        if (! juce::isPositiveAndBelow(lfoIndex, lfoOutputs.getNumChannels()))
-            return; // Safety check
 
-        auto* lfoData = lfoOutputs.getReadPointer(lfoIndex);
-        float depth = modInfo.depth;
-        bool isBipolar = modInfo.isBipolar;
-
-        auto* param = treeState.getParameter(DOWNSAMPLE_ID);
-        auto range = param->getNormalisableRange();
-        float baseValue = *treeState.getRawParameterValue(DOWNSAMPLE_ID);
-
-        for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
-        {
-            auto* channelData = buffer.getWritePointer(channel);
-            int samplesToHold = 0;
-            float sampleToHold = 0.0f;
-
-            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-            {
-                if (samplesToHold == 0)
-                {
-                    // // Get the LFO value for the current sample.
-                    float unipolarLfoValue = lfoData[sample];
-                    float lfoValue = isBipolar ? (unipolarLfoValue * 2.0f - 1.0f) : unipolarLfoValue;
-
-                    // // Calculate the modulated parameter value for this specific sample.
-                    float scaledModulation = lfoValue * depth;
-                    float baseParamNormalized = range.convertTo0to1(baseValue);
-                    float modulatedParamNormalized = juce::jlimit(0.0f, 1.0f, baseParamNormalized + scaledModulation);
-                    float finalValue = range.convertFrom0to1(modulatedParamNormalized);
-
-                    // // The downsampling rate is determined at the start of a new hold segment.
-                    int rateDivide = static_cast<int>(finalValue);
-
-                    sampleToHold = channelData[sample];
-                    samplesToHold = juce::jmax(0, rateDivide - 1); // Ensure it's not negative
-                }
-                else
-                {
-                    channelData[sample] = sampleToHold;
-                    samplesToHold--;
-                }
-            }
-        }
-    }
+    // --- 4. Mix with Dry Signal ---
+    // Finally, mix the processed (wet) buffer with the original (dry) buffer.
+    lofiMixer.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }
 
 void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)

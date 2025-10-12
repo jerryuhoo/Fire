@@ -56,10 +56,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressorMixer.prepare(mixerSpec);
     widthMixer.prepare(mixerSpec);
 
-    // Some processors need extra setup.
-    compressor.setAttack(80.0f);
-    compressor.setRelease(200.0f);
-
     // The DC filter needs its coefficients to be calculated.
     // dcFilter.prepare(spec);
     // *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);

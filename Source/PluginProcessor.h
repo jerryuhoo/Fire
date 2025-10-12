@@ -53,8 +53,13 @@ struct BandProcessingParameters
     float mixVal;
     float compThreshold;
     float compRatio;
+    float compAttack;
+    float compRelease;
+    float compMixVal;
     bool isCompEnabled;
     float width;
+    float pan;
+    float widthMixVal;
     bool isWidthEnabled;
 
     // Distortion-specific parameters
@@ -63,6 +68,7 @@ struct BandProcessingParameters
     ModulatedValueProvider driveVal;
     ModulatedValueProvider biasVal;
     ModulatedValueProvider recVal;
+    float shapeMixVal;
     
     // LFO source indices for the above parameters (-1 if not modulated)
     int driveLfoSourceIndex = -1;
@@ -106,9 +112,12 @@ struct BandProcessor
     // DCFilter dcFilter;
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
+    juce::dsp::DryWetMixer<float> shapeMixer;
+    juce::dsp::DryWetMixer<float> compressorMixer;
+    juce::dsp::DryWetMixer<float> widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
 
-    BandProcessor() : dryWetMixer(2048)
+    BandProcessor() : dryWetMixer(2048), shapeMixer(2048), compressorMixer(2048), widthMixer(2048)
     {
         // Set a default waveshaper so it's never null
         waveshaperFunction = [](float x)

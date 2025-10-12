@@ -52,6 +52,9 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     juce::dsp::ProcessSpec mixerSpec = spec;
     mixerSpec.maximumBlockSize = spec.maximumBlockSize * 4 + 64;
     dryWetMixer.prepare(mixerSpec);
+    shapeMixer.prepare(mixerSpec);
+    compressorMixer.prepare(mixerSpec);
+    widthMixer.prepare(mixerSpec);
 
     // Some processors need extra setup.
     compressor.setAttack(80.0f);
@@ -78,6 +81,9 @@ void BandProcessor::reset()
     compressor.reset();
     gain.reset();
     dryWetMixer.reset();
+    shapeMixer.reset();
+    compressorMixer.reset();
+    widthMixer.reset();
     // dcFilter.reset();
 
     if (oversampling)
@@ -156,13 +162,21 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
     if (params.isCompEnabled)
     {
+        compressorMixer.setWetMixProportion(params.compMixVal);
+        compressorMixer.pushDrySamples(postDistortionContext.getOutputBlock());
         this->compressor.setThreshold(params.compThreshold);
         this->compressor.setRatio(params.compRatio);
+        this->compressor.setAttack(params.compAttack);
+        this->compressor.setRelease(params.compRelease);
         this->compressor.process(postDistortionContext);
+        compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
     }
     if (params.isWidthEnabled && buffer.getNumChannels() == 2)
     {
-        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, buffer.getNumSamples());
+        widthMixer.setWetMixProportion(params.widthMixVal);
+        widthMixer.pushDrySamples(postDistortionContext.getOutputBlock());
+        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, params.pan, buffer.getNumSamples());
+        widthMixer.mixWetSamples(postDistortionContext.getOutputBlock());
     }
 
     // 4. Post-Distortion Effects
@@ -231,6 +245,9 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // The 'else' block for setting targets is removed.
     // Targets are now updated per-sample inside the loop to smooth the final signal.
 
+    shapeMixer.setWetMixProportion(params.shapeMixVal);
+    shapeMixer.pushDrySamples(dryBuffer);
+
     for (int sample = 0; sample < numSamples; ++sample)
     {
         // 1. Get the final, LFO-modulated value for each parameter for the CURRENT sample.
@@ -288,6 +305,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             blockToProcess.setSample(channel, sample, currentSample);
         }
     }
+
+    shapeMixer.mixWetSamples(blockToProcess);
 }
 
 //==============================================================================
@@ -1838,8 +1857,14 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 // 3. Get final values for Block-wise parameters
                 params.compRatio = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_RATIO_ID, i));
                 params.compThreshold = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_THRESH_ID, i));
+                params.compAttack = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_ATTACK_ID, i));
+                params.compRelease = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_RELEASE_ID, i));
+                params.compMixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_MIX_ID, i));
                 params.width = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(WIDTH_ID, i));
+                params.pan = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(PAN_ID, i));
+                params.widthMixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(WIDTH_MIX_ID, i));
                 params.mixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, i));
+                params.shapeMixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(SHAPE_MIX_ID, i));
 
                 realtimeModulatedThresholds[i].store(params.compThreshold);
 

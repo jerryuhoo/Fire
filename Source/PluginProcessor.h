@@ -48,7 +48,7 @@ struct BandProcessingParameters
     // Main process parameters
     int mode;
     bool isHQ;
-    
+
     ModulatedValueProvider outputVal;
     float mixVal;
     float compThreshold;
@@ -61,6 +61,7 @@ struct BandProcessingParameters
     float pan;
     float widthMixVal;
     bool isWidthEnabled;
+    bool isShapeEnabled;
 
     // Distortion-specific parameters
     bool isSafeModeOn;
@@ -69,7 +70,7 @@ struct BandProcessingParameters
     ModulatedValueProvider biasVal;
     ModulatedValueProvider recVal;
     float shapeMixVal;
-    
+
     // LFO source indices for the above parameters (-1 if not modulated)
     int driveLfoSourceIndex = -1;
     int biasLfoSourceIndex = -1;
@@ -147,7 +148,7 @@ struct BandProcessor
     void process(juce::AudioBuffer<float>& buffer,
                  const BandProcessingParameters& params,
                  const juce::AudioBuffer<float>& lfoOutputs);
-    
+
     const int oversampleFactor = 2;
 
 private:
@@ -301,7 +302,7 @@ public:
 
     void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
     void clearLfoModulationForBand(int bandIndex);
-    
+
     bool getLatestDistortionGraphValues(DistortionGraphValues& values);
     void setUiFocusBand(int bandIndex);
 
@@ -440,7 +441,7 @@ private:
     juce::AbstractFifo meterFifo { 1024 };
     std::vector<MeterValues> meterFifoBuffer;
     int meterFifoWritePos = 0;
-    
+
     // 3. For Distortion Graph
     juce::AbstractFifo graphFifo { 1024 };
     std::vector<DistortionGraphValues> graphFifoBuffer;

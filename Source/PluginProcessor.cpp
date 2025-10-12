@@ -1395,6 +1395,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_SOLO_ID, i), BAND_SOLO_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(COMP_BYPASS_ID, i), COMP_BYPASS_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(WIDTH_BYPASS_ID, i), WIDTH_BYPASS_NAME, false));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(SHAPE_BYPASS_ID, i), SHAPE_BYPASS_NAME, false));
     }
 
     // --- Crossover Parameters ---
@@ -1825,6 +1826,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 params.isOutputModulated = getModulationInfoForParameter(ParameterIDAndName::getIDString(OUTPUT_ID, i)).isModulated;
                 params.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, i));
                 params.isHQ = *treeState.getRawParameterValue(HQ_ID);
+                params.isShapeEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i)) > 0.5f;
                 params.isCompEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i)) > 0.5f;
                 params.isWidthEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i)) > 0.5f;
                 params.isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, i)) > 0.5f;

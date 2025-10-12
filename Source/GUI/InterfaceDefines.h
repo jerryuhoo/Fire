@@ -130,6 +130,9 @@
 #define LINE_STATE_ID           "lineState" // lineState1 - lineState3
 #define LINE_STATE_NAME         "LineState"
 
+#define SHAPE_BYPASS_ID          "shapeBypass"
+#define SHAPE_BYPASS_NAME        "ShapeBypass"
+
 #define COMP_BYPASS_ID          "compressorBypass"
 #define COMP_BYPASS_NAME        "CompressorBypass"
 

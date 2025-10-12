@@ -49,6 +49,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     // Load initial bypass states from the processor's state tree
     for (int i = 0; i < 4; ++i)
     {
+        shapeBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i));
         compBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i));
         widthBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i));
     }
@@ -79,13 +80,11 @@ BandPanel::~BandPanel()
     extremeButton.removeListener(this);
     compressorBypassButton.removeListener(this);
     widthBypassButton.removeListener(this);
+    shapeBypassButton.removeListener(this);
 }
 
 void BandPanel::createSliders()
 {
-    // [MODIFIED] This function is now much simpler.
-    // It just calls the helper from the base class for each slider.
-
     // Main Panel
     createAndConfigureSlider(DRIVE_NAME, "Drive", DRIVE_COLOUR);
     createAndConfigureSlider(OUTPUT_NAME, "Output", COLOUR1, " dB");
@@ -109,7 +108,6 @@ void BandPanel::createSliders()
     createAndConfigureSlider(WIDTH_MIX_NAME, "Mix", WIDTH_COLOUR);
 
     // === Final specific configurations ===
-    // Assign special component ID for the custom LookAndFeel.
     modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive");
 }
 
@@ -134,6 +132,8 @@ void BandPanel::createButtons()
     initFlatButton(linkedButton, "Link");
     initFlatButton(safeButton, "Safe");
     initFlatButton(extremeButton, "Extreme");
+
+    initBypassButton(shapeBypassButton, SHAPE_COLOUR);
     initBypassButton(compressorBypassButton, COMP_COLOUR);
     initBypassButton(widthBypassButton, WIDTH_COLOUR);
 
@@ -163,6 +163,7 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(BIAS_NAME).get(),
         modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
         &shapePanelLabel,
+        &shapeBypassButton
     };
 
     compressorComponents = {
@@ -172,7 +173,7 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
         modulatableSliderComponents.at(COMP_MIX_NAME).get(),
         &compressorBypassButton,
-        &compressorPanelLabel,
+        &compressorPanelLabel
     };
 
     widthComponents = {
@@ -180,10 +181,17 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(PAN_NAME).get(),
         modulatableSliderComponents.at(WIDTH_MIX_NAME).get(),
         &widthBypassButton,
-        &widthPanelLabel,
+        &widthPanelLabel
     };
 
     // Groups for managing ENABLED/DISABLED state logic
+    shapeSubControls = {
+        modulatableSliderComponents.at(REC_NAME).get(),
+        modulatableSliderComponents.at(BIAS_NAME).get(),
+        modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
+        &shapePanelLabel
+    };
+
     compressorSubControls = {
         modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
         modulatableSliderComponents.at(COMP_RATIO_NAME).get(),
@@ -215,11 +223,6 @@ void BandPanel::setupComponentGroups()
     setVisibility(widthComponents, false);
 }
 
-// ... paint() and resized() methods remain the same as your provided code,
-// but they will now use the maps to access components, for example:
-// modulatableSliderComponents.at(REC_NAME)->setBounds(leftKnobArea);
-// driveKnob->setBounds(driveKnobArea.reduced(0, bandKnobArea.getHeight() / 5));
-
 void BandPanel::paint(juce::Graphics& g)
 {
     g.setColour(COLOUR6);
@@ -238,27 +241,22 @@ void BandPanel::resized()
 {
     juce::Rectangle<int> controlArea = getLocalBounds();
 
-    // Conditionally define the layout areas based on which switch is active.
     if (! oscSwitch.getToggleState())
     {
-        // If Shape, Comp, or Width is active:
-        // The main knob area takes up the full left 3/5ths of the panel.
         bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 3);
-        driveKnobArea = {}; // Drive area is not used, so we create an empty rectangle.
+        driveKnobArea = {};
     }
     else
     {
-        // If OSC (Drive) is active, use the original layout definition.
         bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 2);
         driveKnobArea = controlArea.removeFromLeft(getWidth() / 5);
     }
 
-    // The rest of the area is for the Output section, this remains unchanged.
     outputKnobArea = controlArea;
     const int verticalMargin = getHeight() / 6;
 
     outputKnobArea.reduce(0, verticalMargin);
-    driveKnobArea.reduce(0, verticalMargin); // Reduces an empty rect, which is fine.
+    driveKnobArea.reduce(0, verticalMargin);
     bandKnobArea.reduce(0, verticalMargin);
 
     juce::Rectangle<int> switchArea = bandKnobArea.removeFromLeft(getWidth() / 50);
@@ -270,31 +268,24 @@ void BandPanel::resized()
     compressorSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
     widthSwitch.setBounds(area);
 
-    // Set bounds only for the big Drive knob when OSC is active.
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
         modulatableSliderComponents.at(DRIVE_NAME)->setBounds(bigDriveArea);
     }
 
-    // === MODIFIED BLOCK START ===
-    // --- Band Knob Area Layout ---
-    // This section is now replaced with a flexible grid layout to accommodate all new knobs.
     juce::Rectangle<int> subKnobArea = bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5);
 
-    // --- Shape Panel Layout (3 knobs in 1 row) ---
     auto shapeArea = subKnobArea;
     int shapeKnobWidth = shapeArea.getWidth() / 3;
     modulatableSliderComponents.at(REC_NAME)->setBounds(shapeArea.removeFromLeft(shapeKnobWidth));
     modulatableSliderComponents.at(BIAS_NAME)->setBounds(shapeArea.removeFromLeft(shapeKnobWidth));
     modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(shapeArea);
 
-    // --- Compressor Panel Layout (5 knobs in 2 rows) ---
     auto compArea = subKnobArea;
     auto compTopRow = compArea.removeFromTop(compArea.getHeight() / 2);
     auto compBottomRow = compArea;
     int compTopKnobWidth = compTopRow.getWidth() / 3;
-    // Center the 2 knobs on the bottom row to align with the 3 on top
     auto centeredBottomRow = compBottomRow.withSizeKeepingCentre(compTopKnobWidth * 2, compBottomRow.getHeight());
     modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(compTopRow.removeFromLeft(compTopKnobWidth));
     modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(compTopRow.removeFromLeft(compTopKnobWidth));
@@ -302,13 +293,11 @@ void BandPanel::resized()
     modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(centeredBottomRow.removeFromLeft(compTopKnobWidth));
     modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(centeredBottomRow);
 
-    // --- Width Panel Layout (3 knobs in 1 row) ---
     auto widthArea = subKnobArea;
     int widthKnobWidth = widthArea.getWidth() / 3;
     modulatableSliderComponents.at(WIDTH_NAME)->setBounds(widthArea.removeFromLeft(widthKnobWidth));
     modulatableSliderComponents.at(PAN_NAME)->setBounds(widthArea.removeFromLeft(widthKnobWidth));
     modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(widthArea);
-    // === MODIFIED BLOCK END ===
 
     // Panel Labels & Bypass Buttons
     bottomArea = bandKnobArea.removeFromBottom(bandKnobArea.getHeight() / 5);
@@ -328,69 +317,58 @@ void BandPanel::resized()
     juce::Rectangle<int> bypassButtonArea = labelArea.translated(-buttonSize - gap, 0)
                                                 .withSize(buttonSize, buttonSize);
 
+    shapeBypassButton.setBounds(bypassButtonArea);
     compressorBypassButton.setBounds(bypassButtonArea);
     widthBypassButton.setBounds(bypassButtonArea);
 
-    // --- Output Area Layout --- (This part remains unchanged and correct)
     const int bottomAreaHeight = outputKnobArea.getHeight() / 5;
-
-    juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(),
-                                          outputKnobArea.getBottom() - bottomAreaHeight,
-                                          outputKnobArea.getWidth(),
-                                          bottomAreaHeight);
-
+    juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(), outputKnobArea.getBottom() - bottomAreaHeight, outputKnobArea.getWidth(), bottomAreaHeight);
     juce::Rectangle<int> tempButtonArea = outputBottomArea;
     const int buttonWidth = tempButtonArea.getWidth() / 3;
     linkedButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
     safeButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
     extremeButton.setBounds(tempButtonArea);
-
     juce::Rectangle<int> outputSubArea = outputKnobArea.reduced(0, bottomAreaHeight);
     juce::Rectangle<int> outputLeftArea = outputSubArea.withRight(outputSubArea.getCentreX());
     juce::Rectangle<int> outputRightArea = outputSubArea.withLeft(outputSubArea.getCentreX());
-
     modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(outputLeftArea);
     modulatableSliderComponents.at(MIX_NAME)->setBounds(outputRightArea);
 }
 
 void BandPanel::updateAttachments()
 {
-    // Loop through our new definitive list of parameter info
     for (const auto& paramInfo : ParameterIDAndName::getModulatableParameterInfo())
     {
-        // Get the slider using its stable Name (e.g., "CompRatio")
         auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
-
-        // Generate the dynamic parameter ID using the correct idBase (e.g., "compRatio")
         auto paramID = ParameterIDAndName::getIDString(paramInfo.idBase, focusBandNum);
-
         slider->parameterID = paramID;
-
         sliderAttachments[paramInfo.name].reset();
-
         auto* parameter = processor.treeState.getParameter(paramID);
-        jassert(parameter != nullptr && "Parameter not found! Check idBase in getModulatableParameterInfo and parameter creation in PluginProcessor.");
-
+        jassert(parameter != nullptr && "Parameter not found!");
         if (parameter)
         {
             sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
         }
     }
 
-    // === Unchanged Button Attachment Logic ===
+    // === Button Attachment Logic ===
     linkedAttachment.reset();
     safeAttachment.reset();
     extremeAttachment.reset();
+    shapeBypassAttachment.reset();
     compressorBypassAttachment.reset();
     widthBypassAttachment.reset();
 
     linkedAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(LINKED_ID, focusBandNum), linkedButton);
     safeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SAFE_ID, focusBandNum), safeButton);
     extremeAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(EXTREME_ID, focusBandNum), extremeButton);
+
+    shapeBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, focusBandNum), shapeBypassButton);
     compressorBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum), compressorBypassButton);
     widthBypassAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, focusBandNum), widthBypassButton);
 
     // Update visual states from memory
+    shapeBypassButton.setToggleState(shapeBypassTemp[focusBandNum], juce::dontSendNotification);
     compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
     widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
 
@@ -414,6 +392,68 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 {
     addAndMakeVisible(bypassButton);
     bypassButton.setColour(juce::ToggleButton::tickColourId, colour);
+
+    // [FIX 1] Add the panel as a listener to the button.
+    // This is the crucial step to make sure we can react to clicks.
+    bypassButton.addListener(this);
+}
+
+void BandPanel::buttonClicked(juce::Button* clickedButton)
+{
+    auto* driveComponent = modulatableSliderComponents.at(DRIVE_NAME).get();
+
+    // --- Panel Visibility Switches ---
+    if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
+    {
+        driveComponent->setVisible(true);
+        setVisibility(shapeComponents, false);
+        setVisibility(compressorComponents, false);
+        setVisibility(widthComponents, false);
+    }
+    else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
+    {
+        driveComponent->setVisible(false);
+        setVisibility(shapeComponents, true);
+        setVisibility(compressorComponents, false);
+        setVisibility(widthComponents, false);
+    }
+    else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
+    {
+        driveComponent->setVisible(false);
+        setVisibility(shapeComponents, false);
+        setVisibility(compressorComponents, true);
+        setVisibility(widthComponents, false);
+    }
+    else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
+    {
+        driveComponent->setVisible(false);
+        setVisibility(shapeComponents, false);
+        setVisibility(compressorComponents, false);
+        setVisibility(widthComponents, true);
+    }
+
+    // Handle clicks from any of the bypass buttons.
+    else if (clickedButton == &shapeBypassButton || clickedButton == &compressorBypassButton || clickedButton == &widthBypassButton)
+    {
+        // When a bypass button is clicked, we need to do two things:
+        // 1. Save its new state to our temporary memory for the current band.
+        saveBypassStatesToMemory();
+
+        // 2. Re-run the logic to enable/disable all relevant knobs.
+        // We get the master enable state for the whole band first.
+        bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+
+        // Then call our state function, passing 'true' to indicate the call
+        // is from a sub-bypass button itself, preventing it from being reset.
+        setBandKnobsStates(isBandEnabled, true);
+
+        // Return early to avoid the unnecessary resized/repaint for these clicks.
+        return;
+    }
+
+    // Only call resized/repaint if a panel switch was clicked
+    resized();
+    repaint();
 }
 
 void BandPanel::setFocusBandNum(int num, bool forceUpdate)
@@ -430,13 +470,6 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     setBandKnobsStates(isBandEnabled, false);
 }
-
-// ... All remaining functions (updateLinkedValue, updateDriveMeter, buttonClicked, etc.)
-// can remain exactly as you provided them, as their logic is sound. They will now
-// correctly access the UI components via their member variables (for buttons) or
-// the maps (for sliders and labels). For example, canEnableSubKnob will now use the map:
-// if ((&component == modulatableSliderComponents.at(COMP_THRESH_NAME).get() || ...
-// I have left them out for brevity but they should be included in the final file.
 
 void BandPanel::updateLinkedValue()
 {
@@ -460,62 +493,6 @@ void BandPanel::updateDriveMeter()
     }
 }
 
-void BandPanel::buttonClicked(juce::Button* clickedButton)
-{
-    // Get pointers to the Drive knob and its label
-    auto* driveComponent = modulatableSliderComponents.at(DRIVE_NAME).get();
-    // auto* driveLabel = labels.at(DRIVE_NAME).get();
-
-    if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
-    {
-        // If the OSC switch is activated, show the Drive components.
-        driveComponent->setVisible(true);
-        // driveLabel->setVisible(true);
-
-        // Hide all other component groups.
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, false);
-    }
-    else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
-    {
-        // If any other switch is activated, hide the Drive components.
-        driveComponent->setVisible(false);
-        // driveLabel->setVisible(false);
-
-        // Show only the Shape components.
-        setVisibility(shapeComponents, true);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, false);
-    }
-    else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
-    {
-        // Hide the Drive components.
-        driveComponent->setVisible(false);
-        // driveLabel->setVisible(false);
-
-        // Show only the Compressor components.
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, true);
-        setVisibility(widthComponents, false);
-    }
-    else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
-    {
-        // Hide the Drive components.
-        driveComponent->setVisible(false);
-        // driveLabel->setVisible(false);
-
-        // Show only the Width components.
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, true);
-    }
-
-    // Call resized() and repaint() to apply layout and visibility changes.
-    resized();
-    repaint();
-}
-
 void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool isVisible)
 {
     for (auto* component : components)
@@ -526,7 +503,9 @@ void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool is
 
 bool BandPanel::canEnableSubKnob(juce::Component& component)
 {
-    // A sub-knob can be enabled if its corresponding bypass button is on.
+    if (shapeSubControls.contains(&component) && shapeBypassButton.getToggleState())
+        return true;
+
     if (compressorSubControls.contains(&component) && compressorBypassButton.getToggleState())
         return true;
 
@@ -538,6 +517,7 @@ bool BandPanel::canEnableSubKnob(juce::Component& component)
 
 void BandPanel::saveBypassStatesToMemory()
 {
+    shapeBypassTemp[focusBandNum] = shapeBypassButton.getToggleState();
     compBypassTemp[focusBandNum] = compressorBypassButton.getToggleState();
     widthBypassTemp[focusBandNum] = widthBypassButton.getToggleState();
 }
@@ -557,27 +537,29 @@ void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
     // --- If the band IS enabled ---
 
     // 1. Set the state of bypass buttons first (unless the call came from one of them).
-    // The state depends on our memory, as the actual parameter might be for another band.
     if (! callFromSubBypass)
     {
+        shapeBypassButton.setToggleState(shapeBypassTemp[focusBandNum], juce::dontSendNotification);
         compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
         widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
     }
 
-    // 2. Main controls (Drive, Output, etc.) and the bypass buttons themselves are always enabled.
+    // 2. Main controls and all bypass buttons themselves are always enabled.
     modulatableSliderComponents.at(DRIVE_NAME)->setEnabled(true);
     modulatableSliderComponents.at(OUTPUT_NAME)->setEnabled(true);
     modulatableSliderComponents.at(MIX_NAME)->setEnabled(true);
     linkedButton.setEnabled(true);
     safeButton.setEnabled(true);
     extremeButton.setEnabled(true);
+    shapeBypassButton.setEnabled(true);
     compressorBypassButton.setEnabled(true);
     widthBypassButton.setEnabled(true);
 
-    // 3. Shape panel controls are always enabled when the band is on.
-    for (auto* component : shapeComponents)
+    // 3. Shape sub-controls depend on the shape bypass button state.
+    bool shapeIsEnabled = shapeBypassButton.getToggleState();
+    for (auto* component : shapeSubControls)
     {
-        component->setEnabled(true);
+        component->setEnabled(shapeIsEnabled);
     }
 
     // 4. Compressor sub-controls depend on the compressor bypass button state.
@@ -610,7 +592,6 @@ void BandPanel::setSwitch(const int index, bool state)
 void BandPanel::updateWhenChangingFocus()
 {
     updateDriveMeter();
-    // Use the button reference directly, not a pointer
     buttonClicked(&oscSwitch);
     buttonClicked(&shapeSwitch);
     buttonClicked(&compressorSwitch);

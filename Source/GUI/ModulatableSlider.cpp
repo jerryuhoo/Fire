@@ -97,6 +97,7 @@ void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
 {
+    stopTimer();
     juce::Slider::mouseEnter(event);
     mouseMove(event);
     label.setVisible(false);
@@ -114,19 +115,7 @@ void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
         repaint();
     }
 
-    // Get the global screen position of the mouse cursor
-    auto screenPosition = event.originalComponent->localPointToGlobal(event.getPosition());
-
-    // Find what component is now at that screen position
-    auto* componentUnderMouse = juce::Desktop::getInstance().findComponentAt(screenPosition);
-
-    // If the component under the mouse is NOT a child of this slider,
-    // it means the mouse has truly left our slider and its textbox.
-    if (! isParentOf(componentUnderMouse))
-    {
-        label.setVisible(true);
-        setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    }
+    startTimer(100);
 }
 
 void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
@@ -301,4 +290,17 @@ void ModulatableSlider::resized()
     // Then, place our label in the area designated for the textbox.
     // This ensures it's perfectly aligned above the knob.
     label.setBounds(0, 0, getWidth(), TEXTBOX_HEIGHT);
+}
+
+void ModulatableSlider::timerCallback()
+{
+    // This function is called when the timer finishes.
+    stopTimer();
+
+    // Check if the mouse is truly outside the slider and its children (like the textbox).
+    if (! isMouseOver(true))
+    {
+        label.setVisible(true);
+        setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    }
 }

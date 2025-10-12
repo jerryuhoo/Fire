@@ -17,7 +17,8 @@
 /**
     A custom slider that can be modulated by an LFO.
 */
-class ModulatableSlider : public juce::Slider
+class ModulatableSlider : public juce::Slider,
+                          public juce::Timer
 {
 public:
     ModulatableSlider();
@@ -79,6 +80,7 @@ public:
 
     // Override component methods for layout and mouse events.
     void resized() override;
+    void timerCallback() override;
 
 private:
     juce::Label label;

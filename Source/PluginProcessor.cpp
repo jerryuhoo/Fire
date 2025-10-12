@@ -225,6 +225,15 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     auto biasProvider = params.biasVal;
     auto recProvider = params.recVal;
 
+    if (! params.isShapeEnabled)
+    {
+        // Disable LFO modulation for Bias and Rectification
+        biasProvider.baseValue = 0.0f;
+        recProvider.baseValue = 0.0f;
+        biasProvider.lfoSignal = nullptr;
+        recProvider.lfoSignal = nullptr;
+    }
+
     DistortionLogic::State currentState;
     currentState.mode = params.mode;
 

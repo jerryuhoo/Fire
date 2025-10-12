@@ -241,22 +241,27 @@ void BandPanel::resized()
 {
     juce::Rectangle<int> controlArea = getLocalBounds();
 
+    // Conditionally define the layout areas based on which switch is active.
     if (! oscSwitch.getToggleState())
     {
+        // If Shape, Comp, or Width is active:
+        // The main knob area takes up the full left 3/5ths of the panel.
         bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 3);
-        driveKnobArea = {};
+        driveKnobArea = {}; // Drive area is not used, so we create an empty rectangle.
     }
     else
     {
+        // If OSC (Drive) is active, use the original layout definition.
         bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 2);
         driveKnobArea = controlArea.removeFromLeft(getWidth() / 5);
     }
 
+    // The rest of the area is for the Output section, this remains unchanged.
     outputKnobArea = controlArea;
     const int verticalMargin = getHeight() / 6;
 
     outputKnobArea.reduce(0, verticalMargin);
-    driveKnobArea.reduce(0, verticalMargin);
+    driveKnobArea.reduce(0, verticalMargin); // Reduces an empty rect, which is fine.
     bandKnobArea.reduce(0, verticalMargin);
 
     juce::Rectangle<int> switchArea = bandKnobArea.removeFromLeft(getWidth() / 50);
@@ -268,36 +273,49 @@ void BandPanel::resized()
     compressorSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
     widthSwitch.setBounds(area);
 
+    // Set bounds only for the big Drive knob when OSC is active.
     if (oscSwitch.getToggleState())
     {
         juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
         modulatableSliderComponents.at(DRIVE_NAME)->setBounds(bigDriveArea);
     }
 
-    juce::Rectangle<int> subKnobArea = bandKnobArea.reduced(0, bandKnobArea.getHeight() / 5);
+    // This is the main area for the 3 panels (Shape, Comp, Width)
+    juce::Rectangle<int> subKnobArea = bandKnobArea;
 
-    auto shapeArea = subKnobArea;
-    int shapeKnobWidth = shapeArea.getWidth() / 3;
-    modulatableSliderComponents.at(REC_NAME)->setBounds(shapeArea.removeFromLeft(shapeKnobWidth));
-    modulatableSliderComponents.at(BIAS_NAME)->setBounds(shapeArea.removeFromLeft(shapeKnobWidth));
-    modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(shapeArea);
+    // 1. Calculate a single, unified knob size based on the Compressor panel's layout
+    //    (which is the most dense with 3 columns and 2 rows).
+    const int fixedKnobWidth = subKnobArea.getWidth() / 3;
+    const int fixedKnobHeight = subKnobArea.getHeight() / 2;
 
+    // --- Shape Panel Layout (3 knobs in 1 row) ---
+    // Create a single row area with the fixed height, and center it vertically.
+    auto shapeRowArea = subKnobArea.withSizeKeepingCentre(subKnobArea.getWidth(), fixedKnobHeight);
+    modulatableSliderComponents.at(REC_NAME)->setBounds(shapeRowArea.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(BIAS_NAME)->setBounds(shapeRowArea.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(shapeRowArea);
+
+    // --- Compressor Panel Layout (2 knobs on top, 3 on bottom) ---
     auto compArea = subKnobArea;
-    auto compTopRow = compArea.removeFromTop(compArea.getHeight() / 2);
+    auto compTopRow = compArea.removeFromTop(fixedKnobHeight);
     auto compBottomRow = compArea;
-    int compTopKnobWidth = compTopRow.getWidth() / 3;
-    auto centeredBottomRow = compBottomRow.withSizeKeepingCentre(compTopKnobWidth * 2, compBottomRow.getHeight());
-    modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(compTopRow.removeFromLeft(compTopKnobWidth));
-    modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(compTopRow.removeFromLeft(compTopKnobWidth));
-    modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(compTopRow);
-    modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(centeredBottomRow.removeFromLeft(compTopKnobWidth));
-    modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(centeredBottomRow);
 
-    auto widthArea = subKnobArea;
-    int widthKnobWidth = widthArea.getWidth() / 3;
-    modulatableSliderComponents.at(WIDTH_NAME)->setBounds(widthArea.removeFromLeft(widthKnobWidth));
-    modulatableSliderComponents.at(PAN_NAME)->setBounds(widthArea.removeFromLeft(widthKnobWidth));
-    modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(widthArea);
+    // Top Row: 2 knobs. Create a centered area for them.
+    auto centeredTopRow = compTopRow.withSizeKeepingCentre(2 * fixedKnobWidth, fixedKnobHeight);
+    modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(centeredTopRow.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(centeredTopRow);
+
+    // Bottom Row: 3 knobs. They will fill the full width of their row.
+    modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(compBottomRow.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(compBottomRow.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(compBottomRow);
+
+    // --- Width Panel Layout (3 knobs in 1 row) ---
+    // Create a single row area with the fixed height, and center it vertically.
+    auto widthRowArea = subKnobArea.withSizeKeepingCentre(subKnobArea.getWidth(), fixedKnobHeight);
+    modulatableSliderComponents.at(WIDTH_NAME)->setBounds(widthRowArea.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(PAN_NAME)->setBounds(widthRowArea.removeFromLeft(fixedKnobWidth));
+    modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(widthRowArea);
 
     // Panel Labels & Bypass Buttons
     bottomArea = bandKnobArea.removeFromBottom(bandKnobArea.getHeight() / 5);
@@ -321,16 +339,24 @@ void BandPanel::resized()
     compressorBypassButton.setBounds(bypassButtonArea);
     widthBypassButton.setBounds(bypassButtonArea);
 
+    // --- Output Area Layout --- (This part remains unchanged and correct)
     const int bottomAreaHeight = outputKnobArea.getHeight() / 5;
-    juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(), outputKnobArea.getBottom() - bottomAreaHeight, outputKnobArea.getWidth(), bottomAreaHeight);
+
+    juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(),
+                                          outputKnobArea.getBottom() - bottomAreaHeight,
+                                          outputKnobArea.getWidth(),
+                                          bottomAreaHeight);
+
     juce::Rectangle<int> tempButtonArea = outputBottomArea;
     const int buttonWidth = tempButtonArea.getWidth() / 3;
     linkedButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
     safeButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
     extremeButton.setBounds(tempButtonArea);
+
     juce::Rectangle<int> outputSubArea = outputKnobArea.reduced(0, bottomAreaHeight);
     juce::Rectangle<int> outputLeftArea = outputSubArea.withRight(outputSubArea.getCentreX());
     juce::Rectangle<int> outputRightArea = outputSubArea.withLeft(outputSubArea.getCentreX());
+
     modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(outputLeftArea);
     modulatableSliderComponents.at(MIX_NAME)->setBounds(outputRightArea);
 }

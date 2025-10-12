@@ -157,31 +157,7 @@ void BandPanel::createButtons()
 
 void BandPanel::setupComponentGroups()
 {
-    mainControls = {
-        modulatableSliderComponents.at(DRIVE_NAME).get(),
-        modulatableSliderComponents.at(OUTPUT_NAME).get(),
-        modulatableSliderComponents.at(MIX_NAME).get(),
-        modulatableSliderComponents.at(REC_NAME).get(),
-        modulatableSliderComponents.at(BIAS_NAME).get(),
-        &linkedButton,
-        &safeButton,
-        &extremeButton
-    };
-
-    compressorKnobs = {
-        modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
-        modulatableSliderComponents.at(COMP_RATIO_NAME).get(),
-        modulatableSliderComponents.at(COMP_ATTACK_NAME).get(),
-        modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
-        modulatableSliderComponents.at(COMP_MIX_NAME).get()
-    };
-
-    widthKnobs = {
-        modulatableSliderComponents.at(WIDTH_NAME).get(),
-        modulatableSliderComponents.at(PAN_NAME).get(),
-        modulatableSliderComponents.at(WIDTH_MIX_NAME).get()
-    };
-
+    // Groups for managing VISIBILITY when switching panels
     shapeComponents = {
         modulatableSliderComponents.at(REC_NAME).get(),
         modulatableSliderComponents.at(BIAS_NAME).get(),
@@ -207,11 +183,33 @@ void BandPanel::setupComponentGroups()
         &widthPanelLabel,
     };
 
-    allControls.addArray(mainControls);
-    allControls.addArray(compressorKnobs);
-    allControls.addArray(widthKnobs);
-    allControls.add(&linkedButton, &safeButton, &extremeButton, &compressorBypassButton, &widthBypassButton);
+    // Groups for managing ENABLED/DISABLED state logic
+    compressorSubControls = {
+        modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
+        modulatableSliderComponents.at(COMP_RATIO_NAME).get(),
+        modulatableSliderComponents.at(COMP_ATTACK_NAME).get(),
+        modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
+        modulatableSliderComponents.at(COMP_MIX_NAME).get(),
+        &compressorPanelLabel
+    };
 
+    widthSubControls = {
+        modulatableSliderComponents.at(WIDTH_NAME).get(),
+        modulatableSliderComponents.at(PAN_NAME).get(),
+        modulatableSliderComponents.at(WIDTH_MIX_NAME).get(),
+        &widthPanelLabel
+    };
+
+    // A single master list of all components for disabling the entire band
+    allControls.add(modulatableSliderComponents.at(DRIVE_NAME).get());
+    allControls.add(modulatableSliderComponents.at(OUTPUT_NAME).get());
+    allControls.add(modulatableSliderComponents.at(MIX_NAME).get());
+    allControls.add(&linkedButton, &safeButton, &extremeButton);
+    allControls.addArray(shapeComponents);
+    allControls.addArray(compressorComponents);
+    allControls.addArray(widthComponents);
+
+    // Set initial visibility
     setVisibility(shapeComponents, false);
     setVisibility(compressorComponents, false);
     setVisibility(widthComponents, false);
@@ -528,14 +526,13 @@ void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool is
 
 bool BandPanel::canEnableSubKnob(juce::Component& component)
 {
-    auto* compThreshPtr = modulatableSliderComponents.at(COMP_THRESH_NAME).get();
-    auto* compRatioPtr = modulatableSliderComponents.at(COMP_RATIO_NAME).get();
-    auto* widthPtr = modulatableSliderComponents.at(WIDTH_NAME).get();
+    // A sub-knob can be enabled if its corresponding bypass button is on.
+    if (compressorSubControls.contains(&component) && compressorBypassButton.getToggleState())
+        return true;
 
-    if ((&component == compThreshPtr || &component == compRatioPtr) && compressorBypassButton.getToggleState())
+    if (widthSubControls.contains(&component) && widthBypassButton.getToggleState())
         return true;
-    if (&component == widthPtr && widthBypassButton.getToggleState())
-        return true;
+
     return false;
 }
 
@@ -547,44 +544,54 @@ void BandPanel::saveBypassStatesToMemory()
 
 void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
 {
-    bool widthEnableState = isBandEnabled ? widthBypassTemp[focusBandNum] : false;
-    bool compEnableState = isBandEnabled ? compBypassTemp[focusBandNum] : false;
-
-    if (! callFromSubBypass)
+    if (! isBandEnabled)
     {
-        widthBypassButton.setToggleState(widthEnableState, juce::dontSendNotification);
-        compressorBypassButton.setToggleState(compEnableState, juce::dontSendNotification);
-    }
-
-    if (isBandEnabled)
-    {
-        // If the band is enabled, we process each control
-        for (auto* component : allControls)
-        {
-            // Check if this control is a "sub knob"
-            bool isSubKnob = (component == modulatableSliderComponents.at(COMP_THRESH_NAME).get()
-                              || component == modulatableSliderComponents.at(COMP_RATIO_NAME).get()
-                              || component == modulatableSliderComponents.at(WIDTH_NAME).get());
-
-            if (isSubKnob)
-            {
-                // If it's a sub knob, its enabled state is determined by canEnableSubKnob
-                component->setEnabled(canEnableSubKnob(*component));
-            }
-            else
-            {
-                // If it's not a sub knob (e.g., Drive, Output, Mix, etc.), it is always enabled
-                component->setEnabled(true);
-            }
-        }
-    }
-    else
-    {
-        // If the band is disabled, disable all controls
+        // If the entire band is disabled, just disable every single control and we're done.
         for (auto* component : allControls)
         {
             component->setEnabled(false);
         }
+        return;
+    }
+
+    // --- If the band IS enabled ---
+
+    // 1. Set the state of bypass buttons first (unless the call came from one of them).
+    // The state depends on our memory, as the actual parameter might be for another band.
+    if (! callFromSubBypass)
+    {
+        compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
+        widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
+    }
+
+    // 2. Main controls (Drive, Output, etc.) and the bypass buttons themselves are always enabled.
+    modulatableSliderComponents.at(DRIVE_NAME)->setEnabled(true);
+    modulatableSliderComponents.at(OUTPUT_NAME)->setEnabled(true);
+    modulatableSliderComponents.at(MIX_NAME)->setEnabled(true);
+    linkedButton.setEnabled(true);
+    safeButton.setEnabled(true);
+    extremeButton.setEnabled(true);
+    compressorBypassButton.setEnabled(true);
+    widthBypassButton.setEnabled(true);
+
+    // 3. Shape panel controls are always enabled when the band is on.
+    for (auto* component : shapeComponents)
+    {
+        component->setEnabled(true);
+    }
+
+    // 4. Compressor sub-controls depend on the compressor bypass button state.
+    bool compIsEnabled = compressorBypassButton.getToggleState();
+    for (auto* component : compressorSubControls)
+    {
+        component->setEnabled(compIsEnabled);
+    }
+
+    // 5. Width sub-controls depend on the width bypass button state.
+    bool widthIsEnabled = widthBypassButton.getToggleState();
+    for (auto* component : widthSubControls)
+    {
+        component->setEnabled(widthIsEnabled);
     }
 }
 

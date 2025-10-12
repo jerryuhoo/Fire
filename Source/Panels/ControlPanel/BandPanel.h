@@ -11,14 +11,14 @@
 #pragma once
 
 #include "../../GUI/LookAndFeel.h"
-#include "PanelBase.h" // [MODIFIED] Include the new base class
+#include "PanelBase.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <vector>
 
 //==============================================================================
 /*
 */
-class BandPanel : public PanelBase, // [MODIFIED] Inherit from PanelBase
+class BandPanel : public PanelBase,
                   public juce::AudioProcessorValueTreeState::Listener,
                   public juce::AsyncUpdater,
                   public juce::Button::Listener
@@ -47,15 +47,9 @@ public:
     void updateDriveMeter();
     void saveBypassStatesToMemory();
 
-    // [REMOVED] The public list of sliders is now in PanelBase.
-    // The editor can access it via a public getter in PanelBase if needed,
-    // or by casting the component to PanelBase*. For now we assume internal access is sufficient.
-
 private:
     // Re-attaches all UI components to the parameters of the current focusBandNum.
     void updateAttachments();
-
-    // [REMOVED] setupSliderCallbacks is now in PanelBase as setupModulationCallbacks
 
     void updateLinkedValue();
     bool canEnableSubKnob(juce::Component& component);
@@ -106,9 +100,10 @@ private:
     juce::Array<juce::Component*> widthComponents;
     juce::Array<juce::Component*> compressorComponents;
     juce::Array<juce::Component*> allControls;
-    juce::Array<juce::Component*> mainControls;
-    juce::Array<juce::Slider*> compressorKnobs;
-    juce::Array<juce::Slider*> widthKnobs;
+
+    // Groups for managing enable/disable state of sub-controls
+    juce::Array<juce::Component*> compressorSubControls;
+    juce::Array<juce::Component*> widthSubControls;
 
     int focusBandNum;
 

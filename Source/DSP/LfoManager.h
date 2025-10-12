@@ -91,6 +91,8 @@ private:
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<LfoData> lfoData;
 
+    juce::CriticalSection lfoUpdateLock;
+
     // Owns all modulation connection rules.
     juce::Array<ModulationRouting> modulationRoutings;
 

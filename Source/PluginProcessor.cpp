@@ -159,6 +159,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     }
 
     // 3. Block-wise Compressor and Width
+    // These operate on the downsampled block, so their mixers are safe.
     auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
     if (params.isCompEnabled)
     {
@@ -200,13 +201,22 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
 }
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
-                                      const juce::AudioBuffer<float>& dryBuffer,
+                                      const juce::AudioBuffer<float>& dryBuffer, // This is original-sized dry buffer
                                       const BandProcessingParameters& params)
 {
-    // This function is now pure and fully decoupled, as it should be.
+    // Create a copy of the incoming block (which might be oversampled)
+    // to use as the correctly-sized "dry" signal for the shape mixer.
+    // This must be done BEFORE blockToProcess is modified.
+    auto dryBlockForShapeMixer = blockToProcess;
+
+    // Now, push this correctly-sized dry block into the mixer.
+    shapeMixer.setWetMixProportion(params.shapeMixVal);
+    shapeMixer.pushDrySamples(dryBlockForShapeMixer);
+
     const int numSamples = (int) blockToProcess.getNumSamples();
     const int numChannels = (int) blockToProcess.getNumChannels();
 
+    // Note: mSampleMaxValue is still calculated from the original-sized dryBuffer, which is correct.
     this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
     auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(params.mode);
 
@@ -240,13 +250,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         biasSmoother.setCurrentAndTargetValue(biasProvider.get(0));
         recSmoother.setCurrentAndTargetValue(recProvider.get(0));
 
-        isFirstBlock = false; // This logic will not run again until reset() is called.
+        isFirstBlock = false;
     }
-    // The 'else' block for setting targets is removed.
-    // Targets are now updated per-sample inside the loop to smooth the final signal.
-
-    shapeMixer.setWetMixProportion(params.shapeMixVal);
-    shapeMixer.pushDrySamples(dryBuffer);
 
     for (int sample = 0; sample < numSamples; ++sample)
     {

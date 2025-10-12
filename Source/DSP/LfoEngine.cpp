@@ -32,6 +32,13 @@ void LfoEngine::updateShape(const LfoData& shapeData)
 {
     const auto& points = shapeData.points;
     const auto& curvatures = shapeData.curvatures;
+
+    if (points.size() < 2 || curvatures.size() < (points.size() - 1))
+    {
+        jassertfalse;
+        return;
+    }
+
     const auto numPointsInTable = wavetable.getNumPoints();
 
     // Step 1: Create a temporary, mutable array to build the waveform.

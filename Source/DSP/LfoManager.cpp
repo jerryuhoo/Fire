@@ -202,6 +202,7 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     for (int i = 0; i < 4; ++i)
     {
+        const juce::ScopedLock sl(lfoUpdateLock);
         // Shape update logic (unchanged)
         bool needsUpdate = true;
         if (shapeUpdateFlags[i].compare_exchange_strong(needsUpdate, false))
@@ -335,6 +336,7 @@ float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
 
 void LfoManager::onLfoShapeChanged(int lfoIndex)
 {
+    const juce::ScopedLock sl(lfoUpdateLock);
     if (lfoIndex < 0)
     {
         for (int i = 0; i < 4; ++i)

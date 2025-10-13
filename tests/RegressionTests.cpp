@@ -183,6 +183,20 @@ namespace TestHelpers
                     parameter->setValueNotifyingHost(attributeValue.getFloatValue());
             }
 
+            // After loading the preset, manually enable the Shape module for all bands.
+            // This is necessary because older presets won't have this new parameter,
+            // and it defaults to 'off' (bypassed), causing a mismatch with the golden masters.
+            for (int i = 0; i < 4; ++i)
+            {
+                // The parameter ID is constructed like "shapeBypass0", "shapeBypass1", etc.
+                juce::String shapeBypassParamID = "shapeBypass" + juce::String(i);
+                if (auto* shapeBypassParam = processor.treeState.getParameter(shapeBypassParamID))
+                {
+                    // Set to 1.0f to ensure the shape module is ON.
+                    shapeBypassParam->setValueNotifyingHost(1.0f);
+                }
+            }
+
             const int blockSize = 512;
             processor.prepareToPlay(sampleRate, blockSize);
 

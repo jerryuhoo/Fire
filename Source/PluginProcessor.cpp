@@ -953,6 +953,26 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         const auto xmlTreeState = xmlState->getChildElement(xmlIndex++);
         if (xmlTreeState != nullptr)
         {
+            // Convert the XML to a ValueTree so we can inspect and modify it before loading.
+            auto treeToLoad = juce::ValueTree::fromXml(*xmlTreeState);
+
+            // This is the backward-compatibility logic.
+            // We loop through each band to check if the SHAPE_BYPASS_ID exists.
+            for (int i = 0; i < 4; ++i)
+            {
+                auto shapeBypassParamID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i);
+
+                // If the ValueTree from the preset file does NOT have this property...
+                if (! treeToLoad.hasProperty(shapeBypassParamID))
+                {
+                    DBG("old preset");
+                    // ...it means we are loading an old preset.
+                    // To maintain the old sound, we must manually add the property
+                    // and set its value to 'true' (enabled).
+                    treeToLoad.setProperty(shapeBypassParamID, 1.0, nullptr);
+                }
+            }
+
             treeState.replaceState(juce::ValueTree::fromXml(*xmlTreeState));
         }
 
@@ -1402,8 +1422,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(DRIVE_ID, i), DRIVE_NAME, juce::NormalisableRange<float>(0.0f, 100.0f, 0.01f), 0.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_RATIO_ID, i), COMP_RATIO_NAME, juce::NormalisableRange<float>(1.0f, 20.0f, 0.1f), 1.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_THRESH_ID, i), COMP_THRESH_NAME, juce::NormalisableRange<float>(-48.0f, 0.0f, 0.1f), 0.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_ATTACK_ID, i), COMP_ATTACK_NAME, juce::NormalisableRange<float>(0.1f, 200.0f, 0.01f, 0.3f), 10.0f));
-        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_RELEASE_ID, i), COMP_RELEASE_NAME, juce::NormalisableRange<float>(10.0f, 2000.0f, 1.f, 0.3f), 100.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_ATTACK_ID, i), COMP_ATTACK_NAME, juce::NormalisableRange<float>(0.1f, 200.0f, 0.01f, 0.3f), 80.0f));
+        parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_RELEASE_ID, i), COMP_RELEASE_NAME, juce::NormalisableRange<float>(10.0f, 2000.0f, 1.f, 0.3f), 200.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(COMP_MIX_ID, i), COMP_MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(WIDTH_ID, i), WIDTH_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 0.5f));
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(PAN_ID, i), PAN_NAME, juce::NormalisableRange<float>(-1.0f, 1.0f, 0.01f), 0.0f));

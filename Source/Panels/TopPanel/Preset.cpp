@@ -72,9 +72,21 @@ namespace state
                 }
                 else
                 {
-                    // If the parameter is not in the preset (e.g., an older preset),
-                    // set it to its default value to ensure a predictable state.
-                    p->setValueNotifyingHost(p->getDefaultValue());
+                    // If the parameter is not in the preset (e.g., an older preset)...
+
+                    // Check if the missing parameter is the shape bypass toggle.
+                    if (p->paramID.startsWith(SHAPE_BYPASS_ID))
+                    {
+                        // If it is, we are loading an old preset. To maintain the original sound,
+                        // we must force the shape module to be ON (true) by default.
+                        p->setValueNotifyingHost(1.0f);
+                    }
+                    else
+                    {
+                        // For any other missing parameter, set it to its default value
+                        // to ensure a predictable state.
+                        p->setValueNotifyingHost(p->getDefaultValue());
+                    }
                 }
             }
         }

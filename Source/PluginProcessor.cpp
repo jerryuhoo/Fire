@@ -992,13 +992,16 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         // 3. Load LFO Shapes
         if (auto* lfoState = xmlState->getChildByName("LFO_STATE"))
         {
-            auto& lfoDataToLoad = lfoManager->getLfoData();
+            // First, clear all existing LFO data in a thread-safe way.
+            lfoManager->clearAllLfoData();
+
             for (auto* lfoXml : lfoState->getChildIterator())
             {
                 const int index = lfoXml->getIntAttribute("index", -1);
-                if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
+                if (juce::isPositiveAndBelow(index, 4)) // Use a fixed size for safety
                 {
-                    lfoDataToLoad[index] = LfoData::readFromXml(*lfoXml);
+                    // Now, load the new data using the thread-safe setter.
+                    lfoManager->setLfoData(index, LfoData::readFromXml(*lfoXml));
                 }
             }
         }

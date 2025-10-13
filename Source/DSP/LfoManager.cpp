@@ -458,3 +458,24 @@ void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
         }
     }
 }
+
+void LfoManager::setLfoData(int index, const LfoData& newData)
+{
+    const juce::ScopedLock sl(lfoUpdateLock);
+    if (juce::isPositiveAndBelow(index, (int) lfoData.size()))
+    {
+        lfoData[index] = newData;
+        shapeUpdateFlags[index].store(true);
+    }
+}
+
+void LfoManager::clearAllLfoData()
+{
+    const juce::ScopedLock sl(lfoUpdateLock);
+    for (auto& lfo : lfoData)
+    {
+        lfo = LfoData(); // Reset to default state
+    }
+    // Flag all shapes for update on the audio thread
+    onLfoShapeChanged(-1);
+}

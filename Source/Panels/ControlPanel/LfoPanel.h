@@ -32,7 +32,7 @@ public:
     ~LfoEditor() override;
 
     // Sets the data model for the editor to point to. This is the safe way to switch LFOs.
-    void setDataToDisplay(LfoData* dataToDisplay);
+    void setDataToDisplay(const LfoData& dataToDisplay);
 
     // Called by LfoPanel to set the current interaction mode.
     void setCurrentBrush(LfoPresetShape newBrush);
@@ -54,8 +54,7 @@ public:
     void setPlayheadPosition(float position);
     void setPhaseOffsetLinePosition(float position);
 
-    std::function<void()> onDataChanged;
-    void setOnDataChangedCallback(std::function<void()> callback);
+    std::function<void(const LfoData&)> onDataChanged;
 
     enum CommandIDs
     {
@@ -69,7 +68,8 @@ public:
 
 private:
     // This pointer holds the currently active LFO data. It does not own the data.
-    LfoData* activeLfoData = nullptr;
+    LfoData activeLfoData;
+    bool dataIsActive = false;
 
     // Internal helper methods that now operate on the activeLfoData pointer.
     void addPoint(juce::Point<float> newPoint);

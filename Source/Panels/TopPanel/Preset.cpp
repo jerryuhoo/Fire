@@ -13,7 +13,6 @@
 
 namespace state
 {
-
     //==============================================================================
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
@@ -101,11 +100,8 @@ namespace state
         auto& modRoutingsToLoad = mutableFireProc.getLfoManager().getModulationRoutings();
 
         // Clear the existing data using the new references
-        for (auto& lfo : lfoDataToLoad)
-        {
-            lfo = LfoData();
-        }
-        modRoutingsToLoad.clear();
+        mutableFireProc.getLfoManager().clearAllLfoData();
+        mutableFireProc.getLfoManager().getModulationRoutings().clear();
 
         // 1. Load LFO Shapes
         if (auto* lfoState = xml.getChildByName("LFO_STATE"))
@@ -116,7 +112,7 @@ namespace state
                 if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
                 {
                     // Load data into the LfoManager via the reference
-                    lfoDataToLoad[index] = LfoData::readFromXml(*lfoXml);
+                    mutableFireProc.getLfoManager().setLfoData(index, LfoData::readFromXml(*lfoXml));
                 }
             }
         }
@@ -124,7 +120,6 @@ namespace state
         // 2. Load Modulation Matrix Routings
         if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
         {
-            fireProc.getLfoManager().getModulationRoutings().clear();
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
                 fireProc.getLfoManager().getModulationRoutings().add(ModulationRouting::readFromXml(*routingXml));
@@ -511,15 +506,10 @@ namespace state
         mCurrentPresetId = 0;
 
         auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
-        for (auto& lfo : fireProc.getLfoManager().getLfoData())
-        {
-            lfo.resetToDefault();
-        }
-
-        auto& routings = fireProc.getLfoManager().getModulationRoutings();
-        routings.clear();
-
+        fireProc.getLfoManager().clearAllLfoData();
+        fireProc.getLfoManager().getModulationRoutings().clear();
         fireProc.getLfoManager().onLfoShapeChanged(-1);
+        fireProc.sendChangeMessage();
 
         // Notify the editor to update its display
         if (auto* editor = fireProc.getActiveEditor())

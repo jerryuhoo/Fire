@@ -22,10 +22,11 @@ LfoEditor::LfoEditor()
 
 LfoEditor::~LfoEditor() {}
 
-void LfoEditor::setDataToDisplay(LfoData* dataToDisplay)
+void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
 {
-    // Safely switch the data source.
+    // Safely switch the data source by copying.
     activeLfoData = dataToDisplay;
+    dataIsActive = true;
     repaint();
 }
 
@@ -43,17 +44,17 @@ void LfoEditor::paint(juce::Graphics& g)
     for (int i = 1; i < vGridDivs; ++i)
         g.drawHorizontalLine(juce::roundToInt(getHeight() * i / (float) vGridDivs), 0.0f, (float) getWidth());
 
-    if (activeLfoData == nullptr || activeLfoData->points.size() < 2)
+    if (! dataIsActive || activeLfoData.points.size() < 2)
         return;
 
     // Draw LFO Path
     juce::Path lfoPath;
-    lfoPath.startNewSubPath(fromNormalized(activeLfoData->points.front()));
+    lfoPath.startNewSubPath(fromNormalized(activeLfoData.points.front()));
 
-    for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
+    for (size_t i = 0; i < activeLfoData.points.size() - 1; ++i)
     {
-        auto p1_screen = fromNormalized(activeLfoData->points[i]);
-        auto p2_screen = fromNormalized(activeLfoData->points[i + 1]);
+        auto p1_screen = fromNormalized(activeLfoData.points[i]);
+        auto p2_screen = fromNormalized(activeLfoData.points[i + 1]);
 
         if (std::abs(p1_screen.x - p2_screen.x) < 0.1f)
         {
@@ -61,7 +62,7 @@ void LfoEditor::paint(juce::Graphics& g)
             continue;
         }
 
-        bool isCurved = (i < activeLfoData->curvatures.size() && ! juce::approximatelyEqual(activeLfoData->curvatures[i], 0.0f));
+        bool isCurved = (i < activeLfoData.curvatures.size() && ! juce::approximatelyEqual(activeLfoData.curvatures[i], 0.0f));
         if (! isCurved)
         {
             lfoPath.lineTo(p2_screen);
@@ -69,7 +70,7 @@ void LfoEditor::paint(juce::Graphics& g)
         else
         {
             const int numSegments = 30;
-            const float curvature = activeLfoData->curvatures[i];
+            const float curvature = activeLfoData.curvatures[i];
 
             for (int j = 1; j <= numSegments; ++j)
             {
@@ -102,12 +103,12 @@ void LfoEditor::paint(juce::Graphics& g)
     g.strokePath(lfoPath, juce::PathStrokeType(2.0f));
 
     // Draw control points, with visual feedback for selection.
-    for (int i = 0; i < activeLfoData->points.size(); ++i)
+    for (int i = 0; i < activeLfoData.points.size(); ++i)
     {
         bool isSelected = std::find(selectedPointIndices.begin(), selectedPointIndices.end(), i) != selectedPointIndices.end();
         bool isHovered = (i == hoveredPointIndex);
 
-        auto localPoint = fromNormalized(activeLfoData->points[i]);
+        auto localPoint = fromNormalized(activeLfoData.points[i]);
 
         float currentPointRadius = pointRadius;
         juce::Colour currentPointColour = isSelected ? juce::Colours::cyan : juce::Colours::yellow;
@@ -160,11 +161,6 @@ void LfoEditor::paint(juce::Graphics& g)
 
 void LfoEditor::resized() {} // No layout logic needed in the editor itself.
 
-void LfoEditor::setOnDataChangedCallback(std::function<void()> callback)
-{
-    onDataChanged = callback;
-}
-
 void LfoEditor::setGridDivisions(int horizontal, int vertical)
 {
     hGridDivs = juce::jmax(1, horizontal);
@@ -192,7 +188,7 @@ void LfoEditor::setPhaseOffsetLinePosition(float position)
 
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
     grabKeyboardFocus();
 
@@ -233,9 +229,9 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
     // --- Standard Left-click Logic ---
     int clickedPointIndex = -1;
-    for (size_t i = 0; i < activeLfoData->points.size(); ++i)
+    for (size_t i = 0; i < activeLfoData.points.size(); ++i)
     {
-        if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
+        if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
         {
             clickedPointIndex = (int) i;
             break;
@@ -264,7 +260,7 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
         editingCurveIndex = findSegmentIndexAt(event.getPosition());
         if (editingCurveIndex != -1)
         {
-            initialCurvature = activeLfoData->curvatures[editingCurveIndex];
+            initialCurvature = activeLfoData.curvatures[editingCurveIndex];
             initialDragY = event.y;
         }
     }
@@ -275,7 +271,7 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
         dragAnchor = toNormalized(event.getPosition());
         initialDragPositions.clear();
         for (int index : selectedPointIndices)
-            initialDragPositions.push_back(activeLfoData->points[index]);
+            initialDragPositions.push_back(activeLfoData.points[index]);
     }
 
     repaint();
@@ -297,20 +293,20 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             applyBrushShape(event.getPosition());
             lastBrushCell = currentCell;
             if (onDataChanged)
-                onDataChanged();
+                onDataChanged(activeLfoData);
         }
         return; // Brush drag is handled, so we exit here.
     }
 
     // If not brushing, proceed with the point editing logic.
-    if (! activeLfoData || currentMode != LfoEditMode::PointEdit)
+    if (! dataIsActive || currentMode != LfoEditMode::PointEdit)
         return;
 
     if (editingCurveIndex != -1)
     {
         // Get the start and end points of the segment in screen coordinates to calculate the visual slope.
-        auto p1_screen = fromNormalized(activeLfoData->points[editingCurveIndex]);
-        auto p2_screen = fromNormalized(activeLfoData->points[editingCurveIndex + 1]);
+        auto p1_screen = fromNormalized(activeLfoData.points[editingCurveIndex]);
+        auto p2_screen = fromNormalized(activeLfoData.points[editingCurveIndex + 1]);
 
         float dx = p2_screen.x - p1_screen.x;
         // Note: in screen coordinates, a smaller Y is higher up.
@@ -328,11 +324,11 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         // but we invert it if the line is visually sloping downwards on the screen (positive slope).
         float curvatureChange = (slope > 0.0f) ? -dragDistY * sensitivity : dragDistY * sensitivity;
 
-        activeLfoData->curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
+        activeLfoData.curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
 
         repaint();
         if (onDataChanged)
-            onDataChanged();
+            onDataChanged(activeLfoData);
         return; // Curvature drag is handled, so we exit here.
     }
 
@@ -393,11 +389,11 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
                             initialLeftmostX = initialDragPositions[i].x;
                             break;
                         }
-                    maxLeftDelta = activeLfoData->points[leftNeighborIndex].x - initialLeftmostX;
+                    maxLeftDelta = activeLfoData.points[leftNeighborIndex].x - initialLeftmostX;
                 }
             }
 
-            if (rightmostSelectedPointIndex < activeLfoData->points.size() - 1)
+            if (rightmostSelectedPointIndex < activeLfoData.points.size() - 1)
             {
                 int rightNeighborIndex = rightmostSelectedPointIndex + 1;
                 if (std::find(selectedPointIndices.begin(), selectedPointIndices.end(), rightNeighborIndex) == selectedPointIndices.end())
@@ -409,7 +405,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
                             initialRightmostX = initialDragPositions[i].x;
                             break;
                         }
-                    maxRightDelta = activeLfoData->points[rightNeighborIndex].x - initialRightmostX;
+                    maxRightDelta = activeLfoData.points[rightNeighborIndex].x - initialRightmostX;
                 }
             }
 
@@ -420,9 +416,9 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             {
                 int pointIndex = selectedPointIndices[i];
                 auto& initialPos = initialDragPositions[i];
-                auto& point = activeLfoData->points[pointIndex];
+                auto& point = activeLfoData.points[pointIndex];
                 point.y = juce::jlimit(0.0f, 1.0f, initialPos.y + delta.y);
-                if (pointIndex > 0 && pointIndex < activeLfoData->points.size() - 1)
+                if (pointIndex > 0 && pointIndex < activeLfoData.points.size() - 1)
                 {
                     point.x = initialPos.x + delta.x;
                 }
@@ -430,7 +426,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             repaint();
 
             if (onDataChanged)
-                onDataChanged();
+                onDataChanged(activeLfoData);
 
             break;
         }
@@ -449,11 +445,11 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
         m.addItem(CommandIDs::selectAll, "Select All");
         m.addItem(CommandIDs::clear, "Clear");
         m.addSeparator();
-        m.addItem(CommandIDs::copy, "Copy", activeLfoData && activeLfoData->points.size() > 2);
+        m.addItem(CommandIDs::copy, "Copy", dataIsActive && activeLfoData.points.size() > 2);
         m.addItem(CommandIDs::paste, "Paste", lfoClipboard.points.size() > 0);
         m.addSeparator();
-        m.addItem(CommandIDs::invertX, "Invert Horizontally", activeLfoData && activeLfoData->points.size() > 2);
-        m.addItem(CommandIDs::invertY, "Invert Vertically", activeLfoData && activeLfoData->points.size() > 2);
+        m.addItem(CommandIDs::invertX, "Invert Horizontally", dataIsActive && activeLfoData.points.size() > 2);
+        m.addItem(CommandIDs::invertY, "Invert Vertically", dataIsActive && activeLfoData.points.size() > 2);
 
         auto callback = [this](int result)
         {
@@ -465,7 +461,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
                 case CommandIDs::clear:
                     clearAllPoints();
                     if (onDataChanged)
-                        onDataChanged();
+                        onDataChanged(activeLfoData);
                     break;
                 case CommandIDs::copy:
                     copyShape();
@@ -473,20 +469,19 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
                 case CommandIDs::paste:
                     pasteShape();
                     if (onDataChanged)
-                        onDataChanged();
+                        onDataChanged(activeLfoData);
                     break;
                 case CommandIDs::invertX:
                     invertShape(true, false);
                     if (onDataChanged)
-                        onDataChanged();
+                        onDataChanged(activeLfoData);
                     break;
                 case CommandIDs::invertY:
                     invertShape(false, true);
                     if (onDataChanged)
-                        onDataChanged();
+                        onDataChanged(activeLfoData);
                     break;
                 default:
-                    // This case is hit if the user clicks away from the menu (result is 0)
                     break;
             }
         };
@@ -497,7 +492,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
         return; // We've handled the right-click, so we exit here.
     }
 
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
     bool dataWasChanged = false;
 
@@ -505,9 +500,9 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     {
         auto finalRect = makeNormalised(event.getMouseDownPosition(), event.getPosition()).toFloat();
         selectedPointIndices.clear();
-        for (int i = 0; i < activeLfoData->points.size(); ++i)
+        for (int i = 0; i < activeLfoData.points.size(); ++i)
         {
-            if (finalRect.contains(fromNormalized(activeLfoData->points[i])))
+            if (finalRect.contains(fromNormalized(activeLfoData.points[i])))
                 selectedPointIndices.push_back(i);
         }
         selectionRectangle.setSize(0, 0);
@@ -533,28 +528,28 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
     if (dataWasChanged && onDataChanged)
     {
-        if (activeLfoData)
-            activeLfoData->mergeDuplicatePoints();
-        onDataChanged();
+        if (dataIsActive)
+            activeLfoData.mergeDuplicatePoints();
+        onDataChanged(activeLfoData);
     }
 }
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    if (! activeLfoData || currentMode != LfoEditMode::PointEdit)
+    if (! dataIsActive || currentMode != LfoEditMode::PointEdit)
         return;
 
     // First, check if double-clicking on an existing point to delete it.
     // We check from the second to the second-to-last point, as the ends cannot be deleted.
-    if (activeLfoData->points.size() > 2)
+    if (activeLfoData.points.size() > 2)
     {
-        for (size_t i = 1; i < activeLfoData->points.size() - 1; ++i)
+        for (size_t i = 1; i < activeLfoData.points.size() - 1; ++i)
         {
-            if (fromNormalized(activeLfoData->points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
+            if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
             {
                 removePoint((int) i);
                 if (onDataChanged)
-                    onDataChanged();
+                    onDataChanged(activeLfoData);
                 repaint();
                 return; // Point was found and removed, so we're done.
             }
@@ -563,11 +558,11 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 
     // If we reach here, it means we didn't double-click on an existing point.
     // So, we create a new point at the double-click location.
-    if (activeLfoData->points.size() < maxPoints)
+    if (activeLfoData.points.size() < maxPoints)
     {
         addPoint(toNormalized(event.getPosition()));
         if (onDataChanged)
-            onDataChanged();
+            onDataChanged(activeLfoData);
         // addPoint already calls repaint().
     }
 }
@@ -576,9 +571,9 @@ void LfoEditor::mouseMove(const juce::MouseEvent& event)
 {
     // Find if the mouse is currently hovering over any point
     int newHoveredIndex = -1;
-    for (int i = 0; i < activeLfoData->points.size(); ++i)
+    for (int i = 0; i < activeLfoData.points.size(); ++i)
     {
-        auto pointScreen = fromNormalized(activeLfoData->points[i]);
+        auto pointScreen = fromNormalized(activeLfoData.points[i]);
 
         if (pointScreen.getDistanceFrom(event.getPosition().toFloat()) < 5.0f)
         {
@@ -607,32 +602,32 @@ void LfoEditor::mouseExit(const juce::MouseEvent& event)
 
 void LfoEditor::addPoint(juce::Point<float> newPoint)
 {
-    if (! activeLfoData || activeLfoData->points.size() >= maxPoints)
+    if (! dataIsActive || activeLfoData.points.size() >= maxPoints)
         return;
 
     // Add the point and sort the list to find its correct position.
-    activeLfoData->points.push_back(newPoint);
+    activeLfoData.points.push_back(newPoint);
     updateAndSortPoints();
 
     // Find the index of the point we just added.
-    auto it = std::find_if(activeLfoData->points.begin(), activeLfoData->points.end(), [&](const auto& p)
+    auto it = std::find_if(activeLfoData.points.begin(), activeLfoData.points.end(), [&](const auto& p)
                            { return juce::approximatelyEqual(p.x, newPoint.x) && juce::approximatelyEqual(p.y, newPoint.y); });
 
-    if (it != activeLfoData->points.end())
+    if (it != activeLfoData.points.end())
     {
-        int insertedAtIndex = (int) std::distance(activeLfoData->points.begin(), it);
+        int insertedAtIndex = (int) std::distance(activeLfoData.points.begin(), it);
 
         // A new point splits a segment, so we need one more curvature value.
         // We insert a new 0.0f (linear) curvature for the new segment being created.
         // All other curvatures are preserved.
         if (insertedAtIndex > 0)
         {
-            activeLfoData->curvatures.insert(activeLfoData->curvatures.begin() + insertedAtIndex - 1, 0.0f);
+            activeLfoData.curvatures.insert(activeLfoData.curvatures.begin() + insertedAtIndex - 1, 0.0f);
         }
         else
         {
             // This should only happen if adding a point before the second point, very rare.
-            activeLfoData->curvatures.insert(activeLfoData->curvatures.begin(), 0.0f);
+            activeLfoData.curvatures.insert(activeLfoData.curvatures.begin(), 0.0f);
         }
     }
 
@@ -641,19 +636,19 @@ void LfoEditor::addPoint(juce::Point<float> newPoint)
 
 void LfoEditor::removePoint(int index)
 {
-    if (! activeLfoData || index <= 0 || index >= activeLfoData->points.size() - 1)
+    if (! dataIsActive || index <= 0 || index >= activeLfoData.points.size() - 1)
         return;
 
-    activeLfoData->points.erase(activeLfoData->points.begin() + index);
+    activeLfoData.points.erase(activeLfoData.points.begin() + index);
 
     // Removing a point merges two segments. We must remove one curvature value.
     // We remove the curvature of the first of the two merged segments.
-    activeLfoData->curvatures.erase(activeLfoData->curvatures.begin() + index - 1);
+    activeLfoData.curvatures.erase(activeLfoData.curvatures.begin() + index - 1);
 
     // We then set the curvature of the new, merged segment to 0.0 (linear).
-    if (index - 1 < activeLfoData->curvatures.size())
+    if (index - 1 < activeLfoData.curvatures.size())
     {
-        activeLfoData->curvatures[index - 1] = 0.0f;
+        activeLfoData.curvatures[index - 1] = 0.0f;
     }
 
     repaint();
@@ -672,38 +667,38 @@ juce::Point<float> LfoEditor::fromNormalized(juce::Point<float> normalizedPoint)
 
 void LfoEditor::updateAndSortPoints()
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
     // Use stable_sort to preserve the order of points with the same x-coordinate.
-    std::stable_sort(activeLfoData->points.begin(), activeLfoData->points.end(), [](const auto& a, const auto& b)
+    std::stable_sort(activeLfoData.points.begin(), activeLfoData.points.end(), [](const auto& a, const auto& b)
                      { return a.x < b.x; });
 
-    if (activeLfoData->points.empty())
-        activeLfoData->resetToDefault();
+    if (activeLfoData.points.empty())
+        activeLfoData.resetToDefault();
     else
     {
-        activeLfoData->points.front().x = 0.0f;
-        activeLfoData->points.back().x = 1.0f;
+        activeLfoData.points.front().x = 0.0f;
+        activeLfoData.points.back().x = 1.0f;
     }
 }
 
 int LfoEditor::getOrCreatePointAtX(float targetX)
 {
-    if (activeLfoData == nullptr)
+    if (! dataIsActive)
         return -1;
 
     // 1. Check if a point already exists at (or very close to) the target X.
-    for (size_t i = 0; i < activeLfoData->points.size(); ++i)
+    for (size_t i = 0; i < activeLfoData.points.size(); ++i)
     {
-        if (juce::approximatelyEqual(activeLfoData->points[i].x, targetX))
+        if (juce::approximatelyEqual(activeLfoData.points[i].x, targetX))
             return static_cast<int>(i);
     }
 
     // 2. If not, find which segment the targetX falls into.
-    for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
+    for (size_t i = 0; i < activeLfoData.points.size() - 1; ++i)
     {
-        auto& p1 = activeLfoData->points[i];
-        auto& p2 = activeLfoData->points[i + 1];
+        auto& p1 = activeLfoData.points[i];
+        auto& p2 = activeLfoData.points[i + 1];
 
         if (targetX > p1.x && targetX < p2.x)
         {
@@ -717,9 +712,9 @@ int LfoEditor::getOrCreatePointAtX(float targetX)
             addPoint({ targetX, newY });
 
             // 5. After adding, the points are re-sorted. We need to find the new point's index again.
-            for (size_t j = 0; j < activeLfoData->points.size(); ++j)
+            for (size_t j = 0; j < activeLfoData.points.size(); ++j)
             {
-                if (juce::approximatelyEqual(activeLfoData->points[j].x, targetX))
+                if (juce::approximatelyEqual(activeLfoData.points[j].x, targetX))
                     return static_cast<int>(j);
             }
         }
@@ -729,15 +724,15 @@ int LfoEditor::getOrCreatePointAtX(float targetX)
 
 void LfoEditor::rebuildCurvatures()
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
-    size_t numSegments = activeLfoData->points.size() > 1 ? activeLfoData->points.size() - 1 : 0;
-    activeLfoData->curvatures.assign(numSegments, 0.0f);
+    size_t numSegments = activeLfoData.points.size() > 1 ? activeLfoData.points.size() - 1 : 0;
+    activeLfoData.curvatures.assign(numSegments, 0.0f);
 }
 
 void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
 
     // 1. Identify grid cell and its boundaries.
@@ -751,12 +746,12 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
     const float topY = 1.0f - ((float) gridY * gridH);
     const juce::Rectangle<float> cellBounds(startX, bottomY, endX - startX, topY - bottomY);
 
-    const auto oldPoints = activeLfoData->points;
+    const auto oldPoints = activeLfoData.points;
 
     // 2. Cleanup old points with smarter boundary logic.
-    activeLfoData->points.erase(
-        std::remove_if(activeLfoData->points.begin(),
-                       activeLfoData->points.end(),
+    activeLfoData.points.erase(
+        std::remove_if(activeLfoData.points.begin(),
+                       activeLfoData.points.end(),
                        [&](const auto& p)
                        {
                            // Check if the point is at the absolute start or end of the LFO.
@@ -776,18 +771,18 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
                            // For all other points, remove them if they fall within the brush's horizontal range.
                            return p.x >= startX && p.x <= endX;
                        }),
-        activeLfoData->points.end());
+        activeLfoData.points.end());
 
     // 3. Generate the new shape's points.
     auto newPoints = LfoShapeGenerator::generateShape(currentBrush, cellBounds);
 
-    activeLfoData->points.insert(activeLfoData->points.end(), newPoints.begin(), newPoints.end());
+    activeLfoData.points.insert(activeLfoData.points.end(), newPoints.begin(), newPoints.end());
 
     updateAndSortPoints();
 
     // 4. Intelligently rebuild the curvatures vector to preserve old values.
     std::vector<float> newCurvatures;
-    const auto& currentPoints = activeLfoData->points;
+    const auto& currentPoints = activeLfoData.points;
 
     for (size_t i = 0; i < currentPoints.size() - 1; ++i)
     {
@@ -829,9 +824,9 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
             {
                 if (juce::approximatelyEqual(oldPoints[j].x, p1.x) && juce::approximatelyEqual(oldPoints[j + 1].x, p2.x))
                 {
-                    if (j < activeLfoData->curvatures.size())
+                    if (j < activeLfoData.curvatures.size())
                     {
-                        oldCurvature = activeLfoData->curvatures[j];
+                        oldCurvature = activeLfoData.curvatures[j];
                         break;
                     }
                 }
@@ -840,7 +835,7 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
         }
     }
 
-    activeLfoData->curvatures.swap(newCurvatures);
+    activeLfoData.curvatures.swap(newCurvatures);
 
     repaint();
 }
@@ -848,18 +843,18 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 int LfoEditor::findSegmentIndexAt(const juce::Point<int>& position) const
 {
     // Safety checks: ensure there is data and at least one segment to check.
-    if (activeLfoData == nullptr || activeLfoData->points.size() < 2)
+    if (! dataIsActive || activeLfoData.points.size() < 2)
         return -1;
 
     // Convert the mouse's X position to a normalized value [0, 1]
     const float clickXNormalized = (float) position.x / (float) getWidth();
 
     // Iterate through all the points that define the start of a segment
-    for (size_t i = 0; i < activeLfoData->points.size() - 1; ++i)
+    for (size_t i = 0; i < activeLfoData.points.size() - 1; ++i)
     {
         // A segment is defined by point 'i' and point 'i + 1'.
-        const auto& p1 = activeLfoData->points[i];
-        const auto& p2 = activeLfoData->points[i + 1];
+        const auto& p1 = activeLfoData.points[i];
+        const auto& p2 = activeLfoData.points[i + 1];
 
         // Check if the normalized click position falls horizontally between the two points.
         if (clickXNormalized >= p1.x && clickXNormalized <= p2.x)
@@ -902,7 +897,7 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
         {
             pasteShape();
             if (onDataChanged)
-                onDataChanged();
+                onDataChanged(activeLfoData);
             return true;
         }
 
@@ -917,7 +912,7 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
     {
         deleteSelectedPoints();
         if (onDataChanged)
-            onDataChanged();
+            onDataChanged(activeLfoData);
         return true;
     }
     return false;
@@ -925,12 +920,12 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
 
 void LfoEditor::deleteSelectedPoints()
 {
-    if (! activeLfoData || selectedPointIndices.empty())
+    if (! dataIsActive || selectedPointIndices.empty())
         return;
     std::sort(selectedPointIndices.rbegin(), selectedPointIndices.rend());
     for (int index : selectedPointIndices)
     {
-        if (index > 0 && index < activeLfoData->points.size() - 1)
+        if (index > 0 && index < activeLfoData.points.size() - 1)
             removePoint(index);
     }
     selectedPointIndices.clear();
@@ -942,12 +937,19 @@ void LfoEditor::deleteSelectedPoints()
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
-    lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(processor.getLfoManager().getLfoData()[currentLfoIndex]);
     addAndMakeVisible(lfoEditor);
 
-    // Forward the callback from the editor to the panel's own public callback.
-    lfoEditor.setOnDataChangedCallback([this]
-                                       { if (onDataChanged) onDataChanged(); });
+    // FIX: Set up the callback to send updated data back to the manager
+    lfoEditor.onDataChanged = [this](const LfoData& newData)
+    {
+        // Use the thread-safe setter to update the authoritative data
+        processor.getLfoManager().setLfoData(currentLfoIndex, newData);
+
+        // Notify the main editor that a change has occurred (e.g., to mark preset as dirty)
+        if (onDataChanged)
+            onDataChanged();
+    };
 
     // Create UI Components
     for (int i = 0; i < 4; ++i)
@@ -1281,7 +1283,7 @@ void LfoPanel::setLfo(int newIndex)
 {
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
-    lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(processor.getLfoManager().getLfoData()[currentLfoIndex]);
 
     // Explicitly set the toggle state for all buttons in the group.
     for (int i = 0; i < lfoSelectButtons.size(); ++i)
@@ -1367,34 +1369,32 @@ void LfoPanel::updateRateSlider()
 
 void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
 {
-    // Get the authoritative ParameterID for the currently active LFO's sync mode.
     auto currentSyncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex);
-
-    // Compare the incoming parameterID string with our authoritative one.
     if (parameterID == currentSyncModeID)
     {
-        // If they match, it means the sync mode for the visible LFO has changed
-        // (likely via automation or a preset load), so we must update the UI.
         triggerAsyncUpdate();
         return;
     }
 
-    // We must check all 4 LFOs, not just the currently visible one,
-    // so that automation or preset loads work correctly in the background.
     for (int i = 0; i < 4; ++i)
     {
         auto smoothParamID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
         if (parameterID == smoothParamID)
         {
-            // Update the correct LfoData object in the manager.
-            processor.getLfoManager().getLfoData()[i].smoothness = newValue;
+            // FIX: Correct, thread-safe way to update a member of LfoData
+            // 1. Get a copy of the current data
+            auto lfoDataCopy = processor.getLfoManager().getLfoData()[i];
+            // 2. Modify the copy
+            lfoDataCopy.smoothness = newValue;
+            // 3. Set the data back using the thread-safe method
+            processor.getLfoManager().setLfoData(i, lfoDataCopy);
 
-            // Trigger a shape recalculation for all LFOs.
-            // This will cause LfoEngine::updateShape to be called with the new data.
+            // The LfoManager will handle flagging the shape for update.
+            // We still call onDataChanged to mark the preset as dirty.
             if (onDataChanged)
                 onDataChanged();
 
-            return; // We handled it, so we can exit.
+            return;
         }
     }
 }
@@ -1489,16 +1489,16 @@ void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 
 void LfoPanel::refreshLfoDisplay()
 {
-    lfoEditor.setDataToDisplay(&processor.getLfoManager().getLfoData()[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(processor.getLfoManager().getLfoData()[currentLfoIndex]);
 }
 
 void LfoEditor::selectAllPoints()
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
 
     selectedPointIndices.clear();
-    for (int i = 0; i < activeLfoData->points.size(); ++i)
+    for (int i = 0; i < activeLfoData.points.size(); ++i)
     {
         selectedPointIndices.push_back(i);
     }
@@ -1507,38 +1507,36 @@ void LfoEditor::selectAllPoints()
 
 void LfoEditor::clearAllPoints()
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
 
-    activeLfoData->resetToDefault();
+    activeLfoData.resetToDefault();
     selectedPointIndices.clear();
     repaint();
 }
 
 void LfoEditor::copyShape()
 {
-    if (! activeLfoData)
+    if (! dataIsActive)
         return;
-
-    lfoClipboard = *activeLfoData; // This performs a deep copy of the LfoData object
+    lfoClipboard = activeLfoData;
 }
 
 void LfoEditor::pasteShape()
 {
-    if (! activeLfoData || lfoClipboard.points.empty())
+    if (! dataIsActive || lfoClipboard.points.empty())
         return;
-
-    *activeLfoData = lfoClipboard; // Paste the data
-    selectedPointIndices.clear(); // Clear selection after pasting
+    activeLfoData = lfoClipboard;
+    selectedPointIndices.clear();
     repaint();
 }
 
 void LfoEditor::invertShape(bool invertX, bool invertY)
 {
-    if (! activeLfoData || activeLfoData->points.size() < 2)
+    if (! dataIsActive || activeLfoData.points.size() < 2)
         return;
 
-    for (auto& point : activeLfoData->points)
+    for (auto& point : activeLfoData.points)
     {
         if (invertX)
         {

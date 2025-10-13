@@ -217,10 +217,6 @@ public:
     std::unique_ptr<LfoManager> lfoManager;
     const juce::StringArray& getLfoRateSyncDivisions() const;
 
-    // For writing/loading state
-    std::vector<LfoData>& getLfoData() { return lfoManager->getLfoData(); }
-
-    // For reading/saving state (read-only)
     const std::vector<LfoData>& getLfoData() const { return lfoManager->getLfoData(); }
 
     struct ModulationInfo

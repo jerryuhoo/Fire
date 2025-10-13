@@ -59,8 +59,9 @@ public:
     const juce::Array<ModulationRouting>& getModulationRoutings() const { return modulationRoutings; }
 
     // Allow access to LFO data for the UI/saving state
-    std::vector<LfoData>& getLfoData() { return lfoData; }
     const std::vector<LfoData>& getLfoData() const { return lfoData; }
+    void setLfoData(int index, const LfoData& newData);
+    void clearAllLfoData();
 
     // Allow access to LFO engines for UI phase display
     const std::array<LfoEngine, 4>& getLfoEngines() const { return lfoEngines; }

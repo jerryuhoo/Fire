@@ -33,10 +33,21 @@ void WidthProcessor::process(float* channeldataL, float* channeldataR, float wid
         channeldataL[i] = (mid + sides) / sqrt(2); // obtain left signal from mid and side
         channeldataR[i] = (mid - sides) / sqrt(2); // obtain right signal from mid and side
 
-        // Apply panning
-        float panLeft = std::cos((pan + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
-        float panRight = std::sin((pan + 1.0f) * juce::MathConstants<float>::pi / 4.0f);
-        channeldataL[i] *= panLeft;
-        channeldataR[i] *= panRight;
+        float panLeftGain = 1.0f;
+        float panRightGain = 1.0f;
+
+        if (pan > 0.0f) // Panning to the right
+        {
+            // As pan goes from 0 to 1, left gain goes from 1 to 0.
+            panLeftGain = 1.0f - pan;
+        }
+        else // Panning to the left (pan is 0 or negative)
+        {
+            // As pan goes from 0 to -1, right gain goes from 1 to 0.
+            panRightGain = 1.0f + pan;
+        }
+
+        channeldataL[i] *= panLeftGain;
+        channeldataR[i] *= panRightGain;
     }
 }

@@ -78,7 +78,7 @@ private:
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
         shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment;
 
-    juce::ToggleButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
+    juce::TextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
     enum RadioButtonIds
     {
         switchButtons = 1004
@@ -102,6 +102,11 @@ private:
     bool compBypassTemp[4] = { false };
     bool widthBypassTemp[4] = { false };
     bool dcFilterBypassTemp[4] = { false };
+
+    juce::Rectangle<int> knobsAreaRect;
+    juce::Rectangle<int> outputAreaRect;
+    juce::Rectangle<int> tabAreaRect;
+    juce::Colour activeTabColour;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

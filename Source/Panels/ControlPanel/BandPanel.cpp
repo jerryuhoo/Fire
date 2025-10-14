@@ -123,9 +123,6 @@ void BandPanel::createLabels()
         label.setJustificationType(juce::Justification::centred);
     };
 
-    setupPanelLabel(shapePanelLabel, "Shape", SHAPE_COLOUR);
-    setupPanelLabel(compressorPanelLabel, "Compressor", COMP_COLOUR);
-    setupPanelLabel(widthPanelLabel, "Stereo", WIDTH_COLOUR);
     setupPanelLabel(dcFilterLabel, "DC", SHAPE_COLOUR.withBrightness(0.8f));
 }
 
@@ -141,22 +138,35 @@ void BandPanel::createButtons()
 
     initBypassButton(dcFilterButton, SHAPE_COLOUR);
 
-    auto setupSwitch = [this](juce::ToggleButton& btn, juce::Colour colour)
+    auto setupSwitch = [this](juce::TextButton& btn, const juce::String& text, juce::Colour colour)
     {
-        btn.setComponentID("flat_toggle");
         addAndMakeVisible(btn);
+        btn.setButtonText(text);
+        btn.setClickingTogglesState(true); // Make it behave like a toggle
         btn.setRadioGroupId(switchButtons);
-        btn.setColour(juce::ToggleButton::tickDisabledColourId, colour.withBrightness(0.5f));
-        btn.setColour(juce::ToggleButton::tickColourId, colour.withBrightness(0.9f));
-        btn.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+
+        // Set colors according to the new design
+        btn.setColour(juce::TextButton::buttonColourId, COLOUR6); // Standard background
+        btn.setColour(juce::TextButton::buttonOnColourId, COLOUR7); // "On" background
+        btn.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f)); // No outline
+
+        // When ON, text is bright.
+        btn.setColour(juce::TextButton::textColourOnId, colour);
+        // When OFF, text is a darker version of the main color.
+        btn.setColour(juce::TextButton::textColourOffId, colour.darker());
         btn.addListener(this);
     };
 
-    setupSwitch(oscSwitch, DRIVE_COLOUR);
-    setupSwitch(shapeSwitch, SHAPE_COLOUR);
-    setupSwitch(compressorSwitch, COMP_COLOUR);
-    setupSwitch(widthSwitch, WIDTH_COLOUR);
+    setupSwitch(oscSwitch, "Drive", DRIVE_COLOUR);
+    setupSwitch(shapeSwitch, "Shape", SHAPE_COLOUR);
+    setupSwitch(compressorSwitch, "Compressor", COMP_COLOUR);
+    setupSwitch(widthSwitch, "Stereo", WIDTH_COLOUR);
     oscSwitch.setToggleState(true, juce::dontSendNotification);
+
+    shapeBypassButton.toFront(false);
+    compressorBypassButton.toFront(false);
+    widthBypassButton.toFront(false);
+    activeTabColour = DRIVE_COLOUR;
 }
 
 void BandPanel::setupComponentGroups()
@@ -167,7 +177,6 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(BIAS_NAME).get(),
         modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
         &shapePanelLabel,
-        &shapeBypassButton,
         &dcFilterButton,
         &dcFilterLabel
     };
@@ -178,38 +187,10 @@ void BandPanel::setupComponentGroups()
         modulatableSliderComponents.at(COMP_ATTACK_NAME).get(),
         modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
         modulatableSliderComponents.at(COMP_MIX_NAME).get(),
-        &compressorBypassButton,
         &compressorPanelLabel
     };
 
     widthComponents = {
-        modulatableSliderComponents.at(WIDTH_NAME).get(),
-        modulatableSliderComponents.at(PAN_NAME).get(),
-        modulatableSliderComponents.at(WIDTH_MIX_NAME).get(),
-        &widthBypassButton,
-        &widthPanelLabel
-    };
-
-    // Groups for managing ENABLED/DISABLED state logic
-    shapeSubControls = {
-        modulatableSliderComponents.at(REC_NAME).get(),
-        modulatableSliderComponents.at(BIAS_NAME).get(),
-        modulatableSliderComponents.at(SHAPE_MIX_NAME).get(),
-        &shapePanelLabel,
-        &dcFilterButton,
-        &dcFilterLabel
-    };
-
-    compressorSubControls = {
-        modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
-        modulatableSliderComponents.at(COMP_RATIO_NAME).get(),
-        modulatableSliderComponents.at(COMP_ATTACK_NAME).get(),
-        modulatableSliderComponents.at(COMP_RELEASE_NAME).get(),
-        modulatableSliderComponents.at(COMP_MIX_NAME).get(),
-        &compressorPanelLabel
-    };
-
-    widthSubControls = {
         modulatableSliderComponents.at(WIDTH_NAME).get(),
         modulatableSliderComponents.at(PAN_NAME).get(),
         modulatableSliderComponents.at(WIDTH_MIX_NAME).get(),
@@ -233,161 +214,145 @@ void BandPanel::setupComponentGroups()
 
 void BandPanel::paint(juce::Graphics& g)
 {
+    // 1. Draw the standard border for the output area.
     g.setColour(COLOUR6);
-    if (! oscSwitch.getToggleState())
+    g.drawRect(outputAreaRect);
+
+    // 2. Draw the special "Tab" border.
+    if (oscSwitch.getToggleState())
     {
-        g.drawRect(bandKnobArea);
-        g.drawRect(driveKnobArea);
-        g.setColour(COLOUR6.darker());
-        g.fillRect(bottomArea);
-        g.drawRect(bottomArea);
+        // When Drive is selected, it's not a "tab", so just draw a standard
+        // border around its content area.
+        g.setColour(COLOUR6);
+        g.drawRect(knobsAreaRect);
     }
-    g.drawRect(outputKnobArea);
+    else
+    {
+        // When any other switch is selected, draw a themed border around
+        // the entire tab area (switches + knobs).
+        g.setColour(activeTabColour);
+        g.drawRect(tabAreaRect, 1.5f); // Use a slightly thicker line for emphasis.
+    }
 }
 
 void BandPanel::resized()
 {
-    juce::Rectangle<int> controlArea = getLocalBounds();
+    // A small margin for the entire panel content.
+    auto mainArea = getLocalBounds().reduced(10);
 
-    // Conditionally define the layout areas based on which switch is active.
-    if (! oscSwitch.getToggleState())
+    // 1. Define the three main columns
+    auto switchColumnArea = mainArea.removeFromLeft(juce::roundToInt(getWidth() * 0.22f));
+    auto outputColumnArea = mainArea.removeFromRight(juce::roundToInt(getWidth() * 0.3f));
+    auto knobsColumnArea = mainArea;
+
+    // Store bounds for painting borders later.
+    knobsAreaRect = knobsColumnArea;
+    outputAreaRect = outputColumnArea;
+
+    // NEW: Calculate the full tab area by combining the switch and knob columns.
+    // 新增：通过组合开关列和旋钮列来计算完整的标签页区域。
+    tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
+
+    // Add a margin between the columns.
+    switchColumnArea.removeFromRight(10);
+    outputColumnArea.removeFromLeft(10);
+
+    // 2. Layout the Switch Column
+    juce::FlexBox switchColumnBox;
+    switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
+    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
+    switchColumnBox.items.add(juce::FlexItem(oscSwitch).withFlex(1.0f));
+    switchColumnBox.items.add(juce::FlexItem(shapeSwitch).withFlex(1.0f));
+    switchColumnBox.items.add(juce::FlexItem(compressorSwitch).withFlex(1.0f));
+    switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f));
+    switchColumnBox.performLayout(switchColumnArea);
+
+    // 3. UPDATED LAYOUT: Position bypass buttons ON TOP of the switches
+    auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
-        // If Shape, Comp, or Width is active:
-        // The main knob area takes up the full left 3/5ths of the panel.
-        bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 3);
-        driveKnobArea = {}; // Drive area is not used, so we create an empty rectangle.
+        auto parentBounds = parentSwitch.getBounds();
+
+        // Make the bypass button slightly larger.
+        // 将旁通按钮稍微调大。
+        const int bypassSize = juce::jmin(24, (int) (parentBounds.getHeight() * 0.6f));
+        const int margin = 5;
+
+        // Position it in the left-center of the parent switch.
+        // 将其放置在父开关的左侧中央。
+        bypass.setBounds(parentBounds.getX() + margin,
+                         parentBounds.getCentreY() - (bypassSize / 2),
+                         bypassSize,
+                         bypassSize);
+        bypass.toFront(false);
+    };
+
+    layoutBypassButton(shapeBypassButton, shapeSwitch);
+    layoutBypassButton(compressorBypassButton, compressorSwitch);
+    layoutBypassButton(widthBypassButton, widthSwitch);
+
+    // 4. Layout the Output Column (remains the same)
+    juce::FlexBox outputColumnBox;
+    outputColumnBox.flexDirection = juce::FlexBox::Direction::column;
+
+    juce::FlexBox outputKnobsBox;
+    outputKnobsBox.items.add(juce::FlexItem(*modulatableSliderComponents.at(OUTPUT_NAME)).withFlex(1.0f));
+    outputKnobsBox.items.add(juce::FlexItem(*modulatableSliderComponents.at(MIX_NAME)).withFlex(1.0f));
+    outputColumnBox.items.add(juce::FlexItem(outputKnobsBox).withFlex(4.0f));
+
+    juce::FlexBox outputButtonsBox;
+    outputButtonsBox.items.add(juce::FlexItem(linkedButton).withFlex(1.0f));
+    outputButtonsBox.items.add(juce::FlexItem(safeButton).withFlex(1.0f));
+    outputButtonsBox.items.add(juce::FlexItem(extremeButton).withFlex(1.0f));
+    outputColumnBox.items.add(juce::FlexItem(outputButtonsBox).withFlex(1.0f));
+    outputColumnBox.performLayout(outputColumnArea);
+
+    // 5. Layout the Knobs Column using Grid (remains the same)
+    if (oscSwitch.getToggleState())
+    {
+        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(knobsColumnArea);
     }
     else
     {
-        // If OSC (Drive) is active, use the original layout definition.
-        bandKnobArea = controlArea.removeFromLeft(getWidth() / 5 * 2);
-        driveKnobArea = controlArea.removeFromLeft(getWidth() / 5);
+        juce::Grid knobGrid;
+        using Track = juce::Grid::TrackInfo;
+        knobGrid.templateColumns = { Track(juce::Grid::Fr(1)), Track(juce::Grid::Fr(1)), Track(juce::Grid::Fr(1)) };
+        knobGrid.templateRows = { Track(juce::Grid::Fr(1)), Track(juce::Grid::Fr(1)) };
+        knobGrid.setGap(juce::Grid::Px(10));
+
+        if (shapeSwitch.getToggleState())
+        {
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(REC_NAME).get()));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(BIAS_NAME).get()));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(SHAPE_MIX_NAME).get()));
+            knobGrid.performLayout(knobsColumnArea);
+
+            auto middleKnobBounds = modulatableSliderComponents.at(BIAS_NAME)->getBounds();
+            const int dcButtonSize = (int) (middleKnobBounds.getHeight() * 0.3f);
+            const int dcLabelWidth = 35;
+            const int totalWidth = dcButtonSize + dcLabelWidth;
+            juce::Rectangle<int> dcArea;
+            dcArea.setSize(totalWidth, dcButtonSize);
+            dcArea.setCentre(middleKnobBounds.getCentreX(), middleKnobBounds.getBottom() - (int) (dcButtonSize * 0.5f));
+            dcFilterButton.setBounds(dcArea.removeFromLeft(dcButtonSize));
+            dcFilterLabel.setBounds(dcArea);
+        }
+        else if (compressorSwitch.getToggleState())
+        {
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_THRESH_NAME).get()).withArea(1, 1));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_RATIO_NAME).get()).withArea(1, 3));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_ATTACK_NAME).get()).withArea(2, 1));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_RELEASE_NAME).get()).withArea(2, 2));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_MIX_NAME).get()).withArea(2, 3));
+            knobGrid.performLayout(knobsColumnArea);
+        }
+        else if (widthSwitch.getToggleState())
+        {
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(WIDTH_NAME).get()));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(PAN_NAME).get()));
+            knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(WIDTH_MIX_NAME).get()));
+            knobGrid.performLayout(knobsColumnArea);
+        }
     }
-
-    // The rest of the area is for the Output section, this remains unchanged.
-    outputKnobArea = controlArea;
-    const int verticalMargin = getHeight() / 6;
-
-    outputKnobArea.reduce(0, verticalMargin);
-    driveKnobArea.reduce(0, verticalMargin); // Reduces an empty rect, which is fine.
-    bandKnobArea.reduce(0, verticalMargin);
-
-    juce::Rectangle<int> switchArea = bandKnobArea.removeFromLeft(getWidth() / 50);
-    const float switchButtonHeight = switchArea.getHeight() / 4.0f;
-    juce::Rectangle<int> area = switchArea;
-
-    oscSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
-    shapeSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
-    compressorSwitch.setBounds(area.removeFromTop(juce::roundToInt(switchButtonHeight)));
-    widthSwitch.setBounds(area);
-
-    // Set bounds only for the big Drive knob when OSC is active.
-    if (oscSwitch.getToggleState())
-    {
-        juce::Rectangle<int> bigDriveArea = getLocalBounds().removeFromLeft(getWidth() / 5 * 3).reduced(getHeight() / 10);
-        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(bigDriveArea);
-    }
-
-    // This is the main area for the 3 panels (Shape, Comp, Width)
-    juce::Rectangle<int> subKnobArea = bandKnobArea;
-
-    // 1. Calculate a single, unified knob size based on the Compressor panel's layout
-    //    (which is the most dense with 3 columns and 2 rows).
-    const int fixedKnobWidth = subKnobArea.getWidth() / 3;
-    const int fixedKnobHeight = subKnobArea.getHeight() / 2;
-
-    // --- Shape Panel Layout (3 knobs + 1 button) ---
-    auto shapeContentArea = subKnobArea;
-    auto shapeKnobArea = shapeContentArea.removeFromTop(shapeContentArea.getHeight() * 0.8);
-    auto dcFilterArea = shapeContentArea;
-
-    auto shapeRowArea = shapeKnobArea.withSizeKeepingCentre(shapeKnobArea.getWidth(), fixedKnobHeight);
-    modulatableSliderComponents.at(REC_NAME)->setBounds(shapeRowArea.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(BIAS_NAME)->setBounds(shapeRowArea.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(shapeRowArea);
-
-    // 1. Define the size of the button and label.
-    const int dcButtonSize = dcFilterArea.getHeight() * 0.7; // Make the button a bit smaller than the row height
-    const int dcLabelWidth = 35;
-    const int dcGroupWidth = dcButtonSize + dcLabelWidth;
-
-    // 2. Create a single area for the button-label group and center it horizontally
-    //    under the middle knob.
-    auto middleColumnX = subKnobArea.getX() + fixedKnobWidth;
-    juce::Rectangle<int> dcGroupArea;
-    dcGroupArea.setSize(dcGroupWidth, dcFilterArea.getHeight());
-    dcGroupArea.setCentre(middleColumnX + (fixedKnobWidth / 2), dcFilterArea.getCentreY());
-    dcGroupArea.translate(0, -30);
-
-    // 3. Place the button on the left of the group area, and the label on the right.
-    dcFilterButton.setBounds(dcGroupArea.removeFromLeft(dcButtonSize).withSizeKeepingCentre(dcButtonSize, dcButtonSize));
-    dcFilterLabel.setBounds(dcGroupArea);
-    dcFilterLabel.setJustificationType(juce::Justification::centredLeft); // Align text to the left
-
-    // --- Compressor Panel Layout (2 knobs on top, 3 on bottom) ---
-    auto compArea = subKnobArea;
-    auto compTopRow = compArea.removeFromTop(fixedKnobHeight);
-    auto compBottomRow = compArea;
-
-    // Top Row: 2 knobs. Create a centered area for them.
-    auto centeredTopRow = compTopRow.withSizeKeepingCentre(2 * fixedKnobWidth, fixedKnobHeight);
-    modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(centeredTopRow.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(centeredTopRow);
-
-    // Bottom Row: 3 knobs. They will fill the full width of their row.
-    modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(compBottomRow.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(compBottomRow.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(compBottomRow);
-
-    // --- Width Panel Layout (3 knobs in 1 row) ---
-    // Create a single row area with the fixed height, and center it vertically.
-    auto widthRowArea = subKnobArea.withSizeKeepingCentre(subKnobArea.getWidth(), fixedKnobHeight);
-    modulatableSliderComponents.at(WIDTH_NAME)->setBounds(widthRowArea.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(PAN_NAME)->setBounds(widthRowArea.removeFromLeft(fixedKnobWidth));
-    modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(widthRowArea);
-
-    // Panel Labels & Bypass Buttons
-    bottomArea = bandKnobArea.removeFromBottom(bandKnobArea.getHeight() / 5);
-
-    const int buttonSize = bottomArea.getHeight();
-    const float baseLabelWidth = 150.0f;
-    const float scale = getWidth() / (float) INIT_WIDTH;
-    const int scaledLabelWidth = static_cast<int>(baseLabelWidth * scale);
-    const int gap = 2;
-
-    juce::Rectangle<int> labelArea = bottomArea.withSizeKeepingCentre(scaledLabelWidth, buttonSize);
-
-    shapePanelLabel.setBounds(labelArea);
-    compressorPanelLabel.setBounds(labelArea);
-    widthPanelLabel.setBounds(labelArea);
-
-    juce::Rectangle<int> bypassButtonArea = labelArea.translated(-buttonSize - gap, 0)
-                                                .withSize(buttonSize, buttonSize);
-
-    shapeBypassButton.setBounds(bypassButtonArea);
-    compressorBypassButton.setBounds(bypassButtonArea);
-    widthBypassButton.setBounds(bypassButtonArea);
-
-    // --- Output Area Layout --- (This part remains unchanged and correct)
-    const int bottomAreaHeight = outputKnobArea.getHeight() / 5;
-
-    juce::Rectangle<int> outputBottomArea(outputKnobArea.getX(),
-                                          outputKnobArea.getBottom() - bottomAreaHeight,
-                                          outputKnobArea.getWidth(),
-                                          bottomAreaHeight);
-
-    juce::Rectangle<int> tempButtonArea = outputBottomArea;
-    const int buttonWidth = tempButtonArea.getWidth() / 3;
-    linkedButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
-    safeButton.setBounds(tempButtonArea.removeFromLeft(buttonWidth));
-    extremeButton.setBounds(tempButtonArea);
-
-    juce::Rectangle<int> outputSubArea = outputKnobArea.reduced(0, bottomAreaHeight);
-    juce::Rectangle<int> outputLeftArea = outputSubArea.withRight(outputSubArea.getCentreX());
-    juce::Rectangle<int> outputRightArea = outputSubArea.withLeft(outputSubArea.getCentreX());
-
-    modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(outputLeftArea);
-    modulatableSliderComponents.at(MIX_NAME)->setBounds(outputRightArea);
 }
 
 void BandPanel::updateAttachments()
@@ -460,6 +425,23 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 void BandPanel::buttonClicked(juce::Button* clickedButton)
 {
     auto* driveComponent = modulatableSliderComponents.at(DRIVE_NAME).get();
+
+    if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
+    {
+        activeTabColour = DRIVE_COLOUR;
+    }
+    else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
+    {
+        activeTabColour = SHAPE_COLOUR;
+    }
+    else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
+    {
+        activeTabColour = COMP_COLOUR;
+    }
+    else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
+    {
+        activeTabColour = WIDTH_COLOUR;
+    }
 
     // --- Panel Visibility Switches ---
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
@@ -562,13 +544,13 @@ void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool is
 
 bool BandPanel::canEnableSubKnob(juce::Component& component)
 {
-    if (shapeSubControls.contains(&component) && shapeBypassButton.getToggleState())
+    if (shapeComponents.contains(&component) && shapeBypassButton.getToggleState())
         return true;
 
-    if (compressorSubControls.contains(&component) && compressorBypassButton.getToggleState())
+    if (compressorComponents.contains(&component) && compressorBypassButton.getToggleState())
         return true;
 
-    if (widthSubControls.contains(&component) && widthBypassButton.getToggleState())
+    if (widthComponents.contains(&component) && widthBypassButton.getToggleState())
         return true;
 
     return false;
@@ -617,21 +599,21 @@ void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
 
     // 3. Shape sub-controls depend on the shape bypass button state.
     bool shapeIsEnabled = shapeBypassButton.getToggleState();
-    for (auto* component : shapeSubControls)
+    for (auto* component : shapeComponents)
     {
         component->setEnabled(shapeIsEnabled);
     }
 
     // 4. Compressor sub-controls depend on the compressor bypass button state.
     bool compIsEnabled = compressorBypassButton.getToggleState();
-    for (auto* component : compressorSubControls)
+    for (auto* component : compressorComponents)
     {
         component->setEnabled(compIsEnabled);
     }
 
     // 5. Width sub-controls depend on the width bypass button state.
     bool widthIsEnabled = widthBypassButton.getToggleState();
-    for (auto* component : widthSubControls)
+    for (auto* component : widthComponents)
     {
         component->setEnabled(widthIsEnabled);
     }

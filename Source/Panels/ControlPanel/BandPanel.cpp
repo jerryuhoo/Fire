@@ -214,6 +214,9 @@ void BandPanel::setupComponentGroups()
         &dcFilterLabel
     };
 
+    for (auto& modeBox : distortionModes)
+        shapeComponents.add(&modeBox);
+
     compressorComponents = {
         modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
         modulatableSliderComponents.at(COMP_RATIO_NAME).get(),

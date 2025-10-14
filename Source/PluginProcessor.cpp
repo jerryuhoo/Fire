@@ -875,7 +875,9 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         const int bandIndex = uiFocusBand.load();
 
         vals.rec = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(REC_ID, bandIndex));
-        vals.mix = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, bandIndex));
+        const float bandMix = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, bandIndex));
+        const float shapeMix = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(SHAPE_MIX_ID, bandIndex));
+        vals.mix = bandMix * shapeMix;
         vals.bias = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(BIAS_ID, bandIndex));
         float driveBase = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(DRIVE_ID, bandIndex));
 

@@ -17,15 +17,12 @@
 #include "GUI/ValuePopup.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
-#include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
-#include "Panels/ControlPanel/Graph Components/GraphPanel.h"
-#include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
-#include "Panels/ControlPanel/Graph Components/VUPanel.h"
-#include "Panels/ControlPanel/Graph Components/WidthGraph.h"
 #include "Panels/ControlPanel/LfoPanel.h"
 #include "Panels/SpectrogramPanel/FilterControl.h"
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
+
+// Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
 
 struct Version
 {
@@ -150,9 +147,6 @@ private:
     juce::Rectangle<int> logoArea;
     juce::Rectangle<int> wingsArea;
 
-    // Graph panel
-    GraphPanel graphPanel { processor };
-
     // Multiband
     Multiband multiband { processor, stateComponent };
 
@@ -191,21 +185,13 @@ private:
         windowButtons = 1003,
     };
 
-    void setMenu(juce::ComboBox* combobox);
-
     void setLinearSlider(juce::Slider& slider);
-
-    void updateDistortionModeVisibility();
 
     // override listener functions
 
     void sliderValueChanged(juce::Slider* slider) override;
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox* combobox) override;
-    // hide and show labels
-    //    void sliderDragStarted (juce::Slider*) override;
-    //    void sliderDragEnded (juce::Slider*) override;
-    //    void changeSliderState(juce::ComboBox *combobox);
 
     void exitAssignMode();
 
@@ -216,9 +202,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment;
 
-    // ComboBox attachment
-    std::array<juce::ComboBox, 4> distortionModes;
-    std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>, 4> modeAttachments;
+    // ComboBoxes and attachments are now managed by BandPanel
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

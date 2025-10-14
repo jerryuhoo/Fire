@@ -136,6 +136,9 @@
 #define LINE_STATE_ID           "lineState" // lineState1 - lineState3
 #define LINE_STATE_NAME         "LineState"
 
+#define DRIVE_BYPASS_ID          "driveBypass"
+#define DRIVE_BYPASS_NAME        "DriveBypass"
+
 #define SHAPE_BYPASS_ID          "shapeBypass"
 #define SHAPE_BYPASS_NAME        "ShapeBypass"
 

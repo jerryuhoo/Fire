@@ -238,17 +238,28 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // On the first block, calculate the FINAL gain for the *first sample*
         // to properly initialize the smoothers and prevent clicks.
 
-        // Calculate initial Drive gain including Safe Mode
-        float initialDrive = driveProvider.get(0); // Get LFO-modulated value for sample 0
-        if (params.isExtremeModeOn)
-            initialDrive = log2f(10.0f) * initialDrive;
-        const float initialDriveForCalc = initialDrive * 6.5f / 100.0f;
-        float initialPowerDrive = std::pow(2.0f, initialDriveForCalc);
         float initialFinalDriveGain;
-        if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * initialPowerDrive > 2.0f)
-            initialFinalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * initialDriveForCalc;
+
+        if (! params.isDriveEnabled)
+        {
+            // If bypassed at startup, initialize the smoother to a gain of 1.0.
+            initialFinalDriveGain = 1.0f;
+        }
         else
-            initialFinalDriveGain = initialPowerDrive;
+        {
+            // If not bypassed, perform the full calculation as before.
+            float initialDrive = driveProvider.get(0); // Get LFO-modulated value for sample 0
+            if (params.isExtremeModeOn)
+                initialDrive = log2f(10.0f) * initialDrive;
+            const float initialDriveForCalc = initialDrive * 6.5f / 100.0f;
+            float initialPowerDrive = std::pow(2.0f, initialDriveForCalc);
+
+            if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * initialPowerDrive > 2.0f)
+                initialFinalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * initialDriveForCalc;
+            else
+                initialFinalDriveGain = initialPowerDrive;
+        }
+
         driveSmoother.setCurrentAndTargetValue(initialFinalDriveGain);
 
         // Initialize Bias and Rec smoothers with their final modulated value for sample 0
@@ -273,10 +284,19 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         float powerDrive = std::pow(2.0f, driveForCalc);
 
         float finalDriveGain;
-        if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * powerDrive > 2.0f)
-            finalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * driveForCalc;
+        if (! params.isDriveEnabled)
+        {
+            // If drive is bypassed, the gain should be 1.0 (no change).
+            finalDriveGain = 1.0f;
+        }
         else
-            finalDriveGain = powerDrive;
+        {
+            // Otherwise, use the existing Safe Mode logic.
+            if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * powerDrive > 2.0f)
+                finalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * driveForCalc;
+            else
+                finalDriveGain = powerDrive;
+        }
 
         // 3. Set the smoothers' targets to these final, per-sample values.
         // This makes the smoothers act like a one-pole filter, restoring the old behavior
@@ -1438,6 +1458,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout FireAudioProcessor::createPa
         parameters.push_back(std::make_unique<PFloat>(ParameterIDAndName::getID(SHAPE_MIX_ID, i), SHAPE_MIX_NAME, juce::NormalisableRange<float>(0.0f, 1.0f, 0.01f), 1.0f));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_ENABLE_ID, i), BAND_ENABLE_NAME, true));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(BAND_SOLO_ID, i), BAND_SOLO_NAME, false));
+        parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(DRIVE_BYPASS_ID, i), DRIVE_BYPASS_NAME, true));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(COMP_BYPASS_ID, i), COMP_BYPASS_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(WIDTH_BYPASS_ID, i), WIDTH_BYPASS_NAME, false));
         parameters.push_back(std::make_unique<PBool>(ParameterIDAndName::getID(SHAPE_BYPASS_ID, i), SHAPE_BYPASS_NAME, false));
@@ -1872,6 +1893,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 params.isOutputModulated = getModulationInfoForParameter(ParameterIDAndName::getIDString(OUTPUT_ID, i)).isModulated;
                 params.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, i));
                 params.isHQ = *treeState.getRawParameterValue(HQ_ID);
+                params.isDriveEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, i)) > 0.5f;
                 params.isShapeEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i)) > 0.5f;
                 params.isCompEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i)) > 0.5f;
                 params.isWidthEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i)) > 0.5f;

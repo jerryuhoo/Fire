@@ -60,6 +60,7 @@ struct BandProcessingParameters
     float width;
     float pan;
     float widthMixVal;
+    bool isDriveEnabled;
     bool isWidthEnabled;
     bool isShapeEnabled;
     bool isDcFilterEnabled;
@@ -363,7 +364,7 @@ private:
 
     GainProcessor gainProcessorGlobal;
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
-    
+
     juce::dsp::DryWetMixer<float> lofiMixer { 2048 };
     juce::Random random;
 

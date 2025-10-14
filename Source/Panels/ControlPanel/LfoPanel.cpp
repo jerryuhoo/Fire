@@ -957,7 +957,8 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         lfoSelectButtons[i] = std::make_unique<juce::TextButton>("LFO " + juce::String(i + 1));
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
-        styleButton(*lfoSelectButtons[i], true); // It's a toggle button
+        styleLfoSelectButton(*lfoSelectButtons[i], activeLfoColour);
+        lfoSelectButtons[i]->addListener(this);
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
 
@@ -997,7 +998,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
@@ -1046,7 +1047,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     // Initialize the smooth slider and label.
     addAndMakeVisible(lfoSmoothSlider);
     lfoSmoothSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    lfoSmoothSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    lfoSmoothSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 
     addAndMakeVisible(lfoSmoothLabel);
     lfoSmoothLabel.setText("Smooth", juce::dontSendNotification);
@@ -1062,7 +1063,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     // Initialize the phase slider and label.
     addAndMakeVisible(lfoPhaseSlider);
     lfoPhaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    lfoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    lfoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
     lfoPhaseSlider.addListener(this);
 
     addAndMakeVisible(lfoPhaseLabel);
@@ -1113,103 +1114,102 @@ LfoPanel::~LfoPanel()
 
 void LfoPanel::paint(juce::Graphics& g)
 {
-    g.setColour(juce::Colour(0xff303030));
-    g.drawRect(getLocalBounds(), 1);
+    // g.setColour(juce::Colour(0xff303030));
+    // g.drawRect(getLocalBounds(), 1);
+    g.setColour(COLOUR6);
+    g.drawRect(leftColumnArea);
+    g.drawRect(centerColumnArea);
+    g.drawRect(rightColumnArea);
+    g.fillRect(separatorLine);
 }
 
 void LfoPanel::resized()
 {
-    // First, get the scale factor from the parent editor
-    float scale = 1.0f;
-    if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
-        if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&editor->getLookAndFeel()))
-            scale = lnf->scale;
+    const float scale = this->scale;
+    const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
 
-    // --- Define layout constants ---
-    constexpr int initialMargin = 10;
-    // MODIFIED: Increased right column width to fit 3 sliders and shrink the LFO editor.
-    constexpr int initialRightColWidth = 270;
-    constexpr int initialLeftColWidth = 60; // For the LFO 1-4 buttons
-    constexpr int initialTopRowHeight = 30; // For matrix, sync, etc. buttons
+    auto mainArea = getLocalBounds().reduced(10 * scale);
 
-    // Create a working area
-    juce::Rectangle<int> bounds = getLocalBounds();
-    bounds.reduce(juce::roundToInt(initialMargin * scale), juce::roundToInt(initialMargin * scale));
+    // --- 1. Define the three main columns with new proportions ---
+    leftColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
 
-    // --- Create the main Left and Right areas ---
-    auto rightArea = bounds.removeFromRight(juce::roundToInt(initialRightColWidth * scale));
-    bounds.removeFromRight(juce::roundToInt(initialMargin * scale)); // Spacer
-    auto leftArea = bounds;
+    // MODIFICATION: Increase the width percentage for the right column to give it more space.
+    rightColumnArea = mainArea.removeFromRight(mainArea.getWidth() * 0.35f);
 
-    // --- Layout Left Area (LFO Select, Top Buttons, Editor) ---
+    centerColumnArea = mainArea; // Center column takes the remaining space.
+
+    // Add spacing between columns
+    leftColumnArea.removeFromRight(5 * scale);
+    centerColumnArea.removeFromLeft(5 * scale);
+    centerColumnArea.removeFromRight(5 * scale);
+    rightColumnArea.removeFromLeft(5 * scale);
+
+    // --- 2. Layout Left Column (LFO Select Buttons) ---
+    juce::FlexBox lfoSelectBox;
+    lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
+    lfoSelectBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    for (const auto& button : lfoSelectButtons)
+        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f));
+    lfoSelectBox.performLayout(leftColumnArea);
+
+    // --- 3. Layout Center Column (Editor and Top Buttons) ---
+    auto topRowArea = centerColumnArea.removeFromTop(40 * scale);
+    lfoEditor.setBounds(centerColumnArea);
+
+    juce::FlexBox topRowFlexBox;
+    topRowFlexBox.flexDirection = juce::FlexBox::Direction::row;
+    topRowFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
+    topRowFlexBox.alignItems = juce::FlexBox::AlignItems::stretch;
+    std::vector<juce::Component*> topRowControls = {
+        &matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton, &brushSelector
+    };
+    for (auto* control : topRowControls)
     {
-        // Carve out a column for the LFO select buttons from the far left.
-        auto lfoSelectColumn = leftArea.removeFromLeft(juce::roundToInt(initialLeftColWidth * scale));
-        leftArea.removeFromLeft(juce::roundToInt(initialMargin * scale)); // Spacer
-
-        // From the rest of leftArea, take the top row for mode buttons.
-        auto topRow = leftArea.removeFromTop(juce::roundToInt(initialTopRowHeight * scale));
-        leftArea.removeFromTop(juce::roundToInt(initialMargin * scale)); // Spacer
-
-        // The main LFO editor takes the remaining space, which is now narrower.
-        lfoEditor.setBounds(leftArea);
-
-        // Use FlexBox to lay out the LFO select buttons vertically.
-        juce::FlexBox lfoSelectBox;
-        lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
-        for (const auto& button : lfoSelectButtons)
-            lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f).withMargin(juce::FlexItem::Margin(juce::roundToInt(2 * scale))));
-        lfoSelectBox.performLayout(lfoSelectColumn);
-
-        // Use FlexBox to lay out the top row controls horizontally.
-        juce::FlexBox topRowFlexBox;
-        topRowFlexBox.flexDirection = juce::FlexBox::Direction::row;
-        topRowFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
-        topRowFlexBox.alignItems = juce::FlexBox::AlignItems::stretch;
-        std::vector<juce::Component*> topRowControls = {
-            &matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton, &brushSelector
-        };
-        const float scaledPadding = 4 * scale;
-        for (auto* control : topRowControls)
-        {
-            topRowFlexBox.items.add(juce::FlexItem(*control)
-                                        .withFlex(1.0f)
-                                        .withMargin({ scaledPadding, 2.0f * scale, scaledPadding, 2.0f * scale }));
-        }
-        topRowFlexBox.performLayout(topRow);
+        topRowFlexBox.items.add(juce::FlexItem(*control).withFlex(1.0f).withMargin(juce::FlexItem::Margin(4 * scale)));
     }
+    topRowFlexBox.performLayout(topRowArea);
 
-    // --- MODIFIED: Layout Right Area (3 sliders side-by-side + Grid row at bottom) ---
-    {
-        // 1. Define and populate the Grid Area at the absolute bottom (unchanged).
-        const int gridAreaHeight = juce::roundToInt(30 * scale);
-        auto gridArea = rightArea.removeFromBottom(gridAreaHeight);
+    // 4.Right Column Layout
+    auto rightColumnWorkArea = rightColumnArea;
+    auto gridArea = rightColumnWorkArea.removeFromBottom(40 * scale);
+    separatorLine = rightColumnWorkArea.removeFromBottom(2 * scale);
+    auto knobsArea = rightColumnWorkArea;
 
-        juce::FlexBox gridBox;
-        gridBox.flexDirection = juce::FlexBox::Direction::row;
-        gridBox.alignItems = juce::FlexBox::AlignItems::stretch;
-        gridBox.items.add(juce::FlexItem(gridXLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
-        gridBox.items.add(juce::FlexItem(gridXSlider).withFlex(1.0f));
-        gridBox.items.add(juce::FlexItem().withWidth(5 * scale)); // Spacer
-        gridBox.items.add(juce::FlexItem(gridYLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
-        gridBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
-        gridBox.performLayout(gridArea);
+    juce::FlexBox gridBox;
+    gridBox.flexDirection = juce::FlexBox::Direction::row;
+    gridBox.alignItems = juce::FlexBox::AlignItems::stretch;
+    gridBox.items.add(juce::FlexItem(gridXLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
+    gridBox.items.add(juce::FlexItem(gridXSlider).withFlex(1.0f));
+    gridBox.items.add(juce::FlexItem().withWidth(5 * scale));
+    gridBox.items.add(juce::FlexItem(gridYLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
+    gridBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
+    gridBox.performLayout(gridArea);
 
-        // 2. Lay out the 3 sliders in the remaining space above the grid.
-        rightArea.reduce(0, juce::roundToInt(initialMargin * scale)); // Vertical padding
+    juce::Grid knobGrid;
+    using Track = juce::Grid::TrackInfo;
 
-        // Divide the remaining area into 3 vertical columns for the sliders.
-        int sliderWidth = rightArea.getWidth() / 3;
-        auto rateSliderArea = rightArea.removeFromLeft(sliderWidth);
-        auto smoothSliderArea = rightArea.removeFromLeft(sliderWidth);
-        auto phaseSliderArea = rightArea; // Takes the rest
+    knobGrid.templateColumns = {
+        Track(juce::Grid::Px(scaledKnobSize)),
+        Track(juce::Grid::Px(1 * scale)),
+        Track(juce::Grid::Px(scaledKnobSize)),
+        Track(juce::Grid::Px(1 * scale)),
+        Track(juce::Grid::Px(scaledKnobSize))
+    };
 
-        // Assign each slider to its column with some padding.
-        int padding = 10;
-        rateSlider.setBounds(rateSliderArea.reduced(juce::roundToInt(padding * scale)));
-        lfoSmoothSlider.setBounds(smoothSliderArea.reduced(juce::roundToInt(padding * scale)));
-        lfoPhaseSlider.setBounds(phaseSliderArea.reduced(juce::roundToInt(padding * scale)));
-    }
+    knobGrid.templateRows = { Track(juce::Grid::Px(scaledKnobSize)) };
+
+    knobGrid.items.add(juce::GridItem(&rateSlider));
+    knobGrid.items.add(juce::GridItem());
+    knobGrid.items.add(juce::GridItem(&lfoSmoothSlider));
+    knobGrid.items.add(juce::GridItem());
+    knobGrid.items.add(juce::GridItem(&lfoPhaseSlider));
+
+    knobGrid.justifyItems = juce::Grid::JustifyItems::center;
+    knobGrid.alignItems = juce::Grid::AlignItems::center;
+    knobGrid.justifyContent = juce::Grid::JustifyContent::center;
+    knobGrid.alignContent = juce::Grid::AlignContent::center;
+
+    knobGrid.performLayout(knobsArea);
 }
 
 void LfoPanel::timerCallback()
@@ -1568,4 +1568,15 @@ void LfoPanel::handleAsyncUpdate()
     // This function is guaranteed to be called on the main UI thread.
     // It is now safe to update the slider and its attachment here.
     updateRateSlider();
+}
+
+void LfoPanel::styleLfoSelectButton(juce::TextButton& button, juce::Colour colour)
+{
+    button.setClickingTogglesState(true);
+    button.setRadioGroupId(1);
+    button.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    button.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
+    button.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
+    button.setColour(juce::TextButton::textColourOnId, colour);
+    button.setColour(juce::TextButton::textColourOffId, colour.darker());
 }

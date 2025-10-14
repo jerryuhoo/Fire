@@ -379,13 +379,13 @@ void BandPanel::resized()
     auto buttonArea = outputColumnArea; // This is the remaining bottom half
     juce::FlexBox outputButtonsBox;
     outputButtonsBox.flexDirection = juce::FlexBox::Direction::column;
-    outputButtonsBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    outputButtonsBox.justifyContent = juce::FlexBox::JustifyContent::flexEnd;
     outputButtonsBox.items.add(juce::FlexItem(linkedButton).withFlex(1.0f));
     outputButtonsBox.items.add(juce::FlexItem(safeButton).withFlex(1.0f));
     outputButtonsBox.items.add(juce::FlexItem(extremeButton).withFlex(1.0f));
 
     // Perform layout for buttons in their designated area, with some vertical padding
-    outputButtonsBox.performLayout(buttonArea.reduced(0, 10 * scale));
+    outputButtonsBox.performLayout(buttonArea.reduced(0, 0));
 }
 
 void BandPanel::updateAttachments()

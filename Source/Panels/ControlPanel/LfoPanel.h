@@ -169,6 +169,7 @@ private:
     void sliderDragEnded(juce::Slider* slider) override;
     void setEditMode(LfoEditMode newMode);
     void styleButton(juce::Button& button, bool isToggle);
+    void styleLfoSelectButton(juce::TextButton& button, juce::Colour colour);
     void setLfo(int newIndex);
 
     FireAudioProcessor& processor;
@@ -216,6 +217,12 @@ private:
     void updateRateSlider();
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
+
+    juce::Rectangle<int> leftColumnArea;
+    juce::Rectangle<int> centerColumnArea;
+    juce::Rectangle<int> rightColumnArea;
+    juce::Colour activeLfoColour = COLOUR1;
+    juce::Rectangle<int> separatorLine;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoPanel)
 };

@@ -181,7 +181,7 @@
 // Define Components size
 #define TEXTBOX_WIDTH       60
 #define TEXTBOX_HEIGHT      30
-#define KNOB_SIZE            100
+#define KNOB_SIZE           100
 #define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
 
 

@@ -252,41 +252,40 @@ void BandPanel::paint(juce::Graphics& g)
     g.drawRect(graphAreaRect); // Border for the graph section
 
     // Draw a themed border for the active tab
-    g.setColour(activeTabColour);
-    g.drawRect(tabAreaRect, 1.5f);
+    // g.setColour(activeTabColour.withAlpha(0.8f));
+    // g.drawRect(tabAreaRect, 2.0f);
 }
 
 void BandPanel::resized()
 {
+    const float scale = this->scale; // Get the scale factor
+    const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
+
     auto mainArea = getLocalBounds().reduced(10);
 
-    // Define the four main columns for the new layout.
+    // Define the four main columns
     auto switchColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
-    auto knobsColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.40f); // Main controls are wider
-    auto graphColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.55f); // Graph takes the next chunk
-    auto outputColumnArea = mainArea; // Output takes the remaining space on the right
+    auto knobsColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.40f);
+    auto graphColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.55f);
+    auto outputColumnArea = mainArea;
 
-    // Store the bounds for painting borders later if needed.
-    tabAreaRect = switchColumnArea.getUnion(knobsColumnArea); // The "tab" is the switches + knobs
+    tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
     graphAreaRect = graphColumnArea;
     outputAreaRect = outputColumnArea;
 
-    // Add some margin between the columns for visual separation.
     switchColumnArea.removeFromRight(10);
     knobsColumnArea.removeFromRight(10);
-    // graphColumnArea.removeFromRight(10); // REMOVED THIS LINE TO FIX THE GAP
 
-    // --- Column 1: Layout Switches ---
+    // --- Column 1: Layout Switches (unchanged) ---
     juce::FlexBox switchColumnBox;
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
-    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround; // Use spaceAround for better vertical spacing
+    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
     switchColumnBox.items.add(juce::FlexItem(oscSwitch).withFlex(1.0f));
     switchColumnBox.items.add(juce::FlexItem(shapeSwitch).withFlex(1.0f));
     switchColumnBox.items.add(juce::FlexItem(compressorSwitch).withFlex(1.0f));
     switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f));
     switchColumnBox.performLayout(switchColumnArea);
 
-    // Layout the bypass buttons on top of their parent switches.
     auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
@@ -301,88 +300,92 @@ void BandPanel::resized()
     layoutBypassButton(compressorBypassButton, compressorSwitch);
     layoutBypassButton(widthBypassButton, widthSwitch);
 
-    // --- Column 2: Layout the Main Knobs Area ---
+    // --- Column 2: Manual Layout for Main Knobs Area ---
     if (oscSwitch.getToggleState())
     {
-        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(knobsColumnArea);
+        // Center the single Drive knob
+        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2, scaledKnobSize * 2));
     }
     else if (shapeSwitch.getToggleState())
     {
         auto distortionModeArea = knobsColumnArea.removeFromTop(knobsColumnArea.getHeight() / 5);
+        auto smallerDistortionModeArea = distortionModeArea.withSizeKeepingCentre(distortionModeArea.getWidth() / 2, distortionModeArea.getHeight());
         for (auto& modeBox : distortionModes)
-            modeBox.setBounds(distortionModeArea.reduced(0, distortionModeArea.getHeight() / 4));
+            modeBox.setBounds(smallerDistortionModeArea.reduced(0, distortionModeArea.getHeight() / 4));
 
-        juce::Grid knobGrid;
-        knobGrid.templateColumns = { juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-        knobGrid.templateRows = { juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-        knobGrid.setGap(juce::Grid::Px(10));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(REC_NAME).get()));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(BIAS_NAME).get()));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(SHAPE_MIX_NAME).get()));
-        knobGrid.performLayout(knobsColumnArea);
+        // Place 3 knobs in a row
+        juce::Rectangle<int> knobRow = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize);
+        modulatableSliderComponents.at(REC_NAME)->setBounds(knobRow.removeFromLeft(scaledKnobSize));
+        knobRow.removeFromLeft(10);
+        auto biasKnobBounds = knobRow.removeFromLeft(scaledKnobSize);
+        modulatableSliderComponents.at(BIAS_NAME)->setBounds(biasKnobBounds);
+        knobRow.removeFromLeft(10);
+        modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(knobRow);
 
-        auto middleKnobBounds = modulatableSliderComponents.at(BIAS_NAME)->getBounds();
-        const int dcButtonSize = (int) (middleKnobBounds.getHeight() * 0.3f);
+        // DC Filter button below Bias knob
+        const int dcButtonSize = (int) (scaledKnobSize * 0.3f);
         const int dcLabelWidth = 35;
-        const int totalWidth = dcButtonSize + dcLabelWidth;
-        juce::Rectangle<int> dcArea;
-        dcArea.setSize(totalWidth, dcButtonSize);
-        dcArea.setCentre(middleKnobBounds.getCentreX(), middleKnobBounds.getBottom() - (int) (dcButtonSize * 0.5f));
+        juce::Rectangle<int> dcArea(0, 0, dcButtonSize + dcLabelWidth, dcButtonSize);
+        dcArea.setCentre(biasKnobBounds.getCentreX(), biasKnobBounds.getBottom() + dcButtonSize / 2 + 5);
         dcFilterButton.setBounds(dcArea.removeFromLeft(dcButtonSize));
         dcFilterLabel.setBounds(dcArea);
     }
     else if (compressorSwitch.getToggleState())
     {
-        juce::Grid knobGrid;
-        knobGrid.templateColumns = { juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-        knobGrid.templateRows = { juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-        knobGrid.setGap(juce::Grid::Px(10));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_THRESH_NAME).get()).withArea(1, 1));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_RATIO_NAME).get()).withArea(1, 3));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_ATTACK_NAME).get()).withArea(2, 1));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_RELEASE_NAME).get()).withArea(2, 2));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(COMP_MIX_NAME).get()).withArea(2, 3));
-        knobGrid.performLayout(knobsColumnArea);
+        // Place 5 knobs in a 2-row grid
+        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize * 2 + 10);
+        auto topRow = centeredArea.removeFromTop(scaledKnobSize);
+        auto bottomRow = centeredArea.removeFromBottom(scaledKnobSize);
+
+        modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
+        modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(topRow.removeFromRight(scaledKnobSize));
+
+        modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
+        bottomRow.removeFromLeft(10);
+        modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
+        bottomRow.removeFromLeft(10);
+        modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(bottomRow);
     }
     else if (widthSwitch.getToggleState())
     {
-        juce::Grid knobGrid;
-        knobGrid.templateColumns = { juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)), juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-        knobGrid.templateRows = { juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-        knobGrid.setGap(juce::Grid::Px(10));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(WIDTH_NAME).get()));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(PAN_NAME).get()));
-        knobGrid.items.add(juce::GridItem(modulatableSliderComponents.at(WIDTH_MIX_NAME).get()));
-        knobGrid.performLayout(knobsColumnArea);
+        // Place 3 knobs in a row
+        juce::Rectangle<int> knobRow = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize);
+        modulatableSliderComponents.at(WIDTH_NAME)->setBounds(knobRow.removeFromLeft(scaledKnobSize));
+        knobRow.removeFromLeft(10);
+        modulatableSliderComponents.at(PAN_NAME)->setBounds(knobRow.removeFromLeft(scaledKnobSize));
+        knobRow.removeFromLeft(10);
+        modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(knobRow);
     }
 
-    // --- Column 3: Layout Graph Area ---
-    // Set bounds for all graphs; only one will be visible at a time.
+    // --- Column 3: Layout Graph Area (unchanged) ---
     oscilloscope.setBounds(graphColumnArea);
     distortionGraph.setBounds(graphColumnArea);
     vuPanel.setBounds(graphColumnArea);
     widthGraph.setBounds(graphColumnArea);
 
-    // --- Column 4: Layout Output Section ---
-    juce::FlexBox outputColumnBox;
-    outputColumnBox.flexDirection = juce::FlexBox::Direction::column;
+    // --- Column 4: CORRECTED Layout for Output Section ---
 
-    // The knobs at the top of this column
-    juce::FlexBox outputKnobsBox;
-    outputKnobsBox.items.add(juce::FlexItem(*modulatableSliderComponents.at(OUTPUT_NAME)).withFlex(1.0f));
-    outputKnobsBox.items.add(juce::FlexItem(*modulatableSliderComponents.at(MIX_NAME)).withFlex(1.0f));
-    outputColumnBox.items.add(juce::FlexItem(outputKnobsBox).withFlex(3.0f)); // Give knobs more space
+    // 1. Define an area for the knobs at the top half of the column.
+    auto knobsArea = outputColumnArea.removeFromTop(outputColumnArea.getHeight() / 2);
 
-    // The buttons at the bottom of this column
+    // 2. Center a rectangle within that area, wide enough for two knobs plus spacing.
+    auto twoKnobsBounds = knobsArea.withSizeKeepingCentre(scaledKnobSize * 2 + 10, scaledKnobSize);
+
+    // 3. Place the knobs with fixed size, left and right.
+    modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(twoKnobsBounds.removeFromLeft(scaledKnobSize));
+    modulatableSliderComponents.at(MIX_NAME)->setBounds(twoKnobsBounds.removeFromRight(scaledKnobSize));
+
+    // 4. Use the remaining bottom half for the buttons with FlexBox.
+    auto buttonArea = outputColumnArea; // This is the remaining bottom half
     juce::FlexBox outputButtonsBox;
-    outputButtonsBox.flexDirection = juce::FlexBox::Direction::column; // Stack them vertically
+    outputButtonsBox.flexDirection = juce::FlexBox::Direction::column;
     outputButtonsBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
     outputButtonsBox.items.add(juce::FlexItem(linkedButton).withFlex(1.0f));
     outputButtonsBox.items.add(juce::FlexItem(safeButton).withFlex(1.0f));
     outputButtonsBox.items.add(juce::FlexItem(extremeButton).withFlex(1.0f));
-    outputColumnBox.items.add(juce::FlexItem(outputButtonsBox).withFlex(2.0f).withMargin(juce::FlexItem::Margin(10, 0, 0, 0))); // Add top margin
 
-    outputColumnBox.performLayout(outputColumnArea);
+    // Perform layout for buttons in their designated area, with some vertical padding
+    outputButtonsBox.performLayout(buttonArea.reduced(0, 10 * scale));
 }
 
 void BandPanel::updateAttachments()

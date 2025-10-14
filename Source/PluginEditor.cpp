@@ -454,6 +454,7 @@ void FireAudioProcessorEditor::resized()
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
     // set look and feel scale
     fireLookAndFeel.scale = scale;
+    bandPanel.scale = scale;
     globalPanel.scale = scale;
 
     juce::Rectangle<int> bounds(getLocalBounds());

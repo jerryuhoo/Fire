@@ -74,82 +74,71 @@ void VUPanel::paint(juce::Graphics& g)
         }
     }
 
-    if (mZoomState)
-    {
-        // show db meter scale text
-        float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
-        float textWidth = getWidth() / 5;
-        float textHeight = getHeight() / 10;
-        g.setFont(juce::Font {
-            juce::FontOptions()
-                .withName(KNOB_FONT)
-                .withHeight(14.0f * getHeight() / 150.0f)
-                .withStyle("Plain") });
-        g.drawText("-20", textX, VU_METER_Y + 20.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.drawText("-40", textX, VU_METER_Y + 40.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.drawText("-60", textX, VU_METER_Y + 60.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-        g.drawText("-80", textX, VU_METER_Y + 80.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+    // show db meter scale text
+    float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
+    float textWidth = getWidth() / 5;
+    float textHeight = getHeight() / 10;
+    g.setFont(juce::Font {
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(14.0f * getHeight() / 150.0f)
+            .withStyle("Plain") });
+    g.drawText("-20", textX, VU_METER_Y + 20.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+    g.drawText("-40", textX, VU_METER_Y + 40.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+    g.drawText("-60", textX, VU_METER_Y + 60.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+    g.drawText("-80", textX, VU_METER_Y + 80.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
 
-        // --- Calculate RMS & Peak values in dB ---
-        // Note: The VUMeter returns a normalized linear value [0, 1]. We must convert it to dB.
-        auto toDB = [](float linear)
-        { return juce::Decibels::gainToDecibels(linear, -96.0f); };
+    // --- Calculate RMS & Peak values in dB ---
+    auto toDB = [](float linear)
+    { return juce::Decibels::gainToDecibels(linear, -96.0f); };
 
-        float avgInputRmsDb = toDB((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) * 0.5f);
-        float avgInputPeakDb = toDB((vuMeterIn.getLeftChannelPeakLevel() + vuMeterIn.getRightChannelPeakLevel()) * 0.5f);
+    float avgInputRmsDb = toDB((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) * 0.5f);
+    float avgInputPeakDb = toDB((vuMeterIn.getLeftChannelPeakLevel() + vuMeterIn.getRightChannelPeakLevel()) * 0.5f);
 
-        float avgOutputRmsDb = toDB((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) * 0.5f);
-        float avgOutputPeakDb = toDB((vuMeterOut.getLeftChannelPeakLevel() + vuMeterOut.getRightChannelPeakLevel()) * 0.5f);
+    float avgOutputRmsDb = toDB((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) * 0.5f);
+    float avgOutputPeakDb = toDB((vuMeterOut.getLeftChannelPeakLevel() + vuMeterOut.getRightChannelPeakLevel()) * 0.5f);
 
-        // --- Define drawing areas ---
-        juce::Rectangle<int> localBounds = getLocalBounds();
-        juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
-        juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
+    // --- Define drawing areas ---
+    juce::Rectangle<int> localBounds = getLocalBounds();
+    juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
+    juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
 
-        // --- Draw Input Levels (Left Side) ---
-        g.setColour(juce::Colours::yellowgreen);
+    // --- Draw Input Levels (Left Side) ---
+    g.setColour(juce::Colours::yellowgreen);
 
-        auto fontSizeBig = 20.0f * getHeight() / 150.0f;
-        auto fontSizeSmall = 14.0f * getHeight() / 150.0f;
-        if (isGlobal)
-        {
-            fontSizeBig = 16.0f * getHeight() / 150.0f;
-            fontSizeSmall = 10.0f * getHeight() / 150.0f;
-        }
+    auto fontSizeBig = 14.0f * getHeight() / 150.0f;
+    auto fontSizeSmall = 10.0f * getHeight() / 150.0f;
 
-        // Large Text: Peak Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
-        g.drawText(juce::String(avgInputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
+    // Large Text: Peak Value
+    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
+    g.drawText(juce::String(avgInputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
 
-        // Small Text: RMS Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
-        g.drawText(juce::String(avgInputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
+    // Small Text: RMS Value
+    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
+    g.drawText(juce::String(avgInputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
 
-        // Label
-        g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-        g.drawFittedText("RMS In", leftArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
+    // Label
+    g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
+    // Set a smaller, fixed font size for the label
+    g.setFont(fontSizeSmall);
+    g.drawFittedText("RMS In", leftArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
 
-        // --- Draw Output Levels (Right Side) ---
-        g.setColour(juce::Colours::yellowgreen);
+    // --- Draw Output Levels (Right Side) ---
+    g.setColour(juce::Colours::yellowgreen);
 
-        // Large Text: Peak Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
-        g.drawText(juce::String(avgOutputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
+    // Large Text: Peak Value
+    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
+    g.drawText(juce::String(avgOutputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
 
-        // Small Text: RMS Value
-        g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
-        g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
+    // Small Text: RMS Value
+    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
+    g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
 
-        // Label
-        g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-        g.drawFittedText("RMS Out", rightArea.removeFromBottom(getHeight() / 3).toNearestInt(), juce::Justification::centredTop, 2);
-    }
-
-    if (isMouseOn && ! mZoomState)
-    {
-        g.setColour(COMP_COLOUR.withAlpha(0.05f));
-        g.fillAll();
-    }
+    // Label
+    g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
+    // Set a smaller, fixed font size for the label
+    g.setFont(fontSizeSmall);
+    g.drawFittedText("RMS Out", rightArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
 }
 
 void VUPanel::resized()

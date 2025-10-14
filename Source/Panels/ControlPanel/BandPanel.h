@@ -58,6 +58,8 @@ public:
     DistortionGraph* getDistortionGraph() { return &distortionGraph; }
     void updateRealtimeThreshold(float newThreshold);
 
+    float scale = 1.0f;
+
 private:
     void updateAttachments();
     bool canEnableSubKnob(juce::Component& component);

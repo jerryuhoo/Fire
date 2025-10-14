@@ -83,13 +83,14 @@ private:
         switchButtonsGlobal = 1005
     };
 
-    // UI layout areas
-    juce::Rectangle<int> globalEffectArea;
-    juce::Rectangle<int> outputKnobArea;
+    // [MODIFIED] UI layout areas to match BandPanel style
+    juce::Rectangle<int> tabAreaRect;
+    juce::Rectangle<int> outputAreaRect;
 
     // --- Buttons ---
     juce::TextButton filterLowCutButton, filterPeakButton, filterHighCutButton;
-    juce::ToggleButton filterSwitch, downsampleSwitch;
+    // [MODIFIED] Changed ToggleButton to TextButton for tab-like functionality
+    juce::TextButton filterSwitch, downsampleSwitch;
     std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
 
     std::unique_ptr<ButtonAttachment> filterLowAttachment, filterBandAttachment, filterHighAttachment,
@@ -100,7 +101,8 @@ private:
     std::unique_ptr<ComboBoxAttachment> lowcutModeAttachment, highcutModeAttachment;
 
     // --- Labels ---
-    juce::Label filterTypeLabel, lowcutSlopeLabel, highcutSlopeLabel, postFilterPanelLabel, downSamplePanelLabel;
+    // [MODIFIED] Removed panel labels, as the switches now serve as titles.
+    juce::Label filterTypeLabel, lowcutSlopeLabel, highcutSlopeLabel;
 
     // Groups of components for easy visibility toggling.
     juce::Array<juce::Component*> filterComponents;
@@ -110,7 +112,10 @@ private:
     juce::Array<juce::Component*> highcutKnobs;
     juce::Array<juce::Component*> allControls;
 
-    juce::Rectangle<int> bottomArea;
+    // [REMOVED] juce::Rectangle<int> bottomArea;
+
+    // [NEW] Added to store active tab colour for painting, like in BandPanel
+    juce::Colour activeTabColour;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

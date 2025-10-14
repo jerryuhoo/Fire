@@ -159,18 +159,17 @@ void BandPanel::createButtons()
     {
         addAndMakeVisible(btn);
         btn.setButtonText(text);
-        btn.setClickingTogglesState(true); // Make it behave like a toggle
+        btn.setClickingTogglesState(true);
         btn.setRadioGroupId(switchButtons);
 
-        // Set colors according to the new design
-        btn.setColour(juce::TextButton::buttonColourId, COLOUR6); // Standard background
-        btn.setColour(juce::TextButton::buttonOnColourId, COLOUR7); // "On" background
-        btn.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f)); // No outline
+        btn.setColour(juce::TextButton::buttonColourId, COLOUR8);
+        btn.setColour(juce::TextButton::textColourOffId, colour);
 
-        // When ON, text is bright.
-        btn.setColour(juce::TextButton::textColourOnId, colour);
-        // When OFF, text is a darker version of the main color.
-        btn.setColour(juce::TextButton::textColourOffId, colour.darker());
+        btn.setColour(juce::TextButton::buttonOnColourId, colour.darker().darker());
+        btn.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+
+        btn.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+
         btn.addListener(this);
     };
 

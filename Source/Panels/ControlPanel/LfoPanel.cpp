@@ -1574,9 +1574,9 @@ void LfoPanel::styleLfoSelectButton(juce::TextButton& button, juce::Colour colou
 {
     button.setClickingTogglesState(true);
     button.setRadioGroupId(1);
-    button.setColour(juce::TextButton::buttonColourId, COLOUR6);
-    button.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
-    button.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
-    button.setColour(juce::TextButton::textColourOnId, colour);
-    button.setColour(juce::TextButton::textColourOffId, colour.darker());
+    button.setColour(juce::TextButton::buttonColourId, COLOUR8);
+    button.setColour(juce::TextButton::textColourOffId, colour);
+    button.setColour(juce::TextButton::buttonOnColourId, colour.darker().darker());
+    button.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+    button.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
 }

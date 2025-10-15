@@ -240,13 +240,6 @@
 #define OUTPUT_X_G          startX * 9.0f - SCALED_KNOBSIZE / 2.0f
 #define MIX_X_G             startX * 9.0f - SCALED_KNOBSIZE / 2.0f
 
-#define VU_METER_WIDTH      getWidth() / 10.0f
-#define VU_METER_HEIGHT     getHeight() / 10.0f * 9.0f
-#define VU_METER_Y          getHeight() / 10.0f
-#define VU_METER_X_1        getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
-#define VU_METER_X_2        getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
-
-
 // Switches
 #define SWITCH_WIDTH        OSC_WIDTH / 10.0f
 #define SWITCH_HEIGHT       OSC_HEIGHT / 2.0f

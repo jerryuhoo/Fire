@@ -38,115 +38,111 @@ VUPanel::~VUPanel()
 void VUPanel::paint(juce::Graphics& g)
 {
     g.setColour(COLOUR6);
-    g.drawRect(getLocalBounds(), 1); // draw an outline around the component
+    g.drawRect(getLocalBounds(), 1);
 
-    // draw compressor threshold line
+    // --- 1. 復現宏定義的佈局變量 ---
+    // 這樣可以確保 paint() 中的計算與 resized() 中的佈局完全一致
+    const float meterHeight = (float) getHeight() / 10.0f * 9.0f;
+    const float meterY = (float) getHeight() / 10.0f;
+
+    // --- 2. 建立與 VUMeter.cpp 標準完全一致的 dB 轉 Y 坐標系 ---
+    auto dbToY = [&](float db)
+    {
+        // 該標準來源於 dBToNormalizedGain: (-96dB -> 0.0, 0dB -> 1.0)
+        const float minDb = -96.0f;
+        const float maxDb = 0.0f;
+
+        // 將 dB 值限制在視覺範圍內
+        db = juce::jlimit(minDb, maxDb, db);
+
+        // 將 dB 值轉換為標準化的 [0, 1] 位置
+        float normalizedPosition = (db - minDb) / (maxDb - minDb);
+
+        // 將標準化位置映射到宏定義的 VU Meter 像素空間
+        // Y 坐標是反的，所以用 1.0f 減去
+        return meterY + meterHeight * (1.0f - normalizedPosition);
+    };
+
+    // --- 3. 繪製背景刻度 ---
     g.setColour(KNOB_SUBFONT_COLOUR);
-    bool isGlobal = (focusBandNum == -1);
-    vuMeterIn.setParameters(true, focusBandNum);
-    vuMeterOut.setParameters(false, focusBandNum);
+    // 刻度文本的邊界現在被精確定義在兩個 VU 表之間
+    auto textBounds = getLocalBounds().withX(vuMeterIn.getRight()).withRight(vuMeterOut.getX());
+    float textHeight = 12.0f;
+    g.setFont(textHeight);
 
+    g.drawText("0", textBounds.withY(dbToY(0.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
+    g.drawText("-24", textBounds.withY(dbToY(-24.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
+    g.drawText("-48", textBounds.withY(dbToY(-48.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
+    g.drawText("-72", textBounds.withY(dbToY(-72.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
+
+    // --- 4. 繪製 Compressor Threshold 線 ---
+    bool isGlobal = (focusBandNum == -1);
     if (! isGlobal && juce::isPositiveAndBelow(focusBandNum, 4))
     {
-        threshID = ParameterIDAndName::getIDString(COMP_THRESH_ID, focusBandNum);
         compBypassID = ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum);
-    }
-
-    // draw threshold line
-    if (! isGlobal)
-    {
-        float threshValue = realtimeThresholdDb;
-
-        const float vuMeterRange = 82.0f; // Range from -70dB to +12dB
-        float compressorLineY = VU_METER_Y + VU_METER_HEIGHT * (1.0f - (threshValue + 70.0f) / vuMeterRange);
-
-        float pointerX = (processor.getTotalNumInputChannels() == 2) ? VU_METER_X_1 : VU_METER_X_1 + vuMeterIn.getWidth() / 3.0f;
-
         bool compIsEnabled = *processor.treeState.getRawParameterValue(compBypassID);
         if (compIsEnabled)
         {
+            float compressorLineY = dbToY(realtimeThresholdDb);
             g.setColour(juce::Colours::yellowgreen);
-            g.drawLine(pointerX + vuMeterIn.getWidth() / 3.0f,
-                       compressorLineY,
-                       pointerX + vuMeterIn.getWidth() / 3.0f * 2.0f,
-                       compressorLineY,
-                       1.0f);
+            g.drawLine((float) textBounds.getX(), compressorLineY, (float) textBounds.getRight(), compressorLineY, 1.5f);
         }
     }
 
-    // show db meter scale text
-    float textX = (VU_METER_X_1 + VU_METER_X_2 - VU_METER_WIDTH) / 2.0f;
-    float textWidth = getWidth() / 5;
-    float textHeight = getHeight() / 10;
-    g.setFont(juce::Font {
-        juce::FontOptions()
-            .withName(KNOB_FONT)
-            .withHeight(14.0f * getHeight() / 150.0f)
-            .withStyle("Plain") });
-    g.drawText("-20", textX, VU_METER_Y + 20.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-    g.drawText("-40", textX, VU_METER_Y + 40.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-    g.drawText("-60", textX, VU_METER_Y + 60.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
-    g.drawText("-80", textX, VU_METER_Y + 80.0f / VU_METER_RANGE * VU_METER_HEIGHT - textHeight / 2.0f, textWidth, textHeight, juce::Justification::centred);
+    // 更新子組件的參數
+    vuMeterIn.setParameters(true, focusBandNum);
+    vuMeterOut.setParameters(false, focusBandNum);
 
-    // --- Calculate RMS & Peak values in dB ---
+    // --- 5. 繪製 RMS 和 Peak 讀數 ---
     auto toDB = [](float linear)
     { return juce::Decibels::gainToDecibels(linear, -96.0f); };
 
-    float avgInputRmsDb = toDB((vuMeterIn.getLeftChannelLevel() + vuMeterIn.getRightChannelLevel()) * 0.5f);
-    float avgInputPeakDb = toDB((vuMeterIn.getLeftChannelPeakLevel() + vuMeterIn.getRightChannelPeakLevel()) * 0.5f);
+    float avgInputRmsDb = toDB(vuMeterIn.getLeftChannelLevel());
+    float avgInputPeakDb = toDB(vuMeterIn.getLeftChannelPeakLevel());
+    float avgOutputRmsDb = toDB(vuMeterOut.getLeftChannelLevel());
+    float avgOutputPeakDb = toDB(vuMeterOut.getLeftChannelPeakLevel());
 
-    float avgOutputRmsDb = toDB((vuMeterOut.getLeftChannelLevel() + vuMeterOut.getRightChannelLevel()) * 0.5f);
-    float avgOutputPeakDb = toDB((vuMeterOut.getLeftChannelPeakLevel() + vuMeterOut.getRightChannelPeakLevel()) * 0.5f);
+    auto leftArea = getLocalBounds().withRight(vuMeterIn.getX());
+    auto rightArea = getLocalBounds().withLeft(vuMeterOut.getRight());
 
-    // --- Define drawing areas ---
-    juce::Rectangle<int> localBounds = getLocalBounds();
-    juce::Rectangle<int> leftArea = localBounds.removeFromLeft(getWidth() / 4);
-    juce::Rectangle<int> rightArea = localBounds.removeFromRight(getWidth() / 3);
-
-    // --- Draw Input Levels (Left Side) ---
     g.setColour(juce::Colours::yellowgreen);
-
     auto fontSizeBig = 14.0f * getWidth() / 150.0f;
     auto fontSizeSmall = 10.0f * getWidth() / 150.0f;
 
-    // Large Text: Peak Value
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
     g.drawText(juce::String(avgInputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
-
-    // Small Text: RMS Value
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
     g.drawText(juce::String(avgInputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
 
-    // Label
     g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-    // Set a smaller, fixed font size for the label
     g.setFont(fontSizeSmall);
-    g.drawFittedText("RMS In", leftArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
+    g.drawFittedText("In", leftArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
 
-    // --- Draw Output Levels (Right Side) ---
     g.setColour(juce::Colours::yellowgreen);
-
-    // Large Text: Peak Value
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
     g.drawText(juce::String(avgOutputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
-
-    // Small Text: RMS Value
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
     g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
 
-    // Label
     g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-    // Set a smaller, fixed font size for the label
     g.setFont(fontSizeSmall);
-    g.drawFittedText("RMS Out", rightArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
+    g.drawFittedText("Out", rightArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
 }
 
 void VUPanel::resized()
 {
-    // This method is where you should set the bounds of any child
-    // components that your component contains..
-    vuMeterIn.setBounds(VU_METER_X_1, VU_METER_Y, VU_METER_WIDTH, VU_METER_HEIGHT);
-    vuMeterOut.setBounds(VU_METER_X_2, VU_METER_Y, VU_METER_WIDTH, VU_METER_HEIGHT);
+    // --- 使用局部變量來清晰地實現宏定義的佈局 ---
+    const float width = (float) getWidth();
+    const float height = (float) getHeight();
+
+    const float meterWidth = width / 10.0f;
+    const float meterHeight = height / 10.0f * 9.0f;
+    const float meterY = height / 10.0f;
+    const float meterX1 = width / 3.0f - meterWidth / 2.0f;
+    const float meterX2 = width / 3.0f * 2.0f - meterWidth / 2.0f;
+
+    vuMeterIn.setBounds(juce::Rectangle<float>(meterX1, meterY, meterWidth, meterHeight).toNearestInt());
+    vuMeterOut.setBounds(juce::Rectangle<float>(meterX2, meterY, meterWidth, meterHeight).toNearestInt());
 }
 
 void VUPanel::setFocusBandNum(int num)

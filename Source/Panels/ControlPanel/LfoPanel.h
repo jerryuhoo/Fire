@@ -223,6 +223,7 @@ private:
     juce::Rectangle<int> rightColumnArea;
     juce::Colour activeLfoColour = COLOUR1;
     juce::Rectangle<int> separatorLine;
+    juce::Rectangle<int> topRowArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoPanel)
 };

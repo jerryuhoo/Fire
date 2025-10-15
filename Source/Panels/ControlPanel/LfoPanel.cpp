@@ -1121,6 +1121,7 @@ void LfoPanel::paint(juce::Graphics& g)
     g.drawRect(centerColumnArea);
     g.drawRect(rightColumnArea);
     g.fillRect(separatorLine);
+    g.fillRect(topRowArea);
 }
 
 void LfoPanel::resized()
@@ -1153,7 +1154,7 @@ void LfoPanel::resized()
     lfoSelectBox.performLayout(leftColumnArea);
 
     // --- 3. Layout Center Column (Editor and Top Buttons) ---
-    auto topRowArea = centerColumnArea.removeFromTop(40 * scale);
+    topRowArea = centerColumnArea.removeFromTop(40 * scale);
     lfoEditor.setBounds(centerColumnArea);
 
     juce::FlexBox topRowFlexBox;

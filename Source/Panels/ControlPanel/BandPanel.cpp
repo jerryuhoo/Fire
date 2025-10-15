@@ -265,11 +265,16 @@ void BandPanel::resized()
 
     auto mainArea = getLocalBounds().reduced(10 * scale);
 
+    const float switchColumnProportion = 0.15f;
+    const float knobsColumnProportion = 0.35f;
+    const float graphColumnProportion = 0.3f;
+
     // Define the four main columns
-    auto switchColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
-    auto knobsColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.40f);
-    auto graphColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.55f);
-    auto outputColumnArea = mainArea;
+    auto layoutArea = mainArea;
+    auto switchColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * switchColumnProportion);
+    auto knobsColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * knobsColumnProportion);
+    auto graphColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * graphColumnProportion);
+    auto outputColumnArea = layoutArea;
 
     tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
     graphAreaRect = graphColumnArea;

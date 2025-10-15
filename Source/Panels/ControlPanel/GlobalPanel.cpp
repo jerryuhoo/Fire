@@ -50,7 +50,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     // Set the default filter type to Low Cut before the panel is shown
     filterLowCutButton.setToggleState(true, juce::dontSendNotification);
 
-    // [MODIFIED] Set initial switch state and trigger visibility update using buttonClicked
+    // Set initial switch state and trigger visibility update using buttonClicked
     filterSwitch.setToggleState(true, juce::dontSendNotification);
     buttonClicked(&filterSwitch);
 }
@@ -89,7 +89,7 @@ void GlobalPanel::createSliders()
 
 void GlobalPanel::createLabels()
 {
-    // [MODIFIED] Removed the main panel labels as they are no longer needed in the new design.
+    // Removed the main panel labels as they are no longer needed in the new design.
     // The switch text ("Filter", "Lo-Fi") now serves as the title.
 
     auto setupLabel = [this](juce::Label& label, const juce::String& text, juce::Colour colour)
@@ -267,7 +267,7 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String paramId,
 
 void GlobalPanel::paint(juce::Graphics& g)
 {
-    // [MODIFIED] Draw borders for the new layout areas, just like in BandPanel
+    // Draw borders for the new layout areas, just like in BandPanel
     g.setColour(COLOUR6);
     g.drawRect(outputAreaRect); // Border for output section
     g.drawRect(tabAreaRect); // Border for the main controls section
@@ -279,16 +279,24 @@ void GlobalPanel::paint(juce::Graphics& g)
 
 void GlobalPanel::resized()
 {
-    // [MODIFIED] Complete rewrite of resized() to implement the BandPanel-style column layout.
+    // Complete rewrite of resized() to implement the BandPanel-style column layout.
     const float scale = this->scale;
     const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
 
-    auto mainArea = getLocalBounds().reduced(10 * scale);
+    const int scaledSpacing = static_cast<int>(10 * scale);
+    auto mainArea = getLocalBounds().reduced(scaledSpacing);
 
-    // Define the three main columns
-    auto switchColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
-    auto outputColumnArea = mainArea.removeFromRight(mainArea.getWidth() * 0.25f);
-    auto knobsColumnArea = mainArea;
+    // --- New Layout Method: Define proportions first ---
+
+    // 1. Define the width proportions for each column.
+    const float switchColumnProportion = 0.15f;
+    const float outputColumnProportion = 0.2f;
+
+    // 2. Sequentially lay out the columns from a copy of the main area.
+    auto layoutArea = mainArea;
+    auto switchColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * switchColumnProportion);
+    auto outputColumnArea = layoutArea.removeFromRight(mainArea.getWidth() * outputColumnProportion);
+    auto knobsColumnArea = layoutArea;
 
     tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
     outputAreaRect = outputColumnArea;
@@ -473,7 +481,7 @@ void GlobalPanel::setToggleButtonState(juce::String toggleButton)
 
 void GlobalPanel::setBypassState(int index, bool state)
 {
-    // [MODIFIED] Simplified logic as the bypass buttons are now separate from the main component groups
+    // Simplified logic as the bypass buttons are now separate from the main component groups
     if (index == 0) // Filter
     {
         for (auto* component : filterComponents)

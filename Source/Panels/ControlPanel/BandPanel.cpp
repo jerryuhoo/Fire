@@ -566,6 +566,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
 void BandPanel::setFocusBandNum(int num, bool forceUpdate)
 {
+    vuPanel.setFocusBandNum(num);
     if (focusBandNum == num && ! forceUpdate)
         return;
 

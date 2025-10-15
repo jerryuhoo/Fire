@@ -27,7 +27,7 @@ void Oscilloscope::paint(juce::Graphics& g)
     g.setColour(COLOUR6);
     g.drawRect(getLocalBounds(), 1);
 
-    juce::ColourGradient grad(juce::Colours::red.withBrightness(0.9f), getWidth() / 2, getHeight() / 2, juce::Colours::red.withAlpha(0.0f), 0, getHeight() / 2, true);
+    juce::ColourGradient grad(juce::Colours::red.withBrightness(0.9f), getWidth() / 2, getHeight() / 2, juce::Colours::red.withAlpha(0.1f), 0, getHeight() / 2, true);
     g.setGradientFill(grad);
 
     bool monoChannel = false;

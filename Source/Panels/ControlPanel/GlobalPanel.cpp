@@ -25,6 +25,12 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     createButtons();
     createComboBoxes();
 
+    addAndMakeVisible(oscilloscope);
+    addAndMakeVisible(vuPanel);
+    addAndMakeVisible(widthGraph);
+
+    vuPanel.setFocusBandNum(-1);
+
     // Assign callbacks to all modulatable sliders in this panel
     for (auto& sliderPair : modulatableSliderComponents)
     {
@@ -46,6 +52,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
 
     // init visibility
     setVisibility(downsampleComponents, false);
+    setVisibility(graphComponents, false);
 
     // Set the default filter type to Low Cut before the panel is shown
     filterLowCutButton.setToggleState(true, juce::dontSendNotification);
@@ -59,6 +66,7 @@ GlobalPanel::~GlobalPanel()
 {
     filterSwitch.removeListener(this);
     downsampleSwitch.removeListener(this);
+    graphSwitch.removeListener(this);
 }
 
 void GlobalPanel::createSliders()
@@ -133,6 +141,7 @@ void GlobalPanel::createButtons()
 
     setupSwitch(filterSwitch, "Filter", FILTER_COLOUR);
     setupSwitch(downsampleSwitch, "Lo-Fi", DOWNSAMPLE_COLOUR);
+    setupSwitch(graphSwitch, "Graphs", juce::Colours::blueviolet);
 
     filterBypassButton = std::make_unique<juce::ToggleButton>();
     initBypassButton(*filterBypassButton, FILTER_COLOUR);
@@ -196,6 +205,12 @@ void GlobalPanel::setupComponentGroups()
         &highcutSlopeLabel
     };
 
+    graphComponents = {
+        &oscilloscope,
+        &vuPanel,
+        &widthGraph
+    };
+
     filterComponents = { &filterLowCutButton, &filterPeakButton, &filterHighCutButton, &filterTypeLabel };
     filterComponents.addArray(lowcutKnobs);
     filterComponents.addArray(peakKnobs);
@@ -210,6 +225,7 @@ void GlobalPanel::setupComponentGroups()
 
     allControls.addArray(filterComponents);
     allControls.addArray(downsampleComponents);
+    allControls.addArray(graphComponents);
     allControls.add(modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME).get());
     allControls.add(modulatableSliderComponents.at(GLOBAL_MIX_NAME).get());
 }
@@ -279,48 +295,43 @@ void GlobalPanel::paint(juce::Graphics& g)
 
 void GlobalPanel::resized()
 {
-    // Complete rewrite of resized() to implement the BandPanel-style column layout.
     const float scale = this->scale;
     const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
-
     const int scaledSpacing = static_cast<int>(10 * scale);
+
+    // The main area is reduced only once to create the outer margin.
     auto mainArea = getLocalBounds().reduced(scaledSpacing);
 
-    // --- New Layout Method: Define proportions first ---
-
-    // 1. Define the width proportions for each column.
+    // --- Define proportions ---
     const float switchColumnProportion = 0.15f;
     const float outputColumnProportion = 0.2f;
 
-    // 2. Sequentially lay out the columns from a copy of the main area.
+    // --- Sequentially lay out the columns ---
     auto layoutArea = mainArea;
     auto switchColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * switchColumnProportion);
     auto outputColumnArea = layoutArea.removeFromRight(mainArea.getWidth() * outputColumnProportion);
-    auto knobsColumnArea = layoutArea;
+    auto knobsColumnArea = layoutArea; // Knobs area is what's left.
 
     tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
     outputAreaRect = outputColumnArea;
 
-    switchColumnArea.removeFromRight(10); // Gap between switches and knobs
-    knobsColumnArea.removeFromRight(10); // Gap between knobs and output
+    // NOTE: The lines that created gaps between columns have been removed.
 
     // --- Column 1: Layout Switches ---
     juce::FlexBox switchColumnBox;
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
     switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
     switchColumnBox.alignItems = juce::FlexBox::AlignItems::stretch;
-
     switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(0).withHeight(65 * scale));
     switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(0).withHeight(65 * scale));
-
+    switchColumnBox.items.add(juce::FlexItem(graphSwitch).withFlex(0).withHeight(65 * scale));
     switchColumnBox.performLayout(switchColumnArea);
 
     auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
         const int bypassSize = (int) (parentBounds.getHeight() * 0.6f);
-        const int margin = 0;
-        bypass.setBounds(parentBounds.getX() + margin, parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
+        bypass.setBounds(parentBounds.getX(), parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
         bypass.toFront(false);
     };
 
@@ -328,87 +339,86 @@ void GlobalPanel::resized()
     layoutBypassButton(*downsampleBypassButton, downsampleSwitch);
 
     // --- Column 3: Layout for Output Section ---
-    auto knobsArea = outputColumnArea.withSizeKeepingCentre(scaledKnobSize, scaledKnobSize * 2 + 20 * scale);
+    auto knobsArea = outputColumnArea.withSizeKeepingCentre(scaledKnobSize, scaledKnobSize * 2 + scaledSpacing);
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(knobsArea.removeFromTop(scaledKnobSize));
-    knobsArea.removeFromTop(20 * scale); // spacing
+    knobsArea.removeFromTop(scaledSpacing); // spacing
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(knobsArea.removeFromTop(scaledKnobSize));
 
-    // --- Column 2: Layout for Main Knobs Area ---
+    // --- Column 2: Layout for Main Knobs/Graphs Area ---
     if (filterSwitch.getToggleState())
     {
+        // ... filter layout logic remains the same
         const int numColumns = 5;
         const int numGaps = numColumns - 1;
-        const int gapWidth = 10 * scale;
+        const int gapWidth = scaledSpacing;
         const float totalContentWidth = knobsColumnArea.getWidth() - (numGaps * gapWidth);
         const float narrowColProportion = 1.0f / 7.0f;
         const float wideColProportion = (1.0f - (2.0f * narrowColProportion)) / 3.0f;
-
         int narrowColWidth = static_cast<int>(totalContentWidth * narrowColProportion);
         int wideColWidth = static_cast<int>(totalContentWidth * wideColProportion);
-
         juce::Array<juce::Rectangle<int>> columns;
         juce::Rectangle<int> placementArea = knobsColumnArea;
-
-        columns.add(placementArea.removeFromLeft(narrowColWidth)); // Col 1: Buttons
+        columns.add(placementArea.removeFromLeft(narrowColWidth));
         placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea.removeFromLeft(narrowColWidth)); // Col 2: ComboBox
+        columns.add(placementArea.removeFromLeft(narrowColWidth));
         placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea.removeFromLeft(wideColWidth)); // Col 3: Freq Knob
+        columns.add(placementArea.removeFromLeft(wideColWidth));
         placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea.removeFromLeft(wideColWidth)); // Col 4: Gain Knob
+        columns.add(placementArea.removeFromLeft(wideColWidth));
         placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea); // Col 5: Q Knob
-
+        columns.add(placementArea);
         auto& buttonColumn = columns.getReference(0);
         const int buttonHeight = 30 * scale;
         const int verticalPadding = 5 * scale;
         const int totalButtonBlockHeight = (buttonHeight * 3) + (verticalPadding * 2);
-
         auto buttonBlockArea = buttonColumn.withSizeKeepingCentre(buttonColumn.getWidth() - 10 * scale, totalButtonBlockHeight);
         filterLowCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
         buttonBlockArea.removeFromTop(verticalPadding);
         filterPeakButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
         buttonBlockArea.removeFromTop(verticalPadding);
         filterHighCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
-
         auto& comboBoxColumn = columns.getReference(1);
         const int comboBoxWidth = static_cast<int>(narrowColWidth * 0.9f);
         const int comboBoxHeight = 30 * scale;
         lowcutSlopeMode.setBounds(comboBoxColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight));
         highcutSlopeMode.setBounds(comboBoxColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight));
-
         auto freqKnobBounds = columns[2].withSizeKeepingCentre(scaledKnobSize, scaledKnobSize);
         auto gainKnobBounds = columns[3].withSizeKeepingCentre(scaledKnobSize, scaledKnobSize);
         auto qKnobBounds = columns[4].withSizeKeepingCentre(scaledKnobSize, scaledKnobSize);
-
         modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(freqKnobBounds);
         modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(freqKnobBounds);
         modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(freqKnobBounds);
-
         modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(gainKnobBounds);
         modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(gainKnobBounds);
         modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(gainKnobBounds);
-
         modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(qKnobBounds);
         modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(qKnobBounds);
         modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(qKnobBounds);
     }
     else if (downsampleSwitch.getToggleState())
     {
-        // Lo-Fi Panel Layout (4 knobs in a 2x2 grid)
-        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2 + 20 * scale, scaledKnobSize * 2 + 20 * scale);
+        // ... lo-fi layout logic remains the same
+        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2 + scaledSpacing, scaledKnobSize * 2 + scaledSpacing);
         auto topRow = centeredArea.removeFromTop(scaledKnobSize);
         auto bottomRow = centeredArea.removeFromBottom(scaledKnobSize);
-        topRow.removeFromRight(10 * scale);
-        bottomRow.removeFromRight(10 * scale);
-
         modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
-        topRow.removeFromLeft(20 * scale);
+        topRow.removeFromLeft(scaledSpacing);
         modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
-
         modulatableSliderComponents.at(JITTER_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
-        bottomRow.removeFromLeft(20 * scale);
+        bottomRow.removeFromLeft(scaledSpacing);
         modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
+    }
+    else if (graphSwitch.getToggleState())
+    {
+        juce::FlexBox graphBox;
+        graphBox.flexDirection = juce::FlexBox::Direction::row;
+        graphBox.justifyContent = juce::FlexBox::JustifyContent::center;
+
+        graphBox.items.add(juce::FlexItem(oscilloscope).withFlex(1.0f));
+        graphBox.items.add(juce::FlexItem(vuPanel).withFlex(1.0f));
+        graphBox.items.add(juce::FlexItem(widthGraph).withFlex(1.0f));
+
+        graphBox.performLayout(knobsColumnArea);
     }
 }
 
@@ -420,6 +430,7 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
         activeTabColour = FILTER_COLOUR;
         setVisibility(filterComponents, true);
         setVisibility(downsampleComponents, false);
+        setVisibility(graphComponents, false);
         updateFilterKnobVisibility();
         isSwitch = true;
     }
@@ -428,6 +439,15 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
         activeTabColour = DOWNSAMPLE_COLOUR;
         setVisibility(downsampleComponents, true);
         setVisibility(filterComponents, false);
+        setVisibility(graphComponents, false);
+        isSwitch = true;
+    }
+    else if (clickedButton == &graphSwitch && graphSwitch.getToggleState())
+    {
+        activeTabColour = COLOUR1;
+        setVisibility(graphComponents, true);
+        setVisibility(filterComponents, false);
+        setVisibility(downsampleComponents, false);
         isSwitch = true;
     }
     else if (clickedButton == &filterLowCutButton || clickedButton == &filterPeakButton || clickedButton == &filterHighCutButton)

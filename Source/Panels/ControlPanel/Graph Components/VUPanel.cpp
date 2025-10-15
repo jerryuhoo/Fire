@@ -106,8 +106,8 @@ void VUPanel::paint(juce::Graphics& g)
     // --- Draw Input Levels (Left Side) ---
     g.setColour(juce::Colours::yellowgreen);
 
-    auto fontSizeBig = 14.0f * getHeight() / 150.0f;
-    auto fontSizeSmall = 10.0f * getHeight() / 150.0f;
+    auto fontSizeBig = 14.0f * getWidth() / 150.0f;
+    auto fontSizeSmall = 10.0f * getWidth() / 150.0f;
 
     // Large Text: Peak Value
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });

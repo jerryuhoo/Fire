@@ -43,12 +43,6 @@ void DistortionGraph::paint(juce::Graphics& g)
     juce::ColourGradient grad(SHAPE_COLOUR.withBrightness(0.9), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2, juce::Colours::yellow.withBrightness(0.9).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
     g.setGradientFill(grad);
     g.strokePath(distortionCurve, juce::PathStrokeType(2.0f));
-
-    if (isMouseOn && ! mZoomState)
-    {
-        g.setColour(juce::Colours::yellow.withAlpha(0.05f));
-        g.fillAll();
-    }
 }
 
 void DistortionGraph::setState(int mode, float rec, float mix, float bias, float drive, float rateDivide)

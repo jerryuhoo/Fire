@@ -28,12 +28,6 @@ void WidthGraph::paint(juce::Graphics& g)
     g.setColour(COLOUR6);
     g.drawRect(getLocalBounds(), 1);
     g.drawImage(pointCloudCache, getLocalBounds().toFloat());
-
-    if (isMouseOn && ! mZoomState)
-    {
-        g.setColour(WIDTH_COLOUR.withAlpha(0.05f));
-        g.fillAll();
-    }
 }
 
 void WidthGraph::timerCallback()
@@ -83,7 +77,7 @@ void WidthGraph::timerCallback()
 
     // Find the maximum value for normalization
     float maxValue = 0.0f;
-    for (int i = 0; i < (int)historyL.size(); i++)
+    for (int i = 0; i < (int) historyL.size(); i++)
     {
         maxValue = std::max({ maxValue, std::abs(historyL[i]), std::abs(historyR[i]) });
     }
@@ -93,7 +87,7 @@ void WidthGraph::timerCallback()
     if (maxValue > 0.00001f)
     {
         const float scaleFactor = getHeight() / (4.0f * maxValue);
-        for (int i = 0; i < (int)historyL.size(); i += 2)
+        for (int i = 0; i < (int) historyL.size(); i += 2)
         {
             float x = historyL[i] * scaleFactor;
             float y = historyR[i] * scaleFactor;

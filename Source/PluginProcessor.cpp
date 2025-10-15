@@ -987,7 +987,6 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 // If the ValueTree from the preset file does NOT have this property...
                 if (! treeToLoad.hasProperty(shapeBypassParamID))
                 {
-                    DBG("old preset");
                     // ...it means we are loading an old preset.
                     // To maintain the old sound, we must manually add the property
                     // and set its value to 'true' (enabled).

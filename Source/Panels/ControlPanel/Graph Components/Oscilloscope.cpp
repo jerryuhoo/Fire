@@ -102,13 +102,6 @@ void Oscilloscope::paint(juce::Graphics& g)
     g.strokePath(pathL, juce::PathStrokeType(2.0));
     if (! monoChannel)
         g.strokePath(pathR, juce::PathStrokeType(2.0));
-
-    // set color when mouse on
-    if (isMouseOn && ! mZoomState)
-    {
-        g.setColour(DRIVE_COLOUR.withAlpha(0.05f));
-        g.fillAll();
-    }
 }
 
 void Oscilloscope::timerCallback()

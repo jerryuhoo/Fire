@@ -1139,10 +1139,10 @@ void LfoPanel::resized()
     centerColumnArea = mainArea; // Center column takes the remaining space.
 
     // Add spacing between columns
-    leftColumnArea.removeFromRight(5 * scale);
-    centerColumnArea.removeFromLeft(5 * scale);
-    centerColumnArea.removeFromRight(5 * scale);
-    rightColumnArea.removeFromLeft(5 * scale);
+    // leftColumnArea.removeFromRight(5 * scale);
+    // centerColumnArea.removeFromLeft(5 * scale);
+    // centerColumnArea.removeFromRight(5 * scale);
+    // rightColumnArea.removeFromLeft(5 * scale);
 
     // --- 2. Layout Left Column (LFO Select Buttons) ---
     juce::FlexBox lfoSelectBox;
@@ -1165,7 +1165,7 @@ void LfoPanel::resized()
     };
     for (auto* control : topRowControls)
     {
-        topRowFlexBox.items.add(juce::FlexItem(*control).withFlex(1.0f).withMargin(juce::FlexItem::Margin(4 * scale)));
+        topRowFlexBox.items.add(juce::FlexItem(*control).withFlex(1.0f).withMargin(juce::FlexItem::Margin(0 * scale)));
     }
     topRowFlexBox.performLayout(topRowArea);
 

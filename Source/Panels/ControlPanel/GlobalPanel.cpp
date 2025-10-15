@@ -302,8 +302,8 @@ void GlobalPanel::resized()
     switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
     switchColumnBox.alignItems = juce::FlexBox::AlignItems::stretch;
 
-    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(0).withHeight(65));
-    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(0).withHeight(65));
+    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(0).withHeight(65 * scale));
+    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(0).withHeight(65 * scale));
 
     switchColumnBox.performLayout(switchColumnArea);
 
@@ -320,9 +320,9 @@ void GlobalPanel::resized()
     layoutBypassButton(*downsampleBypassButton, downsampleSwitch);
 
     // --- Column 3: Layout for Output Section ---
-    auto knobsArea = outputColumnArea.withSizeKeepingCentre(scaledKnobSize, scaledKnobSize * 2 + 20);
+    auto knobsArea = outputColumnArea.withSizeKeepingCentre(scaledKnobSize, scaledKnobSize * 2 + 20 * scale);
     modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(knobsArea.removeFromTop(scaledKnobSize));
-    knobsArea.removeFromTop(20); // spacing
+    knobsArea.removeFromTop(20 * scale); // spacing
     modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(knobsArea.removeFromTop(scaledKnobSize));
 
     // --- Column 2: Layout for Main Knobs Area ---
@@ -330,7 +330,7 @@ void GlobalPanel::resized()
     {
         const int numColumns = 5;
         const int numGaps = numColumns - 1;
-        const int gapWidth = 10;
+        const int gapWidth = 10 * scale;
         const float totalContentWidth = knobsColumnArea.getWidth() - (numGaps * gapWidth);
         const float narrowColProportion = 1.0f / 7.0f;
         const float wideColProportion = (1.0f - (2.0f * narrowColProportion)) / 3.0f;
@@ -352,11 +352,11 @@ void GlobalPanel::resized()
         columns.add(placementArea); // Col 5: Q Knob
 
         auto& buttonColumn = columns.getReference(0);
-        const int buttonHeight = 30;
-        const int verticalPadding = 5;
+        const int buttonHeight = 30 * scale;
+        const int verticalPadding = 5 * scale;
         const int totalButtonBlockHeight = (buttonHeight * 3) + (verticalPadding * 2);
 
-        auto buttonBlockArea = buttonColumn.withSizeKeepingCentre(buttonColumn.getWidth() - 10, totalButtonBlockHeight);
+        auto buttonBlockArea = buttonColumn.withSizeKeepingCentre(buttonColumn.getWidth() - 10 * scale, totalButtonBlockHeight);
         filterLowCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
         buttonBlockArea.removeFromTop(verticalPadding);
         filterPeakButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
@@ -365,7 +365,7 @@ void GlobalPanel::resized()
 
         auto& comboBoxColumn = columns.getReference(1);
         const int comboBoxWidth = static_cast<int>(narrowColWidth * 0.9f);
-        const int comboBoxHeight = 30;
+        const int comboBoxHeight = 30 * scale;
         lowcutSlopeMode.setBounds(comboBoxColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight));
         highcutSlopeMode.setBounds(comboBoxColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight));
 
@@ -388,18 +388,18 @@ void GlobalPanel::resized()
     else if (downsampleSwitch.getToggleState())
     {
         // Lo-Fi Panel Layout (4 knobs in a 2x2 grid)
-        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2 + 20, scaledKnobSize * 2 + 20);
+        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2 + 20 * scale, scaledKnobSize * 2 + 20 * scale);
         auto topRow = centeredArea.removeFromTop(scaledKnobSize);
         auto bottomRow = centeredArea.removeFromBottom(scaledKnobSize);
-        topRow.removeFromRight(10);
-        bottomRow.removeFromRight(10);
+        topRow.removeFromRight(10 * scale);
+        bottomRow.removeFromRight(10 * scale);
 
         modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
-        topRow.removeFromLeft(20);
+        topRow.removeFromLeft(20 * scale);
         modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
 
         modulatableSliderComponents.at(JITTER_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
-        bottomRow.removeFromLeft(20);
+        bottomRow.removeFromLeft(20 * scale);
         modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
     }
 }

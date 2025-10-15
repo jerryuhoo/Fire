@@ -214,8 +214,8 @@ void BandPanel::setupComponentGroups()
         &dcFilterLabel
     };
 
-    for (auto& modeBox : distortionModes)
-        shapeComponents.add(&modeBox);
+    // for (auto& modeBox : distortionModes)
+    //     shapeComponents.add(&modeBox);
 
     compressorComponents = {
         modulatableSliderComponents.at(COMP_THRESH_NAME).get(),
@@ -252,6 +252,11 @@ void BandPanel::paint(juce::Graphics& g)
     g.drawRect(outputAreaRect); // Border for output section
     g.drawRect(tabAreaRect); // Border for the main controls section
     g.drawRect(graphAreaRect); // Border for the graph section
+
+    if (shapeSwitch.getToggleState())
+    {
+        g.fillRect(shapeSeparatorLine);
+    }
 
     // Draw a themed border for the active tab
     // g.setColour(activeTabColour.withAlpha(0.8f));
@@ -297,8 +302,7 @@ void BandPanel::resized()
     {
         auto parentBounds = parentSwitch.getBounds();
         const int bypassSize = (int) (parentBounds.getHeight() * 0.6f);
-        const int margin = 0;
-        bypass.setBounds(parentBounds.getX() + margin, parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
+        bypass.setBounds(parentBounds.getX(), parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
         bypass.toFront(false);
     };
 
@@ -351,6 +355,12 @@ void BandPanel::resized()
         dcArea.setCentre(biasKnobBounds.getCentreX(), biasKnobBounds.getBottom() + dcButtonSize / 2 + 5);
         dcFilterButton.setBounds(dcArea.removeFromLeft(dcButtonSize));
         dcFilterLabel.setBounds(dcArea);
+
+        // Calculate the separator line's position between the combo box and the knobs.
+        const int spaceBetween = knobRow.getY() - distortionModeArea.getBottom();
+        const int lineY = distortionModeArea.getBottom() + (spaceBetween / 2);
+        const int lineHeight = 1; // Or 2 for a thicker line
+        shapeSeparatorLine.setBounds(knobsColumnArea.getX(), lineY, knobsColumnArea.getWidth(), lineHeight);
     }
     else if (compressorSwitch.getToggleState())
     {

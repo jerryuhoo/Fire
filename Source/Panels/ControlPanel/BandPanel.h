@@ -125,6 +125,7 @@ private:
     juce::Rectangle<int> outputAreaRect;
     juce::Rectangle<int> tabAreaRect;
     juce::Rectangle<int> graphAreaRect; // Area for the graphs
+    juce::Rectangle<int> shapeSeparatorLine;
     juce::Colour activeTabColour;
 
     // Graphs moved from GraphPanel

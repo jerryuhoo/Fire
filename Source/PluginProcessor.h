@@ -24,33 +24,6 @@
 #include "DSP/ModulationRouting.h"
 #include "DSP/ModulatedValueProvider.h"
 
-/**
- * Calculates the RMS and Peak levels for the left and right channels of a buffer
- * and atomically stores them in the provided atomic float variables.
-*/
-static inline void calculateAndStoreLevels(const juce::AudioBuffer<float>& buffer,
-                                           std::atomic<float>& rmsLeft,
-                                           std::atomic<float>& rmsRight,
-                                           std::atomic<float>& peakLeft,
-                                           std::atomic<float>& peakRight)
-{
-    const int numSamples = buffer.getNumSamples();
-    if (numSamples == 0)
-        return;
-
-    const float rmsL = buffer.getRMSLevel(0, 0, numSamples);
-    const float rmsR = (buffer.getNumChannels() > 1) ? buffer.getRMSLevel(1, 0, numSamples) : rmsL;
-
-    rmsLeft.store(rmsL);
-    rmsRight.store(rmsR);
-    
-    // Use getMagnitude to find the peak value in the buffer.
-    const float peakL = buffer.getMagnitude(0, 0, numSamples);
-    const float peakR = (buffer.getNumChannels() > 1) ? buffer.getMagnitude(1, 0, numSamples) : peakL;
-
-    peakLeft.store(peakL);
-    peakRight.store(peakR);
-}
 
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
@@ -475,6 +448,11 @@ private:
     juce::AbstractFifo meterFifo { 1024 };
     std::vector<MeterValues> meterFifoBuffer;
     int meterFifoWritePos = 0;
+    void calculateAndStoreLevels(const juce::AudioBuffer<float>& buffer,
+                                       std::atomic<float>& rmsLeft,
+                                       std::atomic<float>& rmsRight,
+                                       std::atomic<float>& peakLeft,
+                                       std::atomic<float>& peakRight);
 
     // 3. For Distortion Graph
     juce::AbstractFifo graphFifo { 1024 };

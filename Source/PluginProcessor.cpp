@@ -901,6 +901,41 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         graphFifo.finishedWrite(1);
         graphFifoWritePos = (graphFifoWritePos + 1) % graphFifo.getTotalSize();
     }
+    if (meterFifo.getFreeSpace() >= 1)
+    {
+        MeterValues values;
+
+        // Global Meters
+        values.inputRMS_L = mInputLeftRMSGlobal.load();
+        values.inputRMS_R = mInputRightRMSGlobal.load();
+        values.inputPeak_L = mInputLeftPeakGlobal.load();
+        values.inputPeak_R = mInputRightPeakGlobal.load();
+        values.outputRMS_L = mOutputLeftRMSGlobal.load();
+        values.outputRMS_R = mOutputRightRMSGlobal.load();
+        values.outputPeak_L = mOutputLeftPeakGlobal.load();
+        values.outputPeak_R = mOutputRightPeakGlobal.load();
+
+        // Per-Band Meters
+        for (int i = 0; i < 4; ++i)
+        {
+            if (auto* band = bands[i].get())
+            {
+                values.bandInputRMS_L[i] = band->mInputLeftRMS.load();
+                values.bandInputRMS_R[i] = band->mInputRightRMS.load();
+                values.bandInputPeak_L[i] = band->mInputLeftPeak.load();
+                values.bandInputPeak_R[i] = band->mInputRightPeak.load();
+
+                values.bandOutputRMS_L[i] = band->mOutputLeftRMS.load();
+                values.bandOutputRMS_R[i] = band->mOutputRightRMS.load();
+                values.bandOutputPeak_L[i] = band->mOutputLeftPeak.load();
+                values.bandOutputPeak_R[i] = band->mOutputRightPeak.load();
+            }
+        }
+
+        meterFifoBuffer[meterFifoWritePos] = values;
+        meterFifo.finishedWrite(1);
+        meterFifoWritePos = (meterFifoWritePos + 1) % meterFifo.getTotalSize();
+    }
 }
 
 //==============================================================================
@@ -2541,5 +2576,48 @@ void FireAudioProcessor::setUiFocusBand(int bandIndex)
     if (juce::isPositiveAndBelow(bandIndex, 4))
     {
         uiFocusBand.store(bandIndex);
+    }
+}
+
+void FireAudioProcessor::calculateAndStoreLevels(const juce::AudioBuffer<float>& buffer,
+                                                 std::atomic<float>& rmsLeft,
+                                                 std::atomic<float>& rmsRight,
+                                                 std::atomic<float>& peakLeft,
+                                                 std::atomic<float>& peakRight)
+{
+    // This function calculates RMS and Peak levels for a given buffer and stores them
+    // in the provided atomic float variables for thread-safe access from the UI.
+
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
+
+    // If there's no audio, reset levels to zero to prevent stale values.
+    if (numSamples <= 0)
+    {
+        rmsLeft.store(0.0f);
+        rmsRight.store(0.0f);
+        peakLeft.store(0.0f);
+        peakRight.store(0.0f);
+        return;
+    }
+
+    // Use JUCE's built-in functions for efficient calculation.
+    // getRMSLevel() returns linear RMS amplitude.
+    // getMagnitude() with arguments (0, numSamples) finds the peak absolute value.
+
+    // Calculate for Left Channel (or Mono)
+    rmsLeft.store(buffer.getRMSLevel(0, 0, numSamples));
+    peakLeft.store(buffer.getMagnitude(0, 0, numSamples));
+
+    // Calculate for Right Channel if it exists, otherwise mirror the left channel.
+    if (numChannels > 1)
+    {
+        rmsRight.store(buffer.getRMSLevel(1, 0, numSamples));
+        peakRight.store(buffer.getMagnitude(1, 0, numSamples));
+    }
+    else
+    {
+        rmsRight.store(rmsLeft.load());
+        peakRight.store(peakLeft.load());
     }
 }

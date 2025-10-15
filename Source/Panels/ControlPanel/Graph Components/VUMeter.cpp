@@ -16,28 +16,31 @@
 VUMeter::VUMeter(FireAudioProcessor* inProcessor)
     : mProcessor(inProcessor),
       mIsInput(true),
-      mCh0Level(0),
-      mCh1Level(0),
-      mMaxCh0Level(-96.0f),
-      mMaxCh1Level(-96.0f),
-      mMaxValueDecayCounter(0)
+      mBandIndex(-1),
+      mRmsCh0Level(0.0f),
+      mRmsCh1Level(0.0f),
+      mPeakCh0Level(0.0f),
+      mPeakCh1Level(0.0f),
+      mPeakHoldCh0Level(0.0f),
+      mPeakHoldCh1Level(0.0f),
+      mPeakHoldDecayCounter(0)
 {
     setInterceptsMouseClicks(false, false);
-    startTimerHz(60);
 }
 
 VUMeter::~VUMeter()
 {
-    stopTimer();
 }
 
 void VUMeter::paint(juce::Graphics& g)
 {
-    // Ensure all level values are clamped between [0, 1]
-    const auto level0 = juce::jlimit(0.0f, 1.0f, mCh0Level);
-    const auto level1 = juce::jlimit(0.0f, 1.0f, mCh1Level);
-    const auto maxLevel0 = juce::jlimit(0.0f, 1.0f, mMaxCh0Level);
-    const auto maxLevel1 = juce::jlimit(0.0f, 1.0f, mMaxCh1Level);
+    // Ensure all level values are clamped between [0, 1] for drawing
+    const auto rms0 = juce::jlimit(0.0f, 1.0f, mRmsCh0Level);
+    const auto rms1 = juce::jlimit(0.0f, 1.0f, mRmsCh1Level);
+    const auto peak0 = juce::jlimit(0.0f, 1.0f, mPeakCh0Level);
+    const auto peak1 = juce::jlimit(0.0f, 1.0f, mPeakCh1Level);
+    const auto peakHold0 = juce::jlimit(0.0f, 1.0f, mPeakHoldCh0Level);
+    const auto peakHold1 = juce::jlimit(0.0f, 1.0f, mPeakHoldCh1Level);
 
     // 1. Draw Backgrounds
     g.setColour(COLOUR6);
@@ -51,63 +54,76 @@ void VUMeter::paint(juce::Graphics& g)
         g.fillRect(leftMeterBounds);
     }
 
-    // 2. Calculate Fill Heights using the clamped values
+    // 2. Calculate Fill Heights
     const auto h = (float) getHeight();
-    const auto ch0fill_y = h - h * level0;
-    const auto ch1fill_y = h - h * level1;
+    const auto rmsCh0FillY = h - h * rms0;
+    const auto rmsCh1FillY = h - h * rms1;
+    const auto peakCh0FillY = h - h * peak0;
+    const auto peakCh1FillY = h - h * peak1;
 
-    // 3. Draw VU Meter Values (the moving bars)
-    g.setColour(juce::Colours::yellowgreen.withBrightness(0.9));
+    // 3. Draw Peak Level Bars (Light color)
+    g.setColour(juce::Colours::yellowgreen.withAlpha(0.6f));
     if (mProcessor->getTotalNumInputChannels() == 2)
     {
-        g.fillRect((float) leftMeterBounds.getX(), ch0fill_y, (float) leftMeterBounds.getWidth(), h - ch0fill_y);
-        g.fillRect((float) rightMeterBounds.getX(), ch1fill_y, (float) rightMeterBounds.getWidth(), h - ch1fill_y);
+        g.fillRect((float) leftMeterBounds.getX(), peakCh0FillY, (float) leftMeterBounds.getWidth(), h - peakCh0FillY);
+        g.fillRect((float) rightMeterBounds.getX(), peakCh1FillY, (float) rightMeterBounds.getWidth(), h - peakCh1FillY);
     }
     else // Mono
     {
-        g.fillRect((float) leftMeterBounds.getX(), ch0fill_y, (float) leftMeterBounds.getWidth(), h - ch0fill_y);
+        g.fillRect((float) leftMeterBounds.getX(), peakCh0FillY, (float) leftMeterBounds.getWidth(), h - peakCh0FillY);
     }
 
-    // 4. Draw Peak Level Lines using the clamped values
-    g.setColour(juce::Colours::yellowgreen.withBrightness(0.5));
-    const auto maxCh0_y = h - h * maxLevel0;
-    const auto maxCh1_y = h - h * maxLevel1;
+    // 4. Draw RMS Level Bars (Dark color)
+    g.setColour(juce::Colours::yellowgreen);
+    if (mProcessor->getTotalNumInputChannels() == 2)
+    {
+        g.fillRect((float) leftMeterBounds.getX(), rmsCh0FillY, (float) leftMeterBounds.getWidth(), h - rmsCh0FillY);
+        g.fillRect((float) rightMeterBounds.getX(), rmsCh1FillY, (float) rightMeterBounds.getWidth(), h - rmsCh1FillY);
+    }
+    else // Mono
+    {
+        g.fillRect((float) leftMeterBounds.getX(), rmsCh0FillY, (float) leftMeterBounds.getWidth(), h - rmsCh0FillY);
+    }
+
+    // 5. Draw Peak-Hold Lines
+    g.setColour(juce::Colours::yellowgreen.withBrightness(0.5f));
+    const auto peakHoldCh0Y = h - h * peakHold0;
+    const auto peakHoldCh1Y = h - h * peakHold1;
 
     const float peakLineThreshold = 0.0001f;
 
     if (mProcessor->getTotalNumInputChannels() == 2)
     {
-        if (maxLevel0 > peakLineThreshold)
-            g.drawLine((float) leftMeterBounds.getX(), maxCh0_y, (float) leftMeterBounds.getRight(), maxCh0_y, 2.0f);
+        if (peakHold0 > peakLineThreshold)
+            g.drawLine((float) leftMeterBounds.getX(), peakHoldCh0Y, (float) leftMeterBounds.getRight(), peakHoldCh0Y, 2.0f);
 
-        if (maxLevel1 > peakLineThreshold)
-            g.drawLine((float) rightMeterBounds.getX(), maxCh1_y, (float) rightMeterBounds.getRight(), maxCh1_y, 2.0f);
+        if (peakHold1 > peakLineThreshold)
+            g.drawLine((float) rightMeterBounds.getX(), peakHoldCh1Y, (float) rightMeterBounds.getRight(), peakHoldCh1Y, 2.0f);
     }
     else // Mono
     {
-        if (maxLevel0 > peakLineThreshold)
-            g.drawLine((float) leftMeterBounds.getX(), maxCh0_y, (float) leftMeterBounds.getRight(), maxCh0_y, 2.0f);
+        if (peakHold0 > peakLineThreshold)
+            g.drawLine((float) leftMeterBounds.getX(), peakHoldCh0Y, (float) leftMeterBounds.getRight(), peakHoldCh0Y, 2.0f);
     }
 }
 
 void VUMeter::resized()
 {
-    // All layout logic now lives here. This is only called when the component size changes.
     auto bounds = getLocalBounds();
 
     if (mProcessor->getTotalNumInputChannels() == 2)
     {
-        // Stereo layout: two bars with a gap in the middle
+        // Stereo layout: two bars with a gap
         auto meterWidth = bounds.getWidth() / 3;
         leftMeterBounds = bounds.removeFromLeft(meterWidth);
         rightMeterBounds = bounds.removeFromRight(meterWidth);
     }
     else // Mono layout
     {
-        // Mono layout: one bar centered in the available space
+        // Mono layout: one centered bar
         auto meterWidth = bounds.getWidth() / 3;
         leftMeterBounds = bounds.reduced((bounds.getWidth() - meterWidth) / 2, 0);
-        rightMeterBounds = {}; // Not used in mono, so clear it
+        rightMeterBounds = {}; // Not used
     }
 }
 
@@ -117,116 +133,105 @@ void VUMeter::setParameters(bool isInput, int bandIndex)
     mBandIndex = bandIndex;
 }
 
-void VUMeter::timerCallback()
+void VUMeter::updateLevels(const MeterValues& latestValues)
 {
-    float rawCh0Level = 0.0f; // Default to 0.0f linear, which is -inf dB
-    float rawCh1Level = 0.0f;
+    float rawRmsCh0 = 0.0f, rawRmsCh1 = 0.0f, rawPeakCh0 = 0.0f, rawPeakCh1 = 0.0f;
+    const bool isGlobal = (mBandIndex == -1);
 
-    // 1. Safely fetch the latest meter data from the processor via public getters.
-    // This call is thread-safe because the processor's getters read from std::atomic variables.
-    if (mIsInput) // This meter is displaying the input signal
+    if (mIsInput)
     {
-        if (mBandIndex == -1) // Global meter
+        if (isGlobal)
         {
-            rawCh0Level = mProcessor->getGlobalInputMeterLevel(0);
-            rawCh1Level = mProcessor->getGlobalInputMeterLevel(1);
+            rawRmsCh0 = latestValues.inputRMS_L;
+            rawRmsCh1 = latestValues.inputRMS_R;
+            rawPeakCh0 = latestValues.inputPeak_L;
+            rawPeakCh1 = latestValues.inputPeak_R;
         }
-        else // Per-band meter
+        else if (juce::isPositiveAndBelow(mBandIndex, 4))
         {
-            rawCh0Level = mProcessor->getBandInputMeterLevel(mBandIndex, 0);
-            rawCh1Level = mProcessor->getBandInputMeterLevel(mBandIndex, 1);
-        }
-    }
-    else // This meter is displaying the output signal
-    {
-        if (mBandIndex == -1) // Global meter
-        {
-            rawCh0Level = mProcessor->getGlobalOutputMeterLevel(0);
-            rawCh1Level = mProcessor->getGlobalOutputMeterLevel(1);
-        }
-        else // Per-band meter
-        {
-            rawCh0Level = mProcessor->getBandOutputMeterLevel(mBandIndex, 0);
-            rawCh1Level = mProcessor->getBandOutputMeterLevel(mBandIndex, 1);
+            rawRmsCh0 = latestValues.bandInputRMS_L[mBandIndex];
+            rawRmsCh1 = latestValues.bandInputRMS_R[mBandIndex];
+            rawPeakCh0 = latestValues.bandInputPeak_L[mBandIndex];
+            rawPeakCh1 = latestValues.bandInputPeak_R[mBandIndex];
         }
     }
-
-    // 2. Convert the raw linear RMS values to normalized [0, 1] values suitable for the UI.
-    float updatedCh0Level = dBToNormalizedGain(rawCh0Level);
-    float updatedCh1Level = dBToNormalizedGain(rawCh1Level);
-
-    // 3. Update the peak level display.
-    // jmax ensures we always hold the highest value seen so far.
-    mMaxCh0Level = juce::jmax(mMaxCh0Level, updatedCh0Level);
-    mMaxCh1Level = juce::jmax(mMaxCh1Level, updatedCh1Level);
-
-    // 4. Apply smoothing to the real-time level for a better visual experience.
-    if (updatedCh0Level > mCh0Level)
+    else // Output
     {
-        // If the new level is higher, jump to it immediately (Fast Attack).
-        mCh0Level = updatedCh0Level;
-    }
-    else
-    {
-        // If the new level is lower, fall to it slowly (Slow Release).
-        // SMOOTH_COEFF controls the decay speed.
-        mCh0Level = SMOOTH_COEFF * (mCh0Level - updatedCh0Level) + updatedCh0Level;
-    }
-
-    if (updatedCh1Level > mCh1Level)
-    {
-        mCh1Level = updatedCh1Level;
-    }
-    else
-    {
-        mCh1Level = SMOOTH_COEFF * (mCh1Level - updatedCh1Level) + updatedCh1Level;
-    }
-
-    // 5. Prevent denormalization issues where values become too small.
-    mCh0Level = helper_denormalize(mCh0Level);
-    mCh1Level = helper_denormalize(mCh1Level);
-
-    // 6. Handle the decay logic for the peak level line.
-    // The peak line holds for a set number of frames before starting to fall.
-    if (mMaxCh0Level > mCh0Level || mMaxCh1Level > mCh1Level)
-    {
-        if (mMaxValueDecayCounter < MAX_VALUE_HOLD_FRAMES)
+        if (isGlobal)
         {
-            ++mMaxValueDecayCounter;
+            rawRmsCh0 = latestValues.outputRMS_L;
+            rawRmsCh1 = latestValues.outputRMS_R;
+            rawPeakCh0 = latestValues.outputPeak_L;
+            rawPeakCh1 = latestValues.outputPeak_R;
+        }
+        else if (juce::isPositiveAndBelow(mBandIndex, 4))
+        {
+            rawRmsCh0 = latestValues.bandOutputRMS_L[mBandIndex];
+            rawRmsCh1 = latestValues.bandOutputRMS_R[mBandIndex];
+            rawPeakCh0 = latestValues.bandOutputPeak_L[mBandIndex];
+            rawPeakCh1 = latestValues.bandOutputPeak_R[mBandIndex];
+        }
+    }
+
+    // --- The rest of the function remains identical ---
+
+    // 2. Convert from linear gain to normalized dB for UI display.
+    float updatedRmsCh0 = dBToNormalizedGain(rawRmsCh0);
+    float updatedRmsCh1 = dBToNormalizedGain(rawRmsCh1);
+    float updatedPeakCh0 = dBToNormalizedGain(rawPeakCh0);
+    float updatedPeakCh1 = dBToNormalizedGain(rawPeakCh1);
+
+    // 3. Apply smoothing to RMS for a more stable visual.
+    auto applySmoothing = [](float current, float target)
+    {
+        if (target > current)
+            return target; // Fast attack
+        return current + 0.1f * (target - current); // Slow release
+    };
+
+    mRmsCh0Level = applySmoothing(mRmsCh0Level, updatedRmsCh0);
+    mRmsCh1Level = applySmoothing(mRmsCh1Level, updatedRmsCh1);
+
+    // Peak levels jump immediately (no smoothing)
+    mPeakCh0Level = updatedPeakCh0;
+    mPeakCh1Level = updatedPeakCh1;
+
+    // 4. Update peak-hold levels.
+    mPeakHoldCh0Level = juce::jmax(mPeakHoldCh0Level, mPeakCh0Level);
+    mPeakHoldCh1Level = juce::jmax(mPeakHoldCh1Level, mPeakCh1Level);
+
+    // 5. Handle decay logic for the peak-hold line.
+    if (mPeakHoldCh0Level > mPeakCh0Level || mPeakHoldCh1Level > mPeakCh1Level)
+    {
+        if (mPeakHoldDecayCounter < PEAK_HOLD_FRAMES)
+        {
+            ++mPeakHoldDecayCounter;
         }
         else
         {
-            // After the hold time, the peak line starts to decay slowly.
-            mMaxCh0Level -= 0.01f;
-            mMaxCh1Level -= 0.01f;
+            mPeakHoldCh0Level -= 0.01f;
+            mPeakHoldCh1Level -= 0.01f;
         }
     }
     else
     {
-        // If the real-time level catches up to the peak, reset the hold counter.
-        mMaxValueDecayCounter = 0;
+        mPeakHoldDecayCounter = 0;
     }
 
-    // 7. Trigger a repaint to update the component on screen.
+    // Prevent denormalization
+    mRmsCh0Level = helper_denormalize(mRmsCh0Level);
+    mRmsCh1Level = helper_denormalize(mRmsCh1Level);
+    mPeakCh0Level = helper_denormalize(mPeakCh0Level);
+    mPeakCh1Level = helper_denormalize(mPeakCh1Level);
+    mPeakHoldCh0Level = helper_denormalize(mPeakHoldCh0Level);
+    mPeakHoldCh1Level = helper_denormalize(mPeakHoldCh1Level);
+
+    // 6. Trigger a repaint.
     repaint();
 }
 
-float VUMeter::getLeftChannelLevel()
-{
-    return mCh0Level;
-}
-
-float VUMeter::getRightChannelLevel()
-{
-    return mCh1Level;
-}
-
-float VUMeter::getLeftChannelPeakLevel()
-{
-    return mMaxCh0Level;
-}
-
-float VUMeter::getRightChannelPeakLevel()
-{
-    return mMaxCh1Level;
-}
+// Getter implementations
+float VUMeter::getRmsLeftChannelLevel() { return mRmsCh0Level; }
+float VUMeter::getRmsRightChannelLevel() { return mRmsCh1Level; }
+float VUMeter::getPeakLeftChannelLevel() { return mPeakHoldCh0Level; }
+float VUMeter::getPeakRightChannelLevel() { return mPeakHoldCh1Level; }

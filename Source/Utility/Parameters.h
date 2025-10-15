@@ -66,17 +66,15 @@ struct ModulationTarget
 
 struct MeterValues
 {
-    // Global Meters
-    float inputLeftGlobal;
-    float inputRightGlobal;
-    float outputLeftGlobal;
-    float outputRightGlobal;
+    float inputRMS_L { 0.0f }, inputRMS_R { 0.0f };
+    float inputPeak_L { 0.0f }, inputPeak_R { 0.0f };
+    float outputRMS_L { 0.0f }, outputRMS_R { 0.0f };
+    float outputPeak_L { 0.0f }, outputPeak_R { 0.0f };
 
-    // Per-Band Meters (using a std::array for clean access)
-    std::array<float, 4> inputLeftBands;
-    std::array<float, 4> inputRightBands;
-    std::array<float, 4> outputLeftBands;
-    std::array<float, 4> outputRightBands;
+    std::array<float, 4> bandInputRMS_L { 0.0f }, bandInputRMS_R { 0.0f };
+    std::array<float, 4> bandInputPeak_L { 0.0f }, bandInputPeak_R { 0.0f };
+    std::array<float, 4> bandOutputRMS_L { 0.0f }, bandOutputRMS_R { 0.0f };
+    std::array<float, 4> bandOutputPeak_L { 0.0f }, bandOutputPeak_R { 0.0f };
 };
 
 struct DistortionGraphValues

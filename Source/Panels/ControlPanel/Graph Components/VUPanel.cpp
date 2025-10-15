@@ -18,11 +18,8 @@ VUPanel::VUPanel(FireAudioProcessor& p) : processor(p),
                                           vuMeterOut(&p),
                                           realtimeThresholdDb(-100.0f)
 {
-    // In your constructor, you should add any child components, and
-    // initialise any special settings that your component needs.
-
-    vuMeterIn.setParameters(true, 0);
-    vuMeterOut.setParameters(false, 0);
+    vuMeterIn.setParameters(true, -1); // Default to global
+    vuMeterOut.setParameters(false, -1);
 
     addAndMakeVisible(vuMeterIn);
     addAndMakeVisible(vuMeterOut);
@@ -40,32 +37,22 @@ void VUPanel::paint(juce::Graphics& g)
     g.setColour(COLOUR6);
     g.drawRect(getLocalBounds(), 1);
 
-    // --- 1. 復現宏定義的佈局變量 ---
-    // 這樣可以確保 paint() 中的計算與 resized() 中的佈局完全一致
+    // --- 1. Define layout variables consistently ---
     const float meterHeight = (float) getHeight() / 10.0f * 9.0f;
     const float meterY = (float) getHeight() / 10.0f;
 
-    // --- 2. 建立與 VUMeter.cpp 標準完全一致的 dB 轉 Y 坐標系 ---
+    // --- 2. Create a unified dB-to-Y coordinate mapping function ---
     auto dbToY = [&](float db)
     {
-        // 該標準來源於 dBToNormalizedGain: (-96dB -> 0.0, 0dB -> 1.0)
         const float minDb = -96.0f;
         const float maxDb = 0.0f;
-
-        // 將 dB 值限制在視覺範圍內
         db = juce::jlimit(minDb, maxDb, db);
-
-        // 將 dB 值轉換為標準化的 [0, 1] 位置
         float normalizedPosition = (db - minDb) / (maxDb - minDb);
-
-        // 將標準化位置映射到宏定義的 VU Meter 像素空間
-        // Y 坐標是反的，所以用 1.0f 減去
         return meterY + meterHeight * (1.0f - normalizedPosition);
     };
 
-    // --- 3. 繪製背景刻度 ---
+    // --- 3. Draw background scale ---
     g.setColour(KNOB_SUBFONT_COLOUR);
-    // 刻度文本的邊界現在被精確定義在兩個 VU 表之間
     auto textBounds = getLocalBounds().withX(vuMeterIn.getRight()).withRight(vuMeterOut.getX());
     float textHeight = 12.0f;
     g.setFont(textHeight);
@@ -75,7 +62,7 @@ void VUPanel::paint(juce::Graphics& g)
     g.drawText("-48", textBounds.withY(dbToY(-48.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
     g.drawText("-72", textBounds.withY(dbToY(-72.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
 
-    // --- 4. 繪製 Compressor Threshold 線 ---
+    // --- 4. Draw Compressor Threshold line ---
     bool isGlobal = (focusBandNum == -1);
     if (! isGlobal && juce::isPositiveAndBelow(focusBandNum, 4))
     {
@@ -89,18 +76,23 @@ void VUPanel::paint(juce::Graphics& g)
         }
     }
 
-    // 更新子組件的參數
+    // Update child component parameters
     vuMeterIn.setParameters(true, focusBandNum);
     vuMeterOut.setParameters(false, focusBandNum);
 
-    // --- 5. 繪製 RMS 和 Peak 讀數 ---
-    auto toDB = [](float linear)
-    { return juce::Decibels::gainToDecibels(linear, -96.0f); };
+    // --- 5. Draw RMS and Peak readouts ---
+    // This helper converts the meter's normalized [0,1] value back to dB for text display.
+    auto normalizedToDb = [](float norm)
+    {
+        // CORRECTED: Use juce::jmap for linear mapping from [0, 1] back to [-96, 0] dB.
+        // This fixes the jassert caused by using juce::mapToLog10 with negative values.
+        return juce::jmap(norm, 0.0f, 1.0f, -96.0f, 0.0f);
+    };
 
-    float avgInputRmsDb = toDB(vuMeterIn.getLeftChannelLevel());
-    float avgInputPeakDb = toDB(vuMeterIn.getLeftChannelPeakLevel());
-    float avgOutputRmsDb = toDB(vuMeterOut.getLeftChannelLevel());
-    float avgOutputPeakDb = toDB(vuMeterOut.getLeftChannelPeakLevel());
+    float inputRmsDb = normalizedToDb(vuMeterIn.getRmsLeftChannelLevel());
+    float inputPeakDb = normalizedToDb(vuMeterIn.getPeakLeftChannelLevel());
+    float outputRmsDb = normalizedToDb(vuMeterOut.getRmsLeftChannelLevel());
+    float outputPeakDb = normalizedToDb(vuMeterOut.getPeakLeftChannelLevel());
 
     auto leftArea = getLocalBounds().withRight(vuMeterIn.getX());
     auto rightArea = getLocalBounds().withLeft(vuMeterOut.getRight());
@@ -109,20 +101,22 @@ void VUPanel::paint(juce::Graphics& g)
     auto fontSizeBig = 14.0f * getWidth() / 150.0f;
     auto fontSizeSmall = 10.0f * getWidth() / 150.0f;
 
+    // Input Readouts
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
-    g.drawText(juce::String(avgInputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
+    g.drawText(juce::String(inputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
-    g.drawText(juce::String(avgInputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
+    g.drawText(juce::String(inputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
 
     g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
     g.setFont(fontSizeSmall);
     g.drawFittedText("In", leftArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
 
+    // Output Readouts
     g.setColour(juce::Colours::yellowgreen);
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
-    g.drawText(juce::String(avgOutputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
+    g.drawText(juce::String(outputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
     g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
-    g.drawText(juce::String(avgOutputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
+    g.drawText(juce::String(outputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
 
     g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
     g.setFont(fontSizeSmall);
@@ -131,7 +125,6 @@ void VUPanel::paint(juce::Graphics& g)
 
 void VUPanel::resized()
 {
-    // --- 使用局部變量來清晰地實現宏定義的佈局 ---
     const float width = (float) getWidth();
     const float height = (float) getHeight();
 
@@ -152,11 +145,17 @@ void VUPanel::setFocusBandNum(int num)
 
 void VUPanel::timerCallback()
 {
+    MeterValues latestValues;
+    if (processor.getLatestMeterValues(latestValues))
+    {
+        vuMeterIn.updateLevels(latestValues);
+        vuMeterOut.updateLevels(latestValues);
+    }
+
     repaint();
 }
 
 void VUPanel::updateRealtimeThreshold(float newThresholdDb)
 {
-    // Store the live value. No need to repaint here, as the timerCallback already does.
     realtimeThresholdDb = newThresholdDb;
 }

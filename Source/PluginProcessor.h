@@ -25,18 +25,31 @@
 #include "DSP/ModulatedValueProvider.h"
 
 /**
- * Calculates the RMS level for the left and right channels of a buffer
+ * Calculates the RMS and Peak levels for the left and right channels of a buffer
  * and atomically stores them in the provided atomic float variables.
 */
-static inline void calculateAndStoreRMS(const juce::AudioBuffer<float>& buffer,
-                                        std::atomic<float>& leftAtomic,
-                                        std::atomic<float>& rightAtomic)
+static inline void calculateAndStoreLevels(const juce::AudioBuffer<float>& buffer,
+                                           std::atomic<float>& rmsLeft,
+                                           std::atomic<float>& rmsRight,
+                                           std::atomic<float>& peakLeft,
+                                           std::atomic<float>& peakRight)
 {
-    const float rmsL = buffer.getRMSLevel(0, 0, buffer.getNumSamples());
-    const float rmsR = (buffer.getNumChannels() > 1) ? buffer.getRMSLevel(1, 0, buffer.getNumSamples()) : rmsL;
+    const int numSamples = buffer.getNumSamples();
+    if (numSamples == 0)
+        return;
 
-    leftAtomic.store(rmsL);
-    rightAtomic.store(rmsR);
+    const float rmsL = buffer.getRMSLevel(0, 0, numSamples);
+    const float rmsR = (buffer.getNumChannels() > 1) ? buffer.getRMSLevel(1, 0, numSamples) : rmsL;
+
+    rmsLeft.store(rmsL);
+    rmsRight.store(rmsR);
+    
+    // Use getMagnitude to find the peak value in the buffer.
+    const float peakL = buffer.getMagnitude(0, 0, numSamples);
+    const float peakR = (buffer.getNumChannels() > 1) ? buffer.getMagnitude(1, 0, numSamples) : peakL;
+
+    peakLeft.store(peakL);
+    peakRight.store(peakR);
 }
 
 //==============================================================================
@@ -134,11 +147,19 @@ struct BandProcessor
     bool isFirstBlock = true;
 
     std::function<float(float)> waveshaperFunction;
+    
+    // Atomics for RMS levels
+    std::atomic<float> mInputLeftRMS { 0.0f };
+    std::atomic<float> mInputRightRMS { 0.0f };
+    std::atomic<float> mOutputLeftRMS { 0.0f };
+    std::atomic<float> mOutputRightRMS { 0.0f };
 
-    std::atomic<float> mInputLeftSmoothed { 0.0f };
-    std::atomic<float> mInputRightSmoothed { 0.0f };
-    std::atomic<float> mOutputLeftSmoothed { 0.0f };
-    std::atomic<float> mOutputRightSmoothed { 0.0f };
+    // Atomics for Peak levels
+    std::atomic<float> mInputLeftPeak { 0.0f };
+    std::atomic<float> mInputRightPeak { 0.0f };
+    std::atomic<float> mOutputLeftPeak { 0.0f };
+    std::atomic<float> mOutputRightPeak { 0.0f };
+
 
     // Per-band state for Safe Mode
     float mReductionPercent = 1.0f;
@@ -279,10 +300,17 @@ public:
     bool getLatestModulatedFilterValues(ModulatedFilterValues& values);
     bool getLatestMeterValues(MeterValues& values);
 
-    float getGlobalInputMeterLevel(int channel) const;
-    float getGlobalOutputMeterLevel(int channel) const;
-    float getBandInputMeterLevel(int band, int channel) const;
-    float getBandOutputMeterLevel(int band, int channel) const;
+    // Getters for meter levels
+    float getGlobalInputRMSLevel(int channel) const;
+    float getGlobalOutputRMSLevel(int channel) const;
+    float getGlobalInputPeakLevel(int channel) const;
+    float getGlobalOutputPeakLevel(int channel) const;
+
+    float getBandInputRMSLevel(int band, int channel) const;
+    float getBandOutputRMSLevel(int band, int channel) const;
+    float getBandInputPeakLevel(int band, int channel) const;
+    float getBandOutputPeakLevel(int band, int channel) const;
+
 
     void lfoDataHasChanged();
     bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
@@ -425,11 +453,16 @@ private:
     // bypass state
     bool isBypassed = false;
 
-    // VU meters
-    std::atomic<float> mInputLeftSmoothedGlobal { 0.0f };
-    std::atomic<float> mInputRightSmoothedGlobal { 0.0f };
-    std::atomic<float> mOutputLeftSmoothedGlobal { 0.0f };
-    std::atomic<float> mOutputRightSmoothedGlobal { 0.0f };
+    // VU meters data
+    std::atomic<float> mInputLeftRMSGlobal { 0.0f };
+    std::atomic<float> mInputRightRMSGlobal { 0.0f };
+    std::atomic<float> mOutputLeftRMSGlobal { 0.0f };
+    std::atomic<float> mOutputRightRMSGlobal { 0.0f };
+
+    std::atomic<float> mInputLeftPeakGlobal { 0.0f };
+    std::atomic<float> mInputRightPeakGlobal { 0.0f };
+    std::atomic<float> mOutputLeftPeakGlobal { 0.0f };
+    std::atomic<float> mOutputRightPeakGlobal { 0.0f };
 
     std::atomic<float> realtimeModulatedThresholds[4];
 

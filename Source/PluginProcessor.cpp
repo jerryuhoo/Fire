@@ -769,7 +769,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     updateParameters();
 
-    calculateAndStoreRMS(buffer, mInputLeftSmoothedGlobal, mInputRightSmoothedGlobal);
+    calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
 
     // 1. GET PARAMETERS & SMOOTH FREQUENCIES
     int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
@@ -844,7 +844,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mWetBuffer.makeCopyOf(buffer);
     pushDataToFFT(mWetBuffer, processedSpecProcessor);
     pushDataToFFT(delayMatchedDryBuffer, originalSpecProcessor);
-    calculateAndStoreRMS(mWetBuffer, mOutputLeftSmoothedGlobal, mOutputRightSmoothedGlobal);
+    calculateAndStoreLevels(mWetBuffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
 
     // --- 1. Push Modulated Filter Data to its FIFO ---
     if (filterFifo.getFreeSpace() >= 1)
@@ -1884,7 +1884,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
     {
         if (auto* band = bands[i].get())
         {
-            calculateAndStoreRMS(*dryBandBuffers[i], band->mInputLeftSmoothed, band->mInputRightSmoothed);
+            calculateAndStoreLevels(*dryBandBuffers[i], band->mInputLeftRMS, band->mInputRightRMS, band->mInputLeftPeak, band->mInputRightPeak);
 
             if (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i)))
             {
@@ -1943,7 +1943,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 // 4. Call BandProcessor
                 band->process(*wetBandBuffers[i], params, lfoOutputs);
             }
-            calculateAndStoreRMS(*wetBandBuffers[i], band->mOutputLeftSmoothed, band->mOutputRightSmoothed);
+            calculateAndStoreLevels(*wetBandBuffers[i], band->mOutputLeftRMS, band->mOutputRightRMS, band->mOutputLeftPeak, band->mOutputRightPeak);
         }
     }
 
@@ -2314,36 +2314,72 @@ bool FireAudioProcessor::getLatestModulatedFilterValues(ModulatedFilterValues& v
     return false;
 }
 
-float FireAudioProcessor::getGlobalInputMeterLevel(int channel) const
+float FireAudioProcessor::getGlobalInputRMSLevel(int channel) const
 {
-    return channel == 0 ? mInputLeftSmoothedGlobal.load() : mInputRightSmoothedGlobal.load();
+    return channel == 0 ? mInputLeftRMSGlobal.load() : mInputRightRMSGlobal.load();
 }
 
-float FireAudioProcessor::getGlobalOutputMeterLevel(int channel) const
+float FireAudioProcessor::getGlobalOutputRMSLevel(int channel) const
 {
-    return channel == 0 ? mOutputLeftSmoothedGlobal.load() : mOutputRightSmoothedGlobal.load();
+    return channel == 0 ? mOutputLeftRMSGlobal.load() : mOutputRightRMSGlobal.load();
 }
 
-float FireAudioProcessor::getBandInputMeterLevel(int band, int channel) const
+float FireAudioProcessor::getGlobalInputPeakLevel(int channel) const
+{
+    return channel == 0 ? mInputLeftPeakGlobal.load() : mInputRightPeakGlobal.load();
+}
+
+float FireAudioProcessor::getGlobalOutputPeakLevel(int channel) const
+{
+    return channel == 0 ? mOutputLeftPeakGlobal.load() : mOutputRightPeakGlobal.load();
+}
+
+float FireAudioProcessor::getBandInputRMSLevel(int band, int channel) const
 {
     if (juce::isPositiveAndBelow(band, bands.size()))
     {
         if (auto* bandProcessor = bands[band].get())
         {
-            return channel == 0 ? bandProcessor->mInputLeftSmoothed.load() : bandProcessor->mInputRightSmoothed.load();
+            return channel == 0 ? bandProcessor->mInputLeftRMS.load() : bandProcessor->mInputRightRMS.load();
         }
     }
     jassertfalse; // Invalid band index
     return 0.0f;
 }
 
-float FireAudioProcessor::getBandOutputMeterLevel(int band, int channel) const
+float FireAudioProcessor::getBandOutputRMSLevel(int band, int channel) const
 {
     if (juce::isPositiveAndBelow(band, bands.size()))
     {
         if (auto* bandProcessor = bands[band].get())
         {
-            return channel == 0 ? bandProcessor->mOutputLeftSmoothed.load() : bandProcessor->mOutputRightSmoothed.load();
+            return channel == 0 ? bandProcessor->mOutputLeftRMS.load() : bandProcessor->mOutputRightRMS.load();
+        }
+    }
+    jassertfalse; // Invalid band index
+    return 0.0f;
+}
+
+float FireAudioProcessor::getBandInputPeakLevel(int band, int channel) const
+{
+    if (juce::isPositiveAndBelow(band, bands.size()))
+    {
+        if (auto* bandProcessor = bands[band].get())
+        {
+            return channel == 0 ? bandProcessor->mInputLeftPeak.load() : bandProcessor->mInputRightPeak.load();
+        }
+    }
+    jassertfalse; // Invalid band index
+    return 0.0f;
+}
+
+float FireAudioProcessor::getBandOutputPeakLevel(int band, int channel) const
+{
+    if (juce::isPositiveAndBelow(band, bands.size()))
+    {
+        if (auto* bandProcessor = bands[band].get())
+        {
+            return channel == 0 ? bandProcessor->mOutputLeftPeak.load() : bandProcessor->mOutputRightPeak.load();
         }
     }
     jassertfalse; // Invalid band index

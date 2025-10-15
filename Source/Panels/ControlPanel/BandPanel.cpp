@@ -263,7 +263,7 @@ void BandPanel::resized()
     const float scale = this->scale; // Get the scale factor
     const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
 
-    auto mainArea = getLocalBounds().reduced(10);
+    auto mainArea = getLocalBounds().reduced(10 * scale);
 
     // Define the four main columns
     auto switchColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
@@ -291,8 +291,8 @@ void BandPanel::resized()
     auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = juce::jmin(24, (int) (parentBounds.getHeight() * 0.6f));
-        const int margin = 5;
+        const int bypassSize = (int) (parentBounds.getHeight() * 0.6f);
+        const int margin = 0;
         bypass.setBounds(parentBounds.getX() + margin, parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
         bypass.toFront(false);
     };
@@ -326,7 +326,7 @@ void BandPanel::resized()
 
         // DC Filter button below Bias knob
         const int dcButtonSize = (int) (scaledKnobSize * 0.3f);
-        const int dcLabelWidth = 35;
+        const int dcLabelWidth = (int) (35 * scale);
         juce::Rectangle<int> dcArea(0, 0, dcButtonSize + dcLabelWidth, dcButtonSize);
         dcArea.setCentre(biasKnobBounds.getCentreX(), biasKnobBounds.getBottom() + dcButtonSize / 2 + 5);
         dcFilterButton.setBounds(dcArea.removeFromLeft(dcButtonSize));

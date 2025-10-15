@@ -283,7 +283,7 @@ void GlobalPanel::resized()
     const float scale = this->scale;
     const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
 
-    auto mainArea = getLocalBounds().reduced(10);
+    auto mainArea = getLocalBounds().reduced(10 * scale);
 
     // Define the three main columns
     auto switchColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
@@ -301,17 +301,17 @@ void GlobalPanel::resized()
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
     switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
     switchColumnBox.alignItems = juce::FlexBox::AlignItems::stretch;
-    // [MODIFICATION 1 START] Removed the spacer item between the switches.
-    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(0).withHeight(40));
-    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(0).withHeight(40));
-    // [MODIFICATION 1 END]
+
+    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(0).withHeight(65));
+    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(0).withHeight(65));
+
     switchColumnBox.performLayout(switchColumnArea);
 
     auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = juce::jmin(24, (int) (parentBounds.getHeight() * 0.6f));
-        const int margin = 5;
+        const int bypassSize = (int) (parentBounds.getHeight() * 0.6f);
+        const int margin = 0;
         bypass.setBounds(parentBounds.getX() + margin, parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
         bypass.toFront(false);
     };

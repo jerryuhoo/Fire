@@ -310,21 +310,36 @@ void BandPanel::resized()
     }
     else if (shapeSwitch.getToggleState())
     {
-        auto distortionModeArea = knobsColumnArea.removeFromTop(knobsColumnArea.getHeight() / 5);
+        // --- Step 1: Center the main row of three knobs vertically ---
+        // Create a rectangle for the three knobs and their spacing,
+        // and center it within the entire available `knobsColumnArea`.
+        juce::Rectangle<int> knobRow = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize);
+
+        // Now, place the sliders within this perfectly centered `knobRow`.
+        // We need to keep a reference to the middle knob's bounds for later.
+        auto tempKnobRow = knobRow; // Use a temporary copy for manipulation
+        modulatableSliderComponents.at(REC_NAME)->setBounds(tempKnobRow.removeFromLeft(scaledKnobSize));
+        tempKnobRow.removeFromLeft(10);
+        auto biasKnobBounds = tempKnobRow.removeFromLeft(scaledKnobSize);
+        modulatableSliderComponents.at(BIAS_NAME)->setBounds(biasKnobBounds);
+        tempKnobRow.removeFromLeft(10);
+        modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(tempKnobRow);
+
+        // --- Step 2: Place the other elements around the centered knobs ---
+
+        // Place the distortion mode boxes at the top of the area.
+        // We use getFromTop() so it doesn't affect `knobsColumnArea` for centering logic.
+        juce::Rectangle<int> distortionModeArea(knobsColumnArea.getX(),
+                                                knobsColumnArea.getY(),
+                                                knobsColumnArea.getWidth(),
+                                                knobsColumnArea.getHeight() / 5);
+
         auto smallerDistortionModeArea = distortionModeArea.withSizeKeepingCentre(distortionModeArea.getWidth() / 2, distortionModeArea.getHeight());
         for (auto& modeBox : distortionModes)
             modeBox.setBounds(smallerDistortionModeArea.reduced(0, distortionModeArea.getHeight() / 4));
 
-        // Place 3 knobs in a row
-        juce::Rectangle<int> knobRow = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize);
-        modulatableSliderComponents.at(REC_NAME)->setBounds(knobRow.removeFromLeft(scaledKnobSize));
-        knobRow.removeFromLeft(10);
-        auto biasKnobBounds = knobRow.removeFromLeft(scaledKnobSize);
-        modulatableSliderComponents.at(BIAS_NAME)->setBounds(biasKnobBounds);
-        knobRow.removeFromLeft(10);
-        modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(knobRow);
-
-        // DC Filter button below Bias knob
+        // Place the DC Filter button below the (now centered) Bias knob.
+        // Its position is relative to `biasKnobBounds`, which we saved earlier.
         const int dcButtonSize = (int) (scaledKnobSize * 0.3f);
         const int dcLabelWidth = (int) (35 * scale);
         juce::Rectangle<int> dcArea(0, 0, dcButtonSize + dcLabelWidth, dcButtonSize);

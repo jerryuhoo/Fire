@@ -222,7 +222,6 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     {
         draggingState = DraggingState::Marquee;
         selectionRectangle.setPosition(event.getPosition());
-        selectedPointIndices.clear(); // Start a new selection
         repaint();
         return;
     }
@@ -257,6 +256,13 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     }
     else // Clicked on empty space: create a new point and prepare to drag it.
     {
+        // Deselect points when clicking on an empty area.
+        if (! selectedPointIndices.empty())
+        {
+            selectedPointIndices.clear();
+            repaint();
+        }
+
         editingCurveIndex = findSegmentIndexAt(event.getPosition());
         if (editingCurveIndex != -1)
         {
@@ -499,11 +505,14 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     if (draggingState == DraggingState::Marquee)
     {
         auto finalRect = makeNormalised(event.getMouseDownPosition(), event.getPosition()).toFloat();
-        selectedPointIndices.clear();
         for (int i = 0; i < activeLfoData.points.size(); ++i)
         {
             if (finalRect.contains(fromNormalized(activeLfoData.points[i])))
-                selectedPointIndices.push_back(i);
+            {
+                // Add to selection only if not already selected
+                if (std::find(selectedPointIndices.begin(), selectedPointIndices.end(), i) == selectedPointIndices.end())
+                    selectedPointIndices.push_back(i);
+            }
         }
         selectionRectangle.setSize(0, 0);
     }
@@ -1558,7 +1567,17 @@ void LfoEditor::invertShape(bool invertX, bool invertY)
     // Inverting X will mess up the order, so we need to sort again.
     if (invertX)
     {
+        // Swap the y-values of the first and last points.
+        std::swap(activeLfoData.points.front().y, activeLfoData.points.back().y);
+
         updateAndSortPoints();
+
+        // Invert curvatures when inverting horizontally.
+        std::reverse(activeLfoData.curvatures.begin(), activeLfoData.curvatures.end());
+        for (auto& curvature : activeLfoData.curvatures)
+        {
+            curvature = -curvature;
+        }
     }
 
     repaint();

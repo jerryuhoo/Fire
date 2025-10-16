@@ -157,6 +157,10 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     else if (isMouseOverMainSlider())
     {
         isDraggingMainSlider = true;
+
+        if (onMainDragStart)
+            onMainDragStart(this);
+
         // CRITICAL: Only call the base class mouseDown if we intend to start a drag on the main slider
         juce::Slider::mouseDown(event);
     }
@@ -166,8 +170,8 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
         isModHandleMouseDown = true;
         initialLfoAmount = lfoAmount;
 
-        if (onDragStart)
-            onDragStart(this);
+        if (onModDragStart)
+            onModDragStart(this);
 
         repaint();
     }
@@ -178,6 +182,8 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
     // CRITICAL: Only forward the drag event to the base class if our flag is set
     if (isDraggingMainSlider)
     {
+        if (onMainDragMove)
+            onMainDragMove(this);
         juce::Slider::mouseDrag(event);
     }
     else if (isModHandleMouseDown)
@@ -196,8 +202,8 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
             onModAmountChanged(lfoAmount);
         }
 
-        if (onDragMove)
-            onDragMove(this);
+        if (onModDragMove)
+            onModDragMove(this);
 
         // This will update the UI
         repaint();
@@ -262,14 +268,16 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
     // Reset our custom flags regardless of where the mouseUp happened
     if (isDraggingMainSlider)
     {
+        if (onMainDragEnd)
+            onMainDragEnd(this);
         isDraggingMainSlider = false;
         repaint();
     }
 
     if (isModHandleMouseDown)
     {
-        if (onDragEnd)
-            onDragEnd(this);
+        if (onModDragEnd)
+            onModDragEnd(this);
 
         isModHandleMouseDown = false;
         repaint();

@@ -28,9 +28,9 @@ class BandPanel : public PanelBase,
 {
 public:
     BandPanel(FireAudioProcessor&,
-              std::function<void(ModulatableSlider*)> onDragStart,
-              std::function<void(ModulatableSlider*)> onDragMove,
-              std::function<void(ModulatableSlider*)> onDragEnd,
+              std::function<void(ModulatableSlider*)> onModDragStart,
+              std::function<void(ModulatableSlider*)> onModDragMove,
+              std::function<void(ModulatableSlider*)> onModDragEnd,
               std::function<void(ModulatableSlider*)> onHoverStart,
               std::function<void(ModulatableSlider*)> onHoverEnd);
     ~BandPanel() override;
@@ -59,6 +59,10 @@ public:
     void updateRealtimeThreshold(float newThreshold);
 
     float scale = 1.0f;
+
+    // A helper to get a direct pointer to the drive knob
+    ModulatableSlider* getDriveKnob() { return modulatableSliderComponents.at(DRIVE_NAME).get(); }
+    void setGraphVisibilityForDriveDrag(bool isDragging);
 
 private:
     void updateAttachments();
@@ -137,6 +141,8 @@ private:
     // Distortion modes moved from PluginEditor
     std::array<juce::ComboBox, 4> distortionModes;
     std::array<std::unique_ptr<ComboBoxAttachment>, 4> modeAttachments;
+
+    juce::Component* preDragVisibleGraph = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

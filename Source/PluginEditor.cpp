@@ -19,32 +19,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
       processor(p),
       stateComponent { p.stateAB, p.statePresets, p.treeState },
       // Initialize bandPanel and globalPanel with the popup callbacks
-      bandPanel(p,
-                // Drag callbacks
-                [this](ModulatableSlider* s)
-                { showValuePopupForSlider(s); },
-                [this](ModulatableSlider* s)
-                { updateValuePopupForSlider(s); },
-                [this](ModulatableSlider* s)
-                { hideValuePopup(); },
-                // Hover callbacks
-                [this](ModulatableSlider* s)
-                { showValuePopupForSlider(s); },
-                [this](ModulatableSlider* s)
-                { hideValuePopup(); }),
-      globalPanel(processor,
-                  // Drag callbacks
-                  [this](ModulatableSlider* s)
-                  { showValuePopupForSlider(s); },
-                  [this](ModulatableSlider* s)
-                  { updateValuePopupForSlider(s); },
-                  [this](ModulatableSlider* s)
-                  { hideValuePopup(); },
-                  // Hover callbacks
-                  [this](ModulatableSlider* s)
-                  { showValuePopupForSlider(s); },
-                  [this](ModulatableSlider* s)
-                  { hideValuePopup(); }),
+      bandPanel(p, {}, {}, {}, {}, {}),
+      globalPanel(processor, {}, {}, {}, {}, {}),
       lfoPanel(p)
 {
     addAndMakeVisible(valuePopup);
@@ -122,6 +98,52 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // Use the new helper function to get all sliders and assign the callback in a single loop
     for (auto* slider : getAllModulatableSliders())
     {
+        // --- Main Knob Drag Callbacks (NO Value Popup) ---
+        // These callbacks now only handle the special case for the drive knob.
+        slider->onMainDragStart = [this](ModulatableSlider* s)
+        {
+            // If the dragged slider is the drive knob, trigger the graph visibility change.
+            if (s == bandPanel.getDriveKnob())
+                bandPanel.setGraphVisibilityForDriveDrag(true);
+        };
+
+        slider->onMainDragMove = [](ModulatableSlider*) {}; // Main knob drag does not need continuous updates here.
+
+        slider->onMainDragEnd = [this](ModulatableSlider* s)
+        {
+            // If the drag ended on the drive knob, restore the graph visibility.
+            if (s == bandPanel.getDriveKnob())
+                bandPanel.setGraphVisibilityForDriveDrag(false);
+        };
+
+        // --- Modulation Handle Drag Callbacks (WITH Value Popup) ---
+        // This is where the popup logic should be.
+        slider->onModDragStart = [this](ModulatableSlider* s)
+        {
+            showValuePopupForSlider(s);
+        };
+
+        slider->onModDragMove = [this](ModulatableSlider* s)
+        {
+            updateValuePopupForSlider(s);
+        };
+
+        slider->onModDragEnd = [this](ModulatableSlider* s)
+        {
+            hideValuePopup();
+        };
+
+        // --- Hover Callbacks (Still show popups for hover) ---
+        // This behavior remains unchanged.
+        slider->onHoverStart = [this](ModulatableSlider* s)
+        {
+            showValuePopupForSlider(s);
+        };
+        slider->onHoverEnd = [this](ModulatableSlider* s)
+        {
+            hideValuePopup();
+        };
+
         slider->onModAmountSetValue = [this, slider](double newValue)
         {
             processor.setModulationValue(slider->getParamID(), (float) newValue);
@@ -800,8 +822,6 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
 void FireAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
 {
     // The logic for clicking on graphs has been moved to BandPanel.
-    // 单击图形的逻辑已移至 BandPanel。
-
     if (e.eventComponent == &multiband)
     {
         updateWhenChangingFocus();

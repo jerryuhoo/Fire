@@ -27,9 +27,9 @@ class GlobalPanel : public PanelBase,
 {
 public:
     GlobalPanel(FireAudioProcessor& p,
-                std::function<void(ModulatableSlider*)> onDragStart,
-                std::function<void(ModulatableSlider*)> onDragMove,
-                std::function<void(ModulatableSlider*)> onDragEnd,
+                std::function<void(ModulatableSlider*)> onModDragStart,
+                std::function<void(ModulatableSlider*)> onModDragMove,
+                std::function<void(ModulatableSlider*)> onModDragEnd,
                 std::function<void(ModulatableSlider*)> onHoverStart,
                 std::function<void(ModulatableSlider*)> onHoverEnd);
     ~GlobalPanel() override;

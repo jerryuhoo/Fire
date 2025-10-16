@@ -13,9 +13,9 @@
 
 //==============================================================================
 BandPanel::BandPanel(FireAudioProcessor& p,
-                     std::function<void(ModulatableSlider*)> onDragStart,
-                     std::function<void(ModulatableSlider*)> onDragMove,
-                     std::function<void(ModulatableSlider*)> onDragEnd,
+                     std::function<void(ModulatableSlider*)> onModDragStart,
+                     std::function<void(ModulatableSlider*)> onModDragMove,
+                     std::function<void(ModulatableSlider*)> onModDragEnd,
                      std::function<void(ModulatableSlider*)> onHoverStart,
                      std::function<void(ModulatableSlider*)> onHoverEnd)
     : PanelBase(p), focusBandNum(0)
@@ -30,9 +30,9 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     for (auto& sliderPair : modulatableSliderComponents)
     {
         auto* slider = sliderPair.second.get();
-        slider->onDragStart = onDragStart;
-        slider->onDragMove = onDragMove;
-        slider->onDragEnd = onDragEnd;
+        slider->onModDragStart = onModDragStart;
+        slider->onModDragMove = onModDragMove;
+        slider->onModDragEnd = onModDragEnd;
         slider->onHoverStart = onHoverStart;
         slider->onHoverEnd = onHoverEnd;
     }
@@ -758,4 +758,37 @@ void BandPanel::updateDistortionModeVisibility()
 void BandPanel::updateRealtimeThreshold(float newThreshold)
 {
     vuPanel.updateRealtimeThreshold(newThreshold);
+}
+
+void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
+{
+    if (isDragging)
+    {
+        if (oscilloscope.isVisible())
+            preDragVisibleGraph = &oscilloscope;
+        else if (distortionGraph.isVisible())
+            preDragVisibleGraph = &distortionGraph;
+        else if (vuPanel.isVisible())
+            preDragVisibleGraph = &vuPanel;
+        else if (widthGraph.isVisible())
+            preDragVisibleGraph = &widthGraph;
+        else
+            preDragVisibleGraph = nullptr;
+
+        if (preDragVisibleGraph != &distortionGraph)
+        {
+            if (preDragVisibleGraph != nullptr)
+                preDragVisibleGraph->setVisible(false);
+            distortionGraph.setVisible(true);
+        }
+    }
+    else
+    {
+        if (preDragVisibleGraph != nullptr && preDragVisibleGraph != &distortionGraph)
+        {
+            distortionGraph.setVisible(false);
+            preDragVisibleGraph->setVisible(true);
+        }
+        preDragVisibleGraph = nullptr;
+    }
 }

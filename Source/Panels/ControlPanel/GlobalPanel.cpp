@@ -13,9 +13,9 @@
 
 //==============================================================================
 GlobalPanel::GlobalPanel(FireAudioProcessor& p,
-                         std::function<void(ModulatableSlider*)> onDragStart,
-                         std::function<void(ModulatableSlider*)> onDragMove,
-                         std::function<void(ModulatableSlider*)> onDragEnd,
+                         std::function<void(ModulatableSlider*)> onModDragStart,
+                         std::function<void(ModulatableSlider*)> onModDragMove,
+                         std::function<void(ModulatableSlider*)> onModDragEnd,
                          std::function<void(ModulatableSlider*)> onHoverStart,
                          std::function<void(ModulatableSlider*)> onHoverEnd)
     : PanelBase(p)
@@ -35,9 +35,9 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     for (auto& sliderPair : modulatableSliderComponents)
     {
         auto* slider = sliderPair.second.get();
-        slider->onDragStart = onDragStart;
-        slider->onDragMove = onDragMove;
-        slider->onDragEnd = onDragEnd;
+        slider->onModDragStart = onModDragStart;
+        slider->onModDragMove = onModDragMove;
+        slider->onModDragEnd = onModDragEnd;
         slider->onHoverStart = onHoverStart;
         slider->onHoverEnd = onHoverEnd;
     }

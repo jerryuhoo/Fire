@@ -285,9 +285,6 @@ void BandPanel::resized()
     graphAreaRect = graphColumnArea;
     outputAreaRect = outputColumnArea;
 
-    switchColumnArea.removeFromRight(10);
-    knobsColumnArea.removeFromRight(10);
-
     // --- Column 1: Layout Switches (unchanged) ---
     juce::FlexBox switchColumnBox;
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
@@ -298,11 +295,15 @@ void BandPanel::resized()
     switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f));
     switchColumnBox.performLayout(switchColumnArea);
 
-    auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
+    auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = (int) (parentBounds.getHeight() * 0.6f);
-        bypass.setBounds(parentBounds.getX(), parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
+        const int bypassSize = (int) (KNOB_FONT_SIZE * 2.0f * scale);
+
+        bypass.setBounds(parentBounds.getX(),
+                         parentBounds.getCentreY() - (bypassSize / 2),
+                         bypassSize,
+                         bypassSize);
         bypass.toFront(false);
     };
 

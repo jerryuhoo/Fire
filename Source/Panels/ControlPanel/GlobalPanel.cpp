@@ -315,23 +315,25 @@ void GlobalPanel::resized()
     tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
     outputAreaRect = outputColumnArea;
 
-    // NOTE: The lines that created gaps between columns have been removed.
-
     // --- Column 1: Layout Switches ---
     juce::FlexBox switchColumnBox;
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
-    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::flexStart;
+    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
     switchColumnBox.alignItems = juce::FlexBox::AlignItems::stretch;
-    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(0).withHeight(65 * scale));
-    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(0).withHeight(65 * scale));
-    switchColumnBox.items.add(juce::FlexItem(graphSwitch).withFlex(0).withHeight(65 * scale));
+    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(1.0f));
+    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(1.0f));
+    switchColumnBox.items.add(juce::FlexItem(graphSwitch).withFlex(1.0f));
     switchColumnBox.performLayout(switchColumnArea);
 
-    auto layoutBypassButton = [](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
+    auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = (int) (parentBounds.getHeight() * 0.6f);
-        bypass.setBounds(parentBounds.getX(), parentBounds.getCentreY() - (bypassSize / 2), bypassSize, bypassSize);
+        const int bypassSize = (int) (KNOB_FONT_SIZE * 2.0f * scale);
+
+        bypass.setBounds(parentBounds.getX(),
+                         parentBounds.getCentreY() - (bypassSize / 2),
+                         bypassSize,
+                         bypassSize);
         bypass.toFront(false);
     };
 
@@ -347,57 +349,63 @@ void GlobalPanel::resized()
     // --- Column 2: Layout for Main Knobs/Graphs Area ---
     if (filterSwitch.getToggleState())
     {
-        // ... filter layout logic remains the same
-        const int numColumns = 5;
-        const int numGaps = numColumns - 1;
-        const int gapWidth = scaledSpacing;
-        const float totalContentWidth = knobsColumnArea.getWidth() - (numGaps * gapWidth);
-        const float narrowColProportion = 1.0f / 7.0f;
-        const float wideColProportion = (1.0f - (2.0f * narrowColProportion)) / 3.0f;
-        int narrowColWidth = static_cast<int>(totalContentWidth * narrowColProportion);
-        int wideColWidth = static_cast<int>(totalContentWidth * wideColProportion);
-        juce::Array<juce::Rectangle<int>> columns;
-        juce::Rectangle<int> placementArea = knobsColumnArea;
-        columns.add(placementArea.removeFromLeft(narrowColWidth));
-        placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea.removeFromLeft(narrowColWidth));
-        placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea.removeFromLeft(wideColWidth));
-        placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea.removeFromLeft(wideColWidth));
-        placementArea.removeFromLeft(gapWidth);
-        columns.add(placementArea);
-        auto& buttonColumn = columns.getReference(0);
-        const int buttonHeight = 30 * scale;
-        const int verticalPadding = 5 * scale;
-        const int totalButtonBlockHeight = (buttonHeight * 3) + (verticalPadding * 2);
-        auto buttonBlockArea = buttonColumn.withSizeKeepingCentre(buttonColumn.getWidth() - 10 * scale, totalButtonBlockHeight);
-        filterLowCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
-        buttonBlockArea.removeFromTop(verticalPadding);
-        filterPeakButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
-        buttonBlockArea.removeFromTop(verticalPadding);
-        filterHighCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
-        auto& comboBoxColumn = columns.getReference(1);
-        const int comboBoxWidth = static_cast<int>(narrowColWidth * 0.9f);
-        const int comboBoxHeight = 30 * scale;
-        lowcutSlopeMode.setBounds(comboBoxColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight));
-        highcutSlopeMode.setBounds(comboBoxColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight));
-        auto freqKnobBounds = columns[2].withSizeKeepingCentre(scaledKnobSize, scaledKnobSize);
-        auto gainKnobBounds = columns[3].withSizeKeepingCentre(scaledKnobSize, scaledKnobSize);
-        auto qKnobBounds = columns[4].withSizeKeepingCentre(scaledKnobSize, scaledKnobSize);
-        modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(freqKnobBounds);
-        modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(freqKnobBounds);
-        modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(freqKnobBounds);
-        modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(gainKnobBounds);
-        modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(gainKnobBounds);
-        modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(gainKnobBounds);
-        modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(qKnobBounds);
-        modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(qKnobBounds);
-        modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(qKnobBounds);
+        auto controlArea = knobsColumnArea;
+        auto leftHalf = controlArea.removeFromLeft(controlArea.getWidth() / 2);
+        auto rightHalf = controlArea;
+
+        rightHalf.removeFromLeft(scaledSpacing);
+
+        {
+            auto buttonColumn = leftHalf.removeFromLeft(leftHalf.getWidth() / 2);
+            auto comboColumn = leftHalf;
+
+            const int buttonHeight = static_cast<int>(30 * scale);
+            const int buttonWidth = static_cast<int>(60 * scale);
+            const int verticalPadding = static_cast<int>(5 * scale);
+
+            const int totalButtonBlockHeight = (buttonHeight * 3) + (verticalPadding * 2);
+
+            auto buttonBlockArea = buttonColumn.withSizeKeepingCentre(buttonWidth, totalButtonBlockHeight);
+
+            filterLowCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
+            buttonBlockArea.removeFromTop(verticalPadding);
+            filterPeakButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
+            buttonBlockArea.removeFromTop(verticalPadding);
+            filterHighCutButton.setBounds(buttonBlockArea);
+
+            const int comboBoxWidth = static_cast<int>(70 * scale);
+            const int comboBoxHeight = static_cast<int>(30 * scale);
+            auto comboBoxBounds = comboColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight);
+            lowcutSlopeMode.setBounds(comboBoxBounds);
+            highcutSlopeMode.setBounds(comboBoxBounds);
+        }
+
+        {
+            const int numKnobs = 3;
+            const int totalKnobsWidth = (numKnobs * scaledKnobSize) + ((numKnobs - 1) * scaledSpacing);
+            auto knobsArea = rightHalf.withSizeKeepingCentre(totalKnobsWidth, scaledKnobSize);
+
+            auto freqBounds = knobsArea.removeFromLeft(scaledKnobSize);
+            knobsArea.removeFromLeft(scaledSpacing);
+            auto gainBounds = knobsArea.removeFromLeft(scaledKnobSize);
+            knobsArea.removeFromLeft(scaledSpacing);
+            auto qBounds = knobsArea;
+
+            modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(freqBounds);
+            modulatableSliderComponents.at(PEAK_FREQ_NAME)->setBounds(freqBounds);
+            modulatableSliderComponents.at(HIGHCUT_FREQ_NAME)->setBounds(freqBounds);
+
+            modulatableSliderComponents.at(LOWCUT_GAIN_NAME)->setBounds(gainBounds);
+            modulatableSliderComponents.at(PEAK_GAIN_NAME)->setBounds(gainBounds);
+            modulatableSliderComponents.at(HIGHCUT_GAIN_NAME)->setBounds(gainBounds);
+
+            modulatableSliderComponents.at(LOWCUT_Q_NAME)->setBounds(qBounds);
+            modulatableSliderComponents.at(PEAK_Q_NAME)->setBounds(qBounds);
+            modulatableSliderComponents.at(HIGHCUT_Q_NAME)->setBounds(qBounds);
+        }
     }
     else if (downsampleSwitch.getToggleState())
     {
-        // ... lo-fi layout logic remains the same
         auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2 + scaledSpacing, scaledKnobSize * 2 + scaledSpacing);
         auto topRow = centeredArea.removeFromTop(scaledKnobSize);
         auto bottomRow = centeredArea.removeFromBottom(scaledKnobSize);

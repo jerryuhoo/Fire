@@ -1150,8 +1150,8 @@ void LfoPanel::resized()
 
     // Add spacing between columns
     // leftColumnArea.removeFromRight(5 * scale);
-    // centerColumnArea.removeFromLeft(5 * scale);
-    // centerColumnArea.removeFromRight(5 * scale);
+    centerColumnArea.removeFromLeft(5 * scale);
+    centerColumnArea.removeFromRight(5 * scale);
     // rightColumnArea.removeFromLeft(5 * scale);
 
     // --- 2. Layout Left Column (LFO Select Buttons) ---

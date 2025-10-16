@@ -2123,6 +2123,7 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
 
 FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const
 {
+    const juce::ScopedLock sl(lfoManager->getLfoDataLock());
     // Find the routing in the manager's list
     for (const auto& routing : lfoManager->getModulationRoutings())
     {

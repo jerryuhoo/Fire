@@ -74,7 +74,7 @@ public:
     void invertModulationDepth(const juce::String& targetParameterID);
     void onLfoShapeChanged(int lfoIndex);
     void toggleBypassForRouting(const juce::String& targetParameterID);
-
+    juce::CriticalSection& getLfoDataLock() { return dataAccessLock; }
 private:
     /**
      * @brief Internal helper to generate raw LFO signals into the internal buffer.
@@ -92,7 +92,7 @@ private:
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<LfoData> lfoData;
 
-    juce::CriticalSection lfoUpdateLock;
+    juce::CriticalSection dataAccessLock;
 
     // Owns all modulation connection rules.
     juce::Array<ModulationRouting> modulationRoutings;

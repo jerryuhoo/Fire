@@ -76,6 +76,7 @@ bool LfoManager::isModulationActive() const
 
 void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     // 1. Generate all raw LFO signals for the current block.
     // This fills the internal 'lfoOutputBuffer'.
     generateLfoOutput(sampleRate, playHead, numSamples);
@@ -202,7 +203,6 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     for (int i = 0; i < 4; ++i)
     {
-        const juce::ScopedLock sl(lfoUpdateLock);
         // Shape update logic (unchanged)
         bool needsUpdate = true;
         if (shapeUpdateFlags[i].compare_exchange_strong(needsUpdate, false))
@@ -336,7 +336,7 @@ float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
 
 void LfoManager::onLfoShapeChanged(int lfoIndex)
 {
-    const juce::ScopedLock sl(lfoUpdateLock);
+    const juce::ScopedLock sl(dataAccessLock);
     if (lfoIndex < 0)
     {
         for (int i = 0; i < 4; ++i)
@@ -380,6 +380,7 @@ float LfoManager::getLfoOutput(int lfoIndex) const
 
 void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     // 1. First, check if the target parameter is already being modulated.
     //    If so, just update its LFO source.
     for (auto& routing : modulationRoutings)
@@ -420,6 +421,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
 
 void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID == targetParameterID)
@@ -437,6 +439,7 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 
 void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID == targetParameterID)
@@ -449,6 +452,7 @@ void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
 
 void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID == targetParameterID)
@@ -461,7 +465,7 @@ void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
 
 void LfoManager::setLfoData(int index, const LfoData& newData)
 {
-    const juce::ScopedLock sl(lfoUpdateLock);
+    const juce::ScopedLock sl(dataAccessLock);
     if (juce::isPositiveAndBelow(index, (int) lfoData.size()))
     {
         lfoData[index] = newData;
@@ -471,7 +475,7 @@ void LfoManager::setLfoData(int index, const LfoData& newData)
 
 void LfoManager::clearAllLfoData()
 {
-    const juce::ScopedLock sl(lfoUpdateLock);
+    const juce::ScopedLock sl(dataAccessLock);
     for (auto& lfo : lfoData)
     {
         lfo = LfoData(); // Reset to default state

@@ -91,6 +91,7 @@ namespace state
         }
 
         // --- Load LFO and Matrix data ---
+        const juce::ScopedLock sl(fireProc.getLfoManager().getLfoDataLock());
 
         // Cast to non-const to modify the processor's state
         auto& mutableFireProc = const_cast<FireAudioProcessor&>(fireProc);

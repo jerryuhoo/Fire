@@ -1077,12 +1077,20 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         // IMPORTANT: After loading, ensure the UI is updated if the editor is open.
         // This is a simplified notification. A more robust system might use a
         // ChangeBroadcaster/Listener pattern.
+        // if (auto* editor = getActiveEditor())
+        // {
+        //     // A simple repaint might be sufficient if your components read data in their paint calls.
+        //     // For more complex updates, you'd call specific update functions on the editor.
+        //     editor->repaint();
+        // }
+
+        juce::MessageManager::callAsync([this]
+                                        {
         if (auto* editor = getActiveEditor())
         {
-            // A simple repaint might be sufficient if your components read data in their paint calls.
-            // For more complex updates, you'd call specific update functions on the editor.
+            // This code will now run safely on the message thread
             editor->repaint();
-        }
+        } });
 
         sendChangeMessage();
     }

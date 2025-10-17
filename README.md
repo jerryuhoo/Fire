@@ -12,9 +12,9 @@ This is a multi-band distortion plugin [『Fire』](https://www.bluewingsmusic.c
 
 Demo video:
 
-(YouTube) <https://youtu.be/sccW_8W_0o4>
+(YouTube) <https://youtu.be/U5UTz6kWVE4>
 
-(Bilibili) <https://www.bilibili.com/video/BV17f4y1M7Hm>
+(Bilibili) <https://www.bilibili.com/video/BV11MWpzUEKA/>
 
 :musical_note: Home Page for Wings Music: [Blue Wings Music](https://www.bluewingsmusic.com/)
 
@@ -160,15 +160,7 @@ Builds/Fire_artefacts/Release/
 
 - You can split up frequency to four bands for multiband distortion.
 
-### 3.3. Graph Visualizer
-
-- There are four graph visualizers. You can click on each graph to zoom in or zoom out.
-- Top left is oscilloscope.
-- Top right is distortion graph.
-- Bottom Left is VU meters.
-- Bottom right is Width graph.
-
-### 3.4. Band Effect
+### 3.3. Band Effect
 
 - You can click four switches on the right side of graphs.
 - **Drive**:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme".
@@ -176,17 +168,18 @@ Builds/Fire_artefacts/Release/
   - **Safe**: If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
   - **Extreme**: It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
 - **Retification and bias**: Change your distortion shape.
-- **Compressor**: you can change threshold and ratio for each band.
-- **Width**: change audio width.
-- **Output and mix**: Only for distortion part, will not affect compressor and width.
+- **Compressor**: You can change threshold, ratio, attack, and release for each band.
+- **Stereo**: Change audio width and pan.
+- **Output and mix**: For each bandm you can change the output and the mix.
 
-### 3.5. LFO / Modulation
+### 3.4. LFO / Modulation
 
 『Fire』 includes four fully customizable LFOs that can be used to modulate various parameters.
 
 - **LFO Selection**: On the left, click the "LFO 1" through "LFO 4" buttons to select which LFO you are editing.
 - **Rate & Sync**: The **Rate** knob controls the LFO speed. Click the **BPM** button to toggle synchronization with your DAW's tempo.
 - **Smooth**: Adjusts the smoothness of the LFO shape.
+- **Phase**: Adjusts the starting point (phase) of the LFO shape.
 - **Grid**: The X and Y controls adjust the grid divisions in the editor for visual guidance and snapping.
 
 #### LFO Editor
@@ -220,7 +213,7 @@ The main LFO display allows you to create complex modulation shapes. It has two 
 - **Matrix Button**: Opens the Modulation Matrix window, where you can assign LFOs to control plugin parameters.
 - **Assign Button**: Engages "Assign Mode." While active, the next parameter you click in the plugin will be automatically assigned to the currently selected LFO.
 
-### 3.6. Global Effect
+### 3.5. Global Effect
 
 - **Filter**: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
 - **Downsample**: downsample your audio.
@@ -256,7 +249,7 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2025-10-07 (version 1.5.0)
+### 2025-10-18 (version 1.5.0)
 
 This is a major feature update that introduces a comprehensive LFO modulation system and involves a significant refactoring of the plugin's core architecture.
 
@@ -267,6 +260,7 @@ This is a major feature update that introduces a comprehensive LFO modulation sy
     - **Modulation Matrix**: A dedicated matrix panel to manage all modulation routings in one place.
     - **BPM Sync & Free (Hz) Modes**: Each LFO can be synchronized to the host's BPM or run freely in Hz.
     - **Quick Modulation Assignment**: A new "Assign" mode allows you to click any knob to instantly map it as a modulation target.
+    - **Other New Features**: Features like attack / release for compressor, new pan for stereo, and more downsample controls!
 
 2. **Major Code Refactoring**:
     - I refactored both UI and DSP code of this plugin so it is easier to modify and understand now.

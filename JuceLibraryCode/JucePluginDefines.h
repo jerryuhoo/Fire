@@ -77,13 +77,13 @@
  #define JucePlugin_EditorRequiresKeyboardFocus  0
 #endif
 #ifndef  JucePlugin_Version
- #define JucePlugin_Version                1.5.0b
+ #define JucePlugin_Version                1.5.0
 #endif
 #ifndef  JucePlugin_VersionCode
  #define JucePlugin_VersionCode            0x10500
 #endif
 #ifndef  JucePlugin_VersionString
- #define JucePlugin_VersionString          "1.5.0b"
+ #define JucePlugin_VersionString          "1.5.0"
 #endif
 #ifndef  JucePlugin_VSTUniqueID
  #define JucePlugin_VSTUniqueID            JucePlugin_PluginCode
@@ -155,7 +155,7 @@
  #define JucePlugin_ARAFactoryID           "com.BlueWingsMusic.Fire.factory"
 #endif
 #ifndef  JucePlugin_ARADocumentArchiveID
- #define JucePlugin_ARADocumentArchiveID   "com.BlueWingsMusic.Fire.aradocumentarchive.1.0.2"
+ #define JucePlugin_ARADocumentArchiveID   "com.BlueWingsMusic.Fire.aradocumentarchive.1.5.0"
 #endif
 #ifndef  JucePlugin_ARACompatibleArchiveIDs
  #define JucePlugin_ARACompatibleArchiveIDs  ""

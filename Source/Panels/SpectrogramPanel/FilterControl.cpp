@@ -20,16 +20,53 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel) : proces
         param->addListener(this);
     }
 
+    // Register as a listener to the processor for preset changes
+    processor.addChangeListener(this);
+
     updateChain();
     addAndMakeVisible(draggableLowButton);
     addAndMakeVisible(draggablePeakButton);
     addAndMakeVisible(draggableHighButton);
+
+    // The timer is always running, but its callback is now intelligent
     startTimerHz(60);
+
+    // Initial check for modulation status on startup
+    checkAnimationStatus();
+
+    // Add these lines to connect mouse wheel events to Q parameters
+    auto setupQControl = [this](DraggableButton& button, const juce::String& paramID)
+    {
+        button.onQValueChanged = [this, paramID](float delta)
+        {
+            if (auto* param = processor.treeState.getParameter(paramID))
+            {
+                // Increase sensitivity for finer control
+                float sensitivity = 0.5f;
+                float currentValue = param->getValue();
+                float newValue = currentValue + delta * sensitivity;
+
+                // Clamp the value between 0.0 and 1.0
+                newValue = juce::jlimit(0.0f, 1.0f, newValue);
+
+                param->setValueNotifyingHost(newValue);
+            }
+        };
+    };
+
+    // Assuming you have these parameter IDs defined in Parameters.h
+    setupQControl(draggableLowButton, LOWCUT_Q_ID);
+    setupQControl(draggablePeakButton, PEAK_Q_ID);
+    setupQControl(draggableHighButton, HIGHCUT_Q_ID);
 }
 
 FilterControl::~FilterControl()
 {
     stopTimer();
+
+    // Unregister the listener
+    processor.removeChangeListener(this);
+
     const auto& params = processor.getParameters();
     for (auto param : params)
     {
@@ -55,8 +92,12 @@ void FilterControl::paint(juce::Graphics& g)
         g.setColour(juce::Colours::hotpink.withBrightness(0.8f).withAlpha(0.2f));
         g.fillPath(responseCurve);
 
-        g.setColour(juce::Colours::red.withAlpha(0.5f));
-        g.strokePath(lfoResponseCurve, juce::PathStrokeType(1.0f));
+        // Only draw LFO curve if animation is active
+        if (isAnimationActive)
+        {
+            g.setColour(juce::Colours::red.withAlpha(0.5f));
+            g.strokePath(lfoResponseCurve, juce::PathStrokeType(1.0f));
+        }
     }
     else
     {
@@ -179,6 +220,11 @@ void FilterControl::paint(juce::Graphics& g)
 
 void FilterControl::timerCallback()
 {
+    // The core of the optimization
+    // If no LFO is modulating the filter, this function does nothing.
+    if (! isAnimationActive)
+        return;
+
     ModulatedFilterValues modulatedValues;
 
     // Safely pull the latest data packet from the FIFO queue.
@@ -190,6 +236,46 @@ void FilterControl::timerCallback()
 
         // Trigger a repaint to show the changes on screen.
         repaint();
+    }
+}
+
+// This callback responds to preset loads or other global changes
+void FilterControl::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source == &processor)
+    {
+        checkAnimationStatus();
+    }
+}
+
+// New helper function to check modulation and update state
+void FilterControl::checkAnimationStatus()
+{
+    bool needsAnimation = false;
+    const auto& routings = processor.getLfoManager().getModulationRoutings();
+    for (const auto& routing : routings)
+    {
+        if (! routing.targetParameterID.isEmpty())
+        {
+            // Check if the target is any of the global filter parameters
+            if (routing.targetParameterID == LOWCUT_FREQ_ID || routing.targetParameterID == LOWCUT_GAIN_ID || routing.targetParameterID == LOWCUT_Q_ID || routing.targetParameterID == PEAK_FREQ_ID || routing.targetParameterID == PEAK_GAIN_ID || routing.targetParameterID == PEAK_Q_ID || routing.targetParameterID == HIGHCUT_FREQ_ID || routing.targetParameterID == HIGHCUT_GAIN_ID || routing.targetParameterID == HIGHCUT_Q_ID)
+            {
+                needsAnimation = true;
+                break;
+            }
+        }
+    }
+
+    if (needsAnimation != isAnimationActive)
+    {
+        isAnimationActive = needsAnimation;
+
+        if (! isAnimationActive)
+        {
+            // If animation has just been turned off, clear the curve and repaint once.
+            lfoResponseCurve.clear();
+            repaint();
+        }
     }
 }
 
@@ -251,14 +337,8 @@ void FilterControl::updateChain()
     updateCoefficients(monoChain.get<ChainPositions::LowCutQ>().coefficients, lowCutQCoefficients);
     auto highCutQCoefficients = makeHighcutQFilter(chainSettings, processor.getSampleRate());
     updateCoefficients(monoChain.get<ChainPositions::HighCutQ>().coefficients, highCutQCoefficients);
-
-    updateCutFilter(monoChain.get<ChainPositions::LowCut>(),
-                    lowCutCoefficients,
-                    chainSettings.lowCutSlope);
-
-    updateCutFilter(monoChain.get<ChainPositions::HighCut>(),
-                    highCutCoefficients,
-                    chainSettings.highCutSlope);
+    updateCutFilter(monoChain.get<ChainPositions::LowCut>(), lowCutCoefficients, chainSettings.lowCutSlope);
+    updateCutFilter(monoChain.get<ChainPositions::HighCut>(), highCutCoefficients, chainSettings.highCutSlope);
 }
 
 void FilterControl::updateResponseCurve()
@@ -360,6 +440,11 @@ void FilterControl::handleAsyncUpdate()
     updateChain();
     updateResponseCurve();
     setDraggableButtonBounds();
+
+    // Crucially, check if the animation status needs to change
+    // This handles cases like adding/removing modulation links in the matrix.
+    checkAnimationStatus();
+
     repaint();
 }
 
@@ -408,6 +493,13 @@ void FilterControl::updateLfoChain(const ModulatedFilterValues& modulatedValues)
 
 void FilterControl::updateLfoResponseCurve()
 {
+    // If animation is not active, there is nothing to calculate, so we clear the path and exit.
+    if (! isAnimationActive)
+    {
+        lfoResponseCurve.clear();
+        return;
+    }
+
     auto& lowcut = lfoMonoChain.get<ChainPositions::LowCut>();
     auto& peak = lfoMonoChain.get<ChainPositions::Peak>();
     auto& highcut = lfoMonoChain.get<ChainPositions::HighCut>();

@@ -12,7 +12,7 @@
 
 //#include "../../JuceLibraryCode/JucePluginDefines.h"
 
-#define VERSION                 "1.5.0b"
+#define VERSION                 "1.5.0"
 #define GITHUB_LINK             "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK         "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION       ".fire"
@@ -35,12 +35,24 @@
 #define SAFE_NAME               "Safe"
 #define EXTREME_ID              "extreme"
 #define EXTREME_NAME            "Extreme"
+#define SHAPE_MIX_ID            "shapeMix"
+#define SHAPE_MIX_NAME          "ShapeMix"
 #define COMP_RATIO_ID           "compRatio"
 #define COMP_RATIO_NAME         "CompRatio"
 #define COMP_THRESH_ID          "compThresh"
 #define COMP_THRESH_NAME        "CompThresh"
+#define COMP_ATTACK_ID          "compAttack"
+#define COMP_ATTACK_NAME        "CompAttack"
+#define COMP_RELEASE_ID         "compRelease"
+#define COMP_RELEASE_NAME       "CompRelease"
+#define COMP_MIX_ID             "compMix"
+#define COMP_MIX_NAME           "CompMix"
 #define WIDTH_ID                "width"
 #define WIDTH_NAME              "Width"
+#define PAN_ID                  "pan"
+#define PAN_NAME                "Pan"
+#define WIDTH_MIX_ID            "widthMix"
+#define WIDTH_MIX_NAME          "WidthMix"
 #define OUTPUT_ID               "output"     // Note: globalOutput is "output" itself
 #define OUTPUT_NAME             "Output"
 #define GLOBAL_OUTPUT_NAME      "GlobalOutput"
@@ -49,14 +61,20 @@
 #define GLOBAL_MIX_NAME         "GlobalMix"
 #define BIAS_ID                 "bias"
 #define BIAS_NAME               "Bias"
-#define DC_BYPASS_ID            "dcBypass"
-#define DC_BYPASS_NAME          "DcBypass"
+#define DC_FILTER_ID            "dcFilter"
+#define DC_FILTER_NAME          "DcFilter"
 #define REC_ID                  "rec"
 #define REC_NAME                "Rec"
 
 // global params
 #define DOWNSAMPLE_ID           "downSample"
 #define DOWNSAMPLE_NAME         "DownSample"
+#define BIT_DEPTH_ID            "bitDepth"
+#define BIT_DEPTH_NAME          "BitDepth"
+#define JITTER_ID               "jitter"
+#define JITTER_NAME             "Jitter"
+#define DOWNSAMPLE_MIX_ID       "downsampleMix"
+#define DOWNSAMPLE_MIX_NAME     "DownsampleMix"
 #define LOWCUT_FREQ_ID          "lowcutFreq"
 #define LOWCUT_FREQ_NAME        "LowcutFreq"
 #define HIGHCUT_FREQ_ID         "highcutFreq"
@@ -118,6 +136,12 @@
 #define LINE_STATE_ID           "lineState" // lineState1 - lineState3
 #define LINE_STATE_NAME         "LineState"
 
+#define DRIVE_BYPASS_ID          "driveBypass"
+#define DRIVE_BYPASS_NAME        "DriveBypass"
+
+#define SHAPE_BYPASS_ID          "shapeBypass"
+#define SHAPE_BYPASS_NAME        "ShapeBypass"
+
 #define COMP_BYPASS_ID          "compressorBypass"
 #define COMP_BYPASS_NAME        "CompressorBypass"
 
@@ -140,6 +164,10 @@
 #define LFO_RATE_SYNC_NAME      "LfoRateSync"
 #define LFO_RATE_HZ_ID          "lfoRateHz"
 #define LFO_RATE_HZ_NAME        "LfoRateHz"
+#define LFO_SMOOTH_ID           "lfoSmooth"
+#define LFO_SMOOTH_NAME         "LfoSmooth"
+#define LFO_PHASE_ID            "lfoPhase"
+#define LFO_PHASE_NAME          "LfoPhase"
 
 
 // Define Font
@@ -153,7 +181,7 @@
 // Define Components size
 #define TEXTBOX_WIDTH       60
 #define TEXTBOX_HEIGHT      30
-#define KNOBSIZE            100
+#define KNOB_SIZE           100
 #define SCALED_KNOBSIZE     static_cast<int>(knobSize * scale)
 
 
@@ -211,13 +239,6 @@
 #define FILTER_TYPE_X       startX * 6.0f - SCALED_KNOBSIZE / 4.0f
 #define OUTPUT_X_G          startX * 9.0f - SCALED_KNOBSIZE / 2.0f
 #define MIX_X_G             startX * 9.0f - SCALED_KNOBSIZE / 2.0f
-
-#define VU_METER_WIDTH      getWidth() / 10.0f
-#define VU_METER_HEIGHT     getHeight() / 10.0f * 9.0f
-#define VU_METER_Y          getHeight() / 10.0f
-#define VU_METER_X_1        getWidth() / 3.0f - VU_METER_WIDTH / 2.0f
-#define VU_METER_X_2        getWidth() / 3.0f * 2.0f - VU_METER_WIDTH / 2.0f
-
 
 // Switches
 #define SWITCH_WIDTH        OSC_WIDTH / 10.0f

@@ -1,4 +1,4 @@
-# Fire (Version 1.5.0 Beta) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
+# Fire (Version 1.5.0) [![](https://travis-ci.com/jerryuhoo/Fire.svg?branch=master)](https://travis-ci.com/jerryuhoo/Fire) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/8c68fa4c8da04cb8abca88e2dfceb280)](https://app.codacy.com/gh/jerryuhoo/Fire/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)[![CMake Build Matrix](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml/badge.svg)](https://github.com/jerryuhoo/Fire/actions/workflows/build_and_test.yml)
 
 ![Alt text](Fire1.png?raw=true "Title")
 
@@ -12,9 +12,9 @@ This is a multi-band distortion plugin [『Fire』](https://www.bluewingsmusic.c
 
 Demo video:
 
-(YouTube) <https://youtu.be/sccW_8W_0o4>
+(YouTube) <https://youtu.be/U5UTz6kWVE4>
 
-(Bilibili) <https://www.bilibili.com/video/BV17f4y1M7Hm>
+(Bilibili) <https://www.bilibili.com/video/BV11MWpzUEKA/>
 
 :musical_note: Home Page for Wings Music: [Blue Wings Music](https://www.bluewingsmusic.com/)
 
@@ -149,51 +149,75 @@ Builds/Fire_artefacts/Release/
 
 ### 3.1. Top panel
 
-- HQ: 4x oversampling for high quality audio.
-- A/B: switch between A/B to compare.
-- Copy: copy current preset parameters to another(A/B) panel.
-- Preset bar: choose your current preset.
-- Save: save your preset to user folder.
-- Menu: other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
+- **HQ**: 4x oversampling for high quality audio.
+- **A/B**: Switch between A/B to compare.
+- **Copy**: Copy current preset parameters to another (A/B) panel.
+- **Preset bar**: Choose your current preset.
+- **Save**: Save your preset to user folder.
+- **Menu**: Other settings including init, open preset folder, rescan preset folder, open GitHub page, check for new version.
 
 ### 3.2. Spectrogram
 
 - You can split up frequency to four bands for multiband distortion.
 
-### 3.3. Graph Visualizer
-
-- There are four graph visualizers. You can click on each graph to zoom in or zoom out.
-- Top left is oscilloscope.
-- Top right is distortion graph.
-- Buttom Left is VU meters.
-- Buttom right is Width graph.
-
-### 3.4. Band Effect
+### 3.3. Band Effect
 
 - You can click four switches on the right side of graphs.
+- **Drive**:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme".
+  - **Link**: When your turn up drive knob, the output knob value will automatically reduce.
+  - **Safe**: If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
+  - **Extreme**: It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
+- **Retification and bias**: Change your distortion shape.
+- **Compressor**: You can change threshold, ratio, attack, and release for each band.
+- **Stereo**: Change audio width and pan.
+- **Output and mix**: For each bandm you can change the output and the mix.
 
-- Drive:『Fire』 has several distortion functions. There are three buttons "L", "S", "E", related to drive knob, and each means "Link", "Safe", and "Extreme".
-  - "L" (Link): When your turn up drive knob, the output knob value will automatically reduce.
-  - "S" (Safe): If your drive knob pushes your volume too loud, it will automatically reduce your drive value. It also shows reduced value on drive knob.
-  - "E" (Extreme): It expands the range of the the drive knob (from around +40db to around +60db) when it is enabled to give more distortion.
+### 3.4. LFO / Modulation
 
-- Retification and bias: Change your distortion shape.
+『Fire』 includes four fully customizable LFOs that can be used to modulate various parameters.
 
-- Compressor: you can change threshold and ratio for each band.
+- **LFO Selection**: On the left, click the "LFO 1" through "LFO 4" buttons to select which LFO you are editing.
+- **Rate & Sync**: The **Rate** knob controls the LFO speed. Click the **BPM** button to toggle synchronization with your DAW's tempo.
+- **Smooth**: Adjusts the smoothness of the LFO shape.
+- **Phase**: Adjusts the starting point (phase) of the LFO shape.
+- **Grid**: The X and Y controls adjust the grid divisions in the editor for visual guidance and snapping.
 
-- Width: change audio width.
+#### LFO Editor
 
-- Output and mix: for band control.
+The main LFO display allows you to create complex modulation shapes. It has two primary modes: **Edit Mode** and **Brush Mode**.
+
+**Edit Mode Controls:**
+
+- **Add Point**: **Double-click** on an empty space in the editor to add a new point.
+- **Delete Point**: **Double-click** on an existing point to delete it. Note: The first and last points cannot be deleted.
+- **Move Point(s)**: **Click and drag** a point to move it.
+- **Adjust Curve**: **Click and drag** the line segment between two points to adjust its curvature.
+- **Select Multiple Points**:
+  - Hold **Shift** and **drag** to draw a selection box (marquee) around multiple points.
+  - Clicking on an already selected point allows you to drag the entire selection.
+- **Snap to Grid**: Hold **Ctrl** (Windows) or **Cmd** (Mac) while dragging a point to snap it to the nearest grid line.
+- **Context Menu**: **Right-click** anywhere in the editor to open a context menu with the following options:
+  - **Select All**: Selects all points.
+  - **Clear**: Resets the LFO to a default straight line.
+  - **Copy / Paste**: Copies the current LFO shape and allows you to paste it into another LFO editor.
+  - **Invert**: Flips the shape horizontally or vertically.
+
+**Brush Mode Controls:**
+
+- Activate **Brush Mode** to paint pre-defined shapes onto the grid.
+- Use the dropdown menu next to the mode buttons to select a brush shape (e.g., Saw, Sine, Square).
+- **Click and drag** within the editor grid to paint the selected shape. The brush will only respond to the **left mouse button**.
+
+#### Modulation Matrix
+
+- **Matrix Button**: Opens the Modulation Matrix window, where you can assign LFOs to control plugin parameters.
+- **Assign Button**: Engages "Assign Mode." While active, the next parameter you click in the plugin will be automatically assigned to the currently selected LFO.
 
 ### 3.5. Global Effect
 
-- Filter: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
-
-- Downsample: downsample your audio.
-
-- Limiter: add a limiter after distortion.
-
-- Output and mix: for global control.
+- **Filter**: you can set lowcut, highcut, and peak. Lowcut and highcut each has four slopes (12, 24, 36, 48) you can choose.
+- **Downsample**: downsample your audio.
+- **Output and mix**: for global control.
 
 ## 4. Support the author
 
@@ -225,7 +249,7 @@ I am also a music producer (Artist name: 羽翼深蓝 - BlueWings). Check out my
 
 ## 6. Update Notes
 
-### 2025-9-20 (version 1.5.0b)
+### 2025-10-18 (version 1.5.0)
 
 This is a major feature update that introduces a comprehensive LFO modulation system and involves a significant refactoring of the plugin's core architecture.
 
@@ -236,14 +260,23 @@ This is a major feature update that introduces a comprehensive LFO modulation sy
     - **Modulation Matrix**: A dedicated matrix panel to manage all modulation routings in one place.
     - **BPM Sync & Free (Hz) Modes**: Each LFO can be synchronized to the host's BPM or run freely in Hz.
     - **Quick Modulation Assignment**: A new "Assign" mode allows you to click any knob to instantly map it as a modulation target.
+    - **Other New Features**: Features like attack / release for compressor, new pan for stereo, and more downsample controls!
 
 2. **Major Code Refactoring**:
     - I refactored both UI and DSP code of this plugin so it is easier to modify and understand now.
 
 3. **Bug Fixes**:
     - Fixed a critical bug where the plugin might not load presets correctly.
+    - Fixed a bug to correct parameter and LFO state when adding/deleting bands.
 
-> ⚠️ **Breaking Change Notice:** This is a significant update that fundamentally changes how parameters are processed. Due to the addition of the LFO system and the extensive code refactoring, it might have hidden bugs. So it is a **BETA** version. If you find any bugs, please create an issue so I can solve it. Have fun!
+4. **Performance Improvement**
+    - Highly improved performance compared to v1.5.0b.
+      - Refactored signal processing chain for significantly lower CPU usage.
+      - Optimized Waterfall Spectrogram with smooth animation and minimal CPU load.
+    - UI Improvements
+      - Mouse Wheel Q-Control: Adjust filter Q values by hovering over nodes and scrolling.
+      - Redesigned UI: A more logical layout with intuitive controls for a seamless workflow.
+      - Unified Color Scheme: New professional look with improved visual comfort during long sessions.
 
 ### 2025-7-3 (version 1.0.2)
 

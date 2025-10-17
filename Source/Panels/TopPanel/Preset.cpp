@@ -13,7 +13,6 @@
 
 namespace state
 {
-
     //==============================================================================
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
@@ -58,76 +57,41 @@ namespace state
     {
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
 
-        const int lineNum = 3;
-        int freqIndex = 0;
-        int stateIndex = 0;
-        std::vector<std::pair<float, bool>> freqAndStateVector(lineNum);
-        std::vector<juce::AudioProcessorParameter*> freqParamPointers(lineNum);
-        std::vector<juce::AudioProcessorParameter*> stateParamPointers(lineNum);
-
+        // This loop now handles ALL parameters directly, restoring the correct, stable logic.
         for (const auto& param : proc.getParameters())
         {
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             {
-                if (p->paramID == "lineState1" || p->paramID == "lineState2" || p->paramID == "lineState3")
-                {
-                    bool stateValue = xml.getIntAttribute(p->paramID, p->getValue());
-                    jassert(freqIndex < 3);
-                    freqAndStateVector[freqIndex].second = stateValue;
-                    stateParamPointers[freqIndex] = p;
-                    freqIndex++;
-                    // DBG (xml.getIntAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
-                    continue;
-                }
-                if (p->paramID == "freq1" || p->paramID == "freq2" || p->paramID == "freq3")
-                {
-                    float freqValue = xml.getDoubleAttribute(p->paramID, p->getValue());
-                    jassert(stateIndex < 3);
-                    freqAndStateVector[stateIndex].first = freqValue;
-                    freqParamPointers[stateIndex] = p;
-                    stateIndex++;
-                    // DBG ((float) xml.getDoubleAttribute (p->paramID, p->getValue()) << "---preset param " << p->paramID << " loaded---");
-                    continue;
-                }
-                // Set param value. If param not in xml, set default value
+                // Check if the preset XML has an attribute with this parameter's ID.
                 if (xml.hasAttribute(p->paramID))
                 {
+                    // If it exists, load the value from the XML.
+                    // Note: We use getDoubleAttribute as it safely covers both float and int parameters.
                     p->setValueNotifyingHost((float) xml.getDoubleAttribute(p->paramID, p->getValue()));
                 }
                 else
                 {
-                    p->setValueNotifyingHost(p->getDefaultValue());
+                    // If the parameter is not in the preset (e.g., an older preset)...
+
+                    // Check if the missing parameter is the shape bypass toggle.
+                    if (p->paramID.startsWith(SHAPE_BYPASS_ID))
+                    {
+                        // If it is, we are loading an old preset. To maintain the original sound,
+                        // we must force the shape module to be ON (true) by default.
+                        p->setValueNotifyingHost(1.0f);
+                    }
+                    else
+                    {
+                        // For any other missing parameter, set it to its default value
+                        // to ensure a predictable state.
+                        p->setValueNotifyingHost(p->getDefaultValue());
+                    }
                 }
             }
         }
 
-        // sort activated lines
-        std::sort(freqAndStateVector.begin(), freqAndStateVector.end(), [](auto& a, auto& b)
-                  {
-        if (! a.second && ! b.second)
-            return a.first < b.first;
-        else if (a.second && ! b.second) // only a is available
-            return true; // move b after a, a < b
-        else if (! a.second && b.second) // only b is available
-            return false; // move a after b, b < a
-        else
-            return a.first < b.first; });
-
-        // DBG("after freq1:"<<freqAndStateVector[0].first<<"freq2:"<<freqAndStateVector[1].first<<"freq3:"<<freqAndStateVector[2].first);
-
-        // reassign freq and linestate
-        for (int i = 0; i < lineNum; i++)
-        {
-            if (freqAndStateVector[i].second == false)
-            {
-                freqAndStateVector[i].first = 0;
-            }
-            // set lineState first, so that sliderValueChanged in multiband.cpp will be triggered after line state updated.
-            stateParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].second);
-            freqParamPointers[i]->setValueNotifyingHost(freqAndStateVector[i].first);
-        }
-
         // --- Load LFO and Matrix data ---
+        const juce::ScopedLock sl(fireProc.getLfoManager().getLfoDataLock());
 
         // Cast to non-const to modify the processor's state
         auto& mutableFireProc = const_cast<FireAudioProcessor&>(fireProc);
@@ -137,11 +101,8 @@ namespace state
         auto& modRoutingsToLoad = mutableFireProc.getLfoManager().getModulationRoutings();
 
         // Clear the existing data using the new references
-        for (auto& lfo : lfoDataToLoad)
-        {
-            lfo = LfoData();
-        }
-        modRoutingsToLoad.clear();
+        mutableFireProc.getLfoManager().clearAllLfoData();
+        mutableFireProc.getLfoManager().getModulationRoutings().clear();
 
         // 1. Load LFO Shapes
         if (auto* lfoState = xml.getChildByName("LFO_STATE"))
@@ -152,7 +113,7 @@ namespace state
                 if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
                 {
                     // Load data into the LfoManager via the reference
-                    lfoDataToLoad[index] = LfoData::readFromXml(*lfoXml);
+                    mutableFireProc.getLfoManager().setLfoData(index, LfoData::readFromXml(*lfoXml));
                 }
             }
         }
@@ -160,7 +121,6 @@ namespace state
         // 2. Load Modulation Matrix Routings
         if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
         {
-            fireProc.getLfoManager().getModulationRoutings().clear();
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
                 fireProc.getLfoManager().getModulationRoutings().add(ModulationRouting::readFromXml(*routingXml));
@@ -172,6 +132,9 @@ namespace state
         {
             editor->repaint();
         }
+
+        fireProc.sendChangeMessage();
+        fireProc.getLfoManager().onLfoShapeChanged(-1);
     }
 
     //==============================================================================
@@ -191,6 +154,8 @@ namespace state
 
     void StateAB::copyAB()
     {
+        ab.removeAllAttributes();
+        ab.deleteAllChildElements();
         saveStateToXml(pluginProcessor, ab);
     }
 
@@ -231,7 +196,7 @@ namespace state
                                                                       nullptr);
                 if (choice)
                 {
-                    file.replaceFileIn(file.getFullPathName());
+                    // file.replaceFileIn(file.getFullPathName());
                     xml.writeTo(file);
                     return true;
                 }
@@ -243,7 +208,7 @@ namespace state
             else // no alert window
             {
                 // replace existing file and return 2
-                file.replaceFileIn(file.getFullPathName());
+                // file.replaceFileIn(file.getFullPathName());
                 xml.writeTo(file);
                 return true;
             }
@@ -400,6 +365,7 @@ namespace state
 
         // Save the single preset to a real file.
         presetXmlSingle.removeAllAttributes(); // Clear all first.
+        presetXmlSingle.deleteAllChildElements();
         presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
         saveStateToXml(pluginProcessor, presetXmlSingle);
 
@@ -539,14 +505,15 @@ namespace state
                 p->setValueNotifyingHost(p->getDefaultValue());
         // set preset combobox to 0
         statePresetName = "";
+        mCurrentPresetId = 0;
 
         auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
-        for (auto& lfo : fireProc.getLfoManager().getLfoData())
-        {
-            lfo.resetToDefault();
-        }
+        fireProc.getLfoManager().clearAllLfoData();
+        fireProc.getLfoManager().getModulationRoutings().clear();
+        fireProc.getLfoManager().onLfoShapeChanged(-1);
+        fireProc.sendChangeMessage();
 
-        // --- ADDED: Notify the editor to update its display ---
+        // Notify the editor to update its display
         if (auto* editor = fireProc.getActiveEditor())
         {
             editor->repaint();
@@ -603,7 +570,6 @@ namespace state
 
         refreshPresetBox();
 
-        // 1. 获取宿主保存的预设ID和名称
         const int currentPresetId = procStatePresets.getCurrentPresetId();
         juce::String presetNameFromHost = procStatePresets.getPresetName();
         const int numPresets = procStatePresets.getNumPresets();
@@ -613,7 +579,6 @@ namespace state
             juce::String presetNameFromHost = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
             juce::XmlElement* presetXml = nullptr;
 
-            // 关键修复：将 lambda 参数改为 const juce::XmlElement&
             std::function<juce::XmlElement*(const juce::XmlElement&, const juce::String&)> findPresetInXml =
                 [&](const juce::XmlElement& parentXml, const juce::String& nameToFind) -> juce::XmlElement*
             {
@@ -707,6 +672,14 @@ namespace state
 
     StateComponent::~StateComponent()
     {
+        // Remove listeners from all buttons that had them added in the constructor
+        toggleABButton.removeListener(this);
+        copyABButton.removeListener(this);
+        previousButton.removeListener(this);
+        nextButton.removeListener(this);
+        savePresetButton.removeListener(this);
+        menuButton.removeListener(this);
+
         auto& params = procStatePresets.getProcessor().getParameters();
         for (auto param : params)
         {
@@ -1067,21 +1040,15 @@ namespace state
             // 3. Configure DialogWindow launch options
             juce::DialogWindow::LaunchOptions options;
             options.content.setOwned(settingsPanel);
-            options.content->setSize(300, 200);
+            options.content->setSize(400, 300);
             options.dialogTitle = "Settings";
             options.dialogBackgroundColour = COLOUR6;
             options.escapeKeyTriggersCloseButton = true;
             options.useNativeTitleBar = true;
             options.resizable = true;
-
+            options.componentToCentreAround = this;
             // 4. Launch dialog asynchronously
-            auto* dialog = options.launchAsync();
-
-            // 5. (Optional) Make it behave modally by entering modal state
-            if (dialog != nullptr)
-            {
-                dialog->enterModalState(true, nullptr, true); // block until closed
-            }
+            options.launchAsync();
         } });
     }
 

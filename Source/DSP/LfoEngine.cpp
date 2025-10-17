@@ -33,55 +33,95 @@ void LfoEngine::updateShape(const LfoData& shapeData)
     const auto& points = shapeData.points;
     const auto& curvatures = shapeData.curvatures;
 
-    // Make copies to safely capture in the lambda for the audio thread.
-    auto pointsCopy = points;
-    auto curvaturesCopy = curvatures;
+    if (points.size() < 2 || curvatures.size() < (points.size() - 1))
+    {
+        jassertfalse;
+        return;
+    }
+
     const auto numPointsInTable = wavetable.getNumPoints();
 
-    wavetable.initialise([pointsCopy, curvaturesCopy, numPointsInTable](size_t i) -> float
-                         {
-            const float phase = (float)i / (float)(numPointsInTable > 1 ? numPointsInTable - 1 : 1);
-            
-            if (pointsCopy.size() < 2)
-                return 0.5f; // Return middle value if shape is invalid
+    // Step 1: Create a temporary, mutable array to build the waveform.
+    juce::Array<float> tempTable;
+    tempTable.resize(numPointsInTable);
 
-            for (size_t p = 0; p < pointsCopy.size() - 1; ++p)
+    // Step 2: Generate the raw, unsmoothed shape into the temporary array.
+    for (int i = 0; i < numPointsInTable; ++i)
+    {
+        const float phase = (float) i / (float) (numPointsInTable > 1 ? numPointsInTable - 1 : 1);
+
+        float sampleValue = 0.5f; // Default to middle value
+
+        if (points.size() >= 2)
+        {
+            // Find the correct segment for the current phase
+            for (size_t p = 0; p < points.size() - 1; ++p)
             {
-                const auto& p1 = pointsCopy[p];
-                const auto& p2 = pointsCopy[p + 1];
+                const auto& p1 = points[p];
+                const auto& p2 = points[p + 1];
 
                 if (phase >= p1.x && phase <= p2.x)
                 {
                     const float segmentWidth = p2.x - p1.x;
 
-                    // Fallback to linear interpolation if curvatures data is missing
-                    if (p >= curvaturesCopy.size())
+                    // Fallback to linear interpolation if curvatures data is missing or segment is zero-width
+                    if (p >= curvatures.size() || std::abs(segmentWidth) < 1e-9f)
                     {
-                        // Prevent division by zero if points have the same x coordinate
-                        if (std::abs(segmentWidth) < 1e-9f)
-                            return p1.y;
-
-                        return p1.y + (p2.y - p1.y) * ((phase - p1.x) / segmentWidth);
+                        sampleValue = (std::abs(segmentWidth) < 1e-9f)
+                                          ? p1.y
+                                          : p1.y + (p2.y - p1.y) * ((phase - p1.x) / segmentWidth);
                     }
+                    else // Apply curvature
+                    {
+                        const float curvature = curvatures[p];
+                        const float tx = (phase - p1.x) / segmentWidth;
+                        const float absExp = std::pow(4.0f, std::abs(curvature));
+                        float ty;
 
-                    const float curvature = curvaturesCopy[p];
-                    
-                    // Use the already calculated segmentWidth and prevent division by zero
-                    const float tx = (segmentWidth > 1e-9f) ? (phase - p1.x) / segmentWidth : 0.0f;
-                    
-                    const float absExp = std::pow(4.0f, std::abs(curvature));
-                    float ty;
+                        if (curvature >= 0.0f)
+                            ty = std::pow(tx, absExp);
+                        else
+                            ty = 1.0f - std::pow(juce::jmax(0.0f, 1.0f - tx), absExp);
 
-                    if (curvature >= 0.0f)
-                        ty = std::pow(tx, absExp);
-                    else
-                        ty = 1.0f - std::pow(juce::jmax(0.0f, 1.0f - tx), absExp);
-                    
-                    return p1.y + (p2.y - p1.y) * ty;
+                        sampleValue = p1.y + (p2.y - p1.y) * ty;
+                    }
+                    break; // Exit segment search once found
                 }
             }
-            return pointsCopy.back().y; },
-                         numPointsInTable);
+            // If phase is somehow outside all segments, hold the last point's value
+            if (i == numPointsInTable - 1)
+                sampleValue = points.back().y;
+        }
+        tempTable.set(i, sampleValue);
+    }
+
+    // Step 3: Apply smoothing to the temporary array if required.
+    const float smoothness = shapeData.smoothness;
+    if (smoothness > 0.001f && tempTable.size() > 0)
+    {
+        // Map smoothness (0-1) to a filter coefficient.
+        const float feedbackCoeff = smoothness * 0.95f;
+        const float feedforwardCoeff = 1.0f - feedbackCoeff;
+
+        // Apply a one-pole low-pass filter across the temporary table.
+        // Run it twice to better handle the wrap-around continuity.
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            float lastOutput = tempTable.getLast();
+            for (int i = 0; i < tempTable.size(); ++i)
+            {
+                const float currentInput = tempTable.getUnchecked(i);
+                const float smoothedSample = (currentInput * feedforwardCoeff) + (lastOutput * feedbackCoeff);
+                tempTable.set(i, smoothedSample);
+                lastOutput = smoothedSample;
+            }
+        }
+    }
+
+    // Step 4: Finally, initialize the actual wavetable from the processed temporary table.
+    wavetable.initialise([&tempTable](size_t i)
+                         { return tempTable.getUnchecked(i); },
+                         tempTable.size());
 }
 
 // Call this on every sample in processBlock. Returns a bipolar [-1, 1] signal.
@@ -106,6 +146,12 @@ float LfoEngine::process()
 void LfoEngine::setPhaseDelta(float newPhaseDelta)
 {
     phaseDelta = newPhaseDelta;
+}
+
+void LfoEngine::setPhase(float newPhase)
+{
+    // Directly sets the internal phase, ensuring it stays within the valid [0, 1] range.
+    phase = juce::jlimit(0.0f, 1.0f, newPhase);
 }
 
 float LfoEngine::getPhase() const

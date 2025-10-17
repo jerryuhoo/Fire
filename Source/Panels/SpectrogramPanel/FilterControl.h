@@ -20,7 +20,8 @@
 class FilterControl : public juce::Component,
                       public juce::AudioProcessorParameter::Listener,
                       public juce::AsyncUpdater,
-                      public juce::Timer
+                      public juce::Timer,
+                      public juce::ChangeListener
 {
 public:
     FilterControl(FireAudioProcessor&, GlobalPanel&);
@@ -32,6 +33,7 @@ public:
     void handleAsyncUpdate() override;
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override {}
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
 private:
     FireAudioProcessor& processor;
@@ -51,6 +53,9 @@ private:
     void setDraggableButtonBounds();
     void updateLfoChain(const ModulatedFilterValues& modulatedValues);
     void updateLfoResponseCurve();
+    void checkAnimationStatus();
+
+    bool isAnimationActive = false;
 
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 

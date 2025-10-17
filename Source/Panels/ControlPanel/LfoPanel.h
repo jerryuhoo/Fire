@@ -18,6 +18,8 @@
 
 class FireAudioProcessor;
 
+static LfoData lfoClipboard;
+
 //
 //  The LfoEditor is now a pure "View" component.
 //  It holds a pointer to the data it should display and modify.
@@ -30,7 +32,7 @@ public:
     ~LfoEditor() override;
 
     // Sets the data model for the editor to point to. This is the safe way to switch LFOs.
-    void setDataToDisplay(LfoData* dataToDisplay);
+    void setDataToDisplay(const LfoData& dataToDisplay);
 
     // Called by LfoPanel to set the current interaction mode.
     void setCurrentBrush(LfoPresetShape newBrush);
@@ -50,13 +52,24 @@ public:
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
+    void setPhaseOffsetLinePosition(float position);
 
-    std::function<void()> onDataChanged;
-    void setOnDataChangedCallback(std::function<void()> callback);
+    std::function<void(const LfoData&)> onDataChanged;
+
+    enum CommandIDs
+    {
+        selectAll = 1,
+        clear,
+        copy,
+        paste,
+        invertX,
+        invertY
+    };
 
 private:
     // This pointer holds the currently active LFO data. It does not own the data.
-    LfoData* activeLfoData = nullptr;
+    LfoData activeLfoData;
+    bool dataIsActive = false;
 
     // Internal helper methods that now operate on the activeLfoData pointer.
     void addPoint(juce::Point<float> newPoint);
@@ -88,8 +101,9 @@ private:
     int hGridDivs = 4;
     int vGridDivs = 4;
     float playheadPos = -1.0f;
+    float phaseOffsetPosition = -1.0f;
 
-    const int maxPoints = 16;
+    const int maxPoints = 64;
     const float pointRadius = 6.0f;
 
     std::vector<int> selectedPointIndices;
@@ -110,6 +124,12 @@ private:
 
     bool isBrushing = false;
     juce::Point<int> lastBrushCell { -1, -1 };
+
+    void selectAllPoints();
+    void clearAllPoints();
+    void copyShape();
+    void pasteShape();
+    void invertShape(bool invertX, bool invertY);
 };
 
 //
@@ -120,7 +140,8 @@ class LfoPanel : public juce::Component,
                  public juce::Button::Listener,
                  public juce::Slider::Listener,
                  public juce::Timer,
-                 public juce::AudioProcessorValueTreeState::Listener
+                 public juce::AudioProcessorValueTreeState::Listener,
+                 public juce::AsyncUpdater
 {
 public:
     LfoPanel(FireAudioProcessor& p);
@@ -134,14 +155,22 @@ public:
     void setScale(float newScale);
     void setOnDataChangedCallback(std::function<void()> callback);
 
+    std::function<void()> onDataChanged;
     std::function<void(int lfoIndex)> onAssignButtonClicked;
     juce::TextButton assignButton;
+
+    void refreshLfoDisplay();
+    void handleAsyncUpdate() override;
 
 private:
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
+    void sliderDragStarted(juce::Slider* slider) override;
+    void sliderDragEnded(juce::Slider* slider) override;
     void setEditMode(LfoEditMode newMode);
     void styleButton(juce::Button& button, bool isToggle);
+    void styleLfoSelectButton(juce::TextButton& button, juce::Colour colour);
+    void setLfo(int newIndex);
 
     FireAudioProcessor& processor;
 
@@ -172,13 +201,29 @@ private:
     juce::Slider gridYSlider;
     juce::Label gridYLabel;
 
+    juce::Slider lfoSmoothSlider;
+    juce::Label lfoSmoothLabel;
+
+    juce::Slider lfoPhaseSlider;
+    juce::Label lfoPhaseLabel;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncButtonAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoSmoothAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoPhaseAttachment;
     bool isUpdatingRateSlider = false;
+    bool isDraggingPhaseSlider = false;
 
     void updateRateSlider();
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
+
+    juce::Rectangle<int> leftColumnArea;
+    juce::Rectangle<int> centerColumnArea;
+    juce::Rectangle<int> rightColumnArea;
+    juce::Colour activeLfoColour = COLOUR1;
+    juce::Rectangle<int> separatorLine;
+    juce::Rectangle<int> topRowArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoPanel)
 };

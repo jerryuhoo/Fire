@@ -28,6 +28,8 @@ public:
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
 
+    bool isModulationActive() const;
+
     /**
      * @brief The new main processing function for the modulation system.
      * Call this ONCE per processBlock. It will:
@@ -37,7 +39,7 @@ public:
      * @param playHead Optional pointer to the host's playhead for BPM sync.
      * @param numSamples The number of samples in the current block.
      */
-    void processBlock(double sampleRate, juce::AudioPlayHead* playHead, int numSamples);
+    void processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples);
 
     /**
      * @brief Gets the final, possibly modulated, value for a given parameter.
@@ -57,8 +59,9 @@ public:
     const juce::Array<ModulationRouting>& getModulationRoutings() const { return modulationRoutings; }
 
     // Allow access to LFO data for the UI/saving state
-    std::vector<LfoData>& getLfoData() { return lfoData; }
     const std::vector<LfoData>& getLfoData() const { return lfoData; }
+    void setLfoData(int index, const LfoData& newData);
+    void clearAllLfoData();
 
     // Allow access to LFO engines for UI phase display
     const std::array<LfoEngine, 4>& getLfoEngines() const { return lfoEngines; }
@@ -69,7 +72,9 @@ public:
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
     void clearModulationForTarget(const juce::String& targetParameterID);
     void invertModulationDepth(const juce::String& targetParameterID);
-
+    void onLfoShapeChanged(int lfoIndex);
+    void toggleBypassForRouting(const juce::String& targetParameterID);
+    juce::CriticalSection& getLfoDataLock() { return dataAccessLock; }
 private:
     /**
      * @brief Internal helper to generate raw LFO signals into the internal buffer.
@@ -87,6 +92,8 @@ private:
     std::array<LfoEngine, 4> lfoEngines;
     std::vector<LfoData> lfoData;
 
+    juce::CriticalSection dataAccessLock;
+
     // Owns all modulation connection rules.
     juce::Array<ModulationRouting> modulationRoutings;
 
@@ -100,4 +107,5 @@ private:
     bool wasPlaying { false };
 
     juce::StringArray lfoRateSyncDivisions;
+    std::array<std::atomic<bool>, 4> shapeUpdateFlags;
 };

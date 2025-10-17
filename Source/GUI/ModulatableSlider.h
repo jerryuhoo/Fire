@@ -10,13 +10,15 @@
 
 #pragma once
 
+#include "InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
 //==============================================================================
 /**
     A custom slider that can be modulated by an LFO.
 */
-class ModulatableSlider : public juce::Slider
+class ModulatableSlider : public juce::Slider,
+                          public juce::Timer
 {
 public:
     ModulatableSlider();
@@ -39,17 +41,21 @@ public:
     bool isMouseOverMainSlider() const;
     bool isModulated = false;
     bool isBipolar = true;
+    bool isBypassed = false;
     juce::String parameterID;
 
     float assignModeGlowAlpha = 0.0f;
 
     // Callback to notify when the modulation amount changes via UI drag
+    std::function<void(double)> onModAmountSetValue;
+    std::function<void(ModulatableSlider*)> onSetValueRequested;
     std::function<void(double)> onModAmountChanged;
     std::function<void()> onBipolarModeToggled;
     std::function<void()> onModulationReset;
     std::function<void(const juce::String&)> onClickInAssignMode;
     std::function<void()> onModulationCleared;
     std::function<void()> onModulationInverted;
+    std::function<void()> onBypassToggled;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;
@@ -60,7 +66,28 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
 
+    std::function<void(ModulatableSlider*)> onModDragStart;
+    std::function<void(ModulatableSlider*)> onModDragMove;
+    std::function<void(ModulatableSlider*)> onModDragEnd;
+
+    std::function<void(ModulatableSlider*)> onMainDragStart;
+    std::function<void(ModulatableSlider*)> onMainDragMove;
+    std::function<void(ModulatableSlider*)> onMainDragEnd;
+    std::function<void(ModulatableSlider*)> onHoverStart;
+    std::function<void(ModulatableSlider*)> onHoverEnd;
+
+    const juce::String& getParamID() const { return parameterID; }
+    float getLfoValue() const { return lfoValue; }
+
+    // Add a public method to set up the label.
+    void setLabel(const juce::String& text, juce::Colour colour);
+
+    // Override component methods for layout and mouse events.
+    void resized() override;
+    void timerCallback() override;
+
 private:
+    juce::Label label;
     bool isDraggingMainSlider;
 
     // Store the initial LFO amount when a drag starts for smoother interaction

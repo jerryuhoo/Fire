@@ -15,7 +15,7 @@
 //==============================================================================
 /*
 */
-class VUMeter : public juce::Component, juce::Timer
+class VUMeter : public juce::Component
 {
 public:
     VUMeter(FireAudioProcessor* inProcessor);
@@ -24,24 +24,33 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void setParameters(bool isInput, int bandIndex);
-    void timerCallback() override;
-    float getLeftChannelLevel();
-    float getRightChannelLevel();
-    float getLeftChannelPeakLevel();
-    float getRightChannelPeakLevel();
+
+    // Getters for RMS and Peak levels
+    float getRmsLeftChannelLevel();
+    float getRmsRightChannelLevel();
+    float getPeakLeftChannelLevel();
+    float getPeakRightChannelLevel();
+    void updateLevels(const MeterValues& latestValues);
 
 private:
     FireAudioProcessor* mProcessor;
     bool mIsInput;
     int mBandIndex;
 
-    float mCh0Level;
-    float mCh1Level;
-    float mMaxCh0Level;
-    float mMaxCh1Level;
+    // RMS values for the dark bars
+    float mRmsCh0Level;
+    float mRmsCh1Level;
 
-    int mMaxValueDecayCounter;
-    const int MAX_VALUE_HOLD_FRAMES = 60;
+    // Peak values for the light bars
+    float mPeakCh0Level;
+    float mPeakCh1Level;
+
+    // Peak-hold values for the thin lines
+    float mPeakHoldCh0Level;
+    float mPeakHoldCh1Level;
+
+    int mPeakHoldDecayCounter;
+    const int PEAK_HOLD_FRAMES = 60; // How many frames to hold the peak line
 
     juce::Rectangle<int> leftMeterBounds;
     juce::Rectangle<int> rightMeterBounds;

@@ -27,7 +27,7 @@ void Oscilloscope::paint(juce::Graphics& g)
     g.setColour(COLOUR6);
     g.drawRect(getLocalBounds(), 1);
 
-    juce::ColourGradient grad(juce::Colours::red.withBrightness(0.9f), getWidth() / 2, getHeight() / 2, juce::Colours::red.withAlpha(0.0f), 0, getHeight() / 2, true);
+    juce::ColourGradient grad(juce::Colours::red.withBrightness(0.9f), getWidth() / 2, getHeight() / 2, juce::Colours::red.withAlpha(0.1f), 0, getHeight() / 2, true);
     g.setGradientFill(grad);
 
     bool monoChannel = false;
@@ -102,13 +102,6 @@ void Oscilloscope::paint(juce::Graphics& g)
     g.strokePath(pathL, juce::PathStrokeType(2.0));
     if (! monoChannel)
         g.strokePath(pathR, juce::PathStrokeType(2.0));
-
-    // set color when mouse on
-    if (isMouseOn && ! mZoomState)
-    {
-        g.setColour(DRIVE_COLOUR.withAlpha(0.05f));
-        g.fillAll();
-    }
 }
 
 void Oscilloscope::timerCallback()

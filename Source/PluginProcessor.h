@@ -22,44 +22,48 @@
 #include "DSP/DiodeWDF.h"
 #include "DSP/LfoManager.h"
 #include "DSP/ModulationRouting.h"
+#include "DSP/ModulatedValueProvider.h"
 
-/**
- * Calculates the RMS level for the left and right channels of a buffer
- * and atomically stores them in the provided atomic float variables.
-*/
-static inline void calculateAndStoreRMS(const juce::AudioBuffer<float>& buffer,
-                                        std::atomic<float>& leftAtomic,
-                                        std::atomic<float>& rightAtomic)
-{
-    const float rmsL = buffer.getRMSLevel(0, 0, buffer.getNumSamples());
-    const float rmsR = (buffer.getNumChannels() > 1) ? buffer.getRMSLevel(1, 0, buffer.getNumSamples()) : rmsL;
-
-    leftAtomic.store(rmsL);
-    rightAtomic.store(rmsR);
-}
 
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
 struct BandProcessingParameters
 {
+    bool isOutputModulated = false;
     // Main process parameters
     int mode;
     bool isHQ;
-    float outputVal;
+
+    ModulatedValueProvider outputVal;
     float mixVal;
     float compThreshold;
     float compRatio;
+    float compAttack;
+    float compRelease;
+    float compMixVal;
     bool isCompEnabled;
     float width;
+    float pan;
+    float widthMixVal;
+    bool isDriveEnabled;
     bool isWidthEnabled;
+    bool isShapeEnabled;
+    bool isDcFilterEnabled;
 
     // Distortion-specific parameters
     bool isSafeModeOn;
     bool isExtremeModeOn;
-    float driveVal;
-    float biasVal;
-    float recVal;
+    ModulatedValueProvider driveVal;
+    ModulatedValueProvider biasVal;
+    ModulatedValueProvider recVal;
+    float shapeMixVal;
+
+    // LFO source indices for the above parameters (-1 if not modulated)
+    int driveLfoSourceIndex = -1;
+    int biasLfoSourceIndex = -1;
+    int recLfoSourceIndex = -1;
+    int outputLfoSourceIndex = -1;
 
     // Parameter IDs for modulation
     juce::String driveID;
@@ -88,18 +92,21 @@ struct BandProcessingParameters
 struct BandProcessor
 {
     using GainProcessor = juce::dsp::Gain<float>;
-    // using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
+    using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
     using CompressorProcessor = juce::dsp::Compressor<float>;
 
     // Each band has its own set of processors.
     CompressorProcessor compressor;
     WidthProcessor widthProcessor;
-    // DCFilter dcFilter;
+    DCFilter dcFilter;
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
+    juce::dsp::DryWetMixer<float> shapeMixer;
+    juce::dsp::DryWetMixer<float> compressorMixer;
+    juce::dsp::DryWetMixer<float> widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
 
-    BandProcessor() : dryWetMixer(2048)
+    BandProcessor() : dryWetMixer(2048), shapeMixer(2048), compressorMixer(2048), widthMixer(2048)
     {
         // Set a default waveshaper so it's never null
         waveshaperFunction = [](float x)
@@ -113,11 +120,19 @@ struct BandProcessor
     bool isFirstBlock = true;
 
     std::function<float(float)> waveshaperFunction;
+    
+    // Atomics for RMS levels
+    std::atomic<float> mInputLeftRMS { 0.0f };
+    std::atomic<float> mInputRightRMS { 0.0f };
+    std::atomic<float> mOutputLeftRMS { 0.0f };
+    std::atomic<float> mOutputRightRMS { 0.0f };
 
-    std::atomic<float> mInputLeftSmoothed { 0.0f };
-    std::atomic<float> mInputRightSmoothed { 0.0f };
-    std::atomic<float> mOutputLeftSmoothed { 0.0f };
-    std::atomic<float> mOutputRightSmoothed { 0.0f };
+    // Atomics for Peak levels
+    std::atomic<float> mInputLeftPeak { 0.0f };
+    std::atomic<float> mInputRightPeak { 0.0f };
+    std::atomic<float> mOutputLeftPeak { 0.0f };
+    std::atomic<float> mOutputRightPeak { 0.0f };
+
 
     // Per-band state for Safe Mode
     float mReductionPercent = 1.0f;
@@ -127,7 +142,10 @@ struct BandProcessor
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
     void process(juce::AudioBuffer<float>& buffer,
-                 const BandProcessingParameters& params);
+                 const BandProcessingParameters& params,
+                 const juce::AudioBuffer<float>& lfoOutputs);
+
+    const int oversampleFactor = 2;
 
 private:
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
@@ -137,7 +155,8 @@ private:
 
 //==============================================================================
 
-class FireAudioProcessor : public juce::AudioProcessor
+class FireAudioProcessor : public juce::AudioProcessor,
+                           public juce::ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -193,10 +212,6 @@ public:
     std::unique_ptr<LfoManager> lfoManager;
     const juce::StringArray& getLfoRateSyncDivisions() const;
 
-    // For writing/loading state
-    std::vector<LfoData>& getLfoData() { return lfoManager->getLfoData(); }
-
-    // For reading/saving state (read-only)
     const std::vector<LfoData>& getLfoData() const { return lfoManager->getLfoData(); }
 
     struct ModulationInfo
@@ -206,12 +221,14 @@ public:
         float depth = 0.0f;
         float currentValue = 0.0f; // The current LFO output, bipolar [-1, 1]
         bool isBipolar = true;
+        bool isBypassed = false;
     };
 
     void assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID);
 
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;
+    void setModulationValue(const juce::String& targetParameterID, float newValue);
     void setModulationDepth(const juce::String& targetParameterID, float newDepth);
     void toggleBipolarMode(const juce::String& targetParameterID);
     void resetModulation(const juce::String& targetParameterID);
@@ -255,30 +272,49 @@ public:
 
     bool getLatestModulatedFilterValues(ModulatedFilterValues& values);
     bool getLatestMeterValues(MeterValues& values);
-    
-    float getGlobalInputMeterLevel(int channel) const;
-    float getGlobalOutputMeterLevel(int channel) const;
-    float getBandInputMeterLevel(int band, int channel) const;
-    float getBandOutputMeterLevel(int band, int channel) const;
+
+    // Getters for meter levels
+    float getGlobalInputRMSLevel(int channel) const;
+    float getGlobalOutputRMSLevel(int channel) const;
+    float getGlobalInputPeakLevel(int channel) const;
+    float getGlobalOutputPeakLevel(int channel) const;
+
+    float getBandInputRMSLevel(int band, int channel) const;
+    float getBandOutputRMSLevel(int band, int channel) const;
+    float getBandInputPeakLevel(int band, int channel) const;
+    float getBandOutputPeakLevel(int band, int channel) const;
+
 
     void lfoDataHasChanged();
     bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
 
-private:
-    std::vector<std::unique_ptr<BandProcessor>> bands;
-    float totalLatency = 0.0f;
-
-    void updateParameters();
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer,
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
                   bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
     void updateGlobalFilters(double sampleRate);
-    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, double sampleRate);
-    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, double sampleRate);
+    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
+    void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
-    void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
+    void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs);
+
+    void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
+    void clearLfoModulationForBand(int bandIndex);
+
+    bool getLatestDistortionGraphValues(DistortionGraphValues& values);
+    void setUiFocusBand(int bandIndex);
+
+private:
+    std::atomic<int> uiFocusBand { 0 };
+    // reset parameters
+    void performReset();
+    std::atomic<bool> needsReset { false };
+
+    std::vector<std::unique_ptr<BandProcessor>> bands;
+    float totalLatency = 0.0f;
+
+    void updateParameters();
 
     // preset id
     int presetId = 0;
@@ -330,10 +366,13 @@ private:
     GainProcessor gainProcessorGlobal;
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
 
-    // oversampling
-    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4]; // HQ use 4x
+    juce::dsp::DryWetMixer<float> lofiMixer { 2048 };
+    juce::Random random;
 
-    int oversampleFactor = 1;
+    // oversampling
+    std::unique_ptr<juce::dsp::Oversampling<float>> oversamplingHQ[4];
+
+    int oversampleFactor = 2;
 
     // oversampling delay, set to dry buffer
     Delay mDelay { 0 };
@@ -387,11 +426,16 @@ private:
     // bypass state
     bool isBypassed = false;
 
-    // VU meters
-    std::atomic<float> mInputLeftSmoothedGlobal { 0.0f };
-    std::atomic<float> mInputRightSmoothedGlobal { 0.0f };
-    std::atomic<float> mOutputLeftSmoothedGlobal { 0.0f };
-    std::atomic<float> mOutputRightSmoothedGlobal { 0.0f };
+    // VU meters data
+    std::atomic<float> mInputLeftRMSGlobal { 0.0f };
+    std::atomic<float> mInputRightRMSGlobal { 0.0f };
+    std::atomic<float> mOutputLeftRMSGlobal { 0.0f };
+    std::atomic<float> mOutputRightRMSGlobal { 0.0f };
+
+    std::atomic<float> mInputLeftPeakGlobal { 0.0f };
+    std::atomic<float> mInputRightPeakGlobal { 0.0f };
+    std::atomic<float> mOutputLeftPeakGlobal { 0.0f };
+    std::atomic<float> mOutputRightPeakGlobal { 0.0f };
 
     std::atomic<float> realtimeModulatedThresholds[4];
 
@@ -404,6 +448,16 @@ private:
     juce::AbstractFifo meterFifo { 1024 };
     std::vector<MeterValues> meterFifoBuffer;
     int meterFifoWritePos = 0;
+    void calculateAndStoreLevels(const juce::AudioBuffer<float>& buffer,
+                                       std::atomic<float>& rmsLeft,
+                                       std::atomic<float>& rmsRight,
+                                       std::atomic<float>& peakLeft,
+                                       std::atomic<float>& peakRight);
+
+    // 3. For Distortion Graph
+    juce::AbstractFifo graphFifo { 1024 };
+    std::vector<DistortionGraphValues> graphFifoBuffer;
+    int graphFifoWritePos = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessor)
 };

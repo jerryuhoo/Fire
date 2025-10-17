@@ -286,6 +286,31 @@ public:
 
     juce::Slider::SliderLayout getSliderLayout(juce::Slider& slider) override
     {
+        juce::Slider::SliderLayout layout;
+        auto localBounds = slider.getLocalBounds();
+
+        // --- Step 1: Determine the Textbox Dimensions ---
+
+        // For our ModulatableSlider, we want a fixed-size, centered textbox.
+        // For other sliders, we respect their settings.
+        auto textBoxWidth = slider.getTextBoxWidth();
+        auto textBoxHeight = TEXTBOX_HEIGHT;
+
+        if (dynamic_cast<ModulatableSlider*>(&slider))
+        {
+            // The textbox area is ALWAYS the top portion of the component.
+            layout.textBoxBounds = localBounds.removeFromTop(textBoxHeight);
+
+            // Center the textbox within that top area.
+            layout.textBoxBounds.setWidth(textBoxWidth);
+            layout.textBoxBounds.setX((localBounds.getWidth() - textBoxWidth) / 2);
+
+            // The slider knob area is ALWAYS what remains at the bottom.
+            layout.sliderBounds = localBounds;
+
+            return layout;
+        }
+
         // 1. compute the actually visible textBox size from the slider textBox size and some additional constraints
         int minXSpace = 0;
         int minYSpace = 0;
@@ -297,12 +322,8 @@ public:
         else
             minYSpace = 15;
 
-        auto localBounds = slider.getLocalBounds();
-
-        auto textBoxWidth = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
-        auto textBoxHeight = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
-
-        juce::Slider::SliderLayout layout;
+        textBoxWidth = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxWidth() * scale), localBounds.getWidth() - minXSpace));
+        textBoxHeight = juce::jmax(0, juce::jmin(static_cast<int>(slider.getTextBoxHeight() * scale), localBounds.getHeight() - minYSpace));
 
         // 2. set the textBox bounds
         if (textBoxPos != juce::Slider::NoTextBox)
@@ -399,7 +420,7 @@ public:
 
         float cornerSize = 0.0f; // Default to flat corners
 
-        if (id == "rounded" || id == "low_cut" || id == "high_cut" || id == "band_pass")
+        if (id == "rounded" || id == "low_cut" || id == "high_cut" || id == "band_pass" || id == "remove_button")
         {
             cornerSize = 10.0f * scale; // Apply scaling to corner size
         }
@@ -506,6 +527,56 @@ public:
         }
     }
 
+    void drawButtonText(juce::Graphics& g, juce::TextButton& button, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+        // --- Style for the custom Remove button ---
+        if (button.getComponentID() == "remove_button")
+        {
+            // 1. Define the color for the cross symbol
+            auto crossColour = juce::Colours::red.brighter(0.3f);
+            if (shouldDrawButtonAsHighlighted)
+                crossColour = crossColour.brighter(0.2f);
+
+            g.setColour(crossColour);
+
+            // 2. Get the button's full bounds.
+            auto bounds = button.getLocalBounds().toFloat();
+
+            // 3. Find the smaller dimension (width or height) to define the side of our square.
+            float sideLength = juce::jmin(bounds.getWidth(), bounds.getHeight());
+
+            // 4. Create a perfect square area, centered within the button's bounds.
+            auto squareArea = juce::Rectangle<float>(sideLength, sideLength).withCentre(bounds.getCentre());
+
+            // 5. Reduce this square area to create a nice margin for the cross.
+            auto crossArea = squareArea.reduced(sideLength * 0.38f);
+
+            // 6. Define the path for the cross (this part remains the same).
+            juce::Path crossPath;
+            crossPath.startNewSubPath(crossArea.getTopLeft());
+            crossPath.lineTo(crossArea.getBottomRight());
+            crossPath.startNewSubPath(crossArea.getTopRight());
+            crossPath.lineTo(crossArea.getBottomLeft());
+
+            // 7. Draw the cross (this part also remains the same).
+            g.strokePath(crossPath, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        // --- Style for other TextButtons (e.g., the bold button) ---
+        else if (button.getComponentID() == "bold_rounded_button")
+        {
+            g.setColour(juce::Colours::yellow);
+            juce::Font font(getTextButtonFont(button, button.getHeight()));
+            g.setFont(font);
+            g.drawFittedText(button.getButtonText(), button.getLocalBounds(), juce::Justification::centred, 1);
+        }
+        // --- Default JUCE Style Fallback ---
+        else
+        {
+            // This ensures any other standard buttons draw their text normally.
+            LookAndFeel_V4::drawButtonText(g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+        }
+    }
+
     void drawTickBox(juce::Graphics& g, juce::Component& component, float x, float y, float w, float h, const bool ticked, const bool isEnabled, const bool shouldDrawButtonAsHighlighted, const bool shouldDrawButtonAsDown) override
     {
         juce::ignoreUnused(isEnabled, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
@@ -572,6 +643,7 @@ public:
 
     void drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
     {
+        // --- Style 1: Flat Toggle ---
         if (button.getComponentID() == "flat_toggle")
         {
             g.setColour(COLOUR6);
@@ -580,6 +652,7 @@ public:
         }
         else
         {
+            // This is the default behavior if no specific ID is set
             drawTickBox(g, button, button.getWidth() / 4.0f, button.getHeight() / 4.0f, button.getWidth() / 2.0f, button.getHeight() / 2.0f, button.getToggleState(), button.isEnabled(), shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
         }
     }
@@ -608,6 +681,11 @@ private:
     //==============================================================================
     float x1, y1, x2, y2;
     float changePos = 0;
+    // This will store the pre-rendered shadow and track
+    juce::Image driveSliderCache;
+
+    // This stores the bounds of the last rendered cache to check for size changes
+    juce::Rectangle<int> driveSliderCacheBounds;
     void drawDefaultSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, juce::Slider& slider)
     {
         auto outline = COLOUR6;
@@ -734,7 +812,16 @@ private:
                 std::swap(modStartAngle, modEndAngle);
             modulationDepthArc.addCentredArc(center.x, center.y, modulationArcRadius, modulationArcRadius, 0.0f, modStartAngle, modEndAngle, true);
 
-            juce::Colour arcColour = (slider.lfoAmount > 0) ? juce::Colours::red.withAlpha(0.5f) : juce::Colours::orange.withAlpha(0.5f);
+            juce::Colour arcColour;
+            if (slider.isBypassed)
+            {
+                arcColour = juce::Colours::darkgrey;
+            }
+            else
+            {
+                arcColour = (slider.lfoAmount > 0) ? juce::Colours::red.withAlpha(0.5f) : juce::Colours::orange.withAlpha(0.5f);
+            }
+
             g.setColour(arcColour);
             g.strokePath(modulationDepthArc, juce::PathStrokeType(modulationArcWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
@@ -745,28 +832,36 @@ private:
             double lfoSignal = slider.lfoValue; // Let's assume lfoValue is correctly bipolar/unipolar already
             double currentModulatedValueNormalized;
 
-            if (slider.isBipolar)
+            if (! slider.isBypassed)
             {
-                // Assuming slider.lfoValue is [-1, 1] for bipolar
-                currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * (normalizedModulationDepth / 2.0);
+                // 6. Calculate the current LFO-driven value in NORMALIZED space
+                // slider.lfoValue is the raw LFO output, typically [0, 1] for unipolar, or transformed to [-1, 1] for bipolar
+                double lfoSignal = slider.lfoValue; // Let's assume lfoValue is correctly bipolar/unipolar already
+                double currentModulatedValueNormalized;
+
+                if (slider.isBipolar)
+                {
+                    // Assuming slider.lfoValue is [-1, 1] for bipolar
+                    currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * (normalizedModulationDepth / 2.0);
+                }
+                else
+                {
+                    // Assuming slider.lfoValue is [0, 1] for unipolar
+                    currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * slider.lfoAmount;
+                }
+
+                currentModulatedValueNormalized = juce::jlimit(0.0, 1.0, currentModulatedValueNormalized);
+
+                // 7. Convert back to REAL value and then to angle for drawing
+                const double realModulatedValue = slider.proportionOfLengthToValue(currentModulatedValueNormalized);
+                float currentModAngle = valueToAngle(realModulatedValue);
+
+                juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
+                                                 center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
+
+                g.setColour(juce::Colours::red);
+                g.fillEllipse(juce::Rectangle<float>(modulationArcWidth * 1.5f, modulationArcWidth * 1.5f).withCentre(modThumbPoint));
             }
-            else
-            {
-                // Assuming slider.lfoValue is [0, 1] for unipolar
-                currentModulatedValueNormalized = normalizedCurrentValue + lfoSignal * slider.lfoAmount;
-            }
-
-            currentModulatedValueNormalized = juce::jlimit(0.0, 1.0, currentModulatedValueNormalized);
-
-            // 7. Convert back to REAL value and then to angle for drawing
-            const double realModulatedValue = slider.proportionOfLengthToValue(currentModulatedValueNormalized);
-            float currentModAngle = valueToAngle(realModulatedValue);
-
-            juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
-                                             center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
-
-            g.setColour(juce::Colours::red);
-            g.fillEllipse(juce::Rectangle<float>(modulationArcWidth * 1.5f, modulationArcWidth * 1.5f).withCentre(modThumbPoint));
         }
 
         if (slider.isModulated)
@@ -804,150 +899,117 @@ private:
 
     void drawDriveSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos, const float rotaryStartAngle, const float rotaryEndAngle, ModulatableSlider& slider)
     {
-        // draw outline
-        auto outline = COLOUR6;
-        auto fill = COLOUR1;
-
         auto bounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(10);
+        auto currentBounds = juce::Rectangle<int>(x, y, width, height);
+
+        //==============================================================================
+        // 1. CACHE GENERATION: Check if cache is invalid and regenerate if needed
+        //==============================================================================
+        if (driveSliderCache.isNull() || driveSliderCacheBounds != currentBounds)
+        {
+            driveSliderCacheBounds = currentBounds;
+            float displayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+            driveSliderCache = juce::Image(juce::Image::ARGB,
+                                           juce::roundToInt(width * displayScale),
+                                           juce::roundToInt(height * displayScale),
+                                           true);
+
+            juce::Graphics cacheGraphics(driveSliderCache);
+            cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+
+            // --- Start of expensive, static drawing (done only ONCE) ---
+
+            auto staticBounds = juce::Rectangle<int>(0, 0, width, height).toFloat().reduced(10);
+            auto radius = juce::jmin(staticBounds.getWidth(), staticBounds.getHeight()) / 2.0f;
+            auto lineW = radius * 0.2f;
+            auto arcRadius = radius - lineW * 0.5f;
+
+            // Draw static background track outline
+            juce::Path backgroundArc;
+            backgroundArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, rotaryEndAngle, true);
+            cacheGraphics.setColour(COLOUR6);
+            cacheGraphics.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+            // Prepare and draw the expensive inner shadow
+            juce::Path backgroundShadowArc;
+            backgroundShadowArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius + lineW / 2.0f, arcRadius + lineW / 2.0f, 0.0f, 0, 2 * M_PI, true);
+            backgroundShadowArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius - lineW / 2.0f, arcRadius - lineW / 2.0f, 0.0f, 0, 2 * M_PI, true);
+            drawInnerShadow(cacheGraphics, backgroundShadowArc);
+
+            // Draw the static part of the inner dial (the grey gradient)
+            float diameterInner = juce::jmin(width, height) * 0.4f;
+            float radiusInner = diameterInner / 2;
+            float centerX = width / 2;
+            float centerY = height / 2;
+            float rx = centerX - radiusInner;
+            float ry = centerY - radiusInner;
+            juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
+            juce::ColourGradient grad(juce::Colours::black, centerX, centerY, juce::Colours::white.withBrightness(0.9f), radiusInner, radiusInner, true);
+            cacheGraphics.setGradientFill(grad);
+            cacheGraphics.fillEllipse(dialArea);
+        }
+
+        //==============================================================================
+        // 2. FAST DRAWING: Draw the cache and dynamic elements every frame
+        //==============================================================================
+        g.getInternalContext().setInterpolationQuality(juce::Graphics::ResamplingQuality::highResamplingQuality);
+        g.drawImage(driveSliderCache, juce::Rectangle<float>(x, y, width, height));
+
+        // --- Start of cheap, dynamic drawing ---
 
         auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
         auto toAngle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
-        // auto lineW = jmin(8.0f, radius * 0.2f);
         auto lineW = radius * 0.2f;
         auto arcRadius = radius - lineW * 0.5f;
 
-        juce::Path backgroundArc;
-        backgroundArc.addCentredArc(bounds.getCentreX(),
-                                    bounds.getCentreY(),
-                                    arcRadius,
-                                    arcRadius,
-                                    0.0f,
-                                    rotaryStartAngle,
-                                    rotaryEndAngle,
-                                    true);
+        // The original calculation for reductAngle depended on 'toAngle', causing it to oscillate with the LFO.
+        // This corrected calculation creates a stable limit based on 'reductionPercent' and the total angle range of the slider.
+        const float angleRange = rotaryEndAngle - rotaryStartAngle;
+        float reductAngle = rotaryStartAngle + (angleRange * reductionPercent);
 
-        g.setColour(outline);
-        g.strokePath(backgroundArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-
-        // draw shadow
-        juce::Path backgroundShadowArc;
-        backgroundShadowArc.addCentredArc(bounds.getCentreX(),
-                                          bounds.getCentreY(),
-                                          arcRadius + lineW / 2.0f,
-                                          arcRadius + lineW / 2.0f,
-                                          0.0f,
-                                          0,
-                                          2 * M_PI,
-                                          true);
-        //backgroundShadowArc.lineTo(<#Point<float> end#>)
-        backgroundShadowArc.addCentredArc(bounds.getCentreX(),
-                                          bounds.getCentreY(),
-                                          arcRadius - lineW / 2.0f,
-                                          arcRadius - lineW / 2.0f,
-                                          0.0f,
-                                          0,
-                                          2 * M_PI,
-                                          true);
-        drawInnerShadow(g, backgroundShadowArc);
-        //        DBG(reductionPrecent);
-        float reductAngle = toAngle - (1.0f - reductionPercent) * 2 * M_PI;
-
-        // safe reduce paint
-        if (reductAngle < rotaryStartAngle)
-        {
-            reductAngle = rotaryStartAngle;
-        }
+        // 'effectiveAngle' is the end angle for the main, "safe" part of the arc. It's capped by the reduction limit.
+        auto effectiveAngle = juce::jmin(toAngle, reductAngle);
 
         if (slider.isEnabled())
         {
-            // real drive path
+            // Your animation logic for the moving gradient is unchanged.
             juce::Path valueArc;
-            valueArc.addCentredArc(bounds.getCentreX(),
-                                   bounds.getCentreY(),
-                                   arcRadius,
-                                   arcRadius,
-                                   0.0f,
-                                   rotaryStartAngle,
-                                   reductAngle,
-                                   true);
+            valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, effectiveAngle, true);
 
-            // circle path, is used to draw dynamic color loop
             juce::Path circlePath;
-            circlePath.addCentredArc(bounds.getCentreX(),
-                                     bounds.getCentreY(),
-                                     arcRadius,
-                                     arcRadius,
-                                     0.0f,
-                                     0,
-                                     2 * M_PI,
-                                     true);
+            circlePath.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, 0, 2 * M_PI, true);
 
-            // make the color loop move
             if (sampleMaxValue > 0.00001f)
             {
                 if (changePos < circlePath.getLength())
-                {
                     changePos += 10;
-                }
                 else
-                {
                     changePos = 0;
-                }
-                //                juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
-                //                x1 = p1.x;
-                //                y1 = p1.y;
-                //                x2 = p1.x + 100 * scale;
-                //                y2 = p1.y + 100 * scale;
             }
-            else // normal paint static color
-            {
-                //                juce::Point<float> p1 = valueArc.getPointAlongPath(valueArc.getLength());
-                //                x1 = p1.x;
-                //                y1 = p1.y;
-                //                x2 = p1.x + 100 * scale;
-                //                y2 = p1.y + 100 * scale;
-            }
-            // 2021.6.3
             juce::Point<float> p1 = circlePath.getPointAlongPath(changePos);
             x1 = p1.x;
             y1 = p1.y;
             x2 = p1.x + 100 * scale;
             y2 = p1.y + 100 * scale;
 
-            // draw real drive path
+            // Draw the "safe" part of the drive path using the calculated effectiveAngle.
             juce::ColourGradient grad(juce::Colours::red, x1, y1, COLOUR1, x2, y2, true);
             g.setGradientFill(grad);
-
             g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-            if (reductionPercent != 1)
+            // Draw the "reduced" (unsafe) part only if the current value exceeds the limit.
+            // This replaces the old `if (reductionPercent != 1)` condition.
+            if (toAngle > reductAngle)
             {
-                // draw reducted path
                 juce::Path valueArcReduce;
-                valueArcReduce.addCentredArc(bounds.getCentreX(),
-                                             bounds.getCentreY(),
-                                             arcRadius,
-                                             arcRadius,
-                                             0.0f,
-                                             reductAngle - 0.02f,
-                                             toAngle,
-                                             true);
-
-                juce::ColourGradient grad(juce::Colours::red.withAlpha(0.5f), x1, y1, COLOUR1.withAlpha(0.5f), x2, y2, true);
-                g.setGradientFill(grad);
-
+                valueArcReduce.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, reductAngle - 0.02f, toAngle, true);
+                juce::ColourGradient gradReduce(juce::Colours::red.withAlpha(0.5f), x1, y1, COLOUR1.withAlpha(0.5f), x2, y2, true);
+                g.setGradientFill(gradReduce);
                 g.strokePath(valueArcReduce, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             }
         }
 
-        //auto thumbWidth = lineW * 1.0f;
-        //Point<float> thumbPoint(bounds.getCentreX() + arcRadius * std::cos(toAngle - MathConstants<float>::halfPi),
-        //    bounds.getCentreY() + arcRadius * std::sin(toAngle - MathConstants<float>::halfPi));
-
-        //g.setColour(COLOUR5);
-        //g.fillEllipse(Rectangle<float>(thumbWidth, thumbWidth).withCentre(thumbPoint));
-
-        // draw inner circle
+        // Draw dynamic inner dial elements
         float diameterInner = juce::jmin(width, height) * 0.4f;
         float radiusInner = diameterInner / 2;
         float centerX = x + width / 2;
@@ -956,63 +1018,27 @@ private:
         float ry = centerY - radiusInner;
         float angle = rotaryStartAngle + (sliderPos * (rotaryEndAngle - rotaryStartAngle));
 
-        juce::Rectangle<float> dialArea(rx, ry, diameterInner, diameterInner);
-
-        // draw big circle
-        juce::Path dialTick;
-        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
-        juce::ColourGradient grad(juce::Colours::black, centerX, centerY, juce::Colours::white.withBrightness(slider.isEnabled() ? 0.9f : 0.5f), radiusInner, radiusInner, true);
-        g.setGradientFill(grad);
-        g.fillEllipse(dialArea);
-
-        // draw small circle
         juce::Rectangle<float> smallDialArea(rx + radiusInner / 10.0f * 3, ry + radiusInner / 10.0f * 3, diameterInner / 10.0f * 7, diameterInner / 10.0f * 7);
-
         juce::Colour innerColor = KNOB_INNER_COLOUR;
-
         if (slider.isMouseOverOrDragging() && slider.isEnabled())
-        {
             innerColor = innerColor.brighter();
-        }
-
         g.setColour(innerColor);
         g.fillEllipse(smallDialArea);
 
-        // draw colorful inner circle
+        // Draw rotating tick
+        juce::Path dialTick;
+        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
         if (sampleMaxValue > 0.00001f && slider.isEnabled())
         {
-            //            if (rotaryStartAngle == toAngle)
-            //            {
-            //                reductAngle = rotaryStartAngle + 0.1f;
-            //            }
-            //            juce::Path valueArc;
-            //            valueArc.addCentredArc(bounds.getCentreX(),
-            //                                   bounds.getCentreY(),
-            //                                   arcRadius,
-            //                                   arcRadius,
-            //                                   0.0f,
-            //                                   rotaryStartAngle,
-            //                                   reductAngle,
-            //                                   true);
-            //            juce::ColourGradient grad(juce::Colours::red, valueArc.getPointAlongPath(valueArc.getLength()).x, valueArc.getPointAlongPath(valueArc.getLength()).y,
-            //                                      COLOUR1, rx + diameterInner * sampleMaxValue, ry + diameterInner * sampleMaxValue, true);
-            //            g.setGradientFill(grad);
-            //            g.fillEllipse(dialArea);
-
-            // draw colorful tick
-
-            g.setColour(juce::Colour(255, juce::jmax(255 - sampleMaxValue * 2000, 0.0f), 0));
-            g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
+            g.setColour(juce::Colour(255, (juce::uint8) juce::jmax(255 - sampleMaxValue * 2000, 0.0f), 0));
         }
-        else // draw grey 2 layers circle
+        else
         {
-            // draw grey tick
             g.setColour(juce::Colours::lightgrey.withBrightness(slider.isEnabled() ? 0.5f : 0.2f));
-            g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
         }
+        g.fillPath(dialTick, juce::AffineTransform::rotation(angle).translated(centerX, centerY));
 
-        //g.setColour(COLOUR5);
-        //g.drawEllipse(rx, ry, diameter, diameter, 1.0f);
+        // Draw modulation visuals
         drawModulationVisuals(g, x, y, width, height, rotaryStartAngle, rotaryEndAngle, slider);
     }
 

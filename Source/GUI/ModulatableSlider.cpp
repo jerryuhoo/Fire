@@ -20,6 +20,11 @@ ModulatableSlider::ModulatableSlider()
     isModHandleMouseOver = false;
     isModHandleMouseDown = false;
     isDraggingMainSlider = false;
+
+    addAndMakeVisible(label);
+    label.setJustificationType(juce::Justification::centred);
+    label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
+    setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
 }
 
 bool ModulatableSlider::hitTest(int x, int y)
@@ -73,6 +78,16 @@ void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
     if (isOverHandleNow != isModHandleMouseOver)
     {
         isModHandleMouseOver = isOverHandleNow;
+        if (isModHandleMouseOver)
+        {
+            if (onHoverStart)
+                onHoverStart(this);
+        }
+        else
+        {
+            if (onHoverEnd)
+                onHoverEnd(this);
+        }
         repaint();
     }
 
@@ -82,8 +97,11 @@ void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
 {
+    stopTimer();
     juce::Slider::mouseEnter(event);
     mouseMove(event);
+    label.setVisible(false);
+    setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
 void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
@@ -92,8 +110,12 @@ void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
     if (isModHandleMouseOver)
     {
         isModHandleMouseOver = false;
+        if (onHoverEnd)
+            onHoverEnd(this);
         repaint();
     }
+
+    startTimer(100);
 }
 
 void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
@@ -135,6 +157,10 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     else if (isMouseOverMainSlider())
     {
         isDraggingMainSlider = true;
+
+        if (onMainDragStart)
+            onMainDragStart(this);
+
         // CRITICAL: Only call the base class mouseDown if we intend to start a drag on the main slider
         juce::Slider::mouseDown(event);
     }
@@ -143,6 +169,10 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     {
         isModHandleMouseDown = true;
         initialLfoAmount = lfoAmount;
+
+        if (onModDragStart)
+            onModDragStart(this);
+
         repaint();
     }
 }
@@ -152,6 +182,8 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
     // CRITICAL: Only forward the drag event to the base class if our flag is set
     if (isDraggingMainSlider)
     {
+        if (onMainDragMove)
+            onMainDragMove(this);
         juce::Slider::mouseDrag(event);
     }
     else if (isModHandleMouseDown)
@@ -170,6 +202,9 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
             onModAmountChanged(lfoAmount);
         }
 
+        if (onModDragMove)
+            onModDragMove(this);
+
         // This will update the UI
         repaint();
     }
@@ -180,39 +215,51 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
     if (event.mods.isRightButtonDown() && isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
     {
         juce::PopupMenu menu;
-        menu.addItem(1, "Clear LFO");
-        menu.addItem(2, "Invert Depth");
-        // menu.addSeparator();
+        menu.addItem(1, "Set Value");
+        menu.addItem(2, "Clear LFO");
+        menu.addItem(3, "Invert Depth");
 
         juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
-        menu.addItem(3, bipolarToggleText);
+        menu.addItem(4, bipolarToggleText);
 
-        // Use SafePointer to ensure the component still exists during the asynchronous callback
+        juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
+        menu.addItem(5, bypassToggleText);
+
+        // This is the outer lambda. We create 'safeThis' here.
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
-                           [this, weakThis = juce::Component::SafePointer(this)](int result)
+                           [safeThis = juce::Component::SafePointer(this)](int result)
                            {
-                               if (weakThis == nullptr)
-                                   return; // The component has been deleted
+                               if (! safeThis)
+                                   return;
 
                                switch (result)
                                {
-                                   case 1: // Clear LFO
-                                       if (onModulationCleared)
-                                           onModulationCleared();
+                                   case 1: // Set Value
+                                   {
+                                       if (safeThis->onSetValueRequested)
+                                           safeThis->onSetValueRequested(safeThis);
                                        break;
-                                   case 2: // Invert Depth
-                                       if (onModulationInverted)
-                                           onModulationInverted();
+                                   }
+                                   case 2: // Clear LFO
+                                       if (safeThis->onModulationCleared)
+                                           safeThis->onModulationCleared();
                                        break;
-                                   case 3: // Switch Bi/Uni Mode
-                                       if (onBipolarModeToggled)
-                                           onBipolarModeToggled();
+                                   case 3: // Invert Depth
+                                       if (safeThis->onModulationInverted)
+                                           safeThis->onModulationInverted();
+                                       break;
+                                   case 4: // Switch Bi/Uni Mode
+                                       if (safeThis->onBipolarModeToggled)
+                                           safeThis->onBipolarModeToggled();
+                                       break;
+                                   case 5: // Toggle Bypass
+                                       if (safeThis->onBypassToggled)
+                                           safeThis->onBypassToggled();
                                        break;
                                    default:
                                        break;
                                }
                            });
-        return; // Do not execute the following logic after a right-click
     }
 
     // Always call the base class mouseUp to ensure proper state cleanup
@@ -221,13 +268,47 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
     // Reset our custom flags regardless of where the mouseUp happened
     if (isDraggingMainSlider)
     {
+        if (onMainDragEnd)
+            onMainDragEnd(this);
         isDraggingMainSlider = false;
         repaint();
     }
 
     if (isModHandleMouseDown)
     {
+        if (onModDragEnd)
+            onModDragEnd(this);
+
         isModHandleMouseDown = false;
         repaint();
+    }
+}
+
+void ModulatableSlider::setLabel(const juce::String& text, juce::Colour colour)
+{
+    label.setText(text, juce::dontSendNotification);
+    label.setColour(juce::Label::textColourId, colour);
+}
+
+void ModulatableSlider::resized()
+{
+    // First, call the base class's resized() to let it draw the slider itself.
+    juce::Slider::resized();
+
+    // Then, place our label in the area designated for the textbox.
+    // This ensures it's perfectly aligned above the knob.
+    label.setBounds(0, 0, getWidth(), TEXTBOX_HEIGHT);
+}
+
+void ModulatableSlider::timerCallback()
+{
+    // This function is called when the timer finishes.
+    stopTimer();
+
+    // Check if the mouse is truly outside the slider and its children (like the textbox).
+    if (! isMouseOver(true))
+    {
+        label.setVisible(true);
+        setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     }
 }

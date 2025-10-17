@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="NykRD7" name="Fire" projectType="audioplug" pluginManufacturer="Blue Wings Music"
               aaxIdentifier="com.bluewingsmusic.Fire" bundleIdentifier="com.bluewingsmusic.Fire"
-              version="1.5.0b" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
+              version="1.5.0" displaySplashScreen="1" pluginFormats="buildAU,buildLV2,buildVST3"
               jucerFormatVersion="1" pluginAUMainType="'aufx'" pluginVST3Category="Distortion"
               addUsingNamespaceToJuceHeader="0" cppLanguageStandard="17" defines="JUCE_MODAL_LOOPS_PERMITTED=1"
               pluginManufacturerCode="Wing" pluginCode="Fire" useAppConfig="0"
@@ -11,6 +11,7 @@
   <MAINGROUP id="X9e8F0" name="Fire">
     <GROUP id="{1F2CD48B-B61D-AF36-6422-79EF5DB875FF}" name="assets">
       <GROUP id="{C0F63D30-4000-ACDE-A34A-16D94E9E277B}" name="images">
+        <FILE id="SoUMNs" name="fire_anime.png" compile="0" resource="1" file="assets/images/fire_anime.png"/>
         <FILE id="IePV5S" name="firelogo.png" compile="0" resource="1" file="assets/images/firelogo.png"/>
         <FILE id="DLHWyX" name="firewingslogo.png" compile="0" resource="1"
               file="assets/images/firewingslogo.png"/>
@@ -86,6 +87,8 @@
                 file="Source/Panels/ControlPanel/ModulationMatrixPanel.cpp"/>
           <FILE id="bPv4s8" name="ModulationMatrixPanel.h" compile="0" resource="0"
                 file="Source/Panels/ControlPanel/ModulationMatrixPanel.h"/>
+          <FILE id="oh9wRo" name="PanelBase.cpp" compile="1" resource="0" file="Source/Panels/ControlPanel/PanelBase.cpp"/>
+          <FILE id="pBpaAu" name="PanelBase.h" compile="0" resource="0" file="Source/Panels/ControlPanel/PanelBase.h"/>
         </GROUP>
         <GROUP id="{995D5DE9-21F2-8C23-FD7F-A46997F360E4}" name="TopPanel">
           <FILE id="By9zs9" name="Preset.cpp" compile="1" resource="0" file="Source/Panels/TopPanel/Preset.cpp"/>
@@ -109,6 +112,12 @@
               file="Source/GUI/ModulatableSlider.h"/>
         <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
               file="Source/GUI/SettingsComponent.h"/>
+        <FILE id="C3EVC1" name="ValueEntryPopup.cpp" compile="1" resource="0"
+              file="Source/GUI/ValueEntryPopup.cpp"/>
+        <FILE id="LhmYR1" name="ValueEntryPopup.h" compile="0" resource="0"
+              file="Source/GUI/ValueEntryPopup.h"/>
+        <FILE id="g4Ar29" name="ValuePopup.cpp" compile="1" resource="0" file="Source/GUI/ValuePopup.cpp"/>
+        <FILE id="h6WIOb" name="ValuePopup.h" compile="0" resource="0" file="Source/GUI/ValuePopup.h"/>
       </GROUP>
       <GROUP id="{6D93BA34-0044-C87D-1644-2333FABFA73D}" name="DSP">
         <FILE id="kfZ8qg" name="ClippingFunctions.h" compile="0" resource="0"
@@ -124,6 +133,8 @@
         <FILE id="BoNr69" name="LfoManager.h" compile="0" resource="0" file="Source/DSP/LfoManager.h"/>
         <FILE id="f8ecdJ" name="LfoShapeGenerator.h" compile="0" resource="0"
               file="Source/DSP/LfoShapeGenerator.h"/>
+        <FILE id="sbKeYA" name="ModulatedValueProvider.h" compile="0" resource="0"
+              file="Source/DSP/ModulatedValueProvider.h"/>
         <FILE id="SBXQBa" name="ModulationRouting.h" compile="0" resource="0"
               file="Source/DSP/ModulationRouting.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>

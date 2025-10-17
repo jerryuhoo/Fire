@@ -11,28 +11,31 @@
 #pragma once
 
 #include "../../GUI/LookAndFeel.h"
-#include "../../GUI/ModulatableSlider.h"
-#include "../../PluginProcessor.h"
+#include "Graph Components/Oscilloscope.h"
+#include "Graph Components/VUPanel.h"
+#include "Graph Components/WidthGraph.h"
+#include "PanelBase.h"
 #include "juce_gui_basics/juce_gui_basics.h"
-#include <map>
 #include <vector>
 
 //==============================================================================
 /*
 */
-class GlobalPanel : public juce::Component,
+class GlobalPanel : public PanelBase,
                     public juce::ComboBox::Listener,
                     public juce::Button::Listener
 {
 public:
-    GlobalPanel(FireAudioProcessor& p);
+    GlobalPanel(FireAudioProcessor& p,
+                std::function<void(ModulatableSlider*)> onModDragStart,
+                std::function<void(ModulatableSlider*)> onModDragMove,
+                std::function<void(ModulatableSlider*)> onModDragEnd,
+                std::function<void(ModulatableSlider*)> onHoverStart,
+                std::function<void(ModulatableSlider*)> onHoverEnd);
     ~GlobalPanel() override;
 
     void paint(juce::Graphics&) override;
     void resized() override;
-
-    // A public list of all modulatable sliders for the editor to access and update.
-    std::vector<ModulatableSlider*> modulatableSliders;
 
     ModulatableSlider& getLowcutFreqKnob();
     ModulatableSlider& getPeakFreqKnob();
@@ -42,6 +45,7 @@ public:
     ModulatableSlider& getHighcutGainKnob();
 
     void setToggleButtonState(juce::String toggleButton);
+    float scale = 1.0f;
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -55,14 +59,13 @@ private:
     void createComboBoxes();
     void setupComponentGroups();
 
-    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
-    void initFlatButton(juce::TextButton& button, juce::String buttonName);
+    // initRotarySlider is now in PanelBase.
+    void initFlatButton(juce::TextButton& button, juce::String buttonName); // This seems to be missing, keeping for consistency.
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
     void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
 
     // Re-attaches all UI components to their parameters.
     void updateAttachments();
-    void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramID);
 
     // UI update helpers
     void updateFilterKnobVisibility();
@@ -83,20 +86,14 @@ private:
         switchButtonsGlobal = 1005
     };
 
-    FireAudioProcessor& processor;
-
-    // UI layout areas
-    juce::Rectangle<int> globalEffectArea;
-    juce::Rectangle<int> outputKnobArea;
-
-    // === UI Component Management ===
-    std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
-    std::map<juce::String, std::unique_ptr<juce::Label>> labels;
-    std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
+    // UI layout areas to match BandPanel style
+    juce::Rectangle<int> tabAreaRect;
+    juce::Rectangle<int> outputAreaRect;
 
     // --- Buttons ---
     juce::TextButton filterLowCutButton, filterPeakButton, filterHighCutButton;
-    juce::ToggleButton filterSwitch, downsampleSwitch;
+    // Changed ToggleButton to TextButton for tab-like functionality
+    juce::TextButton filterSwitch, downsampleSwitch, graphSwitch;
     std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
 
     std::unique_ptr<ButtonAttachment> filterLowAttachment, filterBandAttachment, filterHighAttachment,
@@ -107,15 +104,24 @@ private:
     std::unique_ptr<ComboBoxAttachment> lowcutModeAttachment, highcutModeAttachment;
 
     // --- Labels ---
-    juce::Label filterTypeLabel, lowcutSlopeLabel, highcutSlopeLabel, postFilterPanelLabel, downSamplePanelLabel;
+    // Removed panel labels, as the switches now serve as titles.
+    juce::Label filterTypeLabel, lowcutSlopeLabel, highcutSlopeLabel;
 
     // Groups of components for easy visibility toggling.
     juce::Array<juce::Component*> filterComponents;
     juce::Array<juce::Component*> downsampleComponents;
+    juce::Array<juce::Component*> graphComponents;
     juce::Array<juce::Component*> lowcutKnobs;
     juce::Array<juce::Component*> peakKnobs;
     juce::Array<juce::Component*> highcutKnobs;
     juce::Array<juce::Component*> allControls;
+
+    // Added to store active tab colour for painting, like in BandPanel
+    juce::Colour activeTabColour;
+
+    Oscilloscope oscilloscope { processor };
+    VUPanel vuPanel { processor };
+    WidthGraph widthGraph { processor };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

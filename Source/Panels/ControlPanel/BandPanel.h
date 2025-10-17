@@ -11,21 +11,28 @@
 #pragma once
 
 #include "../../GUI/LookAndFeel.h"
-#include "../../PluginProcessor.h"
+#include "../ControlPanel/Graph Components/DistortionGraph.h"
+#include "../ControlPanel/Graph Components/Oscilloscope.h"
+#include "../ControlPanel/Graph Components/VUPanel.h"
+#include "../ControlPanel/Graph Components/WidthGraph.h"
+#include "PanelBase.h"
 #include "juce_gui_basics/juce_gui_basics.h"
-#include <map>
 #include <vector>
 
 //==============================================================================
-/*
-*/
-class BandPanel : public juce::Component,
+class BandPanel : public PanelBase,
                   public juce::AudioProcessorValueTreeState::Listener,
                   public juce::AsyncUpdater,
-                  public juce::Button::Listener
+                  public juce::Button::Listener,
+                  public juce::ComboBox::Listener // Add ComboBox::Listener
 {
 public:
-    BandPanel(FireAudioProcessor&);
+    BandPanel(FireAudioProcessor&,
+              std::function<void(ModulatableSlider*)> onModDragStart,
+              std::function<void(ModulatableSlider*)> onModDragMove,
+              std::function<void(ModulatableSlider*)> onModDragEnd,
+              std::function<void(ModulatableSlider*)> onHoverStart,
+              std::function<void(ModulatableSlider*)> onHoverEnd);
     ~BandPanel() override;
 
     void paint(juce::Graphics&) override;
@@ -34,90 +41,108 @@ public:
 
     void handleAsyncUpdate() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
+    void comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged) override;
 
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
-    juce::ToggleButton compressorBypassButton, widthBypassButton;
+
+    juce::ToggleButton shapeBypassButton, compressorBypassButton, widthBypassButton, driveBypassButton;
+    juce::ToggleButton dcFilterButton;
+
     int getFocusBandNum() const { return focusBandNum; }
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
     void updateDriveMeter();
     void saveBypassStatesToMemory();
 
-    // A public list of all modulatable sliders for the editor to access and update.
-    std::vector<ModulatableSlider*> modulatableSliders;
+    // Public getters for graphs so PluginEditor can update them
+    DistortionGraph* getDistortionGraph() { return &distortionGraph; }
+    void updateRealtimeThreshold(float newThreshold);
+
+    float scale = 1.0f;
+
+    // A helper to get a direct pointer to the drive knob
+    ModulatableSlider* getDriveKnob() { return modulatableSliderComponents.at(DRIVE_NAME).get(); }
+    void setGraphVisibilityForDriveDrag(bool isDragging);
 
 private:
-    // Re-attaches all UI components to the parameters of the current focusBandNum.
     void updateAttachments();
-
-    void configureModulatableSlider(ModulatableSlider& slider, const juce::String& paramIDBase);
-
-    void updateLinkedValue();
     bool canEnableSubKnob(juce::Component& component);
-
     void buttonClicked(juce::Button* clickedButton) override;
-    // Initialization helpers
-    void initRotarySlider(juce::Slider& slider, juce::Colour colour);
+
     void initFlatButton(juce::TextButton& button, juce::String buttonName);
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
+    void setMenu(juce::ComboBox* combobox);
+    void updateDistortionModeVisibility();
 
     void createSliders();
     void createLabels();
     void createButtons();
+    void createComboBoxes(); // New function
     void setupComponentGroups();
 
-    // Sets visibility for a group of components.
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
+    void updateLinkedValue();
 
-    FireAudioProcessor& processor;
+    juce::Rectangle<int> bandKnobArea, driveKnobArea, outputKnobArea, bottomArea;
 
-    // UI layout areas
-    juce::Rectangle<int> bandKnobArea;
-    juce::Rectangle<int> driveKnobArea;
-    juce::Rectangle<int> outputKnobArea;
-    juce::Rectangle<int> bottomArea;
-
-    // === Refactored UI Component Management ===
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
-    // A map to own and manage all sliders, keyed by their parameter name.
-    std::map<juce::String, std::unique_ptr<ModulatableSlider>> modulatableSliderComponents;
-
-    // A map to own and manage all labels, keyed by the parameter name they are associated with.
     std::map<juce::String, std::unique_ptr<juce::Label>> labels;
-
-    // A map to own the attachments, ensuring they are re-created correctly when the band changes.
-    std::map<juce::String, std::unique_ptr<SliderAttachment>> sliderAttachments;
-
-    // --- Unchanged Members ---
     juce::Label shapePanelLabel, compressorPanelLabel, widthPanelLabel;
+    juce::Label dcFilterLabel;
 
     juce::TextButton linkedButton, safeButton, extremeButton;
 
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
-        compressorBypassAttachment, widthBypassAttachment;
+        shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment, driveBypassAttachment;
 
-    juce::ToggleButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
+    juce::TextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
     enum RadioButtonIds
     {
         switchButtons = 1004
     };
 
-    // Groups of components for easy visibility toggling.
+    // Groups for visibility
     juce::Array<juce::Component*> shapeComponents;
     juce::Array<juce::Component*> widthComponents;
     juce::Array<juce::Component*> compressorComponents;
+    juce::Array<juce::Component*> driveComponents; // New group for drive
     juce::Array<juce::Component*> allControls;
-    juce::Array<juce::Component*> mainControls;
-    juce::Array<juce::Slider*> compressorKnobs;
-    juce::Array<juce::Slider*> widthKnobs;
+
+    // Groups for enable/disable logic
+    juce::Array<juce::Component*> shapeSubControls;
+    juce::Array<juce::Component*> compressorSubControls;
+    juce::Array<juce::Component*> widthSubControls;
 
     int focusBandNum;
 
-    // Store bypass states for all 4 bands, since the UI only shows one at a time.
+    // Add temp state for the new button
+    bool shapeBypassTemp[4] = { false };
     bool compBypassTemp[4] = { false };
     bool widthBypassTemp[4] = { false };
+    bool driveBypassTemp[4] = { false };
+    bool dcFilterBypassTemp[4] = { false };
+
+    juce::Rectangle<int> knobsAreaRect;
+    juce::Rectangle<int> outputAreaRect;
+    juce::Rectangle<int> tabAreaRect;
+    juce::Rectangle<int> graphAreaRect; // Area for the graphs
+    juce::Rectangle<int> shapeSeparatorLine;
+    juce::Colour activeTabColour;
+
+    // Graphs moved from GraphPanel
+    Oscilloscope oscilloscope { processor };
+    DistortionGraph distortionGraph { processor };
+    VUPanel vuPanel { processor };
+    WidthGraph widthGraph { processor };
+
+    // Distortion modes moved from PluginEditor
+    std::array<juce::ComboBox, 4> distortionModes;
+    std::array<std::unique_ptr<ComboBoxAttachment>, 4> modeAttachments;
+
+    juce::Component* preDragVisibleGraph = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

@@ -15,8 +15,40 @@
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
-    : AudioProcessorEditor(&p), processor(p), stateComponent { p.stateAB, p.statePresets, p.treeState }, globalPanel(processor), lfoPanel(p)
+    : AudioProcessorEditor(&p),
+      processor(p),
+      stateComponent { p.stateAB, p.statePresets, p.treeState },
+      // Initialize bandPanel and globalPanel with the popup callbacks
+      bandPanel(p, {}, {}, {}, {}, {}),
+      globalPanel(processor, {}, {}, {}, {}, {}),
+      lfoPanel(p)
 {
+    addAndMakeVisible(valuePopup);
+    valuePopup.setAlwaysOnTop(true);
+    valuePopup.setVisible(false);
+
+    addAndMakeVisible(valueEntryPopup);
+    valueEntryPopup.setAlwaysOnTop(true);
+    valueEntryPopup.setVisible(false);
+
+    valueEntryPopup.onOk = [this](double value)
+    {
+        if (sliderForValueEntry != nullptr)
+        {
+            processor.setModulationValue(sliderForValueEntry->getParamID(), (float) value);
+        }
+
+        valueEntryPopup.setVisible(false);
+        sliderForValueEntry = nullptr;
+    };
+
+    valueEntryPopup.onCancel = [this]()
+    {
+        valueEntryPopup.setVisible(false);
+        sliderForValueEntry = nullptr;
+    };
+
+    processor.addChangeListener(this);
     // timer
     juce::Timer::startTimerHz(60.0f);
 
@@ -47,9 +79,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             };
 
             // Assign the callback function to all modulatable sliders.
-            for (auto* slider : bandPanel.modulatableSliders)
+            for (auto* slider : bandPanel.getModulatableSliders())
                 slider->onClickInAssignMode = sliderClickCallback;
-            for (auto* slider : globalPanel.modulatableSliders)
+            for (auto* slider : globalPanel.getModulatableSliders())
                 slider->onClickInAssignMode = sliderClickCallback;
         }
     };
@@ -57,14 +89,112 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.setOnDataChangedCallback([this]
                                       { processor.lfoDataHasChanged(); });
 
-    // This is not a perfect fix for Vst3 plugins
-    // Vst3 calls constructor before setStateInformation in processor,
-    // however, AU plugin calls constructor after setStateInformation/
-    // So I set delay of 1 ms to reset size and other stuff.
-    // call function after 1 ms
-    //    std::function<void()> initFunction = [this]() { initEditor(); };
-    //    juce::Timer::callAfterDelay(1, initFunction);
-    //initEditor();
+    auto bypassCallback = [this](const juce::String& parameterID)
+    {
+        processor.getLfoManager().toggleBypassForRouting(parameterID);
+        updateModulationStates();
+    };
+
+    // Use the new helper function to get all sliders and assign the callback in a single loop
+    for (auto* slider : getAllModulatableSliders())
+    {
+        // --- Main Knob Drag Callbacks (NO Value Popup) ---
+        // These callbacks now only handle the special case for the drive knob.
+        slider->onMainDragStart = [this](ModulatableSlider* s)
+        {
+            // If the dragged slider is the drive knob, trigger the graph visibility change.
+            if (s == bandPanel.getDriveKnob())
+                bandPanel.setGraphVisibilityForDriveDrag(true);
+        };
+
+        slider->onMainDragMove = [](ModulatableSlider*) {}; // Main knob drag does not need continuous updates here.
+
+        slider->onMainDragEnd = [this](ModulatableSlider* s)
+        {
+            // If the drag ended on the drive knob, restore the graph visibility.
+            if (s == bandPanel.getDriveKnob())
+                bandPanel.setGraphVisibilityForDriveDrag(false);
+        };
+
+        // --- Modulation Handle Drag Callbacks (WITH Value Popup) ---
+        // This is where the popup logic should be.
+        slider->onModDragStart = [this](ModulatableSlider* s)
+        {
+            showValuePopupForSlider(s);
+        };
+
+        slider->onModDragMove = [this](ModulatableSlider* s)
+        {
+            updateValuePopupForSlider(s);
+        };
+
+        slider->onModDragEnd = [this](ModulatableSlider* s)
+        {
+            hideValuePopup();
+        };
+
+        // --- Hover Callbacks (Still show popups for hover) ---
+        // This behavior remains unchanged.
+        slider->onHoverStart = [this](ModulatableSlider* s)
+        {
+            showValuePopupForSlider(s);
+        };
+        slider->onHoverEnd = [this](ModulatableSlider* s)
+        {
+            hideValuePopup();
+        };
+
+        slider->onModAmountSetValue = [this, slider](double newValue)
+        {
+            processor.setModulationValue(slider->getParamID(), (float) newValue);
+        };
+
+        slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit)
+        {
+            sliderForValueEntry = sliderToEdit;
+
+            auto sliderBounds = sliderToEdit->getScreenBounds();
+
+            auto localBounds = getLocalArea(nullptr, sliderBounds);
+
+            valueEntryPopup.setBounds(localBounds.getCentreX() - 80,
+                                      localBounds.getCentreY() - 30,
+                                      160,
+                                      60);
+            valueEntryPopup.setVisible(true);
+            valueEntryPopup.grabKeyboardFocus();
+        };
+
+        slider->onBypassToggled = [slider, bypassCallback]()
+        {
+            bypassCallback(slider->getParamID());
+        };
+
+        slider->onModulationCleared = [this, slider]()
+        {
+            processor.clearModulationForParameter(slider->getParamID());
+        };
+
+        slider->onModulationInverted = [this, slider]()
+        {
+            processor.invertModulationDepthForParameter(slider->getParamID());
+        };
+
+        slider->onBipolarModeToggled = [this, slider]()
+        {
+            processor.toggleBipolarMode(slider->getParamID());
+        };
+
+        slider->onModAmountChanged = [this, slider](float newDepth)
+        {
+            processor.setModulationDepth(slider->getParamID(), newDepth);
+        };
+
+        slider->onModulationReset = [this, slider]()
+        {
+            processor.resetModulation(slider->getParamID());
+        };
+    }
 
     // 1. Check if this plugin instance has ALREADY performed an update check.
     if (! processor.hasUpdateCheckBeenPerformed)
@@ -73,24 +203,35 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         // 2. If not, check the user's preference from the now-loaded state.
         if (shouldCheckForUpdate)
         {
-            // 3. If enabled, schedule the check on a background thread.
-            juce::Timer::callAfterDelay(1000, [this]()
+            // Schedule the check on a background thread.
+            juce::Timer::callAfterDelay(1000, []()
                                         {
                 std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-                if (versionInfo != nullptr && !versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
+                // We must use the static VERSION macro from JucePluginDefines.h here, not a member variable.
+                if (versionInfo != nullptr)
                 {
-                    juce::String version = versionInfo->versionString;
-                    const auto callback = juce::ModalCallbackFunction::create([version](int result) {
-                        if (result == 1)
-                        {
-                            juce::URL(GITHUB_TAG_LINK + version).launchInDefaultBrowser();
-                        }
-                    });
-                    
-                    juce::MessageManager::callAsync([callback, version]() {
-                        juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                            "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-                    });
+                    // ==============================================================
+                    // ** 2. Use the new Version struct for comparison **
+                    // ==============================================================
+                    Version currentVersion(juce::String(VERSION));
+                    Version fetchedVersion(versionInfo->versionString);
+
+                    // Only prompt for an update if the fetched version is strictly greater than the current one.
+                    if (currentVersion < fetchedVersion)
+                    {
+                        juce::String version = versionInfo->versionString;
+                        const auto callback = juce::ModalCallbackFunction::create([version](int result) {
+                            if (result == 1)
+                            {
+                                juce::URL(GITHUB_TAG_LINK + version).launchInDefaultBrowser();
+                            }
+                        });
+                        
+                        juce::MessageManager::callAsync([callback, version]() {
+                            juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                                "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
+                        });
+                    }
                 } });
         }
 
@@ -99,10 +240,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         processor.hasUpdateCheckBeenPerformed = true;
     }
 
-    // Graph
-    addAndMakeVisible(graphPanel);
-    graphPanel.addMouseListener(this, true);
-
+    // Add main panels
     addAndMakeVisible(bandPanel);
     addAndMakeVisible(globalPanel);
     addAndMakeVisible(lfoPanel);
@@ -125,8 +263,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     bandPanel.widthBypassButton.addListener(this);
 
     processedSpectrum.setInterceptsMouseClicks(false, false);
-    processedSpectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(1), processor.getSampleRate() / (float) processor.getFFTSize());
-    originalSpectrum.prepareToPaintSpectrum(processor.getNumBins(), processor.getFFTData(0), processor.getSampleRate() / (float) processor.getFFTSize());
+    processedSpectrum.updateSpectrum(processor.getFFTData(1), processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
+    originalSpectrum.updateSpectrum(processor.getFFTData(0), processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
 
     // presets
     addAndMakeVisible(stateComponent);
@@ -198,20 +336,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     globalPanel.setVisible(isGlobalView);
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
-    graphPanel.setVisible(isBandView || isGlobalView);
-    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
-
-    setMenu(&distortionMode1);
-    setMenu(&distortionMode2);
-    setMenu(&distortionMode3);
-    setMenu(&distortionMode4);
 
     // zoom button
     addAndMakeVisible(zoomButton);
     zoomButton.setClickingTogglesState(false);
-    //    zoomButton.setButtonText("Z");
     zoomButton.addListener(this);
     zoomButton.setColour(juce::TextButton::buttonColourId, COLOUR5.withAlpha(0.5f));
     zoomButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5.withAlpha(0.5f));
@@ -233,11 +363,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, KNOB_SUBFONT_COLOUR);
     getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
 
-    modeAttachment1 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 0), distortionMode1);
-    modeAttachment2 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 1), distortionMode2);
-    modeAttachment3 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 2), distortionMode3);
-    modeAttachment4 = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(processor.treeState, ParameterIDAndName::getIDString(MODE_ID, 3), distortionMode4);
-
     // set resize
     setResizable(true, true);
     setSize(processor.getSavedWidth(), processor.getSavedHeight());
@@ -245,9 +370,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     getConstrainer()->setFixedAspectRatio(2); // set fixed resize rate
 
-    setMultiband();
-
-    graphPanel.setLayoutMode(GraphPanel::LayoutMode::Band);
+    multiband.resortAndRedrawLines();
 
     auto& params = processor.getParameters();
     for (auto param : params)
@@ -273,7 +396,6 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     }
 
     // Mouse Listeners
-    graphPanel.removeMouseListener(this);
     multiband.removeMouseListener(this);
 
     // StateComponent Listeners
@@ -288,12 +410,6 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     windowRightButton.removeListener(this);
     windowLfoButton.removeListener(this);
 
-    // Distortion Mode ComboBox Listeners
-    distortionMode1.removeListener(this);
-    distortionMode2.removeListener(this);
-    distortionMode3.removeListener(this);
-    distortionMode4.removeListener(this);
-
     // Other Button Listeners
     zoomButton.removeListener(this);
 
@@ -306,6 +422,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     bandPanel.widthBypassButton.removeListener(this);
 
     setLookAndFeel(nullptr);
+    processor.removeChangeListener(this);
 }
 
 void FireAudioProcessorEditor::markPresetAsDirty()
@@ -326,58 +443,23 @@ void FireAudioProcessorEditor::initEditor()
 //==============================================================================
 void FireAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    float part1 = getHeight() / 10.0f;
-    float part2 = part1 * 3.0f;
+    const float newDisplayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
 
-    // background
-    g.setColour(COLOUR7);
-    g.fillRect(0.0f, getHeight() * 3.0f / 10.0f, static_cast<float>(getWidth()), getHeight() * 7.0f / 10.0f);
+    if (newDisplayScale != currentDisplayScale)
+    {
+        currentDisplayScale = newDisplayScale;
+        resized();
+        return;
+    }
+    g.drawImage(backgroundCache, getLocalBounds().toFloat());
 
-    // title
-    g.setColour(COLOUR5);
-    const float scale = getWidth() / (float) INIT_WIDTH;
-    const auto topBarHeight = juce::roundToInt(50.0f * scale);
-    g.fillRect(0, 0, getWidth(), topBarHeight);
-
-    // draw version
-    g.setColour(COLOUR5);
-    g.setFont(juce::Font {
-        juce::FontOptions()
-            .withName("Times New Roman")
-            .withHeight(18.0f)
-            .withStyle("Bold") });
-    juce::String version = (juce::String) VERSION;
-    juce::Rectangle<int> area(getWidth() - 50, getHeight() - 25, 100, 50);
-    g.drawFittedText(version, area, juce::Justification::topLeft, 1);
-
-    // set logo "Fire"
-    juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
-    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(), juce::RectanglePlacement::centred);
-
-    // set logo "Wings"
-    juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
-    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(), juce::RectanglePlacement::centred);
-
-    auto frame = getLocalBounds();
-    frame.setBounds(0, part1, getWidth(), part2);
-
-    int focusIndex = 0;
-    focusIndex = multiband.getFocusIndex();
-
-    // TODO: change it to mouse click
-    setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, windowLeftButton.getToggleState());
+    int focusIndex = multiband.getFocusIndex();
 
     bool left = windowLeftButton.getToggleState();
-    bool right = windowRightButton.getToggleState();
 
     if (left)
-    { // if you select the left window, you will see audio wave and distortion function graphs.
-        bandPanel.setFocusBandNum(focusIndex);
-        graphPanel.setFocusBandNum(focusIndex);
-    }
-    else if (right)
     {
-        graphPanel.setFocusBandNum(-1); // -1 means global
+        bandPanel.setFocusBandNum(focusIndex);
     }
 }
 
@@ -394,6 +476,9 @@ void FireAudioProcessorEditor::resized()
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
     // set look and feel scale
     fireLookAndFeel.scale = scale;
+    bandPanel.scale = scale;
+    lfoPanel.setScale(scale);
+    globalPanel.scale = scale;
 
     juce::Rectangle<int> bounds(getLocalBounds());
 
@@ -444,55 +529,21 @@ void FireAudioProcessorEditor::resized()
         windowLfoButton.setBounds(windowButtonsArea.removeFromLeft(buttonWidth));
         windowRightButton.setBounds(windowButtonsArea);
 
-        // 3. Left and right margin
-        bounds.removeFromLeft(juce::roundToInt(getWidth() / 20.0f));
-        bounds.removeFromRight(juce::roundToInt(getWidth() / 20.0f));
-
         // First, determine the current view state
         const bool isBandView = windowLeftButton.getToggleState();
         const bool isGlobalView = windowRightButton.getToggleState();
 
-        auto mainControlsArea = bounds;
-        mainControlsArea.removeFromBottom(mainControlsArea.getHeight() / 6);
-        auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
-
         if (isBandView)
         {
-            // --- Band View Layout (Your Original Logic) ---
-            auto mainControlsAreaForBand = bounds;
-            // auto mainControlsArea = bounds;
-            // mainControlsArea.removeFromBottom(mainControlsArea.getHeight() / 6);
-
-            // auto topSection = mainControlsArea.removeFromTop(mainControlsArea.getHeight() / 5);
-
-            auto distortionModeArea = topSection.removeFromLeft(juce::roundToInt(OSC_WIDTH));
-            distortionModeArea.reduce(0, topSection.getHeight() / 4);
-            distortionMode1.setBounds(distortionModeArea);
-            distortionMode2.setBounds(distortionModeArea);
-            distortionMode3.setBounds(distortionModeArea);
-            distortionMode4.setBounds(distortionModeArea);
-
-            const int graphPanelWidth = juce::roundToInt(getWidth() / 7.0f * 2.0f);
-            auto graphArea = mainControlsArea.removeFromLeft(graphPanelWidth);
-            mainControlsAreaForBand.removeFromLeft(graphPanelWidth);
-            graphPanel.setBounds(graphArea);
-
-            bandPanel.setBounds(mainControlsAreaForBand);
+            bandPanel.setBounds(bounds);
         }
         else if (isGlobalView)
         {
-            const int graphPanelWidth = juce::roundToInt(getWidth() / 6.0f);
-            auto graphArea = mainControlsArea;
-            graphArea.removeFromRight(graphArea.getWidth() - graphPanelWidth);
-            graphPanel.setBounds(graphArea);
-
-            auto rightHandPanelsArea = mainControlsArea;
-            rightHandPanelsArea.removeFromLeft(graphPanelWidth);
-            globalPanel.setBounds(rightHandPanelsArea);
+            globalPanel.setBounds(bounds);
         }
         else // isLfoView
         {
-            lfoPanel.setBounds(mainControlsArea);
+            lfoPanel.setBounds(bounds);
         }
     }
 
@@ -501,6 +552,30 @@ void FireAudioProcessorEditor::resized()
                          multiband.getY() + multiband.getHeight() - 30.0f * scale,
                          getHeight() / 25.0f,
                          getHeight() / 25.0f);
+
+    const float displayScale = currentDisplayScale;
+
+    backgroundCache = juce::Image(juce::Image::ARGB,
+                                  juce::roundToInt(getWidth() * displayScale),
+                                  juce::roundToInt(getHeight() * displayScale),
+                                  true);
+    juce::Graphics g(backgroundCache);
+    g.addTransform(juce::AffineTransform::scale(displayScale));
+    // background
+    g.setColour(COLOUR7);
+    g.fillRect(0.0f, getHeight() * 3.0f / 10.0f, static_cast<float>(getWidth()), getHeight() * 7.0f / 10.0f);
+
+    // title
+    g.setColour(COLOUR5);
+    g.fillRect(0, 0, getWidth(), topBarHeight);
+
+    // set logo "Fire"
+    juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
+    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(), juce::RectanglePlacement::centred);
+
+    // set logo "Wings"
+    juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
+    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(), juce::RectanglePlacement::centred);
 }
 
 void FireAudioProcessorEditor::timerCallback()
@@ -518,9 +593,9 @@ void FireAudioProcessorEditor::timerCallback()
         assignModePulseAlpha = minAlpha + (maxAlpha - minAlpha) * ((std::sin(assignModePulseAngle) + 1.0f) / 2.0f);
 
         // Pass the new alpha value to all modulatable sliders
-        for (auto* slider : bandPanel.modulatableSliders)
+        for (auto* slider : bandPanel.getModulatableSliders())
             slider->assignModeGlowAlpha = assignModePulseAlpha;
-        for (auto* slider : globalPanel.modulatableSliders)
+        for (auto* slider : globalPanel.getModulatableSliders())
             slider->assignModeGlowAlpha = assignModePulseAlpha;
 
         // Repaint the panels on every frame to ensure smooth animation
@@ -545,7 +620,7 @@ void FireAudioProcessorEditor::timerCallback()
 
     // Loop through the public list of modulatable sliders from the bandPanel.
     // This is much cleaner and automatically adapts to any new sliders you add.
-    for (auto* slider : bandPanel.modulatableSliders)
+    for (auto* slider : bandPanel.getModulatableSliders())
     {
         if (slider != nullptr) // A good safety check
         {
@@ -555,7 +630,7 @@ void FireAudioProcessorEditor::timerCallback()
     // Repaint the entire panel once, which is more efficient than repainting individual sliders.
     bandPanel.repaint();
 
-    for (auto* slider : globalPanel.modulatableSliders)
+    for (auto* slider : globalPanel.getModulatableSliders())
     {
         if (slider != nullptr)
         {
@@ -565,21 +640,13 @@ void FireAudioProcessorEditor::timerCallback()
     globalPanel.repaint();
 
     int currentBand = bandPanel.getFocusBandNum();
-    setDistortionGraph(ParameterIDAndName::getIDString(MODE_ID, currentBand),
-                       ParameterIDAndName::getIDString(DRIVE_ID, currentBand),
-                       ParameterIDAndName::getIDString(REC_ID, currentBand),
-                       ParameterIDAndName::getIDString(MIX_ID, currentBand),
-                       ParameterIDAndName::getIDString(BIAS_ID, currentBand),
-                       ParameterIDAndName::getIDString(SAFE_ID, currentBand),
-                       currentBand);
 
-    float realtimeThreshold = processor.getRealtimeModulatedThreshold(currentBand);
-    graphPanel.getVuPanel()->updateRealtimeThreshold(realtimeThreshold);
+    // Update graphs now inside BandPanel
+    bandPanel.updateRealtimeThreshold(processor.getRealtimeModulatedThreshold(currentBand));
 
     // bypassed
     if (processor.getBypassedState())
     {
-        graphPanel.repaint();
         multiband.repaint();
     }
     else if (processor.isFFTBlockReady())
@@ -599,17 +666,30 @@ void FireAudioProcessorEditor::timerCallback()
         // prepare to paint the spectrum
         float specAlpha = static_cast<float>(*processor.treeState.getRawParameterValue(MIX_ID));
         processedSpectrum.setSpecAlpha(specAlpha);
-        originalSpectrum.setSpecAlpha(specAlpha);
-        processedSpectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTDataProcessed, processor.getSampleRate() / (float) processor.getFFTSize());
-        originalSpectrum.prepareToPaintSpectrum(processor.getNumBins(), tempFFTDataOriginal, processor.getSampleRate() / (float) processor.getFFTSize());
+        originalSpectrum.setSpecAlpha(1.0f - specAlpha);
+        processedSpectrum.updateSpectrum(tempFFTDataProcessed, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
+        originalSpectrum.updateSpectrum(tempFFTDataOriginal, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
         bandPanel.updateDriveMeter();
-        graphPanel.repaint();
         processedSpectrum.repaint();
         originalSpectrum.repaint();
         multiband.repaint();
-        bandPanel.repaint();
+
         globalPanel.repaint();
-        lfoPanel.repaint();
+    }
+
+    updateModulationStates();
+
+    DistortionGraphValues latestValues;
+    if (processor.getLatestDistortionGraphValues(latestValues))
+    {
+        // Update graph now inside BandPanel
+        bandPanel.getDistortionGraph()->setState(
+            latestValues.mode,
+            latestValues.rec,
+            latestValues.mix,
+            latestValues.bias,
+            latestValues.drive,
+            latestValues.rateDivide);
     }
 }
 
@@ -628,9 +708,6 @@ void FireAudioProcessorEditor::updateMainPanelVisibility()
     globalPanel.setVisible(isGlobalView);
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
-
-    // The graph panel should be visible for Band and Global views, but not LFO view.
-    graphPanel.setVisible(isBandView || isGlobalView);
 }
 
 void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
@@ -643,8 +720,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             clickedButton->setButtonText("B");
         else
             clickedButton->setButtonText("A");
-        //        initState();
-        setMultiband();
+        multiband.resortAndRedrawLines();
     }
     if (multiband.getStateComponent().getChangedState())
     {
@@ -660,9 +736,13 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         const bool isNowZoomed = zoomButton.getToggleState();
 
         // Define all components that are hidden when zoomed.
-        std::array<juce::Component*, 7> componentsToHideOnZoom = {
-            &windowLeftButton, &windowRightButton, &windowLfoButton, &distortionMode1, &distortionMode2, &distortionMode3, &distortionMode4
-        };
+        std::vector<juce::Component*> componentsToHideOnZoom;
+        componentsToHideOnZoom.push_back(&windowLeftButton);
+        componentsToHideOnZoom.push_back(&windowRightButton);
+        componentsToHideOnZoom.push_back(&windowLfoButton);
+
+        // Distortion modes are now in BandPanel, so we don't hide them here.
+        // 失真模式现在在BandPanel中，所以我们不在这里隐藏它们。
 
         // Set visibility for the top-level controls.
         // If we are zoomed, these are NOT visible. If not zoomed, they ARE visible.
@@ -672,7 +752,6 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         if (isNowZoomed)
         {
             // When entering zoom, hide all main panels.
-            graphPanel.setVisible(false);
             bandPanel.setVisible(false);
             globalPanel.setVisible(false);
             lfoPanel.setVisible(false);
@@ -686,30 +765,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     }
     if (clickedButton == &windowLeftButton || clickedButton == &windowRightButton || clickedButton == &windowLfoButton)
     {
-        const bool isBandView = windowLeftButton.getToggleState();
-        const bool isGlobalView = windowRightButton.getToggleState();
-        const bool isLfoView = windowLfoButton.getToggleState();
-
-        bandPanel.setVisible(isBandView);
-        globalPanel.setVisible(isGlobalView);
-        lfoPanel.setVisible(isLfoView);
-
-        multiband.setVisible(isBandView || isLfoView);
-        filterControl.setVisible(isGlobalView);
-
-        graphPanel.setVisible(isBandView || isGlobalView);
-
-        if (isBandView)
-        {
-            graphPanel.setLayoutMode(GraphPanel::LayoutMode::Band);
-        }
-        else if (isGlobalView)
-        {
-            graphPanel.setLayoutMode(GraphPanel::LayoutMode::Global);
-        }
-
-        setFourComponentsVisibility(distortionMode1, distortionMode2, distortionMode3, distortionMode4, focusIndex, isBandView);
-
+        updateMainPanelVisibility();
         resized();
     }
     for (int i = 0; i < 4; i++)
@@ -740,11 +796,6 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
 {
-    //    if (combobox == &distortionMode1 || combobox == &distortionMode2
-    //        || combobox == &distortionMode3 || combobox == &distortionMode4)
-    //    {
-    //        changeSliderState(combobox);
-    //    }
     if (combobox == stateComponent.getPresetBox())
     {
         int selectedId = combobox->getSelectedId();
@@ -757,52 +808,8 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
         {
             stateComponent.updatePresetBox(selectedId);
         }
-        setMultiband();
+        multiband.resortAndRedrawLines();
     }
-}
-
-void FireAudioProcessorEditor::setMenu(juce::ComboBox* combobox)
-{
-    /** To add more distortion functions, you need to change:
-     1. here
-     2. createParameters in PluginProcessor.cpp
-     3. processDistortion in PluginProcessor.cpp
-     4. ClippingFunctions.h
-     5. DistortionGraph.cpp
-     */
-    // Distortion mode select
-    addAndMakeVisible(combobox);
-
-    combobox->addSectionHeading("Soft Clipping");
-    combobox->addItem("Arctan", 1);
-    combobox->addItem("Exp", 2);
-    combobox->addItem("Tanh", 3);
-    combobox->addItem("Cubic", 4);
-    combobox->addSeparator();
-
-    combobox->addSectionHeading("Hard Clipping");
-    combobox->addItem("Hard", 5);
-    combobox->addItem("Sausage", 6);
-    combobox->addSeparator();
-
-    combobox->addSectionHeading("Foldback");
-    combobox->addItem("Sin", 7);
-    combobox->addItem("Linear", 8);
-    combobox->addSeparator();
-
-    combobox->addSectionHeading("Other");
-    combobox->addItem("Limit", 9);
-    combobox->addItem("Single Sin", 10);
-    combobox->addItem("Logic", 11);
-    combobox->addItem("Pit", 12);
-    combobox->addSeparator();
-
-    //    combobox->addSectionHeading("Asymmetrical Clipping");
-    //    combobox->addItem("Diode 1 (beta)", 9);
-    //    combobox->addSeparator();
-
-    combobox->setJustificationType(juce::Justification::centred);
-    combobox->addListener(this);
 }
 
 void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
@@ -812,128 +819,9 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
     slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
-void FireAudioProcessorEditor::setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex)
-{
-    // paint distortion function
-    int mode = static_cast<int>(*processor.treeState.getRawParameterValue(modeId));
-    float drive = *processor.treeState.getRawParameterValue(driveId);
-    float rec = *processor.treeState.getRawParameterValue(recId);
-    float mix = *processor.treeState.getRawParameterValue(mixId);
-    float bias = *processor.treeState.getRawParameterValue(biasId);
-    bool isSafeModeOn = *processor.treeState.getRawParameterValue(safeId);
-
-    // protection
-    drive = drive * 6.5f / 100.0f;
-    float powerDrive = powf(2, drive);
-    float sampleMaxValue = processor.getSampleMaxValue(bandIndex);
-
-    if (isSafeModeOn && sampleMaxValue * powerDrive > 2.0f)
-    {
-        drive = 2.0f / sampleMaxValue + 0.1 * std::log2f(powerDrive);
-    }
-    else
-    {
-        drive = powerDrive;
-    }
-
-    // get modulated value
-    auto getModulatedValue = [&](const juce::String& paramId, float baseValue) -> float
-    {
-        auto modInfo = processor.getModulationInfoForParameter(paramId);
-        if (! modInfo.isModulated)
-            return baseValue;
-
-        if (auto* parameter = processor.treeState.getParameter(paramId))
-        {
-            auto range = parameter->getNormalisableRange();
-            float parameterRange = range.end - range.start;
-            float modulationOffset = 0.0f;
-
-            if (modInfo.isBipolar)
-                modulationOffset = modInfo.currentValue * modInfo.depth * parameterRange * 0.5f;
-            else
-                modulationOffset = modInfo.currentValue * modInfo.depth * parameterRange;
-
-            return juce::jlimit(range.start, range.end, baseValue + modulationOffset);
-        }
-        return baseValue;
-    };
-
-    // apply modulation
-    float finalRec = getModulatedValue(recId, rec);
-    float finalBias = getModulatedValue(biasId, bias);
-
-    // apply downsampling
-    float rateDivide = static_cast<float>(*processor.treeState.getRawParameterValue(DOWNSAMPLE_ID));
-    if (! *processor.treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
-        rateDivide = 1;
-
-    graphPanel.getDistortionGraph()->setState(mode, finalRec, mix, finalBias, drive, rateDivide);
-}
-
-void FireAudioProcessorEditor::setMultiband()
-{
-    //multiband.updateLines(1);
-    multiband.sortLines();
-    multiband.setLineRelatedBoundsByX();
-    multiband.setSoloRelatedBounds();
-    //    multiband.resetFocus();
-    //    processor.setLineNum(multiband.getLineNum());
-}
-
-void FireAudioProcessorEditor::setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible)
-{
-    const bool shouldShowAny = ! zoomButton.getToggleState() && isComboboxVisible;
-
-    component1.setVisible(shouldShowAny && (bandNum == 0));
-    component2.setVisible(shouldShowAny && (bandNum == 1));
-    component3.setVisible(shouldShowAny && (bandNum == 2));
-    component4.setVisible(shouldShowAny && (bandNum == 3));
-}
-
-//void FireAudioProcessorEditor::changeSliderState(juce::ComboBox *combobox)
-//{
-//    if (combobox == &distortionMode1)
-//    {
-//        bandPanel.changeSliderState(0, stateComponent.getChangedState());
-//    }
-//    else if (combobox == &distortionMode2)
-//    {
-//        bandPanel.changeSliderState(1, stateComponent.getChangedState());
-//    }
-//    else if (combobox == &distortionMode3)
-//    {
-//        bandPanel.changeSliderState(2, stateComponent.getChangedState());
-//    }
-//    else if (combobox == &distortionMode4)
-//    {
-//        bandPanel.changeSliderState(3, stateComponent.getChangedState());
-//    }
-//}
-
 void FireAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
 {
-    if (e.eventComponent == graphPanel.getOscilloscope())
-    {
-        bandPanel.setSwitch(0, true);
-        graphPanel.toggleZoom(graphPanel.getOscilloscope()); // ++ ADD THIS LINE
-    }
-    else if (e.eventComponent == graphPanel.getDistortionGraph())
-    {
-        bandPanel.setSwitch(1, true);
-        graphPanel.toggleZoom(graphPanel.getDistortionGraph()); // ++ ADD THIS LINE
-    }
-    else if (e.eventComponent == graphPanel.getVuPanel())
-    {
-        bandPanel.setSwitch(2, true);
-        graphPanel.toggleZoom(graphPanel.getVuPanel()); // ++ ADD THIS LINE
-    }
-    else if (e.eventComponent == graphPanel.getWidthGraph())
-    {
-        bandPanel.setSwitch(3, true);
-        graphPanel.toggleZoom(graphPanel.getWidthGraph()); // ++ ADD THIS LINE
-    }
-
+    // The logic for clicking on graphs has been moved to BandPanel.
     if (e.eventComponent == &multiband)
     {
         updateWhenChangingFocus();
@@ -943,39 +831,12 @@ void FireAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
 void FireAudioProcessorEditor::updateWhenChangingFocus()
 {
     focusIndex = multiband.getFocusIndex();
-
-    //    if (focusIndex == 0)
-    //    {
-    //        setDistortionGraph(MODE_ID1, DRIVE_ID1,
-    //            REC_ID1, MIX_ID1, BIAS_ID1, SAFE_ID1);
-    //    }
-    //    else if (focusIndex == 1)
-    //    {
-    //        setDistortionGraph(MODE_ID2, DRIVE_ID2,
-    //            REC_ID2, MIX_ID2, BIAS_ID2, SAFE_ID2);
-    //    }
-    //    else if (focusIndex == 2)
-    //    {
-    //        setDistortionGraph(MODE_ID3, DRIVE_ID3,
-    //            REC_ID3, MIX_ID3, BIAS_ID3, SAFE_ID3);
-    //    }
-    //    else if (focusIndex == 3)
-    //    {
-    //        setDistortionGraph(MODE_ID4, DRIVE_ID4,
-    //            REC_ID4, MIX_ID4, BIAS_ID4, SAFE_ID4);
-    //    }
-
     bool left = windowLeftButton.getToggleState();
-    bool right = windowRightButton.getToggleState();
     if (left)
-    { // if you select the left window, you will see audio wave and distortion function graphs.
-        bandPanel.setFocusBandNum(focusIndex);
-        graphPanel.setFocusBandNum(focusIndex);
-    }
-    else if (right)
     {
-        graphPanel.setFocusBandNum(-1); // -1 means global
+        bandPanel.setFocusBandNum(focusIndex);
     }
+
     bandPanel.updateWhenChangingFocus();
     repaint();
 }
@@ -1011,14 +872,129 @@ void FireAudioProcessorEditor::exitAssignMode()
     lfoPanel.assignButton.setToggleState(false, juce::dontSendNotification);
 
     // Iterate through all modulatable sliders, clear their callback functions and stop flashing.
-    for (auto* slider : bandPanel.modulatableSliders)
+    for (auto* slider : bandPanel.getModulatableSliders())
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
     }
-    for (auto* slider : globalPanel.modulatableSliders)
+    for (auto* slider : globalPanel.getModulatableSliders())
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
+    }
+}
+
+void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source == &processor)
+    {
+        lfoPanel.refreshLfoDisplay();
+        multiband.resortAndRedrawLines();
+    }
+}
+
+void FireAudioProcessorEditor::showValuePopupForSlider(ModulatableSlider* slider)
+{
+    valuePopup.setVisible(true);
+    updateValuePopupForSlider(slider);
+}
+
+void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slider)
+{
+    if (! slider)
+        return;
+
+    auto paramID = slider->getParamID();
+    auto* param = processor.treeState.getParameter(paramID);
+    if (! param)
+        return;
+
+    // --- LOGIC FOR EXTREME VALUE DISPLAY ---
+    // 1. Get the parameter's base value in its real-world units (e.g., -6.0f for -6dB)
+    float baseValue = *processor.treeState.getRawParameterValue(paramID);
+
+    // 2. Get all modulation data from the processor
+    auto modInfo = processor.getModulationInfoForParameter(paramID);
+    float extremeValue = baseValue; // Start with the base value
+
+    // 3. If it's being modulated, calculate the extreme value in real-world units
+    if (modInfo.isModulated)
+    {
+        auto range = param->getNormalisableRange();
+        float parameterRange = range.end - range.start;
+        float maxOffset = 0.0f;
+
+        // We use 1.0f as the LFO value to calculate the maximum possible offset
+        if (modInfo.isBipolar)
+            maxOffset = 1.0f * modInfo.depth * parameterRange * 0.5f;
+        else
+            maxOffset = 1.0f * modInfo.depth * parameterRange;
+
+        extremeValue += maxOffset;
+        extremeValue = juce::jlimit(range.start, range.end, extremeValue);
+    }
+
+    // 4. Convert the final extreme value back to a normalized value [0, 1] that getText() expects
+    float finalNormalizedValue = param->convertTo0to1(extremeValue);
+    valuePopup.setText(param->getText(finalNormalizedValue, 0));
+
+    // --- FIX FOR VISIBILITY (remains the same) ---
+    // 5. Get slider's absolute screen bounds
+    auto sliderBounds = slider->getScreenBounds();
+
+    // 6. Convert the screen coordinates to be local to this editor component
+    auto localBounds = getLocalArea(nullptr, sliderBounds);
+
+    int popupWidth = 80;
+    int popupHeight = 20;
+
+    // 7. Set the popup's bounds using the converted local coordinates
+    valuePopup.setBounds(localBounds.getCentreX() - popupWidth / 2, localBounds.getY() - popupHeight, popupWidth, popupHeight);
+}
+
+void FireAudioProcessorEditor::hideValuePopup()
+{
+    valuePopup.setVisible(false);
+}
+
+std::vector<ModulatableSlider*> FireAudioProcessorEditor::getAllModulatableSliders()
+{
+    std::vector<ModulatableSlider*> allSliders;
+
+    // Get sliders from BandPanel
+    allSliders.insert(allSliders.end(), bandPanel.getModulatableSliders().begin(), bandPanel.getModulatableSliders().end());
+
+    // Get sliders from GlobalPanel
+    allSliders.insert(allSliders.end(), globalPanel.getModulatableSliders().begin(), globalPanel.getModulatableSliders().end());
+
+    return allSliders;
+}
+
+void FireAudioProcessorEditor::updateModulationStates()
+{
+    auto& routings = processor.getLfoManager().getModulationRoutings();
+
+    for (auto* slider : getAllModulatableSliders()) // Assuming you have a way to get all sliders
+    {
+        bool isModulated = false;
+        for (const auto& routing : routings)
+        {
+            if (routing.targetParameterID == slider->getParamID())
+            {
+                slider->isModulated = true;
+                slider->lfoSource = routing.sourceLfoIndex + 1;
+                slider->lfoAmount = routing.depth;
+                slider->isBipolar = routing.isBipolar;
+                slider->isBypassed = routing.isBypassed; // Sync the bypass state!
+                isModulated = true;
+                break;
+            }
+        }
+
+        if (! isModulated)
+        {
+            slider->isModulated = false;
+            slider->isBypassed = false;
+        }
     }
 }

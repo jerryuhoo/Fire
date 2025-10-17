@@ -10,18 +10,19 @@
 
 #pragma once
 
-//
-//  Represents the data model for a single LFO shape.
-//  This ensures that every LFO always starts with a valid default state.
-//
 #include <juce_core/juce_core.h>
 #include <juce_graphics/juce_graphics.h>
 #include <vector>
 
+//
+//  Represents the data model for a single LFO shape.
+//  This ensures that every LFO always starts with a valid default state.
+//
 struct LfoData
 {
     std::vector<juce::Point<float>> points;
     std::vector<float> curvatures;
+    float smoothness = 0.0f; // Add smoothness property, defaulting to 0 (no smoothing).
 
     // Default constructor to initialize a valid shape
     LfoData()
@@ -37,7 +38,53 @@ struct LfoData
         curvatures.clear();
         points.push_back({ 0.0f, 0.0f });
         points.push_back({ 1.0f, 0.0f });
-        curvatures.push_back(0.0f); // English: One segment, so one curvature value.
+        curvatures.push_back(0.0f); // One segment, so one curvature value.
+        smoothness = 0.0f; // Reset smoothness to default.
+    }
+
+    /**
+     * @brief Removes duplicate or very close points to clean up the LFO shape.
+     * It uses an epsilon for robust floating-point comparison and also ensures
+     * the 'curvatures' array remains synchronized with the 'points' array.
+    */
+    void mergeDuplicatePoints()
+    {
+        // Do nothing if there are not enough points to have duplicates.
+        if (points.size() < 2)
+            return;
+
+        // A small tolerance to consider two float values as equal.
+        constexpr float epsilon = 0.0001f;
+
+        // Create new vectors to store the unique points and their corresponding curvatures.
+        std::vector<juce::Point<float>> uniquePoints;
+        std::vector<float> updatedCurvatures;
+
+        // Always add the first point.
+        uniquePoints.push_back(points.front());
+
+        // Iterate through the rest of the points, starting from the second one.
+        for (int i = 1; i < points.size(); ++i)
+        {
+            // Compare the distance from the current point to the last unique point found.
+            if (points[i].getDistanceFrom(uniquePoints.back()) > epsilon)
+            {
+                // If the point is not a duplicate, add it to the unique list.
+                uniquePoints.push_back(points[i]);
+
+                // IMPORTANT: Also add the curvature of the segment *preceding* this new point.
+                // The number of curvatures is always one less than the number of points.
+                // So, the curvature at index i-1 corresponds to the segment between point i-1 and i.
+                if (i - 1 < curvatures.size())
+                {
+                    updatedCurvatures.push_back(curvatures[i - 1]);
+                }
+            }
+        }
+
+        // After checking all points, replace the old data with the cleaned-up versions.
+        points = uniquePoints;
+        curvatures = updatedCurvatures;
     }
 
     // Writes the current LfoData to an XmlElement.
@@ -59,6 +106,9 @@ struct LfoData
             auto* c = curvaturesElement->createNewChildElement("C");
             c->setAttribute("v", curvature);
         }
+
+        // Save the new smoothness attribute directly to the main element.
+        xml.setAttribute("smoothness", smoothness);
     }
 
     // Creates an LfoData object from an XmlElement.
@@ -87,6 +137,9 @@ struct LfoData
             }
         }
 
+        // Load smoothness, providing a default value of 0.0 if the attribute doesn't exist.
+        data.smoothness = (float) xml.getDoubleAttribute("smoothness", 0.0);
+
         // Basic data validation: if loading fails, return a default state.
         if (data.points.empty())
         {
@@ -106,31 +159,31 @@ struct LfoData
     {
         if (newPoints.size() < 2 || segmentIndex < 0 || segmentIndex >= points.size() - 1)
         {
-            // English: Invalid input, do nothing.
+            // Invalid input, do nothing.
             jassertfalse;
             return;
         }
 
-        // English: The points to insert are all points from the new shape *except* the very first and very last one,
+        // The points to insert are all points from the new shape *except* the very first and very last one,
         // because they will replace the existing start and end points of the segment.
         std::vector<juce::Point<float>> pointsToInsert(newPoints.begin() + 1, newPoints.end() - 1);
 
-        // English: Update the start and end points of the original segment.
+        // Update the start and end points of the original segment.
         points[segmentIndex] = newPoints.front();
         points[segmentIndex + 1] = newPoints.back();
 
-        // English: Insert the intermediate points, if any.
+        // Insert the intermediate points, if any.
         if (! pointsToInsert.empty())
         {
             points.insert(points.begin() + segmentIndex + 1, pointsToInsert.begin(), pointsToInsert.end());
         }
 
-        // English: Now, update the curvatures array to match the new points.
+        // Now, update the curvatures array to match the new points.
         // We set all new segments to have a linear (0.0) curvature.
         int numNewSegments = (int) newPoints.size() - 1;
         std::vector<float> newCurvatures(numNewSegments, 0.0f);
 
-        // English: Replace the single old curvature value with the new set of curvatures.
+        // Replace the single old curvature value with the new set of curvatures.
         curvatures.erase(curvatures.begin() + segmentIndex);
         curvatures.insert(curvatures.begin() + segmentIndex, newCurvatures.begin(), newCurvatures.end());
     }

@@ -9,7 +9,7 @@
 */
 
 #include "ModulationMatrixPanel.h"
-#include "../../Utility/AudioHelpers.h" // Include AudioHelpers to access ParameterIDAndName
+#include "../../Utility/AudioHelpers.h"
 
 //==============================================================================
 // ModulationMatrixHeader Implementation
@@ -29,6 +29,10 @@ ModulationMatrixHeader::ModulationMatrixHeader()
     polarityLabel.setText("Polarity", juce::dontSendNotification);
     polarityLabel.setJustificationType(juce::Justification::centred);
 
+    addAndMakeVisible(bypassLabel);
+    bypassLabel.setText("Bypass", juce::dontSendNotification);
+    bypassLabel.setJustificationType(juce::Justification::centred);
+
     addAndMakeVisible(destinationLabel);
     destinationLabel.setText("Destination", juce::dontSendNotification);
     destinationLabel.setJustificationType(juce::Justification::centred);
@@ -42,6 +46,7 @@ void ModulationMatrixHeader::resized()
     flex.items.add(juce::FlexItem(sourceLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(amountLabel).withFlex(2.0f));
     flex.items.add(juce::FlexItem(polarityLabel).withFlex(1.0f));
+    flex.items.add(juce::FlexItem(bypassLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem(destinationLabel).withFlex(1.0f));
     flex.items.add(juce::FlexItem().withWidth(35));
     flex.performLayout(getLocalBounds());
@@ -53,6 +58,7 @@ void ModulationMatrixHeader::resized()
 ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex, std::function<void()> onDelete)
     : processor(p), index(routingIndex), onDeleteCallback(onDelete)
 {
+    setLookAndFeel(&fireLookAndFeel);
     // SOURCE MENU
     addAndMakeVisible(sourceMenu);
     for (int i = 1; i <= 4; ++i)
@@ -74,6 +80,12 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
 
     // BIPOLAR BUTTON
     addAndMakeVisible(bipolarButton);
+    bipolarButton.setComponentID("rounded");
+    bipolarButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    bipolarButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6);
+    bipolarButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    bipolarButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    bipolarButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     bipolarButton.setClickingTogglesState(true);
     bipolarButton.setToggleState(processor.getLfoManager().getModulationRoutings()[index].isBipolar, juce::dontSendNotification);
     bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
@@ -81,6 +93,23 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     {
         bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
         processor.getLfoManager().getModulationRoutings().getReference(index).isBipolar = bipolarButton.getToggleState();
+    };
+
+    // BYPASS BUTTON
+    addAndMakeVisible(bypassButton);
+    bypassButton.setComponentID("rounded");
+    bypassButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    bypassButton.setColour(juce::TextButton::buttonOnColourId, COLOUR6);
+    bypassButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    bypassButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    bypassButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
+    bypassButton.setClickingTogglesState(true);
+    bypassButton.setToggleState(processor.getLfoManager().getModulationRoutings()[index].isBypassed, juce::dontSendNotification);
+    bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+    bypassButton.onStateChange = [this]
+    {
+        bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+        processor.getLfoManager().getModulationRoutings().getReference(index).isBypassed = bypassButton.getToggleState();
     };
 
     // === DESTINATION MENU ===
@@ -122,10 +151,22 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
 
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
+    removeButton.setComponentID("remove_button");
+    removeButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    removeButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    removeButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    removeButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     removeButton.addListener(this);
 }
 
-ModulationMatrixRow::~ModulationMatrixRow() {}
+ModulationMatrixRow::~ModulationMatrixRow()
+{
+    sourceMenu.removeListener(this);
+    amountSlider.removeListener(this);
+    destinationMenu.removeListener(this);
+    removeButton.removeListener(this);
+    setLookAndFeel(nullptr);
+}
 
 void ModulationMatrixRow::resized()
 {
@@ -134,6 +175,7 @@ void ModulationMatrixRow::resized()
     flex.items.add(juce::FlexItem(sourceMenu).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(amountSlider).withFlex(2.0f).withMargin(2));
     flex.items.add(juce::FlexItem(bipolarButton).withFlex(1.0f).withMargin(2));
+    flex.items.add(juce::FlexItem(bypassButton).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(destinationMenu).withFlex(1.0f).withMargin(2));
     flex.items.add(juce::FlexItem(removeButton).withWidth(35).withMargin(2));
     flex.performLayout(getLocalBounds());
@@ -195,13 +237,24 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     viewport.setViewedComponent(&contentComponent, false);
     addAndMakeVisible(addButton);
     addButton.addListener(this);
+    addButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    addButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    addButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    addButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     addAndMakeVisible(closeButton);
     closeButton.addListener(this);
+    closeButton.setColour(juce::TextButton::buttonColourId, COLOUR6);
+    closeButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
+    closeButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
+    closeButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     buildUiFromProcessorState();
-    setSize(500, 300);
 }
 
-ModulationMatrixPanel::~ModulationMatrixPanel() {}
+ModulationMatrixPanel::~ModulationMatrixPanel()
+{
+    addButton.removeListener(this);
+    closeButton.removeListener(this);
+}
 
 void ModulationMatrixPanel::paint(juce::Graphics& g)
 {

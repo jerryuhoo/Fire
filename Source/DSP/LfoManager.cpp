@@ -25,6 +25,11 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
 
     for (int i = 0; i < 4; ++i)
         modulationRoutings.add({});
+
+    for (int i = 0; i < 4; ++i)
+    {
+        shapeUpdateFlags[i] = true;
+    }
 }
 
 void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
@@ -47,25 +52,53 @@ void LfoManager::reset()
     modulatedValues.clear();
 }
 
+bool LfoManager::isModulationActive() const
+{
+    // Iterate through all modulation routings.
+    for (const auto& routing : modulationRoutings)
+    {
+        // If we find any routing with a valid target parameter,
+        // it means modulation is active.
+        if (routing.targetParameterID.isNotEmpty())
+        {
+            return true;
+        }
+    }
+
+    // If we get through the whole loop without finding an active routing,
+    // then no modulation is active.
+    return false;
+}
+
 // =============================================================================
 // Main Processing Logic
 // =============================================================================
 
-void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, int numSamples)
+void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     // 1. Generate all raw LFO signals for the current block.
     // This fills the internal 'lfoOutputBuffer'.
     generateLfoOutput(sampleRate, playHead, numSamples);
 
-    // 2. Clear the map of calculated values from the previous block.
-    // MODIFICATION: We now store normalized values.
+    // 2. Copy the generated LFO signals to the output buffer.
+    jassert(outputBuffer.getNumSamples() == lfoOutputBuffer.getNumSamples());
+    jassert(outputBuffer.getNumChannels() >= lfoOutputBuffer.getNumChannels());
+
+    for (int channel = 0; channel < lfoOutputBuffer.getNumChannels(); ++channel)
+    {
+        outputBuffer.copyFrom(channel, 0, lfoOutputBuffer, channel, 0, numSamples);
+    }
+
+    // 3. Clear the map of calculated values from the previous block.
+    // We now store normalized values.
     modulatedValues.clear();
 
-    // 3. Iterate through all modulation routings to calculate final parameter values.
+    // 4. Iterate through all modulation routings to calculate final parameter values.
     for (const auto& routing : modulationRoutings)
     {
         // Skip invalid or unassigned routings
-        if (routing.targetParameterID.isEmpty())
+        if (routing.isBypassed || routing.targetParameterID.isEmpty())
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
@@ -102,11 +135,9 @@ void LfoManager::processBlock(double sampleRate, juce::AudioPlayHead* playHead, 
 
         // Add the normalized modulation amount. This allows multiple LFOs to target the same parameter.
         modulatedValues[routing.targetParameterID] += normalizedModulationAmount;
-
-        // --- MODIFICATION END ---
     }
 
-    // 4. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
+    // 5. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
     for (auto const& [paramID, val] : modulatedValues)
     {
         modulatedValues[paramID] = juce::jlimit(0.0f, 1.0f, val);
@@ -120,14 +151,13 @@ float LfoManager::getModulatedValue(const juce::String& parameterID) const
 
     if (it != modulatedValues.end())
     {
-        // --- MODIFICATION START: Convert normalized value to real value ---
+        // Convert normalized value to real value ---
         auto* parameter = treeState.getParameter(parameterID);
         if (parameter)
         {
             // If found, convert the final normalized value back to the parameter's real value.
             return parameter->convertFrom0to1(it->second);
         }
-        // --- MODIFICATION END ---
     }
 
     // If not found, it means the parameter is not being modulated.
@@ -150,27 +180,21 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
     // Its sole responsibility is to generate the raw LFO signals.
 
     // 1. Get Transport State from Host
+    juce::Optional<juce::AudioPlayHead::PositionInfo> positionInfo;
     isPlaying = false;
     double currentBpm = 120.0;
 
     if (playHead)
     {
-        if (auto position = playHead->getPosition())
+        positionInfo = playHead->getPosition();
+        if (positionInfo)
         {
-            isPlaying = position->getIsPlaying();
-            if (auto bpm = position->getBpm())
+            isPlaying = positionInfo->getIsPlaying();
+            if (auto bpm = positionInfo->getBpm())
                 currentBpm = *bpm;
         }
     }
 
-    // 2. Reset LFOs on transport start
-    if (isPlaying && ! wasPlaying)
-    {
-        for (auto& engine : lfoEngines)
-        {
-            engine.reset();
-        }
-    }
     wasPlaying = isPlaying;
 
     // 3. Process each LFO
@@ -179,45 +203,91 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     for (int i = 0; i < 4; ++i)
     {
-        // Get LFO parameters
+        // Shape update logic (unchanged)
+        bool needsUpdate = true;
+        if (shapeUpdateFlags[i].compare_exchange_strong(needsUpdate, false))
+        {
+            lfoEngines[i].updateShape(lfoData[i]);
+        }
+
         auto* syncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i));
         const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
-
         float phaseDelta = 0.0f;
 
-        if (isInSyncMode && isPlaying)
+        // 1. Calculate phaseDelta for advancing phase within the block (or for free-running when stopped)
+        if (isInSyncMode)
         {
-            // --- BPM SYNC CALCULATION ---
             auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
-            if (rateSyncParam != nullptr)
+            const int rateIndex = static_cast<int>(rateSyncParam->load());
+            const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
+            const float beatsPerCycle = beatMultiplier * 4.0f;
+            if (beatsPerCycle > 0.0 && currentBpm > 0.0)
             {
-                const int rateIndex = static_cast<int>(rateSyncParam->load());
-                const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
-                const float beatsPerCycle = beatMultiplier * 4.0f;
+                const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float) sampleRate;
+                if (samplesPerCycle > 0)
+                    phaseDelta = 1.0f / samplesPerCycle;
+            }
+        }
+        else // Free (Hz) mode
+        {
+            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
+            const float freqInHz = rateHzParam->load();
+            if (sampleRate > 0)
+                phaseDelta = freqInHz / (float) sampleRate;
+        }
 
-                if (beatsPerCycle > 0.0 && currentBpm > 0.0)
+        // Get the phase offset value from the new parameter we created
+        auto* phaseOffsetParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_PHASE_ID, i));
+        const float phaseOffset = (phaseOffsetParam != nullptr) ? phaseOffsetParam->load() : 0.0f;
+
+        // 2. If playing, calculate and set the absolute start phase for the block.
+        //    Otherwise, the LFO continues from its last phase (free-running).
+        if (isPlaying && positionInfo)
+        {
+            if (isInSyncMode)
+            {
+                if (auto ppq = positionInfo->getPpqPosition())
                 {
-                    const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float) sampleRate;
-                    if (samplesPerCycle > 0)
-                        phaseDelta = 1.0f / samplesPerCycle;
+                    const double ppqAtStartOfBlock = *ppq;
+                    auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
+                    const int rateIndex = static_cast<int>(rateSyncParam->load());
+                    const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
+                    const float cycleLengthInBeats = beatMultiplier * 4.0f;
+
+                    if (cycleLengthInBeats > 0.0f)
+                    {
+                        // Calculate phase from timeline
+                        float startPhase = std::fmod((float) ppqAtStartOfBlock, cycleLengthInBeats) / cycleLengthInBeats;
+
+                        // Apply the user-defined phase offset and wrap around 1.0
+                        startPhase = std::fmod(startPhase + phaseOffset, 1.0f);
+
+                        lfoEngines[i].setPhase(startPhase); // Set the final, offset phase
+                    }
+                }
+            }
+            else // Hz mode
+            {
+                if (auto timeSec = positionInfo->getTimeInSeconds())
+                {
+                    const double timeAtStartOfBlock = *timeSec;
+                    auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
+                    const float freqInHz = rateHzParam->load();
+
+                    // Calculate phase from timeline
+                    float startPhase = std::fmod((float) timeAtStartOfBlock * freqInHz, 1.0f);
+
+                    // Apply the user-defined phase offset and wrap around 1.0
+                    startPhase = std::fmod(startPhase + phaseOffset, 1.0f);
+
+                    lfoEngines[i].setPhase(startPhase); // Set the final, offset phase
                 }
             }
         }
-        else // --- FREE (HZ) MODE CALCULATION ---
-        {
-            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
-            if (rateHzParam != nullptr)
-            {
-                const float freqInHz = rateHzParam->load();
-                if (sampleRate > 0)
-                    phaseDelta = freqInHz / (float) sampleRate;
-            }
-        }
 
+        // 3. Set the delta and generate samples for the block (unchanged)
         lfoEngines[i].setPhaseDelta(phaseDelta);
-        lfoEngines[i].updateShape(lfoData[i]);
 
-        // Generate LFO output for the entire block
         auto* writer = lfoOutputBuffer.getWritePointer(i);
         for (int sample = 0; sample < numSamples; ++sample)
         {
@@ -264,6 +334,20 @@ float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
     }
 }
 
+void LfoManager::onLfoShapeChanged(int lfoIndex)
+{
+    const juce::ScopedLock sl(dataAccessLock);
+    if (lfoIndex < 0)
+    {
+        for (int i = 0; i < 4; ++i)
+            shapeUpdateFlags[i] = true;
+    }
+    else if (juce::isPositiveAndBelow(lfoIndex, 4))
+    {
+        shapeUpdateFlags[lfoIndex] = true;
+    }
+}
+
 // =============================================================================
 // Accessors for UI
 // =============================================================================
@@ -296,6 +380,7 @@ float LfoManager::getLfoOutput(int lfoIndex) const
 
 void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     // 1. First, check if the target parameter is already being modulated.
     //    If so, just update its LFO source.
     for (auto& routing : modulationRoutings)
@@ -336,6 +421,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
 
 void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID == targetParameterID)
@@ -353,6 +439,7 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 
 void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
 {
+    const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
         if (routing.targetParameterID == targetParameterID)
@@ -361,4 +448,38 @@ void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
             return;
         }
     }
+}
+
+void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
+{
+    const juce::ScopedLock sl(dataAccessLock);
+    for (auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID == targetParameterID)
+        {
+            routing.isBypassed = ! routing.isBypassed;
+            return; // Assuming one routing per target for now
+        }
+    }
+}
+
+void LfoManager::setLfoData(int index, const LfoData& newData)
+{
+    const juce::ScopedLock sl(dataAccessLock);
+    if (juce::isPositiveAndBelow(index, (int) lfoData.size()))
+    {
+        lfoData[index] = newData;
+        shapeUpdateFlags[index].store(true);
+    }
+}
+
+void LfoManager::clearAllLfoData()
+{
+    const juce::ScopedLock sl(dataAccessLock);
+    for (auto& lfo : lfoData)
+    {
+        lfo = LfoData(); // Reset to default state
+    }
+    // Flag all shapes for update on the audio thread
+    onLfoShapeChanged(-1);
 }

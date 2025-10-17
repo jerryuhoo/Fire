@@ -13,17 +13,75 @@
 #include "BinaryData.h"
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
+#include "GUI/ValueEntryPopup.h"
+#include "GUI/ValuePopup.h"
 #include "Panels/ControlPanel/BandPanel.h"
 #include "Panels/ControlPanel/GlobalPanel.h"
-#include "Panels/ControlPanel/Graph Components/DistortionGraph.h"
-#include "Panels/ControlPanel/Graph Components/GraphPanel.h"
-#include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
-#include "Panels/ControlPanel/Graph Components/VUPanel.h"
-#include "Panels/ControlPanel/Graph Components/WidthGraph.h"
 #include "Panels/ControlPanel/LfoPanel.h"
 #include "Panels/SpectrogramPanel/FilterControl.h"
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
+
+// Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
+
+struct Version
+{
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+    juce::String preRelease;
+
+    // Parses a version string, e.g., "v1.5.0-beta" or "1.0.2"
+    Version(juce::String versionString)
+    {
+        // Remove the optional 'v' prefix
+        if (versionString.startsWith("v"))
+            versionString = versionString.substring(1);
+
+        // Separate the pre-release identifier (e.g., "-beta", "-rc1")
+        int preReleaseIndex = versionString.indexOf("-");
+        if (preReleaseIndex != -1)
+        {
+            preRelease = versionString.substring(preReleaseIndex + 1);
+            versionString = versionString.substring(0, preReleaseIndex);
+        }
+
+        // Split the major, minor, and patch version numbers
+        juce::StringArray parts;
+        parts.addTokens(versionString, ".", "");
+
+        if (parts.size() > 0)
+            major = parts[0].getIntValue();
+        if (parts.size() > 1)
+            minor = parts[1].getIntValue();
+        if (parts.size() > 2)
+            patch = parts[2].getIntValue();
+    }
+
+    // Overload the less-than operator "<" to implement version comparison
+    bool operator<(const Version& other) const
+    {
+        if (major != other.major)
+            return major < other.major;
+        if (minor != other.minor)
+            return minor < other.minor;
+        if (patch != other.patch)
+            return patch < other.patch;
+
+        // SemVer rule: A stable version is greater than a pre-release version.
+        // If this version has a pre-release tag and the other does not, this one is smaller.
+        if (! preRelease.isEmpty() && other.preRelease.isEmpty())
+            return true;
+
+        // If this version does not have a pre-release tag and the other one does, this one is greater.
+        if (preRelease.isEmpty() && ! other.preRelease.isEmpty())
+            return false;
+
+        // If both have or both lack a pre-release tag, compare them numerically.
+        // (Note: full SemVer pre-release comparison is more complex, but this is sufficient for this use case)
+        return preRelease < other.preRelease;
+    }
+};
 
 //==============================================================================
 /**
@@ -34,7 +92,8 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::Timer,
                                  public juce::Button::Listener,
                                  public juce::AudioProcessorValueTreeState::Listener,
-                                 public juce::AsyncUpdater
+                                 public juce::AsyncUpdater,
+                                 public juce::ChangeListener
 {
 public:
     FireAudioProcessorEditor(FireAudioProcessor&);
@@ -44,16 +103,27 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
-    void setMultiband();
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
     void markPresetAsDirty();
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+
+    void showValuePopupForSlider(ModulatableSlider* slider);
+    void updateValuePopupForSlider(ModulatableSlider* slider);
+    void hideValuePopup();
 
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor& processor;
     state::StateComponent stateComponent;
+
+    ValuePopup valuePopup;
+    ValueEntryPopup valueEntryPopup;
+    ModulatableSlider* sliderForValueEntry = nullptr;
+
+    juce::Image backgroundCache;
+    float currentDisplayScale = 1.0f;
 
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
@@ -77,14 +147,11 @@ private:
     juce::Rectangle<int> logoArea;
     juce::Rectangle<int> wingsArea;
 
-    // Graph panel
-    GraphPanel graphPanel { processor };
-
     // Multiband
     Multiband multiband { processor, stateComponent };
 
     // Band
-    BandPanel bandPanel { processor };
+    BandPanel bandPanel;
 
     // Global
     GlobalPanel globalPanel;
@@ -118,40 +185,24 @@ private:
         windowButtons = 1003,
     };
 
-    void setMenu(juce::ComboBox* combobox);
-
     void setLinearSlider(juce::Slider& slider);
-
-    void setDistortionGraph(juce::String modeId, juce::String driveId, juce::String recId, juce::String mixId, juce::String biasId, juce::String safeId, int bandIndex);
-
-    void setFourComponentsVisibility(juce::Component& component1, juce::Component& component2, juce::Component& component3, juce::Component& component4, int bandNum, bool isComboboxVisible);
 
     // override listener functions
 
     void sliderValueChanged(juce::Slider* slider) override;
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox* combobox) override;
-    // hide and show labels
-    //    void sliderDragStarted (juce::Slider*) override;
-    //    void sliderDragEnded (juce::Slider*) override;
-    //    void changeSliderState(juce::ComboBox *combobox);
 
     void exitAssignMode();
+
+    void updateModulationStates();
+    std::vector<ModulatableSlider*> getAllModulatableSliders();
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment;
 
-    // ComboBox attachment
-    juce::ComboBox distortionMode1;
-    juce::ComboBox distortionMode2;
-    juce::ComboBox distortionMode3;
-    juce::ComboBox distortionMode4;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment1;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment2;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment3;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAttachment4;
+    // ComboBoxes and attachments are now managed by BandPanel
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FireAudioProcessorEditor)
 };

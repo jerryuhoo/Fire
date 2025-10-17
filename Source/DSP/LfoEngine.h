@@ -38,6 +38,9 @@ public:
     /** Processes one sample of the LFO. Returns a unipolar [0, 1] signal. */
     float process();
 
+    // Directly sets the LFO's current phase.
+    void setPhase(float newPhase);
+
     /** Sets the phase increment per sample, controlling the LFO's speed. */
     void setPhaseDelta(float newPhaseDelta);
 

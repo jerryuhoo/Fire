@@ -66,17 +66,25 @@ struct ModulationTarget
 
 struct MeterValues
 {
-    // Global Meters
-    float inputLeftGlobal;
-    float inputRightGlobal;
-    float outputLeftGlobal;
-    float outputRightGlobal;
+    float inputRMS_L { 0.0f }, inputRMS_R { 0.0f };
+    float inputPeak_L { 0.0f }, inputPeak_R { 0.0f };
+    float outputRMS_L { 0.0f }, outputRMS_R { 0.0f };
+    float outputPeak_L { 0.0f }, outputPeak_R { 0.0f };
 
-    // Per-Band Meters (using a std::array for clean access)
-    std::array<float, 4> inputLeftBands;
-    std::array<float, 4> inputRightBands;
-    std::array<float, 4> outputLeftBands;
-    std::array<float, 4> outputRightBands;
+    std::array<float, 4> bandInputRMS_L { 0.0f }, bandInputRMS_R { 0.0f };
+    std::array<float, 4> bandInputPeak_L { 0.0f }, bandInputPeak_R { 0.0f };
+    std::array<float, 4> bandOutputRMS_L { 0.0f }, bandOutputRMS_R { 0.0f };
+    std::array<float, 4> bandOutputPeak_L { 0.0f }, bandOutputPeak_R { 0.0f };
+};
+
+struct DistortionGraphValues
+{
+    int mode = 0;
+    float rec = 0.0f;
+    float mix = 1.0f;
+    float bias = 0.0f;
+    float drive = 1.0f; // This will be the final value AFTER safe mode
+    float rateDivide = 1.0f;
 };
 
 struct ModulatedFilterValues
@@ -179,11 +187,17 @@ namespace ParameterIDAndName
             DRIVE_NAME,
             COMP_RATIO_NAME,
             COMP_THRESH_NAME,
+            COMP_ATTACK_NAME,
+            COMP_RELEASE_NAME,
+            COMP_MIX_NAME,
             WIDTH_NAME,
+            PAN_NAME,
+            WIDTH_MIX_NAME,
             OUTPUT_NAME,
             MIX_NAME,
             BIAS_NAME,
-            REC_NAME
+            REC_NAME,
+            SHAPE_MIX_NAME,
         };
         return modulatableNames;
     }
@@ -197,9 +211,15 @@ namespace ParameterIDAndName
         // This static vector is initialized only once.
         static const std::vector<ModulatableParameterInfo> parameters = {
             { DRIVE_NAME, DRIVE_ID },
+            { SHAPE_MIX_NAME, SHAPE_MIX_ID },
             { COMP_RATIO_NAME, COMP_RATIO_ID },
             { COMP_THRESH_NAME, COMP_THRESH_ID },
+            { COMP_ATTACK_NAME, COMP_ATTACK_ID },
+            { COMP_RELEASE_NAME, COMP_RELEASE_ID },
+            { COMP_MIX_NAME, COMP_MIX_ID },
             { WIDTH_NAME, WIDTH_ID },
+            { PAN_NAME, PAN_ID },
+            { WIDTH_MIX_NAME, WIDTH_MIX_ID },
             { OUTPUT_NAME, OUTPUT_ID },
             { MIX_NAME, MIX_ID },
             { BIAS_NAME, BIAS_ID },
@@ -221,6 +241,9 @@ namespace ParameterIDAndName
             { PEAK_Q_NAME, PEAK_Q_ID },
             { PEAK_GAIN_NAME, PEAK_GAIN_ID },
             { DOWNSAMPLE_NAME, DOWNSAMPLE_ID },
+            { BIT_DEPTH_NAME, BIT_DEPTH_ID },
+            { JITTER_NAME, JITTER_ID },
+            { DOWNSAMPLE_MIX_NAME, DOWNSAMPLE_MIX_ID },
             { GLOBAL_OUTPUT_NAME, OUTPUT_ID },
             { GLOBAL_MIX_NAME, MIX_ID }
         };
@@ -256,5 +279,42 @@ namespace ParameterIDAndName
             targets.push_back({ paramInfo.name, getIDString(paramInfo.idBase) });
         }
         return targets;
+    }
+
+    /**
+     * @brief Returns a definitive list of all per-band parameters,
+     * including their UI Name and their ID base.
+     * This is the single source of truth for band parameter copying logic.
+     */
+    static const std::vector<ModulatableParameterInfo>& getBandParameterInfo()
+    {
+        // This static vector is initialized only once.
+        static const std::vector<ModulatableParameterInfo> params = {
+            { MODE_NAME, MODE_ID },
+            { LINKED_NAME, LINKED_ID },
+            { SAFE_NAME, SAFE_ID },
+            { EXTREME_NAME, EXTREME_ID },
+            { DRIVE_NAME, DRIVE_ID },
+            { COMP_RATIO_NAME, COMP_RATIO_ID },
+            { COMP_THRESH_NAME, COMP_THRESH_ID },
+            { COMP_ATTACK_NAME, COMP_ATTACK_ID },
+            { COMP_RELEASE_NAME, COMP_RELEASE_ID },
+            { COMP_MIX_NAME, COMP_MIX_ID },
+            { WIDTH_NAME, WIDTH_ID },
+            { PAN_NAME, PAN_ID },
+            { WIDTH_MIX_NAME, WIDTH_MIX_ID },
+            { OUTPUT_NAME, OUTPUT_ID },
+            { MIX_NAME, MIX_ID },
+            { BIAS_NAME, BIAS_ID },
+            { REC_NAME, REC_ID },
+            { SHAPE_MIX_NAME, SHAPE_MIX_ID },
+            { BAND_ENABLE_NAME, BAND_ENABLE_ID },
+            { BAND_SOLO_NAME, BAND_SOLO_ID },
+            { COMP_BYPASS_NAME, COMP_BYPASS_ID },
+            { WIDTH_BYPASS_NAME, WIDTH_BYPASS_ID },
+            { SHAPE_BYPASS_NAME, SHAPE_BYPASS_ID },
+            { DC_FILTER_NAME, DC_FILTER_ID }
+        };
+        return params;
     }
 } // namespace ParameterIDAndName

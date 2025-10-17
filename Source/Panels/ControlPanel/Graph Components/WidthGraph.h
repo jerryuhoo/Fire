@@ -19,10 +19,10 @@
 class WidthGraph : public GraphTemplate, juce::Timer
 {
 public:
-    WidthGraph (FireAudioProcessor&);
+    WidthGraph(FireAudioProcessor&);
     ~WidthGraph() override;
 
-    void paint (juce::Graphics&) override;
+    void paint(juce::Graphics&) override;
     void timerCallback() override;
     void resized() override;
 
@@ -30,6 +30,7 @@ private:
     FireAudioProcessor& processor;
     juce::Array<float> historyL;
     juce::Array<float> historyR;
+    juce::Image pointCloudCache;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WidthGraph)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WidthGraph)
 };

@@ -196,7 +196,7 @@ namespace state
                                                                       nullptr);
                 if (choice)
                 {
-                    file.replaceFileIn(file.getFullPathName());
+                    // file.replaceFileIn(file.getFullPathName());
                     xml.writeTo(file);
                     return true;
                 }
@@ -208,7 +208,7 @@ namespace state
             else // no alert window
             {
                 // replace existing file and return 2
-                file.replaceFileIn(file.getFullPathName());
+                // file.replaceFileIn(file.getFullPathName());
                 xml.writeTo(file);
                 return true;
             }
@@ -365,6 +365,7 @@ namespace state
 
         // Save the single preset to a real file.
         presetXmlSingle.removeAllAttributes(); // Clear all first.
+        presetXmlSingle.deleteAllChildElements();
         presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
         saveStateToXml(pluginProcessor, presetXmlSingle);
 

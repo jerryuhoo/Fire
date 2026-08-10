@@ -78,13 +78,15 @@ void FreqDividerGroup::setDeleteState(bool deleteState)
 
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
 {
-    if (! getToggleState())
+    const int index = verticalLine.getIndex();
+    if (! getToggleState() || ! juce::isPositiveAndBelow(index, lineNum)
+        || lineNum > 3 || ! std::isfinite(newXPercent))
         return;
     float leftLimit;
     float rightLimit;
 
-    leftLimit = (verticalLine.getIndex() + 1) * margin;
-    rightLimit = 1 - (lineNum - verticalLine.getIndex()) * margin;
+    leftLimit = (index + 1) * margin;
+    rightLimit = 1 - (lineNum - index) * margin;
 
     if (newXPercent < leftLimit)
     {
@@ -147,14 +149,22 @@ void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent& e)
 
 void FreqDividerGroup::setFreq(float f)
 {
+    if (f <= 0.0f)
+    {
+        freqTextLabel.setFreq(-1);
+        verticalLine.setXPercent(0.0f);
+        return;
+    }
+
     verticalLine.setValue(f);
-    verticalLine.setXPercent(static_cast<float>(transformToLog(f)));
-    freqTextLabel.setFreq(f);
+    const auto clampedFrequency = static_cast<float>(verticalLine.getValue());
+    verticalLine.setXPercent(static_cast<float>(transformToLog(clampedFrequency)));
+    freqTextLabel.setFreq(juce::roundToInt(clampedFrequency));
 }
 
 int FreqDividerGroup::getFreq()
 {
-    return verticalLine.getValue();
+    return juce::roundToInt(verticalLine.getValue());
 }
 void FreqDividerGroup::mouseUp(const juce::MouseEvent& e) {}
 void FreqDividerGroup::mouseEnter(const juce::MouseEvent& e) {}

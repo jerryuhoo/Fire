@@ -51,6 +51,9 @@ void WidthGraph::timerCallback()
     // Get the latest audio data from the history buffer.
     historyL = processor.getHistoryArrayL();
     historyR = processor.getTotalNumInputChannels() == 2 ? processor.getHistoryArrayR() : historyL;
+    const int sampleCount = juce::jmin(historyL.size(), historyR.size());
+    if (sampleCount <= 0)
+        return;
 
     // Apply coordinate transformations for the goniometer effect.
     float pi = juce::MathConstants<float>::pi;
@@ -60,7 +63,7 @@ void WidthGraph::timerCallback()
 
     // Find the maximum value for normalization.
     float maxValue = 0.0f;
-    for (int i = 0; i < (int) historyL.size(); i++)
+    for (int i = 0; i < sampleCount; ++i)
     {
         maxValue = std::max({ maxValue, std::abs(historyL[i]), std::abs(historyR[i]) });
     }
@@ -71,7 +74,7 @@ void WidthGraph::timerCallback()
     {
         const float scaleFactor = getHeight() / (4.0f * maxValue);
         // Iterate by 2 for performance, drawing every other point.
-        for (int i = 0; i < (int) historyL.size(); i += 2)
+        for (int i = 0; i < sampleCount; i += 2)
         {
             float x = historyL[i] * scaleFactor;
             float y = historyR[i] * scaleFactor;

@@ -10,6 +10,7 @@
 
 #include "BandPanel.h"
 #include "../../Utility/AudioHelpers.h"
+#include <cmath>
 
 //==============================================================================
 BandPanel::BandPanel(FireAudioProcessor& p,
@@ -47,19 +48,24 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     setupComponentGroups();
 
     // We listen directly to the parameters that affect our "link" logic.
-    for (int i = 0; i < 4; ++i)
-    {
-        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
-        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
-    }
+    constexpr std::array<const char*, distortionGraphParameterCount> graphParameterBases {
+        REC_ID, MIX_ID, SHAPE_MIX_ID, BIAS_ID, MODE_ID, SAFE_ID
+    };
 
-    // Load initial bypass states from the processor's state tree
     for (int i = 0; i < 4; ++i)
     {
-        driveBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, i));
-        shapeBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i));
-        compBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i));
-        widthBypassTemp[i] = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i));
+        driveParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(DRIVE_ID, i);
+        linkedParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LINKED_ID, i);
+        outputParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(OUTPUT_ID, i);
+        processor.treeState.addParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
+        processor.treeState.addParameterListener(linkedParameterIds[static_cast<size_t>(i)], this);
+
+        for (size_t parameterIndex = 0; parameterIndex < graphParameterBases.size(); ++parameterIndex)
+        {
+            auto& parameterId = distortionGraphParameterIds[parameterIndex][static_cast<size_t>(i)];
+            parameterId = ParameterIDAndName::getIDString(graphParameterBases[parameterIndex], i);
+            processor.treeState.addParameterListener(parameterId, this);
+        }
     }
 
     // Set initial attachments for band 0 and update knob enabled states
@@ -67,6 +73,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
     // Set initial visibility
     buttonClicked(&oscSwitch);
+    startTimerHz(30);
 }
 
 BandPanel::~BandPanel()
@@ -74,8 +81,11 @@ BandPanel::~BandPanel()
     // Remove all parameter listeners that were added in the constructor.
     for (int i = 0; i < 4; ++i)
     {
-        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(DRIVE_ID, i), this);
-        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LINKED_ID, i), this);
+        processor.treeState.removeParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
+        processor.treeState.removeParameterListener(linkedParameterIds[static_cast<size_t>(i)], this);
+
+        for (const auto& parameterIds : distortionGraphParameterIds)
+            processor.treeState.removeParameterListener(parameterIds[static_cast<size_t>(i)], this);
     }
 
     // Remove listeners that were added in the setupSwitch lambda
@@ -188,12 +198,12 @@ void BandPanel::createButtons()
 
 void BandPanel::createComboBoxes()
 {
-    for (int i = 0; i < 4; ++i)
+    for (size_t i = 0; i < distortionModes.size(); ++i)
     {
         setMenu(&distortionModes[i]);
         modeAttachments[i] = std::make_unique<ComboBoxAttachment>(
             processor.treeState,
-            ParameterIDAndName::getIDString(MODE_ID, i),
+            ParameterIDAndName::getIDString(MODE_ID, static_cast<int>(i)),
             distortionModes[i]);
     }
 }
@@ -265,10 +275,10 @@ void BandPanel::paint(juce::Graphics& g)
 
 void BandPanel::resized()
 {
-    const float scale = this->scale; // Get the scale factor
-    const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
+    const float uiScale = scale;
+    const int scaledKnobSize = juce::roundToInt(KNOB_SIZE * uiScale);
 
-    auto mainArea = getLocalBounds().reduced(10 * scale);
+    auto mainArea = getLocalBounds().reduced(juce::roundToInt(10.0f * uiScale));
 
     const float switchColumnProportion = 0.15f;
     const float knobsColumnProportion = 0.35f;
@@ -276,9 +286,12 @@ void BandPanel::resized()
 
     // Define the four main columns
     auto layoutArea = mainArea;
-    auto switchColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * switchColumnProportion);
-    auto knobsColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * knobsColumnProportion);
-    auto graphColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * graphColumnProportion);
+    auto switchColumnArea = layoutArea.removeFromLeft(
+        juce::roundToInt(static_cast<float>(mainArea.getWidth()) * switchColumnProportion));
+    auto knobsColumnArea = layoutArea.removeFromLeft(
+        juce::roundToInt(static_cast<float>(mainArea.getWidth()) * knobsColumnProportion));
+    auto graphColumnArea = layoutArea.removeFromLeft(
+        juce::roundToInt(static_cast<float>(mainArea.getWidth()) * graphColumnProportion));
     auto outputColumnArea = layoutArea;
 
     tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
@@ -298,7 +311,7 @@ void BandPanel::resized()
     auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = (int) (KNOB_FONT_SIZE * 2.0f * scale);
+        const int bypassSize = juce::roundToInt(KNOB_FONT_SIZE * 2.0f * uiScale);
 
         bypass.setBounds(parentBounds.getX(),
                          parentBounds.getCentreY() - (bypassSize / 2),
@@ -350,8 +363,8 @@ void BandPanel::resized()
 
         // Place the DC Filter button below the (now centered) Bias knob.
         // Its position is relative to `biasKnobBounds`, which we saved earlier.
-        const int dcButtonSize = (int) (scaledKnobSize * 0.3f);
-        const int dcLabelWidth = (int) (35 * scale);
+        const int dcButtonSize = juce::roundToInt(static_cast<float>(scaledKnobSize) * 0.3f);
+        const int dcLabelWidth = juce::roundToInt(35.0f * uiScale);
         juce::Rectangle<int> dcArea(0, 0, dcButtonSize + dcLabelWidth, dcButtonSize);
         dcArea.setCentre(biasKnobBounds.getCentreX(), biasKnobBounds.getBottom() + dcButtonSize / 2 + 5);
         dcFilterButton.setBounds(dcArea.removeFromLeft(dcButtonSize));
@@ -458,24 +471,10 @@ void BandPanel::updateAttachments()
 
     dcFilterAttachment = std::make_unique<ButtonAttachment>(processor.treeState, ParameterIDAndName::getIDString(DC_FILTER_ID, focusBandNum), dcFilterButton);
 
-    // Update visual states from memory
-    driveBypassButton.setToggleState(driveBypassTemp[focusBandNum], juce::dontSendNotification);
-    shapeBypassButton.setToggleState(shapeBypassTemp[focusBandNum], juce::dontSendNotification);
-    compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
-    widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
-    dcFilterButton.setToggleState(dcFilterBypassTemp[focusBandNum], juce::dontSendNotification);
-
-    bool bandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+    const auto* bandEnabledParameter = processor.treeState.getRawParameterValue(
+        ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+    const bool bandEnabled = bandEnabledParameter != nullptr && bandEnabledParameter->load() > 0.5f;
     setBandKnobsStates(bandEnabled, false);
-
-    // Update attachments for distortion modes
-    for (int i = 0; i < 4; ++i)
-    {
-        modeAttachments[i] = std::make_unique<ComboBoxAttachment>(
-            processor.treeState,
-            ParameterIDAndName::getIDString(MODE_ID, i),
-            distortionModes[i]);
-    }
 }
 
 void BandPanel::initFlatButton(juce::TextButton& button, juce::String buttonName)
@@ -562,8 +561,10 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     // Handle clicks from any of the bypass buttons.
     if (clickedButton == &driveBypassButton || clickedButton == &shapeBypassButton || clickedButton == &compressorBypassButton || clickedButton == &widthBypassButton)
     {
-        saveBypassStatesToMemory();
-        bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+        const auto* bandEnabledParameter = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+        const bool isBandEnabled = bandEnabledParameter != nullptr
+                                   && bandEnabledParameter->load() > 0.5f;
         setBandKnobsStates(isBandEnabled, true);
         return;
     }
@@ -577,6 +578,12 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
 void BandPanel::setFocusBandNum(int num, bool forceUpdate)
 {
+    if (! juce::isPositiveAndBelow(num, 4))
+    {
+        jassertfalse;
+        return;
+    }
+
     vuPanel.setFocusBandNum(num);
     if (focusBandNum == num && ! forceUpdate)
         return;
@@ -587,23 +594,73 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     updateAttachments();
     updateWhenChangingFocus();
 
-    bool isBandEnabled = *processor.treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+    const auto* bandEnabledParameter = processor.treeState.getRawParameterValue(
+        ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
+    const bool isBandEnabled = bandEnabledParameter != nullptr
+                               && bandEnabledParameter->load() > 0.5f;
     setBandKnobsStates(isBandEnabled, false);
 
     updateDistortionModeVisibility();
+    updateDistortionGraphFromParameters();
 }
 
-void BandPanel::updateLinkedValue()
+void BandPanel::updateLinkedValue(int bandIndex)
 {
-    if (linkedButton.getToggleState())
+    if (! juce::isPositiveAndBelow(bandIndex, 4))
+        return;
+
+    const auto index = static_cast<size_t>(bandIndex);
+    const auto* linked = processor.treeState.getRawParameterValue(linkedParameterIds[index]);
+    const auto* drive = processor.treeState.getRawParameterValue(driveParameterIds[index]);
+    auto* output = processor.treeState.getParameter(outputParameterIds[index]);
+
+    if (linked == nullptr || drive == nullptr || output == nullptr || linked->load() <= 0.5f)
+        return;
+
+    const float newOutputValue = -drive->load() * 0.1f;
+    const float normalisedValue = output->convertTo0to1(newOutputValue);
+    if (! juce::approximatelyEqual(output->getValue(), normalisedValue))
+        output->setValueNotifyingHost(normalisedValue);
+}
+
+void BandPanel::updateDistortionGraphFromParameters()
+{
+    const auto readBandParameter = [this](const juce::String& baseId, float fallback)
     {
-        float newOutputValue = -modulatableSliderComponents.at(DRIVE_NAME)->getValue() * 0.1f;
-        auto* outputSlider = modulatableSliderComponents.at(OUTPUT_NAME).get();
-        if (std::abs(outputSlider->getValue() - newOutputValue) > 0.001)
-        {
-            outputSlider->setValue(newOutputValue, juce::dontSendNotification);
-        }
-    }
+        if (const auto* value = processor.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(baseId, focusBandNum)))
+            return value->load();
+
+        return fallback;
+    };
+
+    DistortionGraphValues values;
+    values.rec = readBandParameter(REC_ID, 0.0f);
+    values.mix = readBandParameter(MIX_ID, 1.0f)
+                 * readBandParameter(SHAPE_MIX_ID, 1.0f);
+    values.bias = readBandParameter(BIAS_ID, 0.0f);
+    values.mode = juce::roundToInt(readBandParameter(MODE_ID, 0.0f));
+
+    const float driveForCalc = readBandParameter(DRIVE_ID, 0.0f) * 6.5f / 100.0f;
+    const float powerDrive = std::pow(2.0f, driveForCalc);
+    const float sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
+    const bool safeMode = readBandParameter(SAFE_ID, 1.0f) > 0.5f;
+    values.drive = safeMode && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f
+                       ? 2.0f / sampleMaxValue + 0.1f * driveForCalc
+                       : powerDrive;
+
+    const auto* downsample = processor.treeState.getRawParameterValue(DOWNSAMPLE_ID);
+    const auto* downsampleBypass = processor.treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID);
+    values.rateDivide = downsample != nullptr ? downsample->load() : 1.0f;
+    if (downsampleBypass != nullptr && downsampleBypass->load() > 0.5f)
+        values.rateDivide = 1.0f;
+
+    distortionGraph.setState(values.mode,
+                             values.rec,
+                             values.mix,
+                             values.bias,
+                             values.drive,
+                             values.rateDivide);
 }
 
 void BandPanel::updateDriveMeter()
@@ -637,16 +694,7 @@ bool BandPanel::canEnableSubKnob(juce::Component& component)
     return false;
 }
 
-void BandPanel::saveBypassStatesToMemory()
-{
-    driveBypassTemp[focusBandNum] = driveBypassButton.getToggleState();
-    shapeBypassTemp[focusBandNum] = shapeBypassButton.getToggleState();
-    compBypassTemp[focusBandNum] = compressorBypassButton.getToggleState();
-    widthBypassTemp[focusBandNum] = widthBypassButton.getToggleState();
-    dcFilterBypassTemp[focusBandNum] = dcFilterButton.getToggleState();
-}
-
-void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
+void BandPanel::setBandKnobsStates(bool isBandEnabled, bool /*callFromSubBypass*/)
 {
     for (auto* component : allControls)
     {
@@ -655,14 +703,6 @@ void BandPanel::setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass)
 
     if (isBandEnabled)
     {
-        if (! callFromSubBypass)
-        {
-            driveBypassButton.setToggleState(driveBypassTemp[focusBandNum], juce::dontSendNotification);
-            shapeBypassButton.setToggleState(shapeBypassTemp[focusBandNum], juce::dontSendNotification);
-            compressorBypassButton.setToggleState(compBypassTemp[focusBandNum], juce::dontSendNotification);
-            widthBypassButton.setToggleState(widthBypassTemp[focusBandNum], juce::dontSendNotification);
-        }
-
         bool driveIsEnabled = driveBypassButton.getToggleState();
         for (auto* component : driveComponents)
             component->setEnabled(driveIsEnabled);
@@ -706,15 +746,45 @@ void BandPanel::updateWhenChangingFocus()
 
 void BandPanel::parameterChanged(const juce::String& parameterID, float newValue)
 {
-    triggerAsyncUpdate();
+    juce::ignoreUnused(newValue);
+
+    for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
+    {
+        const auto index = static_cast<size_t>(bandIndex);
+        const auto bandMask = 1u << static_cast<unsigned int>(bandIndex);
+        const bool isDriveParameter = parameterID == driveParameterIds[index];
+        if (isDriveParameter || parameterID == linkedParameterIds[index])
+            linkedValueDirtyMask.fetch_or(bandMask, std::memory_order_release);
+
+        bool affectsGraph = isDriveParameter;
+        for (const auto& parameterIds : distortionGraphParameterIds)
+            affectsGraph = affectsGraph || parameterID == parameterIds[index];
+
+        if (affectsGraph)
+        {
+            distortionGraphDirtyMask.fetch_or(bandMask, std::memory_order_release);
+            return;
+        }
+
+        if (parameterID == linkedParameterIds[index])
+            return;
+    }
 }
 
-void BandPanel::handleAsyncUpdate()
+void BandPanel::timerCallback()
 {
-    updateLinkedValue();
+    const auto dirtyMask = linkedValueDirtyMask.exchange(0, std::memory_order_acq_rel);
+    for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
+        if ((dirtyMask & (1u << static_cast<unsigned int>(bandIndex))) != 0)
+            updateLinkedValue(bandIndex);
+
+    const auto graphDirtyMask = distortionGraphDirtyMask.exchange(0, std::memory_order_acq_rel);
+    if (juce::isPositiveAndBelow(focusBandNum, 4)
+        && (graphDirtyMask & (1u << static_cast<unsigned int>(focusBandNum))) != 0)
+        updateDistortionGraphFromParameters();
 }
 
-void BandPanel::comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged)
+void BandPanel::comboBoxChanged(juce::ComboBox*)
 {
     // Logic for combo box changes if any
 }
@@ -750,9 +820,10 @@ void BandPanel::updateDistortionModeVisibility()
 {
     const bool shouldShowAny = shapeSwitch.getToggleState();
 
-    for (int i = 0; i < distortionModes.size(); ++i)
+    for (size_t i = 0; i < distortionModes.size(); ++i)
     {
-        distortionModes[i].setVisible(shouldShowAny && (focusBandNum == i));
+        distortionModes[i].setVisible(shouldShowAny
+                                      && focusBandNum == static_cast<int>(i));
     }
 }
 

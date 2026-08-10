@@ -67,6 +67,9 @@ GlobalPanel::~GlobalPanel()
     filterSwitch.removeListener(this);
     downsampleSwitch.removeListener(this);
     graphSwitch.removeListener(this);
+    filterLowCutButton.removeListener(this);
+    filterPeakButton.removeListener(this);
+    filterHighCutButton.removeListener(this);
 }
 
 void GlobalPanel::createSliders()

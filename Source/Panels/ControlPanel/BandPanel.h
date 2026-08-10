@@ -17,12 +17,14 @@
 #include "../ControlPanel/Graph Components/WidthGraph.h"
 #include "PanelBase.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <array>
+#include <atomic>
 #include <vector>
 
 //==============================================================================
 class BandPanel : public PanelBase,
                   public juce::AudioProcessorValueTreeState::Listener,
-                  public juce::AsyncUpdater,
+                  private juce::Timer,
                   public juce::Button::Listener,
                   public juce::ComboBox::Listener // Add ComboBox::Listener
 {
@@ -39,7 +41,6 @@ public:
     void resized() override;
     void setFocusBandNum(int num, bool forceUpdate = false);
 
-    void handleAsyncUpdate() override;
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged) override;
 
@@ -52,7 +53,6 @@ public:
     void setSwitch(const int index, bool state);
     void updateWhenChangingFocus();
     void updateDriveMeter();
-    void saveBypassStatesToMemory();
 
     // Public getters for graphs so PluginEditor can update them
     DistortionGraph* getDistortionGraph() { return &distortionGraph; }
@@ -81,7 +81,16 @@ private:
     void setupComponentGroups();
 
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
-    void updateLinkedValue();
+    void updateLinkedValue(int bandIndex);
+    void updateDistortionGraphFromParameters();
+    void timerCallback() override;
+    std::atomic<unsigned int> linkedValueDirtyMask { 0 };
+    std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
+    static constexpr size_t distortionGraphParameterCount = 6;
+    std::array<juce::String, 4> driveParameterIds;
+    std::array<juce::String, 4> linkedParameterIds;
+    std::array<juce::String, 4> outputParameterIds;
+    std::array<std::array<juce::String, 4>, distortionGraphParameterCount> distortionGraphParameterIds;
 
     juce::Rectangle<int> bandKnobArea, driveKnobArea, outputKnobArea, bottomArea;
 
@@ -117,13 +126,6 @@ private:
     juce::Array<juce::Component*> widthSubControls;
 
     int focusBandNum;
-
-    // Add temp state for the new button
-    bool shapeBypassTemp[4] = { false };
-    bool compBypassTemp[4] = { false };
-    bool widthBypassTemp[4] = { false };
-    bool driveBypassTemp[4] = { false };
-    bool dcFilterBypassTemp[4] = { false };
 
     juce::Rectangle<int> knobsAreaRect;
     juce::Rectangle<int> outputAreaRect;

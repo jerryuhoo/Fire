@@ -12,6 +12,37 @@
 #include "Panels/ControlPanel/Graph Components/VUMeter.h"
 #include "PluginProcessor.h"
 #include "Utility/AudioHelpers.h"
+#include "Utility/VersionInfo.h"
+#include <array>
+
+FireAudioProcessorEditor::UpdateCheckThread::UpdateCheckThread(FireAudioProcessorEditor& ownerToUse)
+    : juce::Thread("Fire update check"), owner(ownerToUse)
+{
+}
+
+void FireAudioProcessorEditor::UpdateCheckThread::run()
+{
+    // Keep the original one-second delay, but make it interruptible when the
+    // editor is closed.
+    if (wait(1000.0) || threadShouldExit())
+        return;
+
+    auto versionInfo = fetchOperation.fetchLatest();
+    if (threadShouldExit() || versionInfo == nullptr)
+        return;
+
+    const Version currentVersion { juce::String(VERSION) };
+    const Version fetchedVersion { versionInfo->versionString };
+    if (currentVersion < fetchedVersion && ! threadShouldExit())
+        owner.publishAvailableUpdate(versionInfo->versionString);
+}
+
+void FireAudioProcessorEditor::UpdateCheckThread::stop()
+{
+    signalThreadShouldExit();
+    fetchOperation.cancel();
+    stopThread(-1);
+}
 
 //==============================================================================
 FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
@@ -21,7 +52,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
       // Initialize bandPanel and globalPanel with the popup callbacks
       bandPanel(p, {}, {}, {}, {}, {}),
       globalPanel(processor, {}, {}, {}, {}, {}),
-      lfoPanel(p)
+      lfoPanel(p),
+      updateCheckThread(*this)
 {
     addAndMakeVisible(valuePopup);
     valuePopup.setAlwaysOnTop(true);
@@ -75,6 +107,13 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 if (isLfoAssignMode) // Check again just in case.
                 {
                     processor.assignLfoToTarget(lfoSourceForAssignment, parameterID);
+                    // This callback runs on the message thread, so complete the
+                    // one-shot assignment interaction here instead of relying on
+                    // a broad parameter-listener notification.
+                    exitAssignMode();
+                    updateModulationStates();
+                    bandPanel.repaint();
+                    globalPanel.repaint();
                 }
             };
 
@@ -157,10 +196,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
             auto localBounds = getLocalArea(nullptr, sliderBounds);
 
-            valueEntryPopup.setBounds(localBounds.getCentreX() - 80,
-                                      localBounds.getCentreY() - 30,
-                                      160,
-                                      60);
+            const auto popupBounds = juce::Rectangle<int>(localBounds.getCentreX() - 80,
+                                                           localBounds.getCentreY() - 30,
+                                                           160,
+                                                           60)
+                                         .constrainedWithin(getLocalBounds());
+            valueEntryPopup.setBounds(popupBounds);
             valueEntryPopup.setVisible(true);
             valueEntryPopup.grabKeyboardFocus();
         };
@@ -203,36 +244,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         // 2. If not, check the user's preference from the now-loaded state.
         if (shouldCheckForUpdate)
         {
-            // Schedule the check on a background thread.
-            juce::Timer::callAfterDelay(1000, []()
-                                        {
-                std::unique_ptr<VersionInfo> versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-                // We must use the static VERSION macro from JucePluginDefines.h here, not a member variable.
-                if (versionInfo != nullptr)
-                {
-                    // ==============================================================
-                    // ** 2. Use the new Version struct for comparison **
-                    // ==============================================================
-                    Version currentVersion(juce::String(VERSION));
-                    Version fetchedVersion(versionInfo->versionString);
-
-                    // Only prompt for an update if the fetched version is strictly greater than the current one.
-                    if (currentVersion < fetchedVersion)
-                    {
-                        juce::String version = versionInfo->versionString;
-                        const auto callback = juce::ModalCallbackFunction::create([version](int result) {
-                            if (result == 1)
-                            {
-                                juce::URL(GITHUB_TAG_LINK + version).launchInDefaultBrowser();
-                            }
-                        });
-                        
-                        juce::MessageManager::callAsync([callback, version]() {
-                            juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                                "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-                        });
-                    }
-                } });
+            // The editor owns this thread and joins it during destruction, so
+            // neither network code nor a queued UI callback can outlive the
+            // plugin module.
+            updateCheckThread.startThread();
         }
 
         // 4. CRITICAL: Set the flag to true, so this check will never run again
@@ -258,14 +273,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     for (int i = 0; i < 4; ++i)
         multiband.getEnableButton(i).addListener(this);
 
-    // Add the editor as a listener DIRECTLY to BandPanel's public buttons
-    bandPanel.compressorBypassButton.addListener(this);
-    bandPanel.widthBypassButton.addListener(this);
-
     processedSpectrum.setInterceptsMouseClicks(false, false);
-    processedSpectrum.updateSpectrum(processor.getFFTData(1), processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
-    originalSpectrum.updateSpectrum(processor.getFFTData(0), processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
-
     // presets
     addAndMakeVisible(stateComponent);
     stateComponent.getPresetBox()->addListener(this);
@@ -372,28 +380,16 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     multiband.resortAndRedrawLines();
 
-    auto& params = processor.getParameters();
-    for (auto param : params)
-    {
-        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-        {
-            processor.treeState.addParameterListener(p->paramID, this);
-        }
-    }
 }
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
     stopTimer();
-
-    auto& params = processor.getParameters();
-    for (auto param : params)
-    {
-        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-        {
-            processor.treeState.removeParameterListener(p->paramID, this);
-        }
-    }
+    cancelPendingUpdate();
+    updateCheckThread.stop();
+    // The worker checks threadShouldExit before publishing, but cancel once
+    // more to close the narrow race between the first cancel and the join.
+    cancelPendingUpdate();
 
     // Mouse Listeners
     multiband.removeMouseListener(this);
@@ -417,9 +413,6 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     {
         multiband.getEnableButton(i).removeListener(this);
     }
-
-    bandPanel.compressorBypassButton.removeListener(this);
-    bandPanel.widthBypassButton.removeListener(this);
 
     setLookAndFeel(nullptr);
     processor.removeChangeListener(this);
@@ -649,32 +642,36 @@ void FireAudioProcessorEditor::timerCallback()
     {
         multiband.repaint();
     }
-    else if (processor.isFFTBlockReady())
+    else
     {
-        // not bypassed, repaint at the same time
-        //(1<<11)
-        // create a temp ddtData because sometimes pushNextSampleIntoFifo will replace the original
-        // fftData after doingProcess and before painting.
+        std::array<float, 2 * SpectrumProcessor::fftSize> tempFFTDataProcessed {};
+        std::array<float, 2 * SpectrumProcessor::fftSize> tempFFTDataOriginal {};
 
-        float tempFFTDataProcessed[2 * 2048] = { 0 };
-        memmove(tempFFTDataProcessed, processor.getFFTData(1), sizeof(tempFFTDataProcessed));
-        processor.processFFT(tempFFTDataProcessed, 1);
-        float tempFFTDataOriginal[2 * 2048] = { 0 };
-        memmove(tempFFTDataOriginal, processor.getFFTData(0), sizeof(tempFFTDataOriginal));
-        processor.processFFT(tempFFTDataOriginal, 0);
+        if (processor.popLatestFFTFrames(tempFFTDataProcessed.data(),
+                                         static_cast<int>(tempFFTDataProcessed.size()),
+                                         tempFFTDataOriginal.data(),
+                                         static_cast<int>(tempFFTDataOriginal.size())))
+        {
+            const auto fftBufferSize = static_cast<int>(tempFFTDataProcessed.size());
+            if (! processor.processFFT(tempFFTDataProcessed.data(), fftBufferSize)
+                || ! processor.processFFT(tempFFTDataOriginal.data(), fftBufferSize))
+                return;
 
-        // prepare to paint the spectrum
-        float specAlpha = static_cast<float>(*processor.treeState.getRawParameterValue(MIX_ID));
-        processedSpectrum.setSpecAlpha(specAlpha);
-        originalSpectrum.setSpecAlpha(1.0f - specAlpha);
-        processedSpectrum.updateSpectrum(tempFFTDataProcessed, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
-        originalSpectrum.updateSpectrum(tempFFTDataOriginal, processor.getNumBins(), processor.getSampleRate() / (float) processor.getFFTSize());
-        bandPanel.updateDriveMeter();
-        processedSpectrum.repaint();
-        originalSpectrum.repaint();
-        multiband.repaint();
-
-        globalPanel.repaint();
+            // Prepare complete, message-thread-owned snapshots for painting.
+            const auto* mixParameter = processor.treeState.getRawParameterValue(MIX_ID);
+            const float specAlpha = mixParameter != nullptr ? mixParameter->load() : 1.0f;
+            processedSpectrum.setSpecAlpha(specAlpha);
+            originalSpectrum.setSpecAlpha(1.0f - specAlpha);
+            const float binWidth = static_cast<float>(processor.getSampleRate())
+                                   / static_cast<float>(processor.getFFTSize());
+            processedSpectrum.updateSpectrum(tempFFTDataProcessed.data(), processor.getNumBins(), binWidth);
+            originalSpectrum.updateSpectrum(tempFFTDataOriginal.data(), processor.getNumBins(), binWidth);
+            bandPanel.updateDriveMeter();
+            processedSpectrum.repaint();
+            originalSpectrum.repaint();
+            multiband.repaint();
+            globalPanel.repaint();
+        }
     }
 
     updateModulationStates();
@@ -780,18 +777,6 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             }
         }
     }
-    // This block replaces the one you just deleted.
-    if (clickedButton == &bandPanel.compressorBypassButton || clickedButton == &bandPanel.widthBypassButton)
-    {
-        // 1. Command the BandPanel to save the new bypass state to its internal "memory".
-        bandPanel.saveBypassStatesToMemory();
-
-        // 2. Command the BandPanel to re-evaluate all knob states based on this new bypass setting.
-        // We pass the current state of the main enableButton to ensure correct logic.
-        int focusBand = bandPanel.getFocusBandNum();
-        bool isMainBandEnabled = multiband.getEnableButton(focusBand).getToggleState();
-        bandPanel.setBandKnobsStates(isMainBandEnabled, true); // Use 'true' to prevent feedback on the bypass button's visual state
-    }
 }
 
 void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
@@ -841,26 +826,50 @@ void FireAudioProcessorEditor::updateWhenChangingFocus()
     repaint();
 }
 
-void FireAudioProcessorEditor::parameterChanged(const juce::String& parameterID, float newValue)
+void FireAudioProcessorEditor::handleAsyncUpdate()
 {
+    const auto availableVersion = takeAvailableUpdate();
+    if (availableVersion.isNotEmpty())
+    {
+        const auto callback = juce::ModalCallbackFunction::create([availableVersion](int result)
+        {
+            if (result == 1)
+                juce::URL(GITHUB_TAG_LINK + availableVersion).launchInDefaultBrowser();
+        });
+
+        juce::NativeMessageBox::showOkCancelBox(
+            juce::AlertWindow::InfoIcon,
+            "New Version",
+            "New version " + availableVersion + " available, do you want to download it?",
+            this,
+            callback);
+    }
+
+    // Processor-side routing changes can arrive through AsyncUpdater. Refresh the
+    // view here, but don't end assignment mode: only a successful slider click is
+    // a one-shot assignment completion.
+    updateModulationStates();
+    bandPanel.repaint();
+    globalPanel.repaint();
+    repaint();
+}
+
+void FireAudioProcessorEditor::publishAvailableUpdate(const juce::String& version)
+{
+    {
+        const juce::ScopedLock lock(updateResultLock);
+        pendingUpdateVersion = version;
+    }
+
     triggerAsyncUpdate();
 }
 
-void FireAudioProcessorEditor::handleAsyncUpdate()
+juce::String FireAudioProcessorEditor::takeAvailableUpdate()
 {
-    // This function is now the single entry point after a successful assignment.
-
-    // 1. First, formally exit the assignment mode and clean up all related states.
-    exitAssignMode();
-
-    // 2. Then, repaint all panels.
-    //    Since the modulation relationship has now been established in the Processor,
-    //    updateSliderState in timerCallback will get the latest state and display it correctly.
-    bandPanel.repaint();
-    globalPanel.repaint();
-
-    // 3. Finally, repaint the entire editor to ensure all UI elements are synchronized.
-    repaint();
+    const juce::ScopedLock lock(updateResultLock);
+    auto result = pendingUpdateVersion;
+    pendingUpdateVersion.clear();
+    return result;
 }
 
 void FireAudioProcessorEditor::exitAssignMode()
@@ -911,7 +920,11 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
 
     // --- LOGIC FOR EXTREME VALUE DISPLAY ---
     // 1. Get the parameter's base value in its real-world units (e.g., -6.0f for -6dB)
-    float baseValue = *processor.treeState.getRawParameterValue(paramID);
+    auto* rawValue = processor.treeState.getRawParameterValue(paramID);
+    if (rawValue == nullptr)
+        return;
+
+    float baseValue = rawValue->load();
 
     // 2. Get all modulation data from the processor
     auto modInfo = processor.getModulationInfoForParameter(paramID);
@@ -949,7 +962,12 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
     int popupHeight = 20;
 
     // 7. Set the popup's bounds using the converted local coordinates
-    valuePopup.setBounds(localBounds.getCentreX() - popupWidth / 2, localBounds.getY() - popupHeight, popupWidth, popupHeight);
+    const auto popupBounds = juce::Rectangle<int>(localBounds.getCentreX() - popupWidth / 2,
+                                                   localBounds.getY() - popupHeight,
+                                                   popupWidth,
+                                                   popupHeight)
+                                 .constrainedWithin(getLocalBounds());
+    valuePopup.setBounds(popupBounds);
 }
 
 void FireAudioProcessorEditor::hideValuePopup()
@@ -972,7 +990,7 @@ std::vector<ModulatableSlider*> FireAudioProcessorEditor::getAllModulatableSlide
 
 void FireAudioProcessorEditor::updateModulationStates()
 {
-    auto& routings = processor.getLfoManager().getModulationRoutings();
+    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
 
     for (auto* slider : getAllModulatableSliders()) // Assuming you have a way to get all sliders
     {

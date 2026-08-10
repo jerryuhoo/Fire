@@ -53,6 +53,7 @@ public:
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
     void setPhaseOffsetLinePosition(float position);
+    void setSmoothness(float smoothness);
 
     std::function<void(const LfoData&)> onDataChanged;
 
@@ -171,6 +172,7 @@ private:
     void styleButton(juce::Button& button, bool isToggle);
     void styleLfoSelectButton(juce::TextButton& button, juce::Colour colour);
     void setLfo(int newIndex);
+    LfoData getLfoDataCopy(int index);
 
     FireAudioProcessor& processor;
 
@@ -213,6 +215,12 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoPhaseAttachment;
     bool isUpdatingRateSlider = false;
     bool isDraggingPhaseSlider = false;
+    std::atomic<bool> pendingRateSliderUpdate { false };
+    std::atomic<unsigned int> pendingSmoothnessUpdates { 0 };
+    std::array<juce::String, 4> syncParameterIDs;
+    std::array<juce::String, 4> smoothParameterIDs;
+
+    juce::Component::SafePointer<juce::DialogWindow> modulationMatrixDialog;
 
     void updateRateSlider();
 

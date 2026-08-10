@@ -36,8 +36,8 @@ void EnableButton::paint (juce::Graphics& g)
                                  arcRadius,
                                  arcRadius,
                                  0.0f,
-                                 2 * M_PI * 0.1f,
-                                 2 * M_PI * 0.9f,
+                                 juce::MathConstants<float>::twoPi * 0.1f,
+                                 juce::MathConstants<float>::twoPi * 0.9f,
                                  true);
 
     g.strokePath (backgroundArc, juce::PathStrokeType (lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));

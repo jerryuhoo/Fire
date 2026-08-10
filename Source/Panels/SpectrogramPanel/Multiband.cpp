@@ -98,6 +98,7 @@ Multiband::~Multiband()
 
             // 它内部的 VerticalLine 滑块
             freqDividerGroup[i]->getVerticalLine().removeListener(this);
+            freqDividerGroup[i]->getVerticalLine().removeMouseListener(this);
         }
     }
 }
@@ -107,6 +108,9 @@ void Multiband::paint(juce::Graphics& g)
     // send band buffer to graphs
     if (isVisible())
         processor.setHistoryArray(focusIndex);
+
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
 
     // draw line that will be added next
     float startY = 0;
@@ -157,19 +161,22 @@ void Multiband::paint(juce::Graphics& g)
         }
     }
 
-    // set leftmost mask
-    setMasks(g, 0, 0, 0, 0, freqDividerGroup[0]->getX() + margin2, getHeight(), mouseX, mouseY);
-
-    // set middle masks
-    for (int i = 1; i < lineNum; i++)
+    if (lineNum > 0)
     {
-        int startX = freqDividerGroup[i - 1]->getX() + margin1;
-        int bandWidth = freqDividerGroup[i]->getX() - freqDividerGroup[i - 1]->getX();
-        setMasks(g, i, 1, startX, 0, bandWidth, getHeight(), mouseX, mouseY);
-    }
+        // set leftmost mask
+        setMasks(g, 0, 0, 0, 0, freqDividerGroup[0]->getX() + margin2, getHeight(), mouseX, mouseY);
 
-    // set rightmost mask
-    setMasks(g, lineNum, 0, freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight(), mouseX, mouseY);
+        // set middle masks
+        for (int i = 1; i < lineNum; i++)
+        {
+            int startX = freqDividerGroup[i - 1]->getX() + margin1;
+            int bandWidth = freqDividerGroup[i]->getX() - freqDividerGroup[i - 1]->getX();
+            setMasks(g, i, 1, startX, 0, bandWidth, getHeight(), mouseX, mouseY);
+        }
+
+        // set rightmost mask
+        setMasks(g, lineNum, 0, freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight(), mouseX, mouseY);
+    }
 }
 
 void Multiband::resized()
@@ -199,6 +206,10 @@ bool Multiband::shouldSetBlackMask(int index)
 
 void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
 {
+    if (! juce::isPositiveAndBelow(toIndex, static_cast<int>(paramsArrays.size()))
+        || ! juce::isPositiveAndBelow(fromIndex, static_cast<int>(paramsArrays.size())))
+        return;
+
     const auto& fromArray = paramsArrays[fromIndex];
     const auto& toArray = paramsArrays[toIndex];
 
@@ -315,6 +326,9 @@ void Multiband::setStatesWhenAdd(int insertionIndex)
 
 void Multiband::setStatesWhenDelete(int deletedIndex)
 {
+    if (lineNum <= 0 || ! juce::isPositiveAndBelow(deletedIndex, lineNum + 1))
+        return;
+
     // 1. Based on the deleted band's index, update the state of the divider line.
     // If the last band is deleted (e.g., Band 4), the line to its left (Line 3) must be disabled.
     if (deletedIndex == lineNum)
@@ -373,7 +387,7 @@ int Multiband::countLines()
 int Multiband::sortLines()
 {
     // clear disabled lines and sort lines by frequency
-    int newFreq;
+    int newFreq = -1;
     std::vector<int> freqVector;
     for (int i = 0; i < 3; i++)
     {
@@ -384,7 +398,9 @@ int Multiband::sortLines()
         }
     }
     std::sort(freqVector.begin(), freqVector.end());
-    int changeIndex = static_cast<int>(std::find(freqVector.begin(), freqVector.end(), newFreq) - freqVector.begin());
+    const int changeIndex = newFreq >= 0
+                              ? static_cast<int>(std::find(freqVector.begin(), freqVector.end(), newFreq) - freqVector.begin())
+                              : 0;
     lineNum = static_cast<int>(freqVector.size());
 
     for (int i = 0; i < freqVector.size(); i++)
@@ -416,6 +432,9 @@ void Multiband::mouseUp(const juce::MouseEvent& e)
 
 void Multiband::mouseDrag(const juce::MouseEvent& e)
 {
+    if (getWidth() <= 0)
+        return;
+
     // moving lines by dragging mouse
     if (e.mods.isLeftButtonDown())
     {
@@ -436,6 +455,9 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
 
 void Multiband::mouseDown(const juce::MouseEvent& e)
 {
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
     if (! isDragging && e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
     {
         float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
@@ -516,7 +538,8 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
 void Multiband::dragLines(float xPercent, int index)
 {
     // moving lines by dragging mouse
-    freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
+    if (juce::isPositiveAndBelow(index, lineNum))
+        freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
 }
 
 void Multiband::setLineRelatedBoundsByX()
@@ -580,7 +603,7 @@ int Multiband::getFocusIndex()
 
 void Multiband::setFocusIndex(int index)
 {
-    focusIndex = index;
+    focusIndex = juce::jlimit(0, lineNum, index);
 }
 
 void Multiband::sliderValueChanged(juce::Slider* slider)
@@ -631,7 +654,8 @@ EnableButton& Multiband::getEnableButton(const int index)
 
 void Multiband::setBandBypassStates(int index, bool state)
 {
-    bandUIs[index].enableButton->setToggleState(state, juce::NotificationType::dontSendNotification); // <--- MODIFIED
+    if (juce::isPositiveAndBelow(index, static_cast<int>(bandUIs.size())))
+        bandUIs[index].enableButton->setToggleState(state, juce::NotificationType::dontSendNotification); // <--- MODIFIED
 }
 
 state::StateComponent& Multiband::getStateComponent()
@@ -657,7 +681,7 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
     }
 
     // set mouse enter white mask
-    if (! isDragging && lineNum > lineNumLimit && mouseX > x && mouseX < x + width && mouseY > y && mouseY < height)
+    if (! isDragging && lineNum > lineNumLimit && mouseX > x && mouseX < x + width && mouseY > y && mouseY < y + height)
     {
         if (focusIndex != index)
         {
@@ -678,16 +702,24 @@ void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, 
 // Gets the enable and solo state for a specific band.
 Multiband::BandState Multiband::getBandState(int bandIndex)
 {
-    // Ensure the index is valid.
-    jassert(bandIndex >= 0 && bandIndex < bandUIs.size());
+    if (! juce::isPositiveAndBelow(bandIndex, static_cast<int>(bandUIs.size())))
+    {
+        jassertfalse;
+        return { true, false };
+    }
+
     return { bandUIs[bandIndex].enableButton->getToggleState(), bandUIs[bandIndex].soloButton->getToggleState() };
 }
 
 // Sets the enable and solo state for a specific band.
 void Multiband::setBandState(int bandIndex, BandState state, juce::NotificationType notification)
 {
-    // Ensure the index is valid.
-    jassert(bandIndex >= 0 && bandIndex < bandUIs.size());
+    if (! juce::isPositiveAndBelow(bandIndex, static_cast<int>(bandUIs.size())))
+    {
+        jassertfalse;
+        return;
+    }
+
     bandUIs[bandIndex].enableButton->setToggleState(state.isEnabled, notification);
     bandUIs[bandIndex].soloButton->setToggleState(state.isSoloed, notification);
 }
@@ -695,9 +727,12 @@ void Multiband::setBandState(int bandIndex, BandState state, juce::NotificationT
 // Copies the complete settings (state and parameters) from one band to another.
 void Multiband::copyBandSettings(int targetIndex, int sourceIndex)
 {
-    // Ensure indices are valid.
-    jassert(targetIndex >= 0 && targetIndex < 4);
-    jassert(sourceIndex >= 0 && sourceIndex < 4);
+    if (! juce::isPositiveAndBelow(targetIndex, 4)
+        || ! juce::isPositiveAndBelow(sourceIndex, 4))
+    {
+        jassertfalse;
+        return;
+    }
 
     // 1. Copy the button states.
     setBandState(targetIndex, getBandState(sourceIndex));
@@ -709,8 +744,11 @@ void Multiband::copyBandSettings(int targetIndex, int sourceIndex)
 // Resets a specific band to its default settings.
 void Multiband::resetBandToDefault(int bandIndex)
 {
-    // Ensure the index is valid.
-    jassert(bandIndex >= 0 && bandIndex < 4);
+    if (! juce::isPositiveAndBelow(bandIndex, 4))
+    {
+        jassertfalse;
+        return;
+    }
 
     // 1. Set button states to default (enabled, not soloed).
     setBandState(bandIndex, { true, false });

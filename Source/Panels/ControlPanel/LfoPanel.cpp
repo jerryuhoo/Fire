@@ -24,8 +24,49 @@ LfoEditor::~LfoEditor() {}
 
 void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
 {
-    // Safely switch the data source by copying.
+    // Safely switch the data source by copying and normalising malformed
+    // preset data before any paint or interaction code indexes it.
     activeLfoData = dataToDisplay;
+    if (activeLfoData.points.size() < 2)
+        activeLfoData.resetToDefault();
+
+    for (auto& point : activeLfoData.points)
+    {
+        point.x = std::isfinite(point.x) ? juce::jlimit(0.0f, 1.0f, point.x) : 0.0f;
+        point.y = std::isfinite(point.y) ? juce::jlimit(0.0f, 1.0f, point.y) : 0.0f;
+    }
+    std::stable_sort(activeLfoData.points.begin(), activeLfoData.points.end(), [](const auto& a, const auto& b)
+                     { return a.x < b.x; });
+
+    if (activeLfoData.points.size() > static_cast<size_t>(maxPoints))
+    {
+        // The editor intentionally supports a bounded number of handles. Keep
+        // both endpoints and uniformly sample an oversized/malformed shape so
+        // paint and hit-testing cannot be forced into unbounded work.
+        const auto originalPoints = activeLfoData.points;
+        activeLfoData.points.clear();
+        activeLfoData.points.reserve(static_cast<size_t>(maxPoints));
+        for (int i = 0; i < maxPoints; ++i)
+        {
+            const auto sourceIndex = static_cast<size_t>(i) * (originalPoints.size() - 1)
+                                     / static_cast<size_t>(maxPoints - 1);
+            activeLfoData.points.push_back(originalPoints[sourceIndex]);
+        }
+        activeLfoData.curvatures.assign(static_cast<size_t>(maxPoints - 1), 0.0f);
+    }
+
+    activeLfoData.points.front().x = 0.0f;
+    activeLfoData.points.back().x = 1.0f;
+    activeLfoData.curvatures.resize(activeLfoData.points.size() - 1, 0.0f);
+    for (auto& curvature : activeLfoData.curvatures)
+        curvature = std::isfinite(curvature) ? juce::jlimit(-2.0f, 2.0f, curvature) : 0.0f;
+
+    selectedPointIndices.clear();
+    initialDragPositions.clear();
+    draggingState = DraggingState::None;
+    editingCurveIndex = -1;
+    hoveredPointIndex = -1;
+    isBrushing = false;
     dataIsActive = true;
     repaint();
 }
@@ -186,6 +227,13 @@ void LfoEditor::setPhaseOffsetLinePosition(float position)
     }
 }
 
+void LfoEditor::setSmoothness(float smoothness)
+{
+    activeLfoData.smoothness = std::isfinite(smoothness)
+                                   ? juce::jlimit(0.0f, 1.0f, smoothness)
+                                   : 0.0f;
+}
+
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
     if (! dataIsActive)
@@ -201,8 +249,8 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
             const float gridW = 1.0f / (float) hGridDivs;
             const float gridH = 1.0f / (float) vGridDivs;
-            const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) event.x / (float) getWidth() / gridW));
-            const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) event.y / (float) getHeight() / gridH));
+            const int gridX = juce::jlimit(0, hGridDivs - 1, (int) ((float) event.x / (float) juce::jmax(1, getWidth()) / gridW));
+            const int gridY = juce::jlimit(0, vGridDivs - 1, (int) ((float) event.y / (float) juce::jmax(1, getHeight()) / gridH));
             lastBrushCell = { gridX, gridY };
         }
         return;
@@ -290,8 +338,8 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
     {
         const float gridW = 1.0f / (float) hGridDivs;
         const float gridH = 1.0f / (float) vGridDivs;
-        const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) event.x / (float) getWidth() / gridW));
-        const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) event.y / (float) getHeight() / gridH));
+        const int gridX = juce::jlimit(0, hGridDivs - 1, (int) ((float) event.x / (float) juce::jmax(1, getWidth()) / gridW));
+        const int gridY = juce::jlimit(0, vGridDivs - 1, (int) ((float) event.y / (float) juce::jmax(1, getHeight()) / gridH));
         const juce::Point<int> currentCell { gridX, gridY };
 
         if (currentCell != lastBrushCell)
@@ -359,7 +407,6 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             if (event.mods.isCommandDown() || event.mods.isCtrlDown())
             {
                 // For the primary point being dragged, find its ideal snapped position.
-                int primaryIndex = selectedPointIndices.front();
                 auto initialPrimaryPos = initialDragPositions.front();
                 auto unsnappedTargetPos = initialPrimaryPos + delta;
 
@@ -457,35 +504,38 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
         m.addItem(CommandIDs::invertX, "Invert Horizontally", dataIsActive && activeLfoData.points.size() > 2);
         m.addItem(CommandIDs::invertY, "Invert Vertically", dataIsActive && activeLfoData.points.size() > 2);
 
-        auto callback = [this](int result)
+        auto callback = [safeThis = juce::Component::SafePointer<LfoEditor>(this)](int result)
         {
+            if (safeThis == nullptr)
+                return;
+
             switch (result)
             {
                 case CommandIDs::selectAll:
-                    selectAllPoints();
+                    safeThis->selectAllPoints();
                     break;
                 case CommandIDs::clear:
-                    clearAllPoints();
-                    if (onDataChanged)
-                        onDataChanged(activeLfoData);
+                    safeThis->clearAllPoints();
+                    if (safeThis->onDataChanged)
+                        safeThis->onDataChanged(safeThis->activeLfoData);
                     break;
                 case CommandIDs::copy:
-                    copyShape();
+                    safeThis->copyShape();
                     break;
                 case CommandIDs::paste:
-                    pasteShape();
-                    if (onDataChanged)
-                        onDataChanged(activeLfoData);
+                    safeThis->pasteShape();
+                    if (safeThis->onDataChanged)
+                        safeThis->onDataChanged(safeThis->activeLfoData);
                     break;
                 case CommandIDs::invertX:
-                    invertShape(true, false);
-                    if (onDataChanged)
-                        onDataChanged(activeLfoData);
+                    safeThis->invertShape(true, false);
+                    if (safeThis->onDataChanged)
+                        safeThis->onDataChanged(safeThis->activeLfoData);
                     break;
                 case CommandIDs::invertY:
-                    invertShape(false, true);
-                    if (onDataChanged)
-                        onDataChanged(activeLfoData);
+                    safeThis->invertShape(false, true);
+                    if (safeThis->onDataChanged)
+                        safeThis->onDataChanged(safeThis->activeLfoData);
                     break;
                 default:
                     break;
@@ -652,7 +702,8 @@ void LfoEditor::removePoint(int index)
 
     // Removing a point merges two segments. We must remove one curvature value.
     // We remove the curvature of the first of the two merged segments.
-    activeLfoData.curvatures.erase(activeLfoData.curvatures.begin() + index - 1);
+    if (juce::isPositiveAndBelow(index - 1, static_cast<int>(activeLfoData.curvatures.size())))
+        activeLfoData.curvatures.erase(activeLfoData.curvatures.begin() + index - 1);
 
     // We then set the curvature of the new, merged segment to 0.0 (linear).
     if (index - 1 < activeLfoData.curvatures.size())
@@ -665,7 +716,10 @@ void LfoEditor::removePoint(int index)
 
 juce::Point<float> LfoEditor::toNormalized(juce::Point<int> localPoint)
 {
-    return { (float) localPoint.x / (float) getWidth(), 1.0f - ((float) localPoint.y / (float) getHeight()) };
+    const auto width = juce::jmax(1, getWidth());
+    const auto height = juce::jmax(1, getHeight());
+    return { juce::jlimit(0.0f, 1.0f, (float) localPoint.x / (float) width),
+             juce::jlimit(0.0f, 1.0f, 1.0f - ((float) localPoint.y / (float) height)) };
 }
 
 juce::Point<float> LfoEditor::fromNormalized(juce::Point<float> normalizedPoint)
@@ -747,8 +801,8 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
     // 1. Identify grid cell and its boundaries.
     const float gridW = 1.0f / (float) hGridDivs;
     const float gridH = 1.0f / (float) vGridDivs;
-    const int gridX = juce::jmin(hGridDivs - 1, (int) ((float) clickPosition.x / (float) getWidth() / gridW));
-    const int gridY = juce::jmin(vGridDivs - 1, (int) ((float) clickPosition.y / (float) getHeight() / gridH));
+    const int gridX = juce::jlimit(0, hGridDivs - 1, (int) ((float) clickPosition.x / (float) juce::jmax(1, getWidth()) / gridW));
+    const int gridY = juce::jlimit(0, vGridDivs - 1, (int) ((float) clickPosition.y / (float) juce::jmax(1, getHeight()) / gridH));
     const float startX = (float) gridX * gridW;
     const float endX = (float) (gridX + 1) * gridW;
     const float bottomY = 1.0f - ((float) (gridY + 1) * gridH);
@@ -852,7 +906,7 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 int LfoEditor::findSegmentIndexAt(const juce::Point<int>& position) const
 {
     // Safety checks: ensure there is data and at least one segment to check.
-    if (! dataIsActive || activeLfoData.points.size() < 2)
+    if (! dataIsActive || activeLfoData.points.size() < 2 || getWidth() <= 0)
         return -1;
 
     // Convert the mouse's X position to a normalized value [0, 1]
@@ -946,7 +1000,13 @@ void LfoEditor::deleteSelectedPoints()
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
-    lfoEditor.setDataToDisplay(processor.getLfoManager().getLfoData()[currentLfoIndex]);
+    for (int i = 0; i < 4; ++i)
+    {
+        syncParameterIDs[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i);
+        smoothParameterIDs[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
+    }
+
+    lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
     addAndMakeVisible(lfoEditor);
 
     // FIX: Set up the callback to send updated data back to the manager
@@ -1049,8 +1109,8 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     // Register as a parameter listener for each of the LFO sync mode parameters.
     for (int i = 0; i < 4; ++i)
     {
-        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);
-        processor.treeState.addParameterListener(ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i), this);
+        processor.treeState.addParameterListener(syncParameterIDs[static_cast<size_t>(i)], this);
+        processor.treeState.addParameterListener(smoothParameterIDs[static_cast<size_t>(i)], this);
     }
 
     // Initialize the smooth slider and label.
@@ -1089,15 +1149,19 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     // Attachments
     setLfo(currentLfoIndex); // Call helper to set up all attachments for the initial LFO.
 
-    // Set up the rate slider based on the initial state
-    triggerAsyncUpdate();
-
     startTimerHz(60);
 }
 
 LfoPanel::~LfoPanel()
 {
     stopTimer();
+
+    if (modulationMatrixDialog != nullptr)
+    {
+        modulationMatrixDialog->setVisible(false);
+        modulationMatrixDialog->exitModalState(0);
+        modulationMatrixDialog = nullptr;
+    }
 
     // Remove listeners from all buttons styled with styleButton()
     for (auto& button : lfoSelectButtons)
@@ -1116,9 +1180,11 @@ LfoPanel::~LfoPanel()
 
     for (int i = 0; i < 4; ++i)
     {
-        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i), this);
-        processor.treeState.removeParameterListener(ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i), this);
+        processor.treeState.removeParameterListener(syncParameterIDs[static_cast<size_t>(i)], this);
+        processor.treeState.removeParameterListener(smoothParameterIDs[static_cast<size_t>(i)], this);
     }
+
+    cancelPendingUpdate();
 }
 
 void LfoPanel::paint(juce::Graphics& g)
@@ -1224,6 +1290,10 @@ void LfoPanel::resized()
 
 void LfoPanel::timerCallback()
 {
+    if (pendingRateSliderUpdate.load(std::memory_order_acquire)
+        || pendingSmoothnessUpdates.load(std::memory_order_acquire) != 0)
+        handleAsyncUpdate();
+
     if (processor.isDawPlaying())
     {
         // If the DAW is playing, get the current phase and show the playhead.
@@ -1259,11 +1329,19 @@ void LfoPanel::buttonClicked(juce::Button* button)
 
     if (button == &matrixButton)
     {
-        // This opens our new panel in a non-modal dialog window.
+        if (modulationMatrixDialog != nullptr)
+        {
+            modulationMatrixDialog->toFront(true);
+            return;
+        }
+
+        // LaunchOptions owns and automatically deletes the modal dialog and its
+        // content when the modal state ends.
         juce::DialogWindow::LaunchOptions launchOptions;
         launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
         launchOptions.content->setSize(800, 400);
-        launchOptions.launchAsync();
+        launchOptions.componentToCentreAround = this;
+        modulationMatrixDialog = launchOptions.launchAsync();
     }
     else if (button == &syncButton)
     {
@@ -1291,9 +1369,12 @@ void LfoPanel::buttonClicked(juce::Button* button)
 
 void LfoPanel::setLfo(int newIndex)
 {
+    if (! juce::isPositiveAndBelow(newIndex, static_cast<int>(lfoSelectButtons.size())))
+        return;
+
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
-    lfoEditor.setDataToDisplay(processor.getLfoManager().getLfoData()[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
 
     // Explicitly set the toggle state for all buttons in the group.
     for (int i = 0; i < lfoSelectButtons.size(); ++i)
@@ -1308,10 +1389,10 @@ void LfoPanel::setLfo(int newIndex)
     lfoPhaseAttachment.reset();
 
     syncButtonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        processor.treeState, ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex), syncButton);
+        processor.treeState, syncParameterIDs[static_cast<size_t>(currentLfoIndex)], syncButton);
 
     lfoSmoothAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        processor.treeState, ParameterIDAndName::getIDString(LFO_SMOOTH_ID, currentLfoIndex), lfoSmoothSlider);
+        processor.treeState, smoothParameterIDs[static_cast<size_t>(currentLfoIndex)], lfoSmoothSlider);
 
     lfoPhaseAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processor.treeState, ParameterIDAndName::getIDString(LFO_PHASE_ID, currentLfoIndex), lfoPhaseSlider);
@@ -1326,11 +1407,22 @@ void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)
     onDataChanged = callback;
 }
 
+LfoData LfoPanel::getLfoDataCopy(int index)
+{
+    const auto data = processor.getLfoManager().getLfoDataCopy();
+
+    if (juce::isPositiveAndBelow(index, static_cast<int>(data.size())))
+        return data[static_cast<size_t>(index)];
+
+    jassertfalse;
+    return {};
+}
+
 void LfoPanel::updateRateSlider()
 {
     // --- Get Parameter IDs using the robust ParameterID namespace ---
     // The currentLfoIndex is 0-based, which matches our arrays perfectly.
-    auto syncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex);
+    const auto& syncModeID = syncParameterIDs[static_cast<size_t>(currentLfoIndex)];
     auto rateSyncID = ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, currentLfoIndex);
     auto rateHzID = ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, currentLfoIndex);
 
@@ -1338,6 +1430,9 @@ void LfoPanel::updateRateSlider()
     // We use .getParamID() to get the string from the juce::ParameterID object.
     auto* param = processor.treeState.getParameter(syncModeID);
     jassert(param != nullptr);
+    if (param == nullptr)
+        return;
+
     bool isInSyncMode = param->getValue() > 0.5f;
 
     // First, always destroy the old attachment before creating a new one.
@@ -1377,32 +1472,28 @@ void LfoPanel::updateRateSlider()
     }
 }
 
-void LfoPanel::parameterChanged(const juce::String& parameterID, float newValue)
+void LfoPanel::parameterChanged(const juce::String& parameterID, float /*newValue*/)
 {
-    auto currentSyncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, currentLfoIndex);
-    if (parameterID == currentSyncModeID)
+    // This callback may run on the audio thread. Avoid reading message-thread
+    // UI state here; any sync-mode change can coalesce into one UI refresh.
+    for (int i = 0; i < 4; ++i)
     {
-        triggerAsyncUpdate();
-        return;
+        if (parameterID == syncParameterIDs[static_cast<size_t>(i)])
+        {
+            pendingRateSliderUpdate.store(true, std::memory_order_release);
+            return;
+        }
     }
 
     for (int i = 0; i < 4; ++i)
     {
-        auto smoothParamID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
-        if (parameterID == smoothParamID)
+        if (parameterID == smoothParameterIDs[static_cast<size_t>(i)])
         {
-            // FIX: Correct, thread-safe way to update a member of LfoData
-            // 1. Get a copy of the current data
-            auto lfoDataCopy = processor.getLfoManager().getLfoData()[i];
-            // 2. Modify the copy
-            lfoDataCopy.smoothness = newValue;
-            // 3. Set the data back using the thread-safe method
-            processor.getLfoManager().setLfoData(i, lfoDataCopy);
-
-            // The LfoManager will handle flagging the shape for update.
-            // We still call onDataChanged to mark the preset as dirty.
-            if (onDataChanged)
-                onDataChanged();
+            // APVTS listeners may run on the audio thread. Record a bit only;
+            // copying vectors, taking the LFO-data lock, and notifying UI/state
+            // are all deferred to handleAsyncUpdate on the message thread.
+            pendingSmoothnessUpdates.fetch_or(1u << static_cast<unsigned int>(i),
+                                              std::memory_order_release);
 
             return;
         }
@@ -1499,7 +1590,7 @@ void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 
 void LfoPanel::refreshLfoDisplay()
 {
-    lfoEditor.setDataToDisplay(processor.getLfoManager().getLfoData()[currentLfoIndex]);
+    lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
 }
 
 void LfoEditor::selectAllPoints()
@@ -1536,9 +1627,8 @@ void LfoEditor::pasteShape()
 {
     if (! dataIsActive || lfoClipboard.points.empty())
         return;
-    activeLfoData = lfoClipboard;
-    selectedPointIndices.clear();
-    repaint();
+
+    setDataToDisplay(lfoClipboard);
 }
 
 void LfoEditor::invertShape(bool invertX, bool invertY)
@@ -1587,7 +1677,30 @@ void LfoPanel::handleAsyncUpdate()
 {
     // This function is guaranteed to be called on the main UI thread.
     // It is now safe to update the slider and its attachment here.
-    updateRateSlider();
+    if (pendingRateSliderUpdate.exchange(false, std::memory_order_acquire))
+        updateRateSlider();
+
+    const auto smoothnessUpdates = pendingSmoothnessUpdates.exchange(0, std::memory_order_acquire);
+    bool dataChanged = false;
+    for (int i = 0; i < 4; ++i)
+    {
+        if ((smoothnessUpdates & (1u << static_cast<unsigned int>(i))) == 0)
+            continue;
+
+        const auto& parameterID = smoothParameterIDs[static_cast<size_t>(i)];
+        if (auto* value = processor.treeState.getRawParameterValue(parameterID))
+        {
+            auto lfoData = getLfoDataCopy(i);
+            lfoData.smoothness = value->load(std::memory_order_relaxed);
+            processor.getLfoManager().setLfoData(i, lfoData);
+            if (i == currentLfoIndex)
+                lfoEditor.setSmoothness(lfoData.smoothness);
+            dataChanged = true;
+        }
+    }
+
+    if (dataChanged && onDataChanged)
+        onDataChanged();
 }
 
 void LfoPanel::styleLfoSelectButton(juce::TextButton& button, juce::Colour colour)

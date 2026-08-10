@@ -3,6 +3,7 @@
 #define __DIODE_H_4BF269BF__
 //==============================================================================
 #include "WDF.h"
+#include <cmath>
 //==============================================================================
 /**
  *  reference from https://forum.juce.com/t/wave-digital-filter-wdf-with-juce/11227
@@ -63,7 +64,7 @@
 
 */
 //==============================================================================
-static inline float diodeClipper(juce::Array<float> &input, float Fs,
+static inline float diodeClipper(juce::Array<float> &input, [[maybe_unused]] float sampleRate,
 								 float Vdiode, VoltageSource &Vin, Serie &root, Resistor &R1)
 {
 	/*
@@ -90,8 +91,11 @@ static inline float diodeClipper(juce::Array<float> &input, float Fs,
 	// float Vdiode = 0.0f;
 
 	// for simulation
-	float b, r, Rdiode;
-	juce::Array<float> output;
+	float b = 0.0f;
+	float r = 0.0f;
+	float Rdiode = 0.0f;
+	if (! std::isfinite(Vdiode))
+		Vdiode = 0.0f;
 
 	// the simulation loop
 	int n = 0;
@@ -99,18 +103,27 @@ static inline float diodeClipper(juce::Array<float> &input, float Fs,
 
 	for (; n < max; ++n)
 	{
-		Vin.Vs = input[n] * 13;			 // read the input signal for the voltage source
+		const float inputSample = input.getUnchecked(n);
+		Vin.Vs = (std::isfinite(inputSample) ? inputSample : 0.0f) * 13.0f; // read the input signal for the voltage source
 		b = root.reflected();			 // get the waves up to the root
+		if (! std::isfinite(b))
+			b = 0.0f;
 										 // ** VALVE RESISTOR **
-		Rdiode = Is * exp(-Vt * Vdiode); // the nonlinear resistance of the diode
+		const float exponent = juce::jlimit(-80.0f, 80.0f, -Vt * Vdiode);
+		Rdiode = Is * std::exp(exponent); // the nonlinear resistance of the diode
 		r = (Rdiode - root.R)			 // update scattering coefficient (KCL)
 			/ (Rdiode + root.R);
+		if (! std::isfinite(r))
+			r = 0.0f;
 		root.incident(r * b);	  // evaluate the wave leaving the diode (root element)
 								  // ** UPDATE **
 		Vdiode = root.voltage();  // update the diode voltage for next time sample
-		output.add(R1.voltage()); // the output is the voltage over the resistor R1
+		if (! std::isfinite(Vdiode))
+			Vdiode = 0.0f;
+
+		const float outputSample = R1.voltage();
+		input.set(n, std::isfinite(outputSample) ? outputSample : 0.0f);
 	}
-	input = output;
 	return Vdiode;
 }
 

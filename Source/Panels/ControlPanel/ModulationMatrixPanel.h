@@ -42,7 +42,10 @@ class ModulationMatrixRow : public juce::Component,
 {
 public:
     // The constructor now accepts a callback function to handle its deletion.
-    ModulationMatrixRow(FireAudioProcessor& p, int routingIndex, std::function<void()> onDelete);
+    ModulationMatrixRow(FireAudioProcessor& p,
+                        int routingIndex,
+                        const ModulationRouting& routing,
+                        std::function<void()> onDelete);
     ~ModulationMatrixRow() override;
 
     void resized() override;
@@ -71,7 +74,8 @@ private:
 //  The main panel that holds all the modulation routing rows.
 //
 class ModulationMatrixPanel : public juce::Component,
-                              public juce::Button::Listener
+                              public juce::Button::Listener,
+                              private juce::AsyncUpdater
 {
 public:
     ModulationMatrixPanel(FireAudioProcessor& p);
@@ -82,9 +86,11 @@ public:
 
     // Rebuilds the UI from the processor's data model
     void buildUiFromProcessorState();
+    void requestUiRebuild();
 
 private:
     void buttonClicked(juce::Button* button) override;
+    void handleAsyncUpdate() override;
     FireAudioProcessor& processor;
 
     ModulationMatrixHeader header;

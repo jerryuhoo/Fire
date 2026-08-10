@@ -12,6 +12,7 @@
 #include "../GUI/InterfaceDefines.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
+#include <array>
 #include <vector>
 
 // =============================================================================
@@ -89,15 +90,15 @@ struct DistortionGraphValues
 
 struct ModulatedFilterValues
 {
-    float lowCutFreq;
-    float lowCutGain;
-    float lowCutQ;
-    float highCutFreq;
-    float highCutGain;
-    float highCutQ;
-    float peakFreq;
-    float peakGain;
-    float peakQ;
+    float lowCutFreq { 20.0f };
+    float lowCutGain { 0.0f };
+    float lowCutQ { 1.0f };
+    float highCutFreq { 20000.0f };
+    float highCutGain { 0.0f };
+    float highCutQ { 1.0f };
+    float peakFreq { 1000.0f };
+    float peakGain { 0.0f };
+    float peakQ { 1.0f };
 };
 
 // =============================================================================
@@ -107,7 +108,7 @@ struct ModulatedFilterValues
 namespace ParameterIDAndName
 {
     // Namespace for all raw parameter ID strings.
-    const int versionNum = 1;
+    inline constexpr int versionNum = 1;
 
     // Todo: Replace InterfaceDefines.h
     // const juce::String DRIVE_ID = "drive";
@@ -121,7 +122,7 @@ namespace ParameterIDAndName
      * @param index     The zero-based index of the band or channel.
      * @return juce::String Returns the final string ID (e.g., "drive1").
      */
-    static inline juce::String getIDString(const juce::String& base, int index)
+    inline juce::String getIDString(const juce::String& base, int index)
     {
         return base + juce::String(index + 1);
     }
@@ -131,7 +132,7 @@ namespace ParameterIDAndName
      * @param base      The parameter ID (e.g., HQ_ID).
      * @return juce::String Returns the base string itself.
      */
-    static inline juce::String getIDString(const juce::String& base)
+    inline juce::String getIDString(const juce::String& base)
     {
         return base;
     }
@@ -142,7 +143,7 @@ namespace ParameterIDAndName
      * @param index     The zero-based index of the band or channel.
      * @return juce::String Returns the final display name (e.g., "Drive 1").
      */
-    static inline juce::String getName(const juce::String& base, int index)
+    inline juce::String getName(const juce::String& base, int index)
     {
         return base + " " + juce::String(index + 1);
     }
@@ -155,7 +156,7 @@ namespace ParameterIDAndName
      * @param index     The zero-based index of the band or channel.
      * @return juce::ParameterID Returns the complete ParameterID object (e.g., {"drive1", 1}).
      */
-    static inline juce::ParameterID getID(const juce::String& base, int index)
+    inline juce::ParameterID getID(const juce::String& base, int index)
     {
         return { getIDString(base, index), versionNum };
     }
@@ -165,7 +166,7 @@ namespace ParameterIDAndName
      * @param base      The parameter ID (e.g., HQ_ID).
      * @return juce::ParameterID Returns the complete ParameterID object (e.g., {"hq", 1}).
      */
-    static inline juce::ParameterID getID(const juce::String& base)
+    inline juce::ParameterID getID(const juce::String& base)
     {
         return { base, versionNum };
     }
@@ -180,7 +181,7 @@ namespace ParameterIDAndName
      *
      * @return A constant reference to a vector of juce::String objects.
      */
-    static const std::vector<juce::String>& getModulatableParameterNames()
+    inline const std::vector<juce::String>& getModulatableParameterNames()
     {
         // This static vector is initialized only once, the first time this function is called.
         static const std::vector<juce::String> modulatableNames = {
@@ -206,7 +207,7 @@ namespace ParameterIDAndName
      * including their UI Name and their ID base.
      * This is the single source of truth for the entire application.
      */
-    static const std::vector<ModulatableParameterInfo>& getModulatableParameterInfo()
+    inline const std::vector<ModulatableParameterInfo>& getModulatableParameterInfo()
     {
         // This static vector is initialized only once.
         static const std::vector<ModulatableParameterInfo> parameters = {
@@ -228,7 +229,7 @@ namespace ParameterIDAndName
         return parameters;
     }
 
-    static const std::vector<ModulatableParameterInfo>& getGlobalParameterInfo()
+    inline const std::vector<ModulatableParameterInfo>& getGlobalParameterInfo()
     {
         static const std::vector<ModulatableParameterInfo> params = {
             { LOWCUT_FREQ_NAME, LOWCUT_FREQ_ID },
@@ -258,7 +259,7 @@ namespace ParameterIDAndName
      *
      * @return A vector of ModulationTarget objects.
      */
-    static std::vector<ModulationTarget> getAllModulatableTargets()
+    inline std::vector<ModulationTarget> getAllModulatableTargets()
     {
         std::vector<ModulationTarget> targets;
         const auto& modulatableParams = getModulatableParameterInfo();
@@ -286,7 +287,7 @@ namespace ParameterIDAndName
      * including their UI Name and their ID base.
      * This is the single source of truth for band parameter copying logic.
      */
-    static const std::vector<ModulatableParameterInfo>& getBandParameterInfo()
+    inline const std::vector<ModulatableParameterInfo>& getBandParameterInfo()
     {
         // This static vector is initialized only once.
         static const std::vector<ModulatableParameterInfo> params = {

@@ -10,21 +10,145 @@
 #include "PluginProcessor.h"
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
+#include <limits>
 
-static void applyGain(juce::AudioBuffer<float>& buffer, const ModulatedValueProvider& gainProvider)
+namespace
 {
-    // If the gain is not modulated, we can use the efficient block-based JUCE gain processor.
+struct FilterFrequencyRange
+{
+    float minimum;
+    float maximum;
+};
+
+FilterFrequencyRange getSafeFilterFrequencyRange(double sampleRate) noexcept
+{
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : 48000.0;
+    const float nyquist = static_cast<float>(safeSampleRate * 0.5);
+    const float maximum = std::nextafter(nyquist, 0.0f);
+    return { juce::jmin(20.0f, maximum), maximum };
+}
+
+Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
+{
+    const int value = parameter != nullptr ? juce::roundToInt(parameter->load(std::memory_order_relaxed)) : 0;
+    return static_cast<Slope>(juce::jlimit(static_cast<int>(Slope_12),
+                                           static_cast<int>(Slope_48),
+                                           value));
+}
+
+// A few hosts occasionally exceed the block-size hint passed to prepareToPlay.
+// Reserving a practical safety capacity keeps JUCE mixers/oversamplers inside
+// their prepared bounds without allocating on the audio thread.
+constexpr int minimumProcessingBlockCapacity = 8192;
+
+template <typename FloatType>
+bool sameCachedValue(FloatType lhs, FloatType rhs) noexcept
+{
+    const auto scale = juce::jmax(static_cast<FloatType>(1),
+                                  juce::jmax(std::abs(lhs), std::abs(rhs)));
+    return std::abs(lhs - rhs) <= std::numeric_limits<FloatType>::epsilon() * scale;
+}
+
+bool sameFilterSettings(const ChainSettings& lhs, const ChainSettings& rhs) noexcept
+{
+    return sameCachedValue(lhs.peakFreq, rhs.peakFreq)
+        && sameCachedValue(lhs.peakGainInDecibels, rhs.peakGainInDecibels)
+        && sameCachedValue(lhs.peakQuality, rhs.peakQuality)
+        && sameCachedValue(lhs.lowCutFreq, rhs.lowCutFreq)
+        && sameCachedValue(lhs.highCutFreq, rhs.highCutFreq)
+        && sameCachedValue(lhs.lowCutQuality, rhs.lowCutQuality)
+        && sameCachedValue(lhs.highCutQuality, rhs.highCutQuality)
+        && sameCachedValue(lhs.lowCutGainInDecibels, rhs.lowCutGainInDecibels)
+        && sameCachedValue(lhs.highCutGainInDecibels, rhs.highCutGainInDecibels)
+        && lhs.lowCutSlope == rhs.lowCutSlope
+        && lhs.highCutSlope == rhs.highCutSlope
+        && lhs.lowCutBypassed == rhs.lowCutBypassed
+        && lhs.peakBypassed == rhs.peakBypassed
+        && lhs.highCutBypassed == rhs.highCutBypassed;
+}
+
+using BiquadCoefficients = std::array<float, 6>;
+
+void assignCutStage(CutFilter& chain,
+                    int stage,
+                    const BiquadCoefficients& coefficients) noexcept
+{
+    switch (stage)
+    {
+        case 0: *chain.get<0>().coefficients = coefficients; break;
+        case 1: *chain.get<1>().coefficients = coefficients; break;
+        case 2: *chain.get<2>().coefficients = coefficients; break;
+        case 3: *chain.get<3>().coefficients = coefficients; break;
+        default: jassertfalse; break;
+    }
+}
+
+void setCutStageBypassed(CutFilter& chain, int stageCount) noexcept
+{
+    chain.setBypassed<0>(stageCount < 1);
+    chain.setBypassed<1>(stageCount < 2);
+    chain.setBypassed<2>(stageCount < 3);
+    chain.setBypassed<3>(stageCount < 4);
+}
+
+void updateButterworthCutFilter(CutFilter& chain,
+                                float frequency,
+                                double sampleRate,
+                                Slope slope,
+                                bool highPass) noexcept
+{
+    const int stageCount = juce::jlimit(1, 4, static_cast<int>(slope) + 1);
+    const int order = stageCount * 2;
+    constexpr BiquadCoefficients identityBiquad { 1.0f, 0.0f, 0.0f,
+                                                   1.0f, 0.0f, 0.0f };
+
+    for (int stage = 0; stage < 4; ++stage)
+    {
+        if (stage >= stageCount)
+        {
+            // Keep even bypassed stages second-order. Otherwise a later slope
+            // increase changes JUCE IIR::Filter's order from one to two and
+            // makes its internal state allocate/reset on the audio thread.
+            assignCutStage(chain, stage, identityBiquad);
+            continue;
+        }
+
+        // This is the same Q sequence used by JUCE's high-order Butterworth
+        // designer, but it writes into the filters' existing coefficient
+        // storage instead of allocating ReferenceCountedObjects per block.
+        const auto angle = (2.0 * static_cast<double>(stage) + 1.0)
+                         * juce::MathConstants<double>::pi
+                         / (2.0 * static_cast<double>(order));
+        const float q = static_cast<float>(1.0 / (2.0 * std::cos(angle)));
+        const auto coefficients = highPass
+                                      ? juce::dsp::IIR::ArrayCoefficients<float>::makeHighPass(sampleRate,
+                                                                                                frequency,
+                                                                                                q)
+                                      : juce::dsp::IIR::ArrayCoefficients<float>::makeLowPass(sampleRate,
+                                                                                               frequency,
+                                                                                               q);
+        assignCutStage(chain, stage, coefficients);
+    }
+
+    setCutStageBypassed(chain, stageCount);
+}
+} // namespace
+
+static void applyGain(juce::AudioBuffer<float>& buffer,
+                      const ModulatedValueProvider& gainProvider,
+                      juce::dsp::Gain<float>& gain)
+{
     if (gainProvider.lfoSignal == nullptr)
     {
-        juce::dsp::Gain<float> gain;
         gain.setGainDecibels(gainProvider.baseValue);
-        gain.setRampDurationSeconds(0.05f); // Apply smoothing for manual changes
 
         auto block = juce::dsp::AudioBlock<float>(buffer);
         auto context = juce::dsp::ProcessContextReplacing<float>(block);
         gain.process(context);
     }
-    else // If gain is modulated, we must apply it sample-by-sample.
+    else
     {
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
@@ -36,7 +160,37 @@ static void applyGain(juce::AudioBuffer<float>& buffer, const ModulatedValueProv
                 channelData[sample] *= juce::Decibels::decibelsToGain(gainDb);
             }
         }
+
+        // Synchronise the block gain with the last value that was actually
+        // applied. If modulation is disabled on the next block, smoothing then
+        // starts from the audible value rather than from stale internal state.
+        const float lastGainDb = gainProvider.get(buffer.getNumSamples() - 1);
+        gain.setRampDurationSeconds(0.0);
+        gain.setGainDecibels(lastGainDb);
+        gain.setRampDurationSeconds(0.05);
     }
+}
+
+template <typename ValueType>
+static bool pushToFifo(juce::AbstractFifo& fifo,
+                       std::vector<ValueType>& storage,
+                       const ValueType& value)
+{
+    int start1 = 0;
+    int size1 = 0;
+    int start2 = 0;
+    int size2 = 0;
+    fifo.prepareToWrite(1, start1, size1, start2, size2);
+
+    if (size1 > 0)
+        storage[static_cast<size_t>(start1)] = value;
+    else if (size2 > 0)
+        storage[static_cast<size_t>(start2)] = value;
+    else
+        return false;
+
+    fifo.finishedWrite(1);
+    return true;
 }
 
 //==============================================================================
@@ -48,6 +202,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
+    gain.setRampDurationSeconds(0.05);
     gain.prepare(spec);
     juce::dsp::ProcessSpec mixerSpec = spec;
     mixerSpec.maximumBlockSize = spec.maximumBlockSize * 4 + 64;
@@ -64,6 +219,11 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
     oversampling->initProcessing(spec.maximumBlockSize);
 
+    const auto numChannels = static_cast<int>(spec.numChannels);
+    const auto maximumBlockSize = static_cast<int>(spec.maximumBlockSize);
+    dryBuffer.setSize(numChannels, maximumBlockSize);
+    upsampledLfoOutputs.setSize(4, maximumBlockSize * 4);
+
     // Reset all smoothed values with the current sample rate and a ramp time.
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
@@ -74,6 +234,10 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 void BandProcessor::reset()
 {
     isFirstBlock = true;
+    dryWetMixerPrimed = false;
+    shapeMixerPrimed = false;
+    compressorMixerPrimed = false;
+    widthMixerPrimed = false;
     compressor.reset();
     gain.reset();
     dryWetMixer.reset();
@@ -94,27 +258,51 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
                             const BandProcessingParameters& params,
                             const juce::AudioBuffer<float>& lfoOutputs)
 {
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+        return;
+
     // 1. Preparation
     const float mixVal = params.mixVal;
-    juce::AudioBuffer<float> dryBuffer;
-    dryBuffer.makeCopyOf(buffer);
+    dryBuffer.makeCopyOf(buffer, true);
     auto block = juce::dsp::AudioBlock<float>(buffer);
     auto paramsForProcessing = params; // Create a mutable copy
+    const bool useHQ = params.isHQ && oversampling != nullptr;
+    paramsForProcessing.isHQ = useHQ;
+
+    dryWetMixer.setWetLatency(useHQ ? oversampling->getLatencyInSamples() : 0.0f);
+    dryWetMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f, mixVal));
+    if (! dryWetMixerPrimed)
+        dryWetMixer.reset();
+    dryWetMixerPrimed = true;
+    dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
 
     // 2. Core Distortion Processing
-    if (params.isHQ)
+    if (useHQ)
     {
         auto oversampledBlock = oversampling->processSamplesUp(block);
 
         // --- LFO Upsampling ---
-        juce::AudioBuffer<float> upsampledLfoOutputs(lfoOutputs.getNumChannels(), oversampledBlock.getNumSamples());
-        if (lfoOutputs.getNumSamples() > 1 && upsampledLfoOutputs.getNumSamples() > 1)
+        upsampledLfoOutputs.setSize(lfoOutputs.getNumChannels(),
+                                    static_cast<int>(oversampledBlock.getNumSamples()),
+                                    false,
+                                    false,
+                                    true);
+        upsampledLfoOutputs.clear();
+        if (lfoOutputs.getNumSamples() > 0 && upsampledLfoOutputs.getNumSamples() > 0)
         {
             for (int channel = 0; channel < lfoOutputs.getNumChannels(); ++channel)
             {
                 auto* dest = upsampledLfoOutputs.getWritePointer(channel);
                 const auto* src = lfoOutputs.getReadPointer(channel);
-                const float step = (float) (lfoOutputs.getNumSamples() - 1) / (float) (upsampledLfoOutputs.getNumSamples() - 1);
+
+                if (lfoOutputs.getNumSamples() == 1 || upsampledLfoOutputs.getNumSamples() == 1)
+                {
+                    juce::FloatVectorOperations::fill(dest, src[0], upsampledLfoOutputs.getNumSamples());
+                    continue;
+                }
+
+                const float step = static_cast<float>(lfoOutputs.getNumSamples() - 1)
+                                   / static_cast<float>(upsampledLfoOutputs.getNumSamples() - 1);
                 for (int i = 0; i < upsampledLfoOutputs.getNumSamples(); ++i)
                 {
                     const float sourcePos = (float) i * step;
@@ -127,28 +315,38 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         }
 
         // Bind the upsampled LFO signals to the providers
-        if (params.driveLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.driveLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
             paramsForProcessing.driveVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.driveLfoSourceIndex);
-        if (params.biasLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.biasLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
             paramsForProcessing.biasVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.biasLfoSourceIndex);
-        if (params.recLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.recLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
             paramsForProcessing.recVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.recLfoSourceIndex);
-        if (params.outputLfoSourceIndex != -1)
-            paramsForProcessing.outputVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.outputLfoSourceIndex);
+        // Output gain runs after downsampling, so it must use the original-rate
+        // LFO. Using the oversampled signal here consumed only its first quarter.
+        if (juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
+            paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex);
 
         processDistortion(oversampledBlock, dryBuffer, paramsForProcessing);
         oversampling->processSamplesDown(block);
+
+        // The DC filter is designed at the base sample rate. Running it on the
+        // 4x block moved its effective cutoff to 4x the selected frequency.
+        if (params.isDcFilterEnabled)
+        {
+            auto dcContext = juce::dsp::ProcessContextReplacing<float>(block);
+            dcFilter.process(dcContext);
+        }
     }
     else
     {
         // Bind the original LFO signals to the providers
-        if (params.driveLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.driveLfoSourceIndex, lfoOutputs.getNumChannels()))
             paramsForProcessing.driveVal.lfoSignal = lfoOutputs.getReadPointer(params.driveLfoSourceIndex);
-        if (params.biasLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.biasLfoSourceIndex, lfoOutputs.getNumChannels()))
             paramsForProcessing.biasVal.lfoSignal = lfoOutputs.getReadPointer(params.biasLfoSourceIndex);
-        if (params.recLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.recLfoSourceIndex, lfoOutputs.getNumChannels()))
             paramsForProcessing.recVal.lfoSignal = lfoOutputs.getReadPointer(params.recLfoSourceIndex);
-        if (params.outputLfoSourceIndex != -1)
+        if (juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
             paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex);
 
         processDistortion(block, dryBuffer, paramsForProcessing);
@@ -160,6 +358,9 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     if (params.isCompEnabled)
     {
         compressorMixer.setWetMixProportion(params.compMixVal);
+        if (! compressorMixerPrimed)
+            compressorMixer.reset();
+        compressorMixerPrimed = true;
         compressorMixer.pushDrySamples(postDistortionContext.getOutputBlock());
         this->compressor.setThreshold(params.compThreshold);
         this->compressor.setRatio(params.compRatio);
@@ -171,6 +372,9 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     if (params.isWidthEnabled && buffer.getNumChannels() == 2)
     {
         widthMixer.setWetMixProportion(params.widthMixVal);
+        if (! widthMixerPrimed)
+            widthMixer.reset();
+        widthMixerPrimed = true;
         widthMixer.pushDrySamples(postDistortionContext.getOutputBlock());
         this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, params.pan, buffer.getNumSamples());
         widthMixer.mixWetSamples(postDistortionContext.getOutputBlock());
@@ -178,22 +382,29 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
 
     // 4. Post-Distortion Effects
     // Per-sample Output Gain
-    applyGain(buffer, paramsForProcessing.outputVal);
+    applyGain(buffer, paramsForProcessing.outputVal, gain);
 
-    // 5. Final Dry/Wet Mix
-    if (params.isHQ)
-        dryWetMixer.setWetLatency(oversampling->getLatencyInSamples());
-    else
-        dryWetMixer.setWetLatency(0.0f);
+    // 5. Final Dry/Wet Mix. Always run the mixer so its dry delay remains
+    // primed and HQ mix=0 stays aligned with wet/other-band paths.
+    dryWetMixer.mixWetSamples(block);
+}
 
-    if (mixVal <= 0.0f)
-        buffer.makeCopyOf(dryBuffer);
-    else if (mixVal < 1.0f)
-    {
-        dryWetMixer.setWetMixProportion(mixVal);
-        dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
-        dryWetMixer.mixWetSamples(block);
-    }
+void BandProcessor::processBypassed(juce::AudioBuffer<float>& buffer, bool useHQ)
+{
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+        return;
+
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    const float latency = useHQ && oversampling != nullptr
+                              ? oversampling->getLatencyInSamples()
+                              : 0.0f;
+    dryWetMixer.setWetLatency(latency);
+    dryWetMixer.setWetMixProportion(0.0f);
+    if (! dryWetMixerPrimed)
+        dryWetMixer.reset();
+    dryWetMixerPrimed = true;
+    dryWetMixer.pushDrySamples(block);
+    dryWetMixer.mixWetSamples(block);
 }
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
@@ -207,13 +418,17 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
     // Now, push this correctly-sized dry block into the mixer.
     shapeMixer.setWetMixProportion(params.shapeMixVal);
+    if (! shapeMixerPrimed)
+        shapeMixer.reset();
+    shapeMixerPrimed = true;
     shapeMixer.pushDrySamples(dryBlockForShapeMixer);
 
     const int numSamples = (int) blockToProcess.getNumSamples();
     const int numChannels = (int) blockToProcess.getNumChannels();
 
     // Note: mSampleMaxValue is still calculated from the original-sized dryBuffer, which is correct.
-    this->mSampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
+    const float sampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
+    mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
     auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(params.mode);
 
     // The providers are now correctly prepared with LFO signals (if any)
@@ -254,8 +469,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             const float initialDriveForCalc = initialDrive * 6.5f / 100.0f;
             float initialPowerDrive = std::pow(2.0f, initialDriveForCalc);
 
-            if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * initialPowerDrive > 2.0f)
-                initialFinalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * initialDriveForCalc;
+            if (params.isSafeModeOn && sampleMaxValue > 0.0001f && sampleMaxValue * initialPowerDrive > 2.0f)
+                initialFinalDriveGain = 2.0f / sampleMaxValue + 0.1f * initialDriveForCalc;
             else
                 initialFinalDriveGain = initialPowerDrive;
         }
@@ -292,8 +507,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         else
         {
             // Otherwise, use the existing Safe Mode logic.
-            if (params.isSafeModeOn && this->mSampleMaxValue > 0.0001f && this->mSampleMaxValue * powerDrive > 2.0f)
-                finalDriveGain = 2.0f / this->mSampleMaxValue + 0.1f * driveForCalc;
+            if (params.isSafeModeOn && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f)
+                finalDriveGain = 2.0f / sampleMaxValue + 0.1f * driveForCalc;
             else
                 finalDriveGain = powerDrive;
         }
@@ -305,19 +520,31 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         biasSmoother.setTargetValue(currentBias);
         recSmoother.setTargetValue(currentRec);
 
-        // 4. Get the NEXT smoothed value from the smoother and use it for processing.
-        currentState.drive = driveSmoother.getNextValue();
-        currentState.bias = biasSmoother.getNextValue();
-        currentState.rec = recSmoother.getNextValue();
+        // In HQ mode the block contains 4x as many samples, while these
+        // smoothers were prepared at the base sample rate. Advance them once
+        // per base-rate sample so their time constants do not become 4x faster.
+        const int smoothingStride = params.isHQ ? (1 << oversampleFactor) : 1;
+        if ((sample % smoothingStride) == 0)
+        {
+            currentState.drive = driveSmoother.getNextValue();
+            currentState.bias = biasSmoother.getNextValue();
+            currentState.rec = recSmoother.getNextValue();
+        }
+        else
+        {
+            currentState.drive = driveSmoother.getCurrentValue();
+            currentState.bias = biasSmoother.getCurrentValue();
+            currentState.rec = recSmoother.getCurrentValue();
+        }
 
         // Update reduction meter (can be done once per block)
         if (sample == 0)
         {
-            if (driveForCalc == 0.0f || this->mSampleMaxValue <= 0.001f)
-                this->mReductionPercent = 1.0f;
+            if (driveForCalc == 0.0f || sampleMaxValue <= 0.001f)
+                mReductionPercent.store(1.0f, std::memory_order_relaxed);
             else
                 // Use the smoothed value for a more stable meter reading
-                this->mReductionPercent = std::log2(currentState.drive) / driveForCalc;
+                mReductionPercent.store(std::log2(currentState.drive) / driveForCalc, std::memory_order_relaxed);
         }
 
         // 5. Apply audio processing using the correctly smoothed values
@@ -338,11 +565,163 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
     shapeMixer.mixWetSamples(blockToProcess);
 
-    if (params.isDcFilterEnabled)
+    if (params.isDcFilterEnabled && ! params.isHQ)
     {
         auto dcContext = juce::dsp::ProcessContextReplacing<float>(blockToProcess);
         dcFilter.process(dcContext);
     }
+}
+
+//==============================================================================
+FireAudioProcessor::CachedParameter FireAudioProcessor::cacheParameter(const juce::String& parameterID)
+{
+    return { treeState.getRawParameterValue(parameterID),
+             treeState.getParameter(parameterID) };
+}
+
+float FireAudioProcessor::loadCachedParameter(const CachedParameter& parameter, float fallback) noexcept
+{
+    if (parameter.raw == nullptr)
+        return fallback;
+
+    const float value = parameter.raw->load(std::memory_order_relaxed);
+    return std::isfinite(value) ? value : fallback;
+}
+
+float FireAudioProcessor::getBlockModulatedValue(const CachedParameter& parameter,
+                                                 const juce::AudioBuffer<float>& lfoOutputs) const noexcept
+{
+    const float defaultValue = parameter.ranged != nullptr
+                                   ? parameter.ranged->convertFrom0to1(parameter.ranged->getDefaultValue())
+                                   : 0.0f;
+    const float baseValue = loadCachedParameter(parameter, defaultValue);
+    if (parameter.ranged == nullptr)
+        return baseValue;
+
+    LfoManager::AudioThreadRoutingInfo routingInfo;
+    if (! lfoManager->getAudioThreadRoutingInfo(parameter.ranged, routingInfo)
+        || ! juce::isPositiveAndBelow(routingInfo.sourceLfoIndex, lfoOutputs.getNumChannels())
+        || lfoOutputs.getNumSamples() <= 0)
+        return baseValue;
+
+    float lfoValue = lfoOutputs.getSample(routingInfo.sourceLfoIndex, 0);
+    if (! std::isfinite(lfoValue))
+        return baseValue;
+
+    const float rawNormalisedBase = parameter.ranged->getValue();
+    const float normalisedBase = std::isfinite(rawNormalisedBase)
+                                     ? juce::jlimit(0.0f, 1.0f, rawNormalisedBase)
+                                     : parameter.ranged->getDefaultValue();
+
+    float effectiveDepth = routingInfo.depth;
+    if (routingInfo.isBipolar)
+    {
+        lfoValue = lfoValue * 2.0f - 1.0f;
+        effectiveDepth *= 0.5f;
+    }
+
+    const float normalisedValue = juce::jlimit(0.0f, 1.0f,
+                                               normalisedBase + lfoValue * effectiveDepth);
+    const float value = parameter.ranged->convertFrom0to1(normalisedValue);
+    return std::isfinite(value) ? value : baseValue;
+}
+
+ChainSettings FireAudioProcessor::getCachedChainSettings(const juce::AudioBuffer<float>* lfoOutputs) const noexcept
+{
+    const auto getValue = [this, lfoOutputs](const CachedParameter& parameter)
+    {
+        return lfoOutputs != nullptr
+                   ? getBlockModulatedValue(parameter, *lfoOutputs)
+                   : loadCachedParameter(parameter);
+    };
+
+    ChainSettings settings;
+    settings.lowCutFreq = getValue(filterParameterCache.lowCutFrequency);
+    settings.lowCutGainInDecibels = getValue(filterParameterCache.lowCutGain);
+    settings.lowCutQuality = getValue(filterParameterCache.lowCutQuality);
+    settings.lowCutSlope = getSlopeParameterValue(filterParameterCache.lowCutSlope.raw);
+    settings.lowCutBypassed = loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f;
+
+    settings.peakFreq = getValue(filterParameterCache.peakFrequency);
+    settings.peakGainInDecibels = getValue(filterParameterCache.peakGain);
+    settings.peakQuality = getValue(filterParameterCache.peakQuality);
+    settings.peakBypassed = loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f;
+
+    settings.highCutFreq = getValue(filterParameterCache.highCutFrequency);
+    settings.highCutGainInDecibels = getValue(filterParameterCache.highCutGain);
+    settings.highCutQuality = getValue(filterParameterCache.highCutQuality);
+    settings.highCutSlope = getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
+    settings.highCutBypassed = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
+    return settings;
+}
+
+void FireAudioProcessor::initialiseParameterCache()
+{
+    const auto indexed = [this](const juce::String& base, int index)
+    {
+        return cacheParameter(ParameterIDAndName::getIDString(base, index));
+    };
+
+    for (int i = 0; i < static_cast<int>(bandParameterCache.size()); ++i)
+    {
+        auto& parameters = bandParameterCache[static_cast<size_t>(i)];
+        parameters.enabled = indexed(BAND_ENABLE_ID, i);
+        parameters.solo = indexed(BAND_SOLO_ID, i);
+        parameters.mode = indexed(MODE_ID, i);
+        parameters.linked = indexed(LINKED_ID, i);
+        parameters.safe = indexed(SAFE_ID, i);
+        parameters.extreme = indexed(EXTREME_ID, i);
+        parameters.driveEnabled = indexed(DRIVE_BYPASS_ID, i);
+        parameters.shapeEnabled = indexed(SHAPE_BYPASS_ID, i);
+        parameters.compressorEnabled = indexed(COMP_BYPASS_ID, i);
+        parameters.widthEnabled = indexed(WIDTH_BYPASS_ID, i);
+        parameters.dcFilterEnabled = indexed(DC_FILTER_ID, i);
+        parameters.drive = indexed(DRIVE_ID, i);
+        parameters.bias = indexed(BIAS_ID, i);
+        parameters.rec = indexed(REC_ID, i);
+        parameters.output = indexed(OUTPUT_ID, i);
+        parameters.compressorRatio = indexed(COMP_RATIO_ID, i);
+        parameters.compressorThreshold = indexed(COMP_THRESH_ID, i);
+        parameters.compressorAttack = indexed(COMP_ATTACK_ID, i);
+        parameters.compressorRelease = indexed(COMP_RELEASE_ID, i);
+        parameters.compressorMix = indexed(COMP_MIX_ID, i);
+        parameters.width = indexed(WIDTH_ID, i);
+        parameters.pan = indexed(PAN_ID, i);
+        parameters.widthMix = indexed(WIDTH_MIX_ID, i);
+        parameters.mix = indexed(MIX_ID, i);
+        parameters.shapeMix = indexed(SHAPE_MIX_ID, i);
+
+        lfoSmoothParameters[static_cast<size_t>(i)] = indexed(LFO_SMOOTH_ID, i).raw;
+    }
+
+    for (int i = 0; i < static_cast<int>(crossoverFrequencyParameters.size()); ++i)
+        crossoverFrequencyParameters[static_cast<size_t>(i)] = indexed(FREQ_ID, i);
+
+    numBandsParameter = cacheParameter(NUM_BANDS_ID);
+    hqParameter = cacheParameter(HQ_ID);
+    globalOutputParameter = cacheParameter(OUTPUT_ID);
+    globalMixParameter = cacheParameter(MIX_ID);
+    filterEnabledParameter = cacheParameter(FILTER_BYPASS_ID);
+    downsampleEnabledParameter = cacheParameter(DOWNSAMPLE_BYPASS_ID);
+    downsampleRateParameter = cacheParameter(DOWNSAMPLE_ID);
+    bitDepthParameter = cacheParameter(BIT_DEPTH_ID);
+    jitterParameter = cacheParameter(JITTER_ID);
+    downsampleMixParameter = cacheParameter(DOWNSAMPLE_MIX_ID);
+
+    filterParameterCache.lowCutFrequency = cacheParameter(LOWCUT_FREQ_ID);
+    filterParameterCache.lowCutGain = cacheParameter(LOWCUT_GAIN_ID);
+    filterParameterCache.lowCutQuality = cacheParameter(LOWCUT_Q_ID);
+    filterParameterCache.lowCutSlope = cacheParameter(LOWCUT_SLOPE_ID);
+    filterParameterCache.lowCutBypassed = cacheParameter(LOWCUT_BYPASSED_ID);
+    filterParameterCache.peakFrequency = cacheParameter(PEAK_FREQ_ID);
+    filterParameterCache.peakGain = cacheParameter(PEAK_GAIN_ID);
+    filterParameterCache.peakQuality = cacheParameter(PEAK_Q_ID);
+    filterParameterCache.peakBypassed = cacheParameter(PEAK_BYPASSED_ID);
+    filterParameterCache.highCutFrequency = cacheParameter(HIGHCUT_FREQ_ID);
+    filterParameterCache.highCutGain = cacheParameter(HIGHCUT_GAIN_ID);
+    filterParameterCache.highCutQuality = cacheParameter(HIGHCUT_Q_ID);
+    filterParameterCache.highCutSlope = cacheParameter(HIGHCUT_SLOPE_ID);
+    filterParameterCache.highCutBypassed = cacheParameter(HIGHCUT_BYPASSED_ID);
 }
 
 //==============================================================================
@@ -374,26 +753,9 @@ FireAudioProcessor::FireAudioProcessor()
           "Wings/Fire"
       } // AppData/Roaming/...
 #endif
-      ,
-      VinL(500.f, 0.f) // VinL(0.f, 500.f)
-      ,
-      VinR(500.f, 0.f),
-      R1L(80.0f),
-      R1R(80.0f),
-      C1L(3.5e-5, getSampleRate()),
-      C1R(3.5e-5, getSampleRate()),
-      RCL(&R1L, &C1L),
-      RCR(&R1R, &C1R),
-      rootL(&VinL, &RCL),
-      rootR(&VinR, &RCR)
-
 #endif
 {
-    // factor = 2 means 2^2 = 4, 4x oversampling
-    for (size_t i = 0; i < 4; i++)
-    {
-        oversamplingHQ[i] = std::make_unique<juce::dsp::Oversampling<float>>(getTotalNumInputChannels(), oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
-    }
+    initialiseParameterCache();
 
     // Initialize the band processors in a loop.
     for (int i = 0; i < 4; ++i)
@@ -418,20 +780,13 @@ FireAudioProcessor::FireAudioProcessor()
     appProperties = std::make_unique<juce::PropertiesFile>(options);
 
     // Initialize all 9 smoothers with default parameter values
-    auto chainSettings = getChainSettings(treeState);
+    auto chainSettings = getCachedChainSettings(nullptr);
 
-    const auto sampleRate = getSampleRate(); // Get the current sample rate
-    const float minFreq = 20.0f;
-    float maxFreq = sampleRate / 2.0f;
+    const auto frequencyRange = getSafeFilterFrequencyRange(getSampleRate());
 
-    if (maxFreq < minFreq)
-    {
-        maxFreq = minFreq;
-    }
-
-    chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
-    chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
-    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
+    chainSettings.lowCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.lowCutFreq);
+    chainSettings.peakFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.highCutFreq);
 
     lowcutFreqSmoother.setCurrentAndTargetValue(chainSettings.lowCutFreq);
     lowcutGainSmoother.setCurrentAndTargetValue(chainSettings.lowCutGainInDecibels);
@@ -444,10 +799,12 @@ FireAudioProcessor::FireAudioProcessor()
     highcutFreqSmoother.setCurrentAndTargetValue(chainSettings.highCutFreq);
     highcutGainSmoother.setCurrentAndTargetValue(chainSettings.highCutGainInDecibels);
     highcutQualitySmoother.setCurrentAndTargetValue(chainSettings.highCutQuality);
+    startTimerHz(30);
 }
 
 FireAudioProcessor::~FireAudioProcessor()
 {
+    stopTimer();
 }
 
 //==============================================================================
@@ -501,122 +858,121 @@ int FireAudioProcessor::getCurrentProgram()
 
 void FireAudioProcessor::setCurrentProgram(int index)
 {
+    juce::ignoreUnused(index);
 }
 
 const juce::String FireAudioProcessor::getProgramName(int index)
 {
+    juce::ignoreUnused(index);
     return {};
 }
 
 void FireAudioProcessor::changeProgramName(int index, const juce::String& newName)
 {
+    juce::ignoreUnused(index, newName);
 }
 
 //==============================================================================
 void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    auto channels = static_cast<juce::uint32>(juce::jmin(getMainBusNumInputChannels(), getMainBusNumOutputChannels()));
-    juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32>(samplesPerBlock), channels };
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : 48000.0;
+    const int maximumBlockSize = juce::jmax(minimumProcessingBlockCapacity,
+                                             juce::jmax(1, samplesPerBlock));
+    const int outputChannels = juce::jmax(1, getMainBusNumOutputChannels());
+    juce::dsp::ProcessSpec spec { safeSampleRate,
+                                  static_cast<juce::uint32>(maximumBlockSize),
+                                  static_cast<juce::uint32>(outputChannels) };
+
+    globalFilterCacheValid = false;
 
     for (int i = 0; i < 4; ++i)
     {
         if (auto* band = bands[i].get())
         {
-            // Call the newly simplified prepare method
+            const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
             band->prepare(spec);
+            band->recSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.rec));
+            band->biasSmoother.setCurrentAndTargetValue(loadCachedParameter(parameters.bias));
 
-            // ** THIS IS THE CRUCIAL ADDITION **
-            // Initialize smoothed values here, from the treeState
-            // TODO: need to use new drive logic instead of ParameterID::driveIds[i])
-            // band->newDriveSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-            band->recSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(REC_ID, i)));
-            band->biasSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BIAS_ID, i)));
+            const float initialOutput = loadCachedParameter(parameters.linked) > 0.5f
+                                            ? -0.1f * loadCachedParameter(parameters.drive)
+                                            : loadCachedParameter(parameters.output);
+            band->gain.setRampDurationSeconds(0.0);
+            band->gain.setGainDecibels(initialOutput);
+            band->gain.setRampDurationSeconds(0.05);
         }
     }
 
+    float hqLatency = 0.0f;
+    if (! bands.empty() && bands.front() != nullptr && bands.front()->oversampling != nullptr)
+        hqLatency = bands.front()->oversampling->getLatencyInSamples();
+    preparedHqLatency.store(hqLatency, std::memory_order_release);
+
     lfoManager->prepare(spec);
 
-    // historyArray init
-    for (int i = 0; i < samplesPerBlock; i++)
+    for (int i = 0; i < historyLength; ++i)
     {
-        historyArrayL.add(0);
-        historyArrayR.add(0);
+        historyArrayL[static_cast<size_t>(i)].store(0.0f, std::memory_order_relaxed);
+        historyArrayR[static_cast<size_t>(i)].store(0.0f, std::memory_order_relaxed);
     }
+    historyWritePosition.store(0, std::memory_order_relaxed);
+    historySamplesAvailable.store(historyLength, std::memory_order_release);
 
-    // dry wet buffer init
-    //    mDryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
-    //    mDryBuffer.clear();
-    delayMatchedDryBuffer.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    delayMatchedDryBuffer.setSize(outputChannels, maximumBlockSize);
     delayMatchedDryBuffer.clear();
 
-    mWetBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    mWetBuffer.setSize(outputChannels, maximumBlockSize);
     mWetBuffer.clear();
-
-    // oversampling init
-    for (size_t i = 0; i < 4; i++)
-    {
-        oversamplingHQ[i]->reset();
-        oversamplingHQ[i]->initProcessing(static_cast<size_t>(samplesPerBlock));
-    }
-    mDelay.reset(0);
+    lfoOutputBuffer.setSize(4, maximumBlockSize);
+    lfoOutputBuffer.clear();
+    lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
+    lofiDryBuffer.clear();
 
     const float rampTimeSeconds = 0.0005f;
 
-    lowcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
-    lowcutFreqSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(LOWCUT_FREQ_ID));
-    lowcutGainSmoother.reset(sampleRate, rampTimeSeconds);
-    lowcutGainSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(LOWCUT_GAIN_ID));
-    lowcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
-    lowcutQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(LOWCUT_Q_ID));
+    lowcutFreqSmoother.reset(safeSampleRate, rampTimeSeconds);
+    lowcutFreqSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.lowCutFrequency));
+    lowcutGainSmoother.reset(safeSampleRate, rampTimeSeconds);
+    lowcutGainSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.lowCutGain));
+    lowcutQualitySmoother.reset(safeSampleRate, rampTimeSeconds);
+    lowcutQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.lowCutQuality));
 
-    peakFreqSmoother.reset(sampleRate, rampTimeSeconds);
-    peakFreqSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(PEAK_FREQ_ID));
-    peakGainSmoother.reset(sampleRate, rampTimeSeconds);
-    peakGainSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(PEAK_GAIN_ID));
-    peakQualitySmoother.reset(sampleRate, rampTimeSeconds);
-    peakQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(PEAK_Q_ID));
+    peakFreqSmoother.reset(safeSampleRate, rampTimeSeconds);
+    peakFreqSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.peakFrequency));
+    peakGainSmoother.reset(safeSampleRate, rampTimeSeconds);
+    peakGainSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.peakGain));
+    peakQualitySmoother.reset(safeSampleRate, rampTimeSeconds);
+    peakQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.peakQuality));
 
-    highcutFreqSmoother.reset(sampleRate, rampTimeSeconds);
-    highcutFreqSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_FREQ_ID));
-    highcutGainSmoother.reset(sampleRate, rampTimeSeconds);
-    highcutGainSmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_GAIN_ID));
-    highcutQualitySmoother.reset(sampleRate, rampTimeSeconds);
-    highcutQualitySmoother.setCurrentAndTargetValue(*treeState.getRawParameterValue(HIGHCUT_Q_ID));
+    highcutFreqSmoother.reset(safeSampleRate, rampTimeSeconds);
+    highcutFreqSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutFrequency));
+    highcutGainSmoother.reset(safeSampleRate, rampTimeSeconds);
+    highcutGainSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutGain));
+    highcutQualitySmoother.reset(safeSampleRate, rampTimeSeconds);
+    highcutQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutQuality));
 
-    smoothedFreq1.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq1.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 0)));
-    smoothedFreq2.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq2.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 1)));
-    smoothedFreq3.reset(sampleRate, rampTimeSeconds * 2);
-    smoothedFreq3.setCurrentAndTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 2)));
+    smoothedFreq1.reset(safeSampleRate, rampTimeSeconds * 2);
+    smoothedFreq1.setCurrentAndTargetValue(loadCachedParameter(crossoverFrequencyParameters[0]));
+    smoothedFreq2.reset(safeSampleRate, rampTimeSeconds * 2);
+    smoothedFreq2.setCurrentAndTargetValue(loadCachedParameter(crossoverFrequencyParameters[1]));
+    smoothedFreq3.reset(safeSampleRate, rampTimeSeconds * 2);
+    smoothedFreq3.setCurrentAndTargetValue(loadCachedParameter(crossoverFrequencyParameters[2]));
 
     // filter init
-    updateFilter(sampleRate);
+    updateFilter(safeSampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
 
-    // mode diode================
-    inputTemp.clear();
-    VdiodeL = 0.0f;
-    VdiodeR = 0.0f;
-    RiL = 1;
-    RiR = 1;
-    /*
-    Vin.Vs = 0.0f;
-    Vin.R = Ri;
-    R1.R = 80.f;
-    C1.R = getSampleRate() / (2.0 * 3.5e-5);
-    root = Serie(&Vin, &Serie(&R1, &C1));
-    // mode 9 diode================
-    */
-
     // multiband filters
-    mBuffer1.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    mBuffer2.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    mBuffer3.setSize(getTotalNumOutputChannels(), samplesPerBlock);
-    mBuffer4.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    mBuffer1.setSize(outputChannels, maximumBlockSize);
+    mBuffer2.setSize(outputChannels, maximumBlockSize);
+    mBuffer3.setSize(outputChannels, maximumBlockSize);
+    mBuffer4.setSize(outputChannels, maximumBlockSize);
+    mSplitTemp1.setSize(outputChannels, maximumBlockSize);
+    mSplitTemp2.setSize(outputChannels, maximumBlockSize);
+    mSplitTemp3.setSize(outputChannels, maximumBlockSize);
     mBuffer1.clear();
     mBuffer2.clear();
     mBuffer3.clear();
@@ -640,23 +996,38 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     compensatorHP.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
     compensatorLP.prepare(spec);
     compensatorHP.prepare(spec);
-
-    compensatorEQ1.prepare(spec);
-    compensatorEQ2.prepare(spec);
-    compensatorEQ3.prepare(spec);
+    secondCompensatorLP.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+    secondCompensatorHP.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
+    secondCompensatorLP.prepare(spec);
+    secondCompensatorHP.prepare(spec);
 
     // gain
+    gainProcessorGlobal.setRampDurationSeconds(0.05);
     gainProcessorGlobal.prepare(spec);
+    gainProcessorGlobal.setRampDurationSeconds(0.0);
+    gainProcessorGlobal.setGainDecibels(loadCachedParameter(globalOutputParameter));
+    gainProcessorGlobal.setRampDurationSeconds(0.05);
 
     // dry wet
     juce::dsp::ProcessSpec globalMixerSpec = spec;
     globalMixerSpec.maximumBlockSize = spec.maximumBlockSize * 20; // set 20 to pass PluginVal
+    dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+    dryWetMixerGlobal.setWetMixProportion(juce::jlimit(0.0f, 1.0f,
+                                                       loadCachedParameter(globalMixParameter)));
     dryWetMixerGlobal.prepare(globalMixerSpec);
 
-    dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+    bypassDelayMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+    // Set the target before prepare/reset so the first bypassed sample is not
+    // blended with the undelayed wet input by DryWetMixer's 50 ms ramp.
+    bypassDelayMixer.setWetMixProportion(0.0f);
+    bypassDelayMixer.prepare(globalMixerSpec);
 
-    lofiMixer.prepare(globalMixerSpec);
     lofiMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+    lofiMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f,
+                                               loadCachedParameter(downsampleMixParameter)));
+    lofiMixer.prepare(globalMixerSpec);
+    updateReportedLatency();
+    publishLatencyToHost();
     reset();
 }
 
@@ -675,20 +1046,52 @@ void FireAudioProcessor::performReset()
     highpass3.reset();
     compensatorLP.reset();
     compensatorHP.reset();
-    compensatorEQ1.reset();
-    compensatorEQ2.reset();
-    compensatorEQ3.reset();
+    secondCompensatorLP.reset();
+    secondCompensatorHP.reset();
     dryWetMixerGlobal.reset();
+    globalMixerPrimed = false;
+    bypassDelayMixer.reset();
+    lofiMixer.reset();
+    lofiMixerPrimed = false;
+    resetDownsamplingState();
     gainProcessorGlobal.reset();
+    lfoManager->reset();
     for (auto& band : bands)
         band->reset();
 }
 
 void FireAudioProcessor::releaseResources()
 {
-    // When playback stops, you can use this as an opportunity to free up any
-    // spare memory, etc.
-    reset();
+    needsReset.store(false, std::memory_order_release);
+    performReset();
+}
+
+void FireAudioProcessor::updateReportedLatency()
+{
+    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
+
+    const float newLatency = useHQ
+                                 ? preparedHqLatency.load(std::memory_order_acquire)
+                                 : 0.0f;
+
+    totalLatency.store(newLatency, std::memory_order_relaxed);
+
+}
+
+void FireAudioProcessor::publishLatencyToHost()
+{
+    const int latencyInSamples = juce::roundToInt(totalLatency.load(std::memory_order_acquire));
+    if (latencyInSamples != getLatencySamples())
+        setLatencySamples(latencyInSamples);
+}
+
+void FireAudioProcessor::timerCallback()
+{
+    // setLatencySamples synchronously notifies the host, so keep it on the
+    // message thread. Re-read HQ here as well so stopped transports update PDC
+    // without waiting for the next audio callback.
+    updateReportedLatency();
+    publishLatencyToHost();
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -717,140 +1120,91 @@ bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
 void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    // set bypass to true
-    isBypassed = true;
+    juce::ignoreUnused(midiMessages);
+    isBypassed.store(true, std::memory_order_relaxed);
+
+    if (needsReset.exchange(false, std::memory_order_acq_rel))
+        performReset();
+
+    updateReportedLatency();
+
+    calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
+    resetDownsamplingState();
+    processLatencyMatchedBypass(buffer);
+    calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
 }
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    if (isBypassed)
-    {
-        isBypassed = false;
-    }
+    juce::ignoreUnused(midiMessages);
+    isBypassed.store(false, std::memory_order_relaxed);
 
-    if (needsReset.exchange(false))
-    {
+    if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
-    }
 
-    // report latency
-    if (*treeState.getRawParameterValue(HQ_ID))
-    {
-        totalLatency = bands[0]->oversampling->getLatencyInSamples();
-    }
-    setLatencySamples(juce::roundToInt(totalLatency));
+    updateReportedLatency();
 
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    const int totalNumInputChannels = getTotalNumInputChannels();
+    const int numBufferChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
     auto sampleRate = getSampleRate();
 
-    if (sampleRate <= 0)
+    if (! std::isfinite(sampleRate) || sampleRate <= 0)
     {
         sampleRate = 48000;
     }
 
-    juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
-    lfoOutputBuffer.clear();
-
-    if (lfoManager->isModulationActive())
-    {
-        lfoManager->processBlock(lfoOutputBuffer, sampleRate, getPlayHead(), buffer.getNumSamples());
-    }
-
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear(i, 0, buffer.getNumSamples());
-
-    updateParameters();
+    for (int channel = juce::jlimit(0, numBufferChannels, totalNumInputChannels);
+         channel < numBufferChannels;
+         ++channel)
+        buffer.clear(channel, 0, numSamples);
 
     calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
 
-    // 1. GET PARAMETERS & SMOOTH FREQUENCIES
-    int numBands = static_cast<int>(*treeState.getRawParameterValue(NUM_BANDS_ID));
-    int lineNum = numBands - 1;
-
-    // Set target values for smoothers from APVTS
-    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 0)));
-    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 1)));
-    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 2)));
-
-    // Get the smoothed frequency values for this block
-    // And also handle sorting based on active lines
-    std::array<float, 3> freqArray = { 0.0f, 0.0f, 0.0f };
-    int activeLineCount = 0;
-    if (static_cast<bool>(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINE_STATE_ID, 0))))
-        freqArray[activeLineCount++] = smoothedFreq1.getNextValue();
-    if (static_cast<bool>(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINE_STATE_ID, 1))))
-        freqArray[activeLineCount++] = smoothedFreq2.getNextValue();
-    if (static_cast<bool>(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(LINE_STATE_ID, 2))))
-        freqArray[activeLineCount++] = smoothedFreq3.getNextValue();
-
-    if (activeLineCount > 1)
-        std::sort(freqArray.begin(), freqArray.begin() + activeLineCount);
-
-    float freqValue1 = freqArray[0];
-    float freqValue2 = freqArray[1];
-    float freqValue3 = freqArray[2];
-
-    const float minFreq = 20.0f;
-    float maxFreq = sampleRate / 2.0f;
-
-    if (maxFreq < minFreq)
+    if (numBufferChannels == 0 || numSamples == 0)
     {
-        maxFreq = minFreq;
+        calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
+        return;
     }
 
-    float safeFreqValue1 = juce::jlimit(minFreq, maxFreq, freqValue1);
-    float safeFreqValue2 = juce::jlimit(minFreq, maxFreq, freqValue2);
-    float safeFreqValue3 = juce::jlimit(minFreq, maxFreq, freqValue3);
+    lfoOutputBuffer.setSize(4, numSamples, false, false, true);
+    lfoOutputBuffer.clear();
+    lfoManager->processBlock(lfoOutputBuffer, static_cast<float>(sampleRate), getPlayHead(), numSamples);
 
-    // 2. SET UP FILTERS WITH SMOOTHED VALUES
-    lowpass1.setCutoffFrequency(safeFreqValue1);
-    highpass1.setCutoffFrequency(safeFreqValue1);
-    lowpass2.setCutoffFrequency(safeFreqValue2);
-    highpass2.setCutoffFrequency(safeFreqValue2);
-    lowpass3.setCutoffFrequency(safeFreqValue3);
-    highpass3.setCutoffFrequency(safeFreqValue3);
+    updateParameters();
 
-    // Set up the all-pass coefficients for 3-band compensation
-    if (lineNum == 2)
-    {
-        compensatorLP.setCutoffFrequency(safeFreqValue1);
-        compensatorHP.setCutoffFrequency(safeFreqValue1);
-    }
+    mBuffer1.setSize(numBufferChannels, numSamples, false, false, true);
+    mBuffer2.setSize(numBufferChannels, numSamples, false, false, true);
+    mBuffer3.setSize(numBufferChannels, numSamples, false, false, true);
+    mBuffer4.setSize(numBufferChannels, numSamples, false, false, true);
+    delayMatchedDryBuffer.setSize(numBufferChannels, numSamples, false, false, true);
+    mWetBuffer.setSize(numBufferChannels, numSamples, false, false, true);
+    lofiDryBuffer.setSize(numBufferChannels, numSamples, false, false, true);
 
-    // 3. PREPARE BUFFERS
-    auto numSamples = buffer.getNumSamples();
-    mBuffer1.setSize(totalNumOutputChannels, numSamples, false, false, true);
-    mBuffer2.setSize(totalNumOutputChannels, numSamples, false, false, true);
-    mBuffer3.setSize(totalNumOutputChannels, numSamples, false, false, true);
-    mBuffer4.setSize(totalNumOutputChannels, numSamples, false, false, true);
+    // Keep a raw-input delay line warm while processing normally. This makes a
+    // host bypass transition retain the same latency as the HQ signal path.
+    primeLatencyMatchedBypass(buffer);
 
     processMultiBand(buffer, lfoOutputBuffer, sampleRate);
 
-    applyDownsamplingEffect(buffer, lfoOutputBuffer);
+    applyDownsamplingEffect(buffer);
     // Call the simplified global effects function.
     applyGlobalEffects(buffer, lfoOutputBuffer, sampleRate);
 
     // Call the simplified global mix function.
     applyGlobalMix(buffer);
 
-    mWetBuffer.makeCopyOf(buffer);
-    pushDataToFFT(mWetBuffer, processedSpecProcessor);
-    pushDataToFFT(delayMatchedDryBuffer, originalSpecProcessor);
+    mWetBuffer.makeCopyOf(buffer, true);
+    captureHistorySamples();
+    pushDataPairToFFT(mWetBuffer, delayMatchedDryBuffer);
     calculateAndStoreLevels(mWetBuffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
 
     // --- 1. Push Modulated Filter Data to its FIFO ---
     if (filterFifo.getFreeSpace() >= 1)
     {
         // Get the final, modulated values for this block
-        auto chainSettings = getChainSettings(treeState, *lfoManager);
+        auto chainSettings = getCachedChainSettings(&lfoOutputBuffer);
 
         ModulatedFilterValues filterVals;
         filterVals.lowCutFreq = chainSettings.lowCutFreq;
@@ -863,26 +1217,24 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         filterVals.peakGain = chainSettings.peakGainInDecibels;
         filterVals.peakQ = chainSettings.peakQuality;
 
-        // Write the data packet to the buffer and notify the FIFO
-        filterFifoBuffer[filterFifoWritePos] = filterVals;
-        filterFifo.finishedWrite(1);
-        filterFifoWritePos = (filterFifoWritePos + 1) % filterFifo.getTotalSize();
+        pushToFifo(filterFifo, filterFifoBuffer, filterVals);
     }
 
     if (graphFifo.getFreeSpace() >= 1)
     {
         DistortionGraphValues vals;
-        const int bandIndex = uiFocusBand.load();
+        const int bandIndex = juce::jlimit(0, 3, uiFocusBand.load(std::memory_order_relaxed));
+        const auto& parameters = bandParameterCache[static_cast<size_t>(bandIndex)];
 
-        vals.rec = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(REC_ID, bandIndex));
-        const float bandMix = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, bandIndex));
-        const float shapeMix = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(SHAPE_MIX_ID, bandIndex));
+        vals.rec = getBlockModulatedValue(parameters.rec, lfoOutputBuffer);
+        const float bandMix = getBlockModulatedValue(parameters.mix, lfoOutputBuffer);
+        const float shapeMix = getBlockModulatedValue(parameters.shapeMix, lfoOutputBuffer);
         vals.mix = bandMix * shapeMix;
-        vals.bias = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(BIAS_ID, bandIndex));
-        float driveBase = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(DRIVE_ID, bandIndex));
+        vals.bias = getBlockModulatedValue(parameters.bias, lfoOutputBuffer);
+        float driveBase = getBlockModulatedValue(parameters.drive, lfoOutputBuffer);
 
-        vals.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, bandIndex));
-        bool isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, bandIndex));
+        vals.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
+        const bool isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
 
         float driveForCalc = driveBase * 6.5f / 100.0f;
         float powerDrive = powf(2, driveForCalc);
@@ -893,13 +1245,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         else
             vals.drive = powerDrive;
 
-        vals.rateDivide = lfoManager->getModulatedValue(DOWNSAMPLE_ID);
-        if (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID))
+        vals.rateDivide = getBlockModulatedValue(downsampleRateParameter, lfoOutputBuffer);
+        if (loadCachedParameter(downsampleEnabledParameter) > 0.5f)
             vals.rateDivide = 1.0f;
 
-        graphFifoBuffer[graphFifoWritePos] = vals;
-        graphFifo.finishedWrite(1);
-        graphFifoWritePos = (graphFifoWritePos + 1) % graphFifo.getTotalSize();
+        pushToFifo(graphFifo, graphFifoBuffer, vals);
     }
     if (meterFifo.getFreeSpace() >= 1)
     {
@@ -932,9 +1282,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             }
         }
 
-        meterFifoBuffer[meterFifoWritePos] = values;
-        meterFifo.finishedWrite(1);
-        meterFifoWritePos = (meterFifoWritePos + 1) % meterFifo.getTotalSize();
+        pushToFifo(meterFifo, meterFifoBuffer, values);
     }
 }
 
@@ -952,10 +1300,6 @@ juce::AudioProcessorEditor* FireAudioProcessor::createEditor()
 //==============================================================================
 void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-
     int xmlIndex = 0;
     juce::XmlElement xmlState { "state" };
 
@@ -965,132 +1309,178 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     xmlState.insertChildElement(treeStateXml.release(), xmlIndex++);
 
     // 2. save current preset ID, width and height
-    std::unique_ptr<juce::XmlElement> currentStateXml { new juce::XmlElement { "otherState" } };
+    auto currentStateXml = std::make_unique<juce::XmlElement>("otherState");
     currentStateXml->setAttribute("currentPresetID", statePresets.getCurrentPresetId());
-    currentStateXml->setAttribute("editorWidth", editorWidth);
-    currentStateXml->setAttribute("editorHeight", editorHeight);
+    currentStateXml->setAttribute("editorWidth", editorWidth.load(std::memory_order_relaxed));
+    currentStateXml->setAttribute("editorHeight", editorHeight.load(std::memory_order_relaxed));
 
     xmlState.insertChildElement(currentStateXml.release(), xmlIndex++);
 
+    const auto lfoDataToSave = lfoManager->getLfoDataCopy();
+    const auto routingsToSave = lfoManager->getModulationRoutingsCopy();
+
     // 3. Save LFO Shapes
-    auto* lfoState = new juce::XmlElement("LFO_STATE");
-    auto& lfoDataToSave = lfoManager->getLfoData();
-    for (int i = 0; i < lfoDataToSave.size(); ++i)
+    auto lfoState = std::make_unique<juce::XmlElement>("LFO_STATE");
+    for (int i = 0; i < static_cast<int>(lfoDataToSave.size()); ++i)
     {
-        auto* lfoXml = new juce::XmlElement("LFO");
+        auto lfoXml = std::make_unique<juce::XmlElement>("LFO");
         lfoXml->setAttribute("index", i);
-        lfoDataToSave[i].writeToXml(*lfoXml);
-        lfoState->addChildElement(lfoXml);
+        lfoDataToSave[static_cast<size_t>(i)].writeToXml(*lfoXml);
+        lfoState->addChildElement(lfoXml.release());
     }
-    xmlState.insertChildElement(lfoState, xmlIndex++);
+    xmlState.insertChildElement(lfoState.release(), xmlIndex++);
 
     // 4. Save Modulation Matrix Routings
-    auto* modMatrixState = new juce::XmlElement("MODULATION_STATE");
-    for (const auto& routing : lfoManager->getModulationRoutings()) // Get from manager
+    auto modMatrixState = std::make_unique<juce::XmlElement>("MODULATION_STATE");
+    for (const auto& routing : routingsToSave)
     {
-        auto* routingXml = new juce::XmlElement("ROUTING");
+        auto routingXml = std::make_unique<juce::XmlElement>("ROUTING");
         routing.writeToXml(*routingXml);
-        modMatrixState->addChildElement(routingXml);
+        modMatrixState->addChildElement(routingXml.release());
     }
-    xmlState.insertChildElement(modMatrixState, xmlIndex++);
+    xmlState.insertChildElement(modMatrixState.release(), xmlIndex++);
 
     copyXmlToBinary(xmlState, destData);
 }
 
 void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
+    if (data == nullptr || sizeInBytes <= 0)
+        return;
 
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-    if (xmlState.get() != nullptr && xmlState->hasTagName("state"))
+    if (xmlState != nullptr && xmlState->hasTagName("state"))
     {
-        int xmlIndex = 0;
+        std::array<bool, 4> smoothnessPresentInParameterState {};
+
         // 1. set treestate
-        const auto xmlTreeState = xmlState->getChildElement(xmlIndex++);
+        const auto* xmlTreeState = xmlState->getChildByName(treeState.state.getType().toString());
+        if (xmlTreeState == nullptr)
+            xmlTreeState = xmlState->getChildElement(0); // Backward compatibility with unlabelled ordering.
+
         if (xmlTreeState != nullptr)
         {
-            // Convert the XML to a ValueTree so we can inspect and modify it before loading.
             auto treeToLoad = juce::ValueTree::fromXml(*xmlTreeState);
 
-            // This is the backward-compatibility logic.
-            // We loop through each band to check if the SHAPE_BYPASS_ID exists.
-            for (int i = 0; i < 4; ++i)
+            if (treeToLoad.isValid() && treeToLoad.hasType(treeState.state.getType()))
             {
-                auto shapeBypassParamID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i);
-
-                // If the ValueTree from the preset file does NOT have this property...
-                if (! treeToLoad.hasProperty(shapeBypassParamID))
+                // APVTS stores each parameter as a PARAM child (id/value), not as
+                // a property on the root. Older states genuinely lack the Shape
+                // children, so recreate them from the current APVTS template.
+                const auto parameterStateTemplate = treeState.copyState();
+                for (int i = 0; i < 4; ++i)
                 {
-                    // ...it means we are loading an old preset.
-                    // To maintain the old sound, we must manually add the property
-                    // and set its value to 'true' (enabled).
-                    treeToLoad.setProperty(shapeBypassParamID, 1.0, nullptr);
-                }
-            }
+                    const auto shapeBypassParamID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i);
+                    juce::ValueTree shapeState;
 
-            treeState.replaceState(juce::ValueTree::fromXml(*xmlTreeState));
+                    for (const auto& child : treeToLoad)
+                    {
+                        if (child.getProperty("id").toString() == shapeBypassParamID)
+                        {
+                            shapeState = child;
+                            break;
+                        }
+                    }
+
+                    if (shapeState.isValid())
+                        continue;
+
+                    for (const auto& templateChild : parameterStateTemplate)
+                    {
+                        if (templateChild.getProperty("id").toString() == shapeBypassParamID)
+                        {
+                            auto upgradedState = templateChild.createCopy();
+                            const float legacyValue = treeToLoad.hasProperty(shapeBypassParamID)
+                                                          ? static_cast<float>(treeToLoad.getProperty(shapeBypassParamID))
+                                                          : 1.0f;
+                            upgradedState.setProperty("value", legacyValue > 0.5f ? 1.0f : 0.0f, nullptr);
+                            treeToLoad.addChild(upgradedState, -1, nullptr);
+                            break;
+                        }
+                    }
+                }
+
+                for (int i = 0; i < 4; ++i)
+                {
+                    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
+                    for (const auto& child : treeToLoad)
+                    {
+                        if (child.getProperty("id").toString() == smoothnessID)
+                        {
+                            smoothnessPresentInParameterState[static_cast<size_t>(i)] = true;
+                            break;
+                        }
+                    }
+                }
+
+                treeState.replaceState(treeToLoad);
+            }
         }
 
         // 2. set current preset ID
-        const auto xmlCurrentState = xmlState->getChildElement(xmlIndex++);
+        const auto* xmlCurrentState = xmlState->getChildByName("otherState");
         if (xmlCurrentState != nullptr)
         {
-            // load preset
-            presetId = xmlCurrentState->getIntAttribute("currentPresetID", 0);
-            statePresets.setCurrentPresetId(presetId); // only set preset id not value
-            // so it won't override the value you changed from the preset
-
-            editorWidth = xmlCurrentState->getIntAttribute("editorWidth", INIT_WIDTH);
-            editorHeight = xmlCurrentState->getIntAttribute("editorHeight", INIT_HEIGHT);
+            statePresets.setCurrentPresetId(juce::jmax(0, xmlCurrentState->getIntAttribute("currentPresetID", 0)));
+            editorWidth.store(xmlCurrentState->getIntAttribute("editorWidth", static_cast<int>(INIT_WIDTH)), std::memory_order_relaxed);
+            editorHeight.store(xmlCurrentState->getIntAttribute("editorHeight", static_cast<int>(INIT_HEIGHT)), std::memory_order_relaxed);
         }
 
-        // 3. Load LFO Shapes
+        std::array<LfoData, 4> loadedLfoData;
+        std::array<bool, 4> loadedLfoSmoothnessFromXml {};
         if (auto* lfoState = xmlState->getChildByName("LFO_STATE"))
         {
-            // First, clear all existing LFO data in a thread-safe way.
-            lfoManager->clearAllLfoData();
-
             for (auto* lfoXml : lfoState->getChildIterator())
             {
                 const int index = lfoXml->getIntAttribute("index", -1);
-                if (juce::isPositiveAndBelow(index, 4)) // Use a fixed size for safety
+                if (juce::isPositiveAndBelow(index, static_cast<int>(loadedLfoData.size())))
                 {
-                    // Now, load the new data using the thread-safe setter.
-                    lfoManager->setLfoData(index, LfoData::readFromXml(*lfoXml));
+                    loadedLfoData[static_cast<size_t>(index)] = LfoData::readFromXml(*lfoXml);
+                    loadedLfoSmoothnessFromXml[static_cast<size_t>(index)] = lfoXml->hasAttribute("smoothness");
                 }
             }
         }
 
-        // 4. Load Modulation Matrix Routings
+        // Legacy states may omit the entire LFO section or individual LFOs.
+        // In that case APVTS remains authoritative for Smoothness; otherwise a
+        // default-constructed LfoData would overwrite the value just restored.
+        for (size_t i = 0; i < loadedLfoData.size(); ++i)
+        {
+            // APVTS is the single authority whenever the parameter state
+            // explicitly contains Smoothness. LFO XML is only a compatibility
+            // fallback for states written before that parameter existed.
+            if ((! smoothnessPresentInParameterState[i] && loadedLfoSmoothnessFromXml[i])
+                || lfoSmoothParameters[i] == nullptr)
+                continue;
+
+            const float smoothness = lfoSmoothParameters[i]->load(std::memory_order_relaxed);
+            if (std::isfinite(smoothness))
+                loadedLfoData[i].smoothness = smoothness;
+        }
+
+        juce::Array<ModulationRouting> loadedRoutings;
         if (auto* modMatrixState = xmlState->getChildByName("MODULATION_STATE"))
         {
-            // Get a reference to the manager's routings array
-            auto& routings = lfoManager->getModulationRoutings();
-            routings.clear(); // Clear existing data before loading
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
-                routings.add(ModulationRouting::readFromXml(*routingXml));
+                auto routing = ModulationRouting::readFromXml(*routingXml);
+                routing.sourceLfoIndex = juce::jlimit(0, 3, routing.sourceLfoIndex);
+                routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
+
+                if (routing.targetParameterID.isNotEmpty() && treeState.getParameter(routing.targetParameterID) == nullptr)
+                    continue;
+
+                loadedRoutings.add(std::move(routing));
             }
         }
 
-        // IMPORTANT: After loading, ensure the UI is updated if the editor is open.
-        // This is a simplified notification. A more robust system might use a
-        // ChangeBroadcaster/Listener pattern.
-        // if (auto* editor = getActiveEditor())
-        // {
-        //     // A simple repaint might be sufficient if your components read data in their paint calls.
-        //     // For more complex updates, you'd call specific update functions on the editor.
-        //     editor->repaint();
-        // }
-
-        juce::MessageManager::callAsync([this]
-                                        {
-        if (auto* editor = getActiveEditor())
         {
-            // This code will now run safely on the message thread
-            editor->repaint();
-        } });
+            const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+            lfoManager->clearAllLfoData();
+            for (int i = 0; i < static_cast<int>(loadedLfoData.size()); ++i)
+                lfoManager->setLfoData(i, loadedLfoData[static_cast<size_t>(i)]);
+            lfoManager->getModulationRoutings() = std::move(loadedRoutings);
+        }
 
         sendChangeMessage();
     }
@@ -1122,12 +1512,12 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts)
     settings.peakFreq = apvts.getRawParameterValue(PEAK_FREQ_ID)->load();
     settings.peakGainInDecibels = apvts.getRawParameterValue(PEAK_GAIN_ID)->load();
     settings.peakQuality = apvts.getRawParameterValue(PEAK_Q_ID)->load();
-    settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
-    settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
+    settings.lowCutSlope = getSlopeParameterValue(apvts.getRawParameterValue(LOWCUT_SLOPE_ID));
+    settings.highCutSlope = getSlopeParameterValue(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID));
 
-    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load(); // > 0.5f;
-    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load(); // > 0.5f;
-    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load(); // > 0.5f;
+    settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load() > 0.5f;
+    settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load() > 0.5f;
+    settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load() > 0.5f;
 
     return settings;
 }
@@ -1148,8 +1538,8 @@ ChainSettings getChainSettings(juce::AudioProcessorValueTreeState& apvts, LfoMan
     settings.peakQuality = lfoManager.getModulatedValue(PEAK_Q_ID);
 
     // These parameters are not modulatable, so we get them directly from the apvts.
-    settings.lowCutSlope = static_cast<Slope>(apvts.getRawParameterValue(LOWCUT_SLOPE_ID)->load());
-    settings.highCutSlope = static_cast<Slope>(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID)->load());
+    settings.lowCutSlope = getSlopeParameterValue(apvts.getRawParameterValue(LOWCUT_SLOPE_ID));
+    settings.highCutSlope = getSlopeParameterValue(apvts.getRawParameterValue(HIGHCUT_SLOPE_ID));
     settings.lowCutBypassed = apvts.getRawParameterValue(LOWCUT_BYPASSED_ID)->load() > 0.5f;
     settings.peakBypassed = apvts.getRawParameterValue(PEAK_BYPASSED_ID)->load() > 0.5f;
     settings.highCutBypassed = apvts.getRawParameterValue(HIGHCUT_BYPASSED_ID)->load() > 0.5f;
@@ -1183,69 +1573,91 @@ CoefficientsPtr makeHighcutQFilter(const ChainSettings& chainSettings, double sa
 
 void FireAudioProcessor::updatePeakFilter(const ChainSettings& chainSettings, double sampleRate)
 {
-    auto peakCoefficients = makePeakFilter(chainSettings, sampleRate);
+    const auto peakCoefficients = juce::dsp::IIR::ArrayCoefficients<float>::makePeakFilter(
+        sampleRate,
+        chainSettings.peakFreq,
+        chainSettings.peakQuality,
+        juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
 
     leftChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
     rightChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
-    updateCoefficients(leftChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
-    updateCoefficients(rightChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
+    *leftChain.get<ChainPositions::Peak>().coefficients = peakCoefficients;
+    *rightChain.get<ChainPositions::Peak>().coefficients = peakCoefficients;
 }
 
 void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings, double sampleRate)
 {
-    auto cutCoefficients = makeLowCutFilter(chainSettings, sampleRate);
     auto& leftLowCut = leftChain.get<ChainPositions::LowCut>();
     auto& rightLowCut = rightChain.get<ChainPositions::LowCut>();
 
-    auto lowcutQCoefficients = makeLowcutQFilter(chainSettings, sampleRate);
+    const auto lowcutQCoefficients = juce::dsp::IIR::ArrayCoefficients<float>::makePeakFilter(
+        sampleRate,
+        chainSettings.lowCutFreq,
+        chainSettings.lowCutQuality,
+        juce::Decibels::decibelsToGain(chainSettings.lowCutGainInDecibels));
 
     leftChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     rightChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
     leftChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
     rightChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
 
-    updateCutFilter(rightLowCut, cutCoefficients, chainSettings.lowCutSlope);
-    updateCutFilter(leftLowCut, cutCoefficients, chainSettings.lowCutSlope);
+    updateButterworthCutFilter(rightLowCut,
+                               chainSettings.lowCutFreq,
+                               sampleRate,
+                               chainSettings.lowCutSlope,
+                               true);
+    updateButterworthCutFilter(leftLowCut,
+                               chainSettings.lowCutFreq,
+                               sampleRate,
+                               chainSettings.lowCutSlope,
+                               true);
 
-    updateCoefficients(leftChain.get<ChainPositions::LowCutQ>().coefficients, lowcutQCoefficients);
-    updateCoefficients(rightChain.get<ChainPositions::LowCutQ>().coefficients, lowcutQCoefficients);
+    *leftChain.get<ChainPositions::LowCutQ>().coefficients = lowcutQCoefficients;
+    *rightChain.get<ChainPositions::LowCutQ>().coefficients = lowcutQCoefficients;
 }
 
 void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate)
 {
-    auto highCutCoefficients = makeHighCutFilter(chainSettings, sampleRate);
     auto& leftHighCut = leftChain.get<ChainPositions::HighCut>();
     auto& rightHighCut = rightChain.get<ChainPositions::HighCut>();
 
-    auto highcutQCoefficients = makeHighcutQFilter(chainSettings, sampleRate);
+    const auto highcutQCoefficients = juce::dsp::IIR::ArrayCoefficients<float>::makePeakFilter(
+        sampleRate,
+        chainSettings.highCutFreq,
+        chainSettings.highCutQuality,
+        juce::Decibels::decibelsToGain(chainSettings.highCutGainInDecibels));
 
     leftChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
     rightChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
+    leftChain.setBypassed<ChainPositions::HighCutQ>(chainSettings.highCutBypassed);
+    rightChain.setBypassed<ChainPositions::HighCutQ>(chainSettings.highCutBypassed);
 
-    updateCutFilter(leftHighCut, highCutCoefficients, chainSettings.highCutSlope);
-    updateCutFilter(rightHighCut, highCutCoefficients, chainSettings.highCutSlope);
+    updateButterworthCutFilter(leftHighCut,
+                               chainSettings.highCutFreq,
+                               sampleRate,
+                               chainSettings.highCutSlope,
+                               false);
+    updateButterworthCutFilter(rightHighCut,
+                               chainSettings.highCutFreq,
+                               sampleRate,
+                               chainSettings.highCutSlope,
+                               false);
 
-    updateCoefficients(leftChain.get<ChainPositions::HighCutQ>().coefficients, highcutQCoefficients);
-    updateCoefficients(rightChain.get<ChainPositions::HighCutQ>().coefficients, highcutQCoefficients);
+    *leftChain.get<ChainPositions::HighCutQ>().coefficients = highcutQCoefficients;
+    *rightChain.get<ChainPositions::HighCutQ>().coefficients = highcutQCoefficients;
 }
 
 void FireAudioProcessor::updateFilter(double sampleRate)
 {
     auto chainSettings = getChainSettings(treeState);
-    const float minFreq = 20.0f;
-    if (sampleRate <= 0)
+    if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
         return;
 
-    float maxFreq = sampleRate / 2.0f;
+    const auto frequencyRange = getSafeFilterFrequencyRange(sampleRate);
 
-    if (maxFreq < minFreq)
-    {
-        maxFreq = minFreq;
-    }
-
-    chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
-    chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
-    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
+    chainSettings.lowCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.lowCutFreq);
+    chainSettings.peakFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.highCutFreq);
 
     // Set the target values for all 9 smoothers
     lowcutFreqSmoother.setTargetValue(chainSettings.lowCutFreq);
@@ -1262,20 +1674,21 @@ void FireAudioProcessor::updateFilter(double sampleRate)
 
     // Create a new settings object with the smoothed values for this audio block
     ChainSettings smoothedSettings;
-    smoothedSettings.lowCutFreq = lowcutFreqSmoother.getNextValue();
+    smoothedSettings.lowCutFreq = juce::jlimit(frequencyRange.minimum,
+                                               frequencyRange.maximum,
+                                               lowcutFreqSmoother.getNextValue());
     smoothedSettings.lowCutGainInDecibels = lowcutGainSmoother.getNextValue();
     smoothedSettings.lowCutQuality = lowcutQualitySmoother.getNextValue();
 
-    smoothedSettings.peakFreq = peakFreqSmoother.getNextValue();
+    smoothedSettings.peakFreq = juce::jlimit(frequencyRange.minimum,
+                                            frequencyRange.maximum,
+                                            peakFreqSmoother.getNextValue());
     smoothedSettings.peakGainInDecibels = peakGainSmoother.getNextValue();
     smoothedSettings.peakQuality = peakQualitySmoother.getNextValue();
 
-    // Get the smoothed high-cut frequency value.
-    float highCutFreqValue = highcutFreqSmoother.getNextValue();
-    // Define the Nyquist frequency.
-    const float nyquist = (float) sampleRate / 2.0f;
-    // Clamp the high-cut frequency to ensure it never exceeds the Nyquist frequency.
-    smoothedSettings.highCutFreq = juce::jmin(highCutFreqValue, nyquist);
+    smoothedSettings.highCutFreq = juce::jlimit(frequencyRange.minimum,
+                                                frequencyRange.maximum,
+                                                highcutFreqSmoother.getNextValue());
 
     smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
     smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
@@ -1291,148 +1704,142 @@ void FireAudioProcessor::updateFilter(double sampleRate)
     updateLowCutFilters(smoothedSettings, sampleRate);
     updatePeakFilter(smoothedSettings, sampleRate);
     updateHighCutFilters(smoothedSettings, sampleRate);
+
+    cachedGlobalFilterSettings = smoothedSettings;
+    cachedGlobalFilterSampleRate = sampleRate;
+    globalFilterCacheValid = true;
 }
 
-bool FireAudioProcessor::isSlient(juce::AudioBuffer<float> buffer)
+bool FireAudioProcessor::isSlient(const juce::AudioBuffer<float>& buffer)
 {
-    if (buffer.getMagnitude(0, buffer.getNumSamples()) == 0)
-        return true;
-    else
-        return false;
+    return buffer.getNumChannels() == 0
+        || buffer.getNumSamples() == 0
+        || buffer.getMagnitude(0, buffer.getNumSamples()) == 0.0f;
 }
 
 void FireAudioProcessor::setHistoryArray(int bandIndex)
 {
-    // This array holds pointers to all possible source buffers.
-    std::array<juce::AudioBuffer<float>*, 5> sourceBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4, &mWetBuffer };
+    historySourceBand.store(juce::isPositiveAndBelow(bandIndex, 4) ? bandIndex : 4,
+                            std::memory_order_relaxed);
+}
 
-    // Use the bandIndex to select the correct buffer. If the index is out of bounds (e.g., -1 for global),
-    // we safely default to the last buffer in the array (mWetBuffer).
-    const int effectiveIndex = (juce::isPositiveAndBelow(bandIndex, 4)) ? bandIndex : 4;
-    auto* sourceBuffer = sourceBuffers[effectiveIndex];
+void FireAudioProcessor::captureHistorySamples()
+{
+    const std::array<const juce::AudioBuffer<float>*, 5> sourceBuffers {
+        &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4, &mWetBuffer
+    };
+    const int sourceIndex = juce::jlimit(0, 4, historySourceBand.load(std::memory_order_relaxed));
+    const auto* sourceBuffer = sourceBuffers[static_cast<size_t>(sourceIndex)];
 
-    // Safety check: if the selected buffer is invalid for any reason, do nothing.
-    if (sourceBuffer == nullptr)
+    if (sourceBuffer == nullptr || sourceBuffer->getNumChannels() == 0 || sourceBuffer->getNumSamples() == 0)
         return;
 
-    const int bufferSamples = sourceBuffer->getNumSamples();
-    const int numChannels = sourceBuffer->getNumChannels();
+    const auto* left = sourceBuffer->getReadPointer(0);
+    const auto* right = sourceBuffer->getNumChannels() > 1 ? sourceBuffer->getReadPointer(1) : left;
+    int writePosition = historyWritePosition.load(std::memory_order_relaxed);
 
-    if (numChannels == 0 || bufferSamples == 0)
-        return;
-
-    // --- The processing loop is now much cleaner ---
-    // We only need to get the channel data once.
-    const float* channelDataL = sourceBuffer->getReadPointer(0);
-    const float* channelDataR = (numChannels > 1) ? sourceBuffer->getReadPointer(1) : nullptr;
-
-    for (int sample = 0; sample < bufferSamples; ++sample)
+    for (int sample = 0; sample < sourceBuffer->getNumSamples(); sample += 10)
     {
-        // Downsample the data by only taking every 10th sample.
-        if (sample % 10 == 0)
-        {
-            // Process Left Channel
-            historyArrayL.add(channelDataL[sample]);
-            if (historyArrayL.size() > historyLength)
-                historyArrayL.remove(0);
-
-            // Process Right Channel (if it exists)
-            if (channelDataR != nullptr)
-            {
-                historyArrayR.add(channelDataR[sample]);
-                if (historyArrayR.size() > historyLength)
-                    historyArrayR.remove(0);
-            }
-        }
+        const auto index = static_cast<size_t>(writePosition);
+        historyArrayL[index].store(left[sample], std::memory_order_relaxed);
+        historyArrayR[index].store(right[sample], std::memory_order_relaxed);
+        writePosition = (writePosition + 1) % historyLength;
     }
+
+    historySamplesAvailable.store(historyLength, std::memory_order_relaxed);
+    historyWritePosition.store(writePosition, std::memory_order_release);
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayL()
 {
-    return historyArrayL;
+    const int writePosition = historyWritePosition.load(std::memory_order_acquire);
+    const int count = juce::jlimit(0, historyLength, historySamplesAvailable.load(std::memory_order_relaxed));
+    const int start = (writePosition - count + historyLength) % historyLength;
+
+    juce::Array<float> result;
+    result.ensureStorageAllocated(count);
+    for (int i = 0; i < count; ++i)
+        result.add(historyArrayL[static_cast<size_t>((start + i) % historyLength)].load(std::memory_order_relaxed));
+    return result;
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayR()
 {
-    return historyArrayR;
+    const int writePosition = historyWritePosition.load(std::memory_order_acquire);
+    const int count = juce::jlimit(0, historyLength, historySamplesAvailable.load(std::memory_order_relaxed));
+    const int start = (writePosition - count + historyLength) % historyLength;
+
+    juce::Array<float> result;
+    result.ensureStorageAllocated(count);
+    for (int i = 0; i < count; ++i)
+        result.add(historyArrayR[static_cast<size_t>((start + i) % historyLength)].load(std::memory_order_relaxed));
+    return result;
 }
 
-float* FireAudioProcessor::getFFTData(int dataIndex)
+int FireAudioProcessor::getNumBins() const noexcept
 {
-    if (dataIndex == 0)
-    {
-        return originalSpecProcessor.fftData;
-    }
-    else
-    {
-        return processedSpecProcessor.fftData;
-    }
+    return SpectrumProcessor::numBins;
 }
 
-int FireAudioProcessor::getNumBins()
+int FireAudioProcessor::getFFTSize() const noexcept
 {
-    return processedSpecProcessor.numBins;
+    return SpectrumProcessor::fftSize;
 }
 
-int FireAudioProcessor::getFFTSize()
+bool FireAudioProcessor::popLatestFFTFrames(float* processedDestination,
+                                            int processedDestinationSize,
+                                            float* originalDestination,
+                                            int originalDestinationSize) noexcept
 {
-    return processedSpecProcessor.fftSize;
+    return spectrumProcessor.popLatestFramePair(processedDestination,
+                                                 processedDestinationSize,
+                                                 originalDestination,
+                                                 originalDestinationSize);
 }
 
-bool FireAudioProcessor::isFFTBlockReady()
+void FireAudioProcessor::pushDataPairToFFT(const juce::AudioBuffer<float>& processedBuffer,
+                                           const juce::AudioBuffer<float>& originalBuffer)
 {
-    return processedSpecProcessor.nextFFTBlockReady;
+    if (processedBuffer.getNumChannels() <= 0 || originalBuffer.getNumChannels() <= 0)
+        return;
+
+    const auto* processedData = processedBuffer.getReadPointer(0);
+    const auto* originalData = originalBuffer.getReadPointer(0);
+    const int samplesToPush = juce::jmin(processedBuffer.getNumSamples(),
+                                          originalBuffer.getNumSamples());
+
+    for (int sample = 0; sample < samplesToPush; ++sample)
+        spectrumProcessor.pushNextSamplePairIntoFifo(processedData[sample], originalData[sample]);
 }
 
-void FireAudioProcessor::pushDataToFFT(juce::AudioBuffer<float>& buffer, SpectrumProcessor& specProcessor)
+bool FireAudioProcessor::processFFT(float* tempFFTData, int bufferSize)
 {
-    if (buffer.getNumChannels() > 0)
-    {
-        auto* channelData = buffer.getReadPointer(0);
-
-        for (auto i = 0; i < buffer.getNumSamples(); ++i)
-            specProcessor.pushNextSampleIntoFifo(channelData[i]);
-    }
-}
-
-void FireAudioProcessor::processFFT(float* tempFFTData, int dataIndex)
-{
-    SpectrumProcessor& specProcessor = (dataIndex == 0) ? originalSpecProcessor : processedSpecProcessor;
-    specProcessor.doProcessing(tempFFTData);
-    specProcessor.nextFFTBlockReady = false;
-}
-
-void FireAudioProcessor::processGain(juce::dsp::ProcessContextReplacing<float> context, juce::String outputID, GainProcessor& gainProcessor)
-{
-    float outputValue = *treeState.getRawParameterValue(outputID);
-    gainProcessor.setGainDecibels(outputValue);
-    gainProcessor.setRampDurationSeconds(0.05f);
-    gainProcessor.process(context);
+    return spectrumProcessor.doProcessing(tempFFTData, bufferSize);
 }
 
 int FireAudioProcessor::getSavedWidth() const
 {
-    return editorWidth;
+    return editorWidth.load(std::memory_order_relaxed);
 }
 
 int FireAudioProcessor::getSavedHeight() const
 {
-    return editorHeight;
+    return editorHeight.load(std::memory_order_relaxed);
 }
 
 void FireAudioProcessor::setSavedWidth(const int width)
 {
-    editorWidth = width;
+    editorWidth.store(width, std::memory_order_relaxed);
 }
 
 void FireAudioProcessor::setSavedHeight(const int height)
 {
-    editorHeight = height;
+    editorHeight.store(height, std::memory_order_relaxed);
 }
 
-bool FireAudioProcessor::getBypassedState()
+bool FireAudioProcessor::getBypassedState() const
 {
-    return isBypassed;
+    return isBypassed.load(std::memory_order_relaxed);
 }
 
 // drive lookandfeel
@@ -1441,7 +1848,7 @@ float FireAudioProcessor::getReductionPrecent(int bandIndex)
     // Safely check if the provided index is valid for our bands vector.
     if (juce::isPositiveAndBelow(bandIndex, bands.size()))
         if (auto* band = bands[bandIndex].get())
-            return band->mReductionPercent; // Return the value from the BandProcessor instance.
+            return band->mReductionPercent.load(std::memory_order_relaxed);
 
     // If the index is invalid, assert in debug mode and return a safe default.
     jassertfalse;
@@ -1452,7 +1859,7 @@ float FireAudioProcessor::getSampleMaxValue(int bandIndex)
 {
     if (juce::isPositiveAndBelow(bandIndex, bands.size()))
         if (auto* band = bands[bandIndex].get())
-            return band->mSampleMaxValue;
+            return band->mSampleMaxValue.load(std::memory_order_relaxed);
 
     jassertfalse;
     return 0.0f;
@@ -1603,13 +2010,13 @@ void FireAudioProcessor::updateParameters()
     //==============================================================================
 
     // Get the number of active bands for processing loops.
-    numBands = *treeState.getRawParameterValue(NUM_BANDS_ID);
+    numBands = juce::jlimit(1, 4, juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
     activeCrossovers = numBands - 1;
 
     // Update smoothers for crossover frequencies.
-    smoothedFreq1.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 0)));
-    smoothedFreq2.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 1)));
-    smoothedFreq3.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(FREQ_ID, 2)));
+    smoothedFreq1.setTargetValue(loadCachedParameter(crossoverFrequencyParameters[0]));
+    smoothedFreq2.setTargetValue(loadCachedParameter(crossoverFrequencyParameters[1]));
+    smoothedFreq3.setTargetValue(loadCachedParameter(crossoverFrequencyParameters[2]));
 
     //==============================================================================
     // 2. Update Per-Band Smoothed Parameters
@@ -1620,9 +2027,9 @@ void FireAudioProcessor::updateParameters()
     {
         if (auto* band = bands[i].get())
         {
-            //            band->drive.setTargetValue(*treeState.getRawParameterValue(ParameterID::driveIds[i]));
-            band->recSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(REC_ID, i)));
-            band->biasSmoother.setTargetValue(*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BIAS_ID, i)));
+            const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
+            band->recSmoother.setTargetValue(loadCachedParameter(parameters.rec));
+            band->biasSmoother.setTargetValue(loadCachedParameter(parameters.bias));
         }
     }
 
@@ -1631,7 +2038,7 @@ void FireAudioProcessor::updateParameters()
     //==============================================================================
 
     // Use the existing helper function to get all filter-related parameter values.
-    auto chainSettings = getChainSettings(treeState);
+    auto chainSettings = getCachedChainSettings(nullptr);
 
     // Set the target values for all global filter smoothers.
     lowcutFreqSmoother.setTargetValue(chainSettings.lowCutFreq);
@@ -1659,7 +2066,7 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
     {
         for (int i = 0; i < numBands; ++i)
         {
-            if (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_SOLO_ID, i)))
+            if (loadCachedParameter(bandParameterCache[static_cast<size_t>(i)].solo) > 0.5f)
             {
                 anySoloActive = true;
                 break;
@@ -1677,7 +2084,9 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
         if (currentBandBuffer == nullptr)
             continue;
 
-        const bool isThisBandSoloed = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_SOLO_ID, i)) > 0.5f;
+        const bool isThisBandSoloed = loadCachedParameter(
+                                          bandParameterCache[static_cast<size_t>(i)].solo)
+                                      > 0.5f;
 
         // Determine if this band should be added to the mix.
         const bool shouldAddBand = anySoloActive ? isThisBandSoloed : true;
@@ -1685,7 +2094,7 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
         if (shouldAddBand || ignoreSoloLogic)
         {
             // The number of samples to process for this operation.
-            const int numSamples = currentBandBuffer->getNumSamples();
+            const int numSamples = juce::jmin(currentBandBuffer->getNumSamples(), outputBuffer.getNumSamples());
 
             for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
             {
@@ -1706,10 +2115,10 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     // This function encapsulates the entire multiband crossover logic.
     // The code is moved directly from your original processBlock.
 
-    const int totalNumOutputChannels = getTotalNumOutputChannels();
+    const int totalNumOutputChannels = inputBuffer.getNumChannels();
     const int numSamples = inputBuffer.getNumSamples();
 
-    if (sampleRate <= 0)
+    if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
         return;
     const int lineNum = activeCrossovers; // Use the member variable updated in updateParameters()
 
@@ -1717,18 +2126,18 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     float freqValue1 = smoothedFreq1.getNextValue();
     float freqValue2 = smoothedFreq2.getNextValue();
     float freqValue3 = smoothedFreq3.getNextValue();
-
-    const float minFreq = 20.0f;
-    float maxFreq = sampleRate / 2.0f;
-
-    if (maxFreq < minFreq)
+    if (numSamples > 1)
     {
-        maxFreq = minFreq;
+        smoothedFreq1.skip(numSamples - 1);
+        smoothedFreq2.skip(numSamples - 1);
+        smoothedFreq3.skip(numSamples - 1);
     }
 
-    freqValue1 = juce::jlimit(minFreq, maxFreq, freqValue1);
-    freqValue2 = juce::jlimit(minFreq, maxFreq, freqValue2);
-    freqValue3 = juce::jlimit(minFreq, maxFreq, freqValue3);
+    const auto frequencyRange = getSafeFilterFrequencyRange(sampleRate);
+
+    freqValue1 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue1);
+    freqValue2 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue2);
+    freqValue3 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue3);
 
     // Set up crossover filters with these frequencies
     lowpass1.setCutoffFrequency(freqValue1);
@@ -1738,22 +2147,35 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     lowpass3.setCutoffFrequency(freqValue3);
     highpass3.setCutoffFrequency(freqValue3);
 
-    // Set up the all-pass coefficients for 3-band compensation
+    // Set up the all-pass branches that make each asymmetric crossover tree
+    // share one phase response before its bands are summed.
     if (lineNum == 2)
     {
-        compensatorLP.setCutoffFrequency(freqValue1);
-        compensatorHP.setCutoffFrequency(freqValue1);
+        // The low branch must pass through the phase response of the second
+        // (f2) split so it remains aligned with the mid+high branches.
+        compensatorLP.setCutoffFrequency(freqValue2);
+        compensatorHP.setCutoffFrequency(freqValue2);
+    }
+    else if (lineNum == 3)
+    {
+        // Low half of the f2 split must also carry the phase of f3, while the
+        // high half must carry the phase of f1. The subsequent f1/f3 splits
+        // then produce A1*A3*(LP2+HP2), which sums flat.
+        compensatorLP.setCutoffFrequency(freqValue3);
+        compensatorHP.setCutoffFrequency(freqValue3);
+        secondCompensatorLP.setCutoffFrequency(freqValue1);
+        secondCompensatorHP.setCutoffFrequency(freqValue1);
     }
 
     // --- TREE-BASED SIGNAL SPLITTING ---
     if (lineNum == 0)
     { // 1 Band: No splitting, the signal just passes through
-        mBuffer1.makeCopyOf(inputBuffer);
+        mBuffer1.makeCopyOf(inputBuffer, true);
     }
     else if (lineNum == 1)
     { // 2 Bands: One split
-        mBuffer1.makeCopyOf(inputBuffer);
-        mBuffer2.makeCopyOf(inputBuffer);
+        mBuffer1.makeCopyOf(inputBuffer, true);
+        mBuffer2.makeCopyOf(inputBuffer, true);
 
         auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
         auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
@@ -1765,14 +2187,22 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     }
     else if (lineNum == 2)
     { // 3 Bands: Asymmetric tree with Dummy Filter compensation
-        juce::AudioBuffer<float> highPassBuffer(totalNumOutputChannels, numSamples);
-        juce::AudioBuffer<float> compensatorHighBuffer(totalNumOutputChannels, numSamples);
+        mSplitTemp1.setSize(totalNumOutputChannels, numSamples, false, false, true);
+        mSplitTemp2.setSize(totalNumOutputChannels, numSamples, false, false, true);
+        auto& highPassBuffer = mSplitTemp1;
+        auto& compensatorHighBuffer = mSplitTemp2;
 
-        mBuffer1.makeCopyOf(inputBuffer);
-        highPassBuffer.makeCopyOf(inputBuffer);
+        mBuffer1.makeCopyOf(inputBuffer, true);
+        highPassBuffer.makeCopyOf(inputBuffer, true);
 
-        // Compensator Path for Band 1 to match group delay
-        compensatorHighBuffer.makeCopyOf(mBuffer1);
+        // First create the actual low branch at f1.
+        auto lowBranchBlock = juce::dsp::AudioBlock<float>(mBuffer1);
+        auto lowBranchContext = juce::dsp::ProcessContextReplacing<float>(lowBranchBlock);
+        lowpass1.process(lowBranchContext);
+
+        // Then pass that low branch through the all-pass response of the f2
+        // split so all three branches have the same phase response.
+        compensatorHighBuffer.makeCopyOf(mBuffer1, true);
 
         auto compLpBlock = juce::dsp::AudioBlock<float>(mBuffer1);
         auto compLpContext = juce::dsp::ProcessContextReplacing<float>(compLpBlock);
@@ -1782,13 +2212,18 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
         auto compHpContext = juce::dsp::ProcessContextReplacing<float>(compHpBlock);
         compensatorHP.process(compHpContext);
 
+        // LR low-pass + high-pass is an all-pass response. The old code
+        // discarded this high-pass half, causing a dip around the crossover.
+        for (int channel = 0; channel < mBuffer1.getNumChannels(); ++channel)
+            mBuffer1.addFrom(channel, 0, compensatorHighBuffer, channel, 0, numSamples);
+
         // Real Split Path for Band 2 and 3
         auto highPassBlock = juce::dsp::AudioBlock<float>(highPassBuffer);
         auto highPassContext = juce::dsp::ProcessContextReplacing<float>(highPassBlock);
         highpass1.process(highPassContext);
 
-        mBuffer2.makeCopyOf(highPassBuffer);
-        mBuffer3.makeCopyOf(highPassBuffer);
+        mBuffer2.makeCopyOf(highPassBuffer, true);
+        mBuffer3.makeCopyOf(highPassBuffer, true);
 
         auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
         auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
@@ -1800,10 +2235,14 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     }
     else if (lineNum == 3)
     { // 4 Bands: Symmetric tree
-        juce::AudioBuffer<float> lowMidBuffer(totalNumOutputChannels, numSamples);
-        juce::AudioBuffer<float> highMidBuffer(totalNumOutputChannels, numSamples);
-        lowMidBuffer.makeCopyOf(inputBuffer);
-        highMidBuffer.makeCopyOf(inputBuffer);
+        mSplitTemp1.setSize(totalNumOutputChannels, numSamples, false, false, true);
+        mSplitTemp2.setSize(totalNumOutputChannels, numSamples, false, false, true);
+        mSplitTemp3.setSize(totalNumOutputChannels, numSamples, false, false, true);
+        auto& lowMidBuffer = mSplitTemp1;
+        auto& highMidBuffer = mSplitTemp2;
+        auto& allPassScratch = mSplitTemp3;
+        lowMidBuffer.makeCopyOf(inputBuffer, true);
+        highMidBuffer.makeCopyOf(inputBuffer, true);
 
         auto lowMidBlock = juce::dsp::AudioBlock<float>(lowMidBuffer);
         auto highMidBlock = juce::dsp::AudioBlock<float>(highMidBuffer);
@@ -1815,8 +2254,20 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
         lowpass2.process(lowMidContext);
         highpass2.process(highMidContext);
 
-        mBuffer1.makeCopyOf(lowMidBuffer);
-        mBuffer2.makeCopyOf(lowMidBuffer);
+        // Apply the f3 all-pass response to the complete low half before its
+        // f1 split. Both halves of a Linkwitz-Riley split are required.
+        allPassScratch.makeCopyOf(lowMidBuffer, true);
+        auto lowHalfCompLpBlock = juce::dsp::AudioBlock<float>(lowMidBuffer);
+        auto lowHalfCompLpContext = juce::dsp::ProcessContextReplacing<float>(lowHalfCompLpBlock);
+        compensatorLP.process(lowHalfCompLpContext);
+        auto lowHalfCompHpBlock = juce::dsp::AudioBlock<float>(allPassScratch);
+        auto lowHalfCompHpContext = juce::dsp::ProcessContextReplacing<float>(lowHalfCompHpBlock);
+        compensatorHP.process(lowHalfCompHpContext);
+        for (int channel = 0; channel < lowMidBuffer.getNumChannels(); ++channel)
+            lowMidBuffer.addFrom(channel, 0, allPassScratch, channel, 0, numSamples);
+
+        mBuffer1.makeCopyOf(lowMidBuffer, true);
+        mBuffer2.makeCopyOf(lowMidBuffer, true);
         auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
         auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
         auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
@@ -1824,8 +2275,20 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
         lowpass1.process(context1);
         highpass1.process(context2);
 
-        mBuffer3.makeCopyOf(highMidBuffer);
-        mBuffer4.makeCopyOf(highMidBuffer);
+        // Mirror the correction on the high half with the f1 all-pass before
+        // splitting it at f3.
+        allPassScratch.makeCopyOf(highMidBuffer, true);
+        auto highHalfCompLpBlock = juce::dsp::AudioBlock<float>(highMidBuffer);
+        auto highHalfCompLpContext = juce::dsp::ProcessContextReplacing<float>(highHalfCompLpBlock);
+        secondCompensatorLP.process(highHalfCompLpContext);
+        auto highHalfCompHpBlock = juce::dsp::AudioBlock<float>(allPassScratch);
+        auto highHalfCompHpContext = juce::dsp::ProcessContextReplacing<float>(highHalfCompHpBlock);
+        secondCompensatorHP.process(highHalfCompHpContext);
+        for (int channel = 0; channel < highMidBuffer.getNumChannels(); ++channel)
+            highMidBuffer.addFrom(channel, 0, allPassScratch, channel, 0, numSamples);
+
+        mBuffer3.makeCopyOf(highMidBuffer, true);
+        mBuffer4.makeCopyOf(highMidBuffer, true);
         auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
         auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
         auto block4 = juce::dsp::AudioBlock<float>(mBuffer4);
@@ -1833,83 +2296,42 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
         lowpass3.process(context3);
         highpass3.process(context4);
     }
-
-    //==============================================================================
-    // DYNAMIC COMPENSATION
-    // This logic is now part of the splitting process, applied after the crossovers.
-    //==============================================================================
-    const float ratioThreshold = 6.0f;
-
-    // For Band 2
-    if (lineNum > 1)
-    {
-        float f1 = freqValue1, f2 = freqValue2;
-        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
-        {
-            float k = f2 / f1;
-            const float denominator = k - 1.0f;
-            if (std::abs(denominator) > 1e-6f)
-            {
-                float centerFreq = std::sqrt(f1 * f2);
-                float Q = std::sqrt(k) / denominator;
-                float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
-
-                *compensatorEQ1.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
-                auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-                auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-                compensatorEQ1.process(context2);
-            }
-        }
-    }
-    // For Band 3
-    if (lineNum > 2)
-    {
-        float f1 = freqValue2, f2 = freqValue3;
-        if (f1 > 20.0f && f2 > f1 && (f2 / f1) < ratioThreshold)
-        {
-            float k = f2 / f1;
-            const float denominator = k - 1.0f;
-            if (std::abs(denominator) > 1e-6f)
-            {
-                float centerFreq = std::sqrt(f1 * f2);
-                float Q = std::sqrt(k) / denominator;
-                float gain = (1.0f + k * k) * (1.0f + k * k) / (k * k * k * k);
-
-                *compensatorEQ2.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(sampleRate, centerFreq, Q, gain);
-                auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
-                auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
-                compensatorEQ2.process(context3);
-            }
-        }
-    }
 }
 
 void FireAudioProcessor::updateGlobalFilters(double sampleRate)
 {
     // Get the final, modulated settings for the entire filter chain.
-    auto chainSettings = getChainSettings(treeState, *lfoManager);
+    auto chainSettings = getCachedChainSettings(&lfoOutputBuffer);
 
     // It's good practice to ensure frequencies are within a valid range.
-    const float minFreq = 20.0f;
-    float maxFreq = sampleRate / 2.0f;
+    if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
+        return;
 
-    if (maxFreq < minFreq)
-        maxFreq = minFreq;
+    const auto frequencyRange = getSafeFilterFrequencyRange(sampleRate);
 
     // Clamp frequencies to be safe.
-    chainSettings.lowCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.lowCutFreq);
-    chainSettings.peakFreq = juce::jlimit(minFreq, maxFreq, chainSettings.peakFreq);
-    chainSettings.highCutFreq = juce::jlimit(minFreq, maxFreq, chainSettings.highCutFreq);
+    chainSettings.lowCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.lowCutFreq);
+    chainSettings.peakFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.peakFreq);
+    chainSettings.highCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.highCutFreq);
+
+    if (globalFilterCacheValid
+        && sameCachedValue(cachedGlobalFilterSampleRate, sampleRate)
+        && sameFilterSettings(cachedGlobalFilterSettings, chainSettings))
+        return;
 
     // Call the modular update functions with the final settings.
     updateLowCutFilters(chainSettings, sampleRate);
     updatePeakFilter(chainSettings, sampleRate);
     updateHighCutFilters(chainSettings, sampleRate);
+
+    cachedGlobalFilterSettings = chainSettings;
+    cachedGlobalFilterSampleRate = sampleRate;
+    globalFilterCacheValid = true;
 }
 
 float FireAudioProcessor::getTotalLatency() const
 {
-    return totalLatency;
+    return totalLatency.load(std::memory_order_relaxed);
 }
 
 void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
@@ -1920,71 +2342,86 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
 
     std::array<juce::AudioBuffer<float>*, 4> dryBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
     std::array<juce::AudioBuffer<float>*, 4> wetBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
+    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
 
-    sumBands(delayMatchedDryBuffer, dryBandBuffers, true);
+    // Solo must affect both sides of the global dry/wet mix. Otherwise the
+    // un-soloed bands leak back through the dry side whenever Mix is below 1.
+    sumBands(delayMatchedDryBuffer, dryBandBuffers, false);
 
     for (int i = 0; i < numBands; ++i)
     {
         if (auto* band = bands[i].get())
         {
+            const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
             calculateAndStoreLevels(*dryBandBuffers[i], band->mInputLeftRMS, band->mInputRightRMS, band->mInputLeftPeak, band->mInputRightPeak);
 
-            if (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(BAND_ENABLE_ID, i)))
+            if (loadCachedParameter(parameters.enabled) > 0.5f)
             {
                 BandProcessingParameters params;
 
                 // 1. Fill General Settings
-                params.isOutputModulated = getModulationInfoForParameter(ParameterIDAndName::getIDString(OUTPUT_ID, i)).isModulated;
-                params.mode = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(MODE_ID, i));
-                params.isHQ = *treeState.getRawParameterValue(HQ_ID);
-                params.isDriveEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, i)) > 0.5f;
-                params.isShapeEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i)) > 0.5f;
-                params.isCompEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(COMP_BYPASS_ID, i)) > 0.5f;
-                params.isWidthEnabled = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(WIDTH_BYPASS_ID, i)) > 0.5f;
-                params.isSafeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(SAFE_ID, i)) > 0.5f;
-                params.isExtremeModeOn = *treeState.getRawParameterValue(ParameterIDAndName::getIDString(EXTREME_ID, i)) > 0.5f;
-                params.isDcFilterEnabled = params.isShapeEnabled && (*treeState.getRawParameterValue(ParameterIDAndName::getIDString(DC_FILTER_ID, i)) > 0.5f);
+                params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
+                params.isHQ = useHQ;
+                params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
+                params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
+                params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
+                params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
+                params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
+                params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
+                params.isDcFilterEnabled = params.isShapeEnabled
+                                           && loadCachedParameter(parameters.dcFilterEnabled) > 0.5f;
 
                 // 2. Setup ModulatedValueProviders AND their LFO source indices
-                auto setupProvider = [&](ModulatedValueProvider& provider, int& lfoIndex, const juce::String& paramID)
+                auto setupProvider = [&](ModulatedValueProvider& provider,
+                                         int& lfoIndex,
+                                         const CachedParameter& parameter)
                 {
-                    auto* param = treeState.getParameter(paramID);
-                    if (! param)
+                    if (parameter.ranged == nullptr)
                         return;
 
-                    provider.baseValue = *treeState.getRawParameterValue(paramID);
-                    provider.range = param->getNormalisableRange();
+                    provider.baseValue = loadCachedParameter(parameter);
+                    provider.range = parameter.ranged->getNormalisableRange();
 
-                    auto modInfo = getModulationInfoForParameter(paramID);
-                    if (modInfo.isModulated && ! modInfo.isBypassed)
+                    LfoManager::AudioThreadRoutingInfo routingInfo;
+                    if (lfoManager->getAudioThreadRoutingInfo(parameter.ranged, routingInfo))
                     {
-                        provider.modulationDepth = modInfo.depth;
-                        provider.isBipolar = modInfo.isBipolar;
-                        lfoIndex = modInfo.sourceLfoIndex - 1; // Store the 0-based index
+                        provider.modulationDepth = routingInfo.depth;
+                        provider.isBipolar = routingInfo.isBipolar;
+                        lfoIndex = routingInfo.sourceLfoIndex;
                     }
                 };
 
-                setupProvider(params.driveVal, params.driveLfoSourceIndex, ParameterIDAndName::getIDString(DRIVE_ID, i));
-                setupProvider(params.biasVal, params.biasLfoSourceIndex, ParameterIDAndName::getIDString(BIAS_ID, i));
-                setupProvider(params.recVal, params.recLfoSourceIndex, ParameterIDAndName::getIDString(REC_ID, i));
-                setupProvider(params.outputVal, params.outputLfoSourceIndex, ParameterIDAndName::getIDString(OUTPUT_ID, i));
+                setupProvider(params.driveVal, params.driveLfoSourceIndex, parameters.drive);
+                setupProvider(params.biasVal, params.biasLfoSourceIndex, parameters.bias);
+                setupProvider(params.recVal, params.recLfoSourceIndex, parameters.rec);
+                setupProvider(params.outputVal, params.outputLfoSourceIndex, parameters.output);
+
+                // Linked output compensation is a DSP rule, not an editor side
+                // effect. It follows the unmodulated Drive base, matching the
+                // original UI formula while keeping Output's own range/LFO.
+                if (loadCachedParameter(parameters.linked) > 0.5f)
+                    params.outputVal.baseValue = -0.1f * loadCachedParameter(parameters.drive);
 
                 // 3. Get final values for Block-wise parameters
-                params.compRatio = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_RATIO_ID, i));
-                params.compThreshold = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_THRESH_ID, i));
-                params.compAttack = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_ATTACK_ID, i));
-                params.compRelease = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_RELEASE_ID, i));
-                params.compMixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(COMP_MIX_ID, i));
-                params.width = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(WIDTH_ID, i));
-                params.pan = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(PAN_ID, i));
-                params.widthMixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(WIDTH_MIX_ID, i));
-                params.mixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(MIX_ID, i));
-                params.shapeMixVal = lfoManager->getModulatedValue(ParameterIDAndName::getIDString(SHAPE_MIX_ID, i));
+                params.compRatio = getBlockModulatedValue(parameters.compressorRatio, lfoOutputs);
+                params.compThreshold = getBlockModulatedValue(parameters.compressorThreshold, lfoOutputs);
+                params.compAttack = getBlockModulatedValue(parameters.compressorAttack, lfoOutputs);
+                params.compRelease = getBlockModulatedValue(parameters.compressorRelease, lfoOutputs);
+                params.compMixVal = getBlockModulatedValue(parameters.compressorMix, lfoOutputs);
+                params.width = getBlockModulatedValue(parameters.width, lfoOutputs);
+                params.pan = getBlockModulatedValue(parameters.pan, lfoOutputs);
+                params.widthMixVal = getBlockModulatedValue(parameters.widthMix, lfoOutputs);
+                params.mixVal = getBlockModulatedValue(parameters.mix, lfoOutputs);
+                params.shapeMixVal = getBlockModulatedValue(parameters.shapeMix, lfoOutputs);
 
                 realtimeModulatedThresholds[i].store(params.compThreshold);
 
                 // 4. Call BandProcessor
                 band->process(*wetBandBuffers[i], params, lfoOutputs);
+            }
+            else
+            {
+                band->processBypassed(*wetBandBuffers[i], useHQ);
             }
             calculateAndStoreLevels(*wetBandBuffers[i], band->mOutputLeftRMS, band->mOutputRightRMS, band->mOutputLeftPeak, band->mOutputRightPeak);
         }
@@ -1998,7 +2435,7 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     // ==============================================================================
     // 1. Global Filter Processing (Block-based)
     // ==============================================================================
-    if (*treeState.getRawParameterValue(FILTER_BYPASS_ID) > 0.5f)
+    if (loadCachedParameter(filterEnabledParameter) > 0.5f)
     {
         updateGlobalFilters(sampleRate);
         auto block = juce::dsp::AudioBlock<float>(buffer);
@@ -2019,59 +2456,83 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
     // a. Prepare the "recipe" for the global output gain.
     ModulatedValueProvider globalGainProvider;
-    auto* param = treeState.getParameter(OUTPUT_ID);
-    if (! param)
+    if (globalOutputParameter.ranged == nullptr)
         return;
 
-    globalGainProvider.baseValue = *treeState.getRawParameterValue(OUTPUT_ID);
-    globalGainProvider.range = param->getNormalisableRange();
+    globalGainProvider.baseValue = loadCachedParameter(globalOutputParameter);
+    globalGainProvider.range = globalOutputParameter.ranged->getNormalisableRange();
 
-    auto modInfo = getModulationInfoForParameter(OUTPUT_ID);
-    if (modInfo.isModulated && ! modInfo.isBypassed)
+    LfoManager::AudioThreadRoutingInfo routingInfo;
+    if (lfoManager->getAudioThreadRoutingInfo(globalOutputParameter.ranged, routingInfo))
     {
-        globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(modInfo.sourceLfoIndex - 1);
-        globalGainProvider.modulationDepth = modInfo.depth;
-        globalGainProvider.isBipolar = modInfo.isBipolar;
+        const int sourceIndex = routingInfo.sourceLfoIndex;
+        if (juce::isPositiveAndBelow(sourceIndex, lfoOutputs.getNumChannels()))
+        {
+            globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(sourceIndex);
+            globalGainProvider.modulationDepth = routingInfo.depth;
+            globalGainProvider.isBipolar = routingInfo.isBipolar;
+        }
     }
 
     // b. Apply the gain using our new, clean helper function.
-    applyGain(buffer, globalGainProvider);
+    applyGain(buffer, globalGainProvider, gainProcessorGlobal);
 }
 
-void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs)
+void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer)
 {
-    // First, check if the entire effect is bypassed.
-    if (! (*treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID) > 0.5f))
+    const bool isActive = loadCachedParameter(downsampleEnabledParameter) > 0.5f;
+    if (! isActive)
+    {
+        resetDownsamplingState();
         return;
+    }
+
+    if (! downsamplingWasActive)
+    {
+        downsampleSamplesRemaining.fill(0);
+        downsampleHeldSamples.fill(0.0f);
+        downsamplingWasActive = true;
+    }
 
     // --- 1. Prepare Dry Signal & Mixer ---
     // A copy of the original signal is needed for the dry/wet mix.
-    juce::AudioBuffer<float> dryBuffer;
-    dryBuffer.makeCopyOf(buffer);
+    lofiDryBuffer.makeCopyOf(buffer, true);
 
     // Set up the mixer with the correct wet proportion from its parameter.
-    lofiMixer.setWetMixProportion(lfoManager->getModulatedValue(DOWNSAMPLE_MIX_ID));
-    lofiMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
+    lofiMixer.setWetMixProportion(getBlockModulatedValue(downsampleMixParameter, lfoOutputBuffer));
+    if (! lofiMixerPrimed)
+        lofiMixer.reset();
+    lofiMixerPrimed = true;
+    lofiMixer.pushDrySamples(juce::dsp::AudioBlock<float>(lofiDryBuffer));
 
     // --- 2. Get All Parameter Values Once Per Block ---
-    const int bits = static_cast<int>(lfoManager->getModulatedValue(BIT_DEPTH_ID));
-    const float jitter = lfoManager->getModulatedValue(JITTER_ID);
-    const float rateReduceValue = lfoManager->getModulatedValue(DOWNSAMPLE_ID);
+    const int bits = juce::jlimit(4, 32,
+                                 juce::roundToInt(getBlockModulatedValue(bitDepthParameter,
+                                                                        lfoOutputBuffer)));
+    const float jitter = getBlockModulatedValue(jitterParameter, lfoOutputBuffer);
+    const float rateReduceValue = getBlockModulatedValue(downsampleRateParameter, lfoOutputBuffer);
 
     // --- 3. Process Audio ---
-    for (int channel = 0; channel < getTotalNumInputChannels(); ++channel)
-    {
-        auto* channelData = buffer.getWritePointer(channel);
-        int samplesToHold = 0;
-        float sampleToHold = 0.0f;
+    const int channelsToProcess = juce::jmin(buffer.getNumChannels(),
+                                              static_cast<int>(downsamplingStateChannels));
+    const float quantisationStep = bits < 32
+                                       ? 2.0f / std::ldexp(1.0f, bits)
+                                       : 0.0f;
 
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    // Iterate samples first so jitter consumes the same random sequence
+    // regardless of how the host partitions the stream into blocks.
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        for (int channel = 0; channel < channelsToProcess; ++channel)
         {
+            auto* channelData = buffer.getWritePointer(channel);
+            const auto stateIndex = static_cast<size_t>(channel);
+
             // --- Rate Reduction (Sample & Hold) ---
-            if (samplesToHold <= 0)
+            if (downsampleSamplesRemaining[stateIndex] <= 0)
             {
                 // It's time to grab a new sample.
-                sampleToHold = channelData[sample];
+                downsampleHeldSamples[stateIndex] = channelData[sample];
 
                 // Determine the hold duration for this new sample.
                 float currentRateReduce = rateReduceValue;
@@ -2086,24 +2547,18 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
                 }
 
                 // Set how many samples we need to hold for. Must be at least 1.
-                samplesToHold = juce::jmax(1, static_cast<int>(currentRateReduce));
+                downsampleSamplesRemaining[stateIndex] = juce::jmax(1, static_cast<int>(currentRateReduce));
             }
 
             // Output the held sample.
-            channelData[sample] = sampleToHold;
-            samplesToHold--;
+            channelData[sample] = downsampleHeldSamples[stateIndex];
+            --downsampleSamplesRemaining[stateIndex];
 
             // --- Bit Crushing ---
             // Apply this effect after the sample has been selected (or held).
             if (bits < 32)
-            {
-                // Calculate the number of possible amplitude levels.
-                float numLevels = std::pow(2.0f, bits);
-                // Calculate the size of each amplitude "step".
-                float step = 2.0f / numLevels;
-                // Quantize the sample's amplitude to the nearest step.
-                channelData[sample] = step * std::floor(channelData[sample] / step + 0.5f);
-            }
+                channelData[sample] = quantisationStep
+                                      * std::floor(channelData[sample] / quantisationStep + 0.5f);
         }
     }
 
@@ -2112,11 +2567,42 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
     lofiMixer.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }
 
+void FireAudioProcessor::resetDownsamplingState() noexcept
+{
+    downsampleSamplesRemaining.fill(0);
+    downsampleHeldSamples.fill(0.0f);
+    downsamplingWasActive = false;
+    lofiMixerPrimed = false;
+}
+
+void FireAudioProcessor::primeLatencyMatchedBypass(juce::AudioBuffer<float>& inputBuffer)
+{
+    if (inputBuffer.getNumChannels() == 0 || inputBuffer.getNumSamples() == 0)
+        return;
+
+    mWetBuffer.makeCopyOf(inputBuffer, true);
+    bypassDelayMixer.setWetLatency(totalLatency.load(std::memory_order_acquire));
+    bypassDelayMixer.setWetMixProportion(0.0f);
+    bypassDelayMixer.pushDrySamples(juce::dsp::AudioBlock<float>(inputBuffer));
+    bypassDelayMixer.mixWetSamples(juce::dsp::AudioBlock<float>(mWetBuffer));
+}
+
+void FireAudioProcessor::processLatencyMatchedBypass(juce::AudioBuffer<float>& buffer)
+{
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+        return;
+
+    bypassDelayMixer.setWetLatency(totalLatency.load(std::memory_order_acquire));
+    bypassDelayMixer.setWetMixProportion(0.0f);
+    bypassDelayMixer.pushDrySamples(juce::dsp::AudioBlock<float>(buffer));
+    bypassDelayMixer.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
+}
+
 void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
 {
-    if (*treeState.getRawParameterValue(HQ_ID))
+    if (loadCachedParameter(hqParameter) > 0.5f)
     {
-        dryWetMixerGlobal.setWetLatency(totalLatency);
+        dryWetMixerGlobal.setWetLatency(totalLatency.load(std::memory_order_relaxed));
     }
     else
     {
@@ -2124,7 +2610,10 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
     }
 
     // Get the final modulated mix value from the LfoManager
-    dryWetMixerGlobal.setWetMixProportion(lfoManager->getModulatedValue(MIX_ID));
+    dryWetMixerGlobal.setWetMixProportion(getBlockModulatedValue(globalMixParameter, lfoOutputBuffer));
+    if (! globalMixerPrimed)
+        dryWetMixerGlobal.reset();
+    globalMixerPrimed = true;
     dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
     dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }
@@ -2150,24 +2639,22 @@ FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParam
 
 void FireAudioProcessor::setModulationValue(const juce::String& targetParameterID, float newValue)
 {
-    // Find the matching routing in the LFO manager.
-    for (auto& routing : lfoManager->getModulationRoutings())
+    auto* parameter = treeState.getParameter(targetParameterID);
+    auto* rawParameter = treeState.getRawParameterValue(targetParameterID);
+    if (parameter == nullptr || rawParameter == nullptr || ! std::isfinite(newValue))
+        return;
+
+    const auto range = parameter->getNormalisableRange();
+    const float valueNormalized = range.convertTo0to1(newValue);
+    const float baseNormalized = range.convertTo0to1(rawParameter->load(std::memory_order_relaxed));
+    bool didUpdate = false;
+
     {
-        if (routing.targetParameterID == targetParameterID)
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        for (auto& routing : lfoManager->getModulationRoutings())
         {
-            // Get the parameter object to access its properties, especially the range.
-            auto* parameter = treeState.getParameter(targetParameterID);
-            if (parameter == nullptr)
-                return; // Exit if the parameter is not found.
-
-            const auto range = parameter->getNormalisableRange();
-
-            // Get the parameter's current base value (without modulation).
-            float baseValue = *treeState.getRawParameterValue(targetParameterID);
-
-            // Convert both the target value and the base value to the normalized [0, 1] range.
-            float valueNormalized = range.convertTo0to1(newValue);
-            float baseNormalized = range.convertTo0to1(baseValue);
+            if (routing.targetParameterID != targetParameterID)
+                continue;
 
             // The new depth is the difference between the target value's normalized position
             // and the base value's normalized position.
@@ -2183,95 +2670,109 @@ void FireAudioProcessor::setModulationValue(const juce::String& targetParameterI
 
             // Clamp the final depth to the valid range [-1.0, 1.0] and update the routing.
             routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
-
-            // Notify that LFO data has changed to ensure UI and state are updated.
-            lfoDataHasChanged();
-
-            // We've found and updated the routing, so we can exit the function.
-            return;
+            didUpdate = true;
+            break;
         }
     }
+
+    if (didUpdate)
+        lfoDataHasChanged();
 }
 
 void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterID, float newDepth)
 {
-    // Find the matching routing in the modulation array.
-    for (auto& routing : lfoManager->getModulationRoutings())
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            // Found it. Update its depth value, ensuring it stays within the [0, 1] range.
-            routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
-
-            lfoDataHasChanged();
-
-            // For now, we only handle the first match.
-            return;
-        }
-    }
-}
-
-void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID)
-{
-    // Find the matching routing in the modulation array.
-    for (auto& routing : lfoManager->getModulationRoutings())
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            // Found it. Flip the boolean state.
-            routing.isBipolar = ! routing.isBipolar;
-
-            lfoDataHasChanged();
-
-            // For now, we only handle the first match.
-            return;
-        }
-    }
-}
-
-void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
-{
-    // Find the matching routing in the modulation array.
-    for (auto& routing : lfoManager->getModulationRoutings())
-    {
-        if (routing.targetParameterID == targetParameterID)
-        {
-            // Reset depth to 0.5 and mode to the default (bipolar)
-            routing.depth = 0.5f;
-            routing.isBipolar = true;
-
-            lfoDataHasChanged();
-
-            // We found the routing and reset it, so we can exit the function.
-            return;
-        }
-    }
-}
-
-void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID)
-{
-    auto& routings = lfoManager->getModulationRoutings();
-    if (! juce::isPositiveAndBelow(routingIndex, routings.size()))
+    if (! std::isfinite(newDepth))
         return;
 
-    if (targetParameterID.isNotEmpty())
+    bool didUpdate = false;
     {
-        for (int i = 0; i < routings.size(); ++i)
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        for (auto& routing : lfoManager->getModulationRoutings())
         {
-            if (i == routingIndex)
-                continue;
-            if (routings.getReference(i).targetParameterID == targetParameterID)
+            if (routing.targetParameterID == targetParameterID)
             {
-                routings.getReference(i).targetParameterID = "";
+                routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
+                didUpdate = true;
+                break;
             }
         }
     }
 
-    auto& currentRouting = routings.getReference(routingIndex);
-    currentRouting.sourceLfoIndex = sourceLfoIndex;
-    currentRouting.targetParameterID = targetParameterID;
+    if (didUpdate)
+        lfoDataHasChanged();
+}
 
-    lfoDataHasChanged();
+void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID)
+{
+    bool didUpdate = false;
+    {
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        for (auto& routing : lfoManager->getModulationRoutings())
+        {
+            if (routing.targetParameterID == targetParameterID)
+            {
+                routing.isBipolar = ! routing.isBipolar;
+                didUpdate = true;
+                break;
+            }
+        }
+    }
+
+    if (didUpdate)
+        lfoDataHasChanged();
+}
+
+void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
+{
+    bool didUpdate = false;
+    {
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        for (auto& routing : lfoManager->getModulationRoutings())
+        {
+            if (routing.targetParameterID == targetParameterID)
+            {
+                routing.depth = 0.5f;
+                routing.isBipolar = true;
+                didUpdate = true;
+                break;
+            }
+        }
+    }
+
+    if (didUpdate)
+        lfoDataHasChanged();
+}
+
+void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID)
+{
+    if (targetParameterID.isNotEmpty()
+        && (! juce::isPositiveAndBelow(sourceLfoIndex, 4) || treeState.getParameter(targetParameterID) == nullptr))
+        return;
+
+    bool didUpdate = false;
+    {
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        auto& routings = lfoManager->getModulationRoutings();
+        if (! juce::isPositiveAndBelow(routingIndex, routings.size()))
+            return;
+
+        if (targetParameterID.isNotEmpty())
+        {
+            for (int i = 0; i < routings.size(); ++i)
+            {
+                if (i != routingIndex && routings.getReference(i).targetParameterID == targetParameterID)
+                    routings.getReference(i).targetParameterID.clear();
+            }
+        }
+
+        auto& currentRouting = routings.getReference(routingIndex);
+        currentRouting.sourceLfoIndex = juce::jlimit(0, 3, sourceLfoIndex);
+        currentRouting.targetParameterID = targetParameterID;
+        didUpdate = true;
+    }
+
+    if (didUpdate)
+        lfoDataHasChanged();
 }
 
 float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
@@ -2289,7 +2790,6 @@ const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
 
 void FireAudioProcessor::lfoDataHasChanged()
 {
-    lfoManager->onLfoShapeChanged(-1);
     if (auto* editor = dynamic_cast<FireAudioProcessorEditor*>(getActiveEditor()))
     {
         editor->markPresetAsDirty();
@@ -2470,11 +2970,44 @@ void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& t
 
 bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml)
 {
-    auto presetTree = juce::ValueTree::fromXml(presetXml);
-    if (! presetTree.isValid())
-        return false;
+    constexpr float comparisonTolerance = 1.0e-6f;
+    for (const auto& parameter : getParameters())
+    {
+        auto* parameterWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter);
+        if (parameterWithID == nullptr)
+            continue;
 
-    return treeState.state.isEquivalentTo(presetTree);
+        float presetValue = parameterWithID->getDefaultValue();
+        if (presetXml.hasAttribute(parameterWithID->paramID))
+        {
+            const float parsedValue = static_cast<float>(presetXml.getDoubleAttribute(parameterWithID->paramID));
+            presetValue = std::isfinite(parsedValue) ? juce::jlimit(0.0f, 1.0f, parsedValue)
+                                                     : parameterWithID->getDefaultValue();
+        }
+        else if (parameterWithID->paramID.startsWith(SHAPE_BYPASS_ID))
+        {
+            presetValue = 1.0f;
+        }
+
+        if (std::abs(parameterWithID->getValue() - presetValue) > comparisonTolerance)
+            return false;
+    }
+
+    juce::XmlElement currentState("currentState");
+    state::saveStateToXml(*this, currentState);
+
+    for (const auto* childName : { "LFO_STATE", "MODULATION_STATE" })
+    {
+        const auto* presetChild = presetXml.getChildByName(childName);
+        if (presetChild != nullptr)
+        {
+            const auto* currentChild = currentState.getChildByName(childName);
+            if (currentChild == nullptr || ! currentChild->isEquivalentTo(presetChild, true))
+                return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -2491,41 +3024,50 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
  */
 void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount)
 {
-    auto& routings = lfoManager->getModulationRoutings();
     const auto& bandParamBases = ParameterIDAndName::getBandParameterInfo();
-
-    for (auto& routing : routings)
+    bool didUpdate = false;
     {
-        if (routing.targetParameterID.isEmpty())
-            continue;
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        auto& routings = lfoManager->getModulationRoutings();
 
-        for (const auto& paramInfo : bandParamBases)
+        for (auto& routing : routings)
         {
-            // Check if the target ID starts with a known band parameter ID base
-            if (routing.targetParameterID.startsWith(paramInfo.idBase))
+            if (routing.targetParameterID.isEmpty())
+                continue;
+
+            for (const auto& paramInfo : bandParamBases)
             {
-                // Extract the number part of the ID
-                juce::String indexStr = routing.targetParameterID.substring(paramInfo.idBase.length());
-
-                if (! indexStr.containsOnly("0123456789"))
-                    continue;
-
-                int currentBandIndex = indexStr.getIntValue() - 1; // Convert to 0-based
-
-                // Check if the current band is within the range we need to shift
-                if (currentBandIndex >= startIndex && currentBandIndex <= endIndex)
+                // Check if the target ID starts with a known band parameter ID base
+                if (routing.targetParameterID.startsWith(paramInfo.idBase))
                 {
-                    int newBandIndex = currentBandIndex + shiftAmount;
-                    routing.targetParameterID = paramInfo.idBase + juce::String(newBandIndex + 1);
+                    // Extract the number part of the ID
+                    juce::String indexStr = routing.targetParameterID.substring(paramInfo.idBase.length());
 
-                    // Found a match and processed it, no need to check other bases for this routing
-                    goto next_routing;
+                    if (! indexStr.containsOnly("0123456789"))
+                        continue;
+
+                    int currentBandIndex = indexStr.getIntValue() - 1; // Convert to 0-based
+
+                    // Check if the current band is within the range we need to shift
+                    if (currentBandIndex >= startIndex && currentBandIndex <= endIndex)
+                    {
+                        int newBandIndex = currentBandIndex + shiftAmount;
+                        routing.targetParameterID = juce::isPositiveAndBelow(newBandIndex, 4)
+                                                        ? paramInfo.idBase + juce::String(newBandIndex + 1)
+                                                        : juce::String();
+                        didUpdate = true;
+
+                        // Found a match and processed it, no need to check other bases for this routing
+                        goto next_routing;
+                    }
                 }
             }
+        next_routing:; // Label to jump to for the next iteration of the outer loop
         }
-    next_routing:; // Label to jump to for the next iteration of the outer loop
     }
-    lfoDataHasChanged();
+
+    if (didUpdate)
+        lfoDataHasChanged();
 }
 
 /**
@@ -2538,27 +3080,37 @@ void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex,
  */
 void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
 {
-    auto& routings = lfoManager->getModulationRoutings();
+    if (! juce::isPositiveAndBelow(bandIndex, 4))
+        return;
+
     const auto& bandParamBases = ParameterIDAndName::getBandParameterInfo();
     const juce::String bandSuffix = juce::String(bandIndex + 1);
-
-    for (auto& routing : routings)
+    bool didUpdate = false;
     {
-        if (routing.targetParameterID.isEmpty())
-            continue;
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        auto& routings = lfoManager->getModulationRoutings();
 
-        for (const auto& paramInfo : bandParamBases)
+        for (auto& routing : routings)
         {
-            // Check if the target is an exact match for a parameter in the specified band
-            if (routing.targetParameterID == (paramInfo.idBase + bandSuffix))
+            if (routing.targetParameterID.isEmpty())
+                continue;
+
+            for (const auto& paramInfo : bandParamBases)
             {
-                routing.targetParameterID = ""; // Set target to "None"
-                goto next_routing_clear;
+                // Check if the target is an exact match for a parameter in the specified band
+                if (routing.targetParameterID == (paramInfo.idBase + bandSuffix))
+                {
+                    routing.targetParameterID = ""; // Set target to "None"
+                    didUpdate = true;
+                    goto next_routing_clear;
+                }
             }
+        next_routing_clear:;
         }
-    next_routing_clear:;
     }
-    lfoDataHasChanged();
+
+    if (didUpdate)
+        lfoDataHasChanged();
 }
 
 bool FireAudioProcessor::getLatestDistortionGraphValues(DistortionGraphValues& values)
@@ -2601,7 +3153,7 @@ void FireAudioProcessor::calculateAndStoreLevels(const juce::AudioBuffer<float>&
     const int numSamples = buffer.getNumSamples();
 
     // If there's no audio, reset levels to zero to prevent stale values.
-    if (numSamples <= 0)
+    if (numChannels <= 0 || numSamples <= 0)
     {
         rmsLeft.store(0.0f);
         rmsRight.store(0.0f);

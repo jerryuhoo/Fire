@@ -21,6 +21,7 @@
 #include "Panels/SpectrogramPanel/FilterControl.h"
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
+#include "Utility/VersionInfo.h"
 
 // Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
 
@@ -91,19 +92,17 @@ class FireAudioProcessorEditor : public juce::AudioProcessorEditor,
                                  public juce::ComboBox::Listener,
                                  public juce::Timer,
                                  public juce::Button::Listener,
-                                 public juce::AudioProcessorValueTreeState::Listener,
                                  public juce::AsyncUpdater,
                                  public juce::ChangeListener
 {
 public:
     FireAudioProcessorEditor(FireAudioProcessor&);
-    ~FireAudioProcessorEditor();
+    ~FireAudioProcessorEditor() override;
 
     //==============================================================================
     void paint(juce::Graphics& g) override;
     void resized() override;
     void timerCallback() override;
-    void parameterChanged(const juce::String& parameterID, float newValue) override;
     void handleAsyncUpdate() override;
     void markPresetAsDirty();
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -113,6 +112,18 @@ public:
     void hideValuePopup();
 
 private:
+    class UpdateCheckThread final : public juce::Thread
+    {
+    public:
+        explicit UpdateCheckThread(FireAudioProcessorEditor& ownerToUse);
+        void run() override;
+        void stop();
+
+    private:
+        FireAudioProcessorEditor& owner;
+        VersionInfo::FetchOperation fetchOperation;
+    };
+
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     FireAudioProcessor& processor;
@@ -197,10 +208,16 @@ private:
 
     void updateModulationStates();
     std::vector<ModulatableSlider*> getAllModulatableSliders();
+    void publishAvailableUpdate(const juce::String& version);
+    juce::String takeAvailableUpdate();
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment;
+
+    juce::CriticalSection updateResultLock;
+    juce::String pendingUpdateVersion;
+    UpdateCheckThread updateCheckThread;
 
     // ComboBoxes and attachments are now managed by BandPanel
 

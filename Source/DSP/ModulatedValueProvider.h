@@ -8,7 +8,10 @@
   ==============================================================================
 */
 
+#pragma once
+
 #include "juce_audio_processors/juce_audio_processors.h"
+#include <cmath>
 
 /**
  * @struct ModulatedValueProvider
@@ -66,24 +69,39 @@ struct ModulatedValueProvider
      */
     inline float get(int sampleIndex) const
     {
+        const float safeBaseValue = std::isfinite(baseValue) ? baseValue : 0.0f;
+
         // // This branch is highly predictable by the CPU, resulting in negligible
         // // performance cost for non-modulated parameters.
-        if (lfoSignal == nullptr)
-            return baseValue;
+        if (lfoSignal == nullptr || sampleIndex < 0)
+            return safeBaseValue;
+
+        if (! std::isfinite(range.start) || ! std::isfinite(range.end) || range.end <= range.start)
+            return safeBaseValue;
 
         // --- Per-sample modulation calculation ---
 
         // // 1. Get the LFO value for the current sample (range [0, 1]).
-        const float lfoSample = lfoSignal[sampleIndex];
+        const float rawLfoSample = lfoSignal[sampleIndex];
+        if (! std::isfinite(rawLfoSample))
+            return safeBaseValue;
+        const float lfoSample = juce::jlimit(0.0f, 1.0f, rawLfoSample);
 
         // // 2. Map LFO to bipolar [-1, 1] or unipolar [0, 1] space.
         const float mappedLfo = isBipolar ? (lfoSample * 2.0f - 1.0f) : lfoSample;
 
         // // 3. Calculate the modulation amount in the normalized [0, 1] domain.
-        const float modulationAmount = mappedLfo * modulationDepth;
+        const float safeDepth = std::isfinite(modulationDepth)
+                                    ? juce::jlimit(-1.0f, 1.0f, modulationDepth)
+                                    : 0.0f;
+        const float effectiveDepth = isBipolar ? safeDepth * 0.5f : safeDepth;
+        const float modulationAmount = mappedLfo * effectiveDepth;
 
         // // 4. Get the base value in its normalized form.
-        const float baseNormalized = range.convertTo0to1(baseValue);
+        const float rawBaseNormalized = range.convertTo0to1(safeBaseValue);
+        const float baseNormalized = std::isfinite(rawBaseNormalized)
+                                         ? juce::jlimit(0.0f, 1.0f, rawBaseNormalized)
+                                         : 0.0f;
 
         // // 5. Add the base value and modulation amount.
         float modulatedNormalized = baseNormalized + modulationAmount;
@@ -92,6 +110,7 @@ struct ModulatedValueProvider
         modulatedNormalized = juce::jlimit(0.0f, 1.0f, modulatedNormalized);
 
         // // 7. Convert back from normalized to the parameter's real value and return.
-        return range.convertFrom0to1(modulatedNormalized);
+        const float result = range.convertFrom0to1(modulatedNormalized);
+        return std::isfinite(result) ? result : safeBaseValue;
     }
 };

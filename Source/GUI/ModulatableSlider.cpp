@@ -139,42 +139,54 @@ void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 {
-    if (onClickInAssignMode)
+    if (onClickInAssignMode && event.mods.isLeftButtonDown())
     {
         onClickInAssignMode(parameterID);
         return;
     }
-    // Check for Cmd+Click (macOS) or Ctrl+Click (Windows) on the handle
-    if (isModulated && (event.mods.isCommandDown() || event.mods.isCtrlDown()) && getModulationHandleBounds().contains(event.getPosition().toFloat()))
+
+    const bool isOnModulationHandle = isModulated
+        && getModulationHandleBounds().contains(event.getPosition().toFloat());
+
+    // Test the actual mouse-down position rather than relying on the last
+    // mouseMove event. A fast click can otherwise start a main-slider drag
+    // while the pointer is already over the modulation handle.
+    if (isOnModulationHandle)
     {
-        // If the modifier is pressed on the handle, toggle the bipolar mode
-        if (onBipolarModeToggled)
+        if (event.mods.isRightButtonDown())
+            return;
+
+        if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
-            onBipolarModeToggled();
+            if (onBipolarModeToggled)
+                onBipolarModeToggled();
+
+            return;
         }
-        // We don't start a drag in this case
+
+        if (event.mods.isLeftButtonDown())
+        {
+            isModHandleMouseDown = true;
+            initialLfoAmount = lfoAmount;
+
+            if (onModDragStart)
+                onModDragStart(this);
+
+            repaint();
+        }
+
+        return;
     }
-    else if (isMouseOverMainSlider())
-    {
-        isDraggingMainSlider = true;
 
-        if (onMainDragStart)
-            onMainDragStart(this);
+    if (! event.mods.isLeftButtonDown())
+        return;
 
-        // CRITICAL: Only call the base class mouseDown if we intend to start a drag on the main slider
-        juce::Slider::mouseDown(event);
-    }
-    // Check if the click is on the modulation handle
-    else if (isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
-    {
-        isModHandleMouseDown = true;
-        initialLfoAmount = lfoAmount;
+    isDraggingMainSlider = true;
 
-        if (onModDragStart)
-            onModDragStart(this);
+    if (onMainDragStart)
+        onMainDragStart(this);
 
-        repaint();
-    }
+    juce::Slider::mouseDown(event);
 }
 
 void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
@@ -225,9 +237,8 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
         menu.addItem(5, bypassToggleText);
 
-        // This is the outer lambda. We create 'safeThis' here.
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
-                           [safeThis = juce::Component::SafePointer(this)](int result)
+                           [safeThis = juce::Component::SafePointer<ModulatableSlider>(this)](int result)
                            {
                                if (! safeThis)
                                    return;
@@ -262,12 +273,12 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
                            });
     }
 
-    // Always call the base class mouseUp to ensure proper state cleanup
-    juce::Slider::mouseUp(event);
-
-    // Reset our custom flags regardless of where the mouseUp happened
     if (isDraggingMainSlider)
     {
+        // Pair the base-class mouseUp only with a mouseDown that was actually
+        // forwarded to it. Handle clicks never enter Slider's drag state.
+        juce::Slider::mouseUp(event);
+
         if (onMainDragEnd)
             onMainDragEnd(this);
         isDraggingMainSlider = false;

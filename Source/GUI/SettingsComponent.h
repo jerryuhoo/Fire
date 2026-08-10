@@ -111,7 +111,7 @@ public:
 
         // 1. Place the logo at the top
         // Make it a square, centered horizontally, occupying 40% of the height
-        auto logoHeight = bounds.getHeight() * 0.4f;
+        const auto logoHeight = juce::roundToInt(bounds.getHeight() * 0.4f);
         auto logoArea = bounds.removeFromTop(logoHeight);
         logo.setBounds(logoArea.withSizeKeepingCentre(logoHeight, logoHeight));
 

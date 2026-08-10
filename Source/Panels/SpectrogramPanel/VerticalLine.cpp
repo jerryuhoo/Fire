@@ -84,7 +84,7 @@ void VerticalLine::setDeleteState (bool deleteState)
 
 void VerticalLine::setXPercent (float x)
 {
-    xPercent = x;
+    xPercent = std::isfinite(x) ? juce::jlimit(0.0f, 1.0f, x) : 0.0f;
 }
 
 float VerticalLine::getXPercent()

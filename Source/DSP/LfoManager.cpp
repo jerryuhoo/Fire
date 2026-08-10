@@ -11,10 +11,17 @@
 */
 
 #include "LfoManager.h"
-#include "../Utility/AudioHelpers.h"
+#include "../GUI/InterfaceDefines.h"
+#include <cmath>
+#include <limits>
 
 LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(apvts)
 {
+    const auto indexedParameterId = [](const char* baseId, int index)
+    {
+        return juce::String(baseId) + juce::String(index + 1);
+    };
+
     // Initialize LFO data containers for 4 LFOs
     lfoData.resize(4);
 
@@ -28,7 +35,22 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
 
     for (int i = 0; i < 4; ++i)
     {
-        shapeUpdateFlags[i] = true;
+        const auto lfoIndex = static_cast<size_t>(i);
+        const auto smoothnessId = indexedParameterId(LFO_SMOOTH_ID, i);
+
+        lfoParameters[lfoIndex] = {
+            treeState.getRawParameterValue(indexedParameterId(LFO_SYNC_MODE_ID, i)),
+            treeState.getRawParameterValue(indexedParameterId(LFO_RATE_SYNC_ID, i)),
+            treeState.getRawParameterValue(indexedParameterId(LFO_RATE_HZ_ID, i)),
+            treeState.getRawParameterValue(indexedParameterId(LFO_PHASE_ID, i)),
+            treeState.getRawParameterValue(smoothnessId),
+            treeState.getParameter(smoothnessId)
+        };
+
+        // Build and publish the default table while the processor is being
+        // constructed, before any audio callback can run.
+        lfoEngines[lfoIndex].stageShape(lfoData[lfoIndex]);
+        lfoEngines[lfoIndex].publishStagedShape();
     }
 }
 
@@ -38,8 +60,13 @@ void LfoManager::prepare(const juce::dsp::ProcessSpec& spec)
     {
         engine.prepare(spec);
     }
-    // Ensure the internal buffer is ready
-    lfoOutputBuffer.setSize(4, spec.maximumBlockSize);
+
+    preparedSampleRate = std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0 ? spec.sampleRate : 44100.0;
+
+    // Keep the prepared capacity. Smaller blocks no longer resize this buffer on the audio thread.
+    const auto safeMaximumBlockSize = static_cast<int>(juce::jmin<uint64_t>(
+        spec.maximumBlockSize, static_cast<uint64_t>(std::numeric_limits<int>::max())));
+    lfoOutputBuffer.setSize(4, juce::jmax(1, safeMaximumBlockSize), false, true, false);
 }
 
 void LfoManager::reset()
@@ -48,26 +75,25 @@ void LfoManager::reset()
     {
         engine.reset();
     }
-    wasPlaying = false;
-    modulatedValues.clear();
+    isPlaying.store(false, std::memory_order_relaxed);
+    modulatedValueCount = 0;
+    lfoOutputBuffer.clear();
 }
 
 bool LfoManager::isModulationActive() const
 {
-    // Iterate through all modulation routings.
-    for (const auto& routing : modulationRoutings)
+    // This is called from processBlock in older processor code, so it must never wait for the UI.
+    const juce::ScopedTryLock lock(dataAccessLock);
+    if (lock.isLocked())
     {
-        // If we find any routing with a valid target parameter,
-        // it means modulation is active.
-        if (routing.targetParameterID.isNotEmpty())
-        {
-            return true;
-        }
+        for (const auto& routing : modulationRoutings)
+            if (routing.targetParameterID.isNotEmpty())
+                return true;
+
+        return false;
     }
 
-    // If we get through the whole loop without finding an active routing,
-    // then no modulation is active.
-    return false;
+    return hasPublishedRouting.load(std::memory_order_relaxed);
 }
 
 // =============================================================================
@@ -76,41 +102,57 @@ bool LfoManager::isModulationActive() const
 
 void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
-    const juce::ScopedLock sl(dataAccessLock);
-    // 1. Generate all raw LFO signals for the current block.
-    // This fills the internal 'lfoOutputBuffer'.
-    generateLfoOutput(sampleRate, playHead, numSamples);
+    refreshRuntimeStateIfAvailable();
+    modulatedValueCount = 0;
 
-    // 2. Copy the generated LFO signals to the output buffer.
-    jassert(outputBuffer.getNumSamples() == lfoOutputBuffer.getNumSamples());
-    jassert(outputBuffer.getNumChannels() >= lfoOutputBuffer.getNumChannels());
-
-    for (int channel = 0; channel < lfoOutputBuffer.getNumChannels(); ++channel)
+    // Smoothness is a 0.01-stepped APVTS parameter. Selecting a prebuilt row is
+    // audio-thread safe and remains responsive even if the UI currently holds
+    // the shape/routing lock.
+    for (size_t i = 0; i < lfoEngines.size(); ++i)
     {
-        outputBuffer.copyFrom(channel, 0, lfoOutputBuffer, channel, 0, numSamples);
+        const auto* parameter = lfoParameters[i].smoothness;
+        const float smoothness = parameter != nullptr
+                                     ? parameter->load(std::memory_order_relaxed)
+                                     : 0.0f;
+        lfoEngines[i].setSmoothness(smoothness);
     }
 
-    // 3. Clear the map of calculated values from the previous block.
-    // We now store normalized values.
-    modulatedValues.clear();
+    const int samplesToProcess = juce::jlimit(0, outputBuffer.getNumSamples(), numSamples);
+    if (samplesToProcess <= 0)
+        return;
+
+    // Hosts should honour maximumBlockSize, but grow safely if a host sends a larger block.
+    if (samplesToProcess > lfoOutputBuffer.getNumSamples())
+        lfoOutputBuffer.setSize(4, samplesToProcess, false, false, true);
+
+    // 1. Generate all raw LFO signals for the current block.
+    // This fills the internal 'lfoOutputBuffer'.
+    generateLfoOutput(sampleRate, playHead, samplesToProcess);
+
+    // 2. Copy the generated LFO signals to the output buffer.
+    const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(), lfoOutputBuffer.getNumChannels());
+    for (int channel = 0; channel < channelsToCopy; ++channel)
+    {
+        outputBuffer.copyFrom(channel, 0, lfoOutputBuffer, channel, 0, samplesToProcess);
+    }
 
     // 4. Iterate through all modulation routings to calculate final parameter values.
-    for (const auto& routing : modulationRoutings)
+    for (size_t routingIndex = 0; routingIndex < runtimeRoutingCount; ++routingIndex)
     {
-        // Skip invalid or unassigned routings
-        if (routing.isBypassed || routing.targetParameterID.isEmpty())
+        const auto& routing = runtimeRoutings[routingIndex];
+        if (routing.parameter == nullptr || ! juce::isPositiveAndBelow(routing.sourceLfoIndex, 4))
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
         float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
-
-        // Get the RangedAudioParameter for conversions
-        auto* parameter = treeState.getParameter(routing.targetParameterID);
-        if (parameter == nullptr)
+        if (! std::isfinite(lfoValue))
             continue;
 
         // Get the parameter's original NORMALIZED value (from the GUI knob)
-        const float normalizedBaseValue = parameter->getValue();
+        const float rawBaseValue = routing.parameter->getValue();
+        const float normalizedBaseValue = std::isfinite(rawBaseValue)
+                                              ? juce::jlimit(0.0f, 1.0f, rawBaseValue)
+                                              : routing.parameter->getDefaultValue();
 
         // For bipolar mode, the effective modulation depth should be halved to match
         // the perceived range of unipolar mode.
@@ -128,60 +170,163 @@ void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float samp
         const float normalizedModulationAmount = lfoValue * effectiveDepth;
 
         // If this parameter hasn't been touched yet in this block, initialize it with its base normalized value.
-        if (modulatedValues.find(routing.targetParameterID) == modulatedValues.end())
+        size_t valueIndex = 0;
+        while (valueIndex < modulatedValueCount
+               && modulatedValues[valueIndex].parameter != routing.parameter)
+            ++valueIndex;
+
+        if (valueIndex == modulatedValueCount)
         {
-            modulatedValues[routing.targetParameterID] = normalizedBaseValue;
+            if (modulatedValueCount >= modulatedValues.size())
+                continue;
+
+            modulatedValues[valueIndex] = { routing.parameter, normalizedBaseValue };
+            ++modulatedValueCount;
         }
 
         // Add the normalized modulation amount. This allows multiple LFOs to target the same parameter.
-        modulatedValues[routing.targetParameterID] += normalizedModulationAmount;
+        modulatedValues[valueIndex].normalisedValue += normalizedModulationAmount;
     }
 
     // 5. Final pass: clamp all calculated NORMALIZED values to the valid [0, 1] range.
-    for (auto const& [paramID, val] : modulatedValues)
+    for (size_t i = 0; i < modulatedValueCount; ++i)
     {
-        modulatedValues[paramID] = juce::jlimit(0.0f, 1.0f, val);
+        auto& value = modulatedValues[i].normalisedValue;
+        value = std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0.0f;
     }
 }
 
 float LfoManager::getModulatedValue(const juce::String& parameterID) const
 {
-    // Check if the parameter ID exists in our map of modulated normalized values.
-    auto it = modulatedValues.find(parameterID);
-
-    if (it != modulatedValues.end())
+    if (auto* parameter = treeState.getParameter(parameterID))
     {
-        // Convert normalized value to real value ---
-        auto* parameter = treeState.getParameter(parameterID);
-        if (parameter)
+        for (size_t i = 0; i < modulatedValueCount; ++i)
         {
-            // If found, convert the final normalized value back to the parameter's real value.
-            return parameter->convertFrom0to1(it->second);
+            if (modulatedValues[i].parameter == parameter)
+                return parameter->convertFrom0to1(modulatedValues[i].normalisedValue);
         }
     }
 
     // If not found, it means the parameter is not being modulated.
     // Return its original value directly from the APVTS.
     // NOTE: It's safer to get the parameter and ask for its real value.
-    if (auto* param = treeState.getRawParameterValue(parameterID))
-        return *param;
+    if (auto* rawValue = treeState.getRawParameterValue(parameterID))
+    {
+        const float value = rawValue->load(std::memory_order_relaxed);
+        if (std::isfinite(value))
+            return value;
+    }
+
+    if (auto* parameter = treeState.getParameter(parameterID))
+        return parameter->convertFrom0to1(parameter->getDefaultValue());
 
     jassertfalse; // Parameter not found
     return 0.0f;
+}
+
+bool LfoManager::getAudioThreadRoutingInfo(const juce::RangedAudioParameter* parameter,
+                                           AudioThreadRoutingInfo& result) const noexcept
+{
+    if (parameter == nullptr)
+        return false;
+
+    // refreshRuntimeStateIfAvailable() publishes this fixed snapshot at the
+    // start of the same audio callback. No UI-owned storage or lock is touched.
+    for (size_t i = 0; i < runtimeRoutingCount; ++i)
+    {
+        const auto& routing = runtimeRoutings[i];
+        if (routing.parameter == parameter)
+        {
+            result = { routing.sourceLfoIndex, routing.depth, routing.isBipolar };
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // =============================================================================
 // Private Helper Functions
 // =============================================================================
 
+void LfoManager::refreshRuntimeStateIfAvailable()
+{
+    const juce::ScopedTryLock lock(dataAccessLock);
+    if (! lock.isLocked())
+        return;
+
+    runtimeRoutingCount = 0;
+    bool hasAnyRouting = false;
+
+    for (const auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID.isEmpty())
+            continue;
+
+        hasAnyRouting = true;
+
+        if (routing.isBypassed || ! juce::isPositiveAndBelow(routing.sourceLfoIndex, 4)
+            || runtimeRoutingCount >= runtimeRoutings.size())
+            continue;
+
+        auto* parameter = treeState.getParameter(routing.targetParameterID);
+        if (parameter == nullptr)
+            continue;
+
+        const float depth = std::isfinite(routing.depth)
+                                ? juce::jlimit(-1.0f, 1.0f, routing.depth)
+                                : 0.0f;
+
+        runtimeRoutings[runtimeRoutingCount++] = {
+            parameter,
+            routing.sourceLfoIndex,
+            depth,
+            routing.isBipolar
+        };
+    }
+
+    hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
+
+    for (size_t i = 0; i < lfoEngines.size(); ++i)
+    {
+        lfoEngines[i].publishStagedShape();
+
+        const auto* smoothnessParameter = lfoParameters[i].smoothness;
+        if (smoothnessParameter != nullptr)
+        {
+            const float rawSmoothness = smoothnessParameter->load(std::memory_order_relaxed);
+            const float smoothness = std::isfinite(rawSmoothness)
+                                         ? juce::jlimit(0.0f, 1.0f, rawSmoothness)
+                                         : 0.0f;
+            if (std::abs(lfoData[i].smoothness - smoothness) > 1.0e-5f)
+                lfoData[i].smoothness = smoothness;
+        }
+    }
+}
+
+void LfoManager::updatePublishedRoutingState() noexcept
+{
+    bool hasAnyRouting = false;
+    for (const auto& routing : modulationRoutings)
+    {
+        if (routing.targetParameterID.isNotEmpty())
+        {
+            hasAnyRouting = true;
+            break;
+        }
+    }
+
+    hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
+}
+
 void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
-    // This is the original 'process' function, now repurposed as a private helper.
-    // Its sole responsibility is to generate the raw LFO signals.
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : preparedSampleRate;
 
-    // 1. Get Transport State from Host
     juce::Optional<juce::AudioPlayHead::PositionInfo> positionInfo;
-    isPlaying = false;
+    bool transportIsPlaying = false;
     double currentBpm = 120.0;
 
     if (playHead)
@@ -189,110 +334,91 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
         positionInfo = playHead->getPosition();
         if (positionInfo)
         {
-            isPlaying = positionInfo->getIsPlaying();
+            transportIsPlaying = positionInfo->getIsPlaying();
             if (auto bpm = positionInfo->getBpm())
-                currentBpm = *bpm;
+                if (std::isfinite(*bpm) && *bpm > 0.0)
+                    currentBpm = *bpm;
         }
     }
 
-    wasPlaying = isPlaying;
+    isPlaying.store(transportIsPlaying, std::memory_order_relaxed);
 
-    // 3. Process each LFO
-    lfoOutputBuffer.setSize(4, numSamples, false, false, true); // Ensure buffer is correct size
-    lfoOutputBuffer.clear();
+    const auto loadParameter = [](const std::atomic<float>* parameter, float fallback) noexcept
+    {
+        if (parameter != nullptr)
+        {
+            const float value = parameter->load(std::memory_order_relaxed);
+            if (std::isfinite(value))
+                return value;
+        }
+        return fallback;
+    };
+
+    const auto wrapPhase = [](double value) noexcept
+    {
+        if (! std::isfinite(value))
+            return 0.0f;
+
+        value -= std::floor(value);
+        return static_cast<float>(value);
+    };
 
     for (int i = 0; i < 4; ++i)
     {
-        // Shape update logic (unchanged)
-        bool needsUpdate = true;
-        if (shapeUpdateFlags[i].compare_exchange_strong(needsUpdate, false))
-        {
-            lfoEngines[i].updateShape(lfoData[i]);
-        }
-
-        auto* syncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i));
-        const bool isInSyncMode = syncParam != nullptr && syncParam->load() > 0.5f;
+        const auto& parameters = lfoParameters[static_cast<size_t>(i)];
+        const bool isInSyncMode = loadParameter(parameters.syncMode, 1.0f) > 0.5f;
+        const int rateIndex = static_cast<int>(loadParameter(parameters.syncedRate, 8.0f));
+        const float freqInHz = juce::jmax(0.0f, loadParameter(parameters.freeRate, 1.0f));
+        const float phaseOffset = juce::jlimit(0.0f, 1.0f, loadParameter(parameters.phaseOffset, 0.0f));
         float phaseDelta = 0.0f;
 
-        // 1. Calculate phaseDelta for advancing phase within the block (or for free-running when stopped)
         if (isInSyncMode)
         {
-            auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
-            const int rateIndex = static_cast<int>(rateSyncParam->load());
             const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
             const float beatsPerCycle = beatMultiplier * 4.0f;
-            if (beatsPerCycle > 0.0 && currentBpm > 0.0)
+            if (beatsPerCycle > 0.0f)
             {
-                const float samplesPerCycle = (beatsPerCycle / currentBpm) * 60.0f * (float) sampleRate;
-                if (samplesPerCycle > 0)
-                    phaseDelta = 1.0f / samplesPerCycle;
+                const double samplesPerCycle = (static_cast<double>(beatsPerCycle) / currentBpm)
+                                               * 60.0 * safeSampleRate;
+                if (std::isfinite(samplesPerCycle) && samplesPerCycle > 0.0)
+                    phaseDelta = static_cast<float>(1.0 / samplesPerCycle);
             }
         }
-        else // Free (Hz) mode
+        else if (safeSampleRate > 0.0)
         {
-            auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
-            const float freqInHz = rateHzParam->load();
-            if (sampleRate > 0)
-                phaseDelta = freqInHz / (float) sampleRate;
+            phaseDelta = freqInHz / static_cast<float>(safeSampleRate);
         }
 
-        // Get the phase offset value from the new parameter we created
-        auto* phaseOffsetParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_PHASE_ID, i));
-        const float phaseOffset = (phaseOffsetParam != nullptr) ? phaseOffsetParam->load() : 0.0f;
-
-        // 2. If playing, calculate and set the absolute start phase for the block.
-        //    Otherwise, the LFO continues from its last phase (free-running).
-        if (isPlaying && positionInfo)
+        // While the host is playing, derive phase from its absolute timeline so seeks are deterministic.
+        if (transportIsPlaying && positionInfo)
         {
             if (isInSyncMode)
             {
                 if (auto ppq = positionInfo->getPpqPosition())
                 {
-                    const double ppqAtStartOfBlock = *ppq;
-                    auto* rateSyncParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, i));
-                    const int rateIndex = static_cast<int>(rateSyncParam->load());
                     const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
                     const float cycleLengthInBeats = beatMultiplier * 4.0f;
 
-                    if (cycleLengthInBeats > 0.0f)
-                    {
-                        // Calculate phase from timeline
-                        float startPhase = std::fmod((float) ppqAtStartOfBlock, cycleLengthInBeats) / cycleLengthInBeats;
-
-                        // Apply the user-defined phase offset and wrap around 1.0
-                        startPhase = std::fmod(startPhase + phaseOffset, 1.0f);
-
-                        lfoEngines[i].setPhase(startPhase); // Set the final, offset phase
-                    }
+                    if (cycleLengthInBeats > 0.0f && std::isfinite(*ppq))
+                        lfoEngines[static_cast<size_t>(i)].setPhase(wrapPhase(*ppq / cycleLengthInBeats + phaseOffset));
                 }
             }
-            else // Hz mode
+            else
             {
                 if (auto timeSec = positionInfo->getTimeInSeconds())
                 {
-                    const double timeAtStartOfBlock = *timeSec;
-                    auto* rateHzParam = treeState.getRawParameterValue(ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, i));
-                    const float freqInHz = rateHzParam->load();
-
-                    // Calculate phase from timeline
-                    float startPhase = std::fmod((float) timeAtStartOfBlock * freqInHz, 1.0f);
-
-                    // Apply the user-defined phase offset and wrap around 1.0
-                    startPhase = std::fmod(startPhase + phaseOffset, 1.0f);
-
-                    lfoEngines[i].setPhase(startPhase); // Set the final, offset phase
+                    if (std::isfinite(*timeSec))
+                        lfoEngines[static_cast<size_t>(i)].setPhase(wrapPhase(*timeSec * freqInHz + phaseOffset));
                 }
             }
         }
 
-        // 3. Set the delta and generate samples for the block (unchanged)
-        lfoEngines[i].setPhaseDelta(phaseDelta);
+        auto& engine = lfoEngines[static_cast<size_t>(i)];
+        engine.setPhaseDelta(phaseDelta);
 
         auto* writer = lfoOutputBuffer.getWritePointer(i);
         for (int sample = 0; sample < numSamples; ++sample)
-        {
-            writer[sample] = lfoEngines[i].process();
-        }
+            writer[sample] = engine.process();
     }
 }
 
@@ -336,15 +462,17 @@ float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const
 
 void LfoManager::onLfoShapeChanged(int lfoIndex)
 {
-    const juce::ScopedLock sl(dataAccessLock);
+    const juce::ScopedLock lock(dataAccessLock);
+
     if (lfoIndex < 0)
     {
-        for (int i = 0; i < 4; ++i)
-            shapeUpdateFlags[i] = true;
+        for (size_t i = 0; i < lfoEngines.size(); ++i)
+            lfoEngines[i].stageShape(lfoData[i]);
     }
     else if (juce::isPositiveAndBelow(lfoIndex, 4))
     {
-        shapeUpdateFlags[lfoIndex] = true;
+        const auto index = static_cast<size_t>(lfoIndex);
+        lfoEngines[index].stageShape(lfoData[index]);
     }
 }
 
@@ -356,7 +484,7 @@ float LfoManager::getLfoPhase(int lfoIndex) const
 {
     if (juce::isPositiveAndBelow(lfoIndex, (int) lfoEngines.size()))
     {
-        return lfoEngines[lfoIndex].getPhase();
+        return lfoEngines[static_cast<size_t>(lfoIndex)].getPhase();
     }
     jassertfalse; // Invalid LFO index requested
     return 0.0f;
@@ -367,11 +495,38 @@ const juce::StringArray& LfoManager::getLfoRateSyncDivisions() const
     return lfoRateSyncDivisions;
 }
 
+juce::Array<ModulationRouting> LfoManager::getModulationRoutingsCopy() const
+{
+    const juce::ScopedLock lock(dataAccessLock);
+    return modulationRoutings;
+}
+
+std::vector<LfoData> LfoManager::getLfoDataCopy() const
+{
+    const juce::ScopedLock lock(dataAccessLock);
+    auto result = lfoData;
+
+    // Smoothness is an automatable APVTS parameter and may have changed while
+    // the transport/editor was stopped, before the audio thread had a chance
+    // to mirror it into lfoData. Always expose a coherent, authoritative copy.
+    for (size_t i = 0; i < result.size() && i < lfoParameters.size(); ++i)
+    {
+        if (const auto* parameter = lfoParameters[i].smoothness)
+        {
+            const float value = parameter->load(std::memory_order_relaxed);
+            if (std::isfinite(value))
+                result[i].smoothness = juce::jlimit(0.0f, 1.0f, value);
+        }
+    }
+
+    return result;
+}
+
 float LfoManager::getLfoOutput(int lfoIndex) const
 {
     if (juce::isPositiveAndBelow(lfoIndex, (int) lfoEngines.size()))
     {
-        return lfoEngines[lfoIndex].getLastOutput();
+        return lfoEngines[static_cast<size_t>(lfoIndex)].getLastOutput();
     }
 
     jassertfalse; // Invalid LFO index requested
@@ -380,6 +535,12 @@ float LfoManager::getLfoOutput(int lfoIndex) const
 
 void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
 {
+    if (! juce::isPositiveAndBelow(sourceLfoIndex, 4) || targetParameterID.isEmpty())
+    {
+        jassertfalse;
+        return;
+    }
+
     const juce::ScopedLock sl(dataAccessLock);
     // 1. First, check if the target parameter is already being modulated.
     //    If so, just update its LFO source.
@@ -388,6 +549,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
         if (routing.targetParameterID == targetParameterID)
         {
             routing.sourceLfoIndex = sourceLfoIndex;
+            updatePublishedRoutingState();
             return; // Assignment complete.
         }
     }
@@ -401,6 +563,8 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
             routing.targetParameterID = targetParameterID;
             if (juce::approximatelyEqual(routing.depth, 0.0f))
                 routing.depth = 0.5f; // Set a sensible default depth.
+            routing.isBypassed = false;
+            updatePublishedRoutingState();
             return; // Assignment complete.
         }
     }
@@ -417,6 +581,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
     newRouting.sourceLfoIndex = sourceLfoIndex;
     newRouting.targetParameterID = targetParameterID;
     newRouting.depth = 0.5f; // Set a sensible default depth.
+    updatePublishedRoutingState();
 }
 
 void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
@@ -432,6 +597,8 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
             // (Optional) Reset other parameters to their default values to maintain a clean state
             routing.depth = 0.5f;
             routing.isBipolar = true;
+            routing.isBypassed = false;
+            updatePublishedRoutingState();
             return; // Exit after finding and clearing
         }
     }
@@ -444,7 +611,9 @@ void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
     {
         if (routing.targetParameterID == targetParameterID)
         {
-            routing.depth *= -1.0f;
+            routing.depth = std::isfinite(routing.depth)
+                                ? juce::jlimit(-1.0f, 1.0f, -routing.depth)
+                                : -0.5f;
             return;
         }
     }
@@ -465,21 +634,42 @@ void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
 
 void LfoManager::setLfoData(int index, const LfoData& newData)
 {
-    const juce::ScopedLock sl(dataAccessLock);
-    if (juce::isPositiveAndBelow(index, (int) lfoData.size()))
+    if (! juce::isPositiveAndBelow(index, static_cast<int>(lfoData.size())))
     {
-        lfoData[index] = newData;
-        shapeUpdateFlags[index].store(true);
+        jassertfalse;
+        return;
     }
+
+    auto safeData = newData;
+    safeData.sanitise();
+
+    const juce::ScopedLock sl(dataAccessLock);
+    const auto lfoIndex = static_cast<size_t>(index);
+    const bool shapeChanged = lfoData[lfoIndex].points != safeData.points
+                              || lfoData[lfoIndex].curvatures != safeData.curvatures;
+
+    // APVTS is the automation/state authority for smoothness. Keep it in sync
+    // whenever a complete shape is restored or edited so the next audio block
+    // cannot overwrite the shape's smoothness with a stale/default parameter.
+    if (auto* parameter = lfoParameters[lfoIndex].smoothnessParameter)
+    {
+        const float normalisedSmoothness = parameter->convertTo0to1(safeData.smoothness);
+        if (! juce::approximatelyEqual(parameter->getValue(), normalisedSmoothness))
+            parameter->setValueNotifyingHost(normalisedSmoothness);
+    }
+
+    if (shapeChanged)
+        lfoEngines[lfoIndex].stageShape(safeData);
+
+    lfoData[lfoIndex] = std::move(safeData);
 }
 
 void LfoManager::clearAllLfoData()
 {
     const juce::ScopedLock sl(dataAccessLock);
-    for (auto& lfo : lfoData)
+    for (size_t i = 0; i < lfoData.size(); ++i)
     {
-        lfo = LfoData(); // Reset to default state
+        lfoData[i].resetToDefault();
+        lfoEngines[i].stageShape(lfoData[i]);
     }
-    // Flag all shapes for update on the audio thread
-    onLfoShapeChanged(-1);
 }

@@ -16,39 +16,36 @@ namespace state
     //==============================================================================
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
-        //xml.removeAllAttributes(); // clear first
         auto& fireProc = static_cast<const FireAudioProcessor&>(proc);
+        xml.deleteAllChildElements();
 
         for (const auto& param : fireProc.getParameters())
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-            {
                 xml.setAttribute(p->paramID, p->getValue());
-            }
+
+        const auto lfoDataToSave = fireProc.getLfoManager().getLfoDataCopy();
+        const auto routingsToSave = fireProc.getLfoManager().getModulationRoutingsCopy();
 
         // 1. Save LFO Shapes
         auto* lfoState = xml.createNewChildElement("LFO_STATE");
 
-        auto& mutableProc = const_cast<FireAudioProcessor&>(fireProc);
-        const auto& lfoDataToSave = mutableProc.getLfoData();
-
-        for (int i = 0; i < lfoDataToSave.size(); ++i)
+        for (int i = 0; i < static_cast<int>(lfoDataToSave.size()); ++i)
         {
-            auto* lfoXml = new juce::XmlElement("LFO");
+            auto lfoXml = std::make_unique<juce::XmlElement>("LFO");
             lfoXml->setAttribute("index", i);
-            lfoDataToSave[i].writeToXml(*lfoXml);
-            lfoState->addChildElement(lfoXml);
+            lfoDataToSave[static_cast<size_t>(i)].writeToXml(*lfoXml);
+            lfoState->addChildElement(lfoXml.release());
         }
 
         // 2. Save Modulation Matrix Routings
         auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
-        for (const auto& routing : fireProc.getLfoManager().getModulationRoutings())
+        for (const auto& routing : routingsToSave)
         {
-            // Only save routings that are actually in use
             if (! routing.targetParameterID.isEmpty())
             {
-                auto* routingXml = new juce::XmlElement("ROUTING");
+                auto routingXml = std::make_unique<juce::XmlElement>("ROUTING");
                 routing.writeToXml(*routingXml);
-                modMatrixState->addChildElement(routingXml);
+                modMatrixState->addChildElement(routingXml.release());
             }
         }
     }
@@ -57,54 +54,32 @@ namespace state
     {
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
 
-        // This loop now handles ALL parameters directly, restoring the correct, stable logic.
         for (const auto& param : proc.getParameters())
         {
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
             {
-                // Check if the preset XML has an attribute with this parameter's ID.
+                float valueToLoad = p->getDefaultValue();
                 if (xml.hasAttribute(p->paramID))
                 {
-                    // If it exists, load the value from the XML.
-                    // Note: We use getDoubleAttribute as it safely covers both float and int parameters.
-                    p->setValueNotifyingHost((float) xml.getDoubleAttribute(p->paramID, p->getValue()));
+                    const auto valueFromXml = static_cast<float>(xml.getDoubleAttribute(p->paramID, p->getValue()));
+                    valueToLoad = std::isfinite(valueFromXml) ? juce::jlimit(0.0f, 1.0f, valueFromXml) : p->getDefaultValue();
                 }
-                else
+                else if (p->paramID.startsWith(SHAPE_BYPASS_ID))
                 {
-                    // If the parameter is not in the preset (e.g., an older preset)...
-
-                    // Check if the missing parameter is the shape bypass toggle.
-                    if (p->paramID.startsWith(SHAPE_BYPASS_ID))
-                    {
-                        // If it is, we are loading an old preset. To maintain the original sound,
-                        // we must force the shape module to be ON (true) by default.
-                        p->setValueNotifyingHost(1.0f);
-                    }
-                    else
-                    {
-                        // For any other missing parameter, set it to its default value
-                        // to ensure a predictable state.
-                        p->setValueNotifyingHost(p->getDefaultValue());
-                    }
+                    valueToLoad = 1.0f;
                 }
+
+                p->setValueNotifyingHost(valueToLoad);
             }
         }
 
-        // --- Load LFO and Matrix data ---
-        const juce::ScopedLock sl(fireProc.getLfoManager().getLfoDataLock());
+        std::array<LfoData, 4> lfoDataToLoad;
+        std::array<bool, 4> loadedLfoSmoothness {};
+        std::array<bool, 4> loadedSmoothnessParameter {};
+        for (int i = 0; i < static_cast<int>(loadedSmoothnessParameter.size()); ++i)
+            loadedSmoothnessParameter[static_cast<size_t>(i)] = xml.hasAttribute(
+                ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i));
 
-        // Cast to non-const to modify the processor's state
-        auto& mutableFireProc = const_cast<FireAudioProcessor&>(fireProc);
-
-        // Get mutable references to the data containers
-        auto& lfoDataToLoad = mutableFireProc.getLfoData();
-        auto& modRoutingsToLoad = mutableFireProc.getLfoManager().getModulationRoutings();
-
-        // Clear the existing data using the new references
-        mutableFireProc.getLfoManager().clearAllLfoData();
-        mutableFireProc.getLfoManager().getModulationRoutings().clear();
-
-        // 1. Load LFO Shapes
         if (auto* lfoState = xml.getChildByName("LFO_STATE"))
         {
             for (auto* lfoXml : lfoState->getChildIterator())
@@ -112,29 +87,52 @@ namespace state
                 const int index = lfoXml->getIntAttribute("index", -1);
                 if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
                 {
-                    // Load data into the LfoManager via the reference
-                    mutableFireProc.getLfoManager().setLfoData(index, LfoData::readFromXml(*lfoXml));
+                    lfoDataToLoad[static_cast<size_t>(index)] = LfoData::readFromXml(*lfoXml);
+                    loadedLfoSmoothness[static_cast<size_t>(index)] = lfoXml->hasAttribute("smoothness");
                 }
             }
         }
 
-        // 2. Load Modulation Matrix Routings
+        // Old preset files may contain APVTS smooth parameters but no matching
+        // LFO_STATE smoothness attribute. Preserve that parameter value instead
+        // of replacing it with LfoData's default during the shape reset below.
+        for (int i = 0; i < static_cast<int>(lfoDataToLoad.size()); ++i)
+        {
+            const auto index = static_cast<size_t>(i);
+            // The parameter attribute is authoritative when present. The LFO
+            // XML value is retained only for presets old enough to lack it.
+            if (! loadedSmoothnessParameter[index] && loadedLfoSmoothness[index])
+                continue;
+
+            if (const auto* smoothness = fireProc.treeState.getRawParameterValue(
+                    ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i)))
+                lfoDataToLoad[index].smoothness = smoothness->load(std::memory_order_relaxed);
+        }
+
+        juce::Array<ModulationRouting> routingsToLoad;
         if (auto* modMatrixState = xml.getChildByName("MODULATION_STATE"))
         {
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
-                fireProc.getLfoManager().getModulationRoutings().add(ModulationRouting::readFromXml(*routingXml));
+                auto routing = ModulationRouting::readFromXml(*routingXml);
+                routing.sourceLfoIndex = juce::jlimit(0, 3, routing.sourceLfoIndex);
+                routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
+
+                if (routing.targetParameterID.isNotEmpty() && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
+                    routingsToLoad.add(std::move(routing));
             }
         }
 
-        // 3. IMPORTANT: Notify the editor to update its display
-        if (auto* editor = fireProc.getActiveEditor())
+        auto& manager = fireProc.getLfoManager();
         {
-            editor->repaint();
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            manager.clearAllLfoData();
+            for (int i = 0; i < static_cast<int>(lfoDataToLoad.size()); ++i)
+                manager.setLfoData(i, lfoDataToLoad[static_cast<size_t>(i)]);
+            manager.getModulationRoutings() = std::move(routingsToLoad);
         }
 
         fireProc.sendChangeMessage();
-        fireProc.getLfoManager().onLfoShapeChanged(-1);
     }
 
     //==============================================================================
@@ -166,53 +164,43 @@ namespace state
 
     //==============================================================================
 
-    void parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml)
+    bool parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml)
     {
-        std::unique_ptr<juce::XmlElement> parsed { juce::XmlDocument::parse(file) };
-        if (parsed)
-            xml = *parsed;
+        auto parsed = juce::XmlDocument::parse(file);
+        if (parsed == nullptr)
+            return false;
+
+        xml = *parsed;
+        return true;
     }
 
-    bool writeXmlElementToFile(const juce::XmlElement& xml, juce::File& file, juce::String presetName, bool hasExtension)
+    bool writeXmlElementToFile(const juce::XmlElement& xml,
+                               juce::File& file,
+                               const juce::String& presetName,
+                               bool hasExtension)
     {
-        //createFileIfNonExistant(file);
-        // 1 saved a new file
-        // 2 replaced a existing file
-        // 3 do nothing
         if (! file.exists())
+            return xml.writeTo(file);
+
+        if (! hasExtension)
         {
-            file.create();
-            xml.writeTo(file);
-            return true;
+            const bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::WarningIcon,
+                                                                        "\"" + presetName + PRESET_EXETENSION + "\" already exists. Do you want to replace it?",
+                                                                        "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.",
+                                                                        nullptr,
+                                                                        nullptr);
+            if (! choice)
+                return false;
+
+            return xml.writeTo(file);
         }
-        else
-        {
-            if (! hasExtension) // pop up alert window
-            {
-                bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::WarningIcon,
-                                                                      "\"" + presetName + PRESET_EXETENSION + "\" already exists. Do you want to replace it?",
-                                                                      "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.",
-                                                                      nullptr,
-                                                                      nullptr);
-                if (choice)
-                {
-                    // file.replaceFileIn(file.getFullPathName());
-                    xml.writeTo(file);
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-            else // no alert window
-            {
-                // replace existing file and return 2
-                // file.replaceFileIn(file.getFullPathName());
-                xml.writeTo(file);
-                return true;
-            }
-        }
+
+        return xml.writeTo(file);
+    }
+
+    static juce::String getFolderDisplayName(const juce::XmlElement& folder)
+    {
+        return folder.getStringAttribute("folderName", folder.getTagName());
     }
 
     //==============================================================================
@@ -222,35 +210,22 @@ namespace state
     public:
         int compareElements(juce::XmlElement* first, juce::XmlElement* second) const
         {
-            // Check if the elements are presets (i.e., they have a "presetName" attribute).
-            bool firstIsPreset = first->hasAttribute("presetName");
-            bool secondIsPreset = second->hasAttribute("presetName");
+            const bool firstIsPreset = first->hasAttribute("presetName");
+            const bool secondIsPreset = second->hasAttribute("presetName");
 
-            // If both are presets, sort them by presetName.
             if (firstIsPreset && secondIsPreset)
             {
                 return first->getStringAttribute("presetName")
                     .compareNatural(second->getStringAttribute("presetName"));
             }
-            // If both are folders, sort them by folder name (TagName).
-            else if (! firstIsPreset && ! secondIsPreset)
-            {
-                return first->getTagName().compareNatural(second->getTagName());
-            }
-            // If one is a preset and the other is a folder, put the folder first.
-            else if (firstIsPreset && ! secondIsPreset)
-            {
-                return 1; // first (preset) > second (folder)
-            }
-            else // !firstIsPreset && secondIsPreset
-            {
-                return -1; // first (folder) < second (preset)
-            }
-        }
 
-    private:
-        juce::String attributeToSort;
-        int direction;
+            if (! firstIsPreset && ! secondIsPreset)
+            {
+                return getFolderDisplayName(*first).compareNatural(getFolderDisplayName(*second));
+            }
+
+            return firstIsPreset ? 1 : -1;
+        }
     };
 
     //==============================================================================
@@ -273,44 +248,36 @@ namespace state
         return "preset" + static_cast<juce::String>(newPresetIdNumber); // format: preset##
     }
 
-    void StatePresets::recursiveFileSearch(juce::XmlElement& parentXML, juce::File dir)
+    void StatePresets::recursiveFileSearch(juce::XmlElement& parentXML, const juce::File& dir)
     {
-        juce::RangedDirectoryIterator iterator(dir, false, "*", 3); // findDirectories = 1, findFiles = 2, findFilesAndDirectories = 3, ignoreHiddenFiles = 4
+        juce::RangedDirectoryIterator iterator(dir,
+                                                false,
+                                                "*",
+                                                juce::File::findFilesAndDirectories | juce::File::ignoreHiddenFiles);
         for (auto file : iterator)
         {
-            // is folder
             if (file.isDirectory())
             {
-                juce::String folderName;
-                folderName = file.getFile().getFileName();
-                std::unique_ptr<juce::XmlElement> currentState { new juce::XmlElement { folderName } }; // must be pointer as parent takes ownership
-                //DBG(dir.getChildFile(file.getFile().getFileName()).getFullPathName());
-                recursiveFileSearch(*currentState, dir.getChildFile(file.getFile().getFileName()));
-                parentXML.addChildElement(currentState.release()); // will be deleted by parent element
+                auto currentState = std::make_unique<juce::XmlElement>("FOLDER");
+                currentState->setAttribute("folderName", file.getFile().getFileName());
+                recursiveFileSearch(*currentState, file.getFile());
+                parentXML.addChildElement(currentState.release());
             }
-            // is preset
             else if (file.getFile().hasFileExtension(PRESET_EXETENSION))
             {
-                numPresets++;
-                juce::String newPresetId = getNextAvailablePresetId(); // presetId format: "preset##"
-                std::unique_ptr<juce::XmlElement> currentState { new juce::XmlElement { newPresetId } }; // must be pointer as parent takes ownership
-                parseFileToXmlElement(file.getFile(), *currentState);
+                auto currentState = std::make_unique<juce::XmlElement>("PRESET");
+                if (! parseFileToXmlElement(file.getFile(), *currentState))
+                    continue;
+
+                ++numPresets;
+                const juce::String newPresetId = getNextAvailablePresetId();
                 currentState->setTagName(newPresetId);
 
-                // if file name differs from preset name in .fire
-                juce::String newName = file.getFile().getFileNameWithoutExtension();
+                const juce::String newName = file.getFile().getFileNameWithoutExtension();
                 if (newName != currentState->getStringAttribute("presetName"))
-                {
                     currentState->setAttribute("presetName", newName);
-                }
 
-                //mPresetXml.addChildElement(currentState.release()); // will be deleted by parent element
-                parentXML.addChildElement(currentState.release()); // will be deleted by parent element
-            }
-            else
-            {
-                // not a fire preset, maybe popup alert window?
-                //jassertfalse;
+                parentXML.addChildElement(currentState.release());
             }
         }
     }
@@ -386,25 +353,22 @@ namespace state
         }
     }
 
-    void StatePresets::recursivePresetLoad(juce::XmlElement parentXml, juce::String presetId)
+    bool StatePresets::recursivePresetLoad(const juce::XmlElement& parentXml, const juce::String& presetId)
     {
-        //    int index = 0;
-
         for (auto* child : parentXml.getChildIterator())
         {
             if (child->hasAttribute("presetName") && child->getTagName() == presetId)
             {
-                juce::XmlElement loadThisChild { *child }; // (0 indexed method)
-                loadStateFromXml(loadThisChild, pluginProcessor);
-                statePresetName = child->getAttributeValue(0); //presetName index is 0
-                break;
+                loadStateFromXml(*child, pluginProcessor);
+                statePresetName = child->getStringAttribute("presetName");
+                return true;
             }
-            else
-            {
-                recursivePresetLoad(*child, presetId);
-            }
-            //        index++;
+
+            if (recursivePresetLoad(*child, presetId))
+                return true;
         }
+
+        return false;
     }
 
     void StatePresets::loadPreset(juce::String presetId)
@@ -414,14 +378,38 @@ namespace state
 
     void StatePresets::deletePreset()
     {
-        juce::XmlElement* childToDelete { mPresetXml.getChildElement(mCurrentPresetId - 1) };
-        if (childToDelete)
-            mPresetXml.removeChildElement(childToDelete, true);
+        const int currentId = mCurrentPresetId.load(std::memory_order_relaxed);
+        const auto presetTag = comboBoxIdToTagNameMap[currentId];
+        if (currentId <= 0 || presetTag.isEmpty())
+            return;
+
+        std::function<bool(juce::XmlElement&)> removeByTag = [&](juce::XmlElement& parent)
+        {
+            for (auto* child : parent.getChildIterator())
+            {
+                if (child->getTagName() == presetTag && child->hasAttribute("presetName"))
+                {
+                    parent.removeChildElement(child, true);
+                    return true;
+                }
+
+                if (removeByTag(*child))
+                    return true;
+            }
+            return false;
+        };
+
+        if (removeByTag(mPresetXml))
+        {
+            numPresets = juce::jmax(0, numPresets - 1);
+            mCurrentPresetId.store(0, std::memory_order_relaxed);
+            statePresetName.clear();
+        }
     }
 
     void StatePresets::setPresetName(juce::String name)
     {
-        statePresetName = name + PRESET_EXETENSION;
+        statePresetName = std::move(name);
     }
 
     juce::StringRef StatePresets::getPresetName()
@@ -429,7 +417,7 @@ namespace state
         return statePresetName;
     }
 
-    void StatePresets::recursivePresetNameAdd(juce::XmlElement parentXml, juce::ComboBox& menu, int& index)
+    void StatePresets::recursivePresetNameAdd(const juce::XmlElement& parentXml, juce::ComboBox& menu, int& index)
     {
         for (auto* child : parentXml.getChildIterator())
         {
@@ -446,7 +434,7 @@ namespace state
                 // save new preset and rescan, this will return new preset index
                 if (statePresetName == n)
                 {
-                    mCurrentPresetId = index;
+                    mCurrentPresetId.store(index);
                 }
             }
             else
@@ -456,7 +444,7 @@ namespace state
                 {
                     menu.addSeparator();
                 }
-                juce::String n = child->getTagName();
+                juce::String n = getFolderDisplayName(*child);
                 menu.addSectionHeading(n);
 
                 recursivePresetNameAdd(*child, menu, index);
@@ -479,12 +467,12 @@ namespace state
 
     int StatePresets::getCurrentPresetId() const
     {
-        return mCurrentPresetId;
+        return mCurrentPresetId.load();
     }
 
     void StatePresets::setCurrentPresetId(int currentPresetId)
     {
-        mCurrentPresetId = currentPresetId;
+        mCurrentPresetId.store(juce::jmax(0, currentPresetId));
     }
 
     juce::File StatePresets::getFile()
@@ -505,28 +493,45 @@ namespace state
                 p->setValueNotifyingHost(p->getDefaultValue());
         // set preset combobox to 0
         statePresetName = "";
-        mCurrentPresetId = 0;
+        mCurrentPresetId.store(0);
 
         auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
-        fireProc.getLfoManager().clearAllLfoData();
-        fireProc.getLfoManager().getModulationRoutings().clear();
-        fireProc.getLfoManager().onLfoShapeChanged(-1);
-        fireProc.sendChangeMessage();
-
-        // Notify the editor to update its display
-        if (auto* editor = fireProc.getActiveEditor())
+        auto& manager = fireProc.getLfoManager();
         {
-            editor->repaint();
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            manager.clearAllLfoData();
+            manager.getModulationRoutings().clear();
         }
+        fireProc.sendChangeMessage();
     }
 
     //==============================================================================
 
     //==============================================================================
+    StateComponent::ManualUpdateCheckThread::ManualUpdateCheckThread(StateComponent& ownerToUse)
+        : juce::Thread("Fire manual update check"), owner(ownerToUse)
+    {
+    }
+
+    void StateComponent::ManualUpdateCheckThread::run()
+    {
+        auto result = fetchOperation.fetchLatest();
+        if (! threadShouldExit())
+            owner.publishManualUpdateResult(std::move(result));
+    }
+
+    void StateComponent::ManualUpdateCheckThread::stop()
+    {
+        signalThreadShouldExit();
+        fetchOperation.cancel();
+        stopThread(-1);
+    }
+
     StateComponent::StateComponent(StateAB& sab, StatePresets& sp, juce::AudioProcessorValueTreeState& vts)
         : procStateAB { sab },
           procStatePresets { sp },
           valueTreeState { vts },
+          manualUpdateCheckThread { *this },
           toggleABButton { "A" },
           copyABButton { "Copy" },
           previousButton { "" },
@@ -571,23 +576,20 @@ namespace state
         refreshPresetBox();
 
         const int currentPresetId = procStatePresets.getCurrentPresetId();
-        juce::String presetNameFromHost = procStatePresets.getPresetName();
         const int numPresets = procStatePresets.getNumPresets();
 
         if (currentPresetId > 0 && currentPresetId <= numPresets)
         {
-            juce::String presetNameFromHost = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
-            juce::XmlElement* presetXml = nullptr;
+            const juce::String presetNameFromHost = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
+            const juce::XmlElement* presetXml = nullptr;
 
-            std::function<juce::XmlElement*(const juce::XmlElement&, const juce::String&)> findPresetInXml =
-                [&](const juce::XmlElement& parentXml, const juce::String& nameToFind) -> juce::XmlElement*
+            std::function<const juce::XmlElement*(const juce::XmlElement&, const juce::String&)> findPresetInXml =
+                [&](const juce::XmlElement& parentXml, const juce::String& nameToFind) -> const juce::XmlElement*
             {
                 for (auto* child : parentXml.getChildIterator())
                 {
                     if (child->hasAttribute("presetName") && child->getStringAttribute("presetName") == nameToFind)
-                    {
-                        return const_cast<juce::XmlElement*>(child);
-                    }
+                        return child;
 
                     if (child->getNumChildElements() > 0)
                     {
@@ -662,6 +664,7 @@ namespace state
         menuButton.getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
         menuButton.getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR7);
         presetMenu.setLookAndFeel(&fireLookAndFeel);
+        startTimerHz(30);
 
         menuButton.getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
         menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
@@ -672,6 +675,18 @@ namespace state
 
     StateComponent::~StateComponent()
     {
+        if (settingsDialog != nullptr)
+        {
+            settingsDialog->setVisible(false);
+            settingsDialog->exitModalState(0);
+            settingsDialog = nullptr;
+        }
+
+        manualUpdateCheckThread.stop();
+        cancelPendingUpdate();
+        fileChooser.reset();
+        presetBox.onChange = nullptr;
+
         // Remove listeners from all buttons that had them added in the constructor
         toggleABButton.removeListener(this);
         copyABButton.removeListener(this);
@@ -692,18 +707,74 @@ namespace state
 
     void StateComponent::parameterChanged(const juce::String& parameterID, float newValue)
     {
-        // This function is called whenever any parameter changes, including:
-        // a) User interaction with the UI controls
-        // b) Host sending automation data
-        // c) We load a preset ourselves
+        juce::ignoreUnused(parameterID, newValue);
 
-        // If the change is caused by a programmatic preset load, we should not mark it as "dirty"
-        // So we use the isProgrammaticChange flag to ignore these changes
-        if (isProgrammaticChange)
+        if (isProgrammaticChange.load(std::memory_order_acquire))
             return;
 
-        // Otherwise, the change is user-initiated, so we call markAsDirty
-        markAsDirty();
+        dirtyUpdatePending.store(true, std::memory_order_release);
+    }
+
+    void StateComponent::timerCallback()
+    {
+        if (dirtyUpdatePending.exchange(false, std::memory_order_acq_rel))
+            markAsDirty();
+    }
+
+    void StateComponent::handleAsyncUpdate()
+    {
+        if (dirtyUpdatePending.exchange(false, std::memory_order_acq_rel))
+            markAsDirty();
+
+        if (versionCheckReady.exchange(false, std::memory_order_acq_rel))
+            showManualUpdateResult();
+    }
+
+    void StateComponent::publishManualUpdateResult(std::unique_ptr<VersionInfo> result)
+    {
+        {
+            const juce::ScopedLock lock(updateResultLock);
+            pendingVersionInfo = std::move(result);
+        }
+        versionCheckReady.store(true, std::memory_order_release);
+        triggerAsyncUpdate();
+    }
+
+    void StateComponent::showManualUpdateResult()
+    {
+        std::unique_ptr<VersionInfo> result;
+        {
+            const juce::ScopedLock lock(updateResultLock);
+            result = std::move(pendingVersionInfo);
+        }
+
+        if (result == nullptr)
+        {
+            juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                                        "Error",
+                                                        "No release found or disconnected from the network!");
+            return;
+        }
+
+        if (result->isNewerVersionThanCurrent())
+        {
+            const auto versionToDownload = result->versionString;
+            const auto callback = juce::ModalCallbackFunction::create([versionToDownload](int choice)
+                                                                      {
+                                                                          if (choice == 1)
+                                                                              juce::URL(GITHUB_TAG_LINK + versionToDownload).launchInDefaultBrowser();
+                                                                      });
+            juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
+                                                    "New Version",
+                                                    "New version " + versionToDownload + " available, do you want to download it?",
+                                                    nullptr,
+                                                    callback);
+            return;
+        }
+
+        juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
+                                                    "New Version",
+                                                    "You are up to date!");
     }
 
     void StateComponent::paint(juce::Graphics& /*g*/)
@@ -785,7 +856,7 @@ namespace state
 
     void StateComponent::comboBoxChanged(juce::ComboBox* changedComboBox)
     {
-        // use presetBox.onChange instead!
+        juce::ignoreUnused(changedComboBox);
     }
 
     void StateComponent::updatePresetBox(int selectedId) // when preset is changed
@@ -810,16 +881,15 @@ namespace state
 
             if (internalIdToLoad.isNotEmpty())
             {
-                isProgrammaticChange = true;
+                cancelPendingUpdate();
+                isProgrammaticChange.store(true, std::memory_order_release);
                 presetManager->setCurrentPresetId(selectedId);
                 presetManager->loadPreset(internalIdToLoad);
+                isProgrammaticChange.store(false, std::memory_order_release);
 
-                juce::MessageManager::callAsync([this]()
-                                                { isProgrammaticChange = false; });
+                const juce::String loadedPresetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
 
-                juce::String presetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
-
-                presetBox.setText(presetName, juce::dontSendNotification);
+                presetBox.setText(loadedPresetName, juce::dontSendNotification);
 
                 presetBox.setSelectedId(selectedId, juce::dontSendNotification);
             }
@@ -838,22 +908,17 @@ namespace state
 
     void StateComponent::deletePresetAndRefresh()
     {
-        enum choice
-        {
-            ok,
-            cancel
-        };
-
-        // if preset number > 0
         if (procStatePresets.getNumPresets() > 0)
         {
-            const auto callback = juce::ModalCallbackFunction::create([this](int choice)
+            juce::Component::SafePointer<StateComponent> safeThis(this);
+            const auto callback = juce::ModalCallbackFunction::create([safeThis](int choice)
                                                                       {
-            if (choice)
-            {
-                procStatePresets.deletePreset();
-                refreshPresetBox();
-            } });
+                                                                          if (choice != 0 && safeThis != nullptr)
+                                                                          {
+                                                                              safeThis->procStatePresets.deletePreset();
+                                                                              safeThis->refreshPresetBox();
+                                                                          }
+                                                                      });
             juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::NoIcon,
                                                     "Warning",
                                                     "Delete preset?",
@@ -872,39 +937,34 @@ namespace state
         creatFolderIfNotExist(userFile);
 
         fileChooser = std::make_unique<juce::FileChooser>("save preset", userFile, "*");
-        auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
+        const auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
+        juce::Component::SafePointer<StateComponent> safeThis(this);
 
-        fileChooser->launchAsync(folderChooserFlags, [this](const juce::FileChooser& chooser)
+        fileChooser->launchAsync(folderChooserFlags, [safeThis](const juce::FileChooser& chooser)
                                  {
+            if (safeThis == nullptr)
+                return;
+
             juce::File inputName = chooser.getResult();
 
-            // 1. Call the modified savePreset and get the returned name.
-            juce::String savedPresetName = procStatePresets.savePreset(inputName);
+            const juce::String savedPresetName = safeThis->procStatePresets.savePreset(inputName);
 
-            // 2. Check if the name is valid (i.e., save was successful and not cancelled).
             if (savedPresetName.isNotEmpty())
             {
-                // 3. Refresh the UI to load the new preset list.
-                refreshPresetBox();
+                safeThis->refreshPresetBox();
 
-                // 4. Iterate to find the newly saved preset, using the same logic as in rescanPresetFolder.
                 int newPresetIdToSelect = 0;
-                for (int i = 0; i < presetBox.getNumItems(); ++i)
+                for (int i = 0; i < safeThis->presetBox.getNumItems(); ++i)
                 {
-                    if (presetBox.getItemId(i) > 0 && presetBox.getItemText(i) == savedPresetName)
+                    if (safeThis->presetBox.getItemId(i) > 0 && safeThis->presetBox.getItemText(i) == savedPresetName)
                     {
-                        newPresetIdToSelect = presetBox.getItemId(i);
+                        newPresetIdToSelect = safeThis->presetBox.getItemId(i);
                         break;
                     }
                 }
-                
-                // 5. Once found, select it using its new ID.
-                //    We want to trigger the onChange callback here to ensure all states are updated correctly,
-                //    so a direct call to setSelectedId (which sends a notification by default) is what we need.
+
                 if (newPresetIdToSelect > 0)
-                {
-                    presetBox.setSelectedId(newPresetIdToSelect);
-                }
+                    safeThis->presetBox.setSelectedId(newPresetIdToSelect);
             } });
     }
 
@@ -978,78 +1038,65 @@ namespace state
         float scale = juce::jmin(heightScale, widthScale);
         fireLookAndFeel.scale = scale;
 
-        presetMenu.showMenuAsync(juce::PopupMenu::Options().withStandardItemHeight(30 * heightScale).withMinimumWidth(250 * widthScale), [this](int result)
+        juce::Component::SafePointer<StateComponent> safeThis(this);
+        presetMenu.showMenuAsync(juce::PopupMenu::Options()
+                                     .withStandardItemHeight(juce::roundToInt(30.0f * heightScale))
+                                     .withMinimumWidth(juce::roundToInt(250.0f * widthScale)),
+                                 [safeThis](int result)
                                  {
-        if (result == 1)  // init
-        {
-            isChanged = true;
-            // set all parameters to default
-            procStatePresets.initPreset();
-            // set GUI verticle lines to default
-            resetMultiband();
-            presetBox.setSelectedId(0);
-        }
-        else if (result == 2)
-        {
-            openPresetFolder();
-        }
-        else if (result == 3)
-        {
-            rescanPresetFolder();
-        }
-        else if (result == 4)
-        {
-            juce::URL gitHubWebsite(GITHUB_LINK);
-            gitHubWebsite.launchInDefaultBrowser();
-        }
-        else if (result == 5)
-        {
-            versionInfo = VersionInfo::fetchLatestFromUpdateServer();
-            if (versionInfo == nullptr)
-            {
-                juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Error", "No release found or disconnected from the network!");
-            }
-            else if(!versionInfo->versionString.equalsIgnoreCase(juce::String("v") + juce::String(VERSION)))
-            {
-                version = versionInfo->versionString;
-                const auto callback = juce::ModalCallbackFunction::create ([this](int result) {
-                    if (result == 1) // result == 1 means user clicks OK
-                    {
-                        juce::URL gitHubWebsite(GITHUB_TAG_LINK + version);
-                        gitHubWebsite.launchInDefaultBrowser();
-                    }
-                });
-                juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                    "New Version", "New version " + version + " available, do you want to download it?", nullptr, callback);
-            }
-            else
-            {
-                juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::InfoIcon, "New Version", "You are up to date!");
-            }
-        }
-        else if (result == 6) // The "Settings..." menu item
-        {
-            // ======== THE FINAL, SAFEST METHOD USING A MODAL DIALOG WINDOW ========
+                                     if (safeThis == nullptr)
+                                         return;
 
-            // 1. Get a reference to the processor
-            auto& ourProcessor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
+                                     if (result == 1)
+                                     {
+                                         safeThis->isChanged = true;
+                                         safeThis->procStatePresets.initPreset();
+                                         safeThis->resetMultiband();
+                                         safeThis->presetBox.setSelectedId(0);
+                                     }
+                                     else if (result == 2)
+                                     {
+                                         safeThis->openPresetFolder();
+                                     }
+                                     else if (result == 3)
+                                     {
+                                         safeThis->rescanPresetFolder();
+                                     }
+                                     else if (result == 4)
+                                     {
+                                         juce::URL(GITHUB_LINK).launchInDefaultBrowser();
+                                     }
+                                     else if (result == 5)
+                                     {
+                                         if (! safeThis->manualUpdateCheckThread.isThreadRunning())
+                                         {
+                                             safeThis->manualUpdateCheckThread.prepareForStart();
+                                             safeThis->manualUpdateCheckThread.startThread();
+                                         }
+                                     }
+                                     else if (result == 6)
+                                     {
+                                         if (safeThis->settingsDialog != nullptr)
+                                         {
+                                             safeThis->settingsDialog->toFront(true);
+                                             return;
+                                         }
 
-            // 2. Create the settings panel on the heap
-            auto* settingsPanel = new SettingsComponent(ourProcessor.getAppSettings());
+                                         auto& processor = static_cast<FireAudioProcessor&>(safeThis->procStatePresets.getProcessor());
+                                         auto settingsPanel = std::make_unique<SettingsComponent>(processor.getAppSettings());
 
-            // 3. Configure DialogWindow launch options
-            juce::DialogWindow::LaunchOptions options;
-            options.content.setOwned(settingsPanel);
-            options.content->setSize(400, 300);
-            options.dialogTitle = "Settings";
-            options.dialogBackgroundColour = COLOUR6;
-            options.escapeKeyTriggersCloseButton = true;
-            options.useNativeTitleBar = true;
-            options.resizable = true;
-            options.componentToCentreAround = this;
-            // 4. Launch dialog asynchronously
-            options.launchAsync();
-        } });
+                                         juce::DialogWindow::LaunchOptions options;
+                                         options.content.setOwned(settingsPanel.release());
+                                         options.content->setSize(400, 300);
+                                         options.dialogTitle = "Settings";
+                                         options.dialogBackgroundColour = COLOUR6;
+                                         options.escapeKeyTriggersCloseButton = true;
+                                         options.useNativeTitleBar = true;
+                                         options.resizable = true;
+                                         options.componentToCentreAround = safeThis.getComponent();
+                                         safeThis->settingsDialog = options.launchAsync();
+                                     }
+                                 });
     }
 
     void StateComponent::resetMultiband()

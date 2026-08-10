@@ -41,6 +41,11 @@ void Oscilloscope::paint(juce::Graphics& g)
         historyR = processor.getHistoryArrayR();
     }
 
+    const int sampleCount = monoChannel ? historyL.size()
+                                        : juce::jmin(historyL.size(), historyR.size());
+    if (sampleCount <= 0 || getWidth() <= 0)
+        return;
+
     juce::Path pathL;
     juce::Path pathR;
 
@@ -53,21 +58,21 @@ void Oscilloscope::paint(juce::Graphics& g)
     // get max
     float maxValue = 0.0f;
 
-    for (int i = 0; i < historyL.size(); i++)
+    for (int i = 0; i < sampleCount; ++i)
     {
-        if (historyL[i] > maxValue || historyR[i] > maxValue)
-        {
-            maxValue = historyL[i] > historyR[i] ? historyL[i] : historyR[i];
-        }
+        maxValue = juce::jmax(maxValue, std::abs(historyL[i]));
+        if (! monoChannel)
+            maxValue = juce::jmax(maxValue, std::abs(historyR[i]));
     }
 
     //TODO: this may cause high CPU usage! maybe use i += 2?
-    float valL;
-    float valR;
+    float valL = 0.0f;
+    float valR = 0.0f;
 
     for (int i = 0; i < getWidth(); i++)
     {
-        int scaledIndex = static_cast<int>(i * (float) historyL.size() / (float) getWidth());
+        const int scaledIndex = juce::jlimit(0, sampleCount - 1,
+                                             static_cast<int>(i * (float) sampleCount / (float) getWidth()));
 
         valL = historyL[scaledIndex];
         if (! monoChannel)

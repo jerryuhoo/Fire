@@ -21,7 +21,7 @@ class SpectrumBackground : public juce::Component
 {
 public:
     SpectrumBackground();
-    ~SpectrumBackground();
+    ~SpectrumBackground() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;

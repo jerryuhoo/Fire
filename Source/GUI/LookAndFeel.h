@@ -16,10 +16,6 @@
 #include "juce_graphics/juce_graphics.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
-#if ! JUCE_MAC
-#define M_PI 3.1415926
-#endif
-
 inline void drawInnerShadow(juce::Graphics& g, juce::Path target)
 {
     // resets the Clip Region when the function returns
@@ -709,7 +705,7 @@ private:
             g.strokePath(valueArc, juce::PathStrokeType(lineW, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
-        float diameterInner = juce::jmin(width, height) * 0.4;
+        float diameterInner = juce::jmin(width, height) * 0.4f;
         float radiusInner = diameterInner / 2;
         float centerX = x + width / 2;
         float centerY = y + height / 2;
@@ -802,8 +798,8 @@ private:
             const double realEndValue = slider.proportionOfLengthToValue(modEndValueNormalized);
 
             // 5. Convert REAL values to angles
-            float modStartAngle = valueToAngle(realStartValue);
-            float modEndAngle = valueToAngle(realEndValue);
+            float modStartAngle = static_cast<float>(valueToAngle(realStartValue));
+            float modEndAngle = static_cast<float>(valueToAngle(realEndValue));
 
             // --- Drawing the modulation depth arc ---
             juce::Path modulationDepthArc;
@@ -829,9 +825,6 @@ private:
 
             // 6. Calculate the current LFO-driven value in NORMALIZED space
             // slider.lfoValue is the raw LFO output, typically [0, 1] for unipolar, or transformed to [-1, 1] for bipolar
-            double lfoSignal = slider.lfoValue; // Let's assume lfoValue is correctly bipolar/unipolar already
-            double currentModulatedValueNormalized;
-
             if (! slider.isBypassed)
             {
                 // 6. Calculate the current LFO-driven value in NORMALIZED space
@@ -854,7 +847,7 @@ private:
 
                 // 7. Convert back to REAL value and then to angle for drawing
                 const double realModulatedValue = slider.proportionOfLengthToValue(currentModulatedValueNormalized);
-                float currentModAngle = valueToAngle(realModulatedValue);
+                float currentModAngle = static_cast<float>(valueToAngle(realModulatedValue));
 
                 juce::Point<float> modThumbPoint(center.x + modulationArcRadius * std::cos(currentModAngle - juce::MathConstants<float>::halfPi),
                                                  center.y + modulationArcRadius * std::sin(currentModAngle - juce::MathConstants<float>::halfPi));
@@ -932,8 +925,8 @@ private:
 
             // Prepare and draw the expensive inner shadow
             juce::Path backgroundShadowArc;
-            backgroundShadowArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius + lineW / 2.0f, arcRadius + lineW / 2.0f, 0.0f, 0, 2 * M_PI, true);
-            backgroundShadowArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius - lineW / 2.0f, arcRadius - lineW / 2.0f, 0.0f, 0, 2 * M_PI, true);
+            backgroundShadowArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius + lineW / 2.0f, arcRadius + lineW / 2.0f, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
+            backgroundShadowArc.addCentredArc(staticBounds.getCentreX(), staticBounds.getCentreY(), arcRadius - lineW / 2.0f, arcRadius - lineW / 2.0f, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
             drawInnerShadow(cacheGraphics, backgroundShadowArc);
 
             // Draw the static part of the inner dial (the grey gradient)
@@ -977,7 +970,7 @@ private:
             valueArc.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, rotaryStartAngle, effectiveAngle, true);
 
             juce::Path circlePath;
-            circlePath.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, 0, 2 * M_PI, true);
+            circlePath.addCentredArc(bounds.getCentreX(), bounds.getCentreY(), arcRadius, arcRadius, 0.0f, 0.0f, juce::MathConstants<float>::twoPi, true);
 
             if (sampleMaxValue > 0.00001f)
             {
@@ -1027,7 +1020,7 @@ private:
 
         // Draw rotating tick
         juce::Path dialTick;
-        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3);
+        dialTick.addRectangle(0, -radiusInner, radiusInner * 0.1f, radiusInner * 0.3f);
         if (sampleMaxValue > 0.00001f && slider.isEnabled())
         {
             g.setColour(juce::Colour(255, (juce::uint8) juce::jmax(255 - sampleMaxValue * 2000, 0.0f), 0));

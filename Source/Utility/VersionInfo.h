@@ -26,6 +26,8 @@
 #pragma once
 #include "juce_core/juce_core.h"
 #include "../GUI/InterfaceDefines.h"
+#include <atomic>
+#include <memory>
 
 //==============================================================================
 class VersionInfo
@@ -37,11 +39,27 @@ public:
         const juce::String url;
     };
 
+    class FetchOperation
+    {
+    public:
+        std::unique_ptr<VersionInfo> fetchLatest();
+        std::unique_ptr<VersionInfo> fetchVersion(const juce::String& versionString);
+        void cancel();
+        void reset();
+
+    private:
+        std::unique_ptr<VersionInfo> fetchEndpoint(const juce::String& endpoint);
+
+        juce::CriticalSection streamLock;
+        std::shared_ptr<juce::WebInputStream> activeStream;
+        std::atomic<bool> cancelled { false };
+    };
+
     static std::unique_ptr<VersionInfo> fetchFromUpdateServer (const juce::String& versionString);
     static std::unique_ptr<VersionInfo> fetchLatestFromUpdateServer();
     static std::unique_ptr<juce::InputStream> createInputStreamForAsset (const Asset& asset, int& statusCode);
 
-    bool isNewerVersionThanCurrent();
+    bool isNewerVersionThanCurrent() const;
 
     const juce::String versionString;
     const juce::String releaseNotes;
@@ -51,4 +69,5 @@ private:
     VersionInfo (juce::String version, juce::String releaseNotes, std::vector<Asset> assets);
 
     static std::unique_ptr<VersionInfo> fetch (const juce::String&);
+    static std::unique_ptr<VersionInfo> parseReleaseResponse(const juce::String& response);
 };

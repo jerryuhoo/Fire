@@ -14,9 +14,5 @@
 class WidthProcessor
 {
 public:
-    WidthProcessor();
-    ~WidthProcessor();
-    void process(float* channeldataL, float* channeldataR, float width, float pan, int numSamples);
-
-private:
+    void process(float* channeldataL, float* channeldataR, float width, float pan, int numSamples) const noexcept;
 };

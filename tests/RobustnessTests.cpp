@@ -1,0 +1,840 @@
+#include "../Source/DSP/Delay.h"
+#include "../Source/DSP/ClippingFunctions.h"
+#include "../Source/DSP/LfoData.h"
+#include "../Source/DSP/LfoEngine.h"
+#include "../Source/PluginProcessor.h"
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+
+namespace
+{
+void setParameterNormalised(FireAudioProcessor& processor,
+                            const juce::String& parameterID,
+                            float normalisedValue)
+{
+    auto* parameter = processor.treeState.getParameter(parameterID);
+    REQUIRE(parameter != nullptr);
+    parameter->setValueNotifyingHost(normalisedValue);
+}
+
+void setParameterValue(FireAudioProcessor& processor,
+                       const juce::String& parameterID,
+                       float value)
+{
+    auto* parameter = processor.treeState.getParameter(parameterID);
+    REQUIRE(parameter != nullptr);
+    parameter->setValueNotifyingHost(parameter->getNormalisableRange().convertTo0to1(value));
+}
+
+bool bufferContainsOnlyFiniteSamples(const juce::AudioBuffer<float>& buffer)
+{
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            if (! std::isfinite(buffer.getSample(channel, sample)))
+                return false;
+
+    return true;
+}
+
+constexpr size_t referenceLfoTableSize = 1024;
+
+std::array<float, referenceLfoTableSize> makeReferenceLfoTable(const LfoData& shapeData,
+                                                               float smoothness)
+{
+    std::array<float, referenceLfoTableSize> table {};
+    size_t segmentIndex = 0;
+
+    for (size_t i = 0; i < table.size(); ++i)
+    {
+        const float phase = static_cast<float>(i) / static_cast<float>(table.size() - 1);
+        while (segmentIndex + 1 < shapeData.points.size()
+               && phase > shapeData.points[segmentIndex + 1].x)
+            ++segmentIndex;
+
+        float value = 0.5f;
+        if (segmentIndex + 1 < shapeData.points.size())
+        {
+            const auto& first = shapeData.points[segmentIndex];
+            const auto& second = shapeData.points[segmentIndex + 1];
+            const float width = second.x - first.x;
+            if (phase >= first.x && phase <= second.x)
+            {
+                if (segmentIndex >= shapeData.curvatures.size() || std::abs(width) < 1.0e-9f)
+                {
+                    value = std::abs(width) < 1.0e-9f
+                                ? first.y
+                                : first.y + (second.y - first.y) * ((phase - first.x) / width);
+                }
+                else
+                {
+                    const float curvature = juce::jlimit(-2.0f, 2.0f,
+                                                          shapeData.curvatures[segmentIndex]);
+                    const float x = juce::jlimit(0.0f, 1.0f, (phase - first.x) / width);
+                    const float exponent = std::pow(4.0f, std::abs(curvature));
+                    const float curvedX = curvature >= 0.0f
+                                              ? std::pow(x, exponent)
+                                              : 1.0f - std::pow(juce::jmax(0.0f, 1.0f - x), exponent);
+                    value = first.y + (second.y - first.y) * curvedX;
+                }
+            }
+        }
+
+        if (i == table.size() - 1)
+            value = shapeData.points.back().y;
+        table[i] = juce::jlimit(0.0f, 1.0f, value);
+    }
+
+    if (smoothness > 0.001f)
+    {
+        const float feedback = smoothness * 0.95f;
+        const float feedforward = 1.0f - feedback;
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            float state = table.back();
+            for (auto& value : table)
+            {
+                value = value * feedforward + state * feedback;
+                state = value;
+            }
+        }
+    }
+
+    return table;
+}
+
+float interpolateReferenceLfo(const std::array<float, referenceLfoTableSize>& table,
+                              float phase)
+{
+    const float position = juce::jlimit(0.0f, 1.0f, phase)
+                           * static_cast<float>(table.size() - 1);
+    const size_t index = juce::jmin(static_cast<size_t>(position), table.size() - 1);
+    const float next = index + 1 < table.size() ? table[index + 1] : table.back();
+    return table[index] + (position - static_cast<float>(index)) * (next - table[index]);
+}
+} // namespace
+
+TEST_CASE("Malformed LFO data is normalised before DSP use", "[lfo][robustness]")
+{
+    LfoData data;
+    data.points = {
+        { 0.8f, 1.4f },
+        { -0.2f, -0.3f },
+        { 0.4f, 0.6f },
+    };
+    data.curvatures = { std::numeric_limits<float>::infinity() };
+    data.smoothness = 2.0f;
+
+    data.sanitise();
+
+    REQUIRE(data.points.size() >= 2);
+    CHECK(data.curvatures.size() == data.points.size() - 1);
+    CHECK(data.points.front().x == Catch::Approx(0.0f));
+    CHECK(data.points.back().x == Catch::Approx(1.0f));
+    CHECK(data.smoothness == Catch::Approx(1.0f));
+
+    CHECK(std::is_sorted(data.points.begin(), data.points.end(), [](const auto& lhs, const auto& rhs)
+                         { return lhs.x < rhs.x; }));
+
+    for (const auto& point : data.points)
+    {
+        CHECK(std::isfinite(point.x));
+        CHECK(std::isfinite(point.y));
+        CHECK(point.x >= 0.0f);
+        CHECK(point.x <= 1.0f);
+        CHECK(point.y >= 0.0f);
+        CHECK(point.y <= 1.0f);
+    }
+
+    for (const auto curvature : data.curvatures)
+        CHECK(std::isfinite(curvature));
+
+    data.points[1].x = std::numeric_limits<float>::quiet_NaN();
+    data.sanitise();
+    REQUIRE(data.points.size() == 2);
+    CHECK(data.points.front().x == Catch::Approx(0.0f));
+    CHECK(data.points.back().x == Catch::Approx(1.0f));
+}
+
+TEST_CASE("Prebuilt LFO banks match the original curve and smoothing math", "[lfo][wavetable]")
+{
+    LfoData shape;
+    shape.points = { { 0.0f, 0.1f }, { 0.3f, 0.9f }, { 0.7f, 0.2f }, { 1.0f, 0.8f } };
+    shape.curvatures = { 1.0f, -0.5f, 2.0f };
+    shape.sanitise();
+
+    LfoEngine engine;
+    engine.stageShape(shape);
+    engine.publishStagedShape();
+    engine.setPhaseDelta(0.0f);
+
+    constexpr std::array<float, 7> phases { 0.0f, 0.0005f, 0.12345f, 0.3f, 0.5f, 0.999f, 1.0f };
+    for (int step = 0; step <= 100; ++step)
+    {
+        const float smoothness = static_cast<float>(step) / 100.0f;
+        const auto reference = makeReferenceLfoTable(shape, smoothness);
+        engine.setSmoothness(smoothness);
+
+        for (const float phase : phases)
+        {
+            engine.setPhase(phase);
+            const float actual = engine.process();
+            const float expected = interpolateReferenceLfo(reference, phase);
+            CAPTURE(step, phase, actual, expected);
+            CHECK(actual == Catch::Approx(expected).margin(2.0e-6f));
+        }
+    }
+
+    engine.setSmoothness(0.0f);
+    engine.setPhase(0.37f);
+    const float activeValue = engine.process();
+
+    LfoData replacement;
+    replacement.points = { { 0.0f, 0.0f }, { 1.0f, 0.0f } };
+    replacement.curvatures = { 0.0f };
+    replacement.sanitise();
+    engine.stageShape(replacement);
+
+    engine.setPhase(0.37f);
+    CHECK(engine.process() == Catch::Approx(activeValue).margin(1.0e-6f));
+
+    // A newer staged shape must replace an unpublished one without touching
+    // the bank that the audio thread is still reading.
+    LfoData latestReplacement;
+    latestReplacement.points = { { 0.0f, 1.0f }, { 1.0f, 1.0f } };
+    latestReplacement.curvatures = { 0.0f };
+    latestReplacement.sanitise();
+    engine.stageShape(latestReplacement);
+    engine.setPhase(0.37f);
+    CHECK(engine.process() == Catch::Approx(activeValue).margin(1.0e-6f));
+
+    engine.publishStagedShape();
+    engine.setPhase(0.37f);
+    CHECK(std::abs(engine.process() - activeValue) > 0.1f);
+}
+
+TEST_CASE("Delay keeps independent channel histories and an exact delay", "[delay][robustness]")
+{
+    Delay delay { 2 };
+    delay.setState(true);
+
+    const std::array<float, 4> leftInput { 1.0f, 2.0f, 3.0f, 4.0f };
+    const std::array<float, 4> rightInput { 10.0f, 20.0f, 30.0f, 40.0f };
+    std::array<float, 4> leftOutput {};
+    std::array<float, 4> rightOutput {};
+
+    for (size_t i = 0; i < leftInput.size(); ++i)
+    {
+        leftOutput[i] = delay.process(leftInput[i], 0, static_cast<int>(leftInput.size()));
+        rightOutput[i] = delay.process(rightInput[i], 1, static_cast<int>(rightInput.size()));
+    }
+
+    const std::array<float, 4> expectedLeft { 0.0f, 0.0f, 1.0f, 2.0f };
+    const std::array<float, 4> expectedRight { 0.0f, 0.0f, 10.0f, 20.0f };
+    CHECK(leftOutput == expectedLeft);
+    CHECK(rightOutput == expectedRight);
+
+    delay.setLatency(0);
+    CHECK(delay.process(7.0f, 0, 1) == Catch::Approx(7.0f));
+    CHECK(delay.process(9.0f, -1, 1) == Catch::Approx(9.0f));
+}
+
+TEST_CASE("Spectrum frames are published as complete newest-only snapshots", "[fft][threading]")
+{
+    SpectrumProcessor spectrum;
+
+    for (int frame = 1; frame <= 3; ++frame)
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+            spectrum.pushNextSamplePairIntoFifo(static_cast<float>(frame),
+                                                static_cast<float>(frame + 10));
+
+    REQUIRE(spectrum.hasCompleteFrame());
+
+    std::array<float, 2 * SpectrumProcessor::fftSize> latestProcessed {};
+    std::array<float, 2 * SpectrumProcessor::fftSize> latestOriginal {};
+    REQUIRE(spectrum.popLatestFramePair(latestProcessed.data(), static_cast<int>(latestProcessed.size()),
+                                        latestOriginal.data(), static_cast<int>(latestOriginal.size())));
+    CHECK(latestProcessed.front() == Catch::Approx(3.0f));
+    CHECK(latestProcessed[SpectrumProcessor::fftSize - 1] == Catch::Approx(3.0f));
+    CHECK(latestProcessed[SpectrumProcessor::fftSize] == Catch::Approx(0.0f));
+    CHECK(latestOriginal.front() == Catch::Approx(13.0f));
+    CHECK(latestOriginal[SpectrumProcessor::fftSize - 1] == Catch::Approx(13.0f));
+    CHECK_FALSE(spectrum.hasCompleteFrame());
+
+    for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+        spectrum.pushNextSamplePairIntoFifo(4.0f, 14.0f);
+
+    REQUIRE(spectrum.popLatestFramePair(latestProcessed.data(), static_cast<int>(latestProcessed.size()),
+                                        latestOriginal.data(), static_cast<int>(latestOriginal.size())));
+    CHECK(latestProcessed.front() == Catch::Approx(4.0f));
+    CHECK(latestOriginal.front() == Catch::Approx(14.0f));
+
+    std::array<float, SpectrumProcessor::fftSize> undersized {};
+    CHECK_FALSE(spectrum.doProcessing(undersized.data(), static_cast<int>(undersized.size())));
+}
+
+TEST_CASE("Sample-accurate bipolar modulation matches block modulation depth", "[lfo][modulation]")
+{
+    const std::array<float, 1> lfo { 1.0f };
+    ModulatedValueProvider provider;
+    provider.lfoSignal = lfo.data();
+    provider.baseValue = 0.25f;
+    provider.modulationDepth = 1.0f;
+    provider.isBipolar = true;
+    provider.range = { 0.0f, 1.0f };
+
+    CHECK(provider.get(0) == Catch::Approx(0.75f));
+    provider.isBipolar = false;
+    CHECK(provider.get(0) == Catch::Approx(1.0f));
+}
+
+TEST_CASE("Logic clipping remains monotonic and saturated at high drive", "[distortion][robustness]")
+{
+    float previous = waveshaping::logicClip(-100.0f);
+    CHECK(previous < -0.999f);
+
+    for (const float input : { -20.0f, -5.0f, -1.0f, 0.0f, 1.0f, 5.0f, 20.0f, 100.0f })
+    {
+        const float output = waveshaping::logicClip(input);
+        CAPTURE(input, output, previous);
+        CHECK(std::isfinite(output));
+        CHECK(output >= previous);
+        CHECK(output >= -1.0f);
+        CHECK(output <= 1.0f);
+        CHECK(output == Catch::Approx(-waveshaping::logicClip(-input)).margin(1.0e-6f));
+        previous = output;
+    }
+
+    CHECK(waveshaping::logicClip(100.0f) > 0.999f);
+    CHECK(waveshaping::logicClip(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
+}
+
+TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[processor][robustness]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    juce::MidiBuffer midi;
+
+    juce::AudioProcessor::BusesLayout monoLayout;
+    monoLayout.inputBuses.add(juce::AudioChannelSet::mono());
+    monoLayout.outputBuses.add(juce::AudioChannelSet::mono());
+    REQUIRE(processor.setBusesLayout(monoLayout));
+    processor.prepareToPlay(32000.0, 16);
+
+    juce::AudioBuffer<float> emptyBuffer(1, 0);
+    REQUIRE_NOTHROW(processor.processBlock(emptyBuffer, midi));
+
+    juce::AudioBuffer<float> monoBuffer(1, 64);
+    for (int sample = 0; sample < monoBuffer.getNumSamples(); ++sample)
+        monoBuffer.setSample(0, sample, 0.25f * std::sin(0.1f * static_cast<float>(sample)));
+
+    setParameterNormalised(processor, HQ_ID, 1.0f);
+    setParameterValue(processor, MIX_ID, 0.5f);
+    REQUIRE_NOTHROW(processor.processBlock(monoBuffer, midi));
+    CHECK(bufferContainsOnlyFiniteSamples(monoBuffer));
+}
+
+TEST_CASE("Disabling HQ clears the processor latency", "[processor][latency]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 128);
+
+    juce::AudioBuffer<float> buffer(2, 128);
+    buffer.clear();
+    juce::MidiBuffer midi;
+
+    setParameterNormalised(processor, HQ_ID, 1.0f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    CHECK(processor.getLatencySamples() > 0);
+    CHECK(processor.getTotalLatency() > 0.0f);
+
+    setParameterNormalised(processor, HQ_ID, 0.0f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    CHECK(processor.getLatencySamples() == 0);
+    CHECK(processor.getTotalLatency() == Catch::Approx(0.0f));
+}
+
+TEST_CASE("Downsampling state is independent of host block boundaries", "[processor][downsampling]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor wholeProcessor;
+    FireAudioProcessor splitProcessor;
+
+    for (auto* processor : { &wholeProcessor, &splitProcessor })
+    {
+        setParameterNormalised(*processor, DOWNSAMPLE_BYPASS_ID, 1.0f);
+        setParameterValue(*processor, DOWNSAMPLE_ID, 7.0f);
+        setParameterValue(*processor, BIT_DEPTH_ID, 32.0f);
+        setParameterValue(*processor, JITTER_ID, 0.0f);
+        setParameterValue(*processor, DOWNSAMPLE_MIX_ID, 1.0f);
+        processor->prepareToPlay(48000.0, 64);
+    }
+
+    constexpr int totalSamples = 257;
+    juce::AudioBuffer<float> input(2, totalSamples);
+    for (int channel = 0; channel < input.getNumChannels(); ++channel)
+        for (int sample = 0; sample < totalSamples; ++sample)
+            input.setSample(channel, sample,
+                            0.75f * std::sin(0.071f * static_cast<float>(sample + channel * 3)));
+
+    auto wholeOutput = input;
+    juce::MidiBuffer midi;
+    wholeProcessor.processBlock(wholeOutput, midi);
+
+    juce::AudioBuffer<float> splitOutput(2, totalSamples);
+    splitOutput.clear();
+    const std::array<int, 6> blockSizes { 13, 29, 5, 61, 17, 64 };
+    int start = 0;
+    size_t blockIndex = 0;
+    while (start < totalSamples)
+    {
+        const int blockSize = juce::jmin(blockSizes[blockIndex % blockSizes.size()],
+                                         totalSamples - start);
+        juce::AudioBuffer<float> block(2, blockSize);
+        for (int channel = 0; channel < 2; ++channel)
+            block.copyFrom(channel, 0, input, channel, start, blockSize);
+
+        splitProcessor.processBlock(block, midi);
+        for (int channel = 0; channel < 2; ++channel)
+            splitOutput.copyFrom(channel, start, block, channel, 0, blockSize);
+
+        start += blockSize;
+        ++blockIndex;
+    }
+
+    for (int channel = 0; channel < 2; ++channel)
+        for (int sample = 0; sample < totalSamples; ++sample)
+            CHECK(splitOutput.getSample(channel, sample)
+                  == Catch::Approx(wholeOutput.getSample(channel, sample)).margin(1.0e-6f));
+}
+
+TEST_CASE("HQ host bypass retains the reported latency", "[processor][latency][bypass]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setParameterNormalised(processor, HQ_ID, 1.0f);
+    processor.prepareToPlay(48000.0, 128);
+
+    juce::AudioBuffer<float> impulse(2, 128);
+    impulse.clear();
+    impulse.setSample(0, 0, 1.0f);
+    impulse.setSample(1, 0, 1.0f);
+    juce::MidiBuffer midi;
+    processor.processBlockBypassed(impulse, midi);
+
+    int peakIndex = 0;
+    float peakMagnitude = 0.0f;
+    for (int sample = 0; sample < impulse.getNumSamples(); ++sample)
+    {
+        const float magnitude = std::abs(impulse.getSample(0, sample));
+        if (magnitude > peakMagnitude)
+        {
+            peakMagnitude = magnitude;
+            peakIndex = sample;
+        }
+    }
+
+    CAPTURE(peakIndex, processor.getTotalLatency(), processor.getLatencySamples());
+    CHECK(peakMagnitude > 0.5f);
+    CHECK(std::abs(peakIndex - juce::roundToInt(processor.getTotalLatency())) <= 1);
+}
+
+TEST_CASE("Neutral three-band crossover keeps a flat summed magnitude", "[processor][crossover]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const float frequency : { 350.0f, 500.0f, 900.0f, 1500.0f, 2000.0f, 2800.0f })
+    {
+        FireAudioProcessor processor;
+        setParameterValue(processor, NUM_BANDS_ID, 3.0f);
+        setParameterValue(processor, ParameterIDAndName::getIDString(FREQ_ID, 0), 500.0f);
+        setParameterValue(processor, ParameterIDAndName::getIDString(FREQ_ID, 1), 2000.0f);
+        for (int band = 0; band < 3; ++band)
+            setParameterNormalised(processor,
+                                   ParameterIDAndName::getIDString(BAND_ENABLE_ID, band),
+                                   0.0f);
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int numSamples = 8192;
+        processor.prepareToPlay(sampleRate, 512);
+
+        juce::AudioBuffer<float> buffer(2, numSamples);
+        double inputEnergy = 0.0;
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            const float value = 0.25f * std::sin(juce::MathConstants<float>::twoPi
+                                                 * frequency
+                                                 * static_cast<float>(sample)
+                                                 / static_cast<float>(sampleRate));
+            buffer.setSample(0, sample, value);
+            buffer.setSample(1, sample, value);
+            if (sample >= numSamples / 2)
+                inputEnergy += static_cast<double>(value) * value;
+        }
+
+        juce::MidiBuffer midi;
+        processor.processBlock(buffer, midi);
+
+        double outputEnergy = 0.0;
+        for (int sample = numSamples / 2; sample < numSamples; ++sample)
+        {
+            const double value = buffer.getSample(0, sample);
+            outputEnergy += value * value;
+        }
+
+        const double magnitudeRatio = std::sqrt(outputEnergy / inputEnergy);
+        CAPTURE(frequency, magnitudeRatio);
+        CHECK(magnitudeRatio == Catch::Approx(1.0).margin(0.035));
+    }
+}
+
+TEST_CASE("Neutral four-band crossover keeps a flat summed magnitude", "[processor][crossover]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const float frequency : { 350.0f, 500.0f, 750.0f, 1000.0f,
+                                   1500.0f, 2000.0f, 2800.0f })
+    {
+        FireAudioProcessor processor;
+        setParameterValue(processor, NUM_BANDS_ID, 4.0f);
+        setParameterValue(processor, ParameterIDAndName::getIDString(FREQ_ID, 0), 500.0f);
+        setParameterValue(processor, ParameterIDAndName::getIDString(FREQ_ID, 1), 1000.0f);
+        setParameterValue(processor, ParameterIDAndName::getIDString(FREQ_ID, 2), 2000.0f);
+        for (int band = 0; band < 4; ++band)
+            setParameterNormalised(processor,
+                                   ParameterIDAndName::getIDString(BAND_ENABLE_ID, band),
+                                   0.0f);
+
+        constexpr double sampleRate = 48000.0;
+        constexpr int numSamples = 8192;
+        processor.prepareToPlay(sampleRate, 512);
+
+        juce::AudioBuffer<float> buffer(2, numSamples);
+        double inputEnergy = 0.0;
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            const float value = 0.25f * std::sin(juce::MathConstants<float>::twoPi
+                                                 * frequency
+                                                 * static_cast<float>(sample)
+                                                 / static_cast<float>(sampleRate));
+            buffer.setSample(0, sample, value);
+            buffer.setSample(1, sample, value);
+            if (sample >= numSamples / 2)
+                inputEnergy += static_cast<double>(value) * value;
+        }
+
+        juce::MidiBuffer midi;
+        processor.processBlock(buffer, midi);
+
+        double outputEnergy = 0.0;
+        for (int sample = numSamples / 2; sample < numSamples; ++sample)
+        {
+            const double value = buffer.getSample(0, sample);
+            outputEnergy += value * value;
+        }
+
+        const double magnitudeRatio = std::sqrt(outputEnergy / inputEnergy);
+        CAPTURE(frequency, magnitudeRatio);
+        CHECK(magnitudeRatio == Catch::Approx(1.0).margin(0.035));
+    }
+}
+
+TEST_CASE("Band solo also isolates the global dry path", "[processor][solo]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor dryMixProcessor;
+    FireAudioProcessor wetMixProcessor;
+
+    const auto configure = [](FireAudioProcessor& processor, float globalMix)
+    {
+        setParameterValue(processor, NUM_BANDS_ID, 2.0f);
+        setParameterValue(processor, ParameterIDAndName::getIDString(FREQ_ID, 0), 1000.0f);
+        for (int band = 0; band < 2; ++band)
+            setParameterNormalised(processor,
+                                   ParameterIDAndName::getIDString(BAND_ENABLE_ID, band),
+                                   0.0f);
+        setParameterNormalised(processor,
+                               ParameterIDAndName::getIDString(BAND_SOLO_ID, 0),
+                               1.0f);
+        setParameterNormalised(processor,
+                               ParameterIDAndName::getIDString(BAND_SOLO_ID, 1),
+                               0.0f);
+        setParameterValue(processor, MIX_ID, globalMix);
+        processor.prepareToPlay(48000.0, 512);
+    };
+
+    configure(dryMixProcessor, 0.0f);
+    configure(wetMixProcessor, 1.0f);
+
+    constexpr int numSamples = 8192;
+    juce::AudioBuffer<float> dryOutput(2, numSamples);
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const float value = 0.25f * std::sin(juce::MathConstants<float>::twoPi
+                                             * 4000.0f
+                                             * static_cast<float>(sample)
+                                             / 48000.0f);
+        dryOutput.setSample(0, sample, value);
+        dryOutput.setSample(1, sample, value);
+    }
+    auto wetOutput = dryOutput;
+
+    juce::MidiBuffer midi;
+    dryMixProcessor.processBlock(dryOutput, midi);
+    wetMixProcessor.processBlock(wetOutput, midi);
+
+    float maximumDifference = 0.0f;
+    for (int channel = 0; channel < 2; ++channel)
+        for (int sample = numSamples / 2; sample < numSamples; ++sample)
+            maximumDifference = juce::jmax(
+                maximumDifference,
+                std::abs(dryOutput.getSample(channel, sample)
+                         - wetOutput.getSample(channel, sample)));
+
+    CHECK(maximumDifference < 1.0e-5f);
+}
+
+TEST_CASE("Headless LFO smooth automation reaches the DSP state", "[lfo][state][headless]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 64);
+
+    LfoData automatedShape;
+    automatedShape.points = { { 0.0f, 0.0f }, { 0.45f, 1.0f }, { 1.0f, 0.2f } };
+    automatedShape.curvatures = { 0.75f, -0.5f };
+    automatedShape.smoothness = 0.0f;
+    automatedShape.sanitise();
+    processor.getLfoManager().setLfoData(1, automatedShape);
+
+    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 1);
+    auto* smoothnessParameter = processor.treeState.getParameter(smoothnessID);
+    REQUIRE(smoothnessParameter != nullptr);
+    smoothnessParameter->setValueNotifyingHost(0.73f);
+
+    juce::AudioBuffer<float> buffer(2, 1);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    processor.processBlock(buffer, midi);
+
+    const auto lfoData = processor.getLfoManager().getLfoDataCopy();
+    REQUIRE(lfoData.size() == 4);
+    CHECK(lfoData[1].smoothness == Catch::Approx(0.73f));
+
+    LfoEngine referenceEngine;
+    referenceEngine.stageShape(automatedShape);
+    referenceEngine.publishStagedShape();
+    referenceEngine.setSmoothness(0.73f);
+    referenceEngine.setPhase(0.0f);
+    referenceEngine.setPhaseDelta(0.0f);
+    CHECK(processor.getLfoManager().getLfoOutput(1)
+          == Catch::Approx(referenceEngine.process()).margin(2.0e-6f));
+}
+
+TEST_CASE("Stopped LFO smoothness survives host and preset state round-trips", "[lfo][state][headless]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor source;
+    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 2);
+    auto* smoothnessParameter = source.treeState.getParameter(smoothnessID);
+    REQUIRE(smoothnessParameter != nullptr);
+    smoothnessParameter->setValueNotifyingHost(0.73f);
+
+    // Deliberately do not run processBlock: this is the stopped-transport path
+    // where APVTS used to be newer than the duplicated LFO_STATE value.
+    const auto stoppedCopy = source.getLfoManager().getLfoDataCopy();
+    REQUIRE(stoppedCopy.size() == 4);
+    CHECK(stoppedCopy[2].smoothness == Catch::Approx(0.73f));
+
+    juce::MemoryBlock hostState;
+    source.getStateInformation(hostState);
+    FireAudioProcessor hostRestored;
+    hostRestored.setStateInformation(hostState.getData(), static_cast<int>(hostState.getSize()));
+    hostRestored.prepareToPlay(48000.0, 1);
+    juce::AudioBuffer<float> hostBuffer(2, 1);
+    hostBuffer.clear();
+    juce::MidiBuffer hostMidi;
+    hostRestored.processBlock(hostBuffer, hostMidi);
+    const auto hostRestoredData = hostRestored.getLfoManager().getLfoDataCopy();
+    REQUIRE(hostRestoredData.size() == 4);
+    CHECK(hostRestoredData[2].smoothness == Catch::Approx(0.73f));
+
+    juce::XmlElement presetState { "PRESET" };
+    state::saveStateToXml(source, presetState);
+    FireAudioProcessor presetRestored;
+    state::loadStateFromXml(presetState, presetRestored);
+    presetRestored.prepareToPlay(48000.0, 1);
+    juce::AudioBuffer<float> presetBuffer(2, 1);
+    presetBuffer.clear();
+    juce::MidiBuffer presetMidi;
+    presetRestored.processBlock(presetBuffer, presetMidi);
+    const auto presetRestoredData = presetRestored.getLfoManager().getLfoDataCopy();
+    REQUIRE(presetRestoredData.size() == 4);
+    CHECK(presetRestoredData[2].smoothness == Catch::Approx(0.73f));
+}
+
+TEST_CASE("Linked output compensation works without an editor", "[processor][link][headless]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor linkedProcessor;
+    FireAudioProcessor explicitProcessor;
+
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto outputID = ParameterIDAndName::getIDString(OUTPUT_ID, 0);
+    const auto linkedID = ParameterIDAndName::getIDString(LINKED_ID, 0);
+
+    for (auto* processor : { &linkedProcessor, &explicitProcessor })
+        setParameterValue(*processor, driveID, 30.0f);
+
+    setParameterValue(linkedProcessor, linkedID, 1.0f);
+    setParameterValue(linkedProcessor, outputID, 6.0f); // Must be ignored while linked.
+    setParameterValue(explicitProcessor, linkedID, 0.0f);
+    setParameterValue(explicitProcessor, outputID, -3.0f);
+
+    linkedProcessor.prepareToPlay(48000.0, 256);
+    explicitProcessor.prepareToPlay(48000.0, 256);
+
+    juce::AudioBuffer<float> linkedBuffer(2, 256);
+    for (int channel = 0; channel < linkedBuffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < linkedBuffer.getNumSamples(); ++sample)
+            linkedBuffer.setSample(channel,
+                                   sample,
+                                   0.2f * std::sin(juce::MathConstants<float>::twoPi
+                                                   * 440.0f * static_cast<float>(sample) / 48000.0f));
+
+    juce::AudioBuffer<float> explicitBuffer;
+    explicitBuffer.makeCopyOf(linkedBuffer);
+    juce::MidiBuffer linkedMidi;
+    juce::MidiBuffer explicitMidi;
+    linkedProcessor.processBlock(linkedBuffer, linkedMidi);
+    explicitProcessor.processBlock(explicitBuffer, explicitMidi);
+
+    float maximumDifference = 0.0f;
+    for (int channel = 0; channel < linkedBuffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < linkedBuffer.getNumSamples(); ++sample)
+            maximumDifference = juce::jmax(maximumDifference,
+                                           std::abs(linkedBuffer.getSample(channel, sample)
+                                                    - explicitBuffer.getSample(channel, sample)));
+
+    CHECK(maximumDifference < 1.0e-6f);
+    const auto* linkedOutput = linkedProcessor.treeState.getRawParameterValue(outputID);
+    REQUIRE(linkedOutput != nullptr);
+    CHECK(linkedOutput->load() == Catch::Approx(6.0f));
+}
+
+TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state", "[state][lfo]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor source;
+
+    LfoData customShape;
+    customShape.points = { { 0.0f, 0.2f }, { 0.5f, 0.9f }, { 1.0f, 0.3f } };
+    customShape.curvatures = { 0.25f, -0.5f };
+    customShape.smoothness = 0.4f;
+    source.getLfoManager().setLfoData(2, customShape);
+    source.assignLfoToTarget(2, ParameterIDAndName::getIDString(DRIVE_ID, 0));
+
+    juce::MemoryBlock savedState;
+    source.getStateInformation(savedState);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(savedState.getData(), static_cast<int>(savedState.getSize()));
+
+    // Exercise the audio-thread snapshot refresh as well. Historically this
+    // first block overwrote XML-restored smoothness with the APVTS default.
+    restored.prepareToPlay(48000.0, 64);
+    juce::AudioBuffer<float> restoredBuffer(2, 64);
+    restoredBuffer.clear();
+    juce::MidiBuffer restoredMidi;
+    restored.processBlock(restoredBuffer, restoredMidi);
+
+    const auto restoredLfos = restored.getLfoManager().getLfoDataCopy();
+    REQUIRE(restoredLfos.size() == 4);
+    REQUIRE(restoredLfos[2].points.size() == 3);
+    CHECK(restoredLfos[2].points[1].x == Catch::Approx(0.5f));
+    CHECK(restoredLfos[2].points[1].y == Catch::Approx(0.9f));
+    CHECK(restoredLfos[2].smoothness == Catch::Approx(0.4f));
+
+    // Some older states contain an LFO shape but predate its smoothness XML
+    // attribute. In that case the APVTS smoothness parameter is authoritative.
+    auto legacySmoothXml = juce::AudioProcessor::getXmlFromBinary(
+        savedState.getData(), static_cast<int>(savedState.getSize()));
+    REQUIRE(legacySmoothXml != nullptr);
+    auto* legacyLfoState = legacySmoothXml->getChildByName("LFO_STATE");
+    REQUIRE(legacyLfoState != nullptr);
+    bool removedSmoothness = false;
+    for (auto* lfoXml : legacyLfoState->getChildIterator())
+    {
+        if (lfoXml->getIntAttribute("index", -1) == 2)
+        {
+            lfoXml->removeAttribute("smoothness");
+            removedSmoothness = true;
+            break;
+        }
+    }
+    REQUIRE(removedSmoothness);
+
+    juce::MemoryBlock legacySmoothState;
+    juce::AudioProcessor::copyXmlToBinary(*legacySmoothXml, legacySmoothState);
+    FireAudioProcessor legacySmoothRestored;
+    legacySmoothRestored.setStateInformation(legacySmoothState.getData(),
+                                             static_cast<int>(legacySmoothState.getSize()));
+    legacySmoothRestored.prepareToPlay(48000.0, 64);
+    juce::AudioBuffer<float> legacySmoothBuffer(2, 64);
+    legacySmoothBuffer.clear();
+    juce::MidiBuffer legacySmoothMidi;
+    legacySmoothRestored.processBlock(legacySmoothBuffer, legacySmoothMidi);
+    const auto legacySmoothLfos = legacySmoothRestored.getLfoManager().getLfoDataCopy();
+    REQUIRE(legacySmoothLfos.size() == 4);
+    CHECK(legacySmoothLfos[2].smoothness == Catch::Approx(0.4f));
+
+    const auto restoredRoutings = restored.getLfoManager().getModulationRoutingsCopy();
+    const auto targetID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto matchingRouting = std::find_if(restoredRoutings.begin(), restoredRoutings.end(), [&](const auto& routing)
+                                              { return routing.targetParameterID == targetID; });
+    REQUIRE(matchingRouting != restoredRoutings.end());
+    CHECK(matchingRouting->sourceLfoIndex == 2);
+
+    const auto* modernShapeState = restored.treeState.getRawParameterValue(
+        ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, 0));
+    REQUIRE(modernShapeState != nullptr);
+    CHECK(modernShapeState->load() <= 0.5f);
+
+    // Simulate an older state written before the per-band shape enable
+    // parameters existed. Loading must enable Shape to preserve the old sound.
+    auto legacyParameterState = source.treeState.copyState();
+    for (int band = 0; band < 4; ++band)
+    {
+        const auto parameterID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, band);
+        for (int childIndex = legacyParameterState.getNumChildren() - 1;
+             childIndex >= 0;
+             --childIndex)
+        {
+            const auto child = legacyParameterState.getChild(childIndex);
+            if (child.getProperty("id").toString() == parameterID)
+                legacyParameterState.removeChild(childIndex, nullptr);
+        }
+    }
+
+    juce::XmlElement legacyRoot { "state" };
+    legacyRoot.addChildElement(legacyParameterState.createXml().release());
+    juce::MemoryBlock legacyBinary;
+    juce::AudioProcessor::copyXmlToBinary(legacyRoot, legacyBinary);
+
+    FireAudioProcessor legacyRestored;
+    legacyRestored.setStateInformation(
+        legacyBinary.getData(), static_cast<int>(legacyBinary.getSize()));
+
+    for (int band = 0; band < 4; ++band)
+    {
+        const auto* shapeEnabled = legacyRestored.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, band));
+        REQUIRE(shapeEnabled != nullptr);
+        CHECK(shapeEnabled->load() > 0.5f);
+    }
+}

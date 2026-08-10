@@ -11,6 +11,7 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <cmath>
 
 //==============================================================================
 /**
@@ -27,6 +28,12 @@ struct ModulationRouting
     bool isBipolar = true;
     bool isBypassed = false;
 
+    void sanitise() noexcept
+    {
+        sourceLfoIndex = juce::jlimit(0, 3, sourceLfoIndex);
+        depth = std::isfinite(depth) ? juce::jlimit(-1.0f, 1.0f, depth) : 0.5f;
+    }
+
     // Helper for saving/loading state
     void writeToXml(juce::XmlElement& xml) const
     {
@@ -39,10 +46,12 @@ struct ModulationRouting
 
     static ModulationRouting readFromXml(const juce::XmlElement& xml)
     {
-        return { xml.getIntAttribute("source", 0),
-                 xml.getStringAttribute("target"),
-                 (float) xml.getDoubleAttribute("depth", 0.5),
-                 xml.getBoolAttribute("bipolar", true),
-                 xml.getBoolAttribute("bypassed", false) };
+        ModulationRouting routing { xml.getIntAttribute("source", 0),
+                                    xml.getStringAttribute("target"),
+                                    static_cast<float>(xml.getDoubleAttribute("depth", 0.5)),
+                                    xml.getBoolAttribute("bipolar", true),
+                                    xml.getBoolAttribute("bypassed", false) };
+        routing.sanitise();
+        return routing;
     }
 };

@@ -82,7 +82,7 @@ void ValueEntryPopup::paint(juce::Graphics& g)
 
     // Use COLOUR1 for the bright, highlighted border
     g.setColour(COLOUR1);
-    g.drawRect(getLocalBounds(), 1.5f);
+    g.drawRect(getLocalBounds().toFloat(), 1.5f);
 }
 
 void ValueEntryPopup::textEditorReturnKeyPressed(juce::TextEditor&)

@@ -9,7 +9,8 @@
 */
 
 #pragma once
-#include <math.h>
+#include <juce_dsp/juce_dsp.h>
+#include <cmath>
 namespace waveshaping
 {
 
@@ -18,19 +19,24 @@ using JMath = juce::dsp::FastMathApproximations;
 template<typename T>
 T arctanSoftClipping (T x) noexcept
 {
-    return atan(x) / 2.0f;
+    if (std::isnan(x))
+        return T {};
+    return std::atan(x) / static_cast<T>(2);
 }
 
 template<typename T>
 T expSoftClipping (T x) noexcept
 {
+    if (std::isnan(x))
+        return T {};
+
     if (x > 0)
     {
-        x = 1.0f - expf(-x);
+        x = static_cast<T>(1) - std::exp(-x);
     }
     else
     {
-        x = -1.0f + expf(x);
+        x = static_cast<T>(-1) + std::exp(x);
     }
     return x;
 }
@@ -38,37 +44,43 @@ T expSoftClipping (T x) noexcept
 template<typename T>
 T tanhSoftClipping (T x) noexcept
 {
-    return tanh(x);
+    return std::isnan(x) ? T {} : std::tanh(x);
 }
 
 template<typename T>
 T cubicSoftClipping (T x) noexcept
 {
-    if (x > 1.0f)
+    if (std::isnan(x))
+        return T {};
+
+    if (x > static_cast<T>(1))
     {
-        x = 1.0f * 2.0f / 3.0f;
+        x = static_cast<T>(2) / static_cast<T>(3);
     }
-    else if (x < -1.0f)
+    else if (x < static_cast<T>(-1))
     {
-        x = -1.0f * 2.0f / 3.0f;
+        x = static_cast<T>(-2) / static_cast<T>(3);
     }
     else
     {
-        x = x - (pow(x, 3.0f) / 3.0f);
+        x = x - (std::pow(x, static_cast<T>(3)) / static_cast<T>(3));
     }
-    return x * 3.0f / 2.0f;
+    return x * static_cast<T>(3) / static_cast<T>(2);
 }
 
 template<typename T>
 T hardClipping (T x) noexcept
 {
-    if (x > 1.0f)
+    if (std::isnan(x))
+        return T {};
+
+    if (x > static_cast<T>(1))
     {
-        x = 1.0f;
+        x = static_cast<T>(1);
     }
-    else if (x < -1.0f)
+    else if (x < static_cast<T>(-1))
     {
-        x = -1.0f;
+        x = static_cast<T>(-1);
     }
     return x;
 }
@@ -76,22 +88,25 @@ T hardClipping (T x) noexcept
 template<typename T>
 T sausageFattener (T x) noexcept
 {
-    x = x * 1.1f;
-    if (x >= 1.1f)
+    if (std::isnan(x))
+        return T {};
+
+    x = x * static_cast<T>(1.1);
+    if (x >= static_cast<T>(1.1))
     {
-        x = 1.0f;
+        x = static_cast<T>(1);
     }
-    else if (x <= -1.1f)
+    else if (x <= static_cast<T>(-1.1))
     {
-        x = -1.0f;
+        x = static_cast<T>(-1);
     }
-    else if (x > 0.9f && x < 1.1f)
+    else if (x > static_cast<T>(0.9) && x < static_cast<T>(1.1))
     {
-        x = -2.5f * x * x + 5.5f * x - 2.025f;
+        x = static_cast<T>(-2.5) * x * x + static_cast<T>(5.5) * x - static_cast<T>(2.025);
     }
-    else if (x < -0.9f && x > -1.1f)
+    else if (x < static_cast<T>(-0.9) && x > static_cast<T>(-1.1))
     {
-        x = 2.5f * x * x + 5.5f * x + 2.025f;
+        x = static_cast<T>(2.5) * x * x + static_cast<T>(5.5) * x + static_cast<T>(2.025);
     }
     return x;
 }
@@ -99,15 +114,20 @@ T sausageFattener (T x) noexcept
 template<typename T>
 T sinFoldback (T x) noexcept
 {
-    return std::sin(x);
+    return std::isfinite(x) ? std::sin(x) : T {};
 }
 
 template<typename T>
 T linFoldback (T x) noexcept
 {
-    if (x > 1.0f || x < -1.0f)
+    if (! std::isfinite(x))
+        return T {};
+
+    if (x > static_cast<T>(1) || x < static_cast<T>(-1))
     {
-        x = fabs(fabs(fmod(x - 1.0f, 1.0f * 4)) - 1.0f * 2) - 1.0f;
+        x = std::abs(std::abs(std::fmod(x - static_cast<T>(1), static_cast<T>(4)))
+                     - static_cast<T>(2))
+            - static_cast<T>(1);
     }
     return x;
 }
@@ -115,7 +135,7 @@ T linFoldback (T x) noexcept
 template<typename T>
 T limitClip (T x) noexcept
 {
-    return juce::jlimit (-0.1f, 0.1f, x);
+    return std::isnan(x) ? T {} : juce::jlimit(static_cast<T>(-0.1), static_cast<T>(0.1), x);
 }
 
 template<typename T>
@@ -134,14 +154,27 @@ T singleSinClip (T x) noexcept
 template<typename T>
 T logicClip (T x) noexcept
 {
-    return 2.0f / (1.0f + JMath::exp (-2.0f * x)) - 1.0f;
+    if (std::isnan(x))
+        return T {};
+
+    // 2 / (1 + exp(-2x)) - 1 is exactly tanh(x). The former implementation
+    // used JUCE's small-range Padé exp approximation with unbounded drive
+    // values, making the curve fold back towards zero at large magnitudes.
+    return std::tanh(x);
 }
 
 template<typename T>
 T tanclip (T x) noexcept
 {
-    float soft = 0.0f;
-    return juce::jlimit (-1.0f, 1.0f, static_cast<float>(JMath::tanh ((1.0f - 0.5f * soft) * x) - 0.02 * x));
+    if (! std::isfinite(x))
+        return T {};
+
+    constexpr T soft {};
+    const T result = JMath::tanh((static_cast<T>(1) - static_cast<T>(0.5) * soft) * x)
+                     - static_cast<T>(0.02) * x;
+    return std::isfinite(result)
+               ? juce::jlimit(static_cast<T>(-1), static_cast<T>(1), result)
+               : T {};
 }
 
 //
@@ -164,9 +197,14 @@ T tanclip (T x) noexcept
 template<typename T>
 T rectificationProcess (T x, T rectification) noexcept
 {
+    if (! std::isfinite(x))
+        return T {};
+    if (! std::isfinite(rectification))
+        rectification = T {};
+
     if (x < 0)
     {
-        x *= (0.5f - rectification) * 2.0f;
+        x *= (static_cast<T>(0.5) - rectification) * static_cast<T>(2);
     }
     return x;
 }

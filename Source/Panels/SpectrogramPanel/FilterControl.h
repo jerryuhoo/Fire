@@ -19,7 +19,6 @@
  */
 class FilterControl : public juce::Component,
                       public juce::AudioProcessorParameter::Listener,
-                      public juce::AsyncUpdater,
                       public juce::Timer,
                       public juce::ChangeListener
 {
@@ -30,7 +29,6 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void timerCallback() override;
-    void handleAsyncUpdate() override;
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override {}
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -56,6 +54,7 @@ private:
     void checkAnimationStatus();
 
     bool isAnimationActive = false;
+    std::atomic<bool> parameterUpdatePending { false };
 
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 

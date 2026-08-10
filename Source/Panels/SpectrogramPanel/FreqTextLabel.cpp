@@ -28,14 +28,16 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
     // Set the text editing callback once in the constructor.
     freqLabel.onTextChange = [this]
     {
-        mFrequency = freqLabel.getText().getIntValue();
+        const int requestedFrequency = freqLabel.getText().getIntValue();
 
         // Update the associated VerticalLine component when the text changes.
-        verticalLine.setValue(mFrequency);
+        verticalLine.setValue(requestedFrequency);
+        mFrequency = juce::roundToInt(verticalLine.getValue());
 
-        // Assumes transformToLog is defined in AudioHelpers.h
-        float xPercent = static_cast<float>(transformToLog(mFrequency));
-        verticalLine.setXPercent(xPercent);
+        // Use the slider's clamped value. Invalid/empty text otherwise feeds
+        // zero or a negative value into the logarithmic mapping.
+        if (mFrequency > 0)
+            verticalLine.setXPercent(static_cast<float>(transformToLog(mFrequency)));
     };
 }
 

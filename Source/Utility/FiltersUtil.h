@@ -92,14 +92,17 @@ void updateCutFilter(ChainType& chain,
         case Slope_48:
         {
             update<3>(chain, coefficients);
+            [[fallthrough]];
         }
         case Slope_36:
         {
             update<2>(chain, coefficients);
+            [[fallthrough]];
         }
         case Slope_24:
         {
             update<1>(chain, coefficients);
+            [[fallthrough]];
         }
         case Slope_12:
         {

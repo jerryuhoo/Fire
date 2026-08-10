@@ -9,135 +9,182 @@
 */
 
 #include "LfoEngine.h"
+#include <cmath>
 
-LfoEngine::LfoEngine()
-{
-    // The size of the lookup table (1024) is a good balance between precision and memory usage.
-    wavetable.initialise([](float x)
-                         { return 0.0f; },
-                         1024); // Initialize with silence
-}
+LfoEngine::LfoEngine() = default;
 
 void LfoEngine::reset()
 {
     phase = 0.0f;
+    lastOutput = 0.0f;
+    publishedPhase.store(phase, std::memory_order_relaxed);
+    publishedOutput.store(lastOutput, std::memory_order_relaxed);
 }
 
 void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
 {
-    sampleRate = spec.sampleRate;
+    jassert(std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0);
+    juce::ignoreUnused(spec);
 }
 
-void LfoEngine::updateShape(const LfoData& shapeData)
+void LfoEngine::stageShape(const LfoData& shapeData)
 {
     const auto& points = shapeData.points;
     const auto& curvatures = shapeData.curvatures;
 
-    if (points.size() < 2 || curvatures.size() < (points.size() - 1))
+    if (points.size() < 2)
     {
         jassertfalse;
         return;
     }
 
-    const auto numPointsInTable = wavetable.getNumPoints();
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        if (! std::isfinite(points[i].x) || ! std::isfinite(points[i].y)
+            || (i > 0 && points[i].x < points[i - 1].x))
+        {
+            jassertfalse;
+            return;
+        }
+    }
 
     // Step 1: Create a temporary, mutable array to build the waveform.
-    juce::Array<float> tempTable;
-    tempTable.resize(numPointsInTable);
+    Wavetable rawTable {};
 
     // Step 2: Generate the raw, unsmoothed shape into the temporary array.
-    for (int i = 0; i < numPointsInTable; ++i)
+    size_t segmentIndex = 0;
+    for (size_t i = 0; i < wavetableSize; ++i)
     {
-        const float phase = (float) i / (float) (numPointsInTable > 1 ? numPointsInTable - 1 : 1);
+        const float lookupPhase = static_cast<float>(i)
+                                  / static_cast<float>(wavetableSize - 1);
 
         float sampleValue = 0.5f; // Default to middle value
 
-        if (points.size() >= 2)
+        while (segmentIndex + 1 < points.size() && lookupPhase > points[segmentIndex + 1].x)
+            ++segmentIndex;
+
+        if (segmentIndex + 1 < points.size())
         {
-            // Find the correct segment for the current phase
-            for (size_t p = 0; p < points.size() - 1; ++p)
+            const auto& p1 = points[segmentIndex];
+            const auto& p2 = points[segmentIndex + 1];
+
+            if (lookupPhase >= p1.x && lookupPhase <= p2.x)
             {
-                const auto& p1 = points[p];
-                const auto& p2 = points[p + 1];
+                const float segmentWidth = p2.x - p1.x;
 
-                if (phase >= p1.x && phase <= p2.x)
+                // Fallback to linear interpolation if curvature data is missing or the segment is vertical.
+                if (segmentIndex >= curvatures.size() || std::abs(segmentWidth) < 1.0e-9f)
                 {
-                    const float segmentWidth = p2.x - p1.x;
+                    sampleValue = (std::abs(segmentWidth) < 1.0e-9f)
+                                      ? p1.y
+                                      : p1.y + (p2.y - p1.y) * ((lookupPhase - p1.x) / segmentWidth);
+                }
+                else // Apply curvature
+                {
+                    const float rawCurvature = curvatures[segmentIndex];
+                    const float curvature = std::isfinite(rawCurvature)
+                                                ? juce::jlimit(-2.0f, 2.0f, rawCurvature)
+                                                : 0.0f;
+                    const float tx = juce::jlimit(0.0f, 1.0f, (lookupPhase - p1.x) / segmentWidth);
+                    const float absExp = std::pow(4.0f, std::abs(curvature));
+                    const float ty = curvature >= 0.0f
+                                         ? std::pow(tx, absExp)
+                                         : 1.0f - std::pow(juce::jmax(0.0f, 1.0f - tx), absExp);
 
-                    // Fallback to linear interpolation if curvatures data is missing or segment is zero-width
-                    if (p >= curvatures.size() || std::abs(segmentWidth) < 1e-9f)
-                    {
-                        sampleValue = (std::abs(segmentWidth) < 1e-9f)
-                                          ? p1.y
-                                          : p1.y + (p2.y - p1.y) * ((phase - p1.x) / segmentWidth);
-                    }
-                    else // Apply curvature
-                    {
-                        const float curvature = curvatures[p];
-                        const float tx = (phase - p1.x) / segmentWidth;
-                        const float absExp = std::pow(4.0f, std::abs(curvature));
-                        float ty;
-
-                        if (curvature >= 0.0f)
-                            ty = std::pow(tx, absExp);
-                        else
-                            ty = 1.0f - std::pow(juce::jmax(0.0f, 1.0f - tx), absExp);
-
-                        sampleValue = p1.y + (p2.y - p1.y) * ty;
-                    }
-                    break; // Exit segment search once found
+                    sampleValue = p1.y + (p2.y - p1.y) * ty;
                 }
             }
-            // If phase is somehow outside all segments, hold the last point's value
-            if (i == numPointsInTable - 1)
-                sampleValue = points.back().y;
         }
-        tempTable.set(i, sampleValue);
-    }
 
-    // Step 3: Apply smoothing to the temporary array if required.
-    const float smoothness = shapeData.smoothness;
-    if (smoothness > 0.001f && tempTable.size() > 0)
+        // If phase is somehow outside all segments, hold the last point's value at the endpoint.
+        if (i == wavetableSize - 1)
+            sampleValue = points.back().y;
+
+        rawTable[i] = std::isfinite(sampleValue) ? juce::jlimit(0.0f, 1.0f, sampleValue) : 0.5f;
+    }
+    rawTable[wavetableSize] = rawTable[wavetableSize - 1];
+
+    // Build every value exposed by the 0.01-stepped Smooth parameter. This is
+    // deliberately done by the producer thread, never by process().
+    stagedBank = 1 - activeBank;
+    auto& bank = wavetableBanks[static_cast<size_t>(stagedBank)];
+    for (size_t step = 0; step < smoothnessStepCount; ++step)
     {
-        // Map smoothness (0-1) to a filter coefficient.
+        auto& table = bank[step];
+        table = rawTable;
+
+        const float smoothness = static_cast<float>(step)
+                                 / static_cast<float>(smoothnessStepCount - 1);
+        if (smoothness <= 0.001f)
+            continue;
+
         const float feedbackCoeff = smoothness * 0.95f;
         const float feedforwardCoeff = 1.0f - feedbackCoeff;
 
-        // Apply a one-pole low-pass filter across the temporary table.
-        // Run it twice to better handle the wrap-around continuity.
         for (int pass = 0; pass < 2; ++pass)
         {
-            float lastOutput = tempTable.getLast();
-            for (int i = 0; i < tempTable.size(); ++i)
+            float smoothingState = table[wavetableSize - 1];
+            for (size_t sample = 0; sample < wavetableSize; ++sample)
             {
-                const float currentInput = tempTable.getUnchecked(i);
-                const float smoothedSample = (currentInput * feedforwardCoeff) + (lastOutput * feedbackCoeff);
-                tempTable.set(i, smoothedSample);
-                lastOutput = smoothedSample;
+                auto& currentSample = table[sample];
+                const float smoothedSample = (currentSample * feedforwardCoeff) + (smoothingState * feedbackCoeff);
+                currentSample = smoothedSample;
+                smoothingState = smoothedSample;
             }
         }
+
+        table[wavetableSize] = table[wavetableSize - 1];
     }
 
-    // Step 4: Finally, initialize the actual wavetable from the processed temporary table.
-    wavetable.initialise([&tempTable](size_t i)
-                         { return tempTable.getUnchecked(i); },
-                         tempTable.size());
+    stagedBankReady = true;
+}
+
+void LfoEngine::publishStagedShape() noexcept
+{
+    if (! stagedBankReady)
+        return;
+
+    activeBank = stagedBank;
+    stagedBankReady = false;
+}
+
+void LfoEngine::setSmoothness(float newSmoothness) noexcept
+{
+    const float safeSmoothness = std::isfinite(newSmoothness)
+                                     ? juce::jlimit(0.0f, 1.0f, newSmoothness)
+                                     : 0.0f;
+    activeSmoothnessStep = juce::jlimit(0,
+                                        static_cast<int>(smoothnessStepCount - 1),
+                                        juce::roundToInt(safeSmoothness
+                                                         * static_cast<float>(smoothnessStepCount - 1)));
 }
 
 // Call this on every sample in processBlock. Returns a bipolar [-1, 1] signal.
 float LfoEngine::process()
 {
     // Get the unipolar [0, 1] value from the pre-calculated wavetable
-    const float unipolarOutput = wavetable.getUnchecked(phase * (wavetable.getNumPoints() - 1));
+    if (! std::isfinite(phase))
+        phase = 0.0f;
+
+    const float safePhase = juce::jlimit(0.0f, 1.0f, phase);
+    const float tablePosition = safePhase * static_cast<float>(wavetableSize - 1);
+    const size_t tableIndex = juce::jmin(static_cast<size_t>(tablePosition), wavetableSize - 1);
+    const float fraction = tablePosition - static_cast<float>(tableIndex);
+    const auto& table = wavetableBanks[static_cast<size_t>(activeBank)]
+                                      [static_cast<size_t>(activeSmoothnessStep)];
+    const float unipolarOutput = table[tableIndex]
+                                 + fraction * (table[tableIndex + 1] - table[tableIndex]);
 
     // Advance the phase using the externally calculated delta
     phase += phaseDelta;
 
-    if (phase >= 1.0f)
-        phase -= 1.0f;
+    if (phase >= 1.0f || phase < 0.0f)
+        phase -= std::floor(phase);
 
     // Convert the output to bipolar [-1, 1] for modulation
     lastOutput = unipolarOutput;
+    publishedPhase.store(phase, std::memory_order_relaxed);
+    publishedOutput.store(lastOutput, std::memory_order_relaxed);
     return unipolarOutput;
 }
 
@@ -145,21 +192,22 @@ float LfoEngine::process()
 // The processor is responsible for calculating the correct delta for Hz or BPM sync.
 void LfoEngine::setPhaseDelta(float newPhaseDelta)
 {
-    phaseDelta = newPhaseDelta;
+    phaseDelta = std::isfinite(newPhaseDelta) ? newPhaseDelta : 0.0f;
 }
 
 void LfoEngine::setPhase(float newPhase)
 {
     // Directly sets the internal phase, ensuring it stays within the valid [0, 1] range.
-    phase = juce::jlimit(0.0f, 1.0f, newPhase);
+    phase = std::isfinite(newPhase) ? juce::jlimit(0.0f, 1.0f, newPhase) : 0.0f;
+    publishedPhase.store(phase, std::memory_order_relaxed);
 }
 
 float LfoEngine::getPhase() const
 {
-    return phase;
+    return publishedPhase.load(std::memory_order_relaxed);
 }
 
 float LfoEngine::getLastOutput() const
 {
-    return lastOutput;
+    return publishedOutput.load(std::memory_order_relaxed);
 }

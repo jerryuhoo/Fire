@@ -220,6 +220,15 @@ void FilterControl::paint(juce::Graphics& g)
 
 void FilterControl::timerCallback()
 {
+    if (parameterUpdatePending.exchange(false, std::memory_order_acq_rel))
+    {
+        updateChain();
+        updateResponseCurve();
+        setDraggableButtonBounds();
+        checkAnimationStatus();
+        repaint();
+    }
+
     // The core of the optimization
     // If no LFO is modulating the filter, this function does nothing.
     if (! isAnimationActive)
@@ -252,10 +261,11 @@ void FilterControl::changeListenerCallback(juce::ChangeBroadcaster* source)
 void FilterControl::checkAnimationStatus()
 {
     bool needsAnimation = false;
-    const auto& routings = processor.getLfoManager().getModulationRoutings();
+    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+
     for (const auto& routing : routings)
     {
-        if (! routing.targetParameterID.isEmpty())
+        if (! routing.isBypassed && ! routing.targetParameterID.isEmpty())
         {
             // Check if the target is any of the global filter parameters
             if (routing.targetParameterID == LOWCUT_FREQ_ID || routing.targetParameterID == LOWCUT_GAIN_ID || routing.targetParameterID == LOWCUT_Q_ID || routing.targetParameterID == PEAK_FREQ_ID || routing.targetParameterID == PEAK_GAIN_ID || routing.targetParameterID == PEAK_Q_ID || routing.targetParameterID == HIGHCUT_FREQ_ID || routing.targetParameterID == HIGHCUT_GAIN_ID || routing.targetParameterID == HIGHCUT_Q_ID)
@@ -344,6 +354,11 @@ void FilterControl::updateChain()
 void FilterControl::updateResponseCurve()
 {
     int w = getWidth();
+    if (w <= 0 || getHeight() <= 0)
+    {
+        responseCurve.clear();
+        return;
+    }
 
     auto& lowcut = monoChain.get<ChainPositions::LowCut>();
     auto& peak = monoChain.get<ChainPositions::Peak>();
@@ -358,6 +373,8 @@ void FilterControl::updateResponseCurve()
 
     const auto nyquist = sampleRate / 2.0;
     const auto maxDisplayFreq = std::min(20000.0, nyquist);
+    if (maxDisplayFreq <= 20.0)
+        return;
 
     std::vector<float> mags;
     mags.resize(w);
@@ -425,27 +442,8 @@ void FilterControl::updateResponseCurve()
 
 void FilterControl::parameterValueChanged(int parameterIndex, float newValue)
 {
-    // When a parameter changes (on ANY thread), we simply trigger an async update.
-    // This is a very lightweight, non-blocking, and thread-safe call.
-    // It posts a message to the message queue, ensuring handleAsyncUpdate()
-    // will be called safely on the message thread.
-    triggerAsyncUpdate();
-}
-
-void FilterControl::handleAsyncUpdate()
-{
-    // This function is guaranteed to be called on the message thread after
-    // triggerAsyncUpdate() has been called.
-    // All UI updates are now safely and efficiently handled here.
-    updateChain();
-    updateResponseCurve();
-    setDraggableButtonBounds();
-
-    // Crucially, check if the animation status needs to change
-    // This handles cases like adding/removing modulation links in the matrix.
-    checkAnimationStatus();
-
-    repaint();
+    juce::ignoreUnused(parameterIndex, newValue);
+    parameterUpdatePending.store(true, std::memory_order_release);
 }
 
 void FilterControl::updateLfoChain(const ModulatedFilterValues& modulatedValues)
@@ -475,6 +473,12 @@ void FilterControl::updateLfoChain(const ModulatedFilterValues& modulatedValues)
     if (sampleRate <= 0)
         return;
 
+    lfoMonoChain.setBypassed<ChainPositions::LowCut>(settings.lowCutBypassed);
+    lfoMonoChain.setBypassed<ChainPositions::Peak>(settings.peakBypassed);
+    lfoMonoChain.setBypassed<ChainPositions::HighCut>(settings.highCutBypassed);
+    lfoMonoChain.setBypassed<ChainPositions::LowCutQ>(settings.lowCutBypassed);
+    lfoMonoChain.setBypassed<ChainPositions::HighCutQ>(settings.highCutBypassed);
+
     // The rest of this logic is identical to updateChain, but for lfoMonoChain.
     auto peakCoefficients = makePeakFilter(settings, sampleRate);
     updateCoefficients(lfoMonoChain.get<ChainPositions::Peak>().coefficients, peakCoefficients);
@@ -500,6 +504,12 @@ void FilterControl::updateLfoResponseCurve()
         return;
     }
 
+    if (getWidth() <= 0 || getHeight() <= 0)
+    {
+        lfoResponseCurve.clear();
+        return;
+    }
+
     auto& lowcut = lfoMonoChain.get<ChainPositions::LowCut>();
     auto& peak = lfoMonoChain.get<ChainPositions::Peak>();
     auto& highcut = lfoMonoChain.get<ChainPositions::HighCut>();
@@ -510,13 +520,17 @@ void FilterControl::updateLfoResponseCurve()
     if (sampleRate <= 0)
         return;
 
+    const auto maxDisplayFrequency = juce::jmin(20000.0, sampleRate / 2.0);
+    if (maxDisplayFrequency <= 20.0)
+        return;
+
     std::vector<double> mags;
     mags.resize(getWidth());
 
     for (int i = 0; i < getWidth(); ++i)
     {
         double mag = 1.0;
-        auto freq = juce::mapToLog10(double(i) / double(getWidth()), 20.0, 20000.0);
+        auto freq = juce::mapToLog10(double(i) / double(getWidth()), 20.0, maxDisplayFrequency);
 
         if (! lfoMonoChain.isBypassed<ChainPositions::Peak>())
             mag *= peak.coefficients->getMagnitudeForFrequency(freq, sampleRate);

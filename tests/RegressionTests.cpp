@@ -16,12 +16,21 @@ namespace TestHelpers
  * (e.g., build/tests/Debug).
  * @return juce::File object pointing to the project root directory.
  */
-    juce::File findProjectRoot()
+    static juce::File findProjectRoot()
     {
-        auto executableFile = juce::File::getSpecialLocation(juce::File::currentApplicationFile);
-        auto projectRoot = executableFile.getParentDirectory().getParentDirectory();
-        jassert(projectRoot.getChildFile("tests").isDirectory()); // Assert that we found the correct directory
-        return projectRoot;
+        auto candidate = juce::File::getSpecialLocation(juce::File::currentApplicationFile)
+                             .getParentDirectory();
+
+        while (candidate != candidate.getParentDirectory())
+        {
+            if (candidate.getChildFile("CMakeLists.txt").existsAsFile()
+                && candidate.getChildFile("tests").isDirectory())
+                return candidate;
+
+            candidate = candidate.getParentDirectory();
+        }
+
+        return {};
     }
 
     /**
@@ -33,7 +42,7 @@ namespace TestHelpers
  * @param frequency The frequency of the sine wave.
  * @return A juce::AudioBuffer<float> filled with the sine wave.
  */
-    juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
+    static juce::AudioBuffer<float> createSineWaveBuffer(double sampleRate, int numChannels, int numSamples, float frequency)
     {
         juce::AudioBuffer<float> buffer(numChannels, numSamples);
         double currentAngle = 0.0;
@@ -58,7 +67,7 @@ namespace TestHelpers
  * @param result The buffer produced by the processor.
  * @param expected The golden master buffer.
  */
-    void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const juce::AudioBuffer<float>& expected)
+    static void requireBuffersAreEquivalent(const juce::AudioBuffer<float>& result, const juce::AudioBuffer<float>& expected)
     {
         REQUIRE(result.getNumChannels() == expected.getNumChannels());
         REQUIRE(result.getNumSamples() == expected.getNumSamples());
@@ -72,6 +81,13 @@ namespace TestHelpers
                 float resultSample = result.getSample(channel, sample);
                 float expectedSample = expected.getSample(channel, sample);
 
+                if (! std::isfinite(resultSample) || ! std::isfinite(expectedSample))
+                {
+                    FAIL("Non-finite sample at channel " << channel << ", sample " << sample
+                                                          << ". Expected: " << expectedSample
+                                                          << ", Got: " << resultSample);
+                }
+
                 if (std::abs(resultSample - expectedSample) > tolerance)
                 {
                     FAIL("Sample mismatch at channel " << channel << ", sample " << sample
@@ -80,6 +96,15 @@ namespace TestHelpers
             }
         }
         SUCCEED("Buffers are equivalent within tolerance.");
+    }
+
+    static void requireBufferContainsOnlyFiniteSamples(const juce::AudioBuffer<float>& buffer)
+    {
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+                if (! std::isfinite(buffer.getSample(channel, sample)))
+                    FAIL("Non-finite processed sample at channel " << channel
+                                                                    << ", sample " << sample);
     }
 
     /**
@@ -91,7 +116,7 @@ namespace TestHelpers
  * @param buffer The AudioBuffer to write to.
  * @return True if the read operation was successful, false otherwise.
  */
-    bool safeReadFromReader(juce::AudioFormatReader* reader, juce::AudioBuffer<float>& buffer)
+    static bool safeReadFromReader(juce::AudioFormatReader* reader, juce::AudioBuffer<float>& buffer)
     {
         if (reader == nullptr)
             return false;
@@ -125,7 +150,7 @@ namespace TestHelpers
  * @param latencySamples The number of samples to shift the audio by.
  * @return A new juce::AudioBuffer<float> with latency compensation applied.
  */
-    juce::AudioBuffer<float> applyLatencyCompensation(const juce::AudioBuffer<float>& rawOutput, int latencySamples)
+    static juce::AudioBuffer<float> applyLatencyCompensation(const juce::AudioBuffer<float>& rawOutput, int latencySamples)
     {
         juce::AudioBuffer<float> compensatedOutput(rawOutput.getNumChannels(), rawOutput.getNumSamples());
         compensatedOutput.clear();
@@ -162,11 +187,11 @@ namespace TestHelpers
  * @param testIdentifier A unique string (e.g., "drums", "sine") for naming output files.
  * @param keepFiles A flag to determine if generated output files should be kept for inspection.
  */
-    void runTestForPreset(const juce::File& presetFile,
-                          const juce::AudioBuffer<float>& inputBuffer,
-                          double sampleRate,
-                          const juce::String& testIdentifier,
-                          bool keepFiles)
+    static void runTestForPreset(const juce::File& presetFile,
+                                 const juce::AudioBuffer<float>& inputBuffer,
+                                 double sampleRate,
+                                 const juce::String& testIdentifier,
+                                 bool keepFiles)
     {
         juce::String presetName = presetFile.getFileNameWithoutExtension();
         SECTION("Preset: " + presetName.toStdString() + " (" + testIdentifier.toStdString() + ")")
@@ -188,8 +213,7 @@ namespace TestHelpers
             // and it defaults to 'off' (bypassed), causing a mismatch with the golden masters.
             for (int i = 0; i < 4; ++i)
             {
-                // The parameter ID is constructed like "shapeBypass0", "shapeBypass1", etc.
-                juce::String shapeBypassParamID = "shapeBypass" + juce::String(i);
+                const auto shapeBypassParamID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i);
                 if (auto* shapeBypassParam = processor.treeState.getParameter(shapeBypassParamID))
                 {
                     // Set to 1.0f to ensure the shape module is ON.
@@ -242,44 +266,65 @@ namespace TestHelpers
             formatManager.registerBasicFormats();
             auto projectRoot = findProjectRoot();
 
-            juce::File fileForComparison;
+            auto* wavFormat = formatManager.findFormatForFileExtension("wav");
+            REQUIRE(wavFormat != nullptr);
+
+            // Encode in memory so the regression suite does not depend on access to a
+            // particular temporary directory. Reloading the encoded WAV still applies
+            // exactly the same 24-bit quantisation as the file-based implementation.
+            requireBufferContainsOnlyFiniteSamples(compensatedOutputBuffer);
+            juce::MemoryBlock encodedAudio;
+            std::unique_ptr<juce::OutputStream> outputStream =
+                std::make_unique<juce::MemoryOutputStream>(encodedAudio, false);
+            auto writer = wavFormat->createWriterFor(
+                outputStream,
+                juce::AudioFormatWriterOptions {}
+                    .withSampleRate(sampleRate)
+                    .withNumChannels(compensatedOutputBuffer.getNumChannels())
+                    .withBitsPerSample(24));
+            REQUIRE(writer != nullptr);
+            REQUIRE(writer->writeFromAudioSampleBuffer(
+                compensatedOutputBuffer, 0, compensatedOutputBuffer.getNumSamples()));
+            writer.reset(); // Finalise the WAV header and flush the memory stream.
+
             if (keepFiles)
             {
                 juce::File regressionOutputDir { projectRoot.getChildFile("tests/RegressionOutput") };
                 if (! regressionOutputDir.isDirectory())
                     REQUIRE(regressionOutputDir.createDirectory().wasOk());
-                fileForComparison = regressionOutputDir.getChildFile(presetName + "_" + testIdentifier + "_output.wav");
-            }
-            else
-            {
-                fileForComparison = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                                        .getChildFile("temp_" + presetName + "_" + testIdentifier + ".wav");
-            }
-            fileForComparison.deleteFile();
 
-            // Write to file
-            std::unique_ptr<juce::AudioFormatWriter> writer(
-                formatManager.findFormatForFileExtension("wav")->createWriterFor(
-                    new juce::FileOutputStream(fileForComparison), sampleRate, compensatedOutputBuffer.getNumChannels(), 24, {}, 0));
-            REQUIRE(writer != nullptr);
-            writer->writeFromAudioSampleBuffer(compensatedOutputBuffer, 0, compensatedOutputBuffer.getNumSamples());
-            writer.reset(); // Close file stream
+                const auto outputFile = regressionOutputDir.getChildFile(
+                    presetName + "_" + testIdentifier + "_output.wav");
+                REQUIRE(outputFile.replaceWithData(encodedAudio.getData(), encodedAudio.getSize()));
+            }
 
             // Read the result back to account for file I/O precision changes
-            std::unique_ptr<juce::AudioFormatReader> resultReader(formatManager.createReaderFor(fileForComparison));
+            std::unique_ptr<juce::AudioFormatReader> resultReader(
+                formatManager.createReaderFor(
+                    std::make_unique<juce::MemoryInputStream>(encodedAudio, false)));
             REQUIRE(resultReader != nullptr);
-            juce::AudioBuffer<float> reloadedResultBuffer(resultReader->numChannels, (int) resultReader->lengthInSamples);
+            juce::AudioBuffer<float> reloadedResultBuffer(
+                static_cast<int>(resultReader->numChannels),
+                static_cast<int>(resultReader->lengthInSamples));
             REQUIRE(safeReadFromReader(resultReader.get(), reloadedResultBuffer));
-
-            if (! keepFiles)
-                fileForComparison.deleteFile();
 
             // Load the golden master file
             juce::File goldenFile = projectRoot.getChildFile("tests/GoldenMasters/" + presetName + "_" + testIdentifier + "_output.wav");
+
+            // Golden files are immutable during an ordinary test run. A
+            // deliberate, auditable update requires an explicit environment
+            // switch so a regression can never overwrite its own evidence.
+            const auto updateGoldenMasters = juce::SystemStats::getEnvironmentVariable(
+                "FIRE_UPDATE_GOLDEN_MASTERS", {});
+            if (updateGoldenMasters.equalsIgnoreCase("all"))
+                REQUIRE(goldenFile.replaceWithData(encodedAudio.getData(), encodedAudio.getSize()));
+
             REQUIRE(goldenFile.existsAsFile());
             std::unique_ptr<juce::AudioFormatReader> goldenReader(formatManager.createReaderFor(goldenFile));
             REQUIRE(goldenReader != nullptr);
-            juce::AudioBuffer<float> goldenBuffer(goldenReader->numChannels, (int) goldenReader->lengthInSamples);
+            juce::AudioBuffer<float> goldenBuffer(
+                static_cast<int>(goldenReader->numChannels),
+                static_cast<int>(goldenReader->lengthInSamples));
             REQUIRE(safeReadFromReader(goldenReader.get(), goldenBuffer));
 
             // Finally, compare the buffers

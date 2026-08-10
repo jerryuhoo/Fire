@@ -12,23 +12,17 @@
 #include "../../../DSP/DistortionLogic.h"
 
 //==============================================================================
-DistortionGraph::DistortionGraph(FireAudioProcessor& p) : processor(p)
+DistortionGraph::DistortionGraph(FireAudioProcessor& p)
 {
-    const auto& params = processor.getParameters();
-    for (auto param : params)
-    {
-        param->addListener(this);
-    }
+    juce::ignoreUnused(p);
     updateDistortionCurve();
 }
 
-DistortionGraph::~DistortionGraph()
+DistortionGraph::~DistortionGraph() = default;
+
+void DistortionGraph::resized()
 {
-    const auto& params = processor.getParameters();
-    for (auto param : params)
-    {
-        param->removeListener(this);
-    }
+    updateDistortionCurve();
 }
 
 void DistortionGraph::paint(juce::Graphics& g)
@@ -40,33 +34,37 @@ void DistortionGraph::paint(juce::Graphics& g)
     g.drawRect(getLocalBounds(), 1);
 
     // Create the gradient and draw the stored path
-    juce::ColourGradient grad(SHAPE_COLOUR.withBrightness(0.9), frameRight.getX() + frameRight.getWidth() / 2, frameRight.getY() + frameRight.getHeight() / 2, juce::Colours::yellow.withBrightness(0.9).withAlpha(0.0f), frameRight.getX(), frameRight.getY() + frameRight.getHeight() / 2, true);
+    juce::ColourGradient grad(SHAPE_COLOUR.withBrightness(0.9f),
+                              static_cast<float>(frameRight.getCentreX()),
+                              static_cast<float>(frameRight.getCentreY()),
+                              juce::Colours::yellow.withBrightness(0.9f).withAlpha(0.0f),
+                              static_cast<float>(frameRight.getX()),
+                              static_cast<float>(frameRight.getCentreY()),
+                              true);
     g.setGradientFill(grad);
     g.strokePath(distortionCurve, juce::PathStrokeType(2.0f));
 }
 
-void DistortionGraph::setState(int mode, float rec, float mix, float bias, float drive, float rateDivide)
+void DistortionGraph::setState(int newMode,
+                               float newRec,
+                               float newMix,
+                               float newBias,
+                               float newDrive,
+                               float newRateDivide)
 {
-    this->mode = mode;
-    this->rec = rec;
-    this->mix = mix;
-    this->bias = bias;
-    this->drive = drive;
-    this->rateDivide = rateDivide;
-    updateDistortionCurve();
-}
+    juce::ignoreUnused(newRateDivide);
+    if (mode == newMode
+        && juce::approximatelyEqual(rec, newRec)
+        && juce::approximatelyEqual(mix, newMix)
+        && juce::approximatelyEqual(bias, newBias)
+        && juce::approximatelyEqual(drive, newDrive))
+        return;
 
-void DistortionGraph::parameterValueChanged(int parameterIndex, float newValue)
-{
-    // When a parameter changes (on ANY thread), we simply trigger an async update.
-    // This is a very lightweight, non-blocking, and thread-safe call.
-    triggerAsyncUpdate();
-}
-
-void DistortionGraph::handleAsyncUpdate()
-{
-    // This function is guaranteed to be called on the message thread.
-    // All UI updates are now safely and efficiently handled here.
+    mode = newMode;
+    rec = newRec;
+    mix = newMix;
+    bias = newBias;
+    drive = newDrive;
     updateDistortionCurve();
 }
 
@@ -83,6 +81,9 @@ void DistortionGraph::updateDistortionCurve()
     graphState.mode = this->mode;
 
     const int numPix = frameRight.getWidth();
+    if (numPix <= 0)
+        return;
+
     float maxInput = 2.0f; // Max input value for the graph's x-axis
     float input = -maxInput;
     const float inputInc = (maxInput * 2.0f) / numPix;

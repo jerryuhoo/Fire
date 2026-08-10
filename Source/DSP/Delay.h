@@ -10,43 +10,56 @@
 
 #pragma once
 
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <array>
+#include <cmath>
+
 class Delay
 {
 public:
-    Delay(int delayTime_) : delayTime(delayTime_)
+    explicit Delay(int initialDelayTime)
     {
-        delayBuffer.setSize(2, size);
-        delayBuffer.clear();
-        writeIndex = delayTime;
+        delayBuffer.setSize(numberOfChannels, bufferSize);
+        reset(initialDelayTime);
     }
     
     void reset(int newDelayTime)
     {
         delayBuffer.clear();
-        writeIndex = newDelayTime;
-        readIndex = 0;
+        delayTime = juce::jlimit(0, juce::jmax(0, delayBuffer.getNumSamples()), newDelayTime);
+        writeIndices.fill(0);
     }
     
     void setLatency(int latency)
     {
-        writeIndex = latency;
+        delayTime = juce::jlimit(0, juce::jmax(0, delayBuffer.getNumSamples()), latency);
     }
     
     float process(float insample, int channel, int numSamples)
     {
-        if (state)
-        {
-            float output = delayBuffer.getSample(channel, readIndex);
-            readIndex = (readIndex + 1) % numSamples;
-            delayBuffer.setSample(channel, writeIndex, insample);
-            writeIndex = (writeIndex + 1) % numSamples;
-            
-            return output;
-        }
-        else
-        {
-            return insample;
-        }
+        const float safeInput = std::isfinite(insample) ? insample : 0.0f;
+
+        if (! state || delayTime == 0 || numSamples <= 0
+            || ! juce::isPositiveAndBelow(channel, numberOfChannels)
+            || ! juce::isPositiveAndBelow(channel, delayBuffer.getNumChannels()))
+            return safeInput;
+
+        const int currentBufferSize = delayBuffer.getNumSamples();
+        if (currentBufferSize <= 0)
+            return safeInput;
+
+        auto& writeIndex = writeIndices[static_cast<size_t>(channel)];
+        writeIndex = juce::jlimit(0, currentBufferSize - 1, writeIndex);
+
+        int readIndex = writeIndex - juce::jmin(delayTime, currentBufferSize);
+        if (readIndex < 0)
+            readIndex += currentBufferSize;
+
+        const float output = delayBuffer.getSample(channel, readIndex);
+        delayBuffer.setSample(channel, writeIndex, safeInput);
+        writeIndex = (writeIndex + 1) % currentBufferSize;
+
+        return output;
     }
     
     void setState(bool currentState)
@@ -57,9 +70,10 @@ public:
     juce::AudioBuffer<float> delayBuffer;
     
 private:
-    int size = 44100;
-    int readIndex = 0;
-    int writeIndex = 0;
+    static constexpr int numberOfChannels = 2;
+    static constexpr int bufferSize = 44100;
+
+    std::array<int, numberOfChannels> writeIndices {};
     int delayTime = 0;
     bool state = false;
 };

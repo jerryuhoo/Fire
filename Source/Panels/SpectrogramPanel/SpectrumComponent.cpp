@@ -85,11 +85,14 @@ void SpectrumComponent::handleAsyncUpdate()
 
 void SpectrumComponent::updateSpectrum(const float* newData, int numBins, float binWidth)
 {
+    if (newData == nullptr || numBins <= 0 || ! std::isfinite(binWidth) || binWidth <= 0.0f)
+        return;
+
     // This method is called from the audio thread.
     // It just copies the new data; all smoothing is now on the message thread.
     {
         juce::ScopedLock locker(dataLock);
-        numberOfBins = std::min(numBins, (int) spectrumData.size());
+        numberOfBins = juce::jlimit(0, static_cast<int>(spectrumData.size()), numBins);
         mBinWidth = binWidth;
 
         // Directly copy the new data into the spectrumData buffer
@@ -208,7 +211,7 @@ void SpectrumComponent::resized()
 
 void SpectrumComponent::setSpecAlpha(const float alp)
 {
-    specAlpha = alp;
+    specAlpha = juce::jlimit(0.0f, 1.0f, alp);
 }
 
 void SpectrumComponent::mouseEnter(const juce::MouseEvent& /*event*/)

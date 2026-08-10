@@ -77,7 +77,7 @@ public:
     std::function<void(ModulatableSlider*)> onHoverEnd;
 
     const juce::String& getParamID() const { return parameterID; }
-    float getLfoValue() const { return lfoValue; }
+    double getLfoValue() const { return lfoValue; }
 
     // Add a public method to set up the label.
     void setLabel(const juce::String& text, juce::Colour colour);

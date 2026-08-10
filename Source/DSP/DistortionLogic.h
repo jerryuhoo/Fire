@@ -10,7 +10,7 @@
 
 #pragma once
 #include "ClippingFunctions.h"
-#include <functional>
+#include <cmath>
 
 namespace DistortionLogic
 {
@@ -26,7 +26,9 @@ namespace DistortionLogic
 
     // Helper function to get the correct waveshaper based on the mode.
     // This is moved directly from your BandProcessor.
-    inline std::function<float(float)> getWaveshaperForMode(int mode)
+    using WaveshaperFunction = float (*)(float) noexcept;
+
+    inline WaveshaperFunction getWaveshaperForMode(int mode) noexcept
     {
         switch (mode)
         {
@@ -61,19 +63,23 @@ namespace DistortionLogic
 
     // This is the core, shared processing function for a single sample.
     // It takes an input sample and the current state, and returns the processed (wet) sample.
-    inline float processSample(float inputSample, const State& state)
+    inline float processSample(float inputSample, const State& state) noexcept
     {
         auto waveshaperFunction = getWaveshaperForMode(state.mode);
 
         // This is the exact processing chain from your BandProcessor, now in one place.
-        float currentSample = inputSample;
-        currentSample *= state.drive; // 1. Drive Gain
-        currentSample += state.bias; // 2. Pre-Bias
+        float currentSample = std::isfinite(inputSample) ? inputSample : 0.0f;
+        const float drive = std::isfinite(state.drive) ? state.drive : 1.0f;
+        const float bias = std::isfinite(state.bias) ? state.bias : 0.0f;
+        const float rectification = std::isfinite(state.rec) ? state.rec : 0.0f;
+
+        currentSample *= drive; // 1. Drive Gain
+        currentSample += bias; // 2. Pre-Bias
         currentSample = waveshaperFunction(currentSample); // 3. Waveshaper
         if (currentSample < 0.0f)
-            currentSample *= (0.5f - state.rec) * 2.0f; // 4. Rectifier
-        currentSample -= state.bias; // 5. Post-Bias
+            currentSample *= (0.5f - rectification) * 2.0f; // 4. Rectifier
+        currentSample -= bias; // 5. Post-Bias
 
-        return currentSample;
+        return std::isfinite(currentSample) ? currentSample : 0.0f;
     }
 } // namespace DistortionLogic

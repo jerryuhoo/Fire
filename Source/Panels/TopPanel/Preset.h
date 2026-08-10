@@ -44,13 +44,13 @@ methods from button callback in editor.
         juce::AudioProcessor& pluginProcessor;
         juce::XmlElement ab { "AB" };
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB);
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB)
     };
 
     //==============================================================================
     //int createFileIfNonExistant(const File &file);
-    void parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml);
-    bool writeXmlElementToFile(const juce::XmlElement& xml, juce::File& file, juce::String presetName, bool hasExtension);
+    bool parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml);
+    bool writeXmlElementToFile(const juce::XmlElement& xml, juce::File& file, const juce::String& presetName, bool hasExtension);
 
     //==============================================================================
     /** Create StatePresets object with XML file saved relative to user
@@ -81,9 +81,9 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         void scanAllPresets();
         juce::File getFile();
         void initPreset();
-        void recursiveFileSearch(juce::XmlElement& parentXML, juce::File dir);
-        void recursivePresetLoad(juce::XmlElement parentXml, juce::String presetId);
-        void recursivePresetNameAdd(juce::XmlElement parentXml, juce::ComboBox& menu, int& index);
+        void recursiveFileSearch(juce::XmlElement& parentXML, const juce::File& dir);
+        bool recursivePresetLoad(const juce::XmlElement& parentXml, const juce::String& presetId);
+        void recursivePresetNameAdd(const juce::XmlElement& parentXml, juce::ComboBox& menu, int& index);
         const juce::XmlElement& getPresetXml() const;
 
     private:
@@ -93,10 +93,10 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::File presetFile; // on-disk representation
         juce::String statePresetName { "" };
         void recursiveSort(juce::XmlElement* parent);
-        int mCurrentPresetId { 0 };
+        std::atomic<int> mCurrentPresetId { 0 };
         int numPresets = 0;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets);
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets)
     };
 
     //==============================================================================
@@ -109,11 +109,13 @@ PluginProcessor).
     class StateComponent : public juce::Component,
                            public juce::Button::Listener,
                            public juce::ComboBox::Listener,
-                           public juce::AudioProcessorValueTreeState::Listener
+                           public juce::AudioProcessorValueTreeState::Listener,
+                           private juce::AsyncUpdater,
+                           private juce::Timer
     {
     public:
         StateComponent(StateAB& sab, StatePresets& sp, juce::AudioProcessorValueTreeState& vts);
-        ~StateComponent();
+        ~StateComponent() override;
 
         void paint(juce::Graphics&) override;
         void resized() override;
@@ -136,18 +138,35 @@ PluginProcessor).
         juce::TextButton* getNextButton();
 
     private:
+        class ManualUpdateCheckThread final : public juce::Thread
+        {
+        public:
+            explicit ManualUpdateCheckThread(StateComponent& ownerToUse);
+            void run() override;
+            void stop();
+            void prepareForStart() { fetchOperation.reset(); }
+
+        private:
+            StateComponent& owner;
+            VersionInfo::FetchOperation fetchOperation;
+        };
+
         StateAB& procStateAB;
         StatePresets& procStatePresets;
 
         juce::AudioProcessorValueTreeState& valueTreeState;
 
-        bool isProgrammaticChange = false;
+        std::atomic<bool> isProgrammaticChange { false };
         //Multiband multiband{};
         //FireAudioProcessorEditor& editor;
 
         std::unique_ptr<juce::FileChooser> fileChooser;
-        std::unique_ptr<VersionInfo> versionInfo;
-        juce::String version;
+        ManualUpdateCheckThread manualUpdateCheckThread;
+        juce::CriticalSection updateResultLock;
+        std::unique_ptr<VersionInfo> pendingVersionInfo;
+        std::atomic<bool> dirtyUpdatePending { false };
+        std::atomic<bool> versionCheckReady { false };
+        juce::Component::SafePointer<juce::DialogWindow> settingsDialog;
 
         FireLookAndFeel fireLookAndFeel;
 
@@ -161,11 +180,12 @@ PluginProcessor).
         juce::TextButton menuButton;
         juce::PopupMenu presetMenu;
 
-        bool isInit = false;
         bool isChanged = false;
 
         void buttonClicked(juce::Button* clickedButton) override;
         void comboBoxChanged(juce::ComboBox* changedComboBox) override;
+        void handleAsyncUpdate() override;
+        void timerCallback() override;
 
         void refreshPresetBox();
         void deletePresetAndRefresh();
@@ -178,10 +198,12 @@ PluginProcessor).
         void setNextPreset();
 
         void resetMultiband();
+        void publishManualUpdateResult(std::unique_ptr<VersionInfo> result);
+        void showManualUpdateResult();
 
         //juce::String presetName;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent);
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateComponent)
     };
 
     //==============================================================================

@@ -55,7 +55,10 @@ void ModulationMatrixHeader::resized()
 //==============================================================================
 // ModulationMatrixRow Implementation
 //==============================================================================
-ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex, std::function<void()> onDelete)
+ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
+                                         int routingIndex,
+                                         const ModulationRouting& routing,
+                                         std::function<void()> onDelete)
     : processor(p), index(routingIndex), onDeleteCallback(onDelete)
 {
     setLookAndFeel(&fireLookAndFeel);
@@ -63,7 +66,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     addAndMakeVisible(sourceMenu);
     for (int i = 1; i <= 4; ++i)
         sourceMenu.addItem("LFO " + juce::String(i), i);
-    sourceMenu.setSelectedId(processor.getLfoManager().getModulationRoutings()[index].sourceLfoIndex + 1, juce::dontSendNotification);
+    sourceMenu.setSelectedId(routing.sourceLfoIndex + 1, juce::dontSendNotification);
     sourceMenu.addListener(this);
     sourceMenu.setColour(juce::ComboBox::backgroundColourId, COLOUR6);
     sourceMenu.setColour(juce::ComboBox::outlineColourId, COLOUR7);
@@ -72,7 +75,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     // AMOUNT SLIDER
     addAndMakeVisible(amountSlider);
     amountSlider.setRange(-1.0, 1.0, 0.01);
-    amountSlider.setValue(processor.getLfoManager().getModulationRoutings()[index].depth, juce::dontSendNotification);
+    amountSlider.setValue(routing.depth, juce::dontSendNotification);
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
     amountSlider.setScrollWheelEnabled(false);
@@ -87,12 +90,25 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     bipolarButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
     bipolarButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     bipolarButton.setClickingTogglesState(true);
-    bipolarButton.setToggleState(processor.getLfoManager().getModulationRoutings()[index].isBipolar, juce::dontSendNotification);
+    bipolarButton.setToggleState(routing.isBipolar, juce::dontSendNotification);
     bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
     bipolarButton.onStateChange = [this]
     {
         bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
-        processor.getLfoManager().getModulationRoutings().getReference(index).isBipolar = bipolarButton.getToggleState();
+        auto& manager = processor.getLfoManager();
+        bool didUpdate = false;
+        {
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            auto& routings = manager.getModulationRoutings();
+            if (juce::isPositiveAndBelow(index, routings.size()))
+            {
+                routings.getReference(index).isBipolar = bipolarButton.getToggleState();
+                didUpdate = true;
+            }
+        }
+
+        if (didUpdate)
+            processor.lfoDataHasChanged();
     };
 
     // BYPASS BUTTON
@@ -104,12 +120,25 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     bypassButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
     bypassButton.setColour(juce::ComboBox::outlineColourId, COLOUR6);
     bypassButton.setClickingTogglesState(true);
-    bypassButton.setToggleState(processor.getLfoManager().getModulationRoutings()[index].isBypassed, juce::dontSendNotification);
+    bypassButton.setToggleState(routing.isBypassed, juce::dontSendNotification);
     bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
     bypassButton.onStateChange = [this]
     {
         bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
-        processor.getLfoManager().getModulationRoutings().getReference(index).isBypassed = bypassButton.getToggleState();
+        auto& manager = processor.getLfoManager();
+        bool didUpdate = false;
+        {
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            auto& routings = manager.getModulationRoutings();
+            if (juce::isPositiveAndBelow(index, routings.size()))
+            {
+                routings.getReference(index).isBypassed = bypassButton.getToggleState();
+                didUpdate = true;
+            }
+        }
+
+        if (didUpdate)
+            processor.lfoDataHasChanged();
     };
 
     // === DESTINATION MENU ===
@@ -127,7 +156,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p, int routingIndex
     }
 
     // 3. Set the currently selected destination
-    const auto& currentTargetId = processor.getLfoManager().getModulationRoutings()[index].targetParameterID;
+    const auto& currentTargetId = routing.targetParameterID;
     if (currentTargetId.isNotEmpty())
     {
         for (int i = 0; i < allPossibleTargets.size(); ++i)
@@ -193,7 +222,22 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == &amountSlider)
-        processor.getLfoManager().getModulationRoutings().getReference(index).depth = (float) amountSlider.getValue();
+    {
+        auto& manager = processor.getLfoManager();
+        bool didUpdate = false;
+        {
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            auto& routings = manager.getModulationRoutings();
+            if (juce::isPositiveAndBelow(index, routings.size()))
+            {
+                routings.getReference(index).depth = (float) amountSlider.getValue();
+                didUpdate = true;
+            }
+        }
+
+        if (didUpdate)
+            processor.lfoDataHasChanged();
+    }
 }
 
 void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
@@ -222,7 +266,7 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
         // This ensures that if another row was cleared, it will visually update to "None".
         if (auto* panel = findParentComponentOfClass<ModulationMatrixPanel>())
         {
-            panel->buildUiFromProcessorState();
+            panel->requestUiRebuild();
         }
     }
 }
@@ -252,6 +296,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
 
 ModulationMatrixPanel::~ModulationMatrixPanel()
 {
+    cancelPendingUpdate();
     addButton.removeListener(this);
     closeButton.removeListener(this);
 }
@@ -287,8 +332,13 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 {
     if (button == &addButton)
     {
-        processor.getLfoManager().getModulationRoutings().add({});
-        buildUiFromProcessorState();
+        auto& manager = processor.getLfoManager();
+        {
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            manager.getModulationRoutings().add({});
+        }
+        processor.lfoDataHasChanged();
+        requestUiRebuild();
     }
 
     if (button == &closeButton)
@@ -303,21 +353,50 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
     rows.clear();
     contentComponent.removeAllChildren();
 
-    for (int i = 0; i < processor.getLfoManager().getModulationRoutings().size(); ++i)
+    // Build from one coherent snapshot. Component construction and callbacks
+    // must not happen while the shared routing lock is held.
+    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+    for (int i = 0; i < routings.size(); ++i)
     {
         // When creating a row, pass a lambda function that captures the index 'i'.
         // This lambda will be called when the row's remove button is clicked.
         auto onDelete = [this, index = i]()
         {
             // Remove the routing from the processor's data model.
-            processor.getLfoManager().getModulationRoutings().remove(index);
-            // Rebuild the entire UI to reflect the change.
-            buildUiFromProcessorState();
+            auto& manager = processor.getLfoManager();
+            bool didRemove = false;
+            {
+                const juce::ScopedLock lock(manager.getLfoDataLock());
+                auto& routings = manager.getModulationRoutings();
+                if (juce::isPositiveAndBelow(index, routings.size()))
+                {
+                    routings.remove(index);
+                    didRemove = true;
+                }
+            }
+
+            if (didRemove)
+                processor.lfoDataHasChanged();
+
+            // Defer rebuilding until the current button callback has returned.
+            // Clearing rows synchronously here would destroy the row that is
+            // currently executing this callback.
+            requestUiRebuild();
         };
 
-        rows.push_back(std::make_unique<ModulationMatrixRow>(processor, i, onDelete));
+        rows.push_back(std::make_unique<ModulationMatrixRow>(processor, i, routings.getReference(i), onDelete));
         contentComponent.addAndMakeVisible(*rows.back());
     }
 
     resized();
+}
+
+void ModulationMatrixPanel::requestUiRebuild()
+{
+    triggerAsyncUpdate();
+}
+
+void ModulationMatrixPanel::handleAsyncUpdate()
+{
+    buildUiFromProcessorState();
 }

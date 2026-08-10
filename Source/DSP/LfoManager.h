@@ -18,7 +18,8 @@
 #include "LfoEngine.h"
 #include "ModulationRouting.h"
 #include "juce_audio_processors/juce_audio_processors.h"
-#include <map>
+#include <array>
+#include <atomic>
 
 class LfoManager
 {
@@ -50,23 +51,38 @@ public:
      */
     float getModulatedValue(const juce::String& parameterID) const;
 
+    struct AudioThreadRoutingInfo
+    {
+        int sourceLfoIndex = -1;
+        float depth = 0.0f;
+        bool isBipolar = true;
+    };
+
+    /** Looks up the already-published routing snapshot. Audio thread only. */
+    bool getAudioThreadRoutingInfo(const juce::RangedAudioParameter* parameter,
+                                   AudioThreadRoutingInfo& result) const noexcept;
+
     // =============================================================================
     // SECTION: Accessors for UI and State Management
     // =============================================================================
 
     // Modulation routings are now owned by the LfoManager.
+    // Legacy reference accessors: callers must hold getLfoDataLock() for the whole access.
     juce::Array<ModulationRouting>& getModulationRoutings() { return modulationRoutings; }
     const juce::Array<ModulationRouting>& getModulationRoutings() const { return modulationRoutings; }
+    juce::Array<ModulationRouting> getModulationRoutingsCopy() const;
 
     // Allow access to LFO data for the UI/saving state
+    // The reference accessor has the same external-lock requirement as above.
     const std::vector<LfoData>& getLfoData() const { return lfoData; }
+    std::vector<LfoData> getLfoDataCopy() const;
     void setLfoData(int index, const LfoData& newData);
     void clearAllLfoData();
 
     // Allow access to LFO engines for UI phase display
     const std::array<LfoEngine, 4>& getLfoEngines() const { return lfoEngines; }
     float getLfoPhase(int lfoIndex) const;
-    bool isDawPlaying() const { return isPlaying; }
+    bool isDawPlaying() const { return isPlaying.load(std::memory_order_relaxed); }
     const juce::StringArray& getLfoRateSyncDivisions() const;
     float getLfoOutput(int lfoIndex) const;
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
@@ -76,10 +92,38 @@ public:
     void toggleBypassForRouting(const juce::String& targetParameterID);
     juce::CriticalSection& getLfoDataLock() { return dataAccessLock; }
 private:
+    static constexpr size_t maxRuntimeRoutings = 128;
+
+    struct LfoParameterPointers
+    {
+        std::atomic<float>* syncMode = nullptr;
+        std::atomic<float>* syncedRate = nullptr;
+        std::atomic<float>* freeRate = nullptr;
+        std::atomic<float>* phaseOffset = nullptr;
+        std::atomic<float>* smoothness = nullptr;
+        juce::RangedAudioParameter* smoothnessParameter = nullptr;
+    };
+
+    struct RuntimeRouting
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        int sourceLfoIndex = 0;
+        float depth = 0.0f;
+        bool isBipolar = true;
+    };
+
+    struct RuntimeModulatedValue
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        float normalisedValue = 0.0f;
+    };
+
     /**
      * @brief Internal helper to generate raw LFO signals into the internal buffer.
      */
     void generateLfoOutput(double sampleRate, juce::AudioPlayHead* playHead, int numSamples);
+    void refreshRuntimeStateIfAvailable();
+    void updatePublishedRoutingState() noexcept;
 
     float mapRateSyncIndexToBeatMultiplier(int index) const;
 
@@ -90,6 +134,7 @@ private:
     juce::AudioProcessorValueTreeState& treeState;
 
     std::array<LfoEngine, 4> lfoEngines;
+    std::array<LfoParameterPointers, 4> lfoParameters;
     std::vector<LfoData> lfoData;
 
     juce::CriticalSection dataAccessLock;
@@ -97,15 +142,18 @@ private:
     // Owns all modulation connection rules.
     juce::Array<ModulationRouting> modulationRoutings;
 
-    // Stores the final calculated values for all modulated parameters for the current block.
-    std::map<juce::String, float> modulatedValues;
+    // Fixed-capacity, audio-thread-owned snapshots avoid per-block allocation and UI lock waits.
+    std::array<RuntimeRouting, maxRuntimeRoutings> runtimeRoutings {};
+    std::array<RuntimeModulatedValue, maxRuntimeRoutings> modulatedValues {};
+    size_t runtimeRoutingCount = 0;
+    size_t modulatedValueCount = 0;
+    std::atomic<bool> hasPublishedRouting { false };
 
     // Internal buffer to hold the raw LFO signals.
     juce::AudioBuffer<float> lfoOutputBuffer;
+    double preparedSampleRate { 44100.0 };
 
-    bool isPlaying { false };
-    bool wasPlaying { false };
+    std::atomic<bool> isPlaying { false };
 
     juce::StringArray lfoRateSyncDivisions;
-    std::array<std::atomic<bool>, 4> shapeUpdateFlags;
 };

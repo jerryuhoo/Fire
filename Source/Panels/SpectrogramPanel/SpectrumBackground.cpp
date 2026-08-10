@@ -30,9 +30,7 @@ SpectrumBackground::SpectrumBackground() : numberOfBins(1024), mBinWidth(44100 /
     cachedBackground = juce::Image(juce::Image::PixelFormat::ARGB, 1, 1, true);
 }
 
-SpectrumBackground::~SpectrumBackground()
-{
-}
+SpectrumBackground::~SpectrumBackground() = default;
 
 void SpectrumBackground::paint(juce::Graphics& g)
 {
@@ -46,10 +44,11 @@ void SpectrumBackground::paint(juce::Graphics& g)
         lastDisplayScale = currentDisplayScale;
         createBackgroundImage();
 
-        // Return immediately. The regeneration will trigger a new paint call.
-        return;
     }
-    // 3. If scale is unchanged, just draw the pre-rendered cache.
+
+    // Draw immediately after regeneration. createBackgroundImage() does not
+    // schedule another repaint, so returning above could leave a blank frame
+    // indefinitely on a display-scale change.
     g.drawImage(cachedBackground, getLocalBounds().toFloat());
 }
 
@@ -74,8 +73,8 @@ void SpectrumBackground::createBackgroundImage()
 
     // Create a new image with the current component size.
     cachedBackground = juce::Image(juce::Image::ARGB,
-                                   juce::roundToInt(getWidth() * lastDisplayScale),
-                                   juce::roundToInt(getHeight() * lastDisplayScale),
+                                   juce::jmax(1, juce::roundToInt(getWidth() * lastDisplayScale)),
+                                   juce::jmax(1, juce::roundToInt(getHeight() * lastDisplayScale)),
                                    true);
     // Create a graphics context to draw onto our new image.
     juce::Graphics g(cachedBackground);

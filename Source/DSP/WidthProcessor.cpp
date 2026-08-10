@@ -9,45 +9,33 @@
 */
 
 #include "WidthProcessor.h"
+#include <cmath>
 
-WidthProcessor::WidthProcessor()
+void WidthProcessor::process(float* channeldataL, float* channeldataR, float width, float pan, int numSamples) const noexcept
 {
-}
+    if (channeldataL == nullptr || channeldataR == nullptr || numSamples <= 0)
+        return;
 
-WidthProcessor::~WidthProcessor()
-{
-}
+    const float safeWidth = std::isfinite(width) ? juce::jlimit(0.0f, 1.0f, width) : 0.5f;
+    const float safePan = std::isfinite(pan) ? juce::jlimit(-1.0f, 1.0f, pan) : 0.0f;
+    constexpr float inverseSqrtTwo = 0.7071067811865475244f;
 
-void WidthProcessor::process(float* channeldataL, float* channeldataR, float width, float pan, int numSamples)
-{
-    // width
+    const float midGain = 2.0f * (1.0f - safeWidth);
+    const float sideGain = 2.0f * safeWidth;
+    const float panLeftGain = safePan > 0.0f ? 1.0f - safePan : 1.0f;
+    const float panRightGain = safePan < 0.0f ? 1.0f + safePan : 1.0f;
+
     for (int i = 0; i < numSamples; ++i)
     {
-        float mid = (channeldataL[i] + channeldataR[i]) / sqrt(2); // obtain mid-signal from left and right
-        float sides = (channeldataL[i] - channeldataR[i]) / sqrt(2); // obtain side-signal from left and right
+        const float leftInput = std::isfinite(channeldataL[i]) ? channeldataL[i] : 0.0f;
+        const float rightInput = std::isfinite(channeldataR[i]) ? channeldataR[i] : 0.0f;
+        float mid = (leftInput + rightInput) * inverseSqrtTwo;
+        float sides = (leftInput - rightInput) * inverseSqrtTwo;
 
-        // amplify mid and side signal seperately:
-        mid *= 2.0f * (1.0f - width);
-        sides *= 2.0f * width;
+        mid *= midGain;
+        sides *= sideGain;
 
-        channeldataL[i] = (mid + sides) / sqrt(2); // obtain left signal from mid and side
-        channeldataR[i] = (mid - sides) / sqrt(2); // obtain right signal from mid and side
-
-        float panLeftGain = 1.0f;
-        float panRightGain = 1.0f;
-
-        if (pan > 0.0f) // Panning to the right
-        {
-            // As pan goes from 0 to 1, left gain goes from 1 to 0.
-            panLeftGain = 1.0f - pan;
-        }
-        else // Panning to the left (pan is 0 or negative)
-        {
-            // As pan goes from 0 to -1, right gain goes from 1 to 0.
-            panRightGain = 1.0f + pan;
-        }
-
-        channeldataL[i] *= panLeftGain;
-        channeldataR[i] *= panRightGain;
+        channeldataL[i] = (mid + sides) * inverseSqrtTwo * panLeftGain;
+        channeldataR[i] = (mid - sides) * inverseSqrtTwo * panRightGain;
     }
 }

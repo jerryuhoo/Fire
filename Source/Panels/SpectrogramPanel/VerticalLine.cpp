@@ -21,24 +21,30 @@ VerticalLine::~VerticalLine()
 {
 }
 
-void VerticalLine::paint (juce::Graphics& g)
+void VerticalLine::paint(juce::Graphics& g)
 {
-    // draw line that will be added next
-    g.setColour (COLOUR1);
+    const auto bounds = getLocalBounds().toFloat();
+    const bool engaged = isMouseOverOrDragging() || isEntered;
+    const float physicalScale = juce::jmax(1.0f,
+        g.getInternalContext().getPhysicalPixelScaleFactor());
+    const float centreX = fire::ui::pixelAligned(bounds.getCentreX(), physicalScale);
+    const float lineWidth = (engaged ? 2.0f : 1.0f) / physicalScale;
 
-    g.fillRect (getWidth() / 10.f * 4.f, 0.f, getWidth() / 10.f * 2.f, static_cast<float> (getHeight()));
+    g.setColour(fire::ui::colours::flame.withAlpha(engaged ? 0.92f : 0.58f));
+    g.fillRect(centreX - lineWidth * 0.5f,
+               bounds.getY(),
+               lineWidth,
+               bounds.getHeight());
 
-    if (isMouseOverOrDragging())
-    {
-        g.setColour (COLOUR1.withAlpha (0.2f));
-        g.fillAll();
-    }
-
-    if (isEntered)
-    {
-        //g.setColour(COLOUR1.withAlpha(0.2f));
-        //g.fillAll();
-    }
+    const float handleRadius = engaged ? 3.5f : 2.75f;
+    const juce::Rectangle<float> handle(centreX - handleRadius,
+                                         bounds.getY() + 3.0f,
+                                         handleRadius * 2.0f,
+                                         handleRadius * 2.0f);
+    g.setColour(fire::ui::colours::surface1.withAlpha(0.96f));
+    g.fillEllipse(handle);
+    g.setColour(fire::ui::colours::flame.withAlpha(engaged ? 1.0f : 0.78f));
+    g.drawEllipse(handle.reduced(0.5f / physicalScale), lineWidth);
 }
 
 void VerticalLine::resized()
@@ -55,14 +61,18 @@ void VerticalLine::mouseDoubleClick (const juce::MouseEvent& e)
     // do nothing, override the silder function, which will reset value.
 }
 
-void VerticalLine::mouseEnter (const juce::MouseEvent& e)
+void VerticalLine::mouseEnter(const juce::MouseEvent& e)
 {
+    juce::Slider::mouseEnter(e);
     isEntered = true;
+    repaint();
 }
 
-void VerticalLine::mouseExit (const juce::MouseEvent& e)
+void VerticalLine::mouseExit(const juce::MouseEvent& e)
 {
+    juce::Slider::mouseExit(e);
     isEntered = false;
+    repaint();
 }
 
 void VerticalLine::mouseDrag (const juce::MouseEvent& e)

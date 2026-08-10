@@ -9,10 +9,14 @@
 */
 
 #include "PanelBase.h"
+#include "../../GUI/FireTheme.h"
 
 PanelBase::PanelBase(FireAudioProcessor& p) : processor(p)
 {
-    // The processor reference is initialized here.
+    // BandPanel and GlobalPanel both paint a complete, opaque reactor surface.
+    // Declaring that here lets JUCE avoid repainting the editor background
+    // underneath these relatively busy control pages.
+    setOpaque(true);
 }
 
 void PanelBase::createAndConfigureSlider(const juce::String& paramName,
@@ -48,6 +52,9 @@ void PanelBase::initRotarySlider(juce::Slider& slider, juce::Colour colour)
     // Let the ModulatableSlider handle its own label drawing, so no textbox needed here.
     slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
+    slider.setColour(juce::Slider::backgroundColourId, fire::ui::colours::surface1);
+    slider.setColour(juce::Slider::textBoxBackgroundColourId, fire::ui::colours::surface0);
+    slider.setColour(juce::Slider::textBoxTextColourId, fire::ui::colours::textPrimary);
 }
 
 void PanelBase::setupModulationCallbacks(ModulatableSlider& slider)

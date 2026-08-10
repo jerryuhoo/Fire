@@ -25,6 +25,7 @@ GraphPanel::GraphPanel(FireAudioProcessor& p) : processor(p)
     // Width Graph
     addAndMakeVisible(widthGraph);
     setInterceptsMouseClicks(false, true);
+    setOpaque(false);
 }
 
 GraphPanel::~GraphPanel()
@@ -50,6 +51,7 @@ void GraphPanel::setLayoutMode(LayoutMode newMode)
 
 void GraphPanel::paint(juce::Graphics& g)
 {
+    fire::ui::drawCanvas(g, getLocalBounds().toFloat());
 }
 
 void GraphPanel::toggleZoom(GraphTemplate* viewToToggle)
@@ -78,7 +80,8 @@ void GraphPanel::toggleZoom(GraphTemplate* viewToToggle)
 
 void GraphPanel::resized()
 {
-    auto bounds = getLocalBounds();
+    constexpr int gap = 6;
+    auto bounds = getLocalBounds().reduced(2);
 
     // === ZOOM LOGIC ===
     // If a view is zoomed, it takes up the entire panel.
@@ -110,24 +113,28 @@ void GraphPanel::resized()
 
     if (currentLayoutMode == LayoutMode::Band)
     {
-        // 2x2 grid layout for Band view
-        auto halfWidth = bounds.getWidth() / 2;
-        auto halfHeight = bounds.getHeight() / 2;
+        const auto halfWidth = juce::jmax(0, (bounds.getWidth() - gap) / 2);
+        const auto halfHeight = juce::jmax(0, (bounds.getHeight() - gap) / 2);
         auto topRow = bounds.removeFromTop(halfHeight);
 
         oscilloscope.setBounds(topRow.removeFromLeft(halfWidth));
+        topRow.removeFromLeft(gap);
         distortionGraph.setBounds(topRow);
 
+        bounds.removeFromTop(gap);
         vuPanel.setBounds(bounds.removeFromLeft(halfWidth));
+        bounds.removeFromLeft(gap);
         widthGraph.setBounds(bounds);
     }
     else // currentLayoutMode == LayoutMode::Global
     {
         // Vertical stack layout for Global view
-        auto thirdHeight = bounds.getHeight() / 3;
+        const auto thirdHeight = juce::jmax(0, (bounds.getHeight() - gap * 2) / 3);
 
         oscilloscope.setBounds(bounds.removeFromTop(thirdHeight));
+        bounds.removeFromTop(gap);
         vuPanel.setBounds(bounds.removeFromTop(thirdHeight));
+        bounds.removeFromTop(gap);
         widthGraph.setBounds(bounds);
     }
 }

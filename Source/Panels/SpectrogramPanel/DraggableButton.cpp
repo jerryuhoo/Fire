@@ -13,6 +13,7 @@
 //==============================================================================
 DraggableButton::DraggableButton()
 {
+    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
 }
 
 DraggableButton::~DraggableButton()
@@ -21,11 +22,27 @@ DraggableButton::~DraggableButton()
 
 void DraggableButton::paint(juce::Graphics& g)
 {
-    g.setColour(getColour().darker().darker());
-    g.fillEllipse(0, 0, getWidth(), getHeight());
+    auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    const auto accent = getColour();
 
-    g.setColour(getColour());
-    g.fillEllipse(getWidth() / 5.0f, getHeight() / 5.0f, getWidth() / 5.0f * 3, getHeight() / 5.0f * 3);
+    if (mState)
+    {
+        g.setColour(accent.withAlpha(isEntered ? 0.20f : 0.11f));
+        g.fillEllipse(bounds.expanded(isEntered ? 0.0f : -0.5f));
+    }
+
+    juce::ColourGradient metal(fire::ui::colours::raised.brighter(isEntered ? 0.10f : 0.04f),
+                               bounds.getCentreX(), bounds.getY(),
+                               fire::ui::colours::surface0, bounds.getCentreX(), bounds.getBottom(), false);
+    g.setGradientFill(metal);
+    g.fillEllipse(bounds.reduced(bounds.getWidth() * 0.16f));
+
+    g.setColour(accent.withAlpha(mState ? (isEntered ? 0.95f : 0.76f) : 0.38f));
+    g.drawEllipse(bounds.reduced(bounds.getWidth() * 0.16f), 1.0f);
+
+    const auto core = bounds.reduced(bounds.getWidth() * (isEntered ? 0.34f : 0.38f));
+    g.setColour(mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
+    g.fillEllipse(core);
 }
 
 void DraggableButton::resized()
@@ -34,36 +51,64 @@ void DraggableButton::resized()
 
 void DraggableButton::mouseEnter(const juce::MouseEvent& e)
 {
+    juce::Component::mouseEnter(e);
     isEntered = true;
+    repaint();
 }
 
 void DraggableButton::mouseExit(const juce::MouseEvent& e)
 {
+    juce::Component::mouseExit(e);
     isEntered = false;
+    repaint();
 }
 
 juce::Colour DraggableButton::getColour()
 {
     if (mState && isEntered)
-        return juce::Colours::hotpink.brighter();
+        return fire::ui::colours::filter.brighter(0.12f);
     else if (mState && ! isEntered)
-        return juce::Colours::hotpink;
+        return fire::ui::colours::filter;
 
-    return juce::Colours::dimgrey;
+    return fire::ui::colours::disabled;
 }
 
 void DraggableButton::setState(const bool state)
 {
+    if (mState == state)
+        return;
+
     mState = state;
+    repaint();
+}
+
+void DraggableButton::mouseDown(const juce::MouseEvent& event)
+{
+    juce::Component::mouseDown(event);
+    if (mState && onDrag)
+        onDrag(*this, event);
+}
+
+void DraggableButton::mouseDrag(const juce::MouseEvent& event)
+{
+    juce::Component::mouseDrag(event);
+    if (mState && onDrag)
+        onDrag(*this, event);
+}
+
+void DraggableButton::mouseUp(const juce::MouseEvent& event)
+{
+    juce::Component::mouseUp(event);
+    if (onDragFinished)
+        onDragFinished();
 }
 
 void DraggableButton::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
-    if (onQValueChanged)
+    juce::ignoreUnused(event);
+
+    if (mState && onQValueChanged)
     {
-        // The wheel.deltaY value can be used to control the Q value.
-        // A positive value means scrolling up, and a negative value means scrolling down.
-        // You can adjust the sensitivity by multiplying by a factor.
         onQValueChanged(wheel.deltaY);
     }
 }

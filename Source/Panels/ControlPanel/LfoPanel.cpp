@@ -2,8 +2,8 @@
 #include "../../DSP/LfoShapeGenerator.h"
 #include "../../PluginProcessor.h"
 
-juce::Rectangle<int> makeNormalised(const juce::Point<int>& p1,
-                                    const juce::Point<int>& p2)
+static juce::Rectangle<int> makeNormalised(const juce::Point<int>& p1,
+                                           const juce::Point<int>& p2)
 {
     return juce::Rectangle<int>::leftTopRightBottom(juce::jmin(p1.x, p2.x),
                                                     juce::jmin(p1.y, p2.y),
@@ -18,6 +18,7 @@ juce::Rectangle<int> makeNormalised(const juce::Point<int>& p1,
 LfoEditor::LfoEditor()
 {
     setWantsKeyboardFocus(true);
+    setOpaque(true);
 }
 
 LfoEditor::~LfoEditor() {}
@@ -73,75 +74,53 @@ void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
 
 void LfoEditor::paint(juce::Graphics& g)
 {
-    // Paint background
-    g.fillAll(juce::Colours::black.brighter(0.1f));
-    g.setColour(juce::Colours::darkgrey);
-    g.drawRect(getLocalBounds(), 1.0f);
+    const auto physicalScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (gridCache.isNull()
+        || cachedGridWidth != getWidth()
+        || cachedGridHeight != getHeight()
+        || std::abs(cachedGridScale - physicalScale) > 0.01f
+        || cachedHorizontalDivisions != hGridDivs
+        || cachedVerticalDivisions != vGridDivs)
+        rebuildGridCache(physicalScale);
 
-    // Paint grid
-    g.setColour(juce::Colours::white.withAlpha(0.2f));
-    for (int i = 1; i < hGridDivs; ++i)
-        g.drawVerticalLine(juce::roundToInt(getWidth() * i / (float) hGridDivs), 0.0f, (float) getHeight());
-    for (int i = 1; i < vGridDivs; ++i)
-        g.drawHorizontalLine(juce::roundToInt(getHeight() * i / (float) vGridDivs), 0.0f, (float) getWidth());
+    if (! gridCache.isNull())
+        g.drawImage(gridCache, getLocalBounds().toFloat());
 
     if (! dataIsActive || activeLfoData.points.size() < 2)
         return;
 
-    // Draw LFO Path
-    juce::Path lfoPath;
-    lfoPath.startNewSubPath(fromNormalized(activeLfoData.points.front()));
-
-    for (size_t i = 0; i < activeLfoData.points.size() - 1; ++i)
+    const auto signature = getWavePathSignature();
+    if (signature != cachedWavePathSignature)
     {
-        auto p1_screen = fromNormalized(activeLfoData.points[i]);
-        auto p2_screen = fromNormalized(activeLfoData.points[i + 1]);
-
-        if (std::abs(p1_screen.x - p2_screen.x) < 0.1f)
-        {
-            lfoPath.lineTo(p2_screen);
-            continue;
-        }
-
-        bool isCurved = (i < activeLfoData.curvatures.size() && ! juce::approximatelyEqual(activeLfoData.curvatures[i], 0.0f));
-        if (! isCurved)
-        {
-            lfoPath.lineTo(p2_screen);
-        }
-        else
-        {
-            const int numSegments = 30;
-            const float curvature = activeLfoData.curvatures[i];
-
-            for (int j = 1; j <= numSegments; ++j)
-            {
-                float tx = (float) j / (float) numSegments;
-                const float absExp = std::pow(4.0f, std::abs(curvature));
-                float ty;
-
-                if (curvature >= 0.0f)
-                {
-                    ty = std::pow(tx, absExp);
-                }
-                else
-                {
-                    const float base = juce::jmax(0.0f, 1.0f - tx); // Prevents NaN
-                    ty = 1.0f - std::pow(base, absExp);
-                }
-
-                float currentX = p1_screen.x + (p2_screen.x - p1_screen.x) * tx;
-                float currentY = p1_screen.y + (p2_screen.y - p1_screen.y) * ty;
-
-                if (std::isnan(currentX) || std::isnan(currentY))
-                    continue;
-
-                lfoPath.lineTo({ currentX, currentY });
-            }
-        }
+        rebuildWavePath();
+        cachedWavePathSignature = signature;
     }
 
-    g.setColour(juce::Colours::orange);
-    g.strokePath(lfoPath, juce::PathStrokeType(2.0f));
+    auto fillPath = cachedWavePath;
+    fillPath.lineTo(static_cast<float>(getWidth()), static_cast<float>(getHeight()));
+    fillPath.lineTo(0.0f, static_cast<float>(getHeight()));
+    fillPath.closeSubPath();
+    juce::ColourGradient fill(fire::ui::colours::modulation.withAlpha(0.16f),
+                              0.0f, 0.0f,
+                              fire::ui::colours::ember.withAlpha(0.015f),
+                              0.0f, static_cast<float>(getHeight()), false);
+    g.setGradientFill(fill);
+    g.fillPath(fillPath);
+
+    g.setColour(fire::ui::colours::modulation.withAlpha(0.13f));
+    g.strokePath(cachedWavePath,
+                 juce::PathStrokeType(5.5f,
+                                      juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
+    juce::ColourGradient wave(fire::ui::colours::modulation, 0.0f, 0.0f,
+                              fire::ui::colours::flame,
+                              static_cast<float>(getWidth()), static_cast<float>(getHeight()), false);
+    wave.addColour(0.68, fire::ui::colours::whiteHot);
+    g.setGradientFill(wave);
+    g.strokePath(cachedWavePath,
+                 juce::PathStrokeType(2.0f,
+                                      juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
 
     // Draw control points, with visual feedback for selection.
     for (int i = 0; i < activeLfoData.points.size(); ++i)
@@ -152,13 +131,14 @@ void LfoEditor::paint(juce::Graphics& g)
         auto localPoint = fromNormalized(activeLfoData.points[i]);
 
         float currentPointRadius = pointRadius;
-        juce::Colour currentPointColour = isSelected ? juce::Colours::cyan : juce::Colours::yellow;
+        juce::Colour currentPointColour = isSelected ? fire::ui::colours::whiteHot
+                                                     : fire::ui::colours::modulation;
 
         // Apply hover effect (enlarge and make transparent) to both selected and unselected points.
         if (isHovered)
         {
             currentPointRadius *= 1.5f;
-            currentPointColour = currentPointColour.withAlpha(0.5f);
+            currentPointColour = currentPointColour.brighter(0.18f);
         }
         // If dragging a selection, make them slightly larger but keep them solid for clarity.
         else if (isSelected && (draggingState == DraggingState::Selection || draggingState == DraggingState::Point))
@@ -166,11 +146,15 @@ void LfoEditor::paint(juce::Graphics& g)
             currentPointRadius *= 1.5f;
         }
 
-        g.setColour(currentPointColour);
-        g.fillEllipse(localPoint.x - currentPointRadius,
-                      localPoint.y - currentPointRadius,
-                      currentPointRadius * 2,
-                      currentPointRadius * 2);
+        const auto pointBounds = juce::Rectangle<float>(currentPointRadius * 2.0f,
+                                                        currentPointRadius * 2.0f)
+                                     .withCentre(localPoint);
+        g.setColour(fire::ui::colours::canvas.withAlpha(0.95f));
+        g.fillEllipse(pointBounds);
+        g.setColour(currentPointColour.withAlpha(isHovered ? 1.0f : 0.88f));
+        g.drawEllipse(pointBounds.reduced(0.5f), isSelected ? 2.0f : 1.3f);
+        if (isSelected)
+            g.fillEllipse(pointBounds.reduced(currentPointRadius * 0.50f));
     }
 
     // Draw the marquee selection rectangle if the user is currently dragging it.
@@ -179,28 +163,138 @@ void LfoEditor::paint(juce::Graphics& g)
         auto rectToDraw = makeNormalised(selectionRectangle.getPosition(),
                                          selectionRectangle.getBottomRight());
 
-        g.setColour(juce::Colours::white.withAlpha(0.3f));
+        g.setColour(fire::ui::colours::modulation.withAlpha(0.14f));
         g.fillRoundedRectangle(rectToDraw.toFloat(), 2.0f);
-        g.setColour(juce::Colours::white);
+        g.setColour(fire::ui::colours::whiteHot.withAlpha(0.85f));
         g.drawRoundedRectangle(rectToDraw.toFloat(), 2.0f, 1.0f);
     }
 
     // Draw playhead
     if (playheadPos >= 0.0f)
     {
-        g.setColour(juce::Colours::white.withAlpha(0.7f));
-        g.drawVerticalLine(juce::roundToInt(getWidth() * playheadPos), 0.0f, (float) getHeight());
+        const auto x = static_cast<float>(getWidth()) * playheadPos;
+        juce::ColourGradient playhead(fire::ui::colours::whiteHot.withAlpha(0.92f), x, 0.0f,
+                                      fire::ui::colours::ember.withAlpha(0.18f), x,
+                                      static_cast<float>(getHeight()), false);
+        g.setGradientFill(playhead);
+        g.fillRect(x - 0.5f, 0.0f, 1.0f, static_cast<float>(getHeight()));
+        g.setColour(fire::ui::colours::whiteHot);
+        g.fillEllipse(x - 2.5f, 2.0f, 5.0f, 5.0f);
     }
 
     // Draw phase offset line when dragging
     if (phaseOffsetPosition >= 0.0f)
     {
-        g.setColour(COLOUR5.withAlpha(0.5f));
+        g.setColour(fire::ui::colours::modulation.withAlpha(0.62f));
         g.drawVerticalLine(juce::roundToInt(getWidth() * phaseOffsetPosition), 0.0f, (float) getHeight());
     }
 }
 
-void LfoEditor::resized() {} // No layout logic needed in the editor itself.
+void LfoEditor::resized()
+{
+    gridCache = {};
+    cachedWavePathSignature = 0;
+}
+
+void LfoEditor::rebuildGridCache(float physicalScale)
+{
+    cachedGridWidth = getWidth();
+    cachedGridHeight = getHeight();
+    cachedGridScale = juce::jmax(1.0f, physicalScale);
+    cachedHorizontalDivisions = hGridDivs;
+    cachedVerticalDivisions = vGridDivs;
+
+    if (cachedGridWidth <= 0 || cachedGridHeight <= 0)
+    {
+        gridCache = {};
+        return;
+    }
+
+    gridCache = juce::Image(juce::Image::ARGB,
+                            juce::jmax(1, juce::roundToInt(cachedGridWidth * cachedGridScale)),
+                            juce::jmax(1, juce::roundToInt(cachedGridHeight * cachedGridScale)),
+                            true);
+    juce::Graphics cacheGraphics(gridCache);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(cachedGridScale));
+    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+    fire::ui::drawTechGrid(cacheGraphics, getLocalBounds().toFloat(),
+                           juce::jmax(12.0f, 20.0f), 0.075f);
+
+    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.58f));
+    for (int i = 1; i < hGridDivs; ++i)
+        cacheGraphics.drawVerticalLine(juce::roundToInt(getWidth() * i / static_cast<float>(hGridDivs)),
+                                       0.0f, static_cast<float>(getHeight()));
+    for (int i = 1; i < vGridDivs; ++i)
+        cacheGraphics.drawHorizontalLine(juce::roundToInt(getHeight() * i / static_cast<float>(vGridDivs)),
+                                         0.0f, static_cast<float>(getWidth()));
+
+    cacheGraphics.setColour(fire::ui::colours::modulation.withAlpha(0.34f));
+    cacheGraphics.drawHorizontalLine(getHeight() / 2, 0.0f, static_cast<float>(getWidth()));
+    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.92f));
+    cacheGraphics.drawRect(getLocalBounds(), 1);
+}
+
+uint64_t LfoEditor::getWavePathSignature() const noexcept
+{
+    uint64_t hash = 1469598103934665603ull;
+    auto append = [&hash](int value)
+    {
+        hash ^= static_cast<uint32_t>(value);
+        hash *= 1099511628211ull;
+    };
+
+    append(getWidth());
+    append(getHeight());
+    append(static_cast<int>(activeLfoData.points.size()));
+    for (const auto& point : activeLfoData.points)
+    {
+        append(juce::roundToInt(point.x * 100000.0f));
+        append(juce::roundToInt(point.y * 100000.0f));
+    }
+    for (const auto curvature : activeLfoData.curvatures)
+        append(juce::roundToInt(curvature * 100000.0f));
+    return hash;
+}
+
+void LfoEditor::rebuildWavePath()
+{
+    cachedWavePath.clear();
+    if (activeLfoData.points.size() < 2)
+        return;
+
+    cachedWavePath.startNewSubPath(fromNormalized(activeLfoData.points.front()));
+    for (size_t i = 0; i + 1 < activeLfoData.points.size(); ++i)
+    {
+        const auto p1 = fromNormalized(activeLfoData.points[i]);
+        const auto p2 = fromNormalized(activeLfoData.points[i + 1]);
+        if (std::abs(p1.x - p2.x) < 0.1f)
+        {
+            cachedWavePath.lineTo(p2);
+            continue;
+        }
+
+        const auto curvature = i < activeLfoData.curvatures.size()
+                                   ? activeLfoData.curvatures[i]
+                                   : 0.0f;
+        if (juce::approximatelyEqual(curvature, 0.0f))
+        {
+            cachedWavePath.lineTo(p2);
+            continue;
+        }
+
+        constexpr int segmentCount = 24;
+        const auto exponent = std::pow(4.0f, std::abs(curvature));
+        for (int segment = 1; segment <= segmentCount; ++segment)
+        {
+            const auto t = static_cast<float>(segment) / static_cast<float>(segmentCount);
+            const auto shaped = curvature >= 0.0f
+                                    ? std::pow(t, exponent)
+                                    : 1.0f - std::pow(juce::jmax(0.0f, 1.0f - t), exponent);
+            cachedWavePath.lineTo(p1.x + (p2.x - p1.x) * t,
+                                  p1.y + (p2.y - p1.y) * shaped);
+        }
+    }
+}
 
 void LfoEditor::setGridDivisions(int horizontal, int vertical)
 {
@@ -1000,6 +1094,7 @@ void LfoEditor::deleteSelectedPoints()
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 {
+    setOpaque(true);
     for (int i = 0; i < 4; ++i)
     {
         syncParameterIDs[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, i);
@@ -1026,10 +1121,12 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         lfoSelectButtons[i] = std::make_unique<juce::TextButton>("LFO " + juce::String(i + 1));
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
-        styleLfoSelectButton(*lfoSelectButtons[i], activeLfoColour);
+        lfoSelectButtons[i]->getProperties().set("fireAnimatedSelection", true);
+        styleLfoSelectButton(*lfoSelectButtons[i], lfoColours[static_cast<size_t>(i)]);
         lfoSelectButtons[i]->addListener(this);
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
+    lfoSelectionPosition.snapTo(0.0f);
 
     // --- Setup Mode Buttons ---
     addAndMakeVisible(editModeButton);
@@ -1068,6 +1165,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     addAndMakeVisible(rateSlider);
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    rateSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);
 
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
@@ -1077,7 +1175,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     rateLabel.attachToComponent(&rateSlider, false);
-    rateLabel.setColour(juce::Label::textColourId, COLOUR1);
+    rateLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
     rateLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(gridXSlider);
@@ -1117,6 +1215,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     addAndMakeVisible(lfoSmoothSlider);
     lfoSmoothSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     lfoSmoothSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    lfoSmoothSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);
 
     addAndMakeVisible(lfoSmoothLabel);
     lfoSmoothLabel.setText("Smooth", juce::dontSendNotification);
@@ -1126,13 +1225,14 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     lfoSmoothLabel.attachToComponent(&lfoSmoothSlider, false);
-    lfoSmoothLabel.setColour(juce::Label::textColourId, COLOUR1);
+    lfoSmoothLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
     lfoSmoothLabel.setJustificationType(juce::Justification::centred);
 
     // Initialize the phase slider and label.
     addAndMakeVisible(lfoPhaseSlider);
     lfoPhaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     lfoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    lfoPhaseSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);
     lfoPhaseSlider.addListener(this);
 
     addAndMakeVisible(lfoPhaseLabel);
@@ -1143,19 +1243,16 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             .withHeight(KNOB_FONT_SIZE)
             .withStyle("Plain") });
     lfoPhaseLabel.attachToComponent(&lfoPhaseSlider, false);
-    lfoPhaseLabel.setColour(juce::Label::textColourId, COLOUR1);
+    lfoPhaseLabel.setColour(juce::Label::textColourId, fire::ui::colours::textSecondary);
     lfoPhaseLabel.setJustificationType(juce::Justification::centred);
 
     // Attachments
     setLfo(currentLfoIndex); // Call helper to set up all attachments for the initial LFO.
 
-    startTimerHz(60);
 }
 
 LfoPanel::~LfoPanel()
 {
-    stopTimer();
-
     if (modulationMatrixDialog != nullptr)
     {
         modulationMatrixDialog->setVisible(false);
@@ -1189,48 +1286,97 @@ LfoPanel::~LfoPanel()
 
 void LfoPanel::paint(juce::Graphics& g)
 {
-    // g.setColour(juce::Colour(0xff303030));
-    // g.drawRect(getLocalBounds(), 1);
-    g.setColour(COLOUR6);
-    g.drawRect(leftColumnArea);
-    g.drawRect(centerColumnArea);
-    g.drawRect(rightColumnArea);
-    g.fillRect(separatorLine);
-    g.fillRect(topRowArea);
+    fire::ui::drawCanvas(g, getLocalBounds().toFloat());
+    fire::ui::drawPanel(g, leftColumnArea.toFloat(), fire::ui::colours::modulation, false);
+    fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false);
+    fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false);
+
+    const auto titleHeight = juce::jmax(16.0f, 21.0f * scale);
+    const auto drawPlainTitle = [&g, titleHeight, this](juce::Rectangle<int> area,
+                                                        const juce::String& title)
+    {
+        auto titleArea = area.toFloat().removeFromTop(titleHeight)
+                             .withTrimmedLeft(juce::jmax(7.0f, 10.0f * scale));
+        g.setColour(fire::ui::colours::textSecondary);
+        g.setFont(fire::ui::labelFont(juce::jlimit(9.0f, 13.0f, titleHeight * 0.36f)));
+        g.drawText(title, titleArea, juce::Justification::centredLeft);
+    };
+    drawPlainTitle(leftColumnArea, "LFO BANK");
+    drawPlainTitle(centerColumnArea, "SHAPE FORGE");
+    drawPlainTitle(rightColumnArea, "MOTION");
+
+    if (! separatorLine.isEmpty())
+    {
+        g.setColour(fire::ui::colours::hairline.withAlpha(0.68f));
+        g.fillRect(separatorLine);
+    }
+}
+
+void LfoPanel::paintOverChildren(juce::Graphics& g)
+{
+    if (lfoSelectButtons.empty() || lfoSelectButtons.front() == nullptr)
+        return;
+
+    const auto position = juce::jlimit(0.0f, 3.0f, lfoSelectionPosition.current);
+    const auto lowerIndex = juce::jlimit(0, 3, static_cast<int>(std::floor(position)));
+    const auto upperIndex = juce::jmin(3, lowerIndex + 1);
+    const auto blend = position - static_cast<float>(lowerIndex);
+    const auto lowerBounds = lfoSelectButtons[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
+    const auto upperBounds = lfoSelectButtons[static_cast<size_t>(upperIndex)]->getBounds().toFloat();
+
+    auto selectionBounds = juce::Rectangle<float>(
+        juce::jmap(blend, lowerBounds.getX(), upperBounds.getX()),
+        juce::jmap(blend, lowerBounds.getY(), upperBounds.getY()),
+        juce::jmap(blend, lowerBounds.getWidth(), upperBounds.getWidth()),
+        juce::jmap(blend, lowerBounds.getHeight(), upperBounds.getHeight()))
+                               .reduced(0.75f);
+    const auto colour = lfoColours[static_cast<size_t>(lowerIndex)].interpolatedWith(
+        lfoColours[static_cast<size_t>(upperIndex)], blend);
+    const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
+                                   fire::ui::Metrics::radius * scale);
+
+    // The moving outline is painted above the buttons so it cannot be hidden by
+    // their hover surfaces.  A very light wash keeps the text fully legible.
+    g.setColour(colour.withAlpha(0.055f));
+    g.fillRoundedRectangle(selectionBounds, radius);
+    g.setColour(colour.withAlpha(0.82f));
+    g.drawRoundedRectangle(selectionBounds, radius, juce::jmax(1.0f, 1.25f * scale));
 }
 
 void LfoPanel::resized()
 {
-    const float scale = this->scale;
-    const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
+    const auto uiScale = scale;
+    const auto outer = juce::jmax(4, juce::roundToInt(7.0f * uiScale));
+    const auto gap = juce::jmax(4, juce::roundToInt(7.0f * uiScale));
+    const auto titleHeight = juce::jmax(16, juce::roundToInt(21.0f * uiScale));
+    const auto scaledKnobSize = juce::jmax(1, juce::roundToInt(KNOB_SIZE * 0.82f * uiScale));
 
-    auto mainArea = getLocalBounds().reduced(10 * scale);
+    auto mainArea = getLocalBounds().reduced(outer);
+    const auto leftWidth = juce::jlimit(104, juce::roundToInt(150.0f * uiScale),
+                                        juce::roundToInt(mainArea.getWidth() * 0.14f));
+    const auto rightWidth = juce::jlimit(248, juce::roundToInt(340.0f * uiScale),
+                                         juce::roundToInt(mainArea.getWidth() * 0.33f));
+    leftColumnArea = mainArea.removeFromLeft(leftWidth);
+    mainArea.removeFromLeft(gap);
+    rightColumnArea = mainArea.removeFromRight(rightWidth);
+    mainArea.removeFromRight(gap);
+    centerColumnArea = mainArea;
 
-    // --- 1. Define the three main columns with new proportions ---
-    leftColumnArea = mainArea.removeFromLeft(mainArea.getWidth() * 0.15f);
-
-    // MODIFICATION: Increase the width percentage for the right column to give it more space.
-    rightColumnArea = mainArea.removeFromRight(mainArea.getWidth() * 0.35f);
-
-    centerColumnArea = mainArea; // Center column takes the remaining space.
-
-    // Add spacing between columns
-    // leftColumnArea.removeFromRight(5 * scale);
-    centerColumnArea.removeFromLeft(5 * scale);
-    centerColumnArea.removeFromRight(5 * scale);
-    // rightColumnArea.removeFromLeft(5 * scale);
-
-    // --- 2. Layout Left Column (LFO Select Buttons) ---
+    auto leftContent = leftColumnArea.reduced(juce::jmax(4, outer / 2));
+    leftContent.removeFromTop(titleHeight);
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
-    lfoSelectBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    lfoSelectBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
     for (const auto& button : lfoSelectButtons)
-        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f));
-    lfoSelectBox.performLayout(leftColumnArea);
+        lfoSelectBox.items.add(juce::FlexItem(*button).withFlex(1.0f)
+                                   .withMargin(juce::FlexItem::Margin(2.0f * uiScale)));
+    lfoSelectBox.performLayout(leftContent);
 
-    // --- 3. Layout Center Column (Editor and Top Buttons) ---
-    topRowArea = centerColumnArea.removeFromTop(40 * scale);
-    lfoEditor.setBounds(centerColumnArea);
+    auto centreContent = centerColumnArea.reduced(juce::jmax(4, outer / 2));
+    centreContent.removeFromTop(titleHeight);
+    topRowArea = centreContent.removeFromTop(juce::jmax(27, juce::roundToInt(34.0f * uiScale)));
+    centreContent.removeFromTop(juce::jmax(3, gap / 2));
+    lfoEditor.setBounds(centreContent);
 
     juce::FlexBox topRowFlexBox;
     topRowFlexBox.flexDirection = juce::FlexBox::Direction::row;
@@ -1240,15 +1386,16 @@ void LfoPanel::resized()
         &matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton, &brushSelector
     };
     for (auto* control : topRowControls)
-    {
-        topRowFlexBox.items.add(juce::FlexItem(*control).withFlex(1.0f).withMargin(juce::FlexItem::Margin(0 * scale)));
-    }
+        topRowFlexBox.items.add(juce::FlexItem(*control).withFlex(1.0f)
+                                    .withMargin(juce::FlexItem::Margin(0.0f, 1.5f * uiScale,
+                                                                       0.0f, 1.5f * uiScale)));
     topRowFlexBox.performLayout(topRowArea);
 
-    // 4.Right Column Layout
-    auto rightColumnWorkArea = rightColumnArea;
-    auto gridArea = rightColumnWorkArea.removeFromBottom(40 * scale);
-    separatorLine = rightColumnWorkArea.removeFromBottom(2 * scale);
+    auto rightColumnWorkArea = rightColumnArea.reduced(juce::jmax(4, outer / 2));
+    rightColumnWorkArea.removeFromTop(titleHeight);
+    auto gridArea = rightColumnWorkArea.removeFromBottom(juce::jmax(28, juce::roundToInt(36.0f * uiScale)));
+    separatorLine = rightColumnWorkArea.removeFromBottom(1);
+    rightColumnWorkArea.removeFromBottom(juce::jmax(3, gap / 2));
     auto knobsArea = rightColumnWorkArea;
 
     juce::FlexBox gridBox;
@@ -1256,7 +1403,7 @@ void LfoPanel::resized()
     gridBox.alignItems = juce::FlexBox::AlignItems::stretch;
     gridBox.items.add(juce::FlexItem(gridXLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
     gridBox.items.add(juce::FlexItem(gridXSlider).withFlex(1.0f));
-    gridBox.items.add(juce::FlexItem().withWidth(5 * scale));
+    gridBox.items.add(juce::FlexItem().withWidth(5 * uiScale));
     gridBox.items.add(juce::FlexItem(gridYLabel).withFlex(0.3f).withMargin({ 0, 2, 0, 0 }));
     gridBox.items.add(juce::FlexItem(gridYSlider).withFlex(1.0f));
     gridBox.performLayout(gridArea);
@@ -1266,9 +1413,9 @@ void LfoPanel::resized()
 
     knobGrid.templateColumns = {
         Track(juce::Grid::Px(scaledKnobSize)),
-        Track(juce::Grid::Px(1 * scale)),
+        Track(juce::Grid::Px(juce::jmax(1.0f, 3.0f * uiScale))),
         Track(juce::Grid::Px(scaledKnobSize)),
-        Track(juce::Grid::Px(1 * scale)),
+        Track(juce::Grid::Px(juce::jmax(1.0f, 3.0f * uiScale))),
         Track(juce::Grid::Px(scaledKnobSize))
     };
 
@@ -1288,11 +1435,22 @@ void LfoPanel::resized()
     knobGrid.performLayout(knobsArea);
 }
 
-void LfoPanel::timerCallback()
+void LfoPanel::animationTick(float deltaSeconds)
 {
     if (pendingRateSliderUpdate.load(std::memory_order_acquire)
         || pendingSmoothnessUpdates.load(std::memory_order_acquire) != 0)
         handleAsyncUpdate();
+
+    if (! isShowing())
+    {
+        lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
+        return;
+    }
+
+    const auto previousSelectionPosition = lfoSelectionPosition.current;
+    lfoSelectionPosition.advance(deltaSeconds, 0.07f);
+    if (! juce::approximatelyEqual(previousSelectionPosition, lfoSelectionPosition.current))
+        repaint(leftColumnArea);
 
     if (processor.isDawPlaying())
     {
@@ -1374,6 +1532,8 @@ void LfoPanel::setLfo(int newIndex)
 
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
+    lfoSelectionPosition.setTarget(static_cast<float>(currentLfoIndex));
+    repaint(leftColumnArea);
     lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
 
     // Explicitly set the toggle state for all buttons in the group.
@@ -1573,13 +1733,12 @@ void LfoPanel::setEditMode(LfoEditMode newMode)
 
 void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 {
-    // Common style for all buttons
     button.addListener(this);
-    button.setColour(juce::TextButton::buttonColourId, COLOUR7);
-    button.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
-    button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    button.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+    button.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
+    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    button.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    button.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
 
     // Specific style for toggle buttons
     if (isToggle)
@@ -1707,9 +1866,9 @@ void LfoPanel::styleLfoSelectButton(juce::TextButton& button, juce::Colour colou
 {
     button.setClickingTogglesState(true);
     button.setRadioGroupId(1);
-    button.setColour(juce::TextButton::buttonColourId, COLOUR8);
-    button.setColour(juce::TextButton::textColourOffId, colour);
-    button.setColour(juce::TextButton::buttonOnColourId, colour.darker().darker());
-    button.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+    button.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    button.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    button.setColour(juce::TextButton::textColourOnId, colour);
     button.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
 }

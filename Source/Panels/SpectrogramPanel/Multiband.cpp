@@ -10,9 +10,11 @@
 
 #include "Multiband.h"
 #include <algorithm>
+#include <cmath>
 //==============================================================================
 Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : processor(p), stateComponent(sc)
 {
+    setOpaque(false);
     bandUIs.resize(4);
     for (int i = 0; i < 4; ++i)
     {
@@ -21,14 +23,17 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         bandUIs[i].soloButton = std::make_unique<SoloButton>();
         addAndMakeVisible(*bandUIs[i].soloButton);
         bandUIs[i].soloButton->addListener(this);
+        bandUIs[i].soloButton->addMouseListener(this, false);
 
         bandUIs[i].enableButton = std::make_unique<EnableButton>();
         addAndMakeVisible(*bandUIs[i].enableButton);
         bandUIs[i].enableButton->addListener(this);
+        bandUIs[i].enableButton->addMouseListener(this, false);
 
         bandUIs[i].closeButton = std::make_unique<CloseButton>();
         addAndMakeVisible(*bandUIs[i].closeButton);
         bandUIs[i].closeButton->addListener(this);
+        bandUIs[i].closeButton->addMouseListener(this, false);
     }
 
     // Init Vertical Lines
@@ -80,13 +85,22 @@ Multiband::~Multiband()
     for (int i = 0; i < 4; ++i)
     {
         if (bandUIs[i].soloButton)
+        {
+            bandUIs[i].soloButton->removeMouseListener(this);
             bandUIs[i].soloButton->removeListener(this);
+        }
 
         if (bandUIs[i].enableButton)
+        {
+            bandUIs[i].enableButton->removeMouseListener(this);
             bandUIs[i].enableButton->removeListener(this);
+        }
 
         if (bandUIs[i].closeButton)
+        {
+            bandUIs[i].closeButton->removeMouseListener(this);
             bandUIs[i].closeButton->removeListener(this);
+        }
     }
 
     for (int i = 0; i < 3; ++i)
@@ -105,19 +119,15 @@ Multiband::~Multiband()
 
 void Multiband::paint(juce::Graphics& g)
 {
-    // send band buffer to graphs
-    if (isVisible())
-        processor.setHistoryArray(focusIndex);
-
     if (getWidth() <= 0 || getHeight() <= 0)
         return;
 
     // draw line that will be added next
-    float startY = 0;
-    float endY = getHeight();
-    auto mousePos = getMouseXYRelative();
-    float xPos = mousePos.getX();
-    float yPos = mousePos.getY();
+    const float startY = 0.0f;
+    const float endY = static_cast<float>(getHeight());
+    const auto mousePos = getMouseXYRelative().toFloat();
+    const float xPos = mousePos.getX();
+    const float yPos = mousePos.getY();
 
     if (yPos >= startY && yPos <= startY + getHeight() / 5 && lineNum < 3)
     {
@@ -133,50 +143,24 @@ void Multiband::paint(juce::Graphics& g)
         }
         if (canCreate)
         {
-            g.setColour(COLOUR1.withAlpha(0.2f));
-            g.drawLine(xPos, startY, xPos, endY, 2);
+            const auto physicalScale = juce::jmax(1.0f,
+                g.getInternalContext().getPhysicalPixelScaleFactor());
+            const auto previewX = fire::ui::pixelAligned(xPos, physicalScale);
+            const auto strokeWidth = 1.0f / physicalScale;
+
+            g.setColour(fire::ui::colours::flame.withAlpha(0.64f));
+            g.fillRect(previewX - strokeWidth * 0.5f,
+                       startY,
+                       strokeWidth,
+                       endY - startY);
+            g.fillEllipse(previewX - 2.5f, startY + 3.0f, 5.0f, 5.0f);
         }
     }
 
-    // set black and focus masks
-    int margin2 = getWidth() / 250; // leftside of line: 1/100(line width) * 4 / 10
-    int margin1 = getWidth() * 6 / 1000; // rightside of line: 1/100(line width) * 6 / 10
-    int mouseX = getMouseXYRelative().getX();
-    int mouseY = getMouseXYRelative().getY();
-
-    // set closebuttons visibility to false
-    for (int i = 0; i < lineNum + 1; i++)
-    {
-        bandUIs[i].closeButton->setVisible(false); // <--- MODIFIED
-    }
-
-    // set dragging state
-    isDragging = false;
-    for (int i = 0; i < lineNum; i++)
-    {
-        if (freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging())
-        {
-            isDragging = true;
-            break;
-        }
-    }
-
-    if (lineNum > 0)
-    {
-        // set leftmost mask
-        setMasks(g, 0, 0, 0, 0, freqDividerGroup[0]->getX() + margin2, getHeight(), mouseX, mouseY);
-
-        // set middle masks
-        for (int i = 1; i < lineNum; i++)
-        {
-            int startX = freqDividerGroup[i - 1]->getX() + margin1;
-            int bandWidth = freqDividerGroup[i]->getX() - freqDividerGroup[i - 1]->getX();
-            setMasks(g, i, 1, startX, 0, bandWidth, getHeight(), mouseX, mouseY);
-        }
-
-        // set rightmost mask
-        setMasks(g, lineNum, 0, freqDividerGroup[lineNum - 1]->getX() + margin1, 0, getWidth() - freqDividerGroup[lineNum - 1]->getX() - margin1, getHeight(), mouseX, mouseY);
-    }
+    // Hit testing, focus changes and painting share the exact centre of each
+    // divider, so the selected rail cannot stop short or spill into a neighbour.
+    for (int band = 0; band <= lineNum; ++band)
+        paintBandOverlay(g, band, getBandBounds(band), mousePos);
 }
 
 void Multiband::resized()
@@ -428,16 +412,30 @@ void Multiband::setLineIndex()
 
 void Multiband::mouseUp(const juce::MouseEvent& e)
 {
+    if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
+        return;
+
+    isDragging = false;
+    hoveredBandIndex = getBandIndexAtX(e.getEventRelativeTo(this).x);
+    updateCloseButtonVisibility();
+    repaint();
 }
 
 void Multiband::mouseDrag(const juce::MouseEvent& e)
 {
+    if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
+        return;
+
     if (getWidth() <= 0)
         return;
 
     // moving lines by dragging mouse
     if (e.mods.isLeftButtonDown())
     {
+        isDragging = true;
+        hoveredBandIndex = -1;
+        updateCloseButtonVisibility();
+
         for (int i = 0; i < lineNum; i++)
         {
             if (e.eventComponent == &freqDividerGroup[i]->getVerticalLine())
@@ -448,6 +446,7 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
                 sortLines();
                 setLineRelatedBoundsByX();
                 setSoloRelatedBounds();
+                repaint();
             }
         }
     }
@@ -455,12 +454,21 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
 
 void Multiband::mouseDown(const juce::MouseEvent& e)
 {
+    if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
+        return;
+
     if (getWidth() <= 0 || getHeight() <= 0)
         return;
 
-    if (! isDragging && e.mods.isLeftButtonDown() && e.y <= getHeight() / 5.0f) // create new lines
+    isDragging = false;
+    for (int i = 0; i < lineNum; ++i)
+        isDragging = isDragging || freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging();
+
+    const auto localEvent = e.getEventRelativeTo(this);
+
+    if (! isDragging && e.mods.isLeftButtonDown() && localEvent.y <= getHeight() / 5.0f) // create new lines
     {
-        float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
+        const float xPercent = localEvent.position.x / static_cast<float>(getWidth());
         if (lineNum < 3)
         {
             bool canCreate = true;
@@ -497,40 +505,15 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                 }
                 setLineRelatedBoundsByX(); // TODO: dont use this, only set freq
                 setSoloRelatedBounds();
+                repaint();
             }
         }
     }
-    else if (! isDragging && e.mods.isLeftButtonDown() && e.y > getHeight() / 5.0f) // focus on one band
+    else if (! isDragging && e.mods.isLeftButtonDown() && localEvent.y > getHeight() / 5.0f) // focus on one band
     {
-        int num = lineNum;
-        if (lineNum == 0)
-        {
-            focusIndex = 0;
-            return;
-        }
-        else
-        {
-            if (e.x >= 0 && e.x < freqDividerGroup[0]->getX())
-            {
-                focusIndex = 0;
-                return;
-            }
-
-            for (int i = 1; i < num; i++)
-            {
-                if (e.x >= freqDividerGroup[i - 1]->getX() && e.x < freqDividerGroup[i]->getX())
-                {
-                    focusIndex = i;
-                    return;
-                }
-            }
-
-            if (e.x >= freqDividerGroup[num - 1]->getX() && e.x <= getWidth())
-            {
-                focusIndex = num;
-                return;
-            }
-        }
+        const int selectedBand = getBandIndexAtX(localEvent.x);
+        if (selectedBand >= 0)
+            setFocusIndex(selectedBand);
     }
 }
 
@@ -563,7 +546,7 @@ void Multiband::setSoloRelatedBounds()
         {
             bandUIs[i].soloButton->setVisible(true); // <--- MODIFIED
             bandUIs[i].enableButton->setVisible(true); // <--- MODIFIED
-            bandUIs[i].closeButton->setVisible(true); // <--- MODIFIED
+            bandUIs[i].closeButton->setVisible(false);
         }
         else
         {
@@ -594,6 +577,8 @@ void Multiband::setSoloRelatedBounds()
         bandUIs[0].soloButton->setBounds(getWidth() / 2 + size, margin, size, size); // <--- MODIFIED
         bandUIs[0].closeButton->setVisible(false); // <--- MODIFIED
     }
+
+    updateCloseButtonVisibility();
 }
 
 int Multiband::getFocusIndex()
@@ -603,7 +588,14 @@ int Multiband::getFocusIndex()
 
 void Multiband::setFocusIndex(int index)
 {
-    focusIndex = juce::jlimit(0, lineNum, index);
+    const int newFocus = juce::jlimit(0, lineNum, index);
+    if (newFocus == focusIndex)
+        return;
+
+    focusIndex = newFocus;
+    if (isShowing())
+        processor.setHistoryArray(focusIndex);
+    repaint();
 }
 
 void Multiband::sliderValueChanged(juce::Slider* slider)
@@ -645,6 +637,8 @@ void Multiband::buttonClicked(juce::Button* button)
             }
         }
     }
+
+    repaint();
 }
 
 EnableButton& Multiband::getEnableButton(const int index)
@@ -655,7 +649,10 @@ EnableButton& Multiband::getEnableButton(const int index)
 void Multiband::setBandBypassStates(int index, bool state)
 {
     if (juce::isPositiveAndBelow(index, static_cast<int>(bandUIs.size())))
+    {
         bandUIs[index].enableButton->setToggleState(state, juce::NotificationType::dontSendNotification); // <--- MODIFIED
+        repaint();
+    }
 }
 
 state::StateComponent& Multiband::getStateComponent()
@@ -663,40 +660,95 @@ state::StateComponent& Multiband::getStateComponent()
     return stateComponent;
 }
 
-void Multiband::setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, int mouseX, int mouseY)
+void Multiband::paintBandOverlay(juce::Graphics& g,
+                                 int index,
+                                 juce::Rectangle<float> area,
+                                 juce::Point<float> mousePosition)
 {
-    // set focus mask
-    if (lineNum > lineNumLimit && focusIndex == index)
+    if (area.isEmpty() || ! juce::isPositiveAndBelow(index, lineNum + 1))
+        return;
+
+    const bool selected = focusIndex == index;
+    const bool hovered = ! isDragging && area.contains(mousePosition);
+
+    if (selected)
     {
-        // MODIFIED: Changed gradient to be top-down and relative to the band's rectangle.
-        juce::ColourGradient grad(COLOUR1.withAlpha(0.5f),
-                                  (float) x,
-                                  (float) y,
-                                  COLOUR1.withAlpha(0.0f),
-                                  (float) x,
-                                  (float) (y + height * 0.1f),
+        juce::ColourGradient grad(fire::ui::colours::ember.withAlpha(0.10f),
+                                  area.getX(), area.getY(),
+                                  fire::ui::colours::ember.withAlpha(0.0f),
+                                  area.getX(), area.getY() + area.getHeight() * 0.20f,
                                   false);
         g.setGradientFill(grad);
-        g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
+        g.fillRect(area);
     }
 
-    // set mouse enter white mask
-    if (! isDragging && lineNum > lineNumLimit && mouseX > x && mouseX < x + width && mouseY > y && mouseY < y + height)
+    if (hovered && ! selected)
     {
-        if (focusIndex != index)
-        {
-            g.setColour(COLOUR_MASK_WHITE);
-            g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
-        }
-        bandUIs[index].closeButton->setVisible(true);
+        g.setColour(fire::ui::colours::textPrimary.withAlpha(0.032f));
+        g.fillRect(area);
     }
 
-    // set solo black mask
-    if (lineNum > lineNumLimit && shouldSetBlackMask(index))
+    if (shouldSetBlackMask(index))
     {
-        g.setColour(COLOUR_MASK_BLACK);
-        g.fillRect(x, y, juce::jmax(0, width), juce::jmax(0, height));
+        g.setColour(fire::ui::colours::canvas.withAlpha(0.64f));
+        g.fillRect(area);
     }
+
+    if (! bandUIs[static_cast<size_t>(index)].enableButton->getToggleState())
+    {
+        g.setColour(fire::ui::colours::canvas.withAlpha(0.36f));
+        g.fillRect(area);
+    }
+
+    if (selected)
+    {
+        // Keep the indicator at two physical pixels on standard and HiDPI
+        // displays. Outward edge rounding closes any subpixel seam against a
+        // divider or the analyser edge.
+        const auto physicalScale = juce::jmax(1.0f,
+            g.getInternalContext().getPhysicalPixelScaleFactor());
+        const auto left = std::floor(area.getX() * physicalScale) / physicalScale;
+        const auto right = std::ceil(area.getRight() * physicalScale) / physicalScale;
+        const auto railHeight = 2.0f / physicalScale;
+        const juce::Rectangle<float> rail(left,
+                                           area.getY(),
+                                           juce::jmax(0.0f, right - left),
+                                           railHeight);
+
+        juce::ColourGradient railGradient(fire::ui::colours::ember.withAlpha(0.92f),
+                                           rail.getX(), rail.getY(),
+                                           fire::ui::colours::ember.withAlpha(0.92f),
+                                           rail.getRight(), rail.getY(), false);
+        railGradient.addColour(0.5, fire::ui::colours::flame.withAlpha(0.98f));
+        g.setGradientFill(railGradient);
+        g.fillRect(rail);
+    }
+}
+
+float Multiband::getDividerX(int index) const
+{
+    if (! juce::isPositiveAndBelow(index, lineNum))
+        return index < 0 ? 0.0f : static_cast<float>(getWidth());
+
+    const auto& divider = freqDividerGroup[index]->getVerticalLine();
+    const auto centreInGroup = divider.getBounds().toFloat().getCentreX();
+    return juce::jlimit(0.0f,
+                        static_cast<float>(getWidth()),
+                        static_cast<float>(freqDividerGroup[index]->getX()) + centreInGroup);
+}
+
+juce::Rectangle<float> Multiband::getBandBounds(int index) const
+{
+    if (! juce::isPositiveAndBelow(index, lineNum + 1))
+        return {};
+
+    const auto left = index == 0 ? 0.0f : getDividerX(index - 1);
+    const auto right = index == lineNum ? static_cast<float>(getWidth())
+                                        : getDividerX(index);
+    return juce::Rectangle<float>::leftTopRightBottom(left,
+                                                       0.0f,
+                                                       juce::jmax(left, right),
+                                                       static_cast<float>(getHeight()));
 }
 
 // Gets the enable and solo state for a specific band.
@@ -759,16 +811,59 @@ void Multiband::resetBandToDefault(int bandIndex)
 
 void Multiband::mouseMove(const juce::MouseEvent& event)
 {
-    // This function is called continuously ONLY when the mouse is moving over this component.
-    // It's perfect for updating hover-dependent graphics like your preview line and masks.
+    isDragging = false;
+    for (int i = 0; i < lineNum; ++i)
+        isDragging = isDragging || freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging();
+
+    const auto relativeEvent = event.getEventRelativeTo(this);
+    const int newHoveredBand = isDragging ? -1 : getBandIndexAtX(relativeEvent.x);
+    if (newHoveredBand != hoveredBandIndex)
+    {
+        hoveredBandIndex = newHoveredBand;
+        updateCloseButtonVisibility();
+    }
+
     repaint();
 }
 
 void Multiband::mouseExit(const juce::MouseEvent& event)
 {
-    // This function is called once when the mouse leaves the component's bounds.
-    // This ensures that any lingering hover effects (like the preview line) are erased.
+    const auto relativeEvent = event.getEventRelativeTo(this);
+    hoveredBandIndex = getLocalBounds().contains(relativeEvent.getPosition())
+                         ? getBandIndexAtX(relativeEvent.x)
+                         : -1;
+    updateCloseButtonVisibility();
     repaint();
+}
+
+void Multiband::visibilityChanged()
+{
+    if (isShowing())
+        processor.setHistoryArray(focusIndex);
+}
+
+int Multiband::getBandIndexAtX(int x) const
+{
+    if (x < 0 || x > getWidth())
+        return -1;
+
+    for (int i = 0; i < lineNum; ++i)
+        if (static_cast<float>(x) < getDividerX(i))
+            return i;
+
+    return lineNum;
+}
+
+void Multiband::updateCloseButtonVisibility()
+{
+    for (int i = 0; i < static_cast<int>(bandUIs.size()); ++i)
+    {
+        const bool shouldShow = lineNum > 0
+                             && i <= lineNum
+                             && i == hoveredBandIndex
+                             && ! isDragging;
+        bandUIs[static_cast<size_t>(i)].closeButton->setVisible(shouldShow);
+    }
 }
 
 void Multiband::resortAndRedrawLines()

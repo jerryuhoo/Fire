@@ -218,6 +218,9 @@ public:
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
 
     void setHistoryArray(int bandIndex);
+    std::uint64_t getHistoryGeneration() const noexcept;
+    void copyHistoryArrays(juce::Array<float>& leftDestination,
+                           juce::Array<float>& rightDestination) const;
     juce::Array<float> getHistoryArrayL();
     juce::Array<float> getHistoryArrayR();
 
@@ -395,6 +398,7 @@ private:
     std::atomic<int> historyWritePosition { 0 };
     std::atomic<int> historySamplesAvailable { historyLength };
     std::atomic<int> historySourceBand { 4 };
+    std::atomic<std::uint64_t> historyGeneration { 0 };
 
     // Spectrum
     SpectrumProcessor spectrumProcessor;

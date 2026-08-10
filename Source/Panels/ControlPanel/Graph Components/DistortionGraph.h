@@ -26,6 +26,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void visibilityChanged() override;
     void setState(int mode, float rec, float mix, float bias, float drive, float rateDivide);
 
 private:
@@ -35,5 +36,7 @@ private:
     float bias = 0.0f;
     float drive = 1.0f;
     juce::Path distortionCurve;
+    juce::ColourGradient curveGradient;
+    bool curveDirty = true;
     void updateDistortionCurve();
 };

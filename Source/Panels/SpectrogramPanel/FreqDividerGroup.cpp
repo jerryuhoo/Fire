@@ -21,13 +21,15 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor
     addAndMakeVisible(verticalLine);
 
     verticalLine.addListener(this);
+    verticalLine.addMouseListener(this, true);
 
     lineStatelId = ParameterIDAndName::getIDString(LINE_STATE_ID, index);
     sliderFreqId = ParameterIDAndName::getIDString(FREQ_ID, index);
 
     multiFreqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.treeState, sliderFreqId, verticalLine);
 
-    addAndMakeVisible(freqTextLabel);
+    addChildComponent(freqTextLabel);
+    freqTextLabel.addMouseListener(this, true);
     // The parent component WON'T respond to mouse clicks,
     // while child components WILL respond to mouse clicks!
     setInterceptsMouseClicks(false, true);
@@ -36,39 +38,28 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor
 FreqDividerGroup::~FreqDividerGroup()
 {
     freqTextLabel.setLookAndFeel(nullptr);
+    freqTextLabel.removeMouseListener(this);
+    verticalLine.removeMouseListener(this);
     verticalLine.removeListener(this);
 }
 
 void FreqDividerGroup::paint(juce::Graphics& g)
 {
-    if (getToggleState())
-    {
-        if (verticalLine.isMouseOverOrDragging() || freqTextLabel.isMouseOverCustom())
-        {
-            freqTextLabel.setFade(true, true);
-            freqTextLabel.setVisible(true);
-        }
-        else
-        {
-            freqTextLabel.setFade(true, false);
-        }
-    }
-    else
-    {
-        freqTextLabel.setFreq(-1);
-        verticalLine.setXPercent(0);
-    }
-    //    g.setColour(juce::Colours::green.withAlpha(0.2f));
-    //    g.fillAll();
+    juce::ignoreUnused(g);
 }
 
 void FreqDividerGroup::resized()
 {
-    margin = getHeight() / 20.0f;
-    size = getWidth() / 100.0f * 15;
-    width = verticalLine.getWidth() / 2.0f;
+    const float uiScale = juce::jlimit(0.75f, 2.0f, getWidth() / 100.0f);
+    margin = 7.5f * uiScale;
+    size = 15.0f * uiScale;
     verticalLine.setBounds(0, 0, getWidth() / 10.0f, getHeight());
-    freqTextLabel.setBounds(width + margin * 2, getHeight() / 5 + margin, size * 5, size * 2);
+    width = verticalLine.getWidth() / 2.0f;
+    freqTextLabel.setScale(uiScale);
+    freqTextLabel.setBounds(juce::roundToInt(width + margin),
+                            juce::roundToInt(getHeight() / 5.0f + margin),
+                            juce::roundToInt(size * 5.0f),
+                            juce::roundToInt(size * 1.9f));
 }
 
 void FreqDividerGroup::setDeleteState(bool deleteState)
@@ -121,11 +112,17 @@ void FreqDividerGroup::buttonClicked(juce::Button* button)
 
 void FreqDividerGroup::clicked(const juce::ModifierKeys& modifiers)
 {
+    juce::ignoreUnused(modifiers);
     // called by changing toggle state
     if (getToggleState())
         setVisible(true);
     else
+    {
+        freqTextLabel.setFreq(-1);
+        freqTextLabel.setFade(true, false);
+        verticalLine.setXPercent(0.0f);
         setVisible(false);
+    }
 }
 
 void FreqDividerGroup::sliderValueChanged(juce::Slider* slider)
@@ -166,8 +163,46 @@ int FreqDividerGroup::getFreq()
 {
     return juce::roundToInt(verticalLine.getValue());
 }
-void FreqDividerGroup::mouseUp(const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseEnter(const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseExit(const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDown(const juce::MouseEvent& e) {}
-void FreqDividerGroup::mouseDrag(const juce::MouseEvent& e) {}
+void FreqDividerGroup::mouseUp(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    updateLabelFade();
+}
+
+void FreqDividerGroup::mouseEnter(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    updateLabelFade();
+}
+
+void FreqDividerGroup::mouseExit(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    updateLabelFade();
+}
+
+void FreqDividerGroup::mouseMove(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    updateLabelFade();
+}
+
+void FreqDividerGroup::mouseDown(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    updateLabelFade();
+}
+
+void FreqDividerGroup::mouseDrag(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    updateLabelFade();
+}
+
+void FreqDividerGroup::updateLabelFade()
+{
+    const bool shouldShow = getToggleState()
+                         && (verticalLine.isMouseOverOrDragging()
+                             || freqTextLabel.isMouseOverCustom());
+    freqTextLabel.setFade(true, shouldShow);
+}

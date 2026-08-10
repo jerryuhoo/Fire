@@ -36,6 +36,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void animationTick(float deltaSeconds);
 
     ModulatableSlider& getLowcutFreqKnob();
     ModulatableSlider& getPeakFreqKnob();
@@ -62,16 +63,20 @@ private:
     // initRotarySlider is now in PanelBase.
     void initFlatButton(juce::TextButton& button, juce::String buttonName); // This seems to be missing, keeping for consistency.
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
-    void setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName);
+    void setRoundButton(juce::TextButton& button, juce::String, juce::String buttonName);
 
     // Re-attaches all UI components to their parameters.
     void updateAttachments();
 
     // UI update helpers
     void updateFilterKnobVisibility();
+    void rebuildChromeCache(float displayScale);
+    void invalidateChromeCache();
+    void updateSelectionTarget(bool snap);
+    juce::TextButton* getSelectedSwitch() noexcept;
 
     void buttonClicked(juce::Button* clickedButton) override;
-    void comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged) override {}
+    void comboBoxChanged(juce::ComboBox*) override {}
 
     void setBypassState(int index, bool state);
     void setVisibility(juce::Array<juce::Component*>& array, bool isVisible);
@@ -88,6 +93,7 @@ private:
 
     // UI layout areas to match BandPanel style
     juce::Rectangle<int> tabAreaRect;
+    juce::Rectangle<int> controlsAreaRect;
     juce::Rectangle<int> outputAreaRect;
 
     // --- Buttons ---
@@ -116,8 +122,15 @@ private:
     juce::Array<juce::Component*> highcutKnobs;
     juce::Array<juce::Component*> allControls;
 
-    // Added to store active tab colour for painting, like in BandPanel
-    juce::Colour activeTabColour;
+    juce::Image chromeCache;
+    float chromeCacheDisplayScale = 0.0f;
+    bool chromeCacheDirty = true;
+
+    fire::ui::DampedValue selectionY;
+    fire::ui::DampedValue selectionRed;
+    fire::ui::DampedValue selectionGreen;
+    fire::ui::DampedValue selectionBlue;
+    bool selectionAnimationInitialised = false;
 
     Oscilloscope oscilloscope { processor };
     VUPanel vuPanel { processor };

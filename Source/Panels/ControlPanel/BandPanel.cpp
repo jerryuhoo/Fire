@@ -9,8 +9,47 @@
 */
 
 #include "BandPanel.h"
+#include "../../GUI/FireTheme.h"
 #include "../../Utility/AudioHelpers.h"
+#include <algorithm>
 #include <cmath>
+
+namespace
+{
+void drawMinimalSurface(juce::Graphics& g, juce::Rectangle<float> bounds)
+{
+    if (bounds.isEmpty())
+        return;
+
+    bounds = bounds.reduced(0.5f);
+    juce::ColourGradient fill(fire::ui::colours::surface1.withAlpha(0.72f),
+                              bounds.getX(), bounds.getY(),
+                              fire::ui::colours::surface0.withAlpha(0.88f),
+                              bounds.getX(), bounds.getBottom(), false);
+    g.setGradientFill(fill);
+    g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
+}
+
+void drawMinimalTitle(juce::Graphics& g,
+                      juce::Rectangle<float> bounds,
+                      const juce::String& text)
+{
+    g.setFont(fire::ui::labelFont(juce::jlimit(9.0f, 12.0f, bounds.getHeight() * 0.36f)));
+    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
+    g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
+}
+
+juce::Colour moduleColourForIndex(int index)
+{
+    switch (index)
+    {
+        case 1:  return fire::ui::colours::shape;
+        case 2:  return fire::ui::colours::compressor;
+        case 3:  return fire::ui::colours::stereo;
+        default: return fire::ui::colours::drive;
+    }
+}
+} // namespace
 
 //==============================================================================
 BandPanel::BandPanel(FireAudioProcessor& p,
@@ -72,6 +111,8 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     setFocusBandNum(0, true);
 
     // Set initial visibility
+    moduleSelectionPosition.snapTo(0.0f);
+    moduleSelectionColourMix.snapTo(1.0f);
     buttonClicked(&oscSwitch);
     startTimerHz(30);
 }
@@ -112,26 +153,26 @@ BandPanel::~BandPanel()
 void BandPanel::createSliders()
 {
     // Main Panel
-    createAndConfigureSlider(DRIVE_NAME, "Drive", DRIVE_COLOUR);
-    createAndConfigureSlider(OUTPUT_NAME, "Output", COLOUR1, " dB");
-    createAndConfigureSlider(MIX_NAME, "Mix", COLOUR1);
+    createAndConfigureSlider(DRIVE_NAME, "Drive", fire::ui::colours::drive);
+    createAndConfigureSlider(OUTPUT_NAME, "Output", fire::ui::colours::flame, " dB");
+    createAndConfigureSlider(MIX_NAME, "Mix", fire::ui::colours::gold);
 
     // Shape Panel
-    createAndConfigureSlider(REC_NAME, "Rectification", SHAPE_COLOUR);
-    createAndConfigureSlider(BIAS_NAME, "Bias", SHAPE_COLOUR);
-    createAndConfigureSlider(SHAPE_MIX_NAME, "Mix", SHAPE_COLOUR);
+    createAndConfigureSlider(REC_NAME, "Rectification", fire::ui::colours::shape);
+    createAndConfigureSlider(BIAS_NAME, "Bias", fire::ui::colours::shape);
+    createAndConfigureSlider(SHAPE_MIX_NAME, "Mix", fire::ui::colours::shape);
 
     // Compressor Panel
-    createAndConfigureSlider(COMP_THRESH_NAME, "Threshold", COMP_COLOUR, " dB");
-    createAndConfigureSlider(COMP_RATIO_NAME, "Ratio", COMP_COLOUR);
-    createAndConfigureSlider(COMP_ATTACK_NAME, "Attack", COMP_COLOUR, " ms");
-    createAndConfigureSlider(COMP_RELEASE_NAME, "Release", COMP_COLOUR, " ms");
-    createAndConfigureSlider(COMP_MIX_NAME, "Mix", COMP_COLOUR);
+    createAndConfigureSlider(COMP_THRESH_NAME, "Threshold", fire::ui::colours::compressor, " dB");
+    createAndConfigureSlider(COMP_RATIO_NAME, "Ratio", fire::ui::colours::compressor);
+    createAndConfigureSlider(COMP_ATTACK_NAME, "Attack", fire::ui::colours::compressor, " ms");
+    createAndConfigureSlider(COMP_RELEASE_NAME, "Release", fire::ui::colours::compressor, " ms");
+    createAndConfigureSlider(COMP_MIX_NAME, "Mix", fire::ui::colours::compressor);
 
     // Width Panel
-    createAndConfigureSlider(WIDTH_NAME, "Width", WIDTH_COLOUR);
-    createAndConfigureSlider(PAN_NAME, "Pan", WIDTH_COLOUR);
-    createAndConfigureSlider(WIDTH_MIX_NAME, "Mix", WIDTH_COLOUR);
+    createAndConfigureSlider(WIDTH_NAME, "Width", fire::ui::colours::stereo);
+    createAndConfigureSlider(PAN_NAME, "Pan", fire::ui::colours::stereo);
+    createAndConfigureSlider(WIDTH_MIX_NAME, "Mix", fire::ui::colours::stereo);
 
     // === Final specific configurations ===
     modulatableSliderComponents.at(DRIVE_NAME)->setComponentID("drive");
@@ -148,7 +189,7 @@ void BandPanel::createLabels()
         label.setJustificationType(juce::Justification::centred);
     };
 
-    setupPanelLabel(dcFilterLabel, "DC", SHAPE_COLOUR.withBrightness(0.8f));
+    setupPanelLabel(dcFilterLabel, "DC", fire::ui::colours::shape);
 }
 
 void BandPanel::createButtons()
@@ -158,12 +199,12 @@ void BandPanel::createButtons()
     initFlatButton(extremeButton, "Extreme");
 
     // Add the new drive bypass button
-    initBypassButton(driveBypassButton, DRIVE_COLOUR);
-    initBypassButton(shapeBypassButton, SHAPE_COLOUR);
-    initBypassButton(compressorBypassButton, COMP_COLOUR);
-    initBypassButton(widthBypassButton, WIDTH_COLOUR);
+    initBypassButton(driveBypassButton, fire::ui::colours::drive);
+    initBypassButton(shapeBypassButton, fire::ui::colours::shape);
+    initBypassButton(compressorBypassButton, fire::ui::colours::compressor);
+    initBypassButton(widthBypassButton, fire::ui::colours::stereo);
 
-    initBypassButton(dcFilterButton, SHAPE_COLOUR);
+    initBypassButton(dcFilterButton, fire::ui::colours::shape);
 
     auto setupSwitch = [this](juce::TextButton& btn, const juce::String& text, juce::Colour colour)
     {
@@ -171,29 +212,29 @@ void BandPanel::createButtons()
         btn.setButtonText(text);
         btn.setClickingTogglesState(true);
         btn.setRadioGroupId(switchButtons);
+        btn.getProperties().set("fireAnimatedSelection", true);
 
-        btn.setColour(juce::TextButton::buttonColourId, COLOUR8);
+        btn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
         btn.setColour(juce::TextButton::textColourOffId, colour);
 
-        btn.setColour(juce::TextButton::buttonOnColourId, colour.darker().darker());
-        btn.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+        btn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        btn.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
 
         btn.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
 
         btn.addListener(this);
     };
 
-    setupSwitch(oscSwitch, "Drive", DRIVE_COLOUR);
-    setupSwitch(shapeSwitch, "Shape", SHAPE_COLOUR);
-    setupSwitch(compressorSwitch, "Compressor", COMP_COLOUR);
-    setupSwitch(widthSwitch, "Stereo", WIDTH_COLOUR);
+    setupSwitch(oscSwitch, "Drive", fire::ui::colours::drive);
+    setupSwitch(shapeSwitch, "Shape", fire::ui::colours::shape);
+    setupSwitch(compressorSwitch, "Compressor", fire::ui::colours::compressor);
+    setupSwitch(widthSwitch, "Stereo", fire::ui::colours::stereo);
     oscSwitch.setToggleState(true, juce::dontSendNotification);
 
     driveBypassButton.toFront(false);
     shapeBypassButton.toFront(false);
     compressorBypassButton.toFront(false);
     widthBypassButton.toFront(false);
-    activeTabColour = DRIVE_COLOUR;
 }
 
 void BandPanel::createComboBoxes()
@@ -257,63 +298,114 @@ void BandPanel::setupComponentGroups()
 
 void BandPanel::paint(juce::Graphics& g)
 {
-    // Draw borders or backgrounds for the new layout
-    g.setColour(COLOUR6);
-    g.drawRect(outputAreaRect); // Border for output section
-    g.drawRect(tabAreaRect); // Border for the main controls section
-    g.drawRect(graphAreaRect); // Border for the graph section
+    const auto displayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (chromeCacheDirty
+        || ! juce::approximatelyEqual(chromeCacheDisplayScale, displayScale)
+        || chromeCache.isNull())
+        rebuildChromeCache(displayScale);
 
-    if (shapeSwitch.getToggleState())
+    if (! chromeCache.isNull())
+        g.drawImage(chromeCache, getLocalBounds().toFloat());
+
+    const auto selectionBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
+    if (! selectionBounds.isEmpty())
     {
-        g.fillRect(shapeSeparatorLine);
-    }
+        const auto accent = getModuleSelectionColour();
+        const auto radius = juce::jmin(selectionBounds.getHeight() * 0.24f,
+                                       fire::ui::Metrics::radius * scale);
 
-    // Draw a themed border for the active tab
-    // g.setColour(activeTabColour.withAlpha(0.8f));
-    // g.drawRect(tabAreaRect, 2.0f);
+        g.setColour(accent.withAlpha(0.09f));
+        g.fillRoundedRectangle(selectionBounds, radius);
+        g.setColour(accent.withAlpha(0.72f));
+        g.drawRoundedRectangle(selectionBounds.reduced(0.75f), radius, 1.5f * scale);
+    }
 }
 
 void BandPanel::resized()
 {
     const float uiScale = scale;
     const int scaledKnobSize = juce::roundToInt(KNOB_SIZE * uiScale);
+    const int outerPadding = juce::roundToInt(10.0f * uiScale);
+    const int gap = juce::roundToInt(juce::jlimit(7.0f * uiScale,
+                                                 14.0f * uiScale,
+                                                 static_cast<float>(getWidth()) * 0.01f));
+    const int cardPadding = juce::roundToInt(8.0f * uiScale);
+    const int titleHeight = juce::roundToInt(22.0f * uiScale);
 
-    auto mainArea = getLocalBounds().reduced(juce::roundToInt(10.0f * uiScale));
+    auto layoutArea = getLocalBounds().reduced(outerPadding);
+    if (layoutArea.isEmpty())
+    {
+        invalidateChromeCache();
+        return;
+    }
 
-    const float switchColumnProportion = 0.15f;
-    const float knobsColumnProportion = 0.35f;
-    const float graphColumnProportion = 0.3f;
+    const int navWidth = juce::roundToInt(juce::jlimit(120.0f * uiScale,
+                                                       165.0f * uiScale,
+                                                       static_cast<float>(getWidth()) * 0.14f));
+    const int outputWidth = juce::roundToInt(juce::jlimit(205.0f * uiScale,
+                                                          240.0f * uiScale,
+                                                          static_cast<float>(getWidth()) * 0.22f));
+    const int graphWidth = juce::roundToInt(juce::jlimit(220.0f * uiScale,
+                                                         320.0f * uiScale,
+                                                         static_cast<float>(getWidth()) * 0.27f));
 
-    // Define the four main columns
-    auto layoutArea = mainArea;
-    auto switchColumnArea = layoutArea.removeFromLeft(
-        juce::roundToInt(static_cast<float>(mainArea.getWidth()) * switchColumnProportion));
-    auto knobsColumnArea = layoutArea.removeFromLeft(
-        juce::roundToInt(static_cast<float>(mainArea.getWidth()) * knobsColumnProportion));
-    auto graphColumnArea = layoutArea.removeFromLeft(
-        juce::roundToInt(static_cast<float>(mainArea.getWidth()) * graphColumnProportion));
-    auto outputColumnArea = layoutArea;
+    tabAreaRect = layoutArea.removeFromLeft(juce::jmin(navWidth, layoutArea.getWidth()));
+    layoutArea.removeFromLeft(juce::jmin(gap, layoutArea.getWidth()));
+    outputAreaRect = layoutArea.removeFromRight(juce::jmin(outputWidth, layoutArea.getWidth()));
+    layoutArea.removeFromRight(juce::jmin(gap, layoutArea.getWidth()));
+    graphAreaRect = layoutArea.removeFromRight(juce::jmin(graphWidth, layoutArea.getWidth()));
+    layoutArea.removeFromRight(juce::jmin(gap, layoutArea.getWidth()));
+    knobsAreaRect = layoutArea;
 
-    tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
-    graphAreaRect = graphColumnArea;
-    outputAreaRect = outputColumnArea;
+    auto contentArea = [cardPadding, titleHeight](juce::Rectangle<int> card)
+    {
+        card.reduce(cardPadding, cardPadding);
+        card.removeFromTop(juce::jmin(titleHeight, card.getHeight()));
+        return card;
+    };
 
-    // --- Column 1: Layout Switches (unchanged) ---
+    auto switchColumnArea = contentArea(tabAreaRect);
+    auto knobsColumnArea = contentArea(knobsAreaRect);
+    auto graphColumnArea = contentArea(graphAreaRect);
+    auto outputColumnArea = contentArea(outputAreaRect);
+
+    // Every secondary rotary control shares one physical diameter.  Deriving
+    // it from the strictest grid/output constraint keeps that invariant intact
+    // even when the editor is resized down.
+    const int controlGap = juce::roundToInt(8.0f * uiScale);
+    const int modeHeight = juce::jmin(juce::roundToInt(30.0f * uiScale),
+                                     knobsColumnArea.getHeight() / 4);
+    const int dcReserve = juce::roundToInt(26.0f * uiScale);
+    const int buttonAreaHeight = juce::jmin(juce::roundToInt(28.0f * uiScale),
+                                            juce::jmax(1, outputColumnArea.getHeight() / 4));
+    const int secondaryKnobSize = juce::jmax(1, std::min({
+        juce::roundToInt(KNOB_SIZE * 0.82f * uiScale),
+        (knobsColumnArea.getWidth() - controlGap * 2) / 3,
+        (knobsColumnArea.getHeight() - controlGap) / 2,
+        knobsColumnArea.getHeight() - modeHeight - controlGap - dcReserve,
+        (outputColumnArea.getWidth() - controlGap) / 2,
+        outputColumnArea.getHeight() - buttonAreaHeight - controlGap
+    }));
+
+    // --- Module rail ---
     juce::FlexBox switchColumnBox;
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
-    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
-    switchColumnBox.items.add(juce::FlexItem(oscSwitch).withFlex(1.0f));
-    switchColumnBox.items.add(juce::FlexItem(shapeSwitch).withFlex(1.0f));
-    switchColumnBox.items.add(juce::FlexItem(compressorSwitch).withFlex(1.0f));
-    switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f));
+    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
+    const auto rowMargin = juce::FlexItem::Margin(juce::jmax(1.0f, 2.0f * uiScale));
+    switchColumnBox.items.add(juce::FlexItem(oscSwitch).withFlex(1.0f).withMargin(rowMargin));
+    switchColumnBox.items.add(juce::FlexItem(shapeSwitch).withFlex(1.0f).withMargin(rowMargin));
+    switchColumnBox.items.add(juce::FlexItem(compressorSwitch).withFlex(1.0f).withMargin(rowMargin));
+    switchColumnBox.items.add(juce::FlexItem(widthSwitch).withFlex(1.0f).withMargin(rowMargin));
     switchColumnBox.performLayout(switchColumnArea);
 
     auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = juce::roundToInt(KNOB_FONT_SIZE * 2.0f * uiScale);
+        const int bypassSize = juce::roundToInt(juce::jlimit(16.0f * uiScale,
+                                                            24.0f * uiScale,
+                                                            parentBounds.getHeight() * 0.46f));
 
-        bypass.setBounds(parentBounds.getX(),
+        bypass.setBounds(parentBounds.getX() + juce::roundToInt(7.0f * uiScale),
                          parentBounds.getCentreY() - (bypassSize / 2),
                          bypassSize,
                          bypassSize);
@@ -325,113 +417,224 @@ void BandPanel::resized()
     layoutBypassButton(compressorBypassButton, compressorSwitch);
     layoutBypassButton(widthBypassButton, widthSwitch);
 
-    // --- Column 2: Manual Layout for Main Knobs Area ---
+    // --- Active module controls ---
     if (oscSwitch.getToggleState())
     {
-        // Center the single Drive knob
-        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2, scaledKnobSize * 2));
+        const int driveSize = juce::jmax(1, std::min({ scaledKnobSize * 2,
+                                                      knobsColumnArea.getWidth(),
+                                                      knobsColumnArea.getHeight() }));
+        modulatableSliderComponents.at(DRIVE_NAME)->setBounds(
+            knobsColumnArea.withSizeKeepingCentre(driveSize, driveSize));
     }
     else if (shapeSwitch.getToggleState())
     {
-        // --- Step 1: Center the main row of three knobs vertically ---
-        // Create a rectangle for the three knobs and their spacing,
-        // and center it within the entire available `knobsColumnArea`.
-        juce::Rectangle<int> knobRow = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize);
+        auto modeArea = knobsColumnArea.removeFromTop(modeHeight);
+        const int modeWidth = juce::jmin(juce::roundToInt(180.0f * uiScale), modeArea.getWidth());
+        for (auto& modeBox : distortionModes)
+            modeBox.setBounds(modeArea.withSizeKeepingCentre(modeWidth, modeHeight).reduced(0, juce::roundToInt(2.0f * uiScale)));
 
-        // Now, place the sliders within this perfectly centered `knobRow`.
-        // We need to keep a reference to the middle knob's bounds for later.
-        auto tempKnobRow = knobRow; // Use a temporary copy for manipulation
-        modulatableSliderComponents.at(REC_NAME)->setBounds(tempKnobRow.removeFromLeft(scaledKnobSize));
-        tempKnobRow.removeFromLeft(10);
-        auto biasKnobBounds = tempKnobRow.removeFromLeft(scaledKnobSize);
+        knobsColumnArea.removeFromTop(juce::jmin(controlGap, knobsColumnArea.getHeight()));
+        auto knobRow = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
+                                                             secondaryKnobSize + dcReserve);
+        knobRow = knobRow.removeFromTop(secondaryKnobSize);
+        auto tempKnobRow = knobRow;
+        modulatableSliderComponents.at(REC_NAME)->setBounds(tempKnobRow.removeFromLeft(secondaryKnobSize));
+        tempKnobRow.removeFromLeft(controlGap);
+        auto biasKnobBounds = tempKnobRow.removeFromLeft(secondaryKnobSize);
         modulatableSliderComponents.at(BIAS_NAME)->setBounds(biasKnobBounds);
-        tempKnobRow.removeFromLeft(10);
+        tempKnobRow.removeFromLeft(controlGap);
         modulatableSliderComponents.at(SHAPE_MIX_NAME)->setBounds(tempKnobRow);
 
-        // --- Step 2: Place the other elements around the centered knobs ---
-
-        // Place the distortion mode boxes at the top of the area.
-        // We use getFromTop() so it doesn't affect `knobsColumnArea` for centering logic.
-        juce::Rectangle<int> distortionModeArea(knobsColumnArea.getX(),
-                                                knobsColumnArea.getY(),
-                                                knobsColumnArea.getWidth(),
-                                                knobsColumnArea.getHeight() / 5);
-
-        auto smallerDistortionModeArea = distortionModeArea.withSizeKeepingCentre(distortionModeArea.getWidth() / 2, distortionModeArea.getHeight());
-        for (auto& modeBox : distortionModes)
-            modeBox.setBounds(smallerDistortionModeArea.reduced(0, distortionModeArea.getHeight() / 4));
-
-        // Place the DC Filter button below the (now centered) Bias knob.
-        // Its position is relative to `biasKnobBounds`, which we saved earlier.
-        const int dcButtonSize = juce::roundToInt(static_cast<float>(scaledKnobSize) * 0.3f);
-        const int dcLabelWidth = juce::roundToInt(35.0f * uiScale);
+        const int dcButtonSize = juce::roundToInt(juce::jlimit(14.0f * uiScale,
+                                                              24.0f * uiScale,
+                                                              secondaryKnobSize * 0.24f));
+        const int dcLabelWidth = juce::roundToInt(30.0f * uiScale);
         juce::Rectangle<int> dcArea(0, 0, dcButtonSize + dcLabelWidth, dcButtonSize);
-        dcArea.setCentre(biasKnobBounds.getCentreX(), biasKnobBounds.getBottom() + dcButtonSize / 2 + 5);
+        dcArea.setCentre(biasKnobBounds.getCentreX(), biasKnobBounds.getBottom() + dcButtonSize / 2);
         dcFilterButton.setBounds(dcArea.removeFromLeft(dcButtonSize));
         dcFilterLabel.setBounds(dcArea);
 
-        // Calculate the separator line's position between the combo box and the knobs.
-        const int spaceBetween = knobRow.getY() - distortionModeArea.getBottom();
-        const int lineY = distortionModeArea.getBottom() + (spaceBetween / 2);
-        const int lineHeight = 1; // Or 2 for a thicker line
-        shapeSeparatorLine.setBounds(knobsColumnArea.getX(), lineY, knobsColumnArea.getWidth(), lineHeight);
     }
     else if (compressorSwitch.getToggleState())
     {
-        // Place 5 knobs in a 2-row grid
-        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize * 2 + 10);
-        auto topRow = centeredArea.removeFromTop(scaledKnobSize);
-        auto bottomRow = centeredArea.removeFromBottom(scaledKnobSize);
+        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
+                                                                  secondaryKnobSize * 2 + controlGap);
+        auto topRow = centeredArea.removeFromTop(secondaryKnobSize);
+        centeredArea.removeFromTop(controlGap);
+        auto bottomRow = centeredArea.removeFromTop(secondaryKnobSize);
 
-        modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
-        modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(topRow.removeFromRight(scaledKnobSize));
+        modulatableSliderComponents.at(COMP_THRESH_NAME)->setBounds(topRow.removeFromLeft(secondaryKnobSize));
+        modulatableSliderComponents.at(COMP_RATIO_NAME)->setBounds(topRow.removeFromRight(secondaryKnobSize));
 
-        modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
-        bottomRow.removeFromLeft(10);
-        modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
-        bottomRow.removeFromLeft(10);
+        modulatableSliderComponents.at(COMP_ATTACK_NAME)->setBounds(bottomRow.removeFromLeft(secondaryKnobSize));
+        bottomRow.removeFromLeft(controlGap);
+        modulatableSliderComponents.at(COMP_RELEASE_NAME)->setBounds(bottomRow.removeFromLeft(secondaryKnobSize));
+        bottomRow.removeFromLeft(controlGap);
         modulatableSliderComponents.at(COMP_MIX_NAME)->setBounds(bottomRow);
     }
     else if (widthSwitch.getToggleState())
     {
-        // Place 3 knobs in a row
-        juce::Rectangle<int> knobRow = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 3 + 20, scaledKnobSize);
-        modulatableSliderComponents.at(WIDTH_NAME)->setBounds(knobRow.removeFromLeft(scaledKnobSize));
-        knobRow.removeFromLeft(10);
-        modulatableSliderComponents.at(PAN_NAME)->setBounds(knobRow.removeFromLeft(scaledKnobSize));
-        knobRow.removeFromLeft(10);
+        auto knobRow = knobsColumnArea.withSizeKeepingCentre(secondaryKnobSize * 3 + controlGap * 2,
+                                                             secondaryKnobSize);
+        modulatableSliderComponents.at(WIDTH_NAME)->setBounds(knobRow.removeFromLeft(secondaryKnobSize));
+        knobRow.removeFromLeft(controlGap);
+        modulatableSliderComponents.at(PAN_NAME)->setBounds(knobRow.removeFromLeft(secondaryKnobSize));
+        knobRow.removeFromLeft(controlGap);
         modulatableSliderComponents.at(WIDTH_MIX_NAME)->setBounds(knobRow);
     }
 
-    // --- Column 3: Layout Graph Area (unchanged) ---
+    // --- Live visualiser card ---
     oscilloscope.setBounds(graphColumnArea);
     distortionGraph.setBounds(graphColumnArea);
     vuPanel.setBounds(graphColumnArea);
     widthGraph.setBounds(graphColumnArea);
 
-    // --- Column 4: CORRECTED Layout for Output Section ---
+    // --- Output card ---
+    auto buttonArea = outputColumnArea.removeFromBottom(buttonAreaHeight);
+    outputColumnArea.removeFromBottom(juce::jmin(controlGap, outputColumnArea.getHeight()));
+    auto twoKnobsBounds = outputColumnArea.withSizeKeepingCentre(secondaryKnobSize * 2 + controlGap,
+                                                                 secondaryKnobSize);
+    modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(twoKnobsBounds.removeFromLeft(secondaryKnobSize));
+    modulatableSliderComponents.at(MIX_NAME)->setBounds(twoKnobsBounds.removeFromRight(secondaryKnobSize));
 
-    // 1. Define an area for the knobs at the top half of the column.
-    auto knobsArea = outputColumnArea.removeFromTop(outputColumnArea.getHeight() / 2);
+    const int compactButtonGap = juce::jmax(3, juce::roundToInt(5.0f * uiScale));
+    const int compactGroupWidth = juce::jmin(buttonArea.getWidth(), juce::roundToInt(184.0f * uiScale));
+    auto compactButtonRow = buttonArea.withSizeKeepingCentre(compactGroupWidth, buttonAreaHeight);
+    const int compactButtonWidth = juce::jmax(1, (compactButtonRow.getWidth() - compactButtonGap * 2) / 3);
+    linkedButton.setBounds(compactButtonRow.removeFromLeft(compactButtonWidth));
+    compactButtonRow.removeFromLeft(juce::jmin(compactButtonGap, compactButtonRow.getWidth()));
+    safeButton.setBounds(compactButtonRow.removeFromLeft(compactButtonWidth));
+    compactButtonRow.removeFromLeft(juce::jmin(compactButtonGap, compactButtonRow.getWidth()));
+    extremeButton.setBounds(compactButtonRow);
 
-    // 2. Center a rectangle within that area, wide enough for two knobs plus spacing.
-    auto twoKnobsBounds = knobsArea.withSizeKeepingCentre(scaledKnobSize * 2 + 10, scaledKnobSize);
+    invalidateChromeCache();
+}
 
-    // 3. Place the knobs with fixed size, left and right.
-    modulatableSliderComponents.at(OUTPUT_NAME)->setBounds(twoKnobsBounds.removeFromLeft(scaledKnobSize));
-    modulatableSliderComponents.at(MIX_NAME)->setBounds(twoKnobsBounds.removeFromRight(scaledKnobSize));
+void BandPanel::rebuildChromeCache(float displayScale)
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
 
-    // 4. Use the remaining bottom half for the buttons with FlexBox.
-    auto buttonArea = outputColumnArea; // This is the remaining bottom half
-    juce::FlexBox outputButtonsBox;
-    outputButtonsBox.flexDirection = juce::FlexBox::Direction::column;
-    outputButtonsBox.justifyContent = juce::FlexBox::JustifyContent::flexEnd;
-    outputButtonsBox.items.add(juce::FlexItem(linkedButton).withFlex(1.0f));
-    outputButtonsBox.items.add(juce::FlexItem(safeButton).withFlex(1.0f));
-    outputButtonsBox.items.add(juce::FlexItem(extremeButton).withFlex(1.0f));
+    displayScale = juce::jmax(1.0f, displayScale);
+    chromeCacheDisplayScale = displayScale;
+    chromeCache = juce::Image(juce::Image::ARGB,
+                              juce::jmax(1, juce::roundToInt(getWidth() * displayScale)),
+                              juce::jmax(1, juce::roundToInt(getHeight() * displayScale)),
+                              true);
 
-    // Perform layout for buttons in their designated area, with some vertical padding
-    outputButtonsBox.performLayout(buttonArea.reduced(0, 0));
+    juce::Graphics cacheGraphics(chromeCache);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+
+    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+    drawMinimalSurface(cacheGraphics, knobsAreaRect.getUnion(outputAreaRect).toFloat());
+
+    const auto titleHeight = juce::roundToInt(22.0f * scale);
+    const auto titleInset = juce::roundToInt(8.0f * scale);
+    auto titleFor = [titleHeight, titleInset](juce::Rectangle<int> area)
+    {
+        area.reduce(titleInset, 0);
+        return area.removeFromTop(juce::jmin(titleHeight, area.getHeight())).toFloat();
+    };
+
+    juce::String moduleTitle { "DRIVE" };
+    juce::String graphTitle { "INPUT" };
+    if (shapeSwitch.getToggleState())
+    {
+        moduleTitle = "SHAPE";
+        graphTitle = "TRANSFER";
+    }
+    else if (compressorSwitch.getToggleState())
+    {
+        moduleTitle = "COMPRESSOR";
+        graphTitle = "GAIN REDUCTION";
+    }
+    else if (widthSwitch.getToggleState())
+    {
+        moduleTitle = "STEREO";
+        graphTitle = "WIDTH";
+    }
+
+    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODULE");
+    drawMinimalTitle(cacheGraphics, titleFor(knobsAreaRect), moduleTitle);
+    drawMinimalTitle(cacheGraphics, titleFor(graphAreaRect), graphTitle);
+    drawMinimalTitle(cacheGraphics,
+                     titleFor(outputAreaRect),
+                     "BAND " + juce::String(focusBandNum + 1));
+
+    chromeCacheDirty = false;
+}
+
+void BandPanel::invalidateChromeCache()
+{
+    chromeCacheDirty = true;
+    repaint();
+}
+
+void BandPanel::setAnimatedModuleTarget(int moduleIndex)
+{
+    moduleIndex = juce::jlimit(0, 3, moduleIndex);
+    const auto targetColour = moduleColourForIndex(moduleIndex);
+    const auto targetPosition = static_cast<float>(moduleIndex);
+
+    if (juce::approximatelyEqual(moduleSelectionPosition.target, targetPosition)
+        && moduleSelectionColourTarget == targetColour)
+        return;
+
+    moduleSelectionColourStart = getModuleSelectionColour();
+    moduleSelectionColourTarget = targetColour;
+    moduleSelectionColourMix.snapTo(0.0f);
+    moduleSelectionColourMix.setTarget(1.0f);
+    moduleSelectionPosition.setTarget(targetPosition);
+}
+
+juce::Rectangle<float> BandPanel::getModuleSelectionBounds(float modulePosition) const
+{
+    const std::array<const juce::TextButton*, 4> switches {
+        &oscSwitch, &shapeSwitch, &compressorSwitch, &widthSwitch
+    };
+
+    modulePosition = juce::jlimit(0.0f, 3.0f, modulePosition);
+    const auto lowerIndex = juce::jlimit(0, 3, static_cast<int>(std::floor(modulePosition)));
+    const auto upperIndex = juce::jmin(3, lowerIndex + 1);
+    const auto mix = modulePosition - static_cast<float>(lowerIndex);
+    const auto lower = switches[static_cast<size_t>(lowerIndex)]->getBounds().toFloat();
+    const auto upper = switches[static_cast<size_t>(upperIndex)]->getBounds().toFloat();
+
+    if (lower.isEmpty())
+        return {};
+
+    return { juce::jmap(mix, lower.getX(), upper.getX()),
+             juce::jmap(mix, lower.getY(), upper.getY()),
+             juce::jmap(mix, lower.getWidth(), upper.getWidth()),
+             juce::jmap(mix, lower.getHeight(), upper.getHeight()) };
+}
+
+juce::Colour BandPanel::getModuleSelectionColour() const
+{
+    return moduleSelectionColourStart.interpolatedWith(
+        moduleSelectionColourTarget,
+        juce::jlimit(0.0f, 1.0f, moduleSelectionColourMix.current));
+}
+
+void BandPanel::animationTick(float deltaSeconds)
+{
+    if (! isShowing())
+    {
+        moduleSelectionPosition.snapTo(moduleSelectionPosition.target);
+        moduleSelectionColourMix.snapTo(moduleSelectionColourMix.target);
+        return;
+    }
+
+    if (moduleSelectionPosition.isSettled() && moduleSelectionColourMix.isSettled())
+        return;
+
+    const auto oldBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
+    moduleSelectionPosition.advance(deltaSeconds, 0.07f);
+    moduleSelectionColourMix.advance(deltaSeconds, 0.07f);
+    const auto newBounds = getModuleSelectionBounds(moduleSelectionPosition.current);
+
+    repaint(oldBounds.getUnion(newBounds).expanded(3.0f * scale)
+                .getSmallestIntegerContainer());
 }
 
 void BandPanel::updateAttachments()
@@ -481,11 +684,12 @@ void BandPanel::initFlatButton(juce::TextButton& button, juce::String buttonName
 {
     addAndMakeVisible(button);
     button.setClickingTogglesState(true);
-    button.setColour(juce::TextButton::buttonColourId, COLOUR7);
-    button.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
-    button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    button.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+    button.setComponentID("rounded");
+    button.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
+    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::raised);
+    button.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    button.setColour(juce::TextButton::textColourOnId, fire::ui::colours::gold);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
     button.setButtonText(buttonName);
 }
 
@@ -493,6 +697,7 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 {
     addAndMakeVisible(bypassButton);
     bypassButton.setColour(juce::ToggleButton::tickColourId, colour);
+    bypassButton.setColour(juce::ToggleButton::tickDisabledColourId, fire::ui::colours::disabled);
     bypassButton.addListener(this);
 }
 
@@ -501,7 +706,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     bool isSwitch = false;
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
     {
-        activeTabColour = DRIVE_COLOUR;
+        setAnimatedModuleTarget(0);
         setVisibility(driveComponents, true);
         setVisibility(shapeComponents, false);
         setVisibility(compressorComponents, false);
@@ -515,7 +720,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     }
     else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
     {
-        activeTabColour = SHAPE_COLOUR;
+        setAnimatedModuleTarget(1);
         setVisibility(driveComponents, false);
         setVisibility(shapeComponents, true);
         setVisibility(compressorComponents, false);
@@ -529,7 +734,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     }
     else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
     {
-        activeTabColour = COMP_COLOUR;
+        setAnimatedModuleTarget(2);
         setVisibility(driveComponents, false);
         setVisibility(shapeComponents, false);
         setVisibility(compressorComponents, true);
@@ -543,7 +748,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     }
     else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
     {
-        activeTabColour = WIDTH_COLOUR;
+        setAnimatedModuleTarget(3);
         setVisibility(driveComponents, false);
         setVisibility(shapeComponents, false);
         setVisibility(compressorComponents, false);
@@ -572,7 +777,7 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     if (isSwitch)
     {
         resized();
-        repaint();
+        invalidateChromeCache();
     }
 }
 
@@ -602,6 +807,7 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
 
     updateDistortionModeVisibility();
     updateDistortionGraphFromParameters();
+    invalidateChromeCache();
 }
 
 void BandPanel::updateLinkedValue(int bandIndex)
@@ -665,6 +871,9 @@ void BandPanel::updateDistortionGraphFromParameters()
 
 void BandPanel::updateDriveMeter()
 {
+    if (! isShowing())
+        return;
+
     if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&getLookAndFeel()))
     {
         lnf->sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
@@ -741,7 +950,7 @@ void BandPanel::updateWhenChangingFocus()
     buttonClicked(&compressorSwitch);
     buttonClicked(&widthSwitch);
     updateDistortionModeVisibility();
-    repaint();
+    invalidateChromeCache();
 }
 
 void BandPanel::parameterChanged(const juce::String& parameterID, float newValue)
@@ -773,10 +982,18 @@ void BandPanel::parameterChanged(const juce::String& parameterID, float newValue
 
 void BandPanel::timerCallback()
 {
+    // Link is an audio/control semantic, so it must remain live even while the
+    // page is hidden. The work below is coalesced by band and only writes when
+    // the derived output value actually changed.
     const auto dirtyMask = linkedValueDirtyMask.exchange(0, std::memory_order_acq_rel);
     for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
         if ((dirtyMask & (1u << static_cast<unsigned int>(bandIndex))) != 0)
             updateLinkedValue(bandIndex);
+
+    // The transfer curve is presentation-only. Keep its dirty bits pending
+    // while hidden and rebuild just that graph once it can actually be seen.
+    if (! isShowing() || ! distortionGraph.isShowing())
+        return;
 
     const auto graphDirtyMask = distortionGraphDirtyMask.exchange(0, std::memory_order_acq_rel);
     if (juce::isPositiveAndBelow(focusBandNum, 4)
@@ -792,6 +1009,10 @@ void BandPanel::comboBoxChanged(juce::ComboBox*)
 void BandPanel::setMenu(juce::ComboBox* combobox)
 {
     addAndMakeVisible(combobox);
+    combobox->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface1);
+    combobox->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    combobox->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+    combobox->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::shape);
     combobox->addSectionHeading("Soft Clipping");
     combobox->addItem("Arctan", 1);
     combobox->addItem("Exp", 2);

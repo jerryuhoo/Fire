@@ -11,6 +11,8 @@
 #include "VUPanel.h"
 #include "../../../Utility/AudioHelpers.h"
 
+#include <array>
+
 //==============================================================================
 VUPanel::VUPanel(FireAudioProcessor& p) : processor(p),
                                           focusBandNum(0),
@@ -18,13 +20,16 @@ VUPanel::VUPanel(FireAudioProcessor& p) : processor(p),
                                           vuMeterOut(&p),
                                           realtimeThresholdDb(-100.0f)
 {
-    vuMeterIn.setParameters(true, -1); // Default to global
-    vuMeterOut.setParameters(false, -1);
+    setGraphIdentity("LEVELS", fire::ui::ModuleRole::compressor);
+    vuMeterIn.setParameters(true, focusBandNum);
+    vuMeterOut.setParameters(false, focusBandNum);
+    compBypassValue = processor.treeState.getRawParameterValue(
+        ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum));
+    thresholdVisible = compBypassValue != nullptr
+                       && compBypassValue->load(std::memory_order_relaxed) > 0.5f;
 
     addAndMakeVisible(vuMeterIn);
     addAndMakeVisible(vuMeterOut);
-
-    startTimerHz(60);
 }
 
 VUPanel::~VUPanel()
@@ -34,128 +39,262 @@ VUPanel::~VUPanel()
 
 void VUPanel::paint(juce::Graphics& g)
 {
-    g.setColour(COLOUR6);
-    g.drawRect(getLocalBounds(), 1);
+    GraphTemplate::paint(g);
 
-    // --- 1. Define layout variables consistently ---
-    const float meterHeight = (float) getHeight() / 10.0f * 9.0f;
-    const float meterY = (float) getHeight() / 10.0f;
-
-    // --- 2. Create a unified dB-to-Y coordinate mapping function ---
-    auto dbToY = [&](float db)
+    const auto displayScale = juce::jmax(
+        0.25f,
+        g.getInternalContext().getPhysicalPixelScaleFactor());
+    const auto logicalBounds = getLocalBounds();
+    const auto expectedWidth = juce::jmax(
+        1,
+        juce::roundToInt(static_cast<float>(logicalBounds.getWidth()) * displayScale));
+    const auto expectedHeight = juce::jmax(
+        1,
+        juce::roundToInt(static_cast<float>(logicalBounds.getHeight()) * displayScale));
+    if (! scaleLayer.isValid()
+        || scaleLayer.getWidth() != expectedWidth
+        || scaleLayer.getHeight() != expectedHeight
+        || scaleLayerBounds != logicalBounds
+        || ! juce::approximatelyEqual(scaleLayerScale, displayScale))
     {
-        const float minDb = -96.0f;
-        const float maxDb = 0.0f;
-        db = juce::jlimit(minDb, maxDb, db);
-        float normalizedPosition = (db - minDb) / (maxDb - minDb);
-        return meterY + meterHeight * (1.0f - normalizedPosition);
-    };
-
-    // --- 3. Draw background scale ---
-    g.setColour(KNOB_SUBFONT_COLOUR);
-    auto textBounds = getLocalBounds().withX(vuMeterIn.getRight()).withRight(vuMeterOut.getX());
-    float textHeight = 12.0f;
-    g.setFont(textHeight);
-
-    g.drawText("0", textBounds.withY(dbToY(0.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
-    g.drawText("-24", textBounds.withY(dbToY(-24.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
-    g.drawText("-48", textBounds.withY(dbToY(-48.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
-    g.drawText("-72", textBounds.withY(dbToY(-72.0f) - textHeight / 2.0f).withHeight(textHeight), juce::Justification::centred, false);
-
-    // --- 4. Draw Compressor Threshold line ---
-    bool isGlobal = (focusBandNum == -1);
-    if (! isGlobal && juce::isPositiveAndBelow(focusBandNum, 4))
-    {
-        compBypassID = ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum);
-        bool compIsEnabled = *processor.treeState.getRawParameterValue(compBypassID);
-        if (compIsEnabled)
-        {
-            float compressorLineY = dbToY(realtimeThresholdDb);
-            g.setColour(juce::Colours::yellowgreen);
-            g.drawLine((float) textBounds.getX(), compressorLineY, (float) textBounds.getRight(), compressorLineY, 1.5f);
-        }
+        rebuildScaleLayer(displayScale);
     }
 
-    // Update child component parameters
-    vuMeterIn.setParameters(true, focusBandNum);
-    vuMeterOut.setParameters(false, focusBandNum);
+    if (scaleLayer.isValid())
+        g.drawImage(scaleLayer, logicalBounds.toFloat());
 
-    // --- 5. Draw RMS and Peak readouts ---
-    // This helper converts the meter's normalized [0,1] value back to dB for text display.
-    auto normalizedToDb = [](float norm)
+    if (focusBandNum != -1 && thresholdVisible)
     {
-        // CORRECTED: Use juce::jmap for linear mapping from [0, 1] back to [-96, 0] dB.
-        // This fixes the jassert caused by using juce::mapToLog10 with negative values.
-        return juce::jmap(norm, 0.0f, 1.0f, -96.0f, 0.0f);
+        const auto normalized = juce::jlimit(0.0f, 1.0f, (realtimeThresholdDb + 96.0f) / 96.0f);
+        const auto thresholdY = scaleBounds.getBottom() - scaleBounds.getHeight() * normalized;
+        g.setColour(fire::ui::colours::warning.withAlpha(0.20f));
+        g.drawLine(scaleBounds.getX(), thresholdY, scaleBounds.getRight(), thresholdY, 4.0f);
+        g.setColour(fire::ui::colours::warning.withAlpha(0.94f));
+        g.drawLine(scaleBounds.getX(), thresholdY, scaleBounds.getRight(), thresholdY, 1.0f);
+    }
+
+    const auto drawReadout = [&g, this](juce::Rectangle<float> area,
+                                         const juce::String& caption,
+                                         const juce::String& peak,
+                                         const juce::String& rms,
+                                         juce::Colour accent)
+    {
+        g.setColour(fire::ui::colours::textMuted);
+        g.setFont(captionFont);
+        g.drawText(caption, area.removeFromTop(captionFont.getHeight() + 2.0f),
+                   juce::Justification::centred);
+
+        g.setColour(accent);
+        g.setFont(peakReadoutFont);
+        g.drawText(peak, area.removeFromTop(area.getHeight() * 0.58f),
+                   juce::Justification::centred);
+
+        g.setColour(fire::ui::colours::textSecondary);
+        g.setFont(rmsReadoutFont);
+        g.drawText(rms, area, juce::Justification::centredTop);
     };
 
-    float inputRmsDb = normalizedToDb(vuMeterIn.getRmsLeftChannelLevel());
-    float inputPeakDb = normalizedToDb(vuMeterIn.getPeakLeftChannelLevel());
-    float outputRmsDb = normalizedToDb(vuMeterOut.getRmsLeftChannelLevel());
-    float outputPeakDb = normalizedToDb(vuMeterOut.getPeakLeftChannelLevel());
-
-    auto leftArea = getLocalBounds().withRight(vuMeterIn.getX());
-    auto rightArea = getLocalBounds().withLeft(vuMeterOut.getRight());
-
-    g.setColour(juce::Colours::yellowgreen);
-    auto fontSizeBig = 14.0f * getWidth() / 150.0f;
-    auto fontSizeSmall = 10.0f * getWidth() / 150.0f;
-
-    // Input Readouts
-    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
-    g.drawText(juce::String(inputPeakDb, 1), leftArea.withTrimmedBottom(leftArea.getHeight() / 2), juce::Justification::centredBottom);
-    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
-    g.drawText(juce::String(inputRmsDb, 1), leftArea.withTrimmedTop(leftArea.getHeight() / 2), juce::Justification::centredTop);
-
-    g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-    g.setFont(fontSizeSmall);
-    g.drawFittedText("In", leftArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
-
-    // Output Readouts
-    g.setColour(juce::Colours::yellowgreen);
-    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeBig).withStyle("Bold") });
-    g.drawText(juce::String(outputPeakDb, 1), rightArea.withTrimmedBottom(rightArea.getHeight() / 2), juce::Justification::centredBottom);
-    g.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(fontSizeSmall).withStyle("Plain") });
-    g.drawText(juce::String(outputRmsDb, 1), rightArea.withTrimmedTop(rightArea.getHeight() / 2), juce::Justification::centredTop);
-
-    g.setColour(juce::Colours::yellowgreen.withAlpha(0.5f));
-    g.setFont(fontSizeSmall);
-    g.drawFittedText("Out", rightArea.removeFromBottom(getHeight() / 4).toNearestInt(), juce::Justification::centredTop, 1);
+    drawReadout(leftReadoutBounds, "IN", inputPeakText, inputRmsText,
+                fire::ui::colours::flame);
+    drawReadout(rightReadoutBounds, "OUT", outputPeakText, outputRmsText,
+                fire::ui::colours::positive);
 }
 
 void VUPanel::resized()
 {
-    const float width = (float) getWidth();
-    const float height = (float) getHeight();
+    GraphTemplate::resized();
 
-    const float meterWidth = width / 10.0f;
-    const float meterHeight = height / 10.0f * 9.0f;
-    const float meterY = height / 10.0f;
-    const float meterX1 = width / 3.0f - meterWidth / 2.0f;
-    const float meterX2 = width / 3.0f * 2.0f - meterWidth / 2.0f;
+    const auto plotBounds = getGraphPlotBounds();
+    const auto meterHeight = juce::jmax(1.0f, plotBounds.getHeight() - 8.0f);
+    const auto meterWidth = juce::jlimit(12.0f, 30.0f, plotBounds.getWidth() * 0.13f);
+    const auto meterY = plotBounds.getCentreY() - meterHeight * 0.5f;
+    const auto inputCentreX = plotBounds.getX() + plotBounds.getWidth() * 0.34f;
+    const auto outputCentreX = plotBounds.getX() + plotBounds.getWidth() * 0.66f;
 
-    vuMeterIn.setBounds(juce::Rectangle<float>(meterX1, meterY, meterWidth, meterHeight).toNearestInt());
-    vuMeterOut.setBounds(juce::Rectangle<float>(meterX2, meterY, meterWidth, meterHeight).toNearestInt());
+    vuMeterIn.setBounds(juce::Rectangle<float>(meterWidth, meterHeight)
+                            .withCentre({ inputCentreX, plotBounds.getCentreY() })
+                            .toNearestInt());
+    vuMeterOut.setBounds(juce::Rectangle<float>(meterWidth, meterHeight)
+                             .withCentre({ outputCentreX, plotBounds.getCentreY() })
+                             .toNearestInt());
+
+    leftReadoutBounds = juce::Rectangle<float>(plotBounds.getX(),
+                                               meterY,
+                                               juce::jmax(1.0f, vuMeterIn.getX() - plotBounds.getX() - 4.0f),
+                                               meterHeight);
+    rightReadoutBounds = juce::Rectangle<float>(static_cast<float>(vuMeterOut.getRight()) + 4.0f,
+                                                meterY,
+                                                juce::jmax(1.0f, plotBounds.getRight() - vuMeterOut.getRight() - 4.0f),
+                                                meterHeight);
+    scaleBounds = juce::Rectangle<float>(static_cast<float>(vuMeterIn.getRight()) + 2.0f,
+                                         meterY,
+                                         juce::jmax(1.0f, vuMeterOut.getX() - vuMeterIn.getRight() - 4.0f),
+                                         meterHeight);
+
+    const auto readoutSize = juce::jlimit(9.0f, 15.0f, plotBounds.getWidth() * 0.08f);
+    peakReadoutFont = fire::ui::displayFont(readoutSize);
+    rmsReadoutFont = fire::ui::bodyFont(juce::jmax(8.0f, readoutSize * 0.70f));
+    captionFont = fire::ui::labelFont(juce::jmax(8.0f, readoutSize * 0.62f));
+    scaleLayer = {};
+    scaleLayerBounds = {};
+    scaleLayerScale = 0.0f;
 }
 
 void VUPanel::setFocusBandNum(int num)
 {
+    if (num != -1 && ! juce::isPositiveAndBelow(num, 4))
+        return;
+    if (focusBandNum == num)
+        return;
+
     focusBandNum = num;
+    vuMeterIn.setParameters(true, focusBandNum);
+    vuMeterOut.setParameters(false, focusBandNum);
+    compBypassValue = focusBandNum == -1
+                          ? nullptr
+                          : processor.treeState.getRawParameterValue(
+                              ParameterIDAndName::getIDString(COMP_BYPASS_ID, focusBandNum));
+    thresholdVisible = compBypassValue != nullptr
+                       && compBypassValue->load(std::memory_order_relaxed) > 0.5f;
+    staleTimerTicks = 0;
+    vuMeterIn.repaint();
+    vuMeterOut.repaint();
+    repaint();
 }
 
 void VUPanel::timerCallback()
 {
-    MeterValues latestValues;
-    if (processor.getLatestMeterValues(latestValues))
+    if (! isShowing())
+        return;
+
+    const bool nextThresholdVisible = compBypassValue != nullptr
+                                      && compBypassValue->load(std::memory_order_relaxed) > 0.5f;
+    if (thresholdVisible != nextThresholdVisible)
     {
-        vuMeterIn.updateLevels(latestValues);
-        vuMeterOut.updateLevels(latestValues);
+        thresholdVisible = nextThresholdVisible;
+        repaint(scaleBounds.getSmallestIntegerContainer());
     }
 
-    repaint();
+    MeterValues latestValues;
+    bool inputChanged = false;
+    bool outputChanged = false;
+    if (processor.getLatestMeterValues(latestValues))
+    {
+        staleTimerTicks = 0;
+        inputChanged = vuMeterIn.updateLevels(latestValues);
+        outputChanged = vuMeterOut.updateLevels(latestValues);
+    }
+    else if (++staleTimerTicks > 3)
+    {
+        inputChanged = vuMeterIn.decayToSilence();
+        outputChanged = vuMeterOut.decayToSilence();
+    }
+
+    if (! inputChanged && ! outputChanged)
+        return;
+
+    if (inputChanged)
+        vuMeterIn.repaint();
+    if (outputChanged)
+        vuMeterOut.repaint();
+    if (refreshReadoutText())
+    {
+        repaint(leftReadoutBounds.getSmallestIntegerContainer());
+        repaint(rightReadoutBounds.getSmallestIntegerContainer());
+    }
 }
 
 void VUPanel::updateRealtimeThreshold(float newThresholdDb)
 {
+    if (juce::approximatelyEqual(realtimeThresholdDb, newThresholdDb))
+        return;
+
     realtimeThresholdDb = newThresholdDb;
+    if (isShowing() && thresholdVisible)
+        repaint(scaleBounds.getSmallestIntegerContainer());
+}
+
+void VUPanel::graphShowingStateChanged(bool isNowShowing)
+{
+    if (! isNowShowing)
+    {
+        stopTimer();
+        return;
+    }
+
+    startTimerHz(60);
+    timerCallback();
+    repaint();
+}
+
+void VUPanel::rebuildScaleLayer(float displayScale)
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+    {
+        scaleLayer = {};
+        scaleLayerBounds = {};
+        scaleLayerScale = 0.0f;
+        return;
+    }
+
+    displayScale = juce::jmax(0.25f, displayScale);
+    scaleLayerBounds = getLocalBounds();
+    scaleLayerScale = displayScale;
+    scaleLayer = juce::Image(
+        juce::Image::ARGB,
+        juce::jmax(1, juce::roundToInt(static_cast<float>(getWidth()) * displayScale)),
+        juce::jmax(1, juce::roundToInt(static_cast<float>(getHeight()) * displayScale)),
+        true);
+    juce::Graphics cacheGraphics(scaleLayer);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+    cacheGraphics.setFont(fire::ui::labelFont(juce::jlimit(7.0f, 10.0f,
+                                                           scaleBounds.getWidth() * 0.24f)));
+    cacheGraphics.setColour(fire::ui::colours::textMuted.withAlpha(0.85f));
+
+    constexpr std::array<int, 5> marks { 0, -24, -48, -72, -96 };
+    for (const auto mark : marks)
+    {
+        const auto normalized = (static_cast<float>(mark) + 96.0f) / 96.0f;
+        const auto y = scaleBounds.getBottom() - scaleBounds.getHeight() * normalized;
+        cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(mark == 0 ? 0.75f : 0.38f));
+        cacheGraphics.drawHorizontalLine(juce::roundToInt(y),
+                                         scaleBounds.getX(),
+                                         scaleBounds.getRight());
+        cacheGraphics.setColour(mark == 0 ? fire::ui::colours::warning.withAlpha(0.88f)
+                                          : fire::ui::colours::textMuted.withAlpha(0.85f));
+        cacheGraphics.drawText(juce::String(mark),
+                               scaleBounds.withY(y - 6.0f).withHeight(12.0f),
+                               juce::Justification::centred);
+    }
+}
+
+bool VUPanel::refreshReadoutText()
+{
+    const auto normalizedToDb = [](float value)
+    {
+        return juce::jmap(juce::jlimit(0.0f, 1.0f, value), 0.0f, 1.0f, -96.0f, 0.0f);
+    };
+
+    const auto updateText = [&normalizedToDb](juce::String& text,
+                                               int& cachedTenths,
+                                               float normalizedValue)
+    {
+        const auto nextTenths = juce::roundToInt(normalizedToDb(normalizedValue) * 10.0f);
+        if (cachedTenths == nextTenths)
+            return false;
+
+        cachedTenths = nextTenths;
+        text = juce::String(static_cast<float>(nextTenths) * 0.1f, 1);
+        return true;
+    };
+
+    bool changed = updateText(inputPeakText, inputPeakTenths,
+                              vuMeterIn.getPeakLeftChannelLevel());
+    changed = updateText(inputRmsText, inputRmsTenths,
+                         vuMeterIn.getRmsLeftChannelLevel()) || changed;
+    changed = updateText(outputPeakText, outputPeakTenths,
+                         vuMeterOut.getPeakLeftChannelLevel()) || changed;
+    changed = updateText(outputRmsText, outputRmsTenths,
+                         vuMeterOut.getRmsLeftChannelLevel()) || changed;
+    return changed;
 }

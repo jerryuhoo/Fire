@@ -18,7 +18,7 @@
 
 class FireAudioProcessor;
 
-static LfoData lfoClipboard;
+inline LfoData lfoClipboard;
 
 //
 //  The LfoEditor is now a pure "View" component.
@@ -88,6 +88,18 @@ private:
 
     void deleteSelectedPoints();
 
+    void rebuildGridCache(float physicalScale);
+    void rebuildWavePath();
+    uint64_t getWavePathSignature() const noexcept;
+    juce::Image gridCache;
+    juce::Path cachedWavePath;
+    uint64_t cachedWavePathSignature = 0;
+    float cachedGridScale = 0.0f;
+    int cachedGridWidth = 0;
+    int cachedGridHeight = 0;
+    int cachedHorizontalDivisions = 0;
+    int cachedVerticalDivisions = 0;
+
     // --- State variables for interaction ---
     LfoEditMode currentMode = LfoEditMode::PointEdit;
     LfoPresetShape currentBrush = LfoPresetShape::SawUp;
@@ -140,7 +152,6 @@ private:
 class LfoPanel : public juce::Component,
                  public juce::Button::Listener,
                  public juce::Slider::Listener,
-                 public juce::Timer,
                  public juce::AudioProcessorValueTreeState::Listener,
                  public juce::AsyncUpdater
 {
@@ -149,9 +160,11 @@ public:
     ~LfoPanel() override;
 
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
-    void timerCallback() override;
+    /** Called by the editor's shared UI clock. */
+    void animationTick(float deltaSeconds = 1.0f / 60.0f);
 
     void setScale(float newScale);
     void setOnDataChangedCallback(std::function<void()> callback);
@@ -229,7 +242,13 @@ private:
     juce::Rectangle<int> leftColumnArea;
     juce::Rectangle<int> centerColumnArea;
     juce::Rectangle<int> rightColumnArea;
-    juce::Colour activeLfoColour = COLOUR1;
+    const std::array<juce::Colour, 4> lfoColours {
+        fire::ui::colours::modulation,
+        fire::ui::colours::signalCool,
+        fire::ui::colours::positive,
+        fire::ui::colours::gold
+    };
+    fire::ui::DampedValue lfoSelectionPosition;
     juce::Rectangle<int> separatorLine;
     juce::Rectangle<int> topRowArea;
 

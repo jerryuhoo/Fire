@@ -9,7 +9,35 @@
 */
 
 #include "GlobalPanel.h"
+#include "../../GUI/FireTheme.h"
 #include "../../Utility/AudioHelpers.h"
+#include <algorithm>
+
+namespace
+{
+void drawMinimalSurface(juce::Graphics& g, juce::Rectangle<float> bounds)
+{
+    if (bounds.isEmpty())
+        return;
+
+    bounds = bounds.reduced(0.5f);
+    juce::ColourGradient fill(fire::ui::colours::surface1.withAlpha(0.72f),
+                              bounds.getX(), bounds.getY(),
+                              fire::ui::colours::surface0.withAlpha(0.88f),
+                              bounds.getX(), bounds.getBottom(), false);
+    g.setGradientFill(fill);
+    g.fillRoundedRectangle(bounds, fire::ui::Metrics::radius);
+}
+
+void drawMinimalTitle(juce::Graphics& g,
+                      juce::Rectangle<float> bounds,
+                      const juce::String& text)
+{
+    g.setFont(fire::ui::labelFont(juce::jlimit(9.0f, 12.0f, bounds.getHeight() * 0.36f)));
+    g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
+    g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
+}
+} // namespace
 
 //==============================================================================
 GlobalPanel::GlobalPanel(FireAudioProcessor& p,
@@ -75,18 +103,18 @@ GlobalPanel::~GlobalPanel()
 void GlobalPanel::createSliders()
 {
     // Global Knobs
-    createAndConfigureSlider(GLOBAL_OUTPUT_NAME, "Output", COLOUR1, " dB");
-    createAndConfigureSlider(GLOBAL_MIX_NAME, "Mix", COLOUR1);
+    createAndConfigureSlider(GLOBAL_OUTPUT_NAME, "Output", fire::ui::colours::flame, " dB");
+    createAndConfigureSlider(GLOBAL_MIX_NAME, "Mix", fire::ui::colours::gold);
 
     // Lo-fi section sliders
-    const auto lofiColour = DOWNSAMPLE_COLOUR.withBrightness(0.8f);
+    const auto lofiColour = fire::ui::colours::loFi;
     createAndConfigureSlider(DOWNSAMPLE_NAME, "Rate", lofiColour);
     createAndConfigureSlider(BIT_DEPTH_NAME, "Bits", lofiColour);
     createAndConfigureSlider(JITTER_NAME, "Jitter", lofiColour);
     createAndConfigureSlider(DOWNSAMPLE_MIX_NAME, "Mix", lofiColour);
 
     // Filter Knobs
-    const auto filterColour = FILTER_COLOUR.withBrightness(0.8f);
+    const auto filterColour = fire::ui::colours::filter;
     createAndConfigureSlider(LOWCUT_FREQ_NAME, "Frequency", filterColour);
     createAndConfigureSlider(LOWCUT_Q_NAME, "Q", filterColour);
     createAndConfigureSlider(LOWCUT_GAIN_NAME, "Gain", filterColour);
@@ -112,15 +140,9 @@ void GlobalPanel::createLabels()
         label.setJustificationType(juce::Justification::centred);
     };
 
-    setupLabel(filterTypeLabel, "Type", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(lowcutSlopeLabel, "Slope", FILTER_COLOUR.withBrightness(0.8f));
-    setupLabel(highcutSlopeLabel, "Slope", FILTER_COLOUR.withBrightness(0.8f));
-
-    filterTypeLabel.attachToComponent(&filterLowCutButton, false);
-    lowcutSlopeLabel.attachToComponent(&lowcutSlopeMode, false);
-    lowcutSlopeLabel.setJustificationType(juce::Justification::centred);
-    highcutSlopeLabel.attachToComponent(&highcutSlopeMode, false);
-    highcutSlopeLabel.setJustificationType(juce::Justification::centred);
+    setupLabel(filterTypeLabel, "Type", fire::ui::colours::filter);
+    setupLabel(lowcutSlopeLabel, "Slope", fire::ui::colours::filter);
+    setupLabel(highcutSlopeLabel, "Slope", fire::ui::colours::filter);
 }
 
 void GlobalPanel::createButtons()
@@ -133,26 +155,27 @@ void GlobalPanel::createButtons()
         btn.setClickingTogglesState(true);
         btn.setRadioGroupId(switchButtonsGlobal);
 
-        btn.setColour(juce::TextButton::buttonColourId, COLOUR8);
+        btn.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
         btn.setColour(juce::TextButton::textColourOffId, colour);
-        btn.setColour(juce::TextButton::buttonOnColourId, colour.darker().darker());
-        btn.setColour(juce::TextButton::textColourOnId, juce::Colours::white);
+        btn.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+        btn.setColour(juce::TextButton::textColourOnId, fire::ui::colours::textPrimary);
         btn.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+        btn.getProperties().set("fireAnimatedSelection", true);
 
         btn.addListener(this);
     };
 
-    setupSwitch(filterSwitch, "Filter", FILTER_COLOUR);
-    setupSwitch(downsampleSwitch, "Lo-Fi", DOWNSAMPLE_COLOUR);
-    setupSwitch(graphSwitch, "Graphs", juce::Colours::blueviolet);
+    setupSwitch(filterSwitch, "Filter", fire::ui::colours::filter);
+    setupSwitch(downsampleSwitch, "Lo-Fi", fire::ui::colours::loFi);
+    setupSwitch(graphSwitch, "Analysis", fire::ui::colours::signalCool);
 
     filterBypassButton = std::make_unique<juce::ToggleButton>();
-    initBypassButton(*filterBypassButton, FILTER_COLOUR);
+    initBypassButton(*filterBypassButton, fire::ui::colours::filter);
     filterBypassButton->onClick = [this]
     { setBypassState(0, filterBypassButton->getToggleState()); };
 
     downsampleBypassButton = std::make_unique<juce::ToggleButton>();
-    initBypassButton(*downsampleBypassButton, DOWNSAMPLE_COLOUR);
+    initBypassButton(*downsampleBypassButton, fire::ui::colours::loFi);
     downsampleBypassButton->onClick = [this]
     { setBypassState(1, downsampleBypassButton->getToggleState()); };
 
@@ -182,6 +205,14 @@ void GlobalPanel::createComboBoxes()
     highcutSlopeMode.addItem("24 db", 2);
     highcutSlopeMode.addItem("36 db", 3);
     highcutSlopeMode.addItem("48 db", 4);
+
+    for (auto* menu : { &lowcutSlopeMode, &highcutSlopeMode })
+    {
+        menu->setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface1);
+        menu->setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+        menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+        menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::filter);
+    }
 }
 
 void GlobalPanel::setupComponentGroups()
@@ -265,17 +296,18 @@ void GlobalPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colou
 {
     addAndMakeVisible(bypassButton);
     bypassButton.setColour(juce::ToggleButton::tickColourId, colour);
+    bypassButton.setColour(juce::ToggleButton::tickDisabledColourId, fire::ui::colours::disabled);
 }
 
-void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String paramId, juce::String buttonName)
+void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String, juce::String buttonName)
 {
     addAndMakeVisible(button);
     button.setClickingTogglesState(true);
-    button.setColour(juce::TextButton::buttonColourId, COLOUR6.withBrightness(0.1f));
-    button.setColour(juce::TextButton::buttonOnColourId, COLOUR6.withBrightness(0.1f));
-    button.setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    button.setColour(juce::TextButton::textColourOnId, FILTER_COLOUR.withBrightness(0.8f));
-    button.setColour(juce::TextButton::textColourOffId, COLOUR7.withBrightness(0.8f));
+    button.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
+    button.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::raised);
+    button.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    button.setColour(juce::TextButton::textColourOnId, fire::ui::colours::filter);
+    button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     if (button.getComponentID().isEmpty())
     {
         button.setComponentID("rounded");
@@ -286,54 +318,119 @@ void GlobalPanel::setRoundButton(juce::TextButton& button, juce::String paramId,
 
 void GlobalPanel::paint(juce::Graphics& g)
 {
-    // Draw borders for the new layout areas, just like in BandPanel
-    g.setColour(COLOUR6);
-    g.drawRect(outputAreaRect); // Border for output section
-    g.drawRect(tabAreaRect); // Border for the main controls section
+    const auto displayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    if (chromeCacheDirty
+        || ! juce::approximatelyEqual(chromeCacheDisplayScale, displayScale)
+        || chromeCache.isNull())
+        rebuildChromeCache(displayScale);
 
-    // Optional: Draw a themed border for the active tab
-    // g.setColour(activeTabColour.withAlpha(0.8f));
-    // g.drawRect(tabAreaRect, 2.0f);
+    if (! chromeCache.isNull())
+        g.drawImage(chromeCache, getLocalBounds().toFloat());
+
+    if (selectionAnimationInitialised)
+    {
+        if (auto* selectedSwitch = getSelectedSwitch())
+        {
+            auto selectionBounds = selectedSwitch->getBounds().toFloat().reduced(
+                juce::jmax(0.5f, 1.0f * scale));
+            selectionBounds.setY(selectionY.current);
+
+            const auto selectionColour = juce::Colour::fromFloatRGBA(
+                juce::jlimit(0.0f, 1.0f, selectionRed.current),
+                juce::jlimit(0.0f, 1.0f, selectionGreen.current),
+                juce::jlimit(0.0f, 1.0f, selectionBlue.current),
+                1.0f);
+            const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
+                                           fire::ui::Metrics::radius * scale);
+
+            g.setColour(selectionColour.withAlpha(0.075f));
+            g.fillRoundedRectangle(selectionBounds, radius);
+            g.setColour(selectionColour.withAlpha(0.78f));
+            g.drawRoundedRectangle(selectionBounds, radius,
+                                   juce::jmax(1.0f, 1.15f * scale));
+        }
+    }
 }
 
 void GlobalPanel::resized()
 {
-    const float scale = this->scale;
-    const int scaledKnobSize = static_cast<int>(KNOB_SIZE * scale);
-    const int scaledSpacing = static_cast<int>(10 * scale);
+    const float uiScale = scale;
+    // Drive is the sole hero control; every other rotary in the editor uses
+    // this quieter common diameter.
+    const int scaledKnobSize = juce::roundToInt(KNOB_SIZE * 0.82f * uiScale);
+    const int outerPadding = juce::roundToInt(10.0f * uiScale);
+    const int gap = juce::roundToInt(juce::jlimit(7.0f * uiScale,
+                                                 14.0f * uiScale,
+                                                 static_cast<float>(getWidth()) * 0.01f));
+    const int cardPadding = juce::roundToInt(8.0f * uiScale);
+    const int titleHeight = juce::roundToInt(22.0f * uiScale);
+    const int controlGap = juce::roundToInt(8.0f * uiScale);
 
-    // The main area is reduced only once to create the outer margin.
-    auto mainArea = getLocalBounds().reduced(scaledSpacing);
+    auto layoutArea = getLocalBounds().reduced(outerPadding);
+    if (layoutArea.isEmpty())
+    {
+        invalidateChromeCache();
+        return;
+    }
 
-    // --- Define proportions ---
-    const float switchColumnProportion = 0.15f;
-    const float outputColumnProportion = 0.2f;
+    const int navWidth = juce::roundToInt(juce::jlimit(120.0f * uiScale,
+                                                       165.0f * uiScale,
+                                                       static_cast<float>(getWidth()) * 0.14f));
+    const int outputWidth = juce::roundToInt(juce::jlimit(170.0f * uiScale,
+                                                          215.0f * uiScale,
+                                                          static_cast<float>(getWidth()) * 0.19f));
 
-    // --- Sequentially lay out the columns ---
-    auto layoutArea = mainArea;
-    auto switchColumnArea = layoutArea.removeFromLeft(mainArea.getWidth() * switchColumnProportion);
-    auto outputColumnArea = layoutArea.removeFromRight(mainArea.getWidth() * outputColumnProportion);
-    auto knobsColumnArea = layoutArea; // Knobs area is what's left.
+    tabAreaRect = layoutArea.removeFromLeft(juce::jmin(navWidth, layoutArea.getWidth()));
+    layoutArea.removeFromLeft(juce::jmin(gap, layoutArea.getWidth()));
+    outputAreaRect = layoutArea.removeFromRight(juce::jmin(outputWidth, layoutArea.getWidth()));
+    layoutArea.removeFromRight(juce::jmin(gap, layoutArea.getWidth()));
+    controlsAreaRect = layoutArea;
 
-    tabAreaRect = switchColumnArea.getUnion(knobsColumnArea);
-    outputAreaRect = outputColumnArea;
+    auto contentArea = [cardPadding, titleHeight](juce::Rectangle<int> card)
+    {
+        card.reduce(cardPadding, cardPadding);
+        card.removeFromTop(juce::jmin(titleHeight, card.getHeight()));
+        return card;
+    };
 
-    // --- Column 1: Layout Switches ---
+    auto switchColumnArea = contentArea(tabAreaRect);
+    auto knobsColumnArea = contentArea(controlsAreaRect);
+    auto outputColumnArea = contentArea(outputAreaRect);
+
+    const int filterUtilityWidth = juce::jlimit(juce::roundToInt(110.0f * uiScale),
+                                                juce::roundToInt(155.0f * uiScale),
+                                                juce::roundToInt(knobsColumnArea.getWidth() * 0.27f));
+    const int filterKnobWidth = juce::jmax(1,
+        knobsColumnArea.getWidth() - juce::jmin(filterUtilityWidth, knobsColumnArea.getWidth()) - controlGap);
+    const int filterKnobLimit = juce::jmax(1, (filterKnobWidth - controlGap * 2) / 3);
+    const int lofiKnobLimit = juce::jmax(1, (knobsColumnArea.getWidth() - controlGap * 3) / 4);
+    const int masterKnobLimit = juce::jmax(1, juce::jmin(outputColumnArea.getWidth(),
+        (outputColumnArea.getHeight() - controlGap) / 2));
+    const int ordinaryKnobSize = juce::jmax(1, std::min({ scaledKnobSize,
+                                                          filterKnobLimit,
+                                                          lofiKnobLimit,
+                                                          masterKnobLimit,
+                                                          knobsColumnArea.getHeight() }));
+
+    // --- Process rail ---
     juce::FlexBox switchColumnBox;
     switchColumnBox.flexDirection = juce::FlexBox::Direction::column;
-    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceAround;
+    switchColumnBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
     switchColumnBox.alignItems = juce::FlexBox::AlignItems::stretch;
-    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(1.0f));
-    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(1.0f));
-    switchColumnBox.items.add(juce::FlexItem(graphSwitch).withFlex(1.0f));
+    const auto rowMargin = juce::FlexItem::Margin(juce::jmax(1.0f, 2.0f * uiScale));
+    switchColumnBox.items.add(juce::FlexItem(filterSwitch).withFlex(1.0f).withMargin(rowMargin));
+    switchColumnBox.items.add(juce::FlexItem(downsampleSwitch).withFlex(1.0f).withMargin(rowMargin));
+    switchColumnBox.items.add(juce::FlexItem(graphSwitch).withFlex(1.0f).withMargin(rowMargin));
     switchColumnBox.performLayout(switchColumnArea);
 
     auto layoutBypassButton = [&](juce::ToggleButton& bypass, const juce::TextButton& parentSwitch)
     {
         auto parentBounds = parentSwitch.getBounds();
-        const int bypassSize = (int) (KNOB_FONT_SIZE * 2.0f * scale);
+        const int bypassSize = juce::roundToInt(juce::jlimit(16.0f * uiScale,
+                                                            24.0f * uiScale,
+                                                            parentBounds.getHeight() * 0.46f));
 
-        bypass.setBounds(parentBounds.getX(),
+        bypass.setBounds(parentBounds.getX() + juce::roundToInt(7.0f * uiScale),
                          parentBounds.getCentreY() - (bypassSize / 2),
                          bypassSize,
                          bypassSize);
@@ -343,55 +440,73 @@ void GlobalPanel::resized()
     layoutBypassButton(*filterBypassButton, filterSwitch);
     layoutBypassButton(*downsampleBypassButton, downsampleSwitch);
 
-    // --- Column 3: Layout for Output Section ---
-    auto knobsArea = outputColumnArea.withSizeKeepingCentre(scaledKnobSize, scaledKnobSize * 2 + scaledSpacing);
-    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(knobsArea.removeFromTop(scaledKnobSize));
-    knobsArea.removeFromTop(scaledSpacing); // spacing
-    modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(knobsArea.removeFromTop(scaledKnobSize));
+    updateSelectionTarget(! selectionAnimationInitialised);
 
-    // --- Column 2: Layout for Main Knobs/Graphs Area ---
+    // --- Master output card ---
+    auto masterKnobs = outputColumnArea.withSizeKeepingCentre(ordinaryKnobSize,
+                                                              ordinaryKnobSize * 2 + controlGap);
+    modulatableSliderComponents.at(GLOBAL_OUTPUT_NAME)->setBounds(masterKnobs.removeFromTop(ordinaryKnobSize));
+    masterKnobs.removeFromTop(controlGap);
+    modulatableSliderComponents.at(GLOBAL_MIX_NAME)->setBounds(masterKnobs.removeFromTop(ordinaryKnobSize));
+
+    // --- Main reactor card ---
     if (filterSwitch.getToggleState())
     {
         auto controlArea = knobsColumnArea;
-        auto leftHalf = controlArea.removeFromLeft(controlArea.getWidth() / 2);
-        auto rightHalf = controlArea;
-
-        rightHalf.removeFromLeft(scaledSpacing);
+        auto utilityArea = controlArea.removeFromLeft(juce::jmin(filterUtilityWidth, controlArea.getWidth()));
+        controlArea.removeFromLeft(juce::jmin(controlGap, controlArea.getWidth()));
 
         {
-            auto buttonColumn = leftHalf.removeFromLeft(leftHalf.getWidth() / 2);
-            auto comboColumn = leftHalf;
+            // Type and Slope share one sizing system.  Explicit label bounds
+            // avoid JUCE's attached-label positioning squeezing the Slope box
+            // against the final Type button at smaller editor scales.
+            const int controlHeight = juce::jmax(1, juce::jmin(
+                juce::roundToInt(28.0f * uiScale),
+                juce::roundToInt(utilityArea.getHeight() / 5.92f)));
+            const int labelHeight = juce::jmax(1, juce::roundToInt(controlHeight * 0.50f));
+            const int itemGap = juce::jmax(1, juce::roundToInt(controlHeight * 0.14f));
+            const int sectionGap = juce::jmax(itemGap * 2,
+                                              juce::roundToInt(controlHeight * 0.36f));
+            const int controlWidth = juce::jmin(utilityArea.getWidth(), juce::roundToInt(
+                juce::jlimit(66.0f * uiScale, 92.0f * uiScale,
+                             utilityArea.getWidth() * 0.78f)));
+            const int blockHeight = labelHeight * 2 + controlHeight * 4
+                                  + itemGap * 4 + sectionGap;
+            const auto utilityLabelFont = fire::ui::labelFont(
+                juce::jmax(6.0f, labelHeight * 0.78f));
+            filterTypeLabel.setFont(utilityLabelFont);
+            lowcutSlopeLabel.setFont(utilityLabelFont);
+            highcutSlopeLabel.setFont(utilityLabelFont);
+            auto utilityBlock = juce::Rectangle<int>(0, 0, controlWidth, blockHeight)
+                                    .withCentre(utilityArea.getCentre());
 
-            const int buttonHeight = static_cast<int>(30 * scale);
-            const int buttonWidth = static_cast<int>(60 * scale);
-            const int verticalPadding = static_cast<int>(5 * scale);
+            filterTypeLabel.setBounds(utilityBlock.removeFromTop(labelHeight));
+            utilityBlock.removeFromTop(itemGap);
+            filterLowCutButton.setBounds(utilityBlock.removeFromTop(controlHeight));
+            utilityBlock.removeFromTop(itemGap);
+            filterPeakButton.setBounds(utilityBlock.removeFromTop(controlHeight));
+            utilityBlock.removeFromTop(itemGap);
+            filterHighCutButton.setBounds(utilityBlock.removeFromTop(controlHeight));
+            utilityBlock.removeFromTop(sectionGap);
 
-            const int totalButtonBlockHeight = (buttonHeight * 3) + (verticalPadding * 2);
+            const auto slopeLabelBounds = utilityBlock.removeFromTop(labelHeight);
+            lowcutSlopeLabel.setBounds(slopeLabelBounds);
+            highcutSlopeLabel.setBounds(slopeLabelBounds);
+            utilityBlock.removeFromTop(itemGap);
 
-            auto buttonBlockArea = buttonColumn.withSizeKeepingCentre(buttonWidth, totalButtonBlockHeight);
-
-            filterLowCutButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
-            buttonBlockArea.removeFromTop(verticalPadding);
-            filterPeakButton.setBounds(buttonBlockArea.removeFromTop(buttonHeight));
-            buttonBlockArea.removeFromTop(verticalPadding);
-            filterHighCutButton.setBounds(buttonBlockArea);
-
-            const int comboBoxWidth = static_cast<int>(70 * scale);
-            const int comboBoxHeight = static_cast<int>(30 * scale);
-            auto comboBoxBounds = comboColumn.withSizeKeepingCentre(comboBoxWidth, comboBoxHeight);
-            lowcutSlopeMode.setBounds(comboBoxBounds);
-            highcutSlopeMode.setBounds(comboBoxBounds);
+            const auto slopeBounds = utilityBlock.removeFromTop(controlHeight);
+            lowcutSlopeMode.setBounds(slopeBounds);
+            highcutSlopeMode.setBounds(slopeBounds);
         }
 
         {
-            const int numKnobs = 3;
-            const int totalKnobsWidth = (numKnobs * scaledKnobSize) + ((numKnobs - 1) * scaledSpacing);
-            auto knobsArea = rightHalf.withSizeKeepingCentre(totalKnobsWidth, scaledKnobSize);
+            auto knobsArea = controlArea.withSizeKeepingCentre(ordinaryKnobSize * 3 + controlGap * 2,
+                                                               ordinaryKnobSize);
 
-            auto freqBounds = knobsArea.removeFromLeft(scaledKnobSize);
-            knobsArea.removeFromLeft(scaledSpacing);
-            auto gainBounds = knobsArea.removeFromLeft(scaledKnobSize);
-            knobsArea.removeFromLeft(scaledSpacing);
+            auto freqBounds = knobsArea.removeFromLeft(ordinaryKnobSize);
+            knobsArea.removeFromLeft(controlGap);
+            auto gainBounds = knobsArea.removeFromLeft(ordinaryKnobSize);
+            knobsArea.removeFromLeft(controlGap);
             auto qBounds = knobsArea;
 
             modulatableSliderComponents.at(LOWCUT_FREQ_NAME)->setBounds(freqBounds);
@@ -409,15 +524,15 @@ void GlobalPanel::resized()
     }
     else if (downsampleSwitch.getToggleState())
     {
-        auto centeredArea = knobsColumnArea.withSizeKeepingCentre(scaledKnobSize * 2 + scaledSpacing, scaledKnobSize * 2 + scaledSpacing);
-        auto topRow = centeredArea.removeFromTop(scaledKnobSize);
-        auto bottomRow = centeredArea.removeFromBottom(scaledKnobSize);
-        modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
-        topRow.removeFromLeft(scaledSpacing);
-        modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(topRow.removeFromLeft(scaledKnobSize));
-        modulatableSliderComponents.at(JITTER_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
-        bottomRow.removeFromLeft(scaledSpacing);
-        modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME)->setBounds(bottomRow.removeFromLeft(scaledKnobSize));
+        auto knobRow = knobsColumnArea.withSizeKeepingCentre(ordinaryKnobSize * 4 + controlGap * 3,
+                                                             ordinaryKnobSize);
+        modulatableSliderComponents.at(DOWNSAMPLE_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
+        knobRow.removeFromLeft(controlGap);
+        modulatableSliderComponents.at(BIT_DEPTH_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
+        knobRow.removeFromLeft(controlGap);
+        modulatableSliderComponents.at(JITTER_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
+        knobRow.removeFromLeft(controlGap);
+        modulatableSliderComponents.at(DOWNSAMPLE_MIX_NAME)->setBounds(knobRow.removeFromLeft(ordinaryKnobSize));
     }
     else if (graphSwitch.getToggleState())
     {
@@ -429,8 +544,121 @@ void GlobalPanel::resized()
         graphBox.items.add(juce::FlexItem(vuPanel).withFlex(1.0f));
         graphBox.items.add(juce::FlexItem(widthGraph).withFlex(1.0f));
 
-        graphBox.performLayout(knobsColumnArea);
+        graphBox.performLayout(knobsColumnArea.reduced(juce::roundToInt(2.0f * uiScale)));
     }
+
+    invalidateChromeCache();
+}
+
+void GlobalPanel::animationTick(float deltaSeconds)
+{
+    if (! selectionAnimationInitialised)
+        return;
+
+    if (! isShowing())
+    {
+        selectionY.snapTo(selectionY.target);
+        selectionRed.snapTo(selectionRed.target);
+        selectionGreen.snapTo(selectionGreen.target);
+        selectionBlue.snapTo(selectionBlue.target);
+        return;
+    }
+
+    bool changed = selectionY.advance(deltaSeconds, 0.07f);
+    changed = selectionRed.advance(deltaSeconds, 0.07f) || changed;
+    changed = selectionGreen.advance(deltaSeconds, 0.07f) || changed;
+    changed = selectionBlue.advance(deltaSeconds, 0.07f) || changed;
+
+    if (changed)
+        repaint(tabAreaRect.expanded(juce::jmax(2, juce::roundToInt(3.0f * scale))));
+}
+
+juce::TextButton* GlobalPanel::getSelectedSwitch() noexcept
+{
+    if (downsampleSwitch.getToggleState())
+        return &downsampleSwitch;
+    if (graphSwitch.getToggleState())
+        return &graphSwitch;
+    return &filterSwitch;
+}
+
+void GlobalPanel::updateSelectionTarget(bool snap)
+{
+    auto* selectedSwitch = getSelectedSwitch();
+    if (selectedSwitch == nullptr || selectedSwitch->getBounds().isEmpty())
+        return;
+
+    auto targetColour = fire::ui::colours::filter;
+    if (selectedSwitch == &downsampleSwitch)
+        targetColour = fire::ui::colours::loFi;
+    else if (selectedSwitch == &graphSwitch)
+        targetColour = fire::ui::colours::signalCool;
+
+    const auto selectionInset = juce::jmax(0.5f, 1.0f * scale);
+    const auto targetY = static_cast<float>(selectedSwitch->getY()) + selectionInset;
+    const auto targetRed = targetColour.getFloatRed();
+    const auto targetGreen = targetColour.getFloatGreen();
+    const auto targetBlue = targetColour.getFloatBlue();
+
+    if (snap || ! selectionAnimationInitialised)
+    {
+        selectionY.snapTo(targetY);
+        selectionRed.snapTo(targetRed);
+        selectionGreen.snapTo(targetGreen);
+        selectionBlue.snapTo(targetBlue);
+        selectionAnimationInitialised = true;
+        return;
+    }
+
+    selectionY.setTarget(targetY);
+    selectionRed.setTarget(targetRed);
+    selectionGreen.setTarget(targetGreen);
+    selectionBlue.setTarget(targetBlue);
+}
+
+void GlobalPanel::rebuildChromeCache(float displayScale)
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
+    displayScale = juce::jmax(1.0f, displayScale);
+    chromeCacheDisplayScale = displayScale;
+    chromeCache = juce::Image(juce::Image::ARGB,
+                              juce::jmax(1, juce::roundToInt(getWidth() * displayScale)),
+                              juce::jmax(1, juce::roundToInt(getHeight() * displayScale)),
+                              true);
+
+    juce::Graphics cacheGraphics(chromeCache);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+
+    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+    drawMinimalSurface(cacheGraphics, controlsAreaRect.getUnion(outputAreaRect).toFloat());
+
+    const int titleHeight = juce::roundToInt(22.0f * scale);
+    const int titleInset = juce::roundToInt(8.0f * scale);
+    auto titleFor = [titleHeight, titleInset](juce::Rectangle<int> area)
+    {
+        area.reduce(titleInset, 0);
+        return area.removeFromTop(juce::jmin(titleHeight, area.getHeight())).toFloat();
+    };
+
+    juce::String sectionTitle { "FILTER" };
+    if (downsampleSwitch.getToggleState())
+        sectionTitle = "LO-FI";
+    else if (graphSwitch.getToggleState())
+        sectionTitle = "ANALYSIS";
+
+    drawMinimalTitle(cacheGraphics, titleFor(tabAreaRect), "MODE");
+    drawMinimalTitle(cacheGraphics, titleFor(controlsAreaRect), sectionTitle);
+    drawMinimalTitle(cacheGraphics, titleFor(outputAreaRect), "MASTER");
+
+    chromeCacheDirty = false;
+}
+
+void GlobalPanel::invalidateChromeCache()
+{
+    chromeCacheDirty = true;
+    repaint();
 }
 
 void GlobalPanel::buttonClicked(juce::Button* clickedButton)
@@ -438,7 +666,6 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
     bool isSwitch = false;
     if (clickedButton == &filterSwitch && filterSwitch.getToggleState())
     {
-        activeTabColour = FILTER_COLOUR;
         setVisibility(filterComponents, true);
         setVisibility(downsampleComponents, false);
         setVisibility(graphComponents, false);
@@ -447,7 +674,6 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
     }
     else if (clickedButton == &downsampleSwitch && downsampleSwitch.getToggleState())
     {
-        activeTabColour = DOWNSAMPLE_COLOUR;
         setVisibility(downsampleComponents, true);
         setVisibility(filterComponents, false);
         setVisibility(graphComponents, false);
@@ -455,7 +681,6 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
     }
     else if (clickedButton == &graphSwitch && graphSwitch.getToggleState())
     {
-        activeTabColour = COLOUR1;
         setVisibility(graphComponents, true);
         setVisibility(filterComponents, false);
         setVisibility(downsampleComponents, false);
@@ -469,7 +694,7 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
     if (isSwitch)
     {
         resized();
-        repaint();
+        invalidateChromeCache();
     }
 }
 

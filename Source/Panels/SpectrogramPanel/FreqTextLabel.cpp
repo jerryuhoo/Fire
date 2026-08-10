@@ -22,13 +22,22 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
 
     // --- One-time setup for the child Label ---
     // These properties are set once here instead of inefficiently in paint().
-    freqLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+    freqLabel.setColour(juce::Label::textColourId, fire::ui::colours::whiteHot);
+    freqLabel.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
+    freqLabel.setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
+    freqLabel.setColour(juce::Label::backgroundWhenEditingColourId, fire::ui::colours::surface0);
+    freqLabel.setColour(juce::Label::outlineWhenEditingColourId, fire::ui::colours::ember);
     freqLabel.setJustificationType(juce::Justification::centred);
+    freqLabel.setAlpha(0.0f);
 
     // Set the text editing callback once in the constructor.
     freqLabel.onTextChange = [this]
     {
-        const int requestedFrequency = freqLabel.getText().getIntValue();
+        auto text = freqLabel.getText().trim().toLowerCase();
+        const bool isKilohertz = text.containsChar('k');
+        text = text.retainCharacters("0123456789.-");
+        const double requestedValue = text.getDoubleValue() * (isKilohertz ? 1000.0 : 1.0);
+        const int requestedFrequency = juce::roundToInt(requestedValue);
 
         // Update the associated VerticalLine component when the text changes.
         verticalLine.setValue(requestedFrequency);
@@ -38,6 +47,11 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
         // zero or a negative value into the logarithmic mapping.
         if (mFrequency > 0)
             verticalLine.setXPercent(static_cast<float>(transformToLog(mFrequency)));
+    };
+
+    freqLabel.onEditorHide = [this]
+    {
+        updateLabelText();
     };
 }
 
@@ -53,25 +67,17 @@ FreqTextLabel::~FreqTextLabel()
 
 void FreqTextLabel::paint(juce::Graphics& g)
 {
-    // The paint() method is for drawing only. All setup is done elsewhere.
+    if (currentAlpha <= 0.001f)
+        return;
 
-    // 1. Calculate the current alpha based on the animation step.
-    float alpha = juce::jmin(1.0f, currentStep / static_cast<float>(maxStep));
-    setAlpha(alpha);
+    g.setOpacity(currentAlpha);
+    auto rect = getLocalBounds().toFloat().reduced(0.5f);
+    fire::ui::drawGlassPill(g, rect, fire::ui::colours::ember, true, false, false);
 
-    // 2. Draw the rounded background rectangle.
-    float cornerSize = 10.0f * mScale;
-    juce::Rectangle<float> rect = getLocalBounds().toFloat();
-    g.setColour(COLOUR1.withAlpha(0.5f));
-    g.fillRoundedRectangle(rect, cornerSize);
-    g.setColour(COLOUR1);
+    auto energyRail = rect.reduced(fire::ui::Metrics::space8, 0.0f).removeFromBottom(1.0f);
+    g.setColour(fire::ui::colours::flame.withAlpha(0.72f));
+    g.fillRect(energyRail);
 
-    // 3. Update the label's text, but only if the user is not currently editing it.
-    if (! freqLabel.isBeingEdited())
-    {
-        juce::String freqText = static_cast<juce::String>(mFrequency) + " Hz";
-        freqLabel.setText(freqText, juce::dontSendNotification);
-    }
 }
 
 void FreqTextLabel::resized()
@@ -80,72 +86,57 @@ void FreqTextLabel::resized()
     freqLabel.setBounds(getLocalBounds());
 
     // It's also a good place to update anything that depends on size, like font height.
-    freqLabel.setFont(juce::Font {
-        juce::FontOptions()
-            .withHeight(14.0f * mScale)
-            .withStyle("Plain") });
+    freqLabel.setFont(fire::ui::displayFont(juce::jlimit(9.0f, 14.0f, 11.0f * mScale)));
 }
 
 void FreqTextLabel::timerCallback()
 {
-    // The timerCallback is solely responsible for updating the animation state.
-
-    bool animationIsFinished = false;
-
-    if (mFadeIn)
+    currentAlpha += (targetAlpha - currentAlpha) * 0.42f;
+    if (std::abs(targetAlpha - currentAlpha) < 0.01f)
     {
-        if (currentStep < maxStep)
-        {
-            currentStep += 1;
-        }
-        else
-        {
-            animationIsFinished = true;
-        }
-    }
-    else // Fading out
-    {
-        if (currentStep > 0)
-        {
-            currentStep -= 1;
-        }
-        else
-        {
-            animationIsFinished = true;
-        }
+        currentAlpha = targetAlpha;
+        stopTimer();
+
+        if (currentAlpha <= 0.0f)
+            setVisible(false);
     }
 
-    if (animationIsFinished)
-    {
-        mUpdate = false;
-        stopTimer(); // CRITICAL: Stop the timer when animation is complete.
-    }
-
-    // Trigger a repaint to draw the new state.
+    freqLabel.setAlpha(currentAlpha);
     repaint();
 }
 
 void FreqTextLabel::setFade(bool update, bool isFadeIn)
 {
-    mUpdate = update;
-    mFadeIn = isFadeIn;
+    if (! update)
+        return;
 
-    // This ensures a component with alpha=0 is still visible to the mouse
-    // so that a mouse-over can trigger the fade-in.
-    if (isFadeIn && getAlpha() == 0.0f)
-        setAlpha(0.01f);
+    const float newTarget = isFadeIn ? 1.0f : 0.0f;
+    if (juce::approximatelyEqual(targetAlpha, newTarget) && ! isTimerRunning())
+        return;
 
-    // Start the timer only if an animation is requested and the timer isn't already running.
-    if (mUpdate && ! isTimerRunning())
-    {
+    targetAlpha = newTarget;
+    if (targetAlpha > 0.0f)
+        setVisible(true);
+
+    if (! isTimerRunning())
         startTimerHz(60);
-    }
 }
 
 void FreqTextLabel::setFreq(int freq)
 {
     mFrequency = freq;
-    repaint(); // Repaint to show the new frequency value.
+    updateLabelText();
+}
+
+void FreqTextLabel::updateLabelText()
+{
+    if (freqLabel.isBeingEdited())
+        return;
+
+    const auto freqText = mFrequency >= 1000
+                            ? juce::String(mFrequency / 1000.0f, 2) + " kHz"
+                            : juce::String(mFrequency) + " Hz";
+    freqLabel.setText(freqText, juce::dontSendNotification);
 }
 
 int FreqTextLabel::getFreq()
@@ -155,7 +146,7 @@ int FreqTextLabel::getFreq()
 
 void FreqTextLabel::setScale(float scale)
 {
-    mScale = scale;
+    mScale = juce::jlimit(0.75f, 2.0f, scale);
     resized(); // Call resized() to update font size based on the new scale.
 }
 

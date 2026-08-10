@@ -25,12 +25,12 @@ public:
     void resized() override;
     void setParameters(bool isInput, int bandIndex);
 
-    // Getters for RMS and Peak levels
-    float getRmsLeftChannelLevel();
-    float getRmsRightChannelLevel();
-    float getPeakLeftChannelLevel();
-    float getPeakRightChannelLevel();
-    void updateLevels(const MeterValues& latestValues);
+    float getRmsLeftChannelLevel() const noexcept;
+    float getRmsRightChannelLevel() const noexcept;
+    float getPeakLeftChannelLevel() const noexcept;
+    float getPeakRightChannelLevel() const noexcept;
+    bool updateLevels(const MeterValues& latestValues);
+    bool decayToSilence();
 
 private:
     FireAudioProcessor* mProcessor;
@@ -50,10 +50,19 @@ private:
     float mPeakHoldCh1Level;
 
     int mPeakHoldDecayCounter;
-    const int PEAK_HOLD_FRAMES = 60; // How many frames to hold the peak line
+    static constexpr int peakHoldFrames = 42;
 
     juce::Rectangle<int> leftMeterBounds;
     juce::Rectangle<int> rightMeterBounds;
+    juce::Image backgroundCache;
+    juce::ColourGradient meterGradient;
+    juce::Rectangle<int> backgroundCacheBounds;
+    float backgroundCacheScale = 0.0f;
+    int cachedChannelCount = 0;
+    bool cachedIsInput = true;
+
+    bool updateBallistics(float rmsCh0, float rmsCh1, float peakCh0, float peakCh1);
+    void rebuildBackgroundCache(float displayScale);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUMeter)
 };

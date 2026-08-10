@@ -560,13 +560,14 @@ namespace state
 
         addAndMakeVisible(presetBox);
 
+        presetBox.setComponentID("header_preset");
         presetBox.setJustificationType(juce::Justification::centred);
-        presetBox.setColour(juce::ComboBox::textColourId, COLOUR1);
-        presetBox.setColour(juce::ComboBox::arrowColourId, COLOUR1);
-        presetBox.setColour(juce::ComboBox::buttonColourId, COLOUR1);
-        presetBox.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-        presetBox.setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
-        presetBox.setColour(juce::ComboBox::backgroundColourId, COLOUR4);
+        presetBox.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
+        presetBox.setColour(juce::ComboBox::arrowColourId, fire::ui::colours::flame);
+        presetBox.setColour(juce::ComboBox::buttonColourId, fire::ui::colours::flame);
+        presetBox.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+        presetBox.setColour(juce::ComboBox::focusedOutlineColourId, fire::ui::colours::ember);
+        presetBox.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
         presetBox.setTextWhenNothingSelected("- Init -");
 
         // when selecting the same preset, this will revert back to the original preset (in case you changed something)
@@ -632,49 +633,50 @@ namespace state
         addAndMakeVisible(menuButton);
         menuButton.addListener(this);
 
-        toggleABButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
-        toggleABButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-        toggleABButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-        copyABButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
-        copyABButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-        copyABButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-        previousButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
-        previousButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-        previousButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-        previousButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-        previousButton.setComponentID("left_arrow");
-        nextButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
-        nextButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-        nextButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-        nextButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-        nextButton.setComponentID("right_arrow");
-        savePresetButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
-        savePresetButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-        savePresetButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
+        auto styleHeaderButton = [](juce::TextButton& button, juce::Colour accent)
+        {
+            button.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+            button.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+            button.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
+            button.setColour(juce::TextButton::textColourOnId, accent);
+            button.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+        };
+
+        styleHeaderButton(toggleABButton, fire::ui::colours::gold);
+        toggleABButton.setComponentID("header_ab");
+        toggleABButton.setColour(juce::TextButton::textColourOffId,
+                                 fire::ui::colours::gold.withAlpha(0.84f));
+        styleHeaderButton(copyABButton, fire::ui::colours::flame);
+        copyABButton.setComponentID("header_action");
+        styleHeaderButton(previousButton, fire::ui::colours::flame);
+        previousButton.setComponentID("header_previous");
+        previousButton.setTooltip("Previous preset");
+        previousButton.setTitle("Previous preset");
+        styleHeaderButton(nextButton, fire::ui::colours::flame);
+        nextButton.setComponentID("header_next");
+        nextButton.setTooltip("Next preset");
+        nextButton.setTitle("Next preset");
+        styleHeaderButton(savePresetButton, fire::ui::colours::positive);
+        savePresetButton.setComponentID("header_action");
+        savePresetButton.setColour(juce::TextButton::textColourOffId,
+                                   fire::ui::colours::positive.withAlpha(0.86f));
         //deletePresetButton.setColour(TextButton::textColourOffId, COLOUR1);
         //deletePresetButton.setColour(TextButton::buttonColourId, COLOUR5);
         //deletePresetButton.setColour(ComboBox::outlineColourId, COLOUR5);
-        menuButton.setColour(juce::TextButton::textColourOffId, COLOUR1);
-        menuButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-        menuButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-        menuButton.getLookAndFeel().setColour(juce::ComboBox::textColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::ComboBox::arrowColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::ComboBox::buttonColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR7);
-        menuButton.getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR7);
+        styleHeaderButton(menuButton, fire::ui::colours::flame);
+        menuButton.setComponentID("header_menu");
+        menuButton.setTooltip("Preset and application menu");
+        menuButton.setTitle("Preset and application menu");
         presetMenu.setLookAndFeel(&fireLookAndFeel);
         startTimerHz(30);
-
-        menuButton.getLookAndFeel().setColour(juce::PopupMenu::textColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
-        menuButton.getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, COLOUR1);
-        menuButton.getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, COLOUR6);
     }
 
     StateComponent::~StateComponent()
     {
+        stopTimer();
+        juce::PopupMenu::dismissAllActiveMenus();
+        presetMenu.setLookAndFeel(nullptr);
+
         if (settingsDialog != nullptr)
         {
             settingsDialog->setVisible(false);
@@ -784,18 +786,32 @@ namespace state
 
     void StateComponent::resized()
     {
-        juce::Rectangle<int> r(getLocalBounds());
-        const int numComponents { 6 };
-        const int componentWidth { getWidth() / numComponents };
+        const auto uiScale = juce::jmax(0.5f, static_cast<float>(getHeight()) / 48.0f);
+        const auto gap = juce::jmax(3, juce::roundToInt(6.0f * uiScale));
+        const auto controlHeight = juce::jmin(getHeight(),
+                                              juce::roundToInt(32.0f * uiScale));
+        const auto compactWidth = juce::jmax(28, juce::roundToInt(32.0f * uiScale));
+        const auto actionWidth = juce::jmax(42, juce::roundToInt(46.0f * uiScale));
+        auto r = getLocalBounds().withSizeKeepingCentre(getWidth(), controlHeight);
 
-        toggleABButton.setBounds(r.removeFromLeft(componentWidth));
-        copyABButton.setBounds(r.removeFromLeft(componentWidth));
-        presetBox.setBounds(r.removeFromLeft(componentWidth * 2).reduced(getHeight() / 15)); // if reduced value is getHeight() / 10, juce has a bug?
-        previousButton.setBounds(r.removeFromLeft(componentWidth / 4));
-        nextButton.setBounds(r.removeFromLeft(componentWidth / 4));
-        savePresetButton.setBounds(r.removeFromLeft(componentWidth));
-        //deletePresetButton.setBounds(r.removeFromLeft(componentWidth));
-        menuButton.setBounds(r.removeFromLeft(componentWidth));
+        auto placeLeft = [&](juce::Component& component, int width)
+        {
+            component.setBounds(r.removeFromLeft(width));
+            r.removeFromLeft(gap);
+        };
+        auto placeRight = [&](juce::Component& component, int width)
+        {
+            component.setBounds(r.removeFromRight(width));
+            r.removeFromRight(gap);
+        };
+
+        placeLeft(toggleABButton, compactWidth);
+        placeLeft(copyABButton, actionWidth);
+        placeRight(menuButton, actionWidth);
+        placeRight(savePresetButton, actionWidth);
+        placeRight(nextButton, compactWidth);
+        placeRight(previousButton, compactWidth);
+        presetBox.setBounds(r.reduced(0, juce::jmax(1, getHeight() / 12)));
     }
 
     void StateComponent::buttonClicked(juce::Button* clickedButton)

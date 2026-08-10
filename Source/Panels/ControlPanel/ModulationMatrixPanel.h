@@ -22,6 +22,7 @@ class ModulationMatrixHeader : public juce::Component
 {
 public:
     ModulationMatrixHeader();
+    void paint(juce::Graphics& g) override;
     void resized() override;
 
 private:
@@ -48,6 +49,7 @@ public:
                         std::function<void()> onDelete);
     ~ModulationMatrixRow() override;
 
+    void paint(juce::Graphics& g) override;
     void resized() override;
 
 private:
@@ -92,6 +94,7 @@ private:
     void buttonClicked(juce::Button* button) override;
     void handleAsyncUpdate() override;
     FireAudioProcessor& processor;
+    FireLookAndFeel fireLookAndFeel;
 
     ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
@@ -100,4 +103,5 @@ private:
 
     juce::Viewport viewport;
     juce::Component contentComponent;
+    juce::Rectangle<int> titleArea;
 };

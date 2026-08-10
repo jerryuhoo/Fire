@@ -13,43 +13,51 @@
 //==============================================================================
 CloseButton::CloseButton ()
 {
+    setClickingTogglesState(false);
 }
 
 CloseButton::~CloseButton()
 {
 }
 
-void CloseButton::paint (juce::Graphics& g)
+void CloseButton::paint(juce::Graphics& g)
 {
+    auto bounds = getLocalBounds().toFloat().reduced(1.0f);
     if (isEntered)
     {
-        g.setColour (COLOUR1);
-        g.drawLine (getWidth() / 4.f, getHeight() / 4.f, getWidth() / 4.f * 3.f, getHeight() / 4.f * 3.f, 2.f);
-        g.drawLine (getWidth() / 4.f, getHeight() / 4.f * 3.f, getWidth() / 4.f * 3.f, getHeight() / 4.f, 2.f);
+        g.setColour(fire::ui::colours::danger.withAlpha(0.13f));
+        g.fillEllipse(bounds);
+        g.setColour(fire::ui::colours::danger.withAlpha(0.62f));
+        g.drawEllipse(bounds, 1.0f);
     }
-    else
-    {
-        g.setColour (COLOUR1.withBrightness (0.4f));
-        g.drawLine (getWidth() / 4.f, getHeight() / 4.f, getWidth() / 4.f * 3.f, getHeight() / 4.f * 3.f, 2.f);
-        g.drawLine (getWidth() / 4.f, getHeight() / 4.f * 3.f, getWidth() / 4.f * 3.f, getHeight() / 4.f, 2.f);
-    }
+
+    const auto cross = bounds.reduced(bounds.getWidth() * 0.29f);
+    g.setColour((isEntered ? fire::ui::colours::danger : fire::ui::colours::textMuted)
+                    .withAlpha(isEntered ? 0.94f : 0.58f));
+    const auto stroke = juce::jmax(1.0f, bounds.getWidth() * 0.085f);
+    g.drawLine({ cross.getTopLeft(), cross.getBottomRight() }, stroke);
+    g.drawLine({ cross.getTopRight(), cross.getBottomLeft() }, stroke);
 }
 
 void CloseButton::resized()
 {
 }
 
-void CloseButton::mouseDown (const juce::MouseEvent& e)
+void CloseButton::mouseDown(const juce::MouseEvent& e)
 {
-    setToggleState (false, juce::sendNotification);
+    juce::ToggleButton::mouseDown(e);
 }
 
-void CloseButton::mouseEnter (const juce::MouseEvent& e)
+void CloseButton::mouseEnter(const juce::MouseEvent& e)
 {
+    juce::ToggleButton::mouseEnter(e);
     isEntered = true;
+    repaint();
 }
 
-void CloseButton::mouseExit (const juce::MouseEvent& e)
+void CloseButton::mouseExit(const juce::MouseEvent& e)
 {
+    juce::ToggleButton::mouseExit(e);
     isEntered = false;
+    repaint();
 }

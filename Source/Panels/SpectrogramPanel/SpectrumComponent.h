@@ -13,10 +13,11 @@
 
 #pragma once
 
-#include "../../GUI/LookAndFeel.h"
+#include "../../GUI/FireTheme.h"
 #include "juce_audio_basics/juce_audio_basics.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <array>
+#include <cstdint>
 
 //==============================================================================
 class SpectrumComponent : public juce::Component,
@@ -31,38 +32,51 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    /** Call this from your audio thread to update the spectrum data. */
+    /** Thread-safe. The data is copied and rendered on the message thread. */
     void updateSpectrum(const float* newData, int numBins, float binWidth);
 
     void setSpecAlpha(const float alp);
 
 private:
-    /** This is called on the message thread to trigger a repaint. Now handled by timer. */
     void handleAsyncUpdate() override;
-
-    /** Timer callback for smooth, interpolated rendering at a fixed frame rate. */
     void timerCallback() override;
 
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void parentHierarchyChanged() override;
+    void visibilityChanged() override;
 
-    /** Resets the peak-hold data. */
     void resetPeakData();
+    void setMouseOverSpectrum(bool shouldBeOver);
+    void rebuildPaths();
+    void updateAnimationTimer();
 
     int mStyle;
     bool mDrawPeak;
 
-    std::atomic<float> mBinWidth;
+    float mBinWidth = 44100.0f / 2048.0f;
 
-    // Use a lock to protect access to spectrum data arrays from audio and message threads
+    // Producer data is copied into message-thread-owned arrays before rendering.
     juce::CriticalSection dataLock;
-    std::array<float, 1024> spectrumData; // Holds the latest data from the audio thread
-    std::array<float, 1024> displayData; // Holds the interpolated data used for painting
-    std::array<float, 1024> maxData;
-    int numberOfBins;
+    std::array<float, 1024> pendingData {};
+    std::array<float, 1024> targetData {};
+    std::array<float, 1024> displayData {};
+    std::array<float, 1024> smoothedData {};
+    std::array<float, 1024> maxData {};
+    int pendingNumberOfBins = 1024;
+    float pendingBinWidth = 44100.0f / 2048.0f;
+    int numberOfBins = 1024;
+    std::atomic<std::uint64_t> pendingGeneration { 0 };
+    std::uint64_t consumedGeneration = 0;
 
-    // New parameter for controlling animation smoothness
     float interpolationFactor = 0.2f;
+    bool interpolationActive = false;
+    bool geometryDirty = true;
+
+    juce::Path spectrumLinePath;
+    juce::Path spectrumFillPath;
+    juce::Path peakLinePath;
 
     // GUI-thread only members
     float maxDecibelValue = -100.0f;
@@ -71,7 +85,7 @@ private:
     juce::Point<float> maxDecibelPoint;
     float specAlpha = 0.8f;
     bool isPeakLineVisible = false;
-    bool wasMouseOver = false;
+    juce::Component* observedMouseSource = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SpectrumComponent)
 };

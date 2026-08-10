@@ -11,15 +11,16 @@
 #pragma once
 
 #include "../../PluginProcessor.h"
+#include "../../GUI/FireTheme.h"
 #include "../../Utility/Parameters.h"
-#include "../ControlPanel/GlobalPanel.h"
 #include "DraggableButton.h"
+
+class GlobalPanel;
 //==============================================================================
 /*
  */
 class FilterControl : public juce::Component,
                       public juce::AudioProcessorParameter::Listener,
-                      public juce::Timer,
                       public juce::ChangeListener
 {
 public:
@@ -28,15 +29,16 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
-    void timerCallback() override;
+    void animationTick();
     void parameterValueChanged(int parameterIndex, float newValue) override;
-    void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override {}
+    void parameterGestureChanged(int, bool) override {}
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+    void visibilityChanged() override;
 
 private:
     FireAudioProcessor& processor;
-    GlobalPanel& globalPanel;
     juce::Path responseCurve;
+    juce::Path responseFillCurve;
     juce::Path lfoResponseCurve;
 
     using Filter = juce::dsp::IIR::Filter<float>;
@@ -52,9 +54,26 @@ private:
     void updateLfoChain(const ModulatedFilterValues& modulatedValues);
     void updateLfoResponseCurve();
     void checkAnimationStatus();
+    void handleFilterDrag(DraggableButton& button,
+                          const juce::MouseEvent& event,
+                          const juce::String& selectionParameter,
+                          const juce::String& frequencyParameter,
+                          const juce::String& gainParameter);
+    void finishFilterDrag();
+    void updateDraggableButtonStates();
+    int getCurvePointCount() const;
 
     bool isAnimationActive = false;
     std::atomic<bool> parameterUpdatePending { false };
+    std::atomic<bool> routingStateDirty { true };
+    std::vector<juce::AudioProcessorParameter*> observedParameters;
+    std::vector<double> responseMagnitudes;
+    std::vector<double> lfoMagnitudes;
+
+    bool dragTooltipVisible = false;
+    double dragFrequency = 0.0;
+    double dragGain = 0.0;
+    juce::Point<int> dragTooltipAnchor;
 
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 

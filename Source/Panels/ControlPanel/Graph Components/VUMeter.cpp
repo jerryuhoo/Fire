@@ -12,6 +12,8 @@
 #include "../../../GUI/InterfaceDefines.h"
 #include "../../../Utility/AudioHelpers.h"
 
+#include <array>
+
 //==============================================================================
 VUMeter::VUMeter(FireAudioProcessor* inProcessor)
     : mProcessor(inProcessor),
@@ -34,7 +36,31 @@ VUMeter::~VUMeter()
 
 void VUMeter::paint(juce::Graphics& g)
 {
-    // Ensure all level values are clamped between [0, 1] for drawing
+    const auto displayScale = juce::jmax(
+        0.25f,
+        g.getInternalContext().getPhysicalPixelScaleFactor());
+    const auto channelCount = mProcessor->getTotalNumInputChannels();
+    const auto logicalBounds = getLocalBounds();
+    const auto expectedWidth = juce::jmax(
+        1,
+        juce::roundToInt(static_cast<float>(logicalBounds.getWidth()) * displayScale));
+    const auto expectedHeight = juce::jmax(
+        1,
+        juce::roundToInt(static_cast<float>(logicalBounds.getHeight()) * displayScale));
+    if (! backgroundCache.isValid()
+        || backgroundCache.getWidth() != expectedWidth
+        || backgroundCache.getHeight() != expectedHeight
+        || backgroundCacheBounds != logicalBounds
+        || ! juce::approximatelyEqual(backgroundCacheScale, displayScale)
+        || cachedChannelCount != channelCount
+        || cachedIsInput != mIsInput)
+    {
+        rebuildBackgroundCache(displayScale);
+    }
+
+    if (backgroundCache.isValid())
+        g.drawImage(backgroundCache, logicalBounds.toFloat());
+
     const auto rms0 = juce::jlimit(0.0f, 1.0f, mRmsCh0Level);
     const auto rms1 = juce::jlimit(0.0f, 1.0f, mRmsCh1Level);
     const auto peak0 = juce::jlimit(0.0f, 1.0f, mPeakCh0Level);
@@ -42,69 +68,43 @@ void VUMeter::paint(juce::Graphics& g)
     const auto peakHold0 = juce::jlimit(0.0f, 1.0f, mPeakHoldCh0Level);
     const auto peakHold1 = juce::jlimit(0.0f, 1.0f, mPeakHoldCh1Level);
 
-    // 1. Draw Backgrounds
-    g.setColour(COLOUR6);
-    if (mProcessor->getTotalNumInputChannels() == 2)
+    const auto accent = mIsInput ? fire::ui::colours::flame
+                                 : fire::ui::colours::positive;
+    const auto drawChannel = [&g, accent, this](juce::Rectangle<int> bounds,
+                                                float rms,
+                                                float peak,
+                                                float peakHold)
     {
-        g.fillRect(leftMeterBounds);
-        g.fillRect(rightMeterBounds);
-    }
-    else // Mono
-    {
-        g.fillRect(leftMeterBounds);
-    }
+        if (bounds.isEmpty())
+            return;
 
-    // 2. Calculate Fill Heights
-    const auto h = (float) getHeight();
-    const auto rmsCh0FillY = h - h * rms0;
-    const auto rmsCh1FillY = h - h * rms1;
-    const auto peakCh0FillY = h - h * peak0;
-    const auto peakCh1FillY = h - h * peak1;
+        const auto floatBounds = bounds.toFloat().reduced(1.0f);
+        const auto levelToY = [floatBounds](float level)
+        {
+            return floatBounds.getBottom() - floatBounds.getHeight() * juce::jlimit(0.0f, 1.0f, level);
+        };
 
-    // 3. Draw Peak Level Bars (Light color)
-    g.setColour(juce::Colours::yellowgreen.withAlpha(0.6f));
-    if (mProcessor->getTotalNumInputChannels() == 2)
-    {
-        g.fillRect((float) leftMeterBounds.getX(), peakCh0FillY, (float) leftMeterBounds.getWidth(), h - peakCh0FillY);
-        g.fillRect((float) rightMeterBounds.getX(), peakCh1FillY, (float) rightMeterBounds.getWidth(), h - peakCh1FillY);
-    }
-    else // Mono
-    {
-        g.fillRect((float) leftMeterBounds.getX(), peakCh0FillY, (float) leftMeterBounds.getWidth(), h - peakCh0FillY);
-    }
+        const auto peakY = levelToY(peak);
+        const auto rmsY = levelToY(rms);
+        g.setColour(accent.withAlpha(0.22f));
+        g.fillRect(floatBounds.withTop(peakY));
 
-    // 4. Draw RMS Level Bars (Dark color)
-    g.setColour(juce::Colours::yellowgreen);
-    if (mProcessor->getTotalNumInputChannels() == 2)
-    {
-        g.fillRect((float) leftMeterBounds.getX(), rmsCh0FillY, (float) leftMeterBounds.getWidth(), h - rmsCh0FillY);
-        g.fillRect((float) rightMeterBounds.getX(), rmsCh1FillY, (float) rightMeterBounds.getWidth(), h - rmsCh1FillY);
-    }
-    else // Mono
-    {
-        g.fillRect((float) leftMeterBounds.getX(), rmsCh0FillY, (float) leftMeterBounds.getWidth(), h - rmsCh0FillY);
-    }
+        g.setGradientFill(meterGradient);
+        g.fillRect(floatBounds.withTop(rmsY));
 
-    // 5. Draw Peak-Hold Lines
-    g.setColour(juce::Colours::yellowgreen.withBrightness(0.5f));
-    const auto peakHoldCh0Y = h - h * peakHold0;
-    const auto peakHoldCh1Y = h - h * peakHold1;
+        if (peakHold > 0.0001f)
+        {
+            const auto holdY = levelToY(peakHold);
+            g.setColour(fire::ui::colours::whiteHot.withAlpha(0.30f));
+            g.drawLine(floatBounds.getX(), holdY, floatBounds.getRight(), holdY, 4.0f);
+            g.setColour(fire::ui::colours::whiteHot);
+            g.drawLine(floatBounds.getX(), holdY, floatBounds.getRight(), holdY, 1.2f);
+        }
+    };
 
-    const float peakLineThreshold = 0.0001f;
-
-    if (mProcessor->getTotalNumInputChannels() == 2)
-    {
-        if (peakHold0 > peakLineThreshold)
-            g.drawLine((float) leftMeterBounds.getX(), peakHoldCh0Y, (float) leftMeterBounds.getRight(), peakHoldCh0Y, 2.0f);
-
-        if (peakHold1 > peakLineThreshold)
-            g.drawLine((float) rightMeterBounds.getX(), peakHoldCh1Y, (float) rightMeterBounds.getRight(), peakHoldCh1Y, 2.0f);
-    }
-    else // Mono
-    {
-        if (peakHold0 > peakLineThreshold)
-            g.drawLine((float) leftMeterBounds.getX(), peakHoldCh0Y, (float) leftMeterBounds.getRight(), peakHoldCh0Y, 2.0f);
-    }
+    drawChannel(leftMeterBounds, rms0, peak0, peakHold0);
+    if (channelCount == 2)
+        drawChannel(rightMeterBounds, rms1, peak1, peakHold1);
 }
 
 void VUMeter::resized()
@@ -125,15 +125,29 @@ void VUMeter::resized()
         leftMeterBounds = bounds.reduced((bounds.getWidth() - meterWidth) / 2, 0);
         rightMeterBounds = {}; // Not used
     }
+
+    backgroundCache = {};
+    backgroundCacheBounds = {};
+    backgroundCacheScale = 0.0f;
 }
 
 void VUMeter::setParameters(bool isInput, int bandIndex)
 {
+    if (mIsInput == isInput && mBandIndex == bandIndex)
+        return;
+
+    const bool appearanceChanged = mIsInput != isInput;
     mIsInput = isInput;
     mBandIndex = bandIndex;
+    if (appearanceChanged)
+    {
+        backgroundCache = {};
+        backgroundCacheBounds = {};
+        backgroundCacheScale = 0.0f;
+    }
 }
 
-void VUMeter::updateLevels(const MeterValues& latestValues)
+bool VUMeter::updateLevels(const MeterValues& latestValues)
 {
     float rawRmsCh0 = 0.0f, rawRmsCh1 = 0.0f, rawPeakCh0 = 0.0f, rawPeakCh1 = 0.0f;
     const bool isGlobal = (mBandIndex == -1);
@@ -149,10 +163,11 @@ void VUMeter::updateLevels(const MeterValues& latestValues)
         }
         else if (juce::isPositiveAndBelow(mBandIndex, 4))
         {
-            rawRmsCh0 = latestValues.bandInputRMS_L[mBandIndex];
-            rawRmsCh1 = latestValues.bandInputRMS_R[mBandIndex];
-            rawPeakCh0 = latestValues.bandInputPeak_L[mBandIndex];
-            rawPeakCh1 = latestValues.bandInputPeak_R[mBandIndex];
+            const auto bandIndex = static_cast<size_t>(mBandIndex);
+            rawRmsCh0 = latestValues.bandInputRMS_L[bandIndex];
+            rawRmsCh1 = latestValues.bandInputRMS_R[bandIndex];
+            rawPeakCh0 = latestValues.bandInputPeak_L[bandIndex];
+            rawPeakCh1 = latestValues.bandInputPeak_R[bandIndex];
         }
     }
     else // Output
@@ -166,51 +181,62 @@ void VUMeter::updateLevels(const MeterValues& latestValues)
         }
         else if (juce::isPositiveAndBelow(mBandIndex, 4))
         {
-            rawRmsCh0 = latestValues.bandOutputRMS_L[mBandIndex];
-            rawRmsCh1 = latestValues.bandOutputRMS_R[mBandIndex];
-            rawPeakCh0 = latestValues.bandOutputPeak_L[mBandIndex];
-            rawPeakCh1 = latestValues.bandOutputPeak_R[mBandIndex];
+            const auto bandIndex = static_cast<size_t>(mBandIndex);
+            rawRmsCh0 = latestValues.bandOutputRMS_L[bandIndex];
+            rawRmsCh1 = latestValues.bandOutputRMS_R[bandIndex];
+            rawPeakCh0 = latestValues.bandOutputPeak_L[bandIndex];
+            rawPeakCh1 = latestValues.bandOutputPeak_R[bandIndex];
         }
     }
 
-    // --- The rest of the function remains identical ---
+    return updateBallistics(dBToNormalizedGain(rawRmsCh0),
+                            dBToNormalizedGain(rawRmsCh1),
+                            dBToNormalizedGain(rawPeakCh0),
+                            dBToNormalizedGain(rawPeakCh1));
+}
 
-    // 2. Convert from linear gain to normalized dB for UI display.
-    float updatedRmsCh0 = dBToNormalizedGain(rawRmsCh0);
-    float updatedRmsCh1 = dBToNormalizedGain(rawRmsCh1);
-    float updatedPeakCh0 = dBToNormalizedGain(rawPeakCh0);
-    float updatedPeakCh1 = dBToNormalizedGain(rawPeakCh1);
+bool VUMeter::decayToSilence()
+{
+    return updateBallistics(0.0f, 0.0f, 0.0f, 0.0f);
+}
 
-    // 3. Apply smoothing to RMS for a more stable visual.
+bool VUMeter::updateBallistics(float updatedRmsCh0,
+                               float updatedRmsCh1,
+                               float updatedPeakCh0,
+                               float updatedPeakCh1)
+{
+    const std::array<float, 6> previous {
+        mRmsCh0Level, mRmsCh1Level, mPeakCh0Level,
+        mPeakCh1Level, mPeakHoldCh0Level, mPeakHoldCh1Level
+    };
+
     auto applySmoothing = [](float current, float target)
     {
         if (target > current)
-            return target; // Fast attack
-        return current + 0.1f * (target - current); // Slow release
+            return target;
+        return current + 0.14f * (target - current);
     };
 
     mRmsCh0Level = applySmoothing(mRmsCh0Level, updatedRmsCh0);
     mRmsCh1Level = applySmoothing(mRmsCh1Level, updatedRmsCh1);
 
-    // Peak levels jump immediately (no smoothing)
-    mPeakCh0Level = updatedPeakCh0;
-    mPeakCh1Level = updatedPeakCh1;
+    mPeakCh0Level = applySmoothing(mPeakCh0Level, updatedPeakCh0);
+    mPeakCh1Level = applySmoothing(mPeakCh1Level, updatedPeakCh1);
 
     // 4. Update peak-hold levels.
     mPeakHoldCh0Level = juce::jmax(mPeakHoldCh0Level, mPeakCh0Level);
     mPeakHoldCh1Level = juce::jmax(mPeakHoldCh1Level, mPeakCh1Level);
 
-    // 5. Handle decay logic for the peak-hold line.
     if (mPeakHoldCh0Level > mPeakCh0Level || mPeakHoldCh1Level > mPeakCh1Level)
     {
-        if (mPeakHoldDecayCounter < PEAK_HOLD_FRAMES)
+        if (mPeakHoldDecayCounter < peakHoldFrames)
         {
             ++mPeakHoldDecayCounter;
         }
         else
         {
-            mPeakHoldCh0Level -= 0.01f;
-            mPeakHoldCh1Level -= 0.01f;
+            mPeakHoldCh0Level = juce::jmax(0.0f, mPeakHoldCh0Level - 0.018f);
+            mPeakHoldCh1Level = juce::jmax(0.0f, mPeakHoldCh1Level - 0.018f);
         }
     }
     else
@@ -218,7 +244,6 @@ void VUMeter::updateLevels(const MeterValues& latestValues)
         mPeakHoldDecayCounter = 0;
     }
 
-    // Prevent denormalization
     mRmsCh0Level = helper_denormalize(mRmsCh0Level);
     mRmsCh1Level = helper_denormalize(mRmsCh1Level);
     mPeakCh0Level = helper_denormalize(mPeakCh0Level);
@@ -226,12 +251,78 @@ void VUMeter::updateLevels(const MeterValues& latestValues)
     mPeakHoldCh0Level = helper_denormalize(mPeakHoldCh0Level);
     mPeakHoldCh1Level = helper_denormalize(mPeakHoldCh1Level);
 
-    // 6. Trigger a repaint.
-    repaint();
+    const std::array<float, 6> current {
+        mRmsCh0Level, mRmsCh1Level, mPeakCh0Level,
+        mPeakCh1Level, mPeakHoldCh0Level, mPeakHoldCh1Level
+    };
+    for (size_t i = 0; i < current.size(); ++i)
+        if (std::abs(current[i] - previous[i]) > 0.0001f)
+            return true;
+
+    return false;
 }
 
-// Getter implementations
-float VUMeter::getRmsLeftChannelLevel() { return mRmsCh0Level; }
-float VUMeter::getRmsRightChannelLevel() { return mRmsCh1Level; }
-float VUMeter::getPeakLeftChannelLevel() { return mPeakHoldCh0Level; }
-float VUMeter::getPeakRightChannelLevel() { return mPeakHoldCh1Level; }
+float VUMeter::getRmsLeftChannelLevel() const noexcept { return mRmsCh0Level; }
+float VUMeter::getRmsRightChannelLevel() const noexcept { return mRmsCh1Level; }
+float VUMeter::getPeakLeftChannelLevel() const noexcept { return mPeakHoldCh0Level; }
+float VUMeter::getPeakRightChannelLevel() const noexcept { return mPeakHoldCh1Level; }
+
+void VUMeter::rebuildBackgroundCache(float displayScale)
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+    {
+        backgroundCache = {};
+        backgroundCacheBounds = {};
+        backgroundCacheScale = 0.0f;
+        return;
+    }
+
+    displayScale = juce::jmax(0.25f, displayScale);
+    backgroundCacheBounds = getLocalBounds();
+    backgroundCacheScale = displayScale;
+    cachedChannelCount = mProcessor->getTotalNumInputChannels();
+    cachedIsInput = mIsInput;
+    backgroundCache = juce::Image(
+        juce::Image::ARGB,
+        juce::jmax(1, juce::roundToInt(static_cast<float>(getWidth()) * displayScale)),
+        juce::jmax(1, juce::roundToInt(static_cast<float>(getHeight()) * displayScale)),
+        true);
+    juce::Graphics cacheGraphics(backgroundCache);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+
+    const auto accent = mIsInput ? fire::ui::colours::flame
+                                 : fire::ui::colours::positive;
+    meterGradient = juce::ColourGradient(accent.darker(0.10f),
+                                         getWidth() * 0.5f,
+                                         static_cast<float>(getHeight()),
+                                         fire::ui::colours::whiteHot,
+                                         getWidth() * 0.5f,
+                                         0.0f,
+                                         false);
+    meterGradient.addColour(0.68, accent);
+
+    const auto drawTrack = [&cacheGraphics](juce::Rectangle<int> bounds)
+    {
+        if (bounds.isEmpty())
+            return;
+
+        const auto track = bounds.toFloat();
+        cacheGraphics.setColour(fire::ui::colours::canvas.withAlpha(0.92f));
+        cacheGraphics.fillRoundedRectangle(track, 2.0f);
+        cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.85f));
+        cacheGraphics.drawRoundedRectangle(track.reduced(0.5f), 2.0f, 1.0f);
+
+        cacheGraphics.setColour(fire::ui::colours::textMuted.withAlpha(0.22f));
+        for (int division = 1; division < 8; ++division)
+        {
+            const auto y = track.getY() + track.getHeight() * division / 8.0f;
+            cacheGraphics.drawHorizontalLine(juce::roundToInt(y),
+                                             track.getX() + 1.0f,
+                                             track.getRight() - 1.0f);
+        }
+    };
+
+    drawTrack(leftMeterBounds);
+    if (cachedChannelCount == 2)
+        drawTrack(rightMeterBounds);
+}

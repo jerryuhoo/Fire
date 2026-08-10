@@ -11,7 +11,7 @@
 #pragma once
 
 #include "VerticalLine.h"
-#include "../../GUI/LookAndFeel.h"
+#include "../../GUI/FireTheme.h"
 
 //==============================================================================
 /*

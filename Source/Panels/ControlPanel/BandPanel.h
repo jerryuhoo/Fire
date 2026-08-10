@@ -39,6 +39,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void animationTick(float deltaSeconds);
     void setFocusBandNum(int num, bool forceUpdate = false);
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
@@ -73,6 +74,11 @@ private:
     void initBypassButton(juce::ToggleButton& bypassButton, juce::Colour colour);
     void setMenu(juce::ComboBox* combobox);
     void updateDistortionModeVisibility();
+    void rebuildChromeCache(float displayScale);
+    void invalidateChromeCache();
+    void setAnimatedModuleTarget(int moduleIndex);
+    juce::Rectangle<float> getModuleSelectionBounds(float modulePosition) const;
+    juce::Colour getModuleSelectionColour() const;
 
     void createSliders();
     void createLabels();
@@ -91,8 +97,6 @@ private:
     std::array<juce::String, 4> linkedParameterIds;
     std::array<juce::String, 4> outputParameterIds;
     std::array<std::array<juce::String, 4>, distortionGraphParameterCount> distortionGraphParameterIds;
-
-    juce::Rectangle<int> bandKnobArea, driveKnobArea, outputKnobArea, bottomArea;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
@@ -131,8 +135,14 @@ private:
     juce::Rectangle<int> outputAreaRect;
     juce::Rectangle<int> tabAreaRect;
     juce::Rectangle<int> graphAreaRect; // Area for the graphs
-    juce::Rectangle<int> shapeSeparatorLine;
-    juce::Colour activeTabColour;
+    juce::Image chromeCache;
+    float chromeCacheDisplayScale = 0.0f;
+    bool chromeCacheDirty = true;
+
+    fire::ui::DampedValue moduleSelectionPosition;
+    fire::ui::DampedValue moduleSelectionColourMix;
+    juce::Colour moduleSelectionColourStart { fire::ui::colours::drive };
+    juce::Colour moduleSelectionColourTarget { fire::ui::colours::drive };
 
     // Graphs moved from GraphPanel
     Oscilloscope oscilloscope { processor };

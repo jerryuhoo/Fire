@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include "BinaryData.h"
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
 #include "GUI/ValueEntryPopup.h"
@@ -22,6 +21,8 @@
 #include "Panels/SpectrogramPanel/Multiband.h"
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
 #include "Utility/VersionInfo.h"
+#include <array>
+#include <vector>
 
 // Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
 
@@ -136,6 +137,34 @@ private:
     juce::Image backgroundCache;
     float currentDisplayScale = 1.0f;
 
+    struct EmberParticle
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+        float velocity = 0.0f;
+        float drift = 0.0f;
+        float size = 1.0f;
+        float phase = 0.0f;
+    };
+
+    std::array<EmberParticle, 18> headerEmbers {};
+    double lastAnimationTimeSeconds = 0.0;
+    float animationSeconds = 0.0f;
+    float headerEnergy = 0.0f;
+    int animationFrame = 0;
+    bool lastBypassedState = false;
+
+    fire::ui::DampedValue workspaceSelection;
+    int activeWorkspace = 0;
+
+    std::array<float, 2 * SpectrumProcessor::fftSize> processedFftFrame {};
+    std::array<float, 2 * SpectrumProcessor::fftSize> originalFftFrame {};
+
+    juce::Rectangle<int> headerArea;
+    juce::Rectangle<int> spectrumCardArea;
+    juce::Rectangle<int> navigationArea;
+    juce::Rectangle<int> contentArea;
+
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
 
@@ -147,6 +176,12 @@ private:
     int focusIndex = 0;
     void updateWhenChangingFocus();
     void updateMainPanelVisibility();
+    void rebuildBackgroundCache();
+    void initialiseHeaderEmbers();
+    void advanceAnimations(float deltaSeconds);
+    void drawAnimatedHeader(juce::Graphics& g);
+    void drawWorkspaceSelection(juce::Graphics& g);
+    void selectWorkspace(int targetWorkspace, bool animateSelection);
 
     void buttonClicked(juce::Button* clickedButton) override;
     void mouseDown(const juce::MouseEvent& e) override;
@@ -207,7 +242,13 @@ private:
     void exitAssignMode();
 
     void updateModulationStates();
-    std::vector<ModulatableSlider*> getAllModulatableSliders();
+    const std::vector<ModulatableSlider*>& getAllModulatableSliders() const noexcept;
+    void refreshModulationSnapshot();
+    void applyModulationSnapshot();
+    std::vector<ModulatableSlider*> allModulatableSliders;
+    juce::Array<ModulationRouting> modulationRoutingSnapshot;
+    std::vector<int> modulationRoutingIndexBySlider;
+    int modulationSnapshotFramesRemaining = 0;
     void publishAvailableUpdate(const juce::String& version);
     juce::String takeAvailableUpdate();
 

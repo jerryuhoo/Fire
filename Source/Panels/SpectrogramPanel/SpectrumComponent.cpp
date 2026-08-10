@@ -2,85 +2,48 @@
   ==============================================================================
 
     SpectrumComponent.cpp
-    Created: 2 Oct 2025
-    Author:  Yifeng Yu
-
-    MODIFIED to remove high-CPU waterfall effect and improve performance.
-    Draws the spectrum directly without intermediate images.
-    Further modified to use a Timer for temporal smoothing and applies
-    spatial smoothing for a cleaner curve.
+    Event-driven, CPU-rendered spectrum view for the Fire analyser.
 
   ==============================================================================
 */
 
 #include "SpectrumComponent.h"
-#include "../../Utility/AudioHelpers.h" // Assumed to contain AudioHelpers::transformToLog
+#include "../../Utility/AudioHelpers.h"
 
-//==============================================================================
-SpectrumComponent::SpectrumComponent()
-    : mStyle(1), mDrawPeak(true), mBinWidth(44100.0f / 2048.0f), numberOfBins(1024)
+namespace
 {
-    spectrumData.fill(0.0f);
-    displayData.fill(0.0f); // Initialize display data
-    maxData.fill(0.0f);
+constexpr float minDisplayDb = -100.0f;
+constexpr float maxDisplayDb = 0.0f;
+constexpr float minimumDisplayFrequency = 20.0f;
+constexpr float maximumDisplayFrequency = 20000.0f;
 
-    startTimerHz(60); // Start a 60 FPS timer for smooth animation
+float magnitudeToDb(float magnitude, int numberOfBins)
+{
+    const auto normalisedMagnitude = juce::jmax(1.0e-9f,
+                                                magnitude / static_cast<float>(juce::jmax(1, numberOfBins)));
+    return juce::Decibels::gainToDecibels(normalisedMagnitude, minDisplayDb);
+}
+} // namespace
+
+SpectrumComponent::SpectrumComponent()
+    : SpectrumComponent(1, true)
+{
 }
 
 SpectrumComponent::SpectrumComponent(int style, bool drawPeak)
-    : mStyle(style), mDrawPeak(drawPeak), mBinWidth(44100.0f / 2048.0f), numberOfBins(1024)
+    : mStyle(style), mDrawPeak(drawPeak)
 {
-    spectrumData.fill(0.0f);
-    displayData.fill(0.0f);
-    maxData.fill(0.0f);
-
-    startTimerHz(60);
+    setOpaque(false);
+    setInterceptsMouseClicks(false, false);
 }
 
 SpectrumComponent::~SpectrumComponent()
 {
-    stopTimer(); // Stop the timer when the component is destroyed
-}
+    stopTimer();
+    cancelPendingUpdate();
 
-void SpectrumComponent::timerCallback()
-{
-    {
-        juce::ScopedLock locker(dataLock);
-        // 1. Interpolate the main spectrum line (no change here)
-        for (int i = 0; i < numberOfBins; ++i)
-        {
-            displayData[i] += (spectrumData[i] - displayData[i]) * interpolationFactor;
-        }
-
-        // 2. NEW LOGIC for peak line decay
-        // If mouse is NOT over, the peak line should fall towards zero.
-        if (! mouseOver && isPeakLineVisible)
-        {
-            float maxPeakValue = 0.0f;
-            for (int i = 0; i < numberOfBins; ++i)
-            {
-                // Decay towards a small negative value to ensure it goes below the bottom of the graph
-                maxData[i] += (-0.1f - maxData[i]) * interpolationFactor;
-
-                // Keep track of the highest peak value during decay
-                if (maxData[i] > maxPeakValue)
-                    maxPeakValue = maxData[i];
-            }
-
-            if (maxPeakValue < 0.001f)
-            {
-                isPeakLineVisible = false;
-            }
-        }
-    }
-
-    repaint();
-}
-
-void SpectrumComponent::handleAsyncUpdate()
-{
-    // This is no longer needed for rendering, as the timer handles it.
-    // It can be left empty or used for other asynchronous tasks if necessary.
+    if (observedMouseSource != nullptr)
+        observedMouseSource->removeMouseListener(this);
 }
 
 void SpectrumComponent::updateSpectrum(const float* newData, int numBins, float binWidth)
@@ -88,151 +51,413 @@ void SpectrumComponent::updateSpectrum(const float* newData, int numBins, float 
     if (newData == nullptr || numBins <= 0 || ! std::isfinite(binWidth) || binWidth <= 0.0f)
         return;
 
-    // This method is called from the audio thread.
-    // It just copies the new data; all smoothing is now on the message thread.
+    const auto binsToCopy = juce::jlimit(0, static_cast<int>(pendingData.size()), numBins);
     {
-        juce::ScopedLock locker(dataLock);
-        numberOfBins = juce::jlimit(0, static_cast<int>(spectrumData.size()), numBins);
-        mBinWidth = binWidth;
+        const juce::ScopedLock locker(dataLock);
+        std::copy_n(newData, binsToCopy, pendingData.begin());
+        if (binsToCopy < static_cast<int>(pendingData.size()))
+            std::fill(pendingData.begin() + binsToCopy, pendingData.end(), 0.0f);
 
-        // Directly copy the new data into the spectrumData buffer
-        std::copy(newData, newData + numberOfBins, spectrumData.begin());
+        pendingNumberOfBins = binsToCopy;
+        pendingBinWidth = binWidth;
+        pendingGeneration.fetch_add(1, std::memory_order_release);
     }
-    // No need to call triggerAsyncUpdate() anymore.
+
+    triggerAsyncUpdate();
+}
+
+void SpectrumComponent::handleAsyncUpdate()
+{
+    if (! isShowing())
+        return;
+
+    if (! isTimerRunning())
+        startTimerHz(60);
+}
+
+void SpectrumComponent::timerCallback()
+{
+    if (! isShowing())
+    {
+        stopTimer();
+        return;
+    }
+
+    bool visualStateChanged = false;
+    const auto newestGeneration = pendingGeneration.load(std::memory_order_acquire);
+    if (newestGeneration != consumedGeneration)
+    {
+        const juce::ScopedLock locker(dataLock);
+        targetData = pendingData;
+        numberOfBins = pendingNumberOfBins;
+        mBinWidth = pendingBinWidth;
+        consumedGeneration = pendingGeneration.load(std::memory_order_relaxed);
+        interpolationActive = true;
+        visualStateChanged = true;
+    }
+
+    bool stillInterpolating = false;
+    if (interpolationActive)
+    {
+        for (int i = 0; i < numberOfBins; ++i)
+        {
+            const float difference = targetData[static_cast<size_t>(i)]
+                                   - displayData[static_cast<size_t>(i)];
+
+            if (std::abs(difference) > 1.0e-5f)
+            {
+                displayData[static_cast<size_t>(i)] += difference * interpolationFactor;
+                stillInterpolating = true;
+            }
+            else
+            {
+                displayData[static_cast<size_t>(i)] = targetData[static_cast<size_t>(i)];
+            }
+        }
+
+        interpolationActive = stillInterpolating;
+        visualStateChanged = true;
+    }
+
+    if (mDrawPeak && mouseOver && visualStateChanged)
+    {
+        for (int i = 0; i < numberOfBins; ++i)
+            maxData[static_cast<size_t>(i)] = juce::jmax(maxData[static_cast<size_t>(i)],
+                                                        displayData[static_cast<size_t>(i)]);
+
+        isPeakLineVisible = true;
+    }
+    else if (mDrawPeak && ! mouseOver && isPeakLineVisible)
+    {
+        float loudestPeakDb = minDisplayDb;
+        for (int i = 0; i < numberOfBins; ++i)
+        {
+            auto& peak = maxData[static_cast<size_t>(i)];
+            peak *= 0.88f;
+            loudestPeakDb = juce::jmax(loudestPeakDb, magnitudeToDb(peak, numberOfBins));
+        }
+
+        if (loudestPeakDb <= minDisplayDb + 0.5f)
+        {
+            maxData.fill(0.0f);
+            isPeakLineVisible = false;
+        }
+
+        visualStateChanged = true;
+    }
+
+    if (visualStateChanged || geometryDirty)
+    {
+        rebuildPaths();
+        repaint();
+    }
+
+    updateAnimationTimer();
+}
+
+void SpectrumComponent::rebuildPaths()
+{
+    spectrumLinePath.clear();
+    spectrumFillPath.clear();
+    peakLinePath.clear();
+    geometryDirty = false;
+
+    const auto bounds = getLocalBounds().toFloat();
+    if (bounds.isEmpty() || numberOfBins < 2 || mBinWidth <= 0.0f)
+        return;
+
+    spectrumLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
+    peakLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
+
+    for (int i = 0; i < numberOfBins; ++i)
+    {
+        if (i == 0 || i == numberOfBins - 1)
+            smoothedData[static_cast<size_t>(i)] = displayData[static_cast<size_t>(i)];
+        else
+            smoothedData[static_cast<size_t>(i)] = (displayData[static_cast<size_t>(i - 1)]
+                                                    + displayData[static_cast<size_t>(i)] * 2.0f
+                                                    + displayData[static_cast<size_t>(i + 1)])
+                                                   * 0.25f;
+    }
+
+    int currentBucket = -1;
+    float currentBucketY = bounds.getBottom();
+    float peakBucketY = bounds.getBottom();
+    bool hasSpectrumPoint = false;
+    bool hasPeakPoint = false;
+
+    maxDecibelValue = minDisplayDb;
+    maxFreq = 0.0f;
+    maxDecibelPoint = { -10.0f, -10.0f };
+
+    const auto dbToY = [&bounds](float db)
+    {
+        const float proportion = juce::jmap(juce::jlimit(minDisplayDb, maxDisplayDb, db),
+                                            minDisplayDb,
+                                            maxDisplayDb,
+                                            0.0f,
+                                            1.0f);
+        return juce::jmap(proportion, 0.0f, 1.0f, bounds.getBottom(), bounds.getY());
+    };
+
+    const auto flushBucket = [&](int bucket)
+    {
+        if (bucket < 0)
+            return;
+
+        const float x = juce::jlimit(bounds.getX(), bounds.getRight(),
+                                     static_cast<float>(bucket) + 0.5f);
+        if (! hasSpectrumPoint)
+        {
+            spectrumLinePath.startNewSubPath(x, currentBucketY);
+            hasSpectrumPoint = true;
+        }
+        else
+        {
+            spectrumLinePath.lineTo(x, currentBucketY);
+        }
+
+        if (mDrawPeak && isPeakLineVisible)
+        {
+            if (! hasPeakPoint)
+            {
+                peakLinePath.startNewSubPath(x, peakBucketY);
+                hasPeakPoint = true;
+            }
+            else
+            {
+                peakLinePath.lineTo(x, peakBucketY);
+            }
+        }
+    };
+
+    for (int i = 1; i < numberOfBins; ++i)
+    {
+        const float frequency = static_cast<float>(i) * mBinWidth;
+        if (frequency < minimumDisplayFrequency || frequency > maximumDisplayFrequency)
+            continue;
+
+        const float normalisedX = transformToLog(frequency);
+        if (! std::isfinite(normalisedX))
+            continue;
+
+        const float x = bounds.getX() + normalisedX * bounds.getWidth();
+        const int bucket = juce::jlimit(0, juce::jmax(0, getWidth() - 1),
+                                       static_cast<int>(std::floor(x)));
+        const float currentDb = magnitudeToDb(smoothedData[static_cast<size_t>(i)], numberOfBins);
+        const float currentY = dbToY(currentDb);
+        const float peakDb = magnitudeToDb(maxData[static_cast<size_t>(i)], numberOfBins);
+        const float peakY = dbToY(peakDb);
+
+        if (bucket != currentBucket)
+        {
+            flushBucket(currentBucket);
+            currentBucket = bucket;
+            currentBucketY = currentY;
+            peakBucketY = peakY;
+        }
+        else
+        {
+            // Preserve the strongest bin in each physical x-column. This keeps
+            // narrow transients visible while limiting the path to screen width.
+            currentBucketY = juce::jmin(currentBucketY, currentY);
+            peakBucketY = juce::jmin(peakBucketY, peakY);
+        }
+
+        if (mDrawPeak && isPeakLineVisible && peakDb > maxDecibelValue)
+        {
+            maxDecibelValue = peakDb;
+            maxFreq = frequency;
+            maxDecibelPoint = { x, peakY };
+        }
+    }
+
+    flushBucket(currentBucket);
+
+    if (hasSpectrumPoint)
+    {
+        spectrumFillPath = spectrumLinePath;
+        spectrumFillPath.lineTo(bounds.getRight(), bounds.getBottom());
+        spectrumFillPath.lineTo(bounds.getX(), bounds.getBottom());
+        spectrumFillPath.closeSubPath();
+    }
 }
 
 void SpectrumComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::transparentBlack);
+    const auto bounds = getLocalBounds().toFloat();
+    if (bounds.isEmpty() || spectrumLinePath.isEmpty())
+        return;
 
-    auto width = getLocalBounds().getWidth();
-    auto height = getLocalBounds().getHeight();
-    auto mindB = -100.0f;
-    auto maxdB = 0.0f;
-
-    // mouseOver state is updated in paint(), which is more robust
-    mouseOver = getLocalBounds().contains(getMouseXYRelative());
-    maxDecibelValue = -100.0f;
-
-    if (mouseOver && ! wasMouseOver)
-    {
-        isPeakLineVisible = true;
-        resetPeakData();
-    }
-    wasMouseOver = mouseOver;
-
-    juce::Path currentSpecPath, maxSpecPath;
-    currentSpecPath.startNewSubPath(0, (float) height);
-    if (mDrawPeak)
-        maxSpecPath.startNewSubPath(0, (float) height);
-
-    std::array<float, 1024> smoothedDisplayData;
-
-    {
-        juce::ScopedLock locker(dataLock);
-
-        for (int i = 0; i < numberOfBins; ++i)
-        {
-            if (i == 0 || i == numberOfBins - 1)
-                smoothedDisplayData[i] = displayData[i];
-            else
-                smoothedDisplayData[i] = (displayData[i - 1] + displayData[i] + displayData[i + 1]) / 3.0f;
-        }
-
-        for (int i = 1; i < numberOfBins; ++i)
-        {
-            // --- CRITICAL CHANGE HERE ---
-            // Only capture new peaks when the mouse is hovering over the component.
-            if (mDrawPeak && mouseOver && smoothedDisplayData[i] > maxData[i])
-            {
-                maxData[i] = smoothedDisplayData[i];
-            }
-
-            float currentDecibel = juce::Decibels::gainToDecibels(smoothedDisplayData[i] / (float) numberOfBins);
-            float maxDecibel = juce::Decibels::gainToDecibels(maxData[i] / (float) numberOfBins);
-
-            float yPercent = juce::jmap(juce::jlimit(mindB, maxdB, currentDecibel), mindB, maxdB, 0.0f, 1.0f);
-            float yMaxPercent = juce::jmap(juce::jlimit(mindB, maxdB, maxDecibel), mindB, maxdB, 0.0f, 1.0f);
-            double currentFreq = i * mBinWidth.load();
-            float currentX = transformToLog(currentFreq) * width;
-            float currentY = juce::jmap(yPercent, 0.0f, 1.0f, (float) height, 0.0f);
-            float maxY = juce::jmap(yMaxPercent, 0.0f, 1.0f, (float) height, 0.0f);
-            if (! std::isnan(currentX) && ! std::isinf(currentX))
-            {
-                currentSpecPath.lineTo(currentX, currentY);
-                if (mDrawPeak)
-                    maxSpecPath.lineTo(currentX, maxY);
-            }
-            if (maxDecibel > maxDecibelValue)
-            {
-                maxDecibelValue = maxDecibel;
-                maxFreq = currentFreq;
-                maxDecibelPoint.setXY(currentX, maxY);
-            }
-        }
-    }
-
-    auto roundedCurrentPath = currentSpecPath.createPathWithRoundedCorners(5.0f);
-    roundedCurrentPath.lineTo((float) width, (float) height);
-    roundedCurrentPath.lineTo(0.0f, (float) height);
-    roundedCurrentPath.closeSubPath();
-    juce::ColourGradient grad;
     if (mStyle == 1)
-        grad = juce::ColourGradient(juce::Colours::red.withAlpha(specAlpha), 0, 0, COLOUR1.withAlpha(specAlpha), 0, (float) height, false);
-    else
-        grad = juce::ColourGradient(juce::Colours::white.withAlpha(0.2f), 0, 0, juce::Colours::grey.withAlpha(0.2f), 0, (float) height, false);
-    g.setGradientFill(grad);
-    g.fillPath(roundedCurrentPath);
-
-    // Drawing of maxSpecPath and its text
-    if (mDrawPeak && isPeakLineVisible)
     {
-        // We always draw the path, because we want to see the decay animation
-        // when the mouse leaves. It will naturally become flat at the bottom when decayed.
-        auto roundedMaxPath = maxSpecPath.createPathWithRoundedCorners(5.0f);
-        g.setColour(juce::Colours::white.withAlpha(0.8f));
-        g.strokePath(roundedMaxPath, juce::PathStrokeType(1.5f));
+        juce::ColourGradient fill(fire::ui::colours::flame.withAlpha(specAlpha * 0.16f),
+                                  bounds.getX(), bounds.getY(),
+                                  fire::ui::colours::ember.withAlpha(0.0f),
+                                  bounds.getX(), bounds.getBottom(), false);
+        fill.addColour(0.42, fire::ui::colours::ember.withAlpha(specAlpha * 0.09f));
+        g.setGradientFill(fill);
+        g.fillPath(spectrumFillPath);
 
-        // The text, however, should only be visible when hovering.
-        if (mouseOver && maxDecibelValue > -99.9f)
-        {
-            float boxWidth = 100.0f;
-            g.setColour(juce::Colours::lightgrey);
-            g.drawText(juce::String(maxDecibelValue, 1) + " db", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - 20.0f, boxWidth, 20, juce::Justification::centred);
-            g.drawText(juce::String(static_cast<int>(maxFreq)) + " Hz", maxDecibelPoint.getX() - boxWidth / 2.0f, maxDecibelPoint.getY() - 5.0f, boxWidth, 20, juce::Justification::centred);
-        }
+        g.setColour(fire::ui::colours::ember.withAlpha(specAlpha * 0.13f));
+        g.strokePath(spectrumLinePath,
+                     juce::PathStrokeType(4.0f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+
+        juce::ColourGradient heat(fire::ui::colours::whiteHot.withAlpha(specAlpha * 0.90f),
+                                  bounds.getX(), bounds.getY(),
+                                  fire::ui::colours::ember.withAlpha(specAlpha * 0.88f),
+                                  bounds.getX(), bounds.getBottom(), false);
+        heat.addColour(0.55, fire::ui::colours::flame.withAlpha(specAlpha * 0.94f));
+        g.setGradientFill(heat);
+        g.strokePath(spectrumLinePath,
+                     juce::PathStrokeType(1.45f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+    }
+    else
+    {
+        g.setColour(fire::ui::colours::signalCool.withAlpha(specAlpha * 0.055f));
+        g.fillPath(spectrumFillPath);
+        g.setColour(fire::ui::colours::signalCool.withAlpha(specAlpha * 0.52f));
+        g.strokePath(spectrumLinePath,
+                     juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+    }
+
+    if (mDrawPeak && isPeakLineVisible && ! peakLinePath.isEmpty())
+    {
+        g.setColour(fire::ui::colours::whiteHot.withAlpha(mouseOver ? 0.56f : 0.30f));
+        g.strokePath(peakLinePath,
+                     juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
+                                          juce::PathStrokeType::rounded));
+    }
+
+    if (mDrawPeak && mouseOver && maxDecibelValue > minDisplayDb + 0.1f)
+    {
+        constexpr float popupWidth = 112.0f;
+        constexpr float popupHeight = 38.0f;
+        auto popup = juce::Rectangle<float>(popupWidth, popupHeight)
+                         .withCentre({ maxDecibelPoint.x,
+                                       maxDecibelPoint.y - popupHeight * 0.72f });
+        popup.setPosition(juce::jlimit(bounds.getX() + 4.0f,
+                                       bounds.getRight() - popupWidth - 4.0f,
+                                       popup.getX()),
+                          juce::jlimit(bounds.getY() + 4.0f,
+                                       bounds.getBottom() - popupHeight - 4.0f,
+                                       popup.getY()));
+
+        fire::ui::drawGlassPill(g, popup, fire::ui::colours::ember, true, false, false);
+        g.setFont(fire::ui::displayFont(11.0f));
+        g.setColour(fire::ui::colours::whiteHot);
+        g.drawText(juce::String(maxDecibelValue, 1) + " dB",
+                   popup.removeFromTop(popupHeight * 0.52f).reduced(8.0f, 0.0f),
+                   juce::Justification::centredLeft);
+        g.setFont(fire::ui::bodyFont(10.0f));
+        g.setColour(fire::ui::colours::textSecondary);
+        const auto frequencyText = maxFreq >= 1000.0f
+                                     ? juce::String(maxFreq / 1000.0f, 2) + " kHz"
+                                     : juce::String(juce::roundToInt(maxFreq)) + " Hz";
+        g.drawText(frequencyText, popup.reduced(8.0f, 0.0f), juce::Justification::centredLeft);
     }
 }
 
 void SpectrumComponent::resized()
 {
-    // This method is called when the component's size is changed.
+    geometryDirty = true;
+    rebuildPaths();
+    repaint();
 }
 
-void SpectrumComponent::setSpecAlpha(const float alp)
+void SpectrumComponent::setSpecAlpha(float alpha)
 {
-    specAlpha = juce::jlimit(0.0f, 1.0f, alp);
-}
-
-void SpectrumComponent::mouseEnter(const juce::MouseEvent& /*event*/)
-{
-    // When the mouse enters, we want to start a fresh peak-hold session.
-    // Calling resetPeakData() clears the old values.
-    if (mDrawPeak)
+    const float newAlpha = juce::jlimit(0.0f, 1.0f, alpha);
+    if (! juce::approximatelyEqual(specAlpha, newAlpha))
     {
-        resetPeakData();
+        specAlpha = newAlpha;
+        repaint();
     }
 }
 
-void SpectrumComponent::mouseExit(const juce::MouseEvent& /*event*/)
+void SpectrumComponent::mouseEnter(const juce::MouseEvent& event)
 {
-    // Mouse over state is now handled inside paint().
+    const auto relativeEvent = event.getEventRelativeTo(this);
+    setMouseOverSpectrum(getLocalBounds().contains(relativeEvent.getPosition()));
+}
+
+void SpectrumComponent::mouseMove(const juce::MouseEvent& event)
+{
+    const auto relativeEvent = event.getEventRelativeTo(this);
+    setMouseOverSpectrum(getLocalBounds().contains(relativeEvent.getPosition()));
+}
+
+void SpectrumComponent::mouseExit(const juce::MouseEvent& event)
+{
+    const auto relativeEvent = event.getEventRelativeTo(this);
+    setMouseOverSpectrum(getLocalBounds().contains(relativeEvent.getPosition()));
+}
+
+void SpectrumComponent::setMouseOverSpectrum(bool shouldBeOver)
+{
+    if (! mDrawPeak || mouseOver == shouldBeOver)
+        return;
+
+    mouseOver = shouldBeOver;
+    if (mouseOver)
+    {
+        resetPeakData();
+        std::copy(displayData.begin(), displayData.end(), maxData.begin());
+        isPeakLineVisible = true;
+        rebuildPaths();
+        repaint();
+    }
+    else if (isPeakLineVisible && ! isTimerRunning())
+    {
+        startTimerHz(60);
+    }
 }
 
 void SpectrumComponent::resetPeakData()
 {
-    juce::ScopedLock locker(dataLock);
     maxData.fill(0.0f);
     maxFreq = 0.0f;
-    maxDecibelPoint.setXY(-10.0f, -10.0f);
+    maxDecibelValue = minDisplayDb;
+    maxDecibelPoint = { -10.0f, -10.0f };
+}
+
+void SpectrumComponent::parentHierarchyChanged()
+{
+    if (observedMouseSource != nullptr)
+        observedMouseSource->removeMouseListener(this);
+
+    observedMouseSource = mDrawPeak ? getParentComponent() : nullptr;
+    if (observedMouseSource != nullptr)
+        observedMouseSource->addMouseListener(this, true);
+}
+
+void SpectrumComponent::visibilityChanged()
+{
+    if (! isShowing())
+    {
+        setMouseOverSpectrum(false);
+        stopTimer();
+        return;
+    }
+
+    if (pendingGeneration.load(std::memory_order_acquire) != consumedGeneration)
+        startTimerHz(60);
+}
+
+void SpectrumComponent::updateAnimationTimer()
+{
+    const bool hasPendingFrame = pendingGeneration.load(std::memory_order_acquire) != consumedGeneration;
+    const bool peakIsDecaying = mDrawPeak && isPeakLineVisible && ! mouseOver;
+    if (isShowing() && (hasPendingFrame || interpolationActive || peakIsDecaying))
+    {
+        if (! isTimerRunning())
+            startTimerHz(60);
+    }
+    else
+    {
+        stopTimer();
+    }
 }

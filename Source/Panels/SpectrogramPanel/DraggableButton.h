@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "../../GUI/FireTheme.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
 //==============================================================================
@@ -26,9 +27,14 @@ public:
 
     void mouseEnter(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     void setState(const bool state);
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     std::function<void(float)> onQValueChanged;
+    std::function<void(DraggableButton&, const juce::MouseEvent&)> onDrag;
+    std::function<void()> onDragFinished;
 
 private:
     bool isEntered = false;

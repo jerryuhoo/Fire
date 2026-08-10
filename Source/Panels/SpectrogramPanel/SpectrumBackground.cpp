@@ -12,7 +12,6 @@
 #include "../../Utility/AudioHelpers.h" // Assuming transformToLog is here
 
 const int SpectrumBackground::frequenciesForLines[] = { 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 20000 };
-const int SpectrumBackground::numberOfLines = 28;
 const int SpectrumBackground::frequenciesForTextLabels[] = {
     20,
     100,
@@ -24,97 +23,113 @@ const int SpectrumBackground::frequenciesForTextLabels[] = {
 };
 
 //==============================================================================
-SpectrumBackground::SpectrumBackground() : numberOfBins(1024), mBinWidth(44100 / (float) 2048)
+SpectrumBackground::SpectrumBackground()
 {
-    // Initialize with a placeholder image.
     cachedBackground = juce::Image(juce::Image::PixelFormat::ARGB, 1, 1, true);
+    setOpaque(true);
+    setInterceptsMouseClicks(false, false);
 }
 
 SpectrumBackground::~SpectrumBackground() = default;
 
 void SpectrumBackground::paint(juce::Graphics& g)
 {
-    // 1. Get the real physical scale factor for this paint cycle
     const float currentDisplayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
 
-    // 2. Check if the scale has changed (or if it's the first time painting)
-    if (currentDisplayScale != lastDisplayScale)
+    if (! juce::approximatelyEqual(currentDisplayScale, lastDisplayScale)
+        || cachedLogicalBounds != getLocalBounds())
     {
-        // If it changed, update our stored value and regenerate the background image
         lastDisplayScale = currentDisplayScale;
         createBackgroundImage();
-
     }
 
-    // Draw immediately after regeneration. createBackgroundImage() does not
-    // schedule another repaint, so returning above could leave a blank frame
-    // indefinitely on a display-scale change.
-    g.drawImage(cachedBackground, getLocalBounds().toFloat());
+    if (cachedBackground.isValid())
+        g.drawImage(cachedBackground, getLocalBounds().toFloat());
 }
 
 void SpectrumBackground::resized()
 {
-    // First, get the scale factor from the parent editor, as before.
     if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
         if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&editor->getLookAndFeel()))
             scale = lnf->scale;
 
-    // Now, trigger the regeneration of the background image.
-    // The resize itself will cause a repaint, which will then draw the new image.
     createBackgroundImage();
 }
 
 void SpectrumBackground::createBackgroundImage()
 {
-    // Get component bounds.
     auto bounds = getLocalBounds();
     if (bounds.isEmpty())
         return;
 
-    // Create a new image with the current component size.
+    const int physicalWidth = juce::jmax(1, juce::roundToInt(getWidth() * lastDisplayScale));
+    const int physicalHeight = juce::jmax(1, juce::roundToInt(getHeight() * lastDisplayScale));
+    if (cachedBackground.isValid()
+        && cachedBackground.getWidth() == physicalWidth
+        && cachedBackground.getHeight() == physicalHeight
+        && juce::approximatelyEqual(cachedUiScale, scale)
+        && cachedLogicalBounds == bounds)
+        return;
+
+    cachedUiScale = scale;
+    cachedLogicalBounds = bounds;
     cachedBackground = juce::Image(juce::Image::ARGB,
-                                   juce::jmax(1, juce::roundToInt(getWidth() * lastDisplayScale)),
-                                   juce::jmax(1, juce::roundToInt(getHeight() * lastDisplayScale)),
+                                   physicalWidth,
+                                   physicalHeight,
                                    true);
-    // Create a graphics context to draw onto our new image.
+
     juce::Graphics g(cachedBackground);
     g.addTransform(juce::AffineTransform::scale(lastDisplayScale));
 
-    // --- All original painting logic is moved here ---
+    const auto area = bounds.toFloat();
+    fire::ui::drawCanvas(g, area);
 
-    // Paint background color onto the image.
-    g.setColour(COLOUR6);
-    g.fillAll();
+    // A very restrained technical grid gives the analyser depth without
+    // competing with the moving spectrum.
+    fire::ui::drawTechGrid(g, area, 24.0f * scale, 0.055f);
 
-    // Set a scalable font size for the frequency labels.
-    g.setFont(12.0f * scale);
+    const float headerHeight = juce::jmax(22.0f * scale, area.getHeight() * 0.19f);
+    juce::ColourGradient headerShade(fire::ui::colours::surface2.withAlpha(0.72f),
+                                     area.getX(), area.getY(),
+                                     fire::ui::colours::surface0.withAlpha(0.16f),
+                                     area.getX(), area.getY() + headerHeight, false);
+    g.setGradientFill(headerShade);
+    g.fillRect(area.withHeight(headerHeight));
 
-    // Paint horizontal lines and frequency numbers.
-    g.setColour(juce::Colours::lightgrey.withAlpha(0.2f));
-    auto horizontalLineY = (float) bounds.getHeight() / 5.0f;
-    g.drawHorizontalLine((int) horizontalLineY, 0.0f, (float) bounds.getWidth());
+    g.setColour(fire::ui::colours::hairline.withAlpha(0.42f));
+    for (int division = 1; division < 5; ++division)
+    {
+        const float y = fire::ui::pixelAligned(area.getY() + area.getHeight() * division / 5.0f,
+                                                lastDisplayScale);
+        g.drawHorizontalLine(juce::roundToInt(y), area.getX(), area.getRight());
+    }
 
     for (const auto freq : frequenciesForLines)
     {
-        float xPos = transformToLog(freq) * bounds.getWidth();
-        g.drawVerticalLine((int) xPos, horizontalLineY, (float) bounds.getHeight());
+        const float xPos = fire::ui::pixelAligned(transformToLog(freq) * area.getWidth(),
+                                                   lastDisplayScale);
+        const bool major = freq == 20 || freq == 100 || freq == 200 || freq == 1000
+                        || freq == 2000 || freq == 10000 || freq == 20000;
+        g.setColour(fire::ui::colours::hairline.withAlpha(major ? 0.48f : 0.22f));
+        g.drawVerticalLine(juce::roundToInt(xPos), headerHeight, area.getBottom());
     }
 
-    // Loop 2: Draw ONLY the text labels using the sparse array.
+    g.setFont(fire::ui::bodyFont(juce::jlimit(9.0f, 12.0f, 11.0f * scale)));
+    g.setColour(fire::ui::colours::textMuted.withAlpha(0.94f));
     for (const auto freq : frequenciesForTextLabels)
     {
-        float xPos = transformToLog(freq) * bounds.getWidth();
+        const float xPos = transformToLog(freq) * area.getWidth();
 
-        const int scaledWidth = (int) (60 * scale);
-        const int scaledXOffset = (int) (30 * scale);
+        const int scaledWidth = juce::roundToInt(64.0f * scale);
+        const int scaledXOffset = scaledWidth / 2;
 
-        juce::Rectangle<int> textBounds((int) xPos - scaledXOffset, 0, scaledWidth, (int) horizontalLineY);
+        juce::Rectangle<int> textBounds(juce::roundToInt(xPos) - scaledXOffset,
+                                        0,
+                                        scaledWidth,
+                                        juce::roundToInt(headerHeight));
 
-        juce::String text;
-        if (freq >= 1000)
-            text = juce::String(freq / 1000) + "k";
-        else
-            text = juce::String(freq);
+        const auto text = freq >= 1000 ? juce::String(freq / 1000) + " kHz"
+                                       : juce::String(freq) + " Hz";
 
         auto justification = juce::Justification::centred;
         if (freq == 20)

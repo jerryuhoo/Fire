@@ -919,6 +919,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
     historyWritePosition.store(0, std::memory_order_relaxed);
     historySamplesAvailable.store(historyLength, std::memory_order_release);
+    historyGeneration.fetch_add(1, std::memory_order_release);
 
     delayMatchedDryBuffer.setSize(outputChannels, maximumBlockSize);
     delayMatchedDryBuffer.clear();
@@ -1748,32 +1749,45 @@ void FireAudioProcessor::captureHistorySamples()
 
     historySamplesAvailable.store(historyLength, std::memory_order_relaxed);
     historyWritePosition.store(writePosition, std::memory_order_release);
+    historyGeneration.fetch_add(1, std::memory_order_release);
+}
+
+std::uint64_t FireAudioProcessor::getHistoryGeneration() const noexcept
+{
+    return historyGeneration.load(std::memory_order_acquire);
+}
+
+void FireAudioProcessor::copyHistoryArrays(juce::Array<float>& leftDestination,
+                                           juce::Array<float>& rightDestination) const
+{
+    const int writePosition = historyWritePosition.load(std::memory_order_acquire);
+    const int count = juce::jlimit(0, historyLength, historySamplesAvailable.load(std::memory_order_relaxed));
+    const int start = (writePosition - count + historyLength) % historyLength;
+
+    leftDestination.resize(count);
+    rightDestination.resize(count);
+    for (int i = 0; i < count; ++i)
+    {
+        const auto index = static_cast<size_t>((start + i) % historyLength);
+        leftDestination.setUnchecked(i, historyArrayL[index].load(std::memory_order_relaxed));
+        rightDestination.setUnchecked(i, historyArrayR[index].load(std::memory_order_relaxed));
+    }
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayL()
 {
-    const int writePosition = historyWritePosition.load(std::memory_order_acquire);
-    const int count = juce::jlimit(0, historyLength, historySamplesAvailable.load(std::memory_order_relaxed));
-    const int start = (writePosition - count + historyLength) % historyLength;
-
-    juce::Array<float> result;
-    result.ensureStorageAllocated(count);
-    for (int i = 0; i < count; ++i)
-        result.add(historyArrayL[static_cast<size_t>((start + i) % historyLength)].load(std::memory_order_relaxed));
-    return result;
+    juce::Array<float> left;
+    juce::Array<float> right;
+    copyHistoryArrays(left, right);
+    return left;
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayR()
 {
-    const int writePosition = historyWritePosition.load(std::memory_order_acquire);
-    const int count = juce::jlimit(0, historyLength, historySamplesAvailable.load(std::memory_order_relaxed));
-    const int start = (writePosition - count + historyLength) % historyLength;
-
-    juce::Array<float> result;
-    result.ensureStorageAllocated(count);
-    for (int i = 0; i < count; ++i)
-        result.add(historyArrayR[static_cast<size_t>((start + i) % historyLength)].load(std::memory_order_relaxed));
-    return result;
+    juce::Array<float> left;
+    juce::Array<float> right;
+    copyHistoryArrays(left, right);
+    return right;
 }
 
 int FireAudioProcessor::getNumBins() const noexcept

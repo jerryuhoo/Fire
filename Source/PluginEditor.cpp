@@ -111,9 +111,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                     // one-shot assignment interaction here instead of relying on
                     // a broad parameter-listener notification.
                     exitAssignMode();
+                    modulationSnapshotFramesRemaining = 0;
                     updateModulationStates();
-                    bandPanel.repaint();
-                    globalPanel.repaint();
                 }
             };
 
@@ -128,9 +127,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.setOnDataChangedCallback([this]
                                       { processor.lfoDataHasChanged(); });
 
+    allModulatableSliders.reserve(bandPanel.getModulatableSliders().size()
+                                  + globalPanel.getModulatableSliders().size());
+    allModulatableSliders.insert(allModulatableSliders.end(),
+                                 bandPanel.getModulatableSliders().begin(),
+                                 bandPanel.getModulatableSliders().end());
+    allModulatableSliders.insert(allModulatableSliders.end(),
+                                 globalPanel.getModulatableSliders().begin(),
+                                 globalPanel.getModulatableSliders().end());
+    refreshModulationSnapshot();
+
     auto bypassCallback = [this](const juce::String& parameterID)
     {
         processor.getLfoManager().toggleBypassForRouting(parameterID);
+        modulationSnapshotFramesRemaining = 0;
         updateModulationStates();
     };
 
@@ -167,7 +177,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             updateValuePopupForSlider(s);
         };
 
-        slider->onModDragEnd = [this](ModulatableSlider* s)
+        slider->onModDragEnd = [this](ModulatableSlider*)
         {
             hideValuePopup();
         };
@@ -178,7 +188,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         {
             showValuePopupForSlider(s);
         };
-        slider->onHoverEnd = [this](ModulatableSlider* s)
+        slider->onHoverEnd = [this](ModulatableSlider*)
         {
             hideValuePopup();
         };
@@ -186,6 +196,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         slider->onModAmountSetValue = [this, slider](double newValue)
         {
             processor.setModulationValue(slider->getParamID(), (float) newValue);
+            modulationSnapshotFramesRemaining = 0;
         };
 
         slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit)
@@ -214,26 +225,31 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         slider->onModulationCleared = [this, slider]()
         {
             processor.clearModulationForParameter(slider->getParamID());
+            modulationSnapshotFramesRemaining = 0;
         };
 
         slider->onModulationInverted = [this, slider]()
         {
             processor.invertModulationDepthForParameter(slider->getParamID());
+            modulationSnapshotFramesRemaining = 0;
         };
 
         slider->onBipolarModeToggled = [this, slider]()
         {
             processor.toggleBipolarMode(slider->getParamID());
+            modulationSnapshotFramesRemaining = 0;
         };
 
         slider->onModAmountChanged = [this, slider](float newDepth)
         {
             processor.setModulationDepth(slider->getParamID(), newDepth);
+            modulationSnapshotFramesRemaining = 0;
         };
 
         slider->onModulationReset = [this, slider]()
         {
             processor.resetModulation(slider->getParamID());
+            modulationSnapshotFramesRemaining = 0;
         };
     }
 
@@ -287,52 +303,61 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     // HQ(oversampling) Button
     addAndMakeVisible(hqButton);
     hqButton.setClickingTogglesState(true);
-    bool hqButtonState = *processor.treeState.getRawParameterValue("hq");
+    const auto* hqParameter = processor.treeState.getRawParameterValue(HQ_ID);
+    const bool hqButtonState = hqParameter != nullptr && hqParameter->load() > 0.5f;
     hqButton.setToggleState(hqButtonState, juce::dontSendNotification);
-    hqButton.setColour(juce::TextButton::buttonColourId, COLOUR5);
-    hqButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    hqButton.setColour(juce::ComboBox::outlineColourId, COLOUR5);
-    hqButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    hqButton.setColour(juce::TextButton::textColourOffId, juce::Colour(100, 20, 20));
+    hqButton.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    hqButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    hqButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    hqButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
+    hqButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     hqButton.setButtonText("HQ");
+    hqButton.setComponentID("header_hq");
+    hqButton.setTooltip("High-quality oversampling");
 
     // Window Left Button
     addAndMakeVisible(windowLeftButton);
     windowLeftButton.setClickingTogglesState(true);
     windowLeftButton.setRadioGroupId(windowButtons);
-    windowLeftButton.setButtonText("Band Effect");
+    windowLeftButton.setButtonText("BAND LAB");
     windowLeftButton.setToggleState(true, juce::NotificationType::dontSendNotification);
-    windowLeftButton.setColour(juce::TextButton::buttonColourId, COLOUR6.withAlpha(0.5f));
-    windowLeftButton.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
-    windowLeftButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
-    windowLeftButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    windowLeftButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
+    windowLeftButton.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    windowLeftButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    windowLeftButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    windowLeftButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
+    windowLeftButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    windowLeftButton.setComponentID("workspace_tab");
+    windowLeftButton.getProperties().set("fireAnimatedSelection", true);
     windowLeftButton.addListener(this);
 
     // Window Right Button
     addAndMakeVisible(windowRightButton);
     windowRightButton.setClickingTogglesState(true);
     windowRightButton.setRadioGroupId(windowButtons);
-    windowRightButton.setButtonText("Global Effect");
+    windowRightButton.setButtonText("MASTER LAB");
     windowRightButton.setToggleState(false, juce::NotificationType::dontSendNotification);
-    windowRightButton.setColour(juce::TextButton::buttonColourId, COLOUR6.withAlpha(0.5f));
-    windowRightButton.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
-    windowRightButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
-    windowRightButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    windowRightButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
+    windowRightButton.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    windowRightButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    windowRightButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    windowRightButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
+    windowRightButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    windowRightButton.setComponentID("workspace_tab");
+    windowRightButton.getProperties().set("fireAnimatedSelection", true);
     windowRightButton.addListener(this);
 
     // Setup for the new LFO button
     addAndMakeVisible(windowLfoButton);
     windowLfoButton.setClickingTogglesState(true);
     windowLfoButton.setRadioGroupId(windowButtons);
-    windowLfoButton.setButtonText("LFO");
+    windowLfoButton.setButtonText("MOD FORGE");
     windowLfoButton.setToggleState(false, juce::NotificationType::dontSendNotification);
-    windowLfoButton.setColour(juce::TextButton::buttonColourId, COLOUR6.withAlpha(0.5f));
-    windowLfoButton.setColour(juce::TextButton::buttonOnColourId, COLOUR7);
-    windowLfoButton.setColour(juce::ComboBox::outlineColourId, COLOUR1.withAlpha(0.0f));
-    windowLfoButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    windowLfoButton.setColour(juce::TextButton::textColourOffId, juce::Colours::darkgrey);
+    windowLfoButton.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    windowLfoButton.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    windowLfoButton.setColour(juce::ComboBox::outlineColourId, juce::Colours::transparentBlack);
+    windowLfoButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
+    windowLfoButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    windowLfoButton.setComponentID("workspace_tab");
+    windowLfoButton.getProperties().set("fireAnimatedSelection", true);
     windowLfoButton.addListener(this);
 
     const bool isBandView = windowLeftButton.getToggleState();
@@ -345,31 +370,24 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
 
+    activeWorkspace = isGlobalView ? 2 : (isLfoView ? 1 : 0);
+    workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
+
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
 
     // zoom button
     addAndMakeVisible(zoomButton);
     zoomButton.setClickingTogglesState(false);
     zoomButton.addListener(this);
-    zoomButton.setColour(juce::TextButton::buttonColourId, COLOUR5.withAlpha(0.5f));
-    zoomButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5.withAlpha(0.5f));
-    zoomButton.setColour(juce::ComboBox::outlineColourId, COLOUR5.withAlpha(0.5f));
-    zoomButton.setColour(juce::TextButton::textColourOnId, COLOUR1);
-    zoomButton.setColour(juce::TextButton::textColourOffId, COLOUR1.withAlpha(0.5f));
+    zoomButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0.withAlpha(0.85f));
+    zoomButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    zoomButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
+    zoomButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
+    zoomButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
     zoomButton.setComponentID("zoom");
 
-    // use global lookandfeel
-    getLookAndFeel().setColour(juce::ComboBox::textColourId, KNOB_SUBFONT_COLOUR);
-    getLookAndFeel().setColour(juce::ComboBox::arrowColourId, KNOB_SUBFONT_COLOUR);
-    getLookAndFeel().setColour(juce::ComboBox::buttonColourId, COLOUR1);
-    getLookAndFeel().setColour(juce::ComboBox::outlineColourId, COLOUR6);
-    getLookAndFeel().setColour(juce::ComboBox::focusedOutlineColourId, COLOUR1);
-    getLookAndFeel().setColour(juce::ComboBox::backgroundColourId, COLOUR6);
-    getLookAndFeel().setColour(juce::PopupMenu::textColourId, KNOB_SUBFONT_COLOUR);
-    getLookAndFeel().setColour(juce::PopupMenu::highlightedBackgroundColourId, COLOUR5);
-    getLookAndFeel().setColour(juce::PopupMenu::highlightedTextColourId, COLOUR1);
-    getLookAndFeel().setColour(juce::PopupMenu::headerTextColourId, KNOB_SUBFONT_COLOUR);
-    getLookAndFeel().setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentWhite);
+    initialiseHeaderEmbers();
+    lastAnimationTimeSeconds = juce::Time::getMillisecondCounterHiRes() * 0.001;
 
     // set resize
     setResizable(true, true);
@@ -438,248 +456,368 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
 {
     const float newDisplayScale = g.getInternalContext().getPhysicalPixelScaleFactor();
 
-    if (newDisplayScale != currentDisplayScale)
+    if (std::abs(newDisplayScale - currentDisplayScale) > 0.01f)
     {
         currentDisplayScale = newDisplayScale;
-        resized();
-        return;
+        rebuildBackgroundCache();
     }
-    g.drawImage(backgroundCache, getLocalBounds().toFloat());
 
-    int focusIndex = multiband.getFocusIndex();
+    if (! backgroundCache.isNull())
+        g.drawImage(backgroundCache, getLocalBounds().toFloat());
+    else
+        fire::ui::drawCanvas(g, getLocalBounds().toFloat());
 
-    bool left = windowLeftButton.getToggleState();
-
-    if (left)
-    {
-        bandPanel.setFocusBandNum(focusIndex);
-    }
+    drawWorkspaceSelection(g);
+    drawAnimatedHeader(g);
 }
 
 void FireAudioProcessorEditor::resized()
 {
-    // This is generally where you'll want to lay out the positions of any
-    // subcomponents in your editor..
-
-    // save resized size
     processor.setSavedHeight(getHeight());
     processor.setSavedWidth(getWidth());
 
-    // knobs
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
-    // set look and feel scale
     fireLookAndFeel.scale = scale;
     bandPanel.scale = scale;
     lfoPanel.setScale(scale);
     globalPanel.scale = scale;
 
-    juce::Rectangle<int> bounds(getLocalBounds());
+    const auto gap = juce::jmax(4, juce::roundToInt(8.0f * scale));
+    auto bounds = getLocalBounds();
+    headerArea = bounds.removeFromTop(juce::roundToInt(56.0f * scale));
 
-    // ===== Top Bar Layout =====
-    const auto topBarHeight = juce::roundToInt(50.0f * scale);
-    auto topBar = bounds.removeFromTop(topBarHeight);
+    auto headerContent = headerArea.reduced(gap, juce::jmax(3, gap / 2));
+    logoArea = headerContent.removeFromLeft(juce::roundToInt(172.0f * scale));
+    headerContent.removeFromLeft(gap);
+    wingsArea = headerContent.removeFromRight(juce::roundToInt(112.0f * scale));
+    headerContent.removeFromRight(gap);
+    auto hqSlot = headerContent.removeFromRight(juce::roundToInt(44.0f * scale));
+    const auto headerControlHeight = juce::roundToInt(32.0f * scale);
+    hqButton.setBounds(hqSlot.withSizeKeepingCentre(hqSlot.getWidth(), headerControlHeight));
+    headerContent.removeFromRight(gap);
+    stateComponent.setBounds(headerContent);
 
-    // 1. Reserve space for the right logo (which is painted manually)
-    wingsArea = topBar.removeFromRight(topBar.getHeight());
+    bounds.reduce(gap, gap);
+    contentArea = {};
+    navigationArea = {};
 
-    // 2. Reserve space for the left logo (which is painted manually)
-    logoArea = topBar.removeFromLeft(topBar.getHeight());
-
-    // 3. Place the HQ button immediately to the right of the logo's space
-    hqButton.setBounds(topBar.removeFromLeft(topBar.getHeight()));
-
-    // 4. Reserve space for the right logo
-    topBar.removeFromRight(topBar.getHeight());
-
-    // 5. The StateComponent takes all the remaining space in the middle
-    stateComponent.setBounds(topBar);
-
-    // spectrum and filter
     if (zoomButton.getToggleState())
     {
-        specBackground.setBounds(bounds);
-        processedSpectrum.setBounds(bounds);
-        originalSpectrum.setBounds(bounds);
-        multiband.setBounds(bounds);
-        filterControl.setBounds(bounds);
+        spectrumCardArea = bounds;
     }
     else
     {
-        // 1. spectrum
-        auto spectrumArea = bounds.removeFromTop(SPEC_HEIGHT);
-        specBackground.setBounds(spectrumArea);
-        processedSpectrum.setBounds(spectrumArea);
-        originalSpectrum.setBounds(spectrumArea);
-        multiband.setBounds(spectrumArea);
-        filterControl.setBounds(spectrumArea);
+        const auto spectrumHeight = juce::roundToInt(static_cast<float>(bounds.getHeight()) * 0.36f);
+        spectrumCardArea = bounds.removeFromTop(spectrumHeight);
+        bounds.removeFromTop(gap);
 
-        // 2. Switch
-        const auto windowButtonHeight = juce::roundToInt(getHeight() / 20.0f);
-        auto windowButtonsArea = bounds.removeFromTop(windowButtonHeight);
+        navigationArea = bounds.removeFromTop(juce::roundToInt(34.0f * scale));
+        bounds.removeFromTop(gap);
+        contentArea = bounds;
 
-        const int buttonWidth = windowButtonsArea.getWidth() / 3;
-        windowLeftButton.setBounds(windowButtonsArea.removeFromLeft(buttonWidth));
-        windowLfoButton.setBounds(windowButtonsArea.removeFromLeft(buttonWidth));
-        windowRightButton.setBounds(windowButtonsArea);
+        auto tabs = navigationArea.withSizeKeepingCentre(
+            juce::jmin(navigationArea.getWidth(), juce::roundToInt(510.0f * scale)),
+            juce::jmin(navigationArea.getHeight(), juce::roundToInt(30.0f * scale)));
+        const auto tabGap = juce::jmax(3, juce::roundToInt(5.0f * scale));
+        const int tabWidth = (tabs.getWidth() - tabGap * 2) / 3;
+        windowLeftButton.setBounds(tabs.removeFromLeft(tabWidth));
+        tabs.removeFromLeft(tabGap);
+        windowLfoButton.setBounds(tabs.removeFromLeft(tabWidth));
+        tabs.removeFromLeft(tabGap);
+        windowRightButton.setBounds(tabs);
 
-        // First, determine the current view state
-        const bool isBandView = windowLeftButton.getToggleState();
-        const bool isGlobalView = windowRightButton.getToggleState();
-
-        if (isBandView)
-        {
-            bandPanel.setBounds(bounds);
-        }
-        else if (isGlobalView)
-        {
-            globalPanel.setBounds(bounds);
-        }
-        else // isLfoView
-        {
-            lfoPanel.setBounds(bounds);
-        }
+        bandPanel.setBounds(contentArea);
+        globalPanel.setBounds(contentArea);
+        lfoPanel.setBounds(contentArea);
     }
 
-    // Zoom button
-    zoomButton.setBounds(getWidth() - 30.0f * scale,
-                         multiband.getY() + multiband.getHeight() - 30.0f * scale,
-                         getHeight() / 25.0f,
-                         getHeight() / 25.0f);
+    const auto spectrumBounds = spectrumCardArea.reduced(1);
+    specBackground.setBounds(spectrumBounds);
+    processedSpectrum.setBounds(spectrumBounds);
+    originalSpectrum.setBounds(spectrumBounds);
+    multiband.setBounds(spectrumBounds);
+    filterControl.setBounds(spectrumBounds);
 
-    const float displayScale = currentDisplayScale;
+    const auto zoomSize = juce::jmax(22, juce::roundToInt(27.0f * scale));
+    zoomButton.setBounds(spectrumCardArea.getRight() - zoomSize - gap,
+                         spectrumCardArea.getBottom() - zoomSize - gap,
+                         zoomSize,
+                         zoomSize);
 
+    rebuildBackgroundCache();
+}
+
+void FireAudioProcessorEditor::rebuildBackgroundCache()
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
+    const auto displayScale = juce::jmax(1.0f, currentDisplayScale);
     backgroundCache = juce::Image(juce::Image::ARGB,
-                                  juce::roundToInt(getWidth() * displayScale),
-                                  juce::roundToInt(getHeight() * displayScale),
+                                  juce::jmax(1, juce::roundToInt(getWidth() * displayScale)),
+                                  juce::jmax(1, juce::roundToInt(getHeight() * displayScale)),
                                   true);
-    juce::Graphics g(backgroundCache);
-    g.addTransform(juce::AffineTransform::scale(displayScale));
-    // background
-    g.setColour(COLOUR7);
-    g.fillRect(0.0f, getHeight() * 3.0f / 10.0f, static_cast<float>(getWidth()), getHeight() * 7.0f / 10.0f);
+    juce::Graphics cacheGraphics(backgroundCache);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
+    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+    fire::ui::drawTechGrid(cacheGraphics, getLocalBounds().toFloat(),
+                           juce::jmax(20.0f, 28.0f * fireLookAndFeel.scale), 0.055f);
 
-    // title
-    g.setColour(COLOUR5);
-    g.fillRect(0, 0, getWidth(), topBarHeight);
+    auto header = headerArea.toFloat();
+    juce::ColourGradient headerFill(fire::ui::colours::surface2, header.getX(), header.getY(),
+                                    fire::ui::colours::surface0, header.getRight(), header.getBottom(), false);
+    headerFill.addColour(0.56, fire::ui::colours::surface1);
+    cacheGraphics.setGradientFill(headerFill);
+    cacheGraphics.fillRect(header);
+    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.82f));
+    cacheGraphics.drawHorizontalLine(headerArea.getBottom() - 1, 0.0f, static_cast<float>(getWidth()));
 
-    // set logo "Fire"
-    juce::Image logo = juce::ImageCache::getFromMemory(BinaryData::firelogo_png, (size_t) BinaryData::firelogo_pngSize);
-    g.drawImageWithin(logo, logoArea.getX(), logoArea.getY(), logoArea.getWidth(), logoArea.getHeight(), juce::RectanglePlacement::centred);
+    // Workspace tabs intentionally sit directly on the canvas.  Their short
+    // active rail is enough hierarchy and avoids another framed container.
+}
 
-    // set logo "Wings"
-    juce::Image logoWings = juce::ImageCache::getFromMemory(BinaryData::firewingslogo_png, (size_t) BinaryData::firewingslogo_pngSize);
-    g.drawImageWithin(logoWings, wingsArea.getX(), wingsArea.getY(), wingsArea.getWidth(), wingsArea.getHeight(), juce::RectanglePlacement::centred);
+void FireAudioProcessorEditor::initialiseHeaderEmbers()
+{
+    uint32_t state = 0x46495245u;
+    auto random01 = [&state]()
+    {
+        state = state * 1664525u + 1013904223u;
+        return static_cast<float>((state >> 8) & 0x00ffffffu) / static_cast<float>(0x01000000u);
+    };
+
+    for (auto& ember : headerEmbers)
+    {
+        ember.x = random01();
+        ember.y = random01();
+        ember.velocity = 0.08f + random01() * 0.18f;
+        ember.drift = (random01() - 0.5f) * 0.08f;
+        ember.size = 0.65f + random01() * 1.5f;
+        ember.phase = random01() * juce::MathConstants<float>::twoPi;
+    }
+}
+
+void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
+{
+    deltaSeconds = juce::jlimit(0.0f, 0.05f, deltaSeconds);
+    animationSeconds += deltaSeconds;
+
+    const auto focusedBand = juce::jlimit(0, 3, bandPanel.getFocusBandNum());
+    const auto signalEnergy = juce::jlimit(0.0f, 1.0f,
+                                           processor.getSampleMaxValue(focusedBand) * 1.8f);
+    const auto targetEnergy = processor.isDawPlaying() ? 0.28f + signalEnergy * 0.72f : 0.14f;
+    headerEnergy += (targetEnergy - headerEnergy) * juce::jmin(1.0f, deltaSeconds * 7.0f);
+
+    for (auto& ember : headerEmbers)
+    {
+        ember.y -= ember.velocity * deltaSeconds * (0.55f + headerEnergy);
+        ember.x += (ember.drift + std::sin(animationSeconds * 0.8f + ember.phase) * 0.012f)
+                   * deltaSeconds;
+        if (ember.y < -0.08f)
+        {
+            ember.y = 1.08f;
+            ember.x = std::fmod(ember.x + 0.37f, 1.0f);
+        }
+        if (ember.x < 0.0f)
+            ember.x += 1.0f;
+        else if (ember.x > 1.0f)
+            ember.x -= 1.0f;
+    }
+
+    if (workspaceSelection.advance(deltaSeconds, 0.07f))
+        repaint(navigationArea);
+}
+
+void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
+{
+    if (headerArea.isEmpty())
+        return;
+
+    const juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(headerArea);
+
+    const auto particleArea = headerArea.toFloat();
+    for (const auto& ember : headerEmbers)
+    {
+        const auto alpha = (0.07f + 0.18f * headerEnergy)
+                           * (0.45f + 0.55f * std::sin(ember.phase + animationSeconds * 1.3f)
+                                             * std::sin(ember.phase + animationSeconds * 1.3f));
+        const juce::Point<float> point {
+            particleArea.getX() + ember.x * particleArea.getWidth(),
+            particleArea.getY() + ember.y * particleArea.getHeight()
+        };
+        g.setColour(fire::ui::colours::flame.withAlpha(alpha));
+        g.fillEllipse(juce::Rectangle<float>(ember.size, ember.size * 1.7f).withCentre(point));
+    }
+
+    const auto seamY = static_cast<float>(headerArea.getBottom()) - 1.0f;
+    const auto hotSpot = static_cast<float>(headerArea.getWidth())
+                         * (0.18f + 0.64f * (0.5f + 0.5f * std::sin(animationSeconds * 0.42f)));
+    juce::ColourGradient seam(fire::ui::colours::ember.withAlpha(0.0f), 0.0f, seamY,
+                              fire::ui::colours::whiteHot.withAlpha(0.45f * headerEnergy), hotSpot, seamY, false);
+    seam.addColour(0.55, fire::ui::colours::flame.withAlpha(0.36f * headerEnergy));
+    seam.addColour(1.0, fire::ui::colours::ember.withAlpha(0.0f));
+    g.setGradientFill(seam);
+    g.fillRect(0.0f, seamY, static_cast<float>(headerArea.getWidth()), 1.0f);
+
+    auto brand = logoArea.toFloat().reduced(2.0f, 3.0f);
+    auto glyph = brand.removeFromLeft(brand.getHeight()).reduced(8.0f * fireLookAndFeel.scale);
+    fire::ui::drawFireGlyph(g, glyph, headerEnergy);
+    brand.removeFromLeft(5.0f * fireLookAndFeel.scale);
+    auto title = brand.removeFromTop(brand.getHeight() * 0.62f);
+    g.setFont(fire::ui::displayFont(18.0f * fireLookAndFeel.scale));
+    g.setColour(fire::ui::colours::textPrimary);
+    g.drawText("FIRE", title, juce::Justification::centredLeft);
+    g.setFont(fire::ui::labelFont(8.5f * fireLookAndFeel.scale));
+    g.setColour(fire::ui::colours::textMuted);
+    g.drawText("MULTIBAND REACTOR", brand, juce::Justification::centredLeft);
+
+    auto signature = wingsArea.toFloat().reduced(4.0f, 5.0f);
+    auto bars = signature.removeFromLeft(24.0f * fireLookAndFeel.scale);
+    for (int i = 0; i < 3; ++i)
+    {
+        const auto height = bars.getHeight() * (0.28f + 0.18f * static_cast<float>(i)
+                                                + 0.08f * headerEnergy);
+        const auto barWidth = juce::jmax(1.0f, 2.0f * fireLookAndFeel.scale);
+        g.setColour(fire::ui::colours::flame.withAlpha(0.45f + 0.16f * static_cast<float>(i)));
+        g.fillRoundedRectangle(bars.getX() + static_cast<float>(i) * 6.0f * fireLookAndFeel.scale,
+                               bars.getCentreY() - height * 0.5f,
+                               barWidth, height, barWidth * 0.5f);
+    }
+    g.setFont(fire::ui::labelFont(8.0f * fireLookAndFeel.scale));
+    g.setColour(fire::ui::colours::textSecondary);
+    g.drawText("BLUE WINGS", signature.removeFromTop(signature.getHeight() * 0.55f),
+               juce::Justification::centredLeft);
+    g.setFont(fire::ui::bodyFont(7.5f * fireLookAndFeel.scale));
+    g.setColour(fire::ui::colours::textMuted);
+    g.drawText("v" VERSION, signature, juce::Justification::centredLeft);
+}
+
+void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
+{
+    if (navigationArea.isEmpty() || zoomButton.getToggleState())
+        return;
+
+    const std::array<juce::Rectangle<float>, 3> tabBounds {
+        windowLeftButton.getBounds().toFloat(),
+        windowLfoButton.getBounds().toFloat(),
+        windowRightButton.getBounds().toFloat()
+    };
+    const std::array<juce::Colour, 3> tabColours {
+        fire::ui::colours::flame,
+        fire::ui::colours::modulation,
+        fire::ui::colours::flame
+    };
+
+    const auto position = juce::jlimit(0.0f, 2.0f, workspaceSelection.current);
+    const auto lower = juce::jlimit(0, 2, static_cast<int>(std::floor(position)));
+    const auto upper = juce::jmin(2, lower + 1);
+    const auto amount = position - static_cast<float>(lower);
+
+    const auto& from = tabBounds[static_cast<size_t>(lower)];
+    const auto& to = tabBounds[static_cast<size_t>(upper)];
+    auto selector = juce::Rectangle<float>(
+        juce::jmap(amount, from.getX(), to.getX()),
+        juce::jmap(amount, from.getY(), to.getY()),
+        juce::jmap(amount, from.getWidth(), to.getWidth()),
+        juce::jmap(amount, from.getHeight(), to.getHeight()));
+    const auto accent = tabColours[static_cast<size_t>(lower)]
+                            .interpolatedWith(tabColours[static_cast<size_t>(upper)], amount);
+
+    selector = selector.reduced(0.5f);
+    g.setColour(accent.withAlpha(0.075f));
+    g.fillRoundedRectangle(selector, fire::ui::Metrics::radiusSmall * fireLookAndFeel.scale);
+
+    const auto railWidth = juce::jmin(selector.getWidth() * 0.34f,
+                                      30.0f * fireLookAndFeel.scale);
+    const auto railHeight = juce::jmax(1.0f, 1.5f * fireLookAndFeel.scale);
+    g.setColour(accent.withAlpha(0.94f));
+    g.fillRoundedRectangle(selector.getCentreX() - railWidth * 0.5f,
+                           selector.getBottom() - railHeight,
+                           railWidth,
+                           railHeight,
+                           railHeight * 0.5f);
 }
 
 void FireAudioProcessorEditor::timerCallback()
 {
+    const auto nowSeconds = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    const auto deltaSeconds = static_cast<float>(nowSeconds - lastAnimationTimeSeconds);
+    lastAnimationTimeSeconds = nowSeconds;
+
+    // Hosts commonly keep an editor instance alive after hiding its window.
+    // Keep the timer itself cheap in that state and resume from a fresh clock
+    // when the peer becomes visible again.
+    if (! isShowing())
+        return;
+
+    advanceAnimations(deltaSeconds);
+
+    ++animationFrame;
+    if ((animationFrame & 1) == 0)
+        repaint(headerArea);
+
+    for (auto* slider : allModulatableSliders)
+        if (slider != nullptr && slider->isShowing() && slider->advanceAnimation(deltaSeconds))
+            slider->repaint();
+
     if (isLfoAssignMode)
     {
-        // Increment the angle for the sine wave animation
-        assignModePulseAngle += 0.05f;
-        if (assignModePulseAngle > juce::MathConstants<float>::twoPi)
-            assignModePulseAngle -= juce::MathConstants<float>::twoPi;
-
-        // Calculate a smooth alpha value using a sine wave, mapped to a pleasant range (e.g., 0.1 to 0.4)
-        float minAlpha = 0.1f;
-        float maxAlpha = 0.4f;
-        assignModePulseAlpha = minAlpha + (maxAlpha - minAlpha) * ((std::sin(assignModePulseAngle) + 1.0f) / 2.0f);
-
-        // Pass the new alpha value to all modulatable sliders
-        for (auto* slider : bandPanel.getModulatableSliders())
-            slider->assignModeGlowAlpha = assignModePulseAlpha;
-        for (auto* slider : globalPanel.getModulatableSliders())
-            slider->assignModeGlowAlpha = assignModePulseAlpha;
-
-        // Repaint the panels on every frame to ensure smooth animation
-        bandPanel.repaint();
-        globalPanel.repaint();
-    }
-
-    auto updateSliderState = [&](ModulatableSlider& slider)
-    {
-        if (slider.parameterID.isEmpty())
-            return;
-
-        auto modInfo = processor.getModulationInfoForParameter(slider.parameterID);
-        slider.isModulated = modInfo.isModulated;
-
-        // Always update the values. If not modulated, depth will be 0 from getModulationInfoForParameter.
-        slider.lfoSource = modInfo.sourceLfoIndex;
-        slider.lfoAmount = modInfo.depth;
-        slider.lfoValue = modInfo.currentValue;
-        slider.isBipolar = modInfo.isBipolar;
-    };
-
-    // Loop through the public list of modulatable sliders from the bandPanel.
-    // This is much cleaner and automatically adapts to any new sliders you add.
-    for (auto* slider : bandPanel.getModulatableSliders())
-    {
-        if (slider != nullptr) // A good safety check
+        assignModePulseAngle = std::fmod(animationSeconds * 3.6f,
+                                         juce::MathConstants<float>::twoPi);
+        assignModePulseAlpha = 0.16f + 0.20f * (0.5f + 0.5f * std::sin(assignModePulseAngle));
+        for (auto* slider : allModulatableSliders)
         {
-            updateSliderState(*slider);
+            if (slider == nullptr)
+                continue;
+            slider->assignModeGlowAlpha = assignModePulseAlpha;
+            if (slider->isShowing())
+                slider->repaint();
         }
     }
-    // Repaint the entire panel once, which is more efficient than repainting individual sliders.
-    bandPanel.repaint();
 
-    for (auto* slider : globalPanel.getModulatableSliders())
-    {
-        if (slider != nullptr)
-        {
-            updateSliderState(*slider);
-        }
-    }
-    globalPanel.repaint();
+    if (--modulationSnapshotFramesRemaining <= 0)
+        refreshModulationSnapshot();
+    applyModulationSnapshot();
 
-    int currentBand = bandPanel.getFocusBandNum();
+    const int currentBand = bandPanel.getFocusBandNum();
 
-    // Update graphs now inside BandPanel
-    bandPanel.updateRealtimeThreshold(processor.getRealtimeModulatedThreshold(currentBand));
+    if (bandPanel.isShowing())
+        bandPanel.updateRealtimeThreshold(processor.getRealtimeModulatedThreshold(currentBand));
 
-    // bypassed
-    if (processor.getBypassedState())
+    const bool isBypassed = processor.getBypassedState();
+    if (isBypassed != lastBypassedState)
     {
         multiband.repaint();
+        lastBypassedState = isBypassed;
     }
-    else
-    {
-        std::array<float, 2 * SpectrumProcessor::fftSize> tempFFTDataProcessed {};
-        std::array<float, 2 * SpectrumProcessor::fftSize> tempFFTDataOriginal {};
 
-        if (processor.popLatestFFTFrames(tempFFTDataProcessed.data(),
-                                         static_cast<int>(tempFFTDataProcessed.size()),
-                                         tempFFTDataOriginal.data(),
-                                         static_cast<int>(tempFFTDataOriginal.size())))
+    if (! isBypassed && spectrumCardArea.intersects(getLocalBounds()))
+    {
+        if (processor.popLatestFFTFrames(processedFftFrame.data(),
+                                         static_cast<int>(processedFftFrame.size()),
+                                         originalFftFrame.data(),
+                                         static_cast<int>(originalFftFrame.size())))
         {
-            const auto fftBufferSize = static_cast<int>(tempFFTDataProcessed.size());
-            if (! processor.processFFT(tempFFTDataProcessed.data(), fftBufferSize)
-                || ! processor.processFFT(tempFFTDataOriginal.data(), fftBufferSize))
+            const auto fftBufferSize = static_cast<int>(processedFftFrame.size());
+            if (! processor.processFFT(processedFftFrame.data(), fftBufferSize)
+                || ! processor.processFFT(originalFftFrame.data(), fftBufferSize))
                 return;
 
-            // Prepare complete, message-thread-owned snapshots for painting.
             const auto* mixParameter = processor.treeState.getRawParameterValue(MIX_ID);
             const float specAlpha = mixParameter != nullptr ? mixParameter->load() : 1.0f;
             processedSpectrum.setSpecAlpha(specAlpha);
             originalSpectrum.setSpecAlpha(1.0f - specAlpha);
             const float binWidth = static_cast<float>(processor.getSampleRate())
                                    / static_cast<float>(processor.getFFTSize());
-            processedSpectrum.updateSpectrum(tempFFTDataProcessed.data(), processor.getNumBins(), binWidth);
-            originalSpectrum.updateSpectrum(tempFFTDataOriginal.data(), processor.getNumBins(), binWidth);
+            processedSpectrum.updateSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth);
+            originalSpectrum.updateSpectrum(originalFftFrame.data(), processor.getNumBins(), binWidth);
             bandPanel.updateDriveMeter();
-            processedSpectrum.repaint();
-            originalSpectrum.repaint();
-            multiband.repaint();
-            globalPanel.repaint();
         }
     }
-
-    updateModulationStates();
 
     DistortionGraphValues latestValues;
     if (processor.getLatestDistortionGraphValues(latestValues))
     {
-        // Update graph now inside BandPanel
         bandPanel.getDistortionGraph()->setState(
             latestValues.mode,
             latestValues.rec,
@@ -688,23 +826,48 @@ void FireAudioProcessorEditor::timerCallback()
             latestValues.drive,
             latestValues.rateDivide);
     }
+
+    if ((animationFrame & 1) == 0)
+        filterControl.animationTick();
+    bandPanel.animationTick(deltaSeconds);
+    globalPanel.animationTick(deltaSeconds);
+    lfoPanel.animationTick(deltaSeconds);
 }
 
-void FireAudioProcessorEditor::sliderValueChanged(juce::Slider* slider)
+void FireAudioProcessorEditor::sliderValueChanged(juce::Slider*)
 {
 }
 
 void FireAudioProcessorEditor::updateMainPanelVisibility()
 {
-    const bool isBandView = windowLeftButton.getToggleState();
-    const bool isGlobalView = windowRightButton.getToggleState();
-    const bool isLfoView = windowLfoButton.getToggleState();
+    const auto selectedWorkspace = windowRightButton.getToggleState()
+                                       ? 2
+                                       : (windowLfoButton.getToggleState() ? 1 : 0);
+    selectWorkspace(selectedWorkspace, false);
+}
 
-    multiband.setVisible(isBandView || isLfoView);
-    bandPanel.setVisible(isBandView);
-    globalPanel.setVisible(isGlobalView);
-    lfoPanel.setVisible(isLfoView);
-    filterControl.setVisible(isGlobalView);
+void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animateSelection)
+{
+    targetWorkspace = juce::jlimit(0, 2, targetWorkspace);
+    activeWorkspace = targetWorkspace;
+    if (animateSelection && isShowing() && ! navigationArea.isEmpty())
+        workspaceSelection.setTarget(static_cast<float>(activeWorkspace));
+    else
+        workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
+
+    const std::array<juce::Component*, 3> panels { &bandPanel, &lfoPanel, &globalPanel };
+    for (int index = 0; index < static_cast<int>(panels.size()); ++index)
+    {
+        panels[static_cast<size_t>(index)]->setAlpha(1.0f);
+        panels[static_cast<size_t>(index)]->setVisible(index == activeWorkspace);
+    }
+
+    multiband.setAlpha(1.0f);
+    filterControl.setAlpha(1.0f);
+    multiband.setVisible(activeWorkspace != 2);
+    filterControl.setVisible(activeWorkspace == 2);
+
+    repaint(navigationArea.getUnion(contentArea));
 }
 
 void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
@@ -762,8 +925,10 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     }
     if (clickedButton == &windowLeftButton || clickedButton == &windowRightButton || clickedButton == &windowLfoButton)
     {
-        updateMainPanelVisibility();
-        resized();
+        const auto targetWorkspace = clickedButton == &windowLeftButton
+                                         ? 0
+                                         : (clickedButton == &windowLfoButton ? 1 : 2);
+        selectWorkspace(targetWorkspace, true);
     }
     for (int i = 0; i < 4; i++)
     {
@@ -848,10 +1013,9 @@ void FireAudioProcessorEditor::handleAsyncUpdate()
     // Processor-side routing changes can arrive through AsyncUpdater. Refresh the
     // view here, but don't end assignment mode: only a successful slider click is
     // a one-shot assignment completion.
+    modulationSnapshotFramesRemaining = 0;
     updateModulationStates();
-    bandPanel.repaint();
-    globalPanel.repaint();
-    repaint();
+    repaint(headerArea);
 }
 
 void FireAudioProcessorEditor::publishAvailableUpdate(const juce::String& version)
@@ -885,11 +1049,15 @@ void FireAudioProcessorEditor::exitAssignMode()
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
+        if (slider->isShowing())
+            slider->repaint();
     }
     for (auto* slider : globalPanel.getModulatableSliders())
     {
         slider->onClickInAssignMode = nullptr;
         slider->assignModeGlowAlpha = 0.0f;
+        if (slider->isShowing())
+            slider->repaint();
     }
 }
 
@@ -897,6 +1065,7 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
 {
     if (source == &processor)
     {
+        modulationSnapshotFramesRemaining = 0;
         lfoPanel.refreshLfoDisplay();
         multiband.resortAndRedrawLines();
     }
@@ -975,44 +1144,89 @@ void FireAudioProcessorEditor::hideValuePopup()
     valuePopup.setVisible(false);
 }
 
-std::vector<ModulatableSlider*> FireAudioProcessorEditor::getAllModulatableSliders()
+const std::vector<ModulatableSlider*>& FireAudioProcessorEditor::getAllModulatableSliders() const noexcept
 {
-    std::vector<ModulatableSlider*> allSliders;
-
-    // Get sliders from BandPanel
-    allSliders.insert(allSliders.end(), bandPanel.getModulatableSliders().begin(), bandPanel.getModulatableSliders().end());
-
-    // Get sliders from GlobalPanel
-    allSliders.insert(allSliders.end(), globalPanel.getModulatableSliders().begin(), globalPanel.getModulatableSliders().end());
-
-    return allSliders;
+    return allModulatableSliders;
 }
 
 void FireAudioProcessorEditor::updateModulationStates()
 {
-    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+    refreshModulationSnapshot();
+    applyModulationSnapshot();
+}
 
-    for (auto* slider : getAllModulatableSliders()) // Assuming you have a way to get all sliders
+void FireAudioProcessorEditor::refreshModulationSnapshot()
+{
+    modulationRoutingSnapshot = processor.getLfoManager().getModulationRoutingsCopy();
+    modulationRoutingIndexBySlider.assign(allModulatableSliders.size(), -1);
+
+    for (size_t sliderIndex = 0; sliderIndex < allModulatableSliders.size(); ++sliderIndex)
     {
-        bool isModulated = false;
-        for (const auto& routing : routings)
+        const auto* slider = allModulatableSliders[sliderIndex];
+        if (slider == nullptr || slider->getParamID().isEmpty())
+            continue;
+
+        for (int routingIndex = 0; routingIndex < modulationRoutingSnapshot.size(); ++routingIndex)
         {
-            if (routing.targetParameterID == slider->getParamID())
+            if (modulationRoutingSnapshot.getReference(routingIndex).targetParameterID
+                == slider->getParamID())
             {
-                slider->isModulated = true;
-                slider->lfoSource = routing.sourceLfoIndex + 1;
-                slider->lfoAmount = routing.depth;
-                slider->isBipolar = routing.isBipolar;
-                slider->isBypassed = routing.isBypassed; // Sync the bypass state!
-                isModulated = true;
+                modulationRoutingIndexBySlider[sliderIndex] = routingIndex;
                 break;
             }
         }
+    }
 
-        if (! isModulated)
+    modulationSnapshotFramesRemaining = 15;
+}
+
+void FireAudioProcessorEditor::applyModulationSnapshot()
+{
+    std::array<float, 4> lfoOutputs {};
+    for (int i = 0; i < static_cast<int>(lfoOutputs.size()); ++i)
+        lfoOutputs[static_cast<size_t>(i)] = processor.getLfoManager().getLfoOutput(i);
+
+    for (size_t sliderIndex = 0; sliderIndex < allModulatableSliders.size(); ++sliderIndex)
+    {
+        auto* slider = allModulatableSliders[sliderIndex];
+        if (slider == nullptr || slider->getParamID().isEmpty())
+            continue;
+
+        const ModulationRouting* matchedRouting = nullptr;
+        if (sliderIndex < modulationRoutingIndexBySlider.size())
         {
-            slider->isModulated = false;
-            slider->isBypassed = false;
+            const int routingIndex = modulationRoutingIndexBySlider[sliderIndex];
+            if (juce::isPositiveAndBelow(routingIndex, modulationRoutingSnapshot.size()))
+                matchedRouting = &modulationRoutingSnapshot.getReference(routingIndex);
+        }
+
+        const bool isModulated = matchedRouting != nullptr;
+        const int sourceIndex = isModulated ? juce::jlimit(0, 3, matchedRouting->sourceLfoIndex) : 0;
+        const float rawLfo = isModulated ? lfoOutputs[static_cast<size_t>(sourceIndex)] : 0.0f;
+        const double displayLfo = isModulated && matchedRouting->isBipolar
+                                      ? static_cast<double>(rawLfo * 2.0f - 1.0f)
+                                      : static_cast<double>(rawLfo);
+        const double depth = isModulated ? static_cast<double>(matchedRouting->depth) : 0.0;
+        const bool bipolar = isModulated ? matchedRouting->isBipolar : true;
+        const bool bypassed = isModulated && matchedRouting->isBypassed;
+
+        const bool changed = slider->isModulated != isModulated
+                             || slider->lfoSource != (isModulated ? sourceIndex + 1 : 0)
+                             || std::abs(slider->lfoAmount - depth) > 1.0e-6
+                             || std::abs(slider->lfoValue - displayLfo) > 1.0e-4
+                             || slider->isBipolar != bipolar
+                             || slider->isBypassed != bypassed;
+
+        slider->isModulated = isModulated;
+        slider->lfoSource = isModulated ? sourceIndex + 1 : 0;
+        slider->lfoAmount = depth;
+        slider->lfoValue = displayLfo;
+        slider->isBipolar = bipolar;
+        slider->isBypassed = bypassed;
+
+        if (changed && slider->isShowing())
+        {
+            slider->repaint();
         }
     }
 }

@@ -26,7 +26,7 @@ public:
     // void paint(juce::Graphics& g) override;
     bool hitTest(int x, int y) override;
 
-    juce::Rectangle<float> getModulationHandleBounds();
+    juce::Rectangle<float> getModulationHandleBounds() const;
 
     // LFO properties
     int lfoSource;
@@ -39,6 +39,9 @@ public:
 
     // Is the mouse over the main body of the slider, and not the handle?
     bool isMouseOverMainSlider() const;
+    bool advanceAnimation(float deltaSeconds) noexcept;
+    float getHoverAnimation() const noexcept { return hoverAnimation; }
+    float getPressAnimation() const noexcept { return pressAnimation; }
     bool isModulated = false;
     bool isBipolar = true;
     bool isBypassed = false;
@@ -87,8 +90,14 @@ public:
     void timerCallback() override;
 
 private:
+    float getUiScale() const noexcept;
+    juce::Rectangle<float> getRotarySliderBounds() const;
+    juce::Rectangle<int> getHeaderBounds() const;
+
     juce::Label label;
     bool isDraggingMainSlider;
+    float hoverAnimation = 0.0f;
+    float pressAnimation = 0.0f;
 
     // Store the initial LFO amount when a drag starts for smoother interaction
     double initialLfoAmount = 0.0;

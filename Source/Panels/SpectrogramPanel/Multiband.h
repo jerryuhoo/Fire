@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../PluginProcessor.h"
+#include "../../GUI/FireTheme.h"
 #include "../../Utility/AudioHelpers.h"
 #include "../TopPanel/Preset.h"
 #include "CloseButton.h"
@@ -33,6 +34,7 @@ public:
     void resized() override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
+    void visibilityChanged() override;
 
     void setCloseButtonState();
     void dragLines(float xPercent, int index);
@@ -75,6 +77,7 @@ private:
     int lineNum = 0;
     int focusIndex = 0;
     bool isDragging = false;
+    int hoveredBandIndex = -1;
 
     // Use a 2D vector to store parameter arrays for each band
     std::vector<std::vector<juce::String>> paramsArrays;
@@ -93,7 +96,14 @@ private:
 
     bool shouldSetBlackMask(int index);
     int countLines();
-    void setMasks(juce::Graphics& g, int index, int lineNumLimit, int x, int y, int width, int height, int mouseX, int mouseY);
+    void paintBandOverlay(juce::Graphics& g,
+                          int index,
+                          juce::Rectangle<float> area,
+                          juce::Point<float> mousePosition);
+    float getDividerX(int index) const;
+    juce::Rectangle<float> getBandBounds(int index) const;
+    int getBandIndexAtX(int x) const;
+    void updateCloseButtonVisibility();
 
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
 

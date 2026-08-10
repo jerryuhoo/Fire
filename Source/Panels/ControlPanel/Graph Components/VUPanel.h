@@ -32,13 +32,35 @@ public:
 private:
     FireAudioProcessor& processor;
     int focusBandNum;
-    const float VU_METER_RANGE = 96.0f;
     VUMeter vuMeterIn;
     VUMeter vuMeterOut;
 
-    juce::String threshID = "";
-    juce::String compBypassID = "";
     float realtimeThresholdDb;
+    std::atomic<float>* compBypassValue = nullptr;
+    int staleTimerTicks = 0;
+    bool thresholdVisible = false;
+
+    juce::Image scaleLayer;
+    juce::Rectangle<int> scaleLayerBounds;
+    float scaleLayerScale = 0.0f;
+    juce::Rectangle<float> leftReadoutBounds;
+    juce::Rectangle<float> rightReadoutBounds;
+    juce::Rectangle<float> scaleBounds;
+    juce::Font peakReadoutFont { juce::FontOptions() };
+    juce::Font rmsReadoutFont { juce::FontOptions() };
+    juce::Font captionFont { juce::FontOptions() };
+    juce::String inputPeakText { "-96.0" };
+    juce::String inputRmsText { "-96.0" };
+    juce::String outputPeakText { "-96.0" };
+    juce::String outputRmsText { "-96.0" };
+    int inputPeakTenths = -960;
+    int inputRmsTenths = -960;
+    int outputPeakTenths = -960;
+    int outputRmsTenths = -960;
+
+    void rebuildScaleLayer(float displayScale);
+    bool refreshReadoutText();
+    void graphShowingStateChanged(bool isNowShowing) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUPanel)
 };

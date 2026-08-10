@@ -9,6 +9,8 @@
 */
 
 #include "ModulatableSlider.h"
+#include "LookAndFeel.h"
+#include <cmath>
 
 ModulatableSlider::ModulatableSlider()
 {
@@ -29,13 +31,15 @@ ModulatableSlider::ModulatableSlider()
 
 bool ModulatableSlider::hitTest(int x, int y)
 {
-    auto sliderBounds = getLocalBounds();
-    auto center = sliderBounds.getCentre().toFloat();
-    auto distFromCentre = juce::Point<float>((float) x, (float) y).getDistanceFrom(center);
+    const auto point = juce::Point<float>(static_cast<float>(x), static_cast<float>(y));
+    if (getHeaderBounds().toFloat().contains(point))
+        return true;
 
-    auto outerBounds = sliderBounds.toFloat().reduced(10);
+    auto outerBounds = getRotarySliderBounds().reduced(juce::jmax(5.0f, 7.0f * getUiScale()));
+    auto center = outerBounds.getCentre();
+    auto distFromCentre = point.getDistanceFrom(center);
     auto outerRadius = juce::jmin(outerBounds.getWidth(), outerBounds.getHeight()) / 2.0f;
-    float maxSliderClickableRadius = outerRadius + (outerRadius * 0.2f * 0.5f);
+    float maxSliderClickableRadius = outerRadius * 1.1f;
 
     if (distFromCentre <= maxSliderClickableRadius)
     {
@@ -50,9 +54,9 @@ bool ModulatableSlider::hitTest(int x, int y)
     return false;
 }
 
-juce::Rectangle<float> ModulatableSlider::getModulationHandleBounds()
+juce::Rectangle<float> ModulatableSlider::getModulationHandleBounds() const
 {
-    auto bounds = getLocalBounds().toFloat().reduced(10 * 1.0f);
+    auto bounds = getRotarySliderBounds().reduced(juce::jmax(5.0f, 7.0f * getUiScale()));
     auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
     float handleSize = radius * 0.4f;
 
@@ -62,12 +66,58 @@ juce::Rectangle<float> ModulatableSlider::getModulationHandleBounds()
     return juce::Rectangle<float>(handleSize, handleSize).withCentre({ handleCenterX, handleCenterY });
 }
 
+float ModulatableSlider::getUiScale() const noexcept
+{
+    if (const auto* fireLookAndFeel = dynamic_cast<const FireLookAndFeel*>(&getLookAndFeel()))
+        return juce::jmax(0.1f, fireLookAndFeel->scale);
+
+    return 1.0f;
+}
+
+juce::Rectangle<float> ModulatableSlider::getRotarySliderBounds() const
+{
+    auto& mutableSlider = const_cast<ModulatableSlider&>(*this);
+    return getLookAndFeel().getSliderLayout(mutableSlider).sliderBounds.toFloat();
+}
+
+juce::Rectangle<int> ModulatableSlider::getHeaderBounds() const
+{
+    auto header = getLocalBounds();
+    const auto rotaryBounds = getRotarySliderBounds();
+    header.setBottom(juce::jlimit(0, getHeight(), juce::roundToInt(rotaryBounds.getY())));
+    return header;
+}
+
 // New helper function
 bool ModulatableSlider::isMouseOverMainSlider() const
 {
     // The main slider is highlighted only if the mouse is over the component
     // in general, but NOT specifically over the modulation handle.
     return isMouseOver() && ! isModHandleMouseOver;
+}
+
+bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
+{
+    deltaSeconds = juce::jlimit(0.0f, 0.05f, deltaSeconds);
+    const auto oldHover = hoverAnimation;
+    const auto oldPress = pressAnimation;
+    const auto hoverTarget = isMouseOverMainSlider() && isEnabled() ? 1.0f : 0.0f;
+    const auto pressTarget = (isDraggingMainSlider || (isMouseButtonDown() && ! isModHandleMouseDown))
+                                 && isEnabled()
+                             ? 1.0f
+                             : 0.0f;
+    const auto hoverStep = juce::jmin(1.0f, deltaSeconds * 10.0f);
+    const auto pressStep = juce::jmin(1.0f, deltaSeconds * 16.0f);
+    hoverAnimation += (hoverTarget - hoverAnimation) * hoverStep;
+    pressAnimation += (pressTarget - pressAnimation) * pressStep;
+
+    if (std::abs(hoverAnimation - hoverTarget) < 0.002f)
+        hoverAnimation = hoverTarget;
+    if (std::abs(pressAnimation - pressTarget) < 0.002f)
+        pressAnimation = pressTarget;
+
+    return std::abs(oldHover - hoverAnimation) > 0.001f
+           || std::abs(oldPress - pressAnimation) > 0.001f;
 }
 
 // New/updated mouse handlers
@@ -101,7 +151,10 @@ void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
     juce::Slider::mouseEnter(event);
     mouseMove(event);
     label.setVisible(false);
-    setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
+    const auto uiScale = getUiScale();
+    setTextBoxStyle(juce::Slider::TextBoxAbove, false,
+                    juce::roundToInt(TEXTBOX_WIDTH * uiScale),
+                    juce::roundToInt(TEXTBOX_HEIGHT * uiScale));
 }
 
 void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
@@ -306,9 +359,17 @@ void ModulatableSlider::resized()
     // First, call the base class's resized() to let it draw the slider itself.
     juce::Slider::resized();
 
-    // Then, place our label in the area designated for the textbox.
-    // This ensures it's perfectly aligned above the knob.
-    label.setBounds(0, 0, getWidth(), TEXTBOX_HEIGHT);
+    // Match the exact header reserved by FireLookAndFeel. This keeps the static
+    // label, hover text editor and rotary drawing area aligned at every zoom.
+    const auto headerBounds = getHeaderBounds();
+    label.setBounds(headerBounds);
+    label.setFont(juce::Font {
+        juce::FontOptions()
+            .withName(KNOB_FONT)
+            .withHeight(juce::jmax(1.0f,
+                                   juce::jmin(KNOB_FONT_SIZE * getUiScale(),
+                                              static_cast<float>(headerBounds.getHeight()) * 0.68f)))
+            .withStyle("Plain") });
 }
 
 void ModulatableSlider::timerCallback()

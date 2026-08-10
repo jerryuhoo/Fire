@@ -13,10 +13,10 @@
 ValuePopup::ValuePopup()
 {
     // Style the label for the popup window
-    valueLabel.setColour(juce::Label::backgroundColourId, juce::Colours::black.withAlpha(0.85f));
-    valueLabel.setColour(juce::Label::textColourId, COLOUR4);
+    valueLabel.setColour(juce::Label::backgroundColourId, fire::ui::colours::surface0.withAlpha(0.96f));
+    valueLabel.setColour(juce::Label::textColourId, fire::ui::colours::whiteHot);
     valueLabel.setBorderSize({ 1, 1, 1, 1 });
-    valueLabel.setColour(juce::Label::outlineColourId, COLOUR6);
+    valueLabel.setColour(juce::Label::outlineColourId, fire::ui::colours::ember.withAlpha(0.68f));
     valueLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(valueLabel);
 
@@ -28,7 +28,7 @@ ValuePopup::~ValuePopup()
 {
 }
 
-void ValuePopup::paint(juce::Graphics& g)
+void ValuePopup::paint(juce::Graphics&)
 {
     // Nothing to paint here, as the child label handles everything.
 }

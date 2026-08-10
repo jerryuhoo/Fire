@@ -15,6 +15,7 @@
 DistortionGraph::DistortionGraph(FireAudioProcessor& p)
 {
     juce::ignoreUnused(p);
+    setGraphIdentity("TRANSFER", fire::ui::ModuleRole::shape);
     updateDistortionCurve();
 }
 
@@ -22,27 +23,36 @@ DistortionGraph::~DistortionGraph() = default;
 
 void DistortionGraph::resized()
 {
-    updateDistortionCurve();
+    GraphTemplate::resized();
+    curveDirty = true;
+    if (isShowing())
+        updateDistortionCurve();
 }
 
 void DistortionGraph::paint(juce::Graphics& g)
 {
-    // The paint function is now very lightweight. It only draws the pre-calculated path.
-    auto frameRight = getLocalBounds();
+    GraphTemplate::paint(g);
 
-    g.setColour(COLOUR6);
-    g.drawRect(getLocalBounds(), 1);
+    const juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(getGraphPlotBounds().getSmallestIntegerContainer());
 
-    // Create the gradient and draw the stored path
-    juce::ColourGradient grad(SHAPE_COLOUR.withBrightness(0.9f),
-                              static_cast<float>(frameRight.getCentreX()),
-                              static_cast<float>(frameRight.getCentreY()),
-                              juce::Colours::yellow.withBrightness(0.9f).withAlpha(0.0f),
-                              static_cast<float>(frameRight.getX()),
-                              static_cast<float>(frameRight.getCentreY()),
-                              true);
-    g.setGradientFill(grad);
-    g.strokePath(distortionCurve, juce::PathStrokeType(2.0f));
+    g.setColour(getGraphAccent().withAlpha(0.16f));
+    g.strokePath(distortionCurve,
+                 juce::PathStrokeType(6.0f,
+                                      juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
+    g.setGradientFill(curveGradient);
+    g.strokePath(distortionCurve,
+                 juce::PathStrokeType(1.8f,
+                                      juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
+}
+
+void DistortionGraph::visibilityChanged()
+{
+    GraphTemplate::visibilityChanged();
+    if (isShowing() && curveDirty)
+        updateDistortionCurve();
 }
 
 void DistortionGraph::setState(int newMode,
@@ -58,20 +68,26 @@ void DistortionGraph::setState(int newMode,
         && juce::approximatelyEqual(mix, newMix)
         && juce::approximatelyEqual(bias, newBias)
         && juce::approximatelyEqual(drive, newDrive))
+    {
+        if (curveDirty && isShowing())
+            updateDistortionCurve();
         return;
+    }
 
     mode = newMode;
     rec = newRec;
     mix = newMix;
     bias = newBias;
     drive = newDrive;
-    updateDistortionCurve();
+    curveDirty = true;
+    if (isShowing())
+        updateDistortionCurve();
 }
 
 void DistortionGraph::updateDistortionCurve()
 {
     distortionCurve.clear();
-    auto frameRight = getLocalBounds();
+    const auto plotBounds = getGraphPlotBounds();
 
     // Create a single state object for the graph using the parameters passed to this component.
     DistortionLogic::State graphState;
@@ -80,9 +96,23 @@ void DistortionGraph::updateDistortionCurve()
     graphState.rec = this->rec;
     graphState.mode = this->mode;
 
-    const int numPix = frameRight.getWidth();
+    const int numPix = juce::roundToInt(plotBounds.getWidth());
     if (numPix <= 0)
+    {
+        curveDirty = true;
         return;
+    }
+
+    distortionCurve.preallocateSpace(numPix * 3);
+
+    curveGradient = juce::ColourGradient(fire::ui::colours::whiteHot,
+                                         plotBounds.getCentreX(),
+                                         plotBounds.getCentreY(),
+                                         getGraphAccent().withAlpha(0.72f),
+                                         plotBounds.getX(),
+                                         plotBounds.getCentreY(),
+                                         true);
+    curveGradient.addColour(0.58, fire::ui::colours::gold);
 
     float maxInput = 2.0f; // Max input value for the graph's x-axis
     float input = -maxInput;
@@ -97,8 +127,16 @@ void DistortionGraph::updateDistortionCurve()
         float mixedValue = (1.0f - this->mix) * input + this->mix * wetValue;
 
         // Map the input and output values to screen coordinates
-        float xPos = juce::jmap((float) i, 0.0f, (float) numPix, (float) frameRight.getX(), (float) frameRight.getRight());
-        float yPos = juce::jmap(mixedValue, maxInput, -maxInput, (float) frameRight.getY(), (float) frameRight.getBottom());
+        const float xPos = juce::jmap(static_cast<float>(i),
+                                     0.0f,
+                                     static_cast<float>(juce::jmax(1, numPix - 1)),
+                                     plotBounds.getX(),
+                                     plotBounds.getRight());
+        const float yPos = juce::jmap(mixedValue,
+                                     maxInput,
+                                     -maxInput,
+                                     plotBounds.getY(),
+                                     plotBounds.getBottom());
 
         if (i == 0)
             distortionCurve.startNewSubPath(xPos, yPos);
@@ -108,5 +146,6 @@ void DistortionGraph::updateDistortionCurve()
         input += inputInc;
     }
 
+    curveDirty = false;
     repaint();
 }

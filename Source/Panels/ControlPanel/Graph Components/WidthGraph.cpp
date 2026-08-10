@@ -14,7 +14,7 @@
 //==============================================================================
 WidthGraph::WidthGraph(FireAudioProcessor& p) : processor(p)
 {
-    startTimerHz(60);
+    setGraphIdentity("STEREO FIELD", fire::ui::ModuleRole::stereo);
 }
 
 WidthGraph::~WidthGraph()
@@ -24,73 +24,236 @@ WidthGraph::~WidthGraph()
 
 void WidthGraph::paint(juce::Graphics& g)
 {
-    // The paint() function remains unchanged, still extremely simple and fast
-    g.setColour(COLOUR6);
-    g.drawRect(getLocalBounds(), 1);
-    g.drawImage(pointCloudCache, getLocalBounds().toFloat());
+    GraphTemplate::paint(g);
+
+    const auto displayScale = juce::jmax(
+        0.25f,
+        g.getInternalContext().getPhysicalPixelScaleFactor());
+    const auto plotBounds = getGraphPlotBounds();
+    const auto expectedWidth = juce::jmax(
+        1,
+        juce::roundToInt(plotBounds.getWidth() * displayScale));
+    const auto expectedHeight = juce::jmax(
+        1,
+        juce::roundToInt(plotBounds.getHeight() * displayScale));
+    if (cacheGeometryDirty
+        || ! pointCloudCache.isValid()
+        || pointCloudCache.getWidth() != expectedWidth
+        || pointCloudCache.getHeight() != expectedHeight
+        || pointCloudCacheBounds != plotBounds
+        || ! juce::approximatelyEqual(pointCloudCacheScale, displayScale))
+    {
+        rebuildPointCloudCache(displayScale);
+    }
+
+    if (pointCloudCache.isValid())
+        g.drawImage(pointCloudCache, plotBounds);
+
+    const juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(plotBounds.getSmallestIntegerContainer());
+    g.setColour(fire::ui::colours::signalCool.withAlpha(0.22f));
+    g.drawLine(plotBounds.getX(), plotBounds.getBottom(),
+               plotBounds.getRight(), plotBounds.getY(), 1.0f);
+    g.setColour(fire::ui::colours::ember.withAlpha(0.16f));
+    g.drawLine(plotBounds.getX(), plotBounds.getY(),
+               plotBounds.getRight(), plotBounds.getBottom(), 1.0f);
 }
 
 void WidthGraph::timerCallback()
 {
-    // Do nothing if the cache image is not valid.
-    if (! pointCloudCache.isValid())
+    if (! isShowing())
         return;
 
-    // --- Efficient fade-out implementation ---
-    // 1. Create a graphics context to draw onto our cached image.
-    juce::Graphics g(pointCloudCache);
-
-    // 2. Overlay a semi-transparent dark rectangle on the entire image.
-    // This makes all existing points a little dimmer, simulating a fade-out effect.
-    g.setColour(COLOUR7.withAlpha(0.2f)); // The alpha value controls the fade-out speed.
-    g.fillRect(pointCloudCache.getBounds().reduced(1)); // Use reduced(1) to avoid covering the border.
-
-    // --- Key Step 2: Draw the new points ---
-    // (This part of the code is identical to your original version).
-
-    // Get the latest audio data from the history buffer.
-    historyL = processor.getHistoryArrayL();
-    historyR = processor.getTotalNumInputChannels() == 2 ? processor.getHistoryArrayR() : historyL;
-    const int sampleCount = juce::jmin(historyL.size(), historyR.size());
-    if (sampleCount <= 0)
+    if (cacheGeometryDirty || ! pointCloudCache.isValid())
+    {
+        repaint();
         return;
-
-    // Apply coordinate transformations for the goniometer effect.
-    float pi = juce::MathConstants<float>::pi;
-    float rotateAngle = pi / 4.0f;
-    g.addTransform(juce::AffineTransform::scale(-1, -1, getWidth() / 2.0f, getHeight() / 2.0f));
-    g.addTransform(juce::AffineTransform::rotation(rotateAngle, getWidth() / 2.0f, getHeight() / 2.0f));
-
-    // Find the maximum value for normalization.
-    float maxValue = 0.0f;
-    for (int i = 0; i < sampleCount; ++i)
-    {
-        maxValue = std::max({ maxValue, std::abs(historyL[i]), std::abs(historyR[i]) });
     }
 
-    // Draw the new points.
-    g.setColour(juce::Colours::skyblue);
-    if (maxValue > 0.00001f)
+    const auto historyGeneration = processor.getHistoryGeneration();
+    if (historyGeneration == lastHistoryGeneration)
     {
-        const float scaleFactor = getHeight() / (4.0f * maxValue);
-        // Iterate by 2 for performance, drawing every other point.
-        for (int i = 0; i < sampleCount; i += 2)
-        {
-            float x = historyL[i] * scaleFactor;
-            float y = historyR[i] * scaleFactor;
-            g.fillRect(getWidth() / 2.0f + x, getHeight() / 2.0f + y, 1.0f, 1.0f);
-        }
+        if (fadeFramesRemaining > 0 && drawLatestFrame(false))
+            repaint(getGraphPlotBounds().getSmallestIntegerContainer());
+        return;
+    }
+    lastHistoryGeneration = historyGeneration;
+
+    const bool nextMonoChannel = processor.getTotalNumInputChannels() != 2;
+    processor.copyHistoryArrays(historyScratchL, historyScratchR);
+    const bool historyContentsChanged = monoChannel != nextMonoChannel
+                                        || ! arraysMatch(historyL, historyScratchL)
+                                        || (! nextMonoChannel
+                                            && ! arraysMatch(historyR, historyScratchR));
+
+    if (historyContentsChanged)
+    {
+        monoChannel = nextMonoChannel;
+        historyL.swapWith(historyScratchL);
+        if (monoChannel)
+            historyR.clearQuick();
+        else
+            historyR.swapWith(historyScratchR);
     }
 
-    // Trigger a repaint to show the updated image on screen.
-    repaint();
+    // A new generation is a new visual frame even if its values happen to be
+    // identical (DC input or a periodic window). Reinforce that frame instead
+    // of letting the trail fade to nothing while audio is still arriving.
+    if (drawLatestFrame(true))
+        repaint(getGraphPlotBounds().getSmallestIntegerContainer());
 }
 
 void WidthGraph::resized()
 {
-    // When the component is resized, recreate a transparent cached image that matches the new dimensions
-    if (getWidth() > 0 && getHeight() > 0)
+    GraphTemplate::resized();
+    restoreTrailOnCacheRebuild = cacheHasContent;
+    pointCloudCache = {};
+    cacheHasContent = false;
+    fadeFramesRemaining = 0;
+    cacheGeometryDirty = true;
+    pointCloudCacheBounds = {};
+    pointCloudCacheScale = 0.0f;
+    if (isShowing())
+        repaint();
+}
+
+void WidthGraph::visibilityChanged()
+{
+    GraphTemplate::visibilityChanged();
+    if (isShowing() && cacheGeometryDirty)
+        repaint();
+}
+
+void WidthGraph::graphShowingStateChanged(bool isNowShowing)
+{
+    if (! isNowShowing)
     {
-        pointCloudCache = juce::Image(juce::Image::ARGB, getWidth(), getHeight(), true);
+        stopTimer();
+        return;
     }
+
+    startTimerHz(60);
+    repaint();
+}
+
+void WidthGraph::rebuildPointCloudCache(float displayScale)
+{
+    cacheGeometryDirty = false;
+
+    const auto plotBounds = getGraphPlotBounds();
+    const bool shouldRestoreTrail = (cacheHasContent || restoreTrailOnCacheRebuild)
+                                    && ! historyL.isEmpty()
+                                    && (monoChannel || ! historyR.isEmpty());
+    displayScale = juce::jmax(0.25f, displayScale);
+    const auto cacheWidth = juce::roundToInt(plotBounds.getWidth() * displayScale);
+    const auto cacheHeight = juce::roundToInt(plotBounds.getHeight() * displayScale);
+    if (cacheWidth > 0 && cacheHeight > 0)
+    {
+        pointCloudCache = juce::Image(juce::Image::ARGB, cacheWidth, cacheHeight, true);
+        pointCloudCacheBounds = plotBounds;
+        pointCloudCacheScale = displayScale;
+        cacheHasContent = false;
+        fadeFramesRemaining = 0;
+        restoreTrailOnCacheRebuild = false;
+        if (shouldRestoreTrail)
+            drawLatestFrame(true);
+    }
+    else
+    {
+        pointCloudCache = {};
+        pointCloudCacheBounds = {};
+        pointCloudCacheScale = 0.0f;
+        restoreTrailOnCacheRebuild = shouldRestoreTrail;
+    }
+}
+
+bool WidthGraph::arraysMatch(const juce::Array<float>& lhs,
+                             const juce::Array<float>& rhs) noexcept
+{
+    if (lhs.size() != rhs.size())
+        return false;
+
+    for (int i = 0; i < lhs.size(); ++i)
+        if (! juce::approximatelyEqual(lhs.getUnchecked(i), rhs.getUnchecked(i)))
+            return false;
+
+    return true;
+}
+
+bool WidthGraph::drawLatestFrame(bool hasNewSamples)
+{
+    if (! pointCloudCache.isValid())
+        return false;
+
+    bool visualChanged = false;
+    if (cacheHasContent)
+    {
+        pointCloudCache.multiplyAllAlphas(0.82f);
+        visualChanged = true;
+    }
+
+    juce::Graphics cacheGraphics(pointCloudCache);
+    cacheGraphics.addTransform(juce::AffineTransform::scale(pointCloudCacheScale));
+    bool drewSignal = false;
+    const int sampleCount = monoChannel ? historyL.size()
+                                        : juce::jmin(historyL.size(), historyR.size());
+    if (hasNewSamples && sampleCount > 0)
+    {
+        float maxValue = 0.0f;
+        for (int sample = 0; sample < sampleCount; ++sample)
+        {
+            const auto left = historyL.getUnchecked(sample);
+            const auto right = monoChannel ? left : historyR.getUnchecked(sample);
+            maxValue = juce::jmax(maxValue, std::abs(left), std::abs(right));
+        }
+
+        if (maxValue > 0.00001f)
+        {
+            const auto logicalWidth = pointCloudCacheBounds.getWidth();
+            const auto logicalHeight = pointCloudCacheBounds.getHeight();
+            const auto centreX = logicalWidth * 0.5f;
+            const auto centreY = logicalHeight * 0.5f;
+            const auto scaleFactor = juce::jmin(logicalWidth, logicalHeight)
+                                     * 0.44f / maxValue;
+
+            const auto targetPointCount = juce::jlimit(64,
+                                                       512,
+                                                       juce::roundToInt(logicalWidth * 2.0f));
+            const auto sampleStride = juce::jmax(1,
+                                                 (sampleCount + targetPointCount - 1)
+                                                     / targetPointCount);
+            for (int sample = 0; sample < sampleCount; sample += sampleStride)
+            {
+                const auto left = historyL.getUnchecked(sample);
+                const auto right = monoChannel ? left : historyR.getUnchecked(sample);
+                const auto side = (left - right) * 0.5f;
+                const auto mid = (left + right) * 0.5f;
+                const auto point = juce::Point<float>(centreX + side * scaleFactor,
+                                                      centreY - mid * scaleFactor);
+
+                const auto phaseEnergy = juce::jlimit(0.0f, 1.0f, std::abs(side) / maxValue);
+                cacheGraphics.setColour(fire::ui::colours::signalCool
+                                            .interpolatedWith(fire::ui::colours::flame, phaseEnergy)
+                                            .withAlpha(0.62f));
+                cacheGraphics.fillEllipse(juce::Rectangle<float>(1.6f, 1.6f).withCentre(point));
+            }
+
+            drewSignal = true;
+            visualChanged = true;
+            cacheHasContent = true;
+            fadeFramesRemaining = 24;
+        }
+    }
+
+    if (! drewSignal && fadeFramesRemaining > 0)
+        --fadeFramesRemaining;
+
+    if (fadeFramesRemaining == 0 && cacheHasContent && ! drewSignal)
+    {
+        pointCloudCache.clear(pointCloudCache.getBounds(), juce::Colours::transparentBlack);
+        cacheHasContent = false;
+        visualChanged = true;
+    }
+
+    return visualChanged;
 }

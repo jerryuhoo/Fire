@@ -7,25 +7,26 @@ ValueEntryPopup::ValueEntryPopup()
     // 1. Configure TextEditor colors
     // ==================================================================
     addAndMakeVisible(editor);
-    editor.setTextToShowWhenEmpty("Enter value...", COLOUR6.withAlpha(0.4f));
+    editor.setTextToShowWhenEmpty("Enter value...", fire::ui::colours::textMuted);
     editor.setJustification(juce::Justification::centred);
     editor.addListener(this); // Listen for the return key
 
     // Set colors for the text editor
-    editor.setColour(juce::TextEditor::backgroundColourId, COLOUR7);
-    editor.setColour(juce::TextEditor::textColourId, COLOUR0);
-    editor.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-    editor.setColour(juce::TextEditor::focusedOutlineColourId, COLOUR7);
+    editor.setColour(juce::TextEditor::backgroundColourId, fire::ui::colours::surface0);
+    editor.setColour(juce::TextEditor::textColourId, fire::ui::colours::textPrimary);
+    editor.setColour(juce::TextEditor::outlineColourId, fire::ui::colours::hairline);
+    editor.setColour(juce::TextEditor::focusedOutlineColourId, fire::ui::colours::ember);
 
     // ==================================================================
     // 2. Configure "OK" button colors
     // ==================================================================
     addAndMakeVisible(okButton);
     okButton.setButtonText("OK");
-    okButton.setColour(juce::TextButton::buttonColourId, COLOUR6.brighter(0.2f));
-    okButton.setColour(juce::TextButton::buttonOnColourId, COLOUR1);
-    okButton.setColour(juce::TextButton::textColourOffId, COLOUR0);
-    okButton.setColour(juce::TextButton::textColourOnId, COLOUR7);
+    okButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
+    okButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    okButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::positive);
+    okButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
+    okButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     okButton.onClick = [this]
     {
         if (onOk)
@@ -37,10 +38,11 @@ ValueEntryPopup::ValueEntryPopup()
     // ==================================================================
     addAndMakeVisible(cancelButton);
     cancelButton.setButtonText("Cancel");
-    cancelButton.setColour(juce::TextButton::buttonColourId, COLOUR6.brighter(0.2f));
-    cancelButton.setColour(juce::TextButton::buttonOnColourId, COLOUR5);
-    cancelButton.setColour(juce::TextButton::textColourOffId, COLOUR0.withAlpha(0.8f));
-    cancelButton.setColour(juce::TextButton::textColourOnId, COLOUR0);
+    cancelButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface1);
+    cancelButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
+    cancelButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
+    cancelButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::danger);
+    cancelButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     cancelButton.onClick = [this]
     {
         if (onCancel)
@@ -77,12 +79,8 @@ void ValueEntryPopup::resized()
 // ==================================================================
 void ValueEntryPopup::paint(juce::Graphics& g)
 {
-    // Use COLOUR6 for the dark background
-    g.fillAll(COLOUR6);
-
-    // Use COLOUR1 for the bright, highlighted border
-    g.setColour(COLOUR1);
-    g.drawRect(getLocalBounds().toFloat(), 1.5f);
+    fire::ui::drawPanel(g, getLocalBounds().toFloat(), fire::ui::colours::ember, true,
+                        fire::ui::Metrics::radius);
 }
 
 void ValueEntryPopup::textEditorReturnKeyPressed(juce::TextEditor&)

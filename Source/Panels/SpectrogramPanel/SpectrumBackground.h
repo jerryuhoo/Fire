@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "../../GUI/FireTheme.h"
 #include "../../GUI/LookAndFeel.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -29,17 +30,15 @@ public:
 private:
     void createBackgroundImage();
 
-    int numberOfBins;
-
     static const int frequenciesForLines[];
-    static const int numberOfLines;
     static const int frequenciesForTextLabels[];
-    float mBinWidth;
     float scale = 1.0f;
 
     // The cached image for our static background.
     juce::Image cachedBackground;
     float lastDisplayScale = 1.0f;
+    float cachedUiScale = 0.0f;
+    juce::Rectangle<int> cachedLogicalBounds;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SpectrumBackground)
 };

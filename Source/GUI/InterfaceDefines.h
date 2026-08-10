@@ -12,7 +12,9 @@
 
 //#include "../../JuceLibraryCode/JucePluginDefines.h"
 
-#define VERSION                 "1.5.0"
+#include "FireTheme.h"
+
+#define VERSION                 "1.6.0"
 #define GITHUB_LINK             "https://github.com/jerryuhoo/Fire"
 #define GITHUB_TAG_LINK         "https://github.com/jerryuhoo/Fire/releases/tag/"
 #define PRESET_EXETENSION       ".fire"
@@ -171,7 +173,7 @@
 
 
 // Define Font
-#define KNOB_FONT           "Futura"
+#define KNOB_FONT           juce::Font::getDefaultSansSerifFontName()
 #define KNOB_FONT_SIZE      18.0f
 #define KNOB_FONT_COLOUR    COLOUR1
 #define KNOB_SUBFONT_COLOUR COLOUR7.withBrightness(0.8f)
@@ -255,27 +257,27 @@
 #define BUTTON_WIDTH        OSC_WIDTH / 4.0f
 
 // Define Color
-#define COLOUR0             juce::Colour(244, 244, 210)
-#define COLOUR1             juce::Colour(244, 208, 63)
-#define COLOUR2             juce::Colour(243, 156, 18)
-#define COLOUR3             juce::Colour(230, 126, 34)
-#define COLOUR4             juce::Colour(211, 84, 0)
-#define COLOUR5             juce::Colour(192, 57, 43)
-#define COLOUR6             juce::Colour(40, 40, 40)
-#define COLOUR7             juce::Colour(15, 15, 15)
-#define COLOUR8             juce::Colour(10, 10, 10)
-#define COLOUR_FONT         juce::Colour(100, 100, 100)
-#define COLOUR_MASK_RED     juce::Colours::red.withAlpha(0.05f)
-#define COLOUR_MASK_BLACK   juce::Colours::black.withAlpha(0.5f)
-#define COLOUR_MASK_WHITE   juce::Colours::white.withAlpha(0.05f)
-#define COLOUR_GROUP        juce::Colour(50, 50, 50)
-#define DRIVE_COLOUR        juce::Colours::red
-#define SHAPE_COLOUR        juce::Colours::yellow
-#define WIDTH_COLOUR        juce::Colours::skyblue
-#define COMP_COLOUR         juce::Colours::yellowgreen
-#define FILTER_COLOUR       juce::Colours::hotpink
-#define DOWNSAMPLE_COLOUR   juce::Colours::violet
-#define LIMITER_COLOUR      juce::Colours::mediumpurple
+#define COLOUR0             fire::ui::colours::textPrimary
+#define COLOUR1             fire::ui::colours::gold
+#define COLOUR2             fire::ui::colours::flame
+#define COLOUR3             fire::ui::colours::flame
+#define COLOUR4             fire::ui::colours::ember
+#define COLOUR5             fire::ui::colours::edgeHot
+#define COLOUR6             fire::ui::colours::surface2
+#define COLOUR7             fire::ui::colours::surface0
+#define COLOUR8             fire::ui::colours::canvas
+#define COLOUR_FONT         fire::ui::colours::textMuted
+#define COLOUR_MASK_RED     fire::ui::colours::ember.withAlpha(0.06f)
+#define COLOUR_MASK_BLACK   fire::ui::colours::canvas.withAlpha(0.62f)
+#define COLOUR_MASK_WHITE   fire::ui::colours::textPrimary.withAlpha(0.035f)
+#define COLOUR_GROUP        fire::ui::colours::surface2
+#define DRIVE_COLOUR        fire::ui::colours::drive
+#define SHAPE_COLOUR        fire::ui::colours::shape
+#define WIDTH_COLOUR        fire::ui::colours::stereo
+#define COMP_COLOUR         fire::ui::colours::compressor
+#define FILTER_COLOUR       fire::ui::colours::filter
+#define DOWNSAMPLE_COLOUR   fire::ui::colours::loFi
+#define LIMITER_COLOUR      fire::ui::colours::limiter
 
 // VU meters
 #define SMOOTH_COEFF        0.5

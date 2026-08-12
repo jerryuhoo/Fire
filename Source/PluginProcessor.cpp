@@ -107,21 +107,29 @@ bool sameCachedValue(FloatType lhs, FloatType rhs) noexcept
     return std::abs(lhs - rhs) <= std::numeric_limits<FloatType>::epsilon() * scale;
 }
 
-bool sameFilterSettings(const ChainSettings& lhs, const ChainSettings& rhs) noexcept
+bool sameLowCutSettings(const ChainSettings& lhs, const ChainSettings& rhs) noexcept
+{
+    return sameCachedValue(lhs.lowCutFreq, rhs.lowCutFreq)
+        && sameCachedValue(lhs.lowCutGainInDecibels, rhs.lowCutGainInDecibels)
+        && sameCachedValue(lhs.lowCutQuality, rhs.lowCutQuality)
+        && lhs.lowCutSlope == rhs.lowCutSlope
+        && lhs.lowCutBypassed == rhs.lowCutBypassed;
+}
+
+bool samePeakSettings(const ChainSettings& lhs, const ChainSettings& rhs) noexcept
 {
     return sameCachedValue(lhs.peakFreq, rhs.peakFreq)
         && sameCachedValue(lhs.peakGainInDecibels, rhs.peakGainInDecibels)
         && sameCachedValue(lhs.peakQuality, rhs.peakQuality)
-        && sameCachedValue(lhs.lowCutFreq, rhs.lowCutFreq)
-        && sameCachedValue(lhs.highCutFreq, rhs.highCutFreq)
-        && sameCachedValue(lhs.lowCutQuality, rhs.lowCutQuality)
-        && sameCachedValue(lhs.highCutQuality, rhs.highCutQuality)
-        && sameCachedValue(lhs.lowCutGainInDecibels, rhs.lowCutGainInDecibels)
+        && lhs.peakBypassed == rhs.peakBypassed;
+}
+
+bool sameHighCutSettings(const ChainSettings& lhs, const ChainSettings& rhs) noexcept
+{
+    return sameCachedValue(lhs.highCutFreq, rhs.highCutFreq)
         && sameCachedValue(lhs.highCutGainInDecibels, rhs.highCutGainInDecibels)
-        && lhs.lowCutSlope == rhs.lowCutSlope
+        && sameCachedValue(lhs.highCutQuality, rhs.highCutQuality)
         && lhs.highCutSlope == rhs.highCutSlope
-        && lhs.lowCutBypassed == rhs.lowCutBypassed
-        && lhs.peakBypassed == rhs.peakBypassed
         && lhs.highCutBypassed == rhs.highCutBypassed;
 }
 
@@ -781,6 +789,13 @@ float FireAudioProcessor::loadCachedParameter(const CachedParameter& parameter, 
 float FireAudioProcessor::getBlockModulatedValue(const CachedParameter& parameter,
                                                  const juce::AudioBuffer<float>& lfoOutputs) const noexcept
 {
+    return getModulatedValueAtSample(parameter, lfoOutputs, 0);
+}
+
+float FireAudioProcessor::getModulatedValueAtSample(const CachedParameter& parameter,
+                                                    const juce::AudioBuffer<float>& lfoOutputs,
+                                                    int sampleIndex) const noexcept
+{
     const float defaultValue = parameter.ranged != nullptr
                                    ? parameter.ranged->convertFrom0to1(parameter.ranged->getDefaultValue())
                                    : 0.0f;
@@ -791,10 +806,10 @@ float FireAudioProcessor::getBlockModulatedValue(const CachedParameter& paramete
     LfoManager::AudioThreadRoutingInfo routingInfo;
     if (! lfoManager->getAudioThreadRoutingInfo(parameter.ranged, routingInfo)
         || ! juce::isPositiveAndBelow(routingInfo.sourceLfoIndex, lfoOutputs.getNumChannels())
-        || lfoOutputs.getNumSamples() <= 0)
+        || ! juce::isPositiveAndBelow(sampleIndex, lfoOutputs.getNumSamples()))
         return baseValue;
 
-    float lfoValue = lfoOutputs.getSample(routingInfo.sourceLfoIndex, 0);
+    float lfoValue = lfoOutputs.getSample(routingInfo.sourceLfoIndex, sampleIndex);
     if (! std::isfinite(lfoValue))
         return baseValue;
 
@@ -843,6 +858,65 @@ ChainSettings FireAudioProcessor::getCachedChainSettings(const juce::AudioBuffer
     settings.highCutSlope = getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
     settings.highCutBypassed = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
     return settings;
+}
+
+ChainSettings FireAudioProcessor::getCachedChainSettingsAtSample(
+    const juce::AudioBuffer<float>& lfoOutputs,
+    int sampleIndex) const noexcept
+{
+    const auto getValue = [this, &lfoOutputs, sampleIndex](const CachedParameter& parameter)
+    {
+        return getModulatedValueAtSample(parameter, lfoOutputs, sampleIndex);
+    };
+
+    ChainSettings settings;
+    settings.lowCutFreq = getValue(filterParameterCache.lowCutFrequency);
+    settings.lowCutGainInDecibels = getValue(filterParameterCache.lowCutGain);
+    settings.lowCutQuality = getValue(filterParameterCache.lowCutQuality);
+    settings.lowCutSlope = getSlopeParameterValue(filterParameterCache.lowCutSlope.raw);
+    settings.lowCutBypassed = loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f;
+    settings.peakFreq = getValue(filterParameterCache.peakFrequency);
+    settings.peakGainInDecibels = getValue(filterParameterCache.peakGain);
+    settings.peakQuality = getValue(filterParameterCache.peakQuality);
+    settings.peakBypassed = loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f;
+    settings.highCutFreq = getValue(filterParameterCache.highCutFrequency);
+    settings.highCutGainInDecibels = getValue(filterParameterCache.highCutGain);
+    settings.highCutQuality = getValue(filterParameterCache.highCutQuality);
+    settings.highCutSlope = getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
+    settings.highCutBypassed = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
+    return settings;
+}
+
+bool FireAudioProcessor::hasActiveFilterModulation() const noexcept
+{
+    if (lfoOutputBuffer.getNumSamples() <= 0)
+        return false;
+
+    const std::array<const CachedParameter*, 9> parameters {
+        &filterParameterCache.lowCutFrequency,
+        &filterParameterCache.lowCutGain,
+        &filterParameterCache.lowCutQuality,
+        &filterParameterCache.peakFrequency,
+        &filterParameterCache.peakGain,
+        &filterParameterCache.peakQuality,
+        &filterParameterCache.highCutFrequency,
+        &filterParameterCache.highCutGain,
+        &filterParameterCache.highCutQuality
+    };
+
+    for (const auto* parameter : parameters)
+    {
+        LfoManager::AudioThreadRoutingInfo routingInfo;
+        if (parameter->ranged != nullptr
+            && lfoManager->getAudioThreadRoutingInfo(parameter->ranged, routingInfo)
+            && juce::isPositiveAndBelow(routingInfo.sourceLfoIndex,
+                                        lfoOutputBuffer.getNumChannels())
+            && std::isfinite(routingInfo.depth)
+            && std::abs(routingInfo.depth) > std::numeric_limits<float>::epsilon())
+            return true;
+    }
+
+    return false;
 }
 
 void FireAudioProcessor::initialiseParameterCache()
@@ -1122,27 +1196,38 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     lofiDryBuffer.clear();
 
     const float rampTimeSeconds = 0.0005f;
+    auto initialFilterSettings = getCachedChainSettings(nullptr);
+    const auto initialFilterFrequencyRange = getSafeFilterFrequencyRange(safeSampleRate);
+    initialFilterSettings.lowCutFreq = juce::jlimit(initialFilterFrequencyRange.minimum,
+                                                    initialFilterFrequencyRange.maximum,
+                                                    initialFilterSettings.lowCutFreq);
+    initialFilterSettings.peakFreq = juce::jlimit(initialFilterFrequencyRange.minimum,
+                                                  initialFilterFrequencyRange.maximum,
+                                                  initialFilterSettings.peakFreq);
+    initialFilterSettings.highCutFreq = juce::jlimit(initialFilterFrequencyRange.minimum,
+                                                     initialFilterFrequencyRange.maximum,
+                                                     initialFilterSettings.highCutFreq);
 
     lowcutFreqSmoother.reset(safeSampleRate, rampTimeSeconds);
-    lowcutFreqSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.lowCutFrequency));
+    lowcutFreqSmoother.setCurrentAndTargetValue(initialFilterSettings.lowCutFreq);
     lowcutGainSmoother.reset(safeSampleRate, rampTimeSeconds);
-    lowcutGainSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.lowCutGain));
+    lowcutGainSmoother.setCurrentAndTargetValue(initialFilterSettings.lowCutGainInDecibels);
     lowcutQualitySmoother.reset(safeSampleRate, rampTimeSeconds);
-    lowcutQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.lowCutQuality));
+    lowcutQualitySmoother.setCurrentAndTargetValue(initialFilterSettings.lowCutQuality);
 
     peakFreqSmoother.reset(safeSampleRate, rampTimeSeconds);
-    peakFreqSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.peakFrequency));
+    peakFreqSmoother.setCurrentAndTargetValue(initialFilterSettings.peakFreq);
     peakGainSmoother.reset(safeSampleRate, rampTimeSeconds);
-    peakGainSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.peakGain));
+    peakGainSmoother.setCurrentAndTargetValue(initialFilterSettings.peakGainInDecibels);
     peakQualitySmoother.reset(safeSampleRate, rampTimeSeconds);
-    peakQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.peakQuality));
+    peakQualitySmoother.setCurrentAndTargetValue(initialFilterSettings.peakQuality);
 
     highcutFreqSmoother.reset(safeSampleRate, rampTimeSeconds);
-    highcutFreqSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutFrequency));
+    highcutFreqSmoother.setCurrentAndTargetValue(initialFilterSettings.highCutFreq);
     highcutGainSmoother.reset(safeSampleRate, rampTimeSeconds);
-    highcutGainSmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutGain));
+    highcutGainSmoother.setCurrentAndTargetValue(initialFilterSettings.highCutGainInDecibels);
     highcutQualitySmoother.reset(safeSampleRate, rampTimeSeconds);
-    highcutQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutQuality));
+    highcutQualitySmoother.setCurrentAndTargetValue(initialFilterSettings.highCutQuality);
 
     smoothedFreq1.reset(safeSampleRate, rampTimeSeconds * 2);
     smoothedFreq2.reset(safeSampleRate, rampTimeSeconds * 2);
@@ -2449,25 +2534,6 @@ void FireAudioProcessor::updateParameters()
         }
     }
 
-    //==============================================================================
-    // 3. Update Global Filter Smoothed Parameters
-    //==============================================================================
-
-    // Use the existing helper function to get all filter-related parameter values.
-    auto chainSettings = getCachedChainSettings(nullptr);
-
-    // Set the target values for all global filter smoothers.
-    lowcutFreqSmoother.setTargetValue(chainSettings.lowCutFreq);
-    lowcutGainSmoother.setTargetValue(chainSettings.lowCutGainInDecibels);
-    lowcutQualitySmoother.setTargetValue(chainSettings.lowCutQuality);
-
-    peakFreqSmoother.setTargetValue(chainSettings.peakFreq);
-    peakGainSmoother.setTargetValue(chainSettings.peakGainInDecibels);
-    peakQualitySmoother.setTargetValue(chainSettings.peakQuality);
-
-    highcutFreqSmoother.setTargetValue(chainSettings.highCutFreq);
-    highcutGainSmoother.setTargetValue(chainSettings.highCutGainInDecibels);
-    highcutQualitySmoother.setTargetValue(chainSettings.highCutQuality);
 }
 
 void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
@@ -2714,14 +2780,14 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     }
 }
 
-void FireAudioProcessor::updateGlobalFilters(double sampleRate)
+bool FireAudioProcessor::updateGlobalFilters(double sampleRate, int lfoSampleIndex)
 {
     // Get the final, modulated settings for the entire filter chain.
-    auto chainSettings = getCachedChainSettings(&lfoOutputBuffer);
+    auto chainSettings = getCachedChainSettingsAtSample(lfoOutputBuffer, lfoSampleIndex);
 
     // It's good practice to ensure frequencies are within a valid range.
     if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
-        return;
+        return false;
 
     const auto frequencyRange = getSafeFilterFrequencyRange(sampleRate);
 
@@ -2730,19 +2796,82 @@ void FireAudioProcessor::updateGlobalFilters(double sampleRate)
     chainSettings.peakFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.peakFreq);
     chainSettings.highCutFreq = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, chainSettings.highCutFreq);
 
-    if (globalFilterCacheValid
-        && sameCachedValue(cachedGlobalFilterSampleRate, sampleRate)
-        && sameFilterSettings(cachedGlobalFilterSettings, chainSettings))
-        return;
+    lowcutFreqSmoother.setTargetValue(chainSettings.lowCutFreq);
+    lowcutGainSmoother.setTargetValue(chainSettings.lowCutGainInDecibels);
+    lowcutQualitySmoother.setTargetValue(chainSettings.lowCutQuality);
+    peakFreqSmoother.setTargetValue(chainSettings.peakFreq);
+    peakGainSmoother.setTargetValue(chainSettings.peakGainInDecibels);
+    peakQualitySmoother.setTargetValue(chainSettings.peakQuality);
+    highcutFreqSmoother.setTargetValue(chainSettings.highCutFreq);
+    highcutGainSmoother.setTargetValue(chainSettings.highCutGainInDecibels);
+    highcutQualitySmoother.setTargetValue(chainSettings.highCutQuality);
 
-    // Call the modular update functions with the final settings.
-    updateLowCutFilters(chainSettings, sampleRate);
-    updatePeakFilter(chainSettings, sampleRate);
-    updateHighCutFilters(chainSettings, sampleRate);
+    ChainSettings smoothedSettings = chainSettings;
+    smoothedSettings.lowCutFreq = juce::jlimit(frequencyRange.minimum,
+                                               frequencyRange.maximum,
+                                               lowcutFreqSmoother.getNextValue());
+    smoothedSettings.lowCutGainInDecibels = lowcutGainSmoother.getNextValue();
+    smoothedSettings.lowCutQuality = lowcutQualitySmoother.getNextValue();
+    smoothedSettings.peakFreq = juce::jlimit(frequencyRange.minimum,
+                                            frequencyRange.maximum,
+                                            peakFreqSmoother.getNextValue());
+    smoothedSettings.peakGainInDecibels = peakGainSmoother.getNextValue();
+    smoothedSettings.peakQuality = peakQualitySmoother.getNextValue();
+    smoothedSettings.highCutFreq = juce::jlimit(frequencyRange.minimum,
+                                                frequencyRange.maximum,
+                                                highcutFreqSmoother.getNextValue());
+    smoothedSettings.highCutGainInDecibels = highcutGainSmoother.getNextValue();
+    smoothedSettings.highCutQuality = highcutQualitySmoother.getNextValue();
 
-    cachedGlobalFilterSettings = chainSettings;
+    const bool sampleRateChanged = ! globalFilterCacheValid
+                                || ! sameCachedValue(cachedGlobalFilterSampleRate, sampleRate);
+    const bool lowCutChanged = sampleRateChanged
+                            || ! sameLowCutSettings(cachedGlobalFilterSettings, smoothedSettings);
+    const bool peakChanged = sampleRateChanged
+                          || ! samePeakSettings(cachedGlobalFilterSettings, smoothedSettings);
+    const bool highCutChanged = sampleRateChanged
+                             || ! sameHighCutSettings(cachedGlobalFilterSettings, smoothedSettings);
+
+    if (! lowCutChanged && ! peakChanged && ! highCutChanged)
+        return false;
+
+    // During a parameter ramp this function is called once per processed
+    // sample. All coefficient factories below use fixed-size arrays and the
+    // filters have already been prepared as biquads, so this remains
+    // allocation-free on the audio thread.
+    if (lowCutChanged)
+        updateLowCutFilters(smoothedSettings, sampleRate);
+    if (peakChanged)
+        updatePeakFilter(smoothedSettings, sampleRate);
+    if (highCutChanged)
+        updateHighCutFilters(smoothedSettings, sampleRate);
+
+    if (lowCutChanged)
+    {
+        cachedGlobalFilterSettings.lowCutFreq = smoothedSettings.lowCutFreq;
+        cachedGlobalFilterSettings.lowCutGainInDecibels = smoothedSettings.lowCutGainInDecibels;
+        cachedGlobalFilterSettings.lowCutQuality = smoothedSettings.lowCutQuality;
+        cachedGlobalFilterSettings.lowCutSlope = smoothedSettings.lowCutSlope;
+        cachedGlobalFilterSettings.lowCutBypassed = smoothedSettings.lowCutBypassed;
+    }
+    if (peakChanged)
+    {
+        cachedGlobalFilterSettings.peakFreq = smoothedSettings.peakFreq;
+        cachedGlobalFilterSettings.peakGainInDecibels = smoothedSettings.peakGainInDecibels;
+        cachedGlobalFilterSettings.peakQuality = smoothedSettings.peakQuality;
+        cachedGlobalFilterSettings.peakBypassed = smoothedSettings.peakBypassed;
+    }
+    if (highCutChanged)
+    {
+        cachedGlobalFilterSettings.highCutFreq = smoothedSettings.highCutFreq;
+        cachedGlobalFilterSettings.highCutGainInDecibels = smoothedSettings.highCutGainInDecibels;
+        cachedGlobalFilterSettings.highCutQuality = smoothedSettings.highCutQuality;
+        cachedGlobalFilterSettings.highCutSlope = smoothedSettings.highCutSlope;
+        cachedGlobalFilterSettings.highCutBypassed = smoothedSettings.highCutBypassed;
+    }
     cachedGlobalFilterSampleRate = sampleRate;
     globalFilterCacheValid = true;
+    return true;
 }
 
 float FireAudioProcessor::getTotalLatency() const
@@ -2853,17 +2982,58 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     // ==============================================================================
     if (loadCachedParameter(filterEnabledParameter) > 0.5f)
     {
-        updateGlobalFilters(sampleRate);
         auto block = juce::dsp::AudioBlock<float>(buffer);
 
-        auto leftBlock = block.getSingleChannelBlock(0);
-        leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
-
-        if (buffer.getNumChannels() > 1)
+        const auto processRange = [&] (int startSample, int numSamples)
         {
-            auto rightBlock = block.getSingleChannelBlock(1);
-            rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
+            auto leftBlock = block.getSingleChannelBlock(0)
+                                  .getSubBlock(static_cast<size_t>(startSample),
+                                               static_cast<size_t>(numSamples));
+            leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
+
+            if (buffer.getNumChannels() > 1)
+            {
+                auto rightBlock = block.getSingleChannelBlock(1)
+                                       .getSubBlock(static_cast<size_t>(startSample),
+                                                    static_cast<size_t>(numSamples));
+                rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
+            }
+        };
+
+        const auto isFilterSmoothing = [&]
+        {
+            return lowcutFreqSmoother.isSmoothing()
+                || lowcutGainSmoother.isSmoothing()
+                || lowcutQualitySmoother.isSmoothing()
+                || peakFreqSmoother.isSmoothing()
+                || peakGainSmoother.isSmoothing()
+                || peakQualitySmoother.isSmoothing()
+                || highcutFreqSmoother.isSmoothing()
+                || highcutGainSmoother.isSmoothing()
+                || highcutQualitySmoother.isSmoothing();
+        };
+
+        int processedSamples = 0;
+        const bool filterHasModulation = hasActiveFilterModulation();
+        const bool coefficientsChanged = updateGlobalFilters(sampleRate, 0);
+        const bool needsPerSampleUpdates = filterHasModulation || isFilterSmoothing();
+
+        if ((coefficientsChanged || needsPerSampleUpdates) && buffer.getNumSamples() > 0)
+        {
+            processRange(0, 1);
+            processedSamples = 1;
+
+            while (processedSamples < buffer.getNumSamples()
+                   && (filterHasModulation || isFilterSmoothing()))
+            {
+                updateGlobalFilters(sampleRate, processedSamples);
+                processRange(processedSamples, 1);
+                ++processedSamples;
+            }
         }
+
+        if (processedSamples < buffer.getNumSamples())
+            processRange(processedSamples, buffer.getNumSamples() - processedSamples);
     }
 
     // ==============================================================================

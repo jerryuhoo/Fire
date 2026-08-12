@@ -288,7 +288,7 @@ public:
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
                   bool ignoreSoloLogic);
     void updateFilter(double sampleRate);
-    void updateGlobalFilters(double sampleRate);
+    bool updateGlobalFilters(double sampleRate, int lfoSampleIndex);
     void processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
     void applyGlobalMix(juce::AudioBuffer<float>& buffer);
@@ -364,7 +364,13 @@ private:
     static float loadCachedParameter(const CachedParameter& parameter, float fallback = 0.0f) noexcept;
     float getBlockModulatedValue(const CachedParameter& parameter,
                                  const juce::AudioBuffer<float>& lfoOutputs) const noexcept;
+    float getModulatedValueAtSample(const CachedParameter& parameter,
+                                    const juce::AudioBuffer<float>& lfoOutputs,
+                                    int sampleIndex) const noexcept;
     ChainSettings getCachedChainSettings(const juce::AudioBuffer<float>* lfoOutputs) const noexcept;
+    ChainSettings getCachedChainSettingsAtSample(const juce::AudioBuffer<float>& lfoOutputs,
+                                                 int sampleIndex) const noexcept;
+    bool hasActiveFilterModulation() const noexcept;
 
     std::array<BandParameterCache, 4> bandParameterCache;
     std::array<CachedParameter, 3> crossoverFrequencyParameters;

@@ -2719,189 +2719,188 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
 
 void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate)
 {
-    // This function encapsulates the entire multiband crossover logic.
-    // The code is moved directly from your original processBlock.
-
     const int totalNumOutputChannels = inputBuffer.getNumChannels();
     const int numSamples = inputBuffer.getNumSamples();
 
-    if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
+    if (! std::isfinite(sampleRate) || sampleRate <= 0.0 || numSamples <= 0)
         return;
-    const int lineNum = activeCrossovers; // Use the member variable updated in updateParameters()
-
-    // Get the latest smoothed frequency values for the crossovers
-    float freqValue1 = smoothedFreq1.getNextValue();
-    float freqValue2 = smoothedFreq2.getNextValue();
-    float freqValue3 = smoothedFreq3.getNextValue();
-    if (numSamples > 1)
-    {
-        smoothedFreq1.skip(numSamples - 1);
-        smoothedFreq2.skip(numSamples - 1);
-        smoothedFreq3.skip(numSamples - 1);
-    }
+    const int lineNum = activeCrossovers;
 
     const auto frequencyRange = getSafeFilterFrequencyRange(sampleRate);
-
-    freqValue1 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue1);
-    freqValue2 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue2);
-    freqValue3 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue3);
-
-    // Set up crossover filters with these frequencies
-    lowpass1.setCutoffFrequency(freqValue1);
-    highpass1.setCutoffFrequency(freqValue1);
-    lowpass2.setCutoffFrequency(freqValue2);
-    highpass2.setCutoffFrequency(freqValue2);
-    lowpass3.setCutoffFrequency(freqValue3);
-    highpass3.setCutoffFrequency(freqValue3);
-
-    // Set up the all-pass branches that make each asymmetric crossover tree
-    // share one phase response before its bands are summed.
-    if (lineNum == 2)
+    if (lineNum >= 2)
     {
-        // The low branch must pass through the phase response of the second
-        // (f2) split so it remains aligned with the mid+high branches.
-        compensatorLP.setCutoffFrequency(freqValue2);
-        compensatorHP.setCutoffFrequency(freqValue2);
-    }
-    else if (lineNum == 3)
-    {
-        // Low half of the f2 split must also carry the phase of f3, while the
-        // high half must carry the phase of f1. The subsequent f1/f3 splits
-        // then produce A1*A3*(LP2+HP2), which sums flat.
-        compensatorLP.setCutoffFrequency(freqValue3);
-        compensatorHP.setCutoffFrequency(freqValue3);
-        secondCompensatorLP.setCutoffFrequency(freqValue1);
-        secondCompensatorHP.setCutoffFrequency(freqValue1);
-    }
-
-    // --- TREE-BASED SIGNAL SPLITTING ---
-    if (lineNum == 0)
-    { // 1 Band: No splitting, the signal just passes through
-        mBuffer1.makeCopyOf(inputBuffer, true);
-    }
-    else if (lineNum == 1)
-    { // 2 Bands: One split
-        mBuffer1.makeCopyOf(inputBuffer, true);
-        mBuffer2.makeCopyOf(inputBuffer, true);
-
-        auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
-        auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
-        lowpass1.process(context1);
-
-        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-        highpass1.process(context2);
-    }
-    else if (lineNum == 2)
-    { // 3 Bands: Asymmetric tree with Dummy Filter compensation
         mSplitTemp1.setSize(totalNumOutputChannels, numSamples, false, false, true);
         mSplitTemp2.setSize(totalNumOutputChannels, numSamples, false, false, true);
-        auto& highPassBuffer = mSplitTemp1;
-        auto& compensatorHighBuffer = mSplitTemp2;
-
-        mBuffer1.makeCopyOf(inputBuffer, true);
-        highPassBuffer.makeCopyOf(inputBuffer, true);
-
-        // First create the actual low branch at f1.
-        auto lowBranchBlock = juce::dsp::AudioBlock<float>(mBuffer1);
-        auto lowBranchContext = juce::dsp::ProcessContextReplacing<float>(lowBranchBlock);
-        lowpass1.process(lowBranchContext);
-
-        // Then pass that low branch through the all-pass response of the f2
-        // split so all three branches have the same phase response.
-        compensatorHighBuffer.makeCopyOf(mBuffer1, true);
-
-        auto compLpBlock = juce::dsp::AudioBlock<float>(mBuffer1);
-        auto compLpContext = juce::dsp::ProcessContextReplacing<float>(compLpBlock);
-        compensatorLP.process(compLpContext);
-
-        auto compHpBlock = juce::dsp::AudioBlock<float>(compensatorHighBuffer);
-        auto compHpContext = juce::dsp::ProcessContextReplacing<float>(compHpBlock);
-        compensatorHP.process(compHpContext);
-
-        // LR low-pass + high-pass is an all-pass response. The old code
-        // discarded this high-pass half, causing a dip around the crossover.
-        for (int channel = 0; channel < mBuffer1.getNumChannels(); ++channel)
-            mBuffer1.addFrom(channel, 0, compensatorHighBuffer, channel, 0, numSamples);
-
-        // Real Split Path for Band 2 and 3
-        auto highPassBlock = juce::dsp::AudioBlock<float>(highPassBuffer);
-        auto highPassContext = juce::dsp::ProcessContextReplacing<float>(highPassBlock);
-        highpass1.process(highPassContext);
-
-        mBuffer2.makeCopyOf(highPassBuffer, true);
-        mBuffer3.makeCopyOf(highPassBuffer, true);
-
-        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-        lowpass2.process(context2);
-
-        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
-        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
-        highpass2.process(context3);
+        if (lineNum == 3)
+            mSplitTemp3.setSize(totalNumOutputChannels, numSamples, false, false, true);
     }
-    else if (lineNum == 3)
-    { // 4 Bands: Symmetric tree
-        mSplitTemp1.setSize(totalNumOutputChannels, numSamples, false, false, true);
-        mSplitTemp2.setSize(totalNumOutputChannels, numSamples, false, false, true);
-        mSplitTemp3.setSize(totalNumOutputChannels, numSamples, false, false, true);
+
+    const auto copyRange = [totalNumOutputChannels](juce::AudioBuffer<float>& destination,
+                                                     const juce::AudioBuffer<float>& source,
+                                                     int startSample,
+                                                     int samplesInRange)
+    {
+        const int channels = juce::jmin(totalNumOutputChannels,
+                                        juce::jmin(destination.getNumChannels(), source.getNumChannels()));
+        for (int channel = 0; channel < channels; ++channel)
+            destination.copyFrom(channel, startSample, source, channel, startSample, samplesInRange);
+    };
+
+    const auto addRange = [](juce::AudioBuffer<float>& destination,
+                             const juce::AudioBuffer<float>& source,
+                             int startSample,
+                             int samplesInRange)
+    {
+        const int channels = juce::jmin(destination.getNumChannels(), source.getNumChannels());
+        for (int channel = 0; channel < channels; ++channel)
+            destination.addFrom(channel, startSample, source, channel, startSample, samplesInRange);
+    };
+
+    const auto processRange = [&](int startSample,
+                                  int samplesInRange,
+                                  float freqValue1,
+                                  float freqValue2,
+                                  float freqValue3)
+    {
+        freqValue1 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue1);
+        freqValue2 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue2);
+        freqValue3 = juce::jlimit(frequencyRange.minimum, frequencyRange.maximum, freqValue3);
+
+        lowpass1.setCutoffFrequency(freqValue1);
+        highpass1.setCutoffFrequency(freqValue1);
+        lowpass2.setCutoffFrequency(freqValue2);
+        highpass2.setCutoffFrequency(freqValue2);
+        lowpass3.setCutoffFrequency(freqValue3);
+        highpass3.setCutoffFrequency(freqValue3);
+
+        if (lineNum == 2)
+        {
+            compensatorLP.setCutoffFrequency(freqValue2);
+            compensatorHP.setCutoffFrequency(freqValue2);
+        }
+        else if (lineNum == 3)
+        {
+            compensatorLP.setCutoffFrequency(freqValue3);
+            compensatorHP.setCutoffFrequency(freqValue3);
+            secondCompensatorLP.setCutoffFrequency(freqValue1);
+            secondCompensatorHP.setCutoffFrequency(freqValue1);
+        }
+
+        const auto blockRange = [startSample, samplesInRange](juce::AudioBuffer<float>& buffer)
+        {
+            return juce::dsp::AudioBlock<float>(buffer).getSubBlock(
+                static_cast<size_t>(startSample), static_cast<size_t>(samplesInRange));
+        };
+
+        if (lineNum == 0)
+        {
+            copyRange(mBuffer1, inputBuffer, startSample, samplesInRange);
+            return;
+        }
+
+        if (lineNum == 1)
+        {
+            copyRange(mBuffer1, inputBuffer, startSample, samplesInRange);
+            copyRange(mBuffer2, inputBuffer, startSample, samplesInRange);
+            auto block1 = blockRange(mBuffer1);
+            auto block2 = blockRange(mBuffer2);
+            lowpass1.process(juce::dsp::ProcessContextReplacing<float>(block1));
+            highpass1.process(juce::dsp::ProcessContextReplacing<float>(block2));
+            return;
+        }
+
+        if (lineNum == 2)
+        {
+            auto& highPassBuffer = mSplitTemp1;
+            auto& compensatorHighBuffer = mSplitTemp2;
+            copyRange(mBuffer1, inputBuffer, startSample, samplesInRange);
+            copyRange(highPassBuffer, inputBuffer, startSample, samplesInRange);
+
+            auto lowBranchBlock = blockRange(mBuffer1);
+            lowpass1.process(juce::dsp::ProcessContextReplacing<float>(lowBranchBlock));
+            copyRange(compensatorHighBuffer, mBuffer1, startSample, samplesInRange);
+
+            auto compLpBlock = blockRange(mBuffer1);
+            auto compHpBlock = blockRange(compensatorHighBuffer);
+            compensatorLP.process(juce::dsp::ProcessContextReplacing<float>(compLpBlock));
+            compensatorHP.process(juce::dsp::ProcessContextReplacing<float>(compHpBlock));
+            addRange(mBuffer1, compensatorHighBuffer, startSample, samplesInRange);
+
+            auto highPassBlock = blockRange(highPassBuffer);
+            highpass1.process(juce::dsp::ProcessContextReplacing<float>(highPassBlock));
+            copyRange(mBuffer2, highPassBuffer, startSample, samplesInRange);
+            copyRange(mBuffer3, highPassBuffer, startSample, samplesInRange);
+
+            auto block2 = blockRange(mBuffer2);
+            auto block3 = blockRange(mBuffer3);
+            lowpass2.process(juce::dsp::ProcessContextReplacing<float>(block2));
+            highpass2.process(juce::dsp::ProcessContextReplacing<float>(block3));
+            return;
+        }
+
         auto& lowMidBuffer = mSplitTemp1;
         auto& highMidBuffer = mSplitTemp2;
         auto& allPassScratch = mSplitTemp3;
-        lowMidBuffer.makeCopyOf(inputBuffer, true);
-        highMidBuffer.makeCopyOf(inputBuffer, true);
+        copyRange(lowMidBuffer, inputBuffer, startSample, samplesInRange);
+        copyRange(highMidBuffer, inputBuffer, startSample, samplesInRange);
 
-        auto lowMidBlock = juce::dsp::AudioBlock<float>(lowMidBuffer);
-        auto highMidBlock = juce::dsp::AudioBlock<float>(highMidBuffer);
-        auto lowMidContext = juce::dsp::ProcessContextReplacing<float>(lowMidBlock);
-        auto highMidContext = juce::dsp::ProcessContextReplacing<float>(highMidBlock);
+        auto lowMidBlock = blockRange(lowMidBuffer);
+        auto highMidBlock = blockRange(highMidBuffer);
+        lowpass2.process(juce::dsp::ProcessContextReplacing<float>(lowMidBlock));
+        highpass2.process(juce::dsp::ProcessContextReplacing<float>(highMidBlock));
 
-        lowpass2.setCutoffFrequency(freqValue2); // Use middle frequency for first split
-        highpass2.setCutoffFrequency(freqValue2);
-        lowpass2.process(lowMidContext);
-        highpass2.process(highMidContext);
+        copyRange(allPassScratch, lowMidBuffer, startSample, samplesInRange);
+        auto lowHalfCompLpBlock = blockRange(lowMidBuffer);
+        auto lowHalfCompHpBlock = blockRange(allPassScratch);
+        compensatorLP.process(juce::dsp::ProcessContextReplacing<float>(lowHalfCompLpBlock));
+        compensatorHP.process(juce::dsp::ProcessContextReplacing<float>(lowHalfCompHpBlock));
+        addRange(lowMidBuffer, allPassScratch, startSample, samplesInRange);
 
-        // Apply the f3 all-pass response to the complete low half before its
-        // f1 split. Both halves of a Linkwitz-Riley split are required.
-        allPassScratch.makeCopyOf(lowMidBuffer, true);
-        auto lowHalfCompLpBlock = juce::dsp::AudioBlock<float>(lowMidBuffer);
-        auto lowHalfCompLpContext = juce::dsp::ProcessContextReplacing<float>(lowHalfCompLpBlock);
-        compensatorLP.process(lowHalfCompLpContext);
-        auto lowHalfCompHpBlock = juce::dsp::AudioBlock<float>(allPassScratch);
-        auto lowHalfCompHpContext = juce::dsp::ProcessContextReplacing<float>(lowHalfCompHpBlock);
-        compensatorHP.process(lowHalfCompHpContext);
-        for (int channel = 0; channel < lowMidBuffer.getNumChannels(); ++channel)
-            lowMidBuffer.addFrom(channel, 0, allPassScratch, channel, 0, numSamples);
+        copyRange(mBuffer1, lowMidBuffer, startSample, samplesInRange);
+        copyRange(mBuffer2, lowMidBuffer, startSample, samplesInRange);
+        auto block1 = blockRange(mBuffer1);
+        auto block2 = blockRange(mBuffer2);
+        lowpass1.process(juce::dsp::ProcessContextReplacing<float>(block1));
+        highpass1.process(juce::dsp::ProcessContextReplacing<float>(block2));
 
-        mBuffer1.makeCopyOf(lowMidBuffer, true);
-        mBuffer2.makeCopyOf(lowMidBuffer, true);
-        auto block1 = juce::dsp::AudioBlock<float>(mBuffer1);
-        auto context1 = juce::dsp::ProcessContextReplacing<float>(block1);
-        auto block2 = juce::dsp::AudioBlock<float>(mBuffer2);
-        auto context2 = juce::dsp::ProcessContextReplacing<float>(block2);
-        lowpass1.process(context1);
-        highpass1.process(context2);
+        copyRange(allPassScratch, highMidBuffer, startSample, samplesInRange);
+        auto highHalfCompLpBlock = blockRange(highMidBuffer);
+        auto highHalfCompHpBlock = blockRange(allPassScratch);
+        secondCompensatorLP.process(juce::dsp::ProcessContextReplacing<float>(highHalfCompLpBlock));
+        secondCompensatorHP.process(juce::dsp::ProcessContextReplacing<float>(highHalfCompHpBlock));
+        addRange(highMidBuffer, allPassScratch, startSample, samplesInRange);
 
-        // Mirror the correction on the high half with the f1 all-pass before
-        // splitting it at f3.
-        allPassScratch.makeCopyOf(highMidBuffer, true);
-        auto highHalfCompLpBlock = juce::dsp::AudioBlock<float>(highMidBuffer);
-        auto highHalfCompLpContext = juce::dsp::ProcessContextReplacing<float>(highHalfCompLpBlock);
-        secondCompensatorLP.process(highHalfCompLpContext);
-        auto highHalfCompHpBlock = juce::dsp::AudioBlock<float>(allPassScratch);
-        auto highHalfCompHpContext = juce::dsp::ProcessContextReplacing<float>(highHalfCompHpBlock);
-        secondCompensatorHP.process(highHalfCompHpContext);
-        for (int channel = 0; channel < highMidBuffer.getNumChannels(); ++channel)
-            highMidBuffer.addFrom(channel, 0, allPassScratch, channel, 0, numSamples);
+        copyRange(mBuffer3, highMidBuffer, startSample, samplesInRange);
+        copyRange(mBuffer4, highMidBuffer, startSample, samplesInRange);
+        auto block3 = blockRange(mBuffer3);
+        auto block4 = blockRange(mBuffer4);
+        lowpass3.process(juce::dsp::ProcessContextReplacing<float>(block3));
+        highpass3.process(juce::dsp::ProcessContextReplacing<float>(block4));
+    };
 
-        mBuffer3.makeCopyOf(highMidBuffer, true);
-        mBuffer4.makeCopyOf(highMidBuffer, true);
-        auto block3 = juce::dsp::AudioBlock<float>(mBuffer3);
-        auto context3 = juce::dsp::ProcessContextReplacing<float>(block3);
-        auto block4 = juce::dsp::AudioBlock<float>(mBuffer4);
-        auto context4 = juce::dsp::ProcessContextReplacing<float>(block4);
-        lowpass3.process(context3);
-        highpass3.process(context4);
+    // SmoothedValue advances in samples, not callbacks. The old code used the
+    // first ramp value for the complete host block and then skipped to the end,
+    // turning a 1 ms divider glide into a full block-size-dependent jump. Only
+    // the short active ramp uses single-sample ranges; steady state retains the
+    // original whole-block processing path.
+    for (int startSample = 0; startSample < numSamples;)
+    {
+        const bool crossoverIsSmoothing = (lineNum >= 1 && smoothedFreq1.isSmoothing())
+                                          || (lineNum >= 2 && smoothedFreq2.isSmoothing())
+                                          || (lineNum >= 3 && smoothedFreq3.isSmoothing());
+        int samplesInRange = crossoverIsSmoothing ? 1 : numSamples - startSample;
+        const float freqValue1 = smoothedFreq1.getNextValue();
+        const float freqValue2 = smoothedFreq2.getNextValue();
+        const float freqValue3 = smoothedFreq3.getNextValue();
+        if (samplesInRange > 1)
+        {
+            smoothedFreq1.skip(samplesInRange - 1);
+            smoothedFreq2.skip(samplesInRange - 1);
+            smoothedFreq3.skip(samplesInRange - 1);
+        }
+
+        processRange(startSample, samplesInRange, freqValue1, freqValue2, freqValue3);
+        startSample += samplesInRange;
     }
 }
 

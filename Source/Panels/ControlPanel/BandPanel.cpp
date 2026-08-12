@@ -876,8 +876,21 @@ void BandPanel::updateDriveMeter()
 
     if (auto* lnf = dynamic_cast<FireLookAndFeel*>(&getLookAndFeel()))
     {
-        lnf->sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
-        lnf->reductionPercent = processor.getReductionPrecent(focusBandNum);
+        auto sampleMax = processor.getSampleMaxValue(focusBandNum);
+        auto reduction = safeButton.getToggleState()
+                             ? processor.getReductionPrecent(focusBandNum)
+                             : 1.0f;
+        sampleMax = std::isfinite(sampleMax) ? juce::jmax(0.0f, sampleMax) : 0.0f;
+        reduction = std::isfinite(reduction) ? juce::jlimit(0.0f, 1.0f, reduction) : 1.0f;
+
+        const bool changed = std::abs(lnf->sampleMaxValue - sampleMax) > 0.0005f
+                             || std::abs(lnf->reductionPercent - reduction) > 0.0005f;
+        lnf->sampleMaxValue = sampleMax;
+        lnf->reductionPercent = reduction;
+
+        if (changed)
+            if (auto* driveKnob = getDriveKnob(); driveKnob != nullptr && driveKnob->isShowing())
+                driveKnob->repaint();
     }
 }
 

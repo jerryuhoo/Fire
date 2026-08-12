@@ -1,7 +1,9 @@
 #include <PluginEditor.h>
 #include <PluginProcessor.h>
+#include <GUI/FireTheme.h>
 #include <GUI/SettingsComponent.h>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -107,6 +109,27 @@ void writeSnapshotIfRequested(const juce::Image& image, const juce::String& file
     CHECK(png.writeImageToStream(image, *stream));
 }
 } // namespace
+
+TEST_CASE("Safe Drive dial maps the DSP reduction ratio to the requested value",
+          "[ui][theme]")
+{
+    const auto reduced = fire::ui::calculateDialArcState(0.8f, 0.5f, true);
+    CHECK(reduced.requestedProportion == Catch::Approx(0.8f));
+    CHECK(reduced.effectiveProportion == Catch::Approx(0.4f));
+    CHECK(reduced.hasReduction());
+
+    const auto unrestricted = fire::ui::calculateDialArcState(0.8f, 1.0f, true);
+    CHECK(unrestricted.effectiveProportion == Catch::Approx(0.8f));
+    CHECK_FALSE(unrestricted.hasReduction());
+
+    const auto ordinaryKnob = fire::ui::calculateDialArcState(0.8f, 0.5f, false);
+    CHECK(ordinaryKnob.effectiveProportion == Catch::Approx(0.8f));
+    CHECK_FALSE(ordinaryKnob.hasReduction());
+
+    const auto ordinaryStroke = fire::ui::dialArcStroke(60.0f, 1.0f, false);
+    const auto driveStroke = fire::ui::dialArcStroke(60.0f, 1.0f, true);
+    CHECK(driveStroke > ordinaryStroke * 2.0f);
+}
 
 TEST_CASE("Fire editor renders at supported scale extremes", "[ui][smoke]")
 {

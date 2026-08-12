@@ -782,7 +782,13 @@ void FireAudioProcessorEditor::timerCallback()
     const int currentBand = bandPanel.getFocusBandNum();
 
     if (bandPanel.isShowing())
+    {
         bandPanel.updateRealtimeThreshold(processor.getRealtimeModulatedThreshold(currentBand));
+        // Safe Drive metering is independent of the spectrum FIFO.  Poll the
+        // lock-free DSP meters on the existing UI clock and let BandPanel
+        // repaint only the Drive knob when the visible value changes.
+        bandPanel.updateDriveMeter();
+    }
 
     const bool isBypassed = processor.getBypassedState();
     if (isBypassed != lastBypassedState)
@@ -811,7 +817,6 @@ void FireAudioProcessorEditor::timerCallback()
                                    / static_cast<float>(processor.getFFTSize());
             processedSpectrum.updateSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth);
             originalSpectrum.updateSpectrum(originalFftFrame.data(), processor.getNumBins(), binWidth);
-            bandPanel.updateDriveMeter();
         }
     }
 

@@ -133,6 +133,50 @@ struct DampedValue
     }
 };
 
+// Geometry shared by the Drive renderer and its regression tests.  The DSP
+// publishes reduction as actual/requested Drive, so the effective point on the
+// knob is the requested position multiplied by that ratio.  Treating the
+// ratio as an absolute knob position makes the Safe meter over-report Drive.
+struct DialArcState
+{
+    float requestedProportion = 0.0f;
+    float effectiveProportion = 0.0f;
+
+    bool hasReduction() const noexcept
+    {
+        return effectiveProportion + 0.0001f < requestedProportion;
+    }
+};
+
+inline DialArcState calculateDialArcState(float requestedProportion,
+                                          float reductionRatio,
+                                          bool isDrive) noexcept
+{
+    if (! std::isfinite(requestedProportion))
+        requestedProportion = 0.0f;
+    if (! std::isfinite(reductionRatio))
+        reductionRatio = 1.0f;
+
+    DialArcState state;
+    state.requestedProportion = juce::jlimit(0.0f, 1.0f, requestedProportion);
+    const auto reduction = juce::jlimit(0.0f, 1.0f, reductionRatio);
+    state.effectiveProportion = isDrive
+                                    ? state.requestedProportion * reduction
+                                    : state.requestedProportion;
+    return state;
+}
+
+inline float dialArcStroke(float radius, float scale, bool isDrive) noexcept
+{
+    radius = std::isfinite(radius) ? juce::jmax(0.0f, radius) : 0.0f;
+    scale = std::isfinite(scale) ? juce::jmax(0.1f, scale) : 1.0f;
+
+    const auto desired = isDrive
+                             ? juce::jlimit(5.0f * scale, 12.0f * scale, radius * 0.18f)
+                             : juce::jlimit(1.5f, 3.4f * scale, radius * 0.09f);
+    return juce::jmin(desired, juce::jmax(1.0f, radius * 0.45f));
+}
+
 enum class ModuleRole
 {
     neutral,

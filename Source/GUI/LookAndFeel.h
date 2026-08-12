@@ -630,9 +630,13 @@ private:
         const auto radius = juce::jmax(2.0f, juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f);
         bounds = juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(bounds.getCentre());
         const auto centre = bounds.getCentre();
-        const auto trackRadius = radius - juce::jmax(2.0f, 2.8f * scale);
-        const auto stroke = juce::jlimit(1.5f, 3.4f * scale, radius * 0.09f);
-        const auto valueAngle = startAngle + sliderPos * (endAngle - startAngle);
+        const auto stroke = dialArcStroke(radius, scale, isDrive);
+        const auto trackRadius = juce::jmax(
+            2.0f,
+            radius - (stroke + 2.0f * scale) * 0.5f - 1.0f * scale);
+        const auto arcState = calculateDialArcState(sliderPos, reductionPercent, isDrive);
+        const auto valueAngle = startAngle
+                                + arcState.requestedProportion * (endAngle - startAngle);
         auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
         if (accent.isTransparent())
             accent = colours::flame;
@@ -657,13 +661,10 @@ private:
                                                     juce::PathStrokeType::rounded));
         }
 
-        if (sliderPos > 0.0001f)
+        if (arcState.requestedProportion > 0.0001f)
         {
-            const auto safeEnd = isDrive
-                                     ? juce::jmin(valueAngle,
-                                                  startAngle + juce::jlimit(0.0f, 1.0f, reductionPercent)
-                                                                   * (endAngle - startAngle))
-                                     : valueAngle;
+            const auto safeEnd = startAngle
+                                 + arcState.effectiveProportion * (endAngle - startAngle);
             juce::Path valueArc;
             valueArc.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
                                    startAngle, safeEnd, true);
@@ -675,15 +676,20 @@ private:
                                                        juce::PathStrokeType::curved,
                                                        juce::PathStrokeType::rounded));
 
-            if (isDrive && safeEnd + 0.001f < valueAngle)
+            if (isDrive && arcState.hasReduction())
             {
-                juce::Path dangerArc;
-                dangerArc.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
-                                        safeEnd, valueAngle, true);
-                g.setColour(colours::danger.withAlpha(0.9f));
-                g.strokePath(dangerArc, juce::PathStrokeType(stroke,
-                                                            juce::PathStrokeType::curved,
-                                                            juce::PathStrokeType::rounded));
+                juce::Path reducedArc;
+                reducedArc.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
+                                         safeEnd, valueAngle, true);
+                juce::ColourGradient reducedHeat(accent.withMultipliedAlpha(0.32f),
+                                                  bounds.getX(), bounds.getBottom(),
+                                                  colours::gold.withAlpha(0.32f),
+                                                  bounds.getRight(), bounds.getY(), false);
+                reducedHeat.addColour(0.55, colours::flame.withAlpha(0.32f));
+                g.setGradientFill(reducedHeat);
+                g.strokePath(reducedArc, juce::PathStrokeType(stroke,
+                                                             juce::PathStrokeType::curved,
+                                                             juce::PathStrokeType::rounded));
             }
         }
 

@@ -248,6 +248,58 @@ TEST_CASE("Prebuilt LFO banks match the original curve and smoothing math", "[lf
     CHECK(std::abs(engine.process() - activeValue) > 0.1f);
 }
 
+TEST_CASE("LFO Smooth row changes crossfade without output steps", "[lfo][wavetable][smoothing]")
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int transitionSamples = 480;
+
+    LfoData shape;
+    shape.points = { { 0.0f, 0.0f }, { 0.49f, 0.0f },
+                     { 0.5f, 1.0f }, { 1.0f, 1.0f } };
+    shape.curvatures = { 0.0f, 0.0f, 0.0f };
+    shape.sanitise();
+
+    LfoEngine engine;
+    engine.stageShape(shape);
+    engine.publishStagedShape();
+    engine.prepare({ sampleRate, 64, 1 });
+    engine.setPhaseDelta(0.0f);
+    engine.setPhase(0.5f);
+    engine.setSmoothness(0.0f);
+    const float unsmoothed = engine.process();
+
+    const auto smoothReference = makeReferenceLfoTable(shape, 1.0f);
+    const float smoothTarget = interpolateReferenceLfo(smoothReference, 0.5f);
+    REQUIRE(std::abs(smoothTarget - unsmoothed) > 0.25f);
+
+    engine.setSmoothness(1.0f);
+    engine.setPhase(0.5f);
+    const float firstTransitionSample = engine.process();
+    CHECK(std::abs(firstTransitionSample - unsmoothed) < 0.01f);
+
+    float previous = firstTransitionSample;
+    for (int sample = 1; sample < transitionSamples; ++sample)
+    {
+        engine.setPhase(0.5f);
+        const float current = engine.process();
+        CHECK(std::abs(current - previous) < 0.01f);
+        previous = current;
+    }
+    CHECK(previous == Catch::Approx(smoothTarget).margin(2.0e-6f));
+
+    // Retargeting while a transition is active must continue from the audible
+    // blend, not jump back to either table.
+    engine.setSmoothness(0.0f);
+    for (int sample = 0; sample < 50; ++sample)
+    {
+        engine.setPhase(0.5f);
+        previous = engine.process();
+    }
+    engine.setSmoothness(0.3f);
+    engine.setPhase(0.5f);
+    CHECK(std::abs(engine.process() - previous) < 0.01f);
+}
+
 TEST_CASE("Delay keeps independent channel histories and an exact delay", "[delay][robustness]")
 {
     Delay delay { 2 };
@@ -898,6 +950,7 @@ TEST_CASE("Headless LFO smooth automation reaches the DSP state", "[lfo][state][
     LfoEngine referenceEngine;
     referenceEngine.stageShape(automatedShape);
     referenceEngine.publishStagedShape();
+    referenceEngine.prepare({ 48000.0, 1, 1 });
     referenceEngine.setSmoothness(0.73f);
     referenceEngine.setPhase(0.0f);
     referenceEngine.setPhaseDelta(0.0f);

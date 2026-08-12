@@ -66,6 +66,10 @@ private:
     using Wavetable = std::array<float, wavetableGuardSize>;
     using WavetableBank = std::array<Wavetable, smoothnessStepCount>;
 
+    float lookupTable(const Wavetable& table, float lookupPhase) const noexcept;
+    void captureCurrentAudibleTable() noexcept;
+    void beginTableTransition() noexcept;
+
     float phase = 0.0f;
     float phaseDelta = 0.0f;
     float lastOutput = 0.0f;
@@ -81,4 +85,11 @@ private:
     int stagedBank = 1;
     int activeSmoothnessStep = 0;
     bool stagedBankReady = false;
+
+    // Smooth parameter changes crossfade from the currently audible table to
+    // the newly selected prebuilt row. Keeping a private snapshot makes rapid
+    // target changes continuous without modifying either shared bank.
+    Wavetable transitionSourceTable {};
+    int transitionLengthSamples = 0;
+    int transitionSamplesProcessed = 0;
 };

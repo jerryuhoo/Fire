@@ -19,12 +19,17 @@ void LfoEngine::reset()
     lastOutput = 0.0f;
     publishedPhase.store(phase, std::memory_order_relaxed);
     publishedOutput.store(lastOutput, std::memory_order_relaxed);
+    transitionSamplesProcessed = transitionLengthSamples;
 }
 
 void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
 {
     jassert(std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0);
-    juce::ignoreUnused(spec);
+    const double safeSampleRate = std::isfinite(spec.sampleRate) && spec.sampleRate > 0.0
+                                      ? spec.sampleRate
+                                      : 44100.0;
+    transitionLengthSamples = juce::jmax(1, juce::roundToInt(safeSampleRate * 0.01));
+    transitionSamplesProcessed = transitionLengthSamples;
 }
 
 void LfoEngine::stageShape(const LfoData& shapeData)
@@ -146,6 +151,11 @@ void LfoEngine::publishStagedShape() noexcept
 
     activeBank = stagedBank;
     stagedBankReady = false;
+
+    // Shape publication gets its own transition in a separate change. For
+    // now, make sure a Smooth-row transition cannot keep targeting the table
+    // in the old bank after this atomic publication.
+    transitionSamplesProcessed = transitionLengthSamples;
 }
 
 void LfoEngine::setSmoothness(float newSmoothness) noexcept
@@ -153,10 +163,48 @@ void LfoEngine::setSmoothness(float newSmoothness) noexcept
     const float safeSmoothness = std::isfinite(newSmoothness)
                                      ? juce::jlimit(0.0f, 1.0f, newSmoothness)
                                      : 0.0f;
-    activeSmoothnessStep = juce::jlimit(0,
-                                        static_cast<int>(smoothnessStepCount - 1),
-                                        juce::roundToInt(safeSmoothness
-                                                         * static_cast<float>(smoothnessStepCount - 1)));
+    const int newStep = juce::jlimit(0,
+                                     static_cast<int>(smoothnessStepCount - 1),
+                                     juce::roundToInt(safeSmoothness
+                                                      * static_cast<float>(smoothnessStepCount - 1)));
+    if (newStep == activeSmoothnessStep)
+        return;
+
+    captureCurrentAudibleTable();
+    activeSmoothnessStep = newStep;
+    beginTableTransition();
+}
+
+float LfoEngine::lookupTable(const Wavetable& table, float lookupPhase) const noexcept
+{
+    const float safePhase = juce::jlimit(0.0f, 1.0f, lookupPhase);
+    const float tablePosition = safePhase * static_cast<float>(wavetableSize - 1);
+    const size_t tableIndex = juce::jmin(static_cast<size_t>(tablePosition), wavetableSize - 1);
+    const float fraction = tablePosition - static_cast<float>(tableIndex);
+    return table[tableIndex] + fraction * (table[tableIndex + 1] - table[tableIndex]);
+}
+
+void LfoEngine::captureCurrentAudibleTable() noexcept
+{
+    const auto& currentTarget = wavetableBanks[static_cast<size_t>(activeBank)]
+                                              [static_cast<size_t>(activeSmoothnessStep)];
+    if (transitionLengthSamples <= 0
+        || transitionSamplesProcessed >= transitionLengthSamples)
+    {
+        transitionSourceTable = currentTarget;
+        return;
+    }
+
+    const float amount = static_cast<float>(transitionSamplesProcessed)
+                         / static_cast<float>(transitionLengthSamples);
+    for (size_t sample = 0; sample < transitionSourceTable.size(); ++sample)
+        transitionSourceTable[sample] += amount
+                                         * (currentTarget[sample] - transitionSourceTable[sample]);
+}
+
+void LfoEngine::beginTableTransition() noexcept
+{
+    transitionSamplesProcessed = transitionLengthSamples > 0 ? 0 : transitionLengthSamples;
 }
 
 // Call this on every sample in processBlock. Returns a bipolar [-1, 1] signal.
@@ -167,13 +215,18 @@ float LfoEngine::process()
         phase = 0.0f;
 
     const float safePhase = juce::jlimit(0.0f, 1.0f, phase);
-    const float tablePosition = safePhase * static_cast<float>(wavetableSize - 1);
-    const size_t tableIndex = juce::jmin(static_cast<size_t>(tablePosition), wavetableSize - 1);
-    const float fraction = tablePosition - static_cast<float>(tableIndex);
     const auto& table = wavetableBanks[static_cast<size_t>(activeBank)]
                                       [static_cast<size_t>(activeSmoothnessStep)];
-    const float unipolarOutput = table[tableIndex]
-                                 + fraction * (table[tableIndex + 1] - table[tableIndex]);
+    float unipolarOutput = lookupTable(table, safePhase);
+    if (transitionLengthSamples > 0
+        && transitionSamplesProcessed < transitionLengthSamples)
+    {
+        ++transitionSamplesProcessed;
+        const float amount = static_cast<float>(transitionSamplesProcessed)
+                             / static_cast<float>(transitionLengthSamples);
+        const float sourceOutput = lookupTable(transitionSourceTable, safePhase);
+        unipolarOutput = sourceOutput + amount * (unipolarOutput - sourceOutput);
+    }
 
     // Advance the phase using the externally calculated delta
     phase += phaseDelta;

@@ -2897,12 +2897,6 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer)
 {
     const bool isActive = loadCachedParameter(downsampleEnabledParameter) > 0.5f;
-    if (! isActive)
-    {
-        resetDownsamplingState();
-        return;
-    }
-
     if (! downsamplingWasActive)
     {
         downsampleSamplesRemaining.fill(0);
@@ -2914,8 +2908,15 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
     // A copy of the original signal is needed for the dry/wet mix.
     lofiDryBuffer.makeCopyOf(buffer, true);
 
-    // Set up the mixer with the correct wet proportion from its parameter.
-    lofiMixer.setWetMixProportion(getBlockModulatedValue(downsampleMixParameter, lfoOutputBuffer));
+    // Keep the sample-and-hold path advancing while bypassed and crossfade the
+    // mixer's wet proportion to zero. Resetting/returning here hard-switched at
+    // the callback boundary and restarted the hold counter when re-enabled.
+    const float requestedMix = getBlockModulatedValue(downsampleMixParameter,
+                                                       lfoOutputBuffer);
+    const float effectiveMix = isActive
+                                   ? juce::jlimit(0.0f, 1.0f, requestedMix)
+                                   : 0.0f;
+    lofiMixer.setWetMixProportion(effectiveMix);
     if (! lofiMixerPrimed)
         lofiMixer.reset();
     lofiMixerPrimed = true;

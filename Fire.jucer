@@ -137,6 +137,10 @@
               file="Source/DSP/ModulatedValueProvider.h"/>
         <FILE id="SBXQBa" name="ModulationRouting.h" compile="0" resource="0"
               file="Source/DSP/ModulationRouting.h"/>
+        <FILE id="c4Mpr1" name="SampleAccurateCompressor.cpp" compile="1" resource="0"
+              file="Source/DSP/SampleAccurateCompressor.cpp"/>
+        <FILE id="y9Kac2" name="SampleAccurateCompressor.h" compile="0" resource="0"
+              file="Source/DSP/SampleAccurateCompressor.h"/>
         <FILE id="PVeY6u" name="WDF.h" compile="0" resource="0" file="Source/DSP/WDF.h"/>
         <FILE id="K65kzc" name="WidthProcessor.cpp" compile="1" resource="0"
               file="Source/DSP/WidthProcessor.cpp"/>

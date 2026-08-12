@@ -12,6 +12,7 @@
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "DSP/WidthProcessor.h"
+#include "DSP/SampleAccurateCompressor.h"
 #include "Panels/TopPanel/Preset.h"
 #include "Panels/SpectrogramPanel/FFTProcessor.h"
 #include "GUI/InterfaceDefines.h"
@@ -37,10 +38,15 @@ struct BandProcessingParameters
     float mixVal { 1.0f };
     ModulatedValueProvider mixValProvider;
     float compThreshold { 0.0f };
+    ModulatedValueProvider compThresholdValProvider;
     float compRatio { 1.0f };
+    ModulatedValueProvider compRatioValProvider;
     float compAttack { 10.0f };
+    ModulatedValueProvider compAttackValProvider;
     float compRelease { 100.0f };
+    ModulatedValueProvider compReleaseValProvider;
     float compMixVal { 1.0f };
+    ModulatedValueProvider compMixValProvider;
     bool isCompEnabled { false };
     float width { 0.5f };
     ModulatedValueProvider widthValProvider;
@@ -72,6 +78,11 @@ struct BandProcessingParameters
     int widthLfoSourceIndex = -1;
     int panLfoSourceIndex = -1;
     int widthMixLfoSourceIndex = -1;
+    int compThresholdLfoSourceIndex = -1;
+    int compRatioLfoSourceIndex = -1;
+    int compAttackLfoSourceIndex = -1;
+    int compReleaseLfoSourceIndex = -1;
+    int compMixLfoSourceIndex = -1;
 
 };
 
@@ -82,7 +93,7 @@ struct BandProcessor
 {
     using GainProcessor = juce::dsp::Gain<float>;
     using DCFilter = juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>>;
-    using CompressorProcessor = juce::dsp::Compressor<float>;
+    using CompressorProcessor = SampleAccurateCompressor;
 
     // Each band has its own set of processors.
     CompressorProcessor compressor;

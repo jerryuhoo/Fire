@@ -528,6 +528,28 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         paramsForProcessing.widthMixValProvider.lfoSignal =
             lfoOutputs.getReadPointer(params.widthMixLfoSourceIndex, lfoSampleOffset);
     }
+    const auto bindCompressorProvider = [&](ModulatedValueProvider& provider,
+                                            int sourceIndex)
+    {
+        if (hasCompleteBaseRateLfoChunk
+            && std::abs(provider.modulationDepth) > 1.0e-6f
+            && juce::isPositiveAndBelow(sourceIndex,
+                                        lfoOutputs.getNumChannels()))
+        {
+            provider.lfoSignal = lfoOutputs.getReadPointer(sourceIndex,
+                                                            lfoSampleOffset);
+        }
+    };
+    bindCompressorProvider(paramsForProcessing.compThresholdValProvider,
+                           params.compThresholdLfoSourceIndex);
+    bindCompressorProvider(paramsForProcessing.compRatioValProvider,
+                           params.compRatioLfoSourceIndex);
+    bindCompressorProvider(paramsForProcessing.compAttackValProvider,
+                           params.compAttackLfoSourceIndex);
+    bindCompressorProvider(paramsForProcessing.compReleaseValProvider,
+                           params.compReleaseLfoSourceIndex);
+    bindCompressorProvider(paramsForProcessing.compMixValProvider,
+                           params.compMixLfoSourceIndex);
 
     dryWetMixer.setWetLatency(useHQ ? oversampling->getLatencyInSamples() : 0.0f);
     const bool hasSampleAccurateBandMix = paramsForProcessing.mixValProvider.lfoSignal
@@ -664,20 +686,120 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     // Keep the compressor detector and dry path warm while bypassed. Gating the
     // complete branch hard-switched between compressed and dry audio at a block
     // boundary; using the mixer's existing 50 ms ramp removes that click.
+    const bool hasThresholdModulation = paramsForProcessing.compThresholdValProvider.lfoSignal
+                                        != nullptr;
+    const bool hasRatioModulation = paramsForProcessing.compRatioValProvider.lfoSignal
+                                    != nullptr;
+    const bool hasAttackModulation = paramsForProcessing.compAttackValProvider.lfoSignal
+                                     != nullptr;
+    const bool hasReleaseModulation = paramsForProcessing.compReleaseValProvider.lfoSignal
+                                      != nullptr;
+    const bool hasSampleAccurateCompressorCore = hasThresholdModulation
+                                                 || hasRatioModulation
+                                                 || hasAttackModulation
+                                                 || hasReleaseModulation;
+    const bool hasSampleAccurateCompressorMix = params.isCompEnabled
+                                                && paramsForProcessing.compMixValProvider.lfoSignal
+                                                       != nullptr;
+    const float initialCompressorMix = hasSampleAccurateCompressorMix
+                                           ? paramsForProcessing.compMixValProvider.get(0)
+                                           : params.compMixVal;
     const float effectiveCompressorMix = params.isCompEnabled
-                                             ? juce::jlimit(0.0f, 1.0f, params.compMixVal)
+                                             ? juce::jlimit(0.0f, 1.0f,
+                                                            initialCompressorMix)
                                              : 0.0f;
     compressorMixer.setWetMixProportion(effectiveCompressorMix);
     if (! compressorMixerPrimed)
         compressorMixer.reset();
     compressorMixerPrimed = true;
     compressorMixer.pushDrySamples(postDistortionContext.getOutputBlock());
-    this->compressor.setThreshold(params.compThreshold);
-    this->compressor.setRatio(juce::jmax(1.0f, params.compRatio));
-    this->compressor.setAttack(juce::jmax(0.01f, params.compAttack));
-    this->compressor.setRelease(juce::jmax(0.01f, params.compRelease));
-    this->compressor.process(postDistortionContext);
-    compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
+    const auto safeThreshold = [](float value)
+    {
+        // Keep the public BandProcessor's legacy finite-value contract.  APVTS
+        // values are already constrained to the UI range, but direct callers
+        // historically could use a wider threshold.
+        return std::isfinite(value) ? value : 0.0f;
+    };
+    const auto safeRatio = [](float value)
+    {
+        return std::isfinite(value) ? juce::jmax(1.0f, value) : 1.0f;
+    };
+    const auto safeAttack = [](float value)
+    {
+        return std::isfinite(value) ? juce::jmax(0.01f, value) : 10.0f;
+    };
+    const auto safeRelease = [](float value)
+    {
+        return std::isfinite(value) ? juce::jmax(0.01f, value) : 100.0f;
+    };
+
+    // Seed the coefficient cache with the value that is actually audible at
+    // this chunk's first sample.  Applying the unmodulated base first would do
+    // needless transcendental work at every internal chunk boundary before the
+    // routed value immediately replaced it.
+    this->compressor.setThreshold(safeThreshold(
+        hasThresholdModulation
+            ? paramsForProcessing.compThresholdValProvider.get(0)
+            : params.compThreshold));
+    this->compressor.setRatio(safeRatio(
+        hasRatioModulation
+            ? paramsForProcessing.compRatioValProvider.get(0)
+            : params.compRatio));
+    this->compressor.setAttack(safeAttack(
+        hasAttackModulation
+            ? paramsForProcessing.compAttackValProvider.get(0)
+            : params.compAttack));
+    this->compressor.setRelease(safeRelease(
+        hasReleaseModulation
+            ? paramsForProcessing.compReleaseValProvider.get(0)
+            : params.compRelease));
+
+    if (! hasSampleAccurateCompressorCore)
+    {
+        this->compressor.process(postDistortionContext);
+    }
+    else
+    {
+        auto* const* channelData = buffer.getArrayOfWritePointers();
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            if (hasThresholdModulation)
+                this->compressor.setThreshold(safeThreshold(
+                    paramsForProcessing.compThresholdValProvider.get(sample)));
+            if (hasRatioModulation)
+                this->compressor.setRatio(safeRatio(
+                    paramsForProcessing.compRatioValProvider.get(sample)));
+            if (hasAttackModulation)
+                this->compressor.setAttack(safeAttack(
+                    paramsForProcessing.compAttackValProvider.get(sample)));
+            if (hasReleaseModulation)
+                this->compressor.setRelease(safeRelease(
+                    paramsForProcessing.compReleaseValProvider.get(sample)));
+
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            {
+                channelData[channel][sample] = this->compressor.processSample(
+                    channel, channelData[channel][sample]);
+            }
+        }
+    }
+
+    if (! hasSampleAccurateCompressorMix)
+    {
+        compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
+    }
+    else
+    {
+        auto compressorBlock = postDistortionContext.getOutputBlock();
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            compressorMixer.setWetMixProportion(juce::jlimit(
+                0.0f, 1.0f,
+                paramsForProcessing.compMixValProvider.get(sample)));
+            compressorMixer.mixWetSamples(
+                compressorBlock.getSubBlock(static_cast<size_t>(sample), 1));
+        }
+    }
     if (buffer.getNumChannels() == 2)
     {
         // Keep the width path warm and use the mixer's existing 50 ms ramp for
@@ -3202,6 +3324,21 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 setupProvider(params.widthMixValProvider,
                               params.widthMixLfoSourceIndex,
                               parameters.widthMix);
+                setupProvider(params.compThresholdValProvider,
+                              params.compThresholdLfoSourceIndex,
+                              parameters.compressorThreshold);
+                setupProvider(params.compRatioValProvider,
+                              params.compRatioLfoSourceIndex,
+                              parameters.compressorRatio);
+                setupProvider(params.compAttackValProvider,
+                              params.compAttackLfoSourceIndex,
+                              parameters.compressorAttack);
+                setupProvider(params.compReleaseValProvider,
+                              params.compReleaseLfoSourceIndex,
+                              parameters.compressorRelease);
+                setupProvider(params.compMixValProvider,
+                              params.compMixLfoSourceIndex,
+                              parameters.compressorMix);
 
                 // Linked output compensation is a DSP rule, not an editor side
                 // effect. It follows the unmodulated Drive base, matching the
@@ -3210,18 +3347,20 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                     params.outputVal.baseValue = -0.1f * loadCachedParameter(parameters.drive);
 
                 // 3. Get final values for Block-wise parameters
-                params.compRatio = getBlockModulatedValue(parameters.compressorRatio, lfoOutputs);
-                params.compThreshold = getBlockModulatedValue(parameters.compressorThreshold, lfoOutputs);
-                params.compAttack = getBlockModulatedValue(parameters.compressorAttack, lfoOutputs);
-                params.compRelease = getBlockModulatedValue(parameters.compressorRelease, lfoOutputs);
-                params.compMixVal = getBlockModulatedValue(parameters.compressorMix, lfoOutputs);
+                params.compRatio = params.compRatioValProvider.baseValue;
+                params.compThreshold = params.compThresholdValProvider.baseValue;
+                params.compAttack = params.compAttackValProvider.baseValue;
+                params.compRelease = params.compReleaseValProvider.baseValue;
+                params.compMixVal = params.compMixValProvider.baseValue;
                 params.width = params.widthValProvider.baseValue;
                 params.pan = params.panValProvider.baseValue;
                 params.widthMixVal = params.widthMixValProvider.baseValue;
                 params.mixVal = params.mixValProvider.baseValue;
                 params.shapeMixVal = params.shapeMixValProvider.baseValue;
 
-                realtimeModulatedThresholds[i].store(params.compThreshold);
+                realtimeModulatedThresholds[i].store(
+                    getBlockModulatedValue(parameters.compressorThreshold,
+                                           lfoOutputs));
 
                 // 4. Call BandProcessor
                 band->process(*wetBandBuffers[i], params, lfoOutputs);

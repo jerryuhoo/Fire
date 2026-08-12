@@ -527,6 +527,61 @@ TEST_CASE("Width and pan automation is smoothed within the audio block", "[width
     CHECK(right.back() == Catch::Approx(inputValue).margin(1.0e-6f));
 }
 
+TEST_CASE("Compressor bypass crossfades without a block-boundary click", "[compressor][bypass]")
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int blockSize = 256;
+    constexpr float inputValue = 0.5f;
+
+    BandProcessor band;
+    band.prepare({ sampleRate, static_cast<juce::uint32>(blockSize), 2 });
+
+    BandProcessingParameters params;
+    params.mode = 4;
+    params.mixVal = 1.0f;
+    params.shapeMixVal = 1.0f;
+    params.compThreshold = -40.0f;
+    params.compRatio = 20.0f;
+    params.compAttack = 0.1f;
+    params.compRelease = 100.0f;
+    params.compMixVal = 1.0f;
+    params.outputVal.baseValue = 0.0f;
+
+    juce::AudioBuffer<float> audio(2, blockSize);
+    juce::AudioBuffer<float> lfoOutputs(4, blockSize);
+    lfoOutputs.clear();
+
+    const auto processConstantBlock = [&](bool compressorEnabled)
+    {
+        for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+            juce::FloatVectorOperations::fill(audio.getWritePointer(channel),
+                                              inputValue,
+                                              blockSize);
+
+        params.isCompEnabled = compressorEnabled;
+        band.process(audio, params, lfoOutputs);
+    };
+
+    for (int block = 0; block < 16; ++block)
+        processConstantBlock(true);
+    const float compressedSteadyState = audio.getSample(0, blockSize - 1);
+    REQUIRE(compressedSteadyState < inputValue * 0.25f);
+
+    processConstantBlock(false);
+    CHECK(std::abs(audio.getSample(0, 0) - compressedSteadyState) < 0.02f);
+    for (int block = 0; block < 12; ++block)
+        processConstantBlock(false);
+    CHECK(audio.getSample(0, blockSize - 1) == Catch::Approx(inputValue).margin(1.0e-5f));
+
+    const float drySteadyState = audio.getSample(0, blockSize - 1);
+    processConstantBlock(true);
+    CHECK(std::abs(audio.getSample(0, 0) - drySteadyState) < 0.02f);
+    for (int block = 0; block < 12; ++block)
+        processConstantBlock(true);
+    CHECK(audio.getSample(0, blockSize - 1)
+          == Catch::Approx(compressedSteadyState).margin(1.0e-4f));
+}
+
 TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[processor][robustness]")
 {
     juce::ScopedJuceInitialiser_GUI gui;

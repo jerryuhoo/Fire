@@ -449,20 +449,23 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     // 3. Block-wise Compressor and Width
     // These operate on the downsampled block, so their mixers are safe.
     auto postDistortionContext = juce::dsp::ProcessContextReplacing<float>(block);
-    if (params.isCompEnabled)
-    {
-        compressorMixer.setWetMixProportion(params.compMixVal);
-        if (! compressorMixerPrimed)
-            compressorMixer.reset();
-        compressorMixerPrimed = true;
-        compressorMixer.pushDrySamples(postDistortionContext.getOutputBlock());
-        this->compressor.setThreshold(params.compThreshold);
-        this->compressor.setRatio(params.compRatio);
-        this->compressor.setAttack(params.compAttack);
-        this->compressor.setRelease(params.compRelease);
-        this->compressor.process(postDistortionContext);
-        compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
-    }
+    // Keep the compressor detector and dry path warm while bypassed. Gating the
+    // complete branch hard-switched between compressed and dry audio at a block
+    // boundary; using the mixer's existing 50 ms ramp removes that click.
+    const float effectiveCompressorMix = params.isCompEnabled
+                                             ? juce::jlimit(0.0f, 1.0f, params.compMixVal)
+                                             : 0.0f;
+    compressorMixer.setWetMixProportion(effectiveCompressorMix);
+    if (! compressorMixerPrimed)
+        compressorMixer.reset();
+    compressorMixerPrimed = true;
+    compressorMixer.pushDrySamples(postDistortionContext.getOutputBlock());
+    this->compressor.setThreshold(params.compThreshold);
+    this->compressor.setRatio(juce::jmax(1.0f, params.compRatio));
+    this->compressor.setAttack(juce::jmax(0.01f, params.compAttack));
+    this->compressor.setRelease(juce::jmax(0.01f, params.compRelease));
+    this->compressor.process(postDistortionContext);
+    compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
     if (buffer.getNumChannels() == 2)
     {
         // Keep the width path warm and use the mixer's existing 50 ms ramp for

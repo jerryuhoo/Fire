@@ -154,6 +154,12 @@ private:
     juce::AudioBuffer<float> lfoOutputBuffer;
     double preparedSampleRate { 44100.0 };
 
+    // Audio-thread-owned bookkeeping for Phase while no absolute host timeline
+    // is available. The knob is an offset, so changes are applied as a delta
+    // instead of being added again at every callback boundary.
+    std::array<float, 4> appliedPhaseOffsets {};
+    std::array<bool, 4> phaseOffsetInitialised {};
+
     std::atomic<bool> isPlaying { false };
 
     juce::StringArray lfoRateSyncDivisions;

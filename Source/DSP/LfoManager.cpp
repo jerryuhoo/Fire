@@ -75,6 +75,8 @@ void LfoManager::reset()
     {
         engine.reset();
     }
+    appliedPhaseOffsets.fill(0.0f);
+    phaseOffsetInitialised.fill(false);
     isPlaying.store(false, std::memory_order_relaxed);
     modulatedValueCount = 0;
     lfoOutputBuffer.clear();
@@ -375,7 +377,8 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     for (int i = 0; i < 4; ++i)
     {
-        const auto& parameters = lfoParameters[static_cast<size_t>(i)];
+        const auto lfoIndex = static_cast<size_t>(i);
+        const auto& parameters = lfoParameters[lfoIndex];
         const bool isInSyncMode = loadParameter(parameters.syncMode, 1.0f) > 0.5f;
         const int rateIndex = static_cast<int>(loadParameter(parameters.syncedRate, 8.0f));
         const float freqInHz = juce::jmax(0.0f, loadParameter(parameters.freeRate, 1.0f));
@@ -400,6 +403,9 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
         }
 
         // While the host is playing, derive phase from its absolute timeline so seeks are deterministic.
+        // If the host is stopped or omits the required timeline coordinate, keep free-running and apply
+        // only changes in the Phase offset. Reapplying the full offset every block would make it drift.
+        bool usedAbsoluteTimeline = false;
         if (transportIsPlaying && positionInfo)
         {
             if (isInSyncMode)
@@ -410,7 +416,11 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
                         rateIndex, quarterNotesPerBar);
 
                     if (cycleLengthInBeats > 0.0f && std::isfinite(*ppq))
-                        lfoEngines[static_cast<size_t>(i)].setPhase(wrapPhase(*ppq / cycleLengthInBeats + phaseOffset));
+                    {
+                        lfoEngines[lfoIndex].setPhase(
+                            wrapPhase(*ppq / cycleLengthInBeats + phaseOffset));
+                        usedAbsoluteTimeline = true;
+                    }
                 }
             }
             else
@@ -418,12 +428,34 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
                 if (auto timeSec = positionInfo->getTimeInSeconds())
                 {
                     if (std::isfinite(*timeSec))
-                        lfoEngines[static_cast<size_t>(i)].setPhase(wrapPhase(*timeSec * freqInHz + phaseOffset));
+                    {
+                        lfoEngines[lfoIndex].setPhase(
+                            wrapPhase(*timeSec * freqInHz + phaseOffset));
+                        usedAbsoluteTimeline = true;
+                    }
                 }
             }
         }
 
-        auto& engine = lfoEngines[static_cast<size_t>(i)];
+        auto& engine = lfoEngines[lfoIndex];
+        if (usedAbsoluteTimeline)
+        {
+            appliedPhaseOffsets[lfoIndex] = phaseOffset;
+            phaseOffsetInitialised[lfoIndex] = true;
+        }
+        else
+        {
+            const float previousOffset = phaseOffsetInitialised[lfoIndex]
+                                             ? appliedPhaseOffsets[lfoIndex]
+                                             : 0.0f;
+            const float offsetDelta = phaseOffset - previousOffset;
+            if (offsetDelta != 0.0f)
+                engine.setPhase(wrapPhase(engine.getPhase() + offsetDelta));
+
+            appliedPhaseOffsets[lfoIndex] = phaseOffset;
+            phaseOffsetInitialised[lfoIndex] = true;
+        }
+
         engine.setPhaseDelta(phaseDelta);
 
         auto* writer = lfoOutputBuffer.getWritePointer(i);

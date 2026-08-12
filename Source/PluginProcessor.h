@@ -124,12 +124,21 @@ struct BandProcessor
     const int oversampleFactor = 2;
 
 private:
+    void processChunk(juce::AudioBuffer<float>& buffer,
+                      const BandProcessingParameters& params,
+                      const juce::AudioBuffer<float>& lfoOutputs,
+                      int lfoSampleOffset,
+                      int totalNumSamples,
+                      float inputPeak,
+                      bool updateReductionMeter);
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
-                           const juce::AudioBuffer<float>& dryBuffer,
-                           const BandProcessingParameters& params);
+                           const BandProcessingParameters& params,
+                           float inputPeak,
+                           bool updateReductionMeter);
 
     juce::AudioBuffer<float> dryBuffer;
     juce::AudioBuffer<float> upsampledLfoOutputs;
+    int maximumPreparedBlockSize = 1;
 };
 
 //==============================================================================

@@ -297,12 +297,18 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     dcFilter.prepare(spec);
     *dcFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighPass(spec.sampleRate, 20.0f);
 
+    const auto numChannels = static_cast<int>(spec.numChannels);
+    maximumPreparedBlockSize = juce::jmax(
+        1,
+        static_cast<int>(juce::jmin<juce::uint64>(
+            spec.maximumBlockSize,
+            static_cast<juce::uint64>(std::numeric_limits<int>::max()))));
+    const auto maximumBlockSize = maximumPreparedBlockSize;
+
     // The oversampling object also needs to be prepared.
     oversampling = std::make_unique<juce::dsp::Oversampling<float>>(spec.numChannels, oversampleFactor, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
-    oversampling->initProcessing(spec.maximumBlockSize);
+    oversampling->initProcessing(static_cast<size_t>(maximumPreparedBlockSize));
 
-    const auto numChannels = static_cast<int>(spec.numChannels);
-    const auto maximumBlockSize = static_cast<int>(spec.maximumBlockSize);
     dryBuffer.setSize(numChannels, maximumBlockSize);
     upsampledLfoOutputs.setSize(4, maximumBlockSize * 4);
 
@@ -355,6 +361,47 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
+    const int totalNumSamples = buffer.getNumSamples();
+    const float inputPeak = buffer.getMagnitude(0, 0, totalNumSamples);
+    const int chunkCapacity = juce::jmax(1, maximumPreparedBlockSize);
+
+    if (totalNumSamples <= chunkCapacity)
+    {
+        processChunk(buffer, params, lfoOutputs, 0, totalNumSamples, inputPeak, true);
+        return;
+    }
+
+    // JUCE's Oversampling stages keep fixed-size internal buffers allocated by
+    // initProcessing(). Some hosts occasionally exceed their prepareToPlay()
+    // block-size hint; handing such a block to processSamplesUp() writes beyond
+    // those buffers in release builds. Process non-owning views instead so all
+    // DSP state remains continuous without allocating or re-preparing on the
+    // audio thread.
+    for (int sampleOffset = 0; sampleOffset < totalNumSamples; sampleOffset += chunkCapacity)
+    {
+        const int samplesInChunk = juce::jmin(chunkCapacity, totalNumSamples - sampleOffset);
+        juce::AudioBuffer<float> chunk(buffer.getArrayOfWritePointers(),
+                                       buffer.getNumChannels(),
+                                       sampleOffset,
+                                       samplesInChunk);
+        processChunk(chunk,
+                     params,
+                     lfoOutputs,
+                     sampleOffset,
+                     totalNumSamples,
+                     inputPeak,
+                     sampleOffset == 0);
+    }
+}
+
+void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
+                                 const BandProcessingParameters& params,
+                                 const juce::AudioBuffer<float>& lfoOutputs,
+                                 int lfoSampleOffset,
+                                 int totalNumSamples,
+                                 float inputPeak,
+                                 bool updateReductionMeter)
+{
     // 1. Preparation
     const float mixVal = params.mixVal;
     dryBuffer.makeCopyOf(buffer, true);
@@ -384,25 +431,34 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         upsampledLfoOutputs.clear();
         if (lfoOutputs.getNumSamples() > 0 && upsampledLfoOutputs.getNumSamples() > 0)
         {
+            const int baseSamplesInChunk = buffer.getNumSamples();
+            const int oversamplingRatio = baseSamplesInChunk > 0
+                                              ? upsampledLfoOutputs.getNumSamples() / baseSamplesInChunk
+                                              : 1;
+            const int totalOversampledSamples = juce::jmax(1, totalNumSamples * oversamplingRatio);
+            const int oversampledSampleOffset = lfoSampleOffset * oversamplingRatio;
+
             for (int channel = 0; channel < lfoOutputs.getNumChannels(); ++channel)
             {
                 auto* dest = upsampledLfoOutputs.getWritePointer(channel);
                 const auto* src = lfoOutputs.getReadPointer(channel);
 
-                if (lfoOutputs.getNumSamples() == 1 || upsampledLfoOutputs.getNumSamples() == 1)
+                if (lfoOutputs.getNumSamples() == 1 || totalOversampledSamples == 1)
                 {
                     juce::FloatVectorOperations::fill(dest, src[0], upsampledLfoOutputs.getNumSamples());
                     continue;
                 }
 
                 const float step = static_cast<float>(lfoOutputs.getNumSamples() - 1)
-                                   / static_cast<float>(upsampledLfoOutputs.getNumSamples() - 1);
+                                   / static_cast<float>(totalOversampledSamples - 1);
                 for (int i = 0; i < upsampledLfoOutputs.getNumSamples(); ++i)
                 {
-                    const float sourcePos = (float) i * step;
-                    const int index0 = (int) sourcePos;
+                    const float sourcePos = static_cast<float>(oversampledSampleOffset + i) * step;
+                    const float boundedSourcePos = juce::jlimit(
+                        0.0f, static_cast<float>(lfoOutputs.getNumSamples() - 1), sourcePos);
+                    const int index0 = static_cast<int>(boundedSourcePos);
                     const int index1 = juce::jmin(index0 + 1, lfoOutputs.getNumSamples() - 1);
-                    const float frac = sourcePos - (float) index0;
+                    const float frac = boundedSourcePos - static_cast<float>(index0);
                     dest[i] = src[index0] * (1.0f - frac) + src[index1] * frac;
                 }
             }
@@ -417,10 +473,15 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
             paramsForProcessing.recVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.recLfoSourceIndex);
         // Output gain runs after downsampling, so it must use the original-rate
         // LFO. Using the oversampled signal here consumed only its first quarter.
-        if (juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
-            paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex);
+        if (juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels())
+            && lfoSampleOffset + buffer.getNumSamples() <= lfoOutputs.getNumSamples())
+            paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex,
+                                                                                 lfoSampleOffset);
 
-        processDistortion(oversampledBlock, dryBuffer, paramsForProcessing);
+        processDistortion(oversampledBlock,
+                          paramsForProcessing,
+                          inputPeak,
+                          updateReductionMeter);
         oversampling->processSamplesDown(block);
 
         // The DC filter is designed at the base sample rate. Running it on the
@@ -433,17 +494,31 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     }
     else
     {
-        // Bind the original LFO signals to the providers
-        if (juce::isPositiveAndBelow(params.driveLfoSourceIndex, lfoOutputs.getNumChannels()))
-            paramsForProcessing.driveVal.lfoSignal = lfoOutputs.getReadPointer(params.driveLfoSourceIndex);
-        if (juce::isPositiveAndBelow(params.biasLfoSourceIndex, lfoOutputs.getNumChannels()))
-            paramsForProcessing.biasVal.lfoSignal = lfoOutputs.getReadPointer(params.biasLfoSourceIndex);
-        if (juce::isPositiveAndBelow(params.recLfoSourceIndex, lfoOutputs.getNumChannels()))
-            paramsForProcessing.recVal.lfoSignal = lfoOutputs.getReadPointer(params.recLfoSourceIndex);
-        if (juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
-            paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex);
+        const bool hasCompleteBaseRateLfoChunk = lfoSampleOffset + buffer.getNumSamples()
+                                                 <= lfoOutputs.getNumSamples();
 
-        processDistortion(block, dryBuffer, paramsForProcessing);
+        // Bind the original LFO signals to the providers
+        if (hasCompleteBaseRateLfoChunk
+            && juce::isPositiveAndBelow(params.driveLfoSourceIndex, lfoOutputs.getNumChannels()))
+            paramsForProcessing.driveVal.lfoSignal = lfoOutputs.getReadPointer(params.driveLfoSourceIndex,
+                                                                                lfoSampleOffset);
+        if (hasCompleteBaseRateLfoChunk
+            && juce::isPositiveAndBelow(params.biasLfoSourceIndex, lfoOutputs.getNumChannels()))
+            paramsForProcessing.biasVal.lfoSignal = lfoOutputs.getReadPointer(params.biasLfoSourceIndex,
+                                                                               lfoSampleOffset);
+        if (hasCompleteBaseRateLfoChunk
+            && juce::isPositiveAndBelow(params.recLfoSourceIndex, lfoOutputs.getNumChannels()))
+            paramsForProcessing.recVal.lfoSignal = lfoOutputs.getReadPointer(params.recLfoSourceIndex,
+                                                                              lfoSampleOffset);
+        if (hasCompleteBaseRateLfoChunk
+            && juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
+            paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex,
+                                                                                 lfoSampleOffset);
+
+        processDistortion(block,
+                          paramsForProcessing,
+                          inputPeak,
+                          updateReductionMeter);
     }
 
     // 3. Block-wise Compressor and Width
@@ -513,8 +588,9 @@ void BandProcessor::processBypassed(juce::AudioBuffer<float>& buffer, bool useHQ
 }
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
-                                      const juce::AudioBuffer<float>& dryBuffer, // This is original-sized dry buffer
-                                      const BandProcessingParameters& params)
+                                      const BandProcessingParameters& params,
+                                      float inputPeak,
+                                      bool updateReductionMeter)
 {
     // Create a copy of the incoming block (which might be oversampled)
     // to use as the correctly-sized "dry" signal for the shape mixer.
@@ -538,8 +614,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     const int numSamples = (int) blockToProcess.getNumSamples();
     const int numChannels = (int) blockToProcess.getNumChannels();
 
-    // Note: mSampleMaxValue is still calculated from the original-sized dryBuffer, which is correct.
-    const float sampleMaxValue = dryBuffer.getMagnitude(0, dryBuffer.getNumSamples());
+    // For an oversized callback, every chunk must use the original callback's
+    // peak. Recomputing per chunk would make Safe mode depend on host block
+    // partitioning and could audibly change gain at each internal boundary.
+    const float sampleMaxValue = std::isfinite(inputPeak) ? juce::jmax(0.0f, inputPeak) : 0.0f;
     mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
     auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(params.mode);
 
@@ -650,7 +728,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         }
 
         // Update reduction meter (can be done once per block)
-        if (sample == 0)
+        if (sample == 0 && updateReductionMeter)
         {
             if (driveForCalc == 0.0f || sampleMaxValue <= 0.001f)
                 mReductionPercent.store(1.0f, std::memory_order_relaxed);

@@ -3386,11 +3386,57 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
     // A copy of the original signal is needed for the dry/wet mix.
     lofiDryBuffer.makeCopyOf(buffer, true);
 
+    const auto configureProvider = [this, &buffer](const CachedParameter& parameter,
+                                                   ModulatedValueProvider& provider)
+    {
+        const float defaultValue = parameter.ranged != nullptr
+                                       ? parameter.ranged->convertFrom0to1(
+                                             parameter.ranged->getDefaultValue())
+                                       : 0.0f;
+        provider.baseValue = loadCachedParameter(parameter, defaultValue);
+        if (parameter.ranged == nullptr)
+            return false;
+
+        provider.range = parameter.ranged->getNormalisableRange();
+        LfoManager::AudioThreadRoutingInfo routingInfo;
+        const bool hasCompleteLfoBlock = lfoOutputBuffer.getNumSamples()
+                                         >= buffer.getNumSamples();
+        if (! hasCompleteLfoBlock
+            || ! lfoManager->getAudioThreadRoutingInfo(parameter.ranged,
+                                                        routingInfo)
+            || std::abs(routingInfo.depth) <= 1.0e-6f
+            || ! juce::isPositiveAndBelow(routingInfo.sourceLfoIndex,
+                                           lfoOutputBuffer.getNumChannels()))
+        {
+            return false;
+        }
+
+        provider.lfoSignal = lfoOutputBuffer.getReadPointer(
+            routingInfo.sourceLfoIndex);
+        provider.modulationDepth = routingInfo.depth;
+        provider.isBipolar = routingInfo.isBipolar;
+        return true;
+    };
+
+    ModulatedValueProvider rateProvider;
+    ModulatedValueProvider bitsProvider;
+    ModulatedValueProvider jitterProvider;
+    ModulatedValueProvider mixProvider;
+    const bool hasRateModulation = configureProvider(downsampleRateParameter,
+                                                      rateProvider);
+    const bool hasBitsModulation = configureProvider(bitDepthParameter,
+                                                      bitsProvider);
+    const bool hasJitterModulation = configureProvider(jitterParameter,
+                                                        jitterProvider);
+    const bool hasMixModulation = configureProvider(downsampleMixParameter,
+                                                     mixProvider);
+
     // Keep the sample-and-hold path advancing while bypassed and crossfade the
     // mixer's wet proportion to zero. Resetting/returning here hard-switched at
     // the callback boundary and restarted the hold counter when re-enabled.
-    const float requestedMix = getBlockModulatedValue(downsampleMixParameter,
-                                                       lfoOutputBuffer);
+    const float requestedMix = hasMixModulation
+                                   ? mixProvider.get(0)
+                                   : mixProvider.baseValue;
     const float effectiveMix = isActive
                                    ? juce::jlimit(0.0f, 1.0f, requestedMix)
                                    : 0.0f;
@@ -3400,24 +3446,71 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
     lofiMixerPrimed = true;
     lofiMixer.pushDrySamples(juce::dsp::AudioBlock<float>(lofiDryBuffer));
 
-    // --- 2. Get All Parameter Values Once Per Block ---
-    const int bits = juce::jlimit(4, 32,
-                                 juce::roundToInt(getBlockModulatedValue(bitDepthParameter,
-                                                                        lfoOutputBuffer)));
-    const float jitter = getBlockModulatedValue(jitterParameter, lfoOutputBuffer);
-    const float rateReduceValue = getBlockModulatedValue(downsampleRateParameter, lfoOutputBuffer);
-
-    // --- 3. Process Audio ---
+    // --- 2. Process Audio ---
     const int channelsToProcess = juce::jmin(buffer.getNumChannels(),
                                               static_cast<int>(downsamplingStateChannels));
-    const float quantisationStep = bits < 32
-                                       ? 2.0f / std::ldexp(1.0f, bits)
-                                       : 0.0f;
+    const int staticBits = juce::jlimit(4, 32,
+                                       juce::roundToInt(bitsProvider.baseValue));
+    const float staticRate = std::isfinite(rateProvider.baseValue)
+                                 ? juce::jlimit(1.0f, 64.0f,
+                                                rateProvider.baseValue)
+                                 : 1.0f;
+    const float staticJitter = std::isfinite(jitterProvider.baseValue)
+                                   ? juce::jlimit(0.0f, 1.0f,
+                                                  jitterProvider.baseValue)
+                                   : 0.0f;
+    int cachedBits = -1;
+    float quantisationStep = 0.0f;
 
     // Iterate samples first so jitter consumes the same random sequence
     // regardless of how the host partitions the stream into blocks.
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
+        const int bits = hasBitsModulation
+                             ? juce::jlimit(4, 32,
+                                            juce::roundToInt(bitsProvider.get(sample)))
+                             : staticBits;
+        if (bits != cachedBits)
+        {
+            cachedBits = bits;
+            quantisationStep = bits < 32
+                                   ? 2.0f / std::ldexp(1.0f, bits)
+                                   : 0.0f;
+        }
+
+        bool needsNewHeldSample = false;
+        for (int channel = 0; channel < channelsToProcess; ++channel)
+        {
+            if (downsampleSamplesRemaining[static_cast<size_t>(channel)] <= 0)
+            {
+                needsNewHeldSample = true;
+                break;
+            }
+        }
+
+        // Rate and Jitter define the duration of a newly captured sample. A
+        // parameter change must not retroactively resize the hold already in
+        // progress, so sample their LFOs only at capture instants.
+        float currentRate = staticRate;
+        float currentJitter = staticJitter;
+        if (needsNewHeldSample)
+        {
+            if (hasRateModulation)
+            {
+                const float value = rateProvider.get(sample);
+                currentRate = std::isfinite(value)
+                                  ? juce::jlimit(1.0f, 64.0f, value)
+                                  : staticRate;
+            }
+            if (hasJitterModulation)
+            {
+                const float value = jitterProvider.get(sample);
+                currentJitter = std::isfinite(value)
+                                    ? juce::jlimit(0.0f, 1.0f, value)
+                                    : staticJitter;
+            }
+        }
+
         for (int channel = 0; channel < channelsToProcess; ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
@@ -3430,14 +3523,16 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
                 downsampleHeldSamples[stateIndex] = channelData[sample];
 
                 // Determine the hold duration for this new sample.
-                float currentRateReduce = rateReduceValue;
+                float currentRateReduce = currentRate;
 
                 // Apply Jitter if the parameter is active.
-                if (jitter > 0.0f)
+                if (currentJitter > 0.0f)
                 {
                     // Introduce a random variation to the hold time.
                     // random.nextFloat() returns [0, 1]. We map it to [-1, 1].
-                    float randomFactor = 1.0f + (random.nextFloat() * 2.0f - 1.0f) * jitter;
+                    float randomFactor = 1.0f
+                                         + (random.nextFloat() * 2.0f - 1.0f)
+                                               * currentJitter;
                     currentRateReduce *= randomFactor;
                 }
 
@@ -3457,9 +3552,22 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
         }
     }
 
-    // --- 4. Mix with Dry Signal ---
+    // --- 3. Mix with Dry Signal ---
     // Finally, mix the processed (wet) buffer with the original (dry) buffer.
-    lofiMixer.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
+    auto wetBlock = juce::dsp::AudioBlock<float>(buffer);
+    if (! isActive || ! hasMixModulation)
+    {
+        lofiMixer.mixWetSamples(wetBlock);
+        return;
+    }
+
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        lofiMixer.setWetMixProportion(juce::jlimit(
+            0.0f, 1.0f, mixProvider.get(sample)));
+        lofiMixer.mixWetSamples(
+            wetBlock.getSubBlock(static_cast<size_t>(sample), 1));
+    }
 }
 
 void FireAudioProcessor::resetDownsamplingState() noexcept

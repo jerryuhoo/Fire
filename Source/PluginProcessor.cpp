@@ -817,11 +817,14 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // Update reduction meter (can be done once per block)
         if (sample == 0 && updateReductionMeter)
         {
-            if (driveForCalc == 0.0f || sampleMaxValue <= 0.001f)
+            if (! params.isDriveEnabled || ! params.isSafeModeOn
+                || driveForCalc == 0.0f || sampleMaxValue <= 0.001f)
                 mReductionPercent.store(1.0f, std::memory_order_relaxed);
             else
                 // Use the smoothed value for a more stable meter reading
-                mReductionPercent.store(std::log2(currentState.drive) / driveForCalc, std::memory_order_relaxed);
+                mReductionPercent.store(
+                    juce::jlimit(0.0f, 1.0f, std::log2(currentState.drive) / driveForCalc),
+                    std::memory_order_relaxed);
         }
 
         // 5. Apply audio processing using the correctly smoothed values
@@ -1729,7 +1732,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         float powerDrive = powf(2, driveForCalc);
         float sampleMaxValue = getSampleMaxValue(bandIndex);
 
-        if (isSafeModeOn && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f)
+        if (driveEnabled && isSafeModeOn
+            && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f)
             vals.drive = 2.0f / sampleMaxValue + 0.1f * driveForCalc;
         else
             vals.drive = powerDrive;

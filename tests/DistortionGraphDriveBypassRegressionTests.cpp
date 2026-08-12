@@ -24,7 +24,8 @@ juce::String firstBandParameter(const juce::String& baseID)
     return ParameterIDAndName::getIDString(baseID, 0);
 }
 
-DistortionGraphValues processAndReadGraph(FireAudioProcessor& processor)
+DistortionGraphValues processAndReadGraph(FireAudioProcessor& processor,
+                                          float inputPeak = 0.01f)
 {
     juce::AudioBuffer<float> buffer(2, blockSize);
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
@@ -32,6 +33,8 @@ DistortionGraphValues processAndReadGraph(FireAudioProcessor& processor)
             buffer.setSample(channel,
                              sample,
                              0.01f * std::sin(0.13f * static_cast<float>(sample)));
+
+    buffer.setSample(0, blockSize - 1, inputPeak);
 
     juce::MidiBuffer midi;
     processor.processBlock(buffer, midi);
@@ -65,4 +68,27 @@ TEST_CASE("Distortion graph reports unity drive while the Drive stage is disable
     const float expectedEnabledDrive = std::exp2(6.5f);
     CHECK(enabled.drive
           == Catch::Approx(expectedEnabledDrive).margin(1.0e-5f));
+}
+
+TEST_CASE("Safe telemetry cannot reduce a disabled Drive stage",
+          "[processor][graph-telemetry][drive][bypass][safe]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.setUiFocusBand(0);
+
+    setPlainParameter(processor, NUM_BANDS_ID, 1.0f);
+    setPlainParameter(processor, firstBandParameter(BAND_ENABLE_ID), 1.0f);
+    setPlainParameter(processor, firstBandParameter(DRIVE_ID), 100.0f);
+    setPlainParameter(processor, firstBandParameter(EXTREME_ID), 0.0f);
+    setPlainParameter(processor, firstBandParameter(SAFE_ID), 1.0f);
+    setPlainParameter(processor, firstBandParameter(DRIVE_BYPASS_ID), 0.0f);
+    processor.prepareToPlay(sampleRate, blockSize);
+
+    // A peak above 2 would activate Safe even at unity gain if the graph
+    // applies its limiter formula after Drive has already been bypassed.
+    const auto disabled = processAndReadGraph(processor, 3.0f);
+    CHECK(processor.getSampleMaxValue(0)
+          == Catch::Approx(3.0f).margin(1.0e-6f));
+    CHECK(disabled.drive == Catch::Approx(1.0f).margin(1.0e-6f));
 }

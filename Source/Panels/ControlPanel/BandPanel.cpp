@@ -856,7 +856,8 @@ void BandPanel::updateDistortionGraphFromParameters()
     const float powerDrive = std::pow(2.0f, driveForCalc);
     const float sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
     const bool safeMode = readBandParameter(SAFE_ID, 1.0f) > 0.5f;
-    values.drive = safeMode && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f
+    values.drive = driveEnabled && safeMode
+                           && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f
                        ? 2.0f / sampleMaxValue + 0.1f * driveForCalc
                        : powerDrive;
 

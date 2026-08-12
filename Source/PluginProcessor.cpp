@@ -379,6 +379,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     shapeMixer.prepare(mixerSpec);
     compressorMixer.prepare(mixerSpec);
     widthMixer.prepare(mixerSpec);
+    bandEnableDryDelay.prepare(spec);
 
     // The DC filter needs its coefficients to be calculated.
     dcFilter.prepare(spec);
@@ -404,6 +405,19 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
+    // prepare() may be called again on an existing processor.  JUCE's mixer
+    // prepare resets its FIFO and delay line, but preserves the previously
+    // requested wet proportion.  Force every first post-prepare callback to
+    // snap its mixer to the newly supplied parameters instead of ramping from
+    // stale state left by the previous playback configuration.
+    isFirstBlock = true;
+    dryWetMixerPrimed = false;
+    shapeMixerPrimed = false;
+    compressorMixerPrimed = false;
+    widthMixerPrimed = false;
+    bandEnableMixSmoother.reset(spec.sampleRate, 0.01);
+    bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
+    bandEnableMixPrimed = false;
     dcFilterMixSmoother.reset(spec.sampleRate, 0.01);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
     dcFilterMixPrimed = false;
@@ -417,6 +431,7 @@ void BandProcessor::reset()
     shapeMixerPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
+    bandEnableMixPrimed = false;
     dcFilterMixPrimed = false;
     compressor.reset();
     widthProcessor.reset();
@@ -425,7 +440,9 @@ void BandProcessor::reset()
     shapeMixer.reset();
     compressorMixer.reset();
     widthMixer.reset();
+    bandEnableDryDelay.reset();
     dcFilter.reset();
+    bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
 
     if (oversampling)
@@ -568,6 +585,15 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         dryWetMixer.reset();
     dryWetMixerPrimed = true;
     dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
+
+    // Band Enable bypasses the complete processed band, including the user's
+    // own Band Mix. Keep an independent raw path aligned to the oversampled
+    // wet path so the outer enable crossfade never changes latency or phase.
+    bandEnableDryDelay.setDelay(useHQ ? oversampling->getLatencyInSamples()
+                                      : 0.0f);
+    auto bandEnableDryBlock = juce::dsp::AudioBlock<float>(dryBuffer);
+    bandEnableDryDelay.process(
+        juce::dsp::ProcessContextReplacing<float>(bandEnableDryBlock));
 
     // 2. Core Distortion Processing
     if (useHQ)
@@ -875,34 +901,64 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     if (! hasSampleAccurateBandMix)
     {
         dryWetMixer.mixWetSamples(block);
-        return;
+    }
+    else
+    {
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            dryWetMixer.setWetMixProportion(juce::jlimit(
+                0.0f, 1.0f, paramsForProcessing.mixValProvider.get(sample)));
+            dryWetMixer.mixWetSamples(
+                block.getSubBlock(static_cast<size_t>(sample), 1));
+        }
     }
 
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-    {
-        dryWetMixer.setWetMixProportion(juce::jlimit(
-            0.0f, 1.0f, paramsForProcessing.mixValProvider.get(sample)));
-        dryWetMixer.mixWetSamples(
-            block.getSubBlock(static_cast<size_t>(sample), 1));
-    }
+    processBandEnable(buffer, params.isBandEnabled);
 }
 
-void BandProcessor::processBypassed(juce::AudioBuffer<float>& buffer, bool useHQ)
+void BandProcessor::processBandEnable(juce::AudioBuffer<float>& buffer,
+                                      bool enabled)
 {
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
-    auto block = juce::dsp::AudioBlock<float>(buffer);
-    const float latency = useHQ && oversampling != nullptr
-                              ? oversampling->getLatencyInSamples()
-                              : 0.0f;
-    dryWetMixer.setWetLatency(latency);
-    dryWetMixer.setWetMixProportion(0.0f);
-    if (! dryWetMixerPrimed)
-        dryWetMixer.reset();
-    dryWetMixerPrimed = true;
-    dryWetMixer.pushDrySamples(block);
-    dryWetMixer.mixWetSamples(block);
+    const float targetMix = enabled ? 1.0f : 0.0f;
+    if (! bandEnableMixPrimed)
+    {
+        bandEnableMixSmoother.setCurrentAndTargetValue(targetMix);
+        bandEnableMixPrimed = true;
+    }
+    else
+    {
+        bandEnableMixSmoother.setTargetValue(targetMix);
+    }
+
+    if (! bandEnableMixSmoother.isSmoothing())
+    {
+        if (bandEnableMixSmoother.getCurrentValue() <= 0.0f)
+        {
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                buffer.copyFrom(channel, 0,
+                                dryBuffer, channel, 0,
+                                buffer.getNumSamples());
+        }
+        return;
+    }
+
+    auto* const* wetChannels = buffer.getArrayOfWritePointers();
+    const auto* const* dryChannels = dryBuffer.getArrayOfReadPointers();
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        const float mix = bandEnableMixSmoother.getCurrentValue();
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {
+            const float dry = dryChannels[channel][sample];
+            wetChannels[channel][sample] = dry
+                                          + mix * (wetChannels[channel][sample]
+                                                   - dry);
+        }
+        bandEnableMixSmoother.getNextValue();
+    }
 }
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
@@ -3456,11 +3512,11 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
             const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
             calculateAndStoreLevels(*dryBandBuffers[i], band->mInputLeftRMS, band->mInputRightRMS, band->mInputLeftPeak, band->mInputRightPeak);
 
-            if (loadCachedParameter(parameters.enabled) > 0.5f)
             {
                 BandProcessingParameters params;
 
                 // 1. Fill General Settings
+                params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
                 params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
                 params.isHQ = useHQ;
                 params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
@@ -3551,10 +3607,6 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
 
                 // 4. Call BandProcessor
                 band->process(*wetBandBuffers[i], params, lfoOutputs);
-            }
-            else
-            {
-                band->processBypassed(*wetBandBuffers[i], useHQ);
             }
             calculateAndStoreLevels(*wetBandBuffers[i], band->mOutputLeftRMS, band->mOutputRightRMS, band->mOutputLeftPeak, band->mOutputRightPeak);
         }

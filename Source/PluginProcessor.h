@@ -31,6 +31,7 @@
 struct BandProcessingParameters
 {
     // Main process parameters
+    bool isBandEnabled { true };
     int mode { 0 };
     bool isHQ { false };
 
@@ -112,12 +113,14 @@ struct BandProcessor
     juce::SmoothedValue<float> driveSmoother;
     juce::SmoothedValue<float> biasSmoother;
     juce::SmoothedValue<float> recSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bandEnableMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> dcFilterMixSmoother;
     bool isFirstBlock = true;
     bool dryWetMixerPrimed = false;
     bool shapeMixerPrimed = false;
     bool compressorMixerPrimed = false;
     bool widthMixerPrimed = false;
+    bool bandEnableMixPrimed = false;
     bool dcFilterMixPrimed = false;
 
     // Atomics for RMS levels
@@ -142,7 +145,6 @@ struct BandProcessor
     void process(juce::AudioBuffer<float>& buffer,
                  const BandProcessingParameters& params,
                  const juce::AudioBuffer<float>& lfoOutputs);
-    void processBypassed(juce::AudioBuffer<float>& buffer, bool useHQ);
 
     const int oversampleFactor = 2;
 
@@ -157,11 +159,14 @@ private:
                            const BandProcessingParameters& params,
                            float inputPeak,
                            bool updateReductionMeter);
+    void processBandEnable(juce::AudioBuffer<float>& buffer, bool enabled);
     void processDcFilter(juce::AudioBuffer<float>& buffer, bool enabled);
 
     juce::AudioBuffer<float> dryBuffer;
     juce::AudioBuffer<float> dcFilterDryBuffer;
     juce::AudioBuffer<float> upsampledLfoOutputs;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran>
+        bandEnableDryDelay { 2048 };
     int maximumPreparedBlockSize = 1;
 };
 

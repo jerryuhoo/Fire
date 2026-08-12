@@ -397,12 +397,16 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     oversampling->initProcessing(static_cast<size_t>(maximumPreparedBlockSize));
 
     dryBuffer.setSize(numChannels, maximumBlockSize);
+    dcFilterDryBuffer.setSize(numChannels, maximumBlockSize);
     upsampledLfoOutputs.setSize(4, maximumBlockSize * 4);
 
     // Reset all smoothed values with the current sample rate and a ramp time.
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
+    dcFilterMixSmoother.reset(spec.sampleRate, 0.01);
+    dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
+    dcFilterMixPrimed = false;
 }
 
 // This is what happens when we need to clear the internal state of a band's processors.
@@ -413,6 +417,7 @@ void BandProcessor::reset()
     shapeMixerPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
+    dcFilterMixPrimed = false;
     compressor.reset();
     widthProcessor.reset();
     gain.reset();
@@ -421,6 +426,7 @@ void BandProcessor::reset()
     compressorMixer.reset();
     widthMixer.reset();
     dcFilter.reset();
+    dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
 
     if (oversampling)
         oversampling->reset();
@@ -637,14 +643,6 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                           inputPeak,
                           updateReductionMeter);
         oversampling->processSamplesDown(block);
-
-        // The DC filter is designed at the base sample rate. Running it on the
-        // 4x block moved its effective cutoff to 4x the selected frequency.
-        if (params.isDcFilterEnabled)
-        {
-            auto dcContext = juce::dsp::ProcessContextReplacing<float>(block);
-            dcFilter.process(dcContext);
-        }
     }
     else
     {
@@ -679,6 +677,12 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                           inputPeak,
                           updateReductionMeter);
     }
+
+    // The DC filter is designed at the base sample rate, so both normal and HQ
+    // paths meet here after any downsampling. Keep its hidden wet path running
+    // while bypassed and crossfade the audible result; skipping the IIR froze
+    // its state and hard-switched up to a large DC offset at block boundaries.
+    processDcFilter(buffer, params.isDcFilterEnabled);
 
     // 3. Block-wise Compressor and Width
     // These operate on the downsampled block, so their mixers are safe.
@@ -1090,10 +1094,58 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         }
     }
 
-    if (params.isDcFilterEnabled && ! params.isHQ)
+}
+
+void BandProcessor::processDcFilter(juce::AudioBuffer<float>& buffer,
+                                    bool enabled)
+{
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+        return;
+
+    dcFilterDryBuffer.makeCopyOf(buffer, true);
+
+    const float targetMix = enabled ? 1.0f : 0.0f;
+    if (! dcFilterMixPrimed)
     {
-        auto dcContext = juce::dsp::ProcessContextReplacing<float>(blockToProcess);
-        dcFilter.process(dcContext);
+        dcFilterMixSmoother.setCurrentAndTargetValue(targetMix);
+        dcFilterMixPrimed = true;
+    }
+    else
+    {
+        dcFilterMixSmoother.setTargetValue(targetMix);
+    }
+
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    dcFilter.process(juce::dsp::ProcessContextReplacing<float>(block));
+
+    // Preserve both legacy endpoints exactly. Only an active transition needs
+    // sample-by-sample blending, and the one shared mix value is advanced once
+    // per base-rate sample for identical timing in mono, stereo and HQ modes.
+    if (! dcFilterMixSmoother.isSmoothing())
+    {
+        if (dcFilterMixSmoother.getCurrentValue() <= 0.0f)
+        {
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                buffer.copyFrom(channel, 0,
+                                dcFilterDryBuffer, channel, 0,
+                                buffer.getNumSamples());
+        }
+        return;
+    }
+
+    auto* const* wetChannels = buffer.getArrayOfWritePointers();
+    const auto* const* dryChannels = dcFilterDryBuffer.getArrayOfReadPointers();
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        const float mix = dcFilterMixSmoother.getCurrentValue();
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {
+            const float dry = dryChannels[channel][sample];
+            wetChannels[channel][sample] = dry
+                                          + mix * (wetChannels[channel][sample]
+                                                   - dry);
+        }
+        dcFilterMixSmoother.getNextValue();
     }
 }
 

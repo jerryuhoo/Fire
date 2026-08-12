@@ -112,11 +112,13 @@ struct BandProcessor
     juce::SmoothedValue<float> driveSmoother;
     juce::SmoothedValue<float> biasSmoother;
     juce::SmoothedValue<float> recSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> dcFilterMixSmoother;
     bool isFirstBlock = true;
     bool dryWetMixerPrimed = false;
     bool shapeMixerPrimed = false;
     bool compressorMixerPrimed = false;
     bool widthMixerPrimed = false;
+    bool dcFilterMixPrimed = false;
 
     // Atomics for RMS levels
     std::atomic<float> mInputLeftRMS { 0.0f };
@@ -155,8 +157,10 @@ private:
                            const BandProcessingParameters& params,
                            float inputPeak,
                            bool updateReductionMeter);
+    void processDcFilter(juce::AudioBuffer<float>& buffer, bool enabled);
 
     juce::AudioBuffer<float> dryBuffer;
+    juce::AudioBuffer<float> dcFilterDryBuffer;
     juce::AudioBuffer<float> upsampledLfoOutputs;
     int maximumPreparedBlockSize = 1;
 };

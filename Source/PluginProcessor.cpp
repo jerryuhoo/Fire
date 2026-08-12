@@ -3366,13 +3366,54 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
         dryWetMixerGlobal.setWetLatency(0);
     }
 
-    // Get the final modulated mix value from the LfoManager
-    dryWetMixerGlobal.setWetMixProportion(getBlockModulatedValue(globalMixParameter, lfoOutputBuffer));
+    ModulatedValueProvider mixProvider;
+    mixProvider.baseValue = loadCachedParameter(globalMixParameter, 1.0f);
+    if (globalMixParameter.ranged != nullptr)
+        mixProvider.range = globalMixParameter.ranged->getNormalisableRange();
+
+    LfoManager::AudioThreadRoutingInfo routingInfo;
+    const bool hasSampleAccurateModulation = globalMixParameter.ranged != nullptr
+                                          && lfoManager->getAudioThreadRoutingInfo(
+                                              globalMixParameter.ranged, routingInfo)
+                                          && std::abs(routingInfo.depth) > 1.0e-6f
+                                          && juce::isPositiveAndBelow(
+                                              routingInfo.sourceLfoIndex,
+                                              lfoOutputBuffer.getNumChannels())
+                                          && lfoOutputBuffer.getNumSamples()
+                                                 >= buffer.getNumSamples();
+    if (hasSampleAccurateModulation)
+    {
+        mixProvider.lfoSignal = lfoOutputBuffer.getReadPointer(routingInfo.sourceLfoIndex);
+        mixProvider.modulationDepth = routingInfo.depth;
+        mixProvider.isBipolar = routingInfo.isBipolar;
+    }
+
+    // Set the first target before reset so the initial callback still snaps to
+    // the restored value. Later callbacks retain the mixer's existing 50 ms
+    // smoothing while following every LFO sample instead of only sample zero.
+    dryWetMixerGlobal.setWetMixProportion(
+        juce::jlimit(0.0f, 1.0f, mixProvider.get(0)));
     if (! globalMixerPrimed)
         dryWetMixerGlobal.reset();
     globalMixerPrimed = true;
-    dryWetMixerGlobal.pushDrySamples(juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
-    dryWetMixerGlobal.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
+
+    auto wetBlock = juce::dsp::AudioBlock<float>(buffer);
+    dryWetMixerGlobal.pushDrySamples(
+        juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
+
+    if (! hasSampleAccurateModulation)
+    {
+        dryWetMixerGlobal.mixWetSamples(wetBlock);
+        return;
+    }
+
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        dryWetMixerGlobal.setWetMixProportion(
+            juce::jlimit(0.0f, 1.0f, mixProvider.get(sample)));
+        dryWetMixerGlobal.mixWetSamples(
+            wetBlock.getSubBlock(static_cast<size_t>(sample), 1));
+    }
 }
 
 FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const

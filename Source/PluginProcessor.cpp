@@ -449,7 +449,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         return;
 
     const int totalNumSamples = buffer.getNumSamples();
-    const float inputPeak = buffer.getMagnitude(0, 0, totalNumSamples);
+    const float inputPeak = buffer.getMagnitude(0, totalNumSamples);
     const int chunkCapacity = juce::jmax(1, maximumPreparedBlockSize);
 
     if (totalNumSamples <= chunkCapacity)

@@ -206,29 +206,57 @@ struct LfoData
         data.points.clear();
         data.curvatures.clear();
 
+        // Older brush builds could serialise more than the current 64-point
+        // DSP limit. Read a bounded, evenly distributed view so sanitise()
+        // preserves the complete curve instead of keeping only its first 64
+        // points and stretching that truncated endpoint to phase 1.0.
+        constexpr size_t maximumLegacyPointsToRead = maximumNumberOfPoints * 64;
+
+        const auto forEachSampledChild = [](const juce::XmlElement& parent,
+                                            size_t maximumChildren,
+                                            auto&& callback)
+        {
+            const int totalChildren = juce::jmax(0, parent.getNumChildElements());
+            const size_t count = juce::jmin(static_cast<size_t>(totalChildren),
+                                             maximumChildren);
+            if (count == 0)
+                return;
+
+            for (size_t i = 0; i < count; ++i)
+            {
+                const size_t sourceIndex = count == 1
+                                               ? 0
+                                               : (static_cast<size_t>(totalChildren - 1) * i)
+                                                     / (count - 1);
+                if (const auto* child = parent.getChildElement(static_cast<int>(sourceIndex)))
+                    callback(*child);
+            }
+        };
+
         // Load points
         if (auto* pointsElement = xml.getChildByName("POINTS"))
         {
-            for (auto* p : pointsElement->getChildIterator())
+            data.points.reserve(juce::jmin(maximumLegacyPointsToRead,
+                                            static_cast<size_t>(juce::jmax(
+                                                0, pointsElement->getNumChildElements()))));
+            forEachSampledChild(*pointsElement, maximumLegacyPointsToRead, [&](const auto& p)
             {
-                if (data.points.size() >= maximumNumberOfPoints)
-                    break;
-
-                data.points.push_back({ (float) p->getDoubleAttribute("x"),
-                                        (float) p->getDoubleAttribute("y") });
-            }
+                data.points.push_back({ (float) p.getDoubleAttribute("x"),
+                                        (float) p.getDoubleAttribute("y") });
+            });
         }
 
         // Load curvatures
         if (auto* curvaturesElement = xml.getChildByName("CURVATURES"))
         {
-            for (auto* c : curvaturesElement->getChildIterator())
+            constexpr size_t maximumLegacyCurvaturesToRead = maximumLegacyPointsToRead - 1;
+            data.curvatures.reserve(juce::jmin(maximumLegacyCurvaturesToRead,
+                                                static_cast<size_t>(juce::jmax(
+                                                    0, curvaturesElement->getNumChildElements()))));
+            forEachSampledChild(*curvaturesElement, maximumLegacyCurvaturesToRead, [&](const auto& c)
             {
-                if (data.curvatures.size() + 1 >= maximumNumberOfPoints)
-                    break;
-
-                data.curvatures.push_back((float) c->getDoubleAttribute("v"));
-            }
+                data.curvatures.push_back((float) c.getDoubleAttribute("v"));
+            });
         }
 
         // Load smoothness, providing a default value of 0.0 if the attribute doesn't exist.

@@ -191,6 +191,40 @@ TEST_CASE("Malformed LFO data is normalised before DSP use", "[lfo][robustness]"
     CHECK(data.points.back().x == Catch::Approx(1.0f));
 }
 
+TEST_CASE("Legacy oversized LFO XML preserves the complete curve", "[lfo][state][compatibility]")
+{
+    constexpr int legacyPointCount = 130;
+    juce::XmlElement lfoXml("LFO");
+    auto* points = lfoXml.createNewChildElement("POINTS");
+    auto* curvatures = lfoXml.createNewChildElement("CURVATURES");
+
+    for (int i = 0; i < legacyPointCount; ++i)
+    {
+        const float x = static_cast<float>(i) / static_cast<float>(legacyPointCount - 1);
+        auto* point = points->createNewChildElement("P");
+        point->setAttribute("x", x);
+        point->setAttribute("y", i < legacyPointCount / 2 ? 0.0f : 1.0f);
+
+        if (i + 1 < legacyPointCount)
+        {
+            auto* curvature = curvatures->createNewChildElement("C");
+            curvature->setAttribute("v", 0.0f);
+        }
+    }
+
+    const auto restored = LfoData::readFromXml(lfoXml);
+    REQUIRE(restored.points.size() == LfoData::maximumNumberOfPoints);
+    REQUIRE(restored.curvatures.size() == restored.points.size() - 1);
+    CHECK(restored.points.front().x == Catch::Approx(0.0f));
+    CHECK(restored.points.front().y == Catch::Approx(0.0f));
+    CHECK(restored.points.back().x == Catch::Approx(1.0f));
+    CHECK(restored.points.back().y == Catch::Approx(1.0f));
+    CHECK(std::any_of(restored.points.begin()
+                          + static_cast<std::ptrdiff_t>(restored.points.size() / 2),
+                      restored.points.end(),
+                      [](const auto& point) { return point.y > 0.5f; }));
+}
+
 TEST_CASE("Prebuilt LFO banks match the original curve and smoothing math", "[lfo][wavetable]")
 {
     LfoData shape;

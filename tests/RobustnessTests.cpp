@@ -437,6 +437,52 @@ TEST_CASE("Stereo bypass crossfades without a block-boundary click", "[width][by
     CHECK(audio.getSample(0, blockSize - 1) == Catch::Approx(inputValue).margin(1.0e-5f));
 }
 
+TEST_CASE("Width and pan automation is smoothed within the audio block", "[width][smoothing]")
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int rampSamples = 480;
+    constexpr float inputValue = 0.25f;
+
+    WidthProcessor processor;
+    processor.prepare(sampleRate);
+
+    std::array<float, rampSamples> left {};
+    std::array<float, rampSamples> right {};
+    const auto fillInput = [&]
+    {
+        left.fill(inputValue);
+        right.fill(inputValue);
+    };
+
+    fillInput();
+    processor.process(left.data(), right.data(), 0.5f, 0.0f, rampSamples);
+    CHECK(left.back() == Catch::Approx(inputValue).margin(1.0e-7f));
+    CHECK(right.back() == Catch::Approx(inputValue).margin(1.0e-7f));
+
+    const float widthBoundary = left.back();
+    fillInput();
+    processor.process(left.data(), right.data(), 0.0f, 0.0f, rampSamples);
+    CHECK(std::abs(left.front() - widthBoundary) < 0.002f);
+    for (int sample = 1; sample < rampSamples; ++sample)
+        CHECK(std::abs(left[static_cast<size_t>(sample)]
+                       - left[static_cast<size_t>(sample - 1)]) < 0.002f);
+    CHECK(left.back() == Catch::Approx(inputValue * 2.0f).margin(1.0e-6f));
+    CHECK(right.back() == Catch::Approx(inputValue * 2.0f).margin(1.0e-6f));
+
+    // Return Width to neutral, then verify a hard pan target is also ramped.
+    fillInput();
+    processor.process(left.data(), right.data(), 0.5f, 0.0f, rampSamples);
+    const float panBoundary = left.back();
+    fillInput();
+    processor.process(left.data(), right.data(), 0.5f, 1.0f, rampSamples);
+    CHECK(std::abs(left.front() - panBoundary) < 0.002f);
+    for (int sample = 1; sample < rampSamples; ++sample)
+        CHECK(std::abs(left[static_cast<size_t>(sample)]
+                       - left[static_cast<size_t>(sample - 1)]) < 0.002f);
+    CHECK(left.back() == Catch::Approx(0.0f).margin(1.0e-6f));
+    CHECK(right.back() == Catch::Approx(inputValue).margin(1.0e-6f));
+}
+
 TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[processor][robustness]")
 {
     juce::ScopedJuceInitialiser_GUI gui;

@@ -283,6 +283,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 {
     // Prepare all the DSP modules with the sample rate and block size.
     compressor.prepare(spec);
+    widthProcessor.prepare(spec.sampleRate);
     gain.setRampDurationSeconds(0.05);
     gain.prepare(spec);
     juce::dsp::ProcessSpec mixerSpec = spec;
@@ -320,6 +321,7 @@ void BandProcessor::reset()
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
     compressor.reset();
+    widthProcessor.reset();
     gain.reset();
     dryWetMixer.reset();
     shapeMixer.reset();

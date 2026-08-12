@@ -454,7 +454,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
 
     if (totalNumSamples <= chunkCapacity)
     {
-        processChunk(buffer, params, lfoOutputs, 0, totalNumSamples, inputPeak, true);
+        processChunk(buffer, params, lfoOutputs, 0, inputPeak, true);
         return;
     }
 
@@ -475,7 +475,6 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
                      params,
                      lfoOutputs,
                      sampleOffset,
-                     totalNumSamples,
                      inputPeak,
                      sampleOffset == 0);
     }
@@ -485,20 +484,34 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                  const BandProcessingParameters& params,
                                  const juce::AudioBuffer<float>& lfoOutputs,
                                  int lfoSampleOffset,
-                                 int totalNumSamples,
                                  float inputPeak,
                                  bool updateReductionMeter)
 {
     // 1. Preparation
-    const float mixVal = params.mixVal;
     dryBuffer.makeCopyOf(buffer, true);
     auto block = juce::dsp::AudioBlock<float>(buffer);
     auto paramsForProcessing = params; // Create a mutable copy
     const bool useHQ = params.isHQ && oversampling != nullptr;
     paramsForProcessing.isHQ = useHQ;
 
+    const bool hasCompleteBaseRateLfoChunk = lfoSampleOffset + buffer.getNumSamples()
+                                              <= lfoOutputs.getNumSamples();
+    if (hasCompleteBaseRateLfoChunk
+        && std::abs(paramsForProcessing.mixValProvider.modulationDepth) > 1.0e-6f
+        && juce::isPositiveAndBelow(params.mixLfoSourceIndex,
+                                    lfoOutputs.getNumChannels()))
+    {
+        paramsForProcessing.mixValProvider.lfoSignal =
+            lfoOutputs.getReadPointer(params.mixLfoSourceIndex, lfoSampleOffset);
+    }
+
     dryWetMixer.setWetLatency(useHQ ? oversampling->getLatencyInSamples() : 0.0f);
-    dryWetMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f, mixVal));
+    const bool hasSampleAccurateBandMix = paramsForProcessing.mixValProvider.lfoSignal
+                                          != nullptr;
+    const float initialBandMix = hasSampleAccurateBandMix
+                                     ? paramsForProcessing.mixValProvider.get(0)
+                                     : params.mixVal;
+    dryWetMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f, initialBandMix));
     if (! dryWetMixerPrimed)
         dryWetMixer.reset();
     dryWetMixerPrimed = true;
@@ -522,31 +535,32 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             const int oversamplingRatio = baseSamplesInChunk > 0
                                               ? upsampledLfoOutputs.getNumSamples() / baseSamplesInChunk
                                               : 1;
-            const int totalOversampledSamples = juce::jmax(1, totalNumSamples * oversamplingRatio);
-            const int oversampledSampleOffset = lfoSampleOffset * oversamplingRatio;
+            const int safeOversamplingRatio = juce::jmax(1, oversamplingRatio);
 
             for (int channel = 0; channel < lfoOutputs.getNumChannels(); ++channel)
             {
                 auto* dest = upsampledLfoOutputs.getWritePointer(channel);
                 const auto* src = lfoOutputs.getReadPointer(channel);
 
-                if (lfoOutputs.getNumSamples() == 1 || totalOversampledSamples == 1)
+                if (lfoOutputs.getNumSamples() == 1)
                 {
                     juce::FloatVectorOperations::fill(dest, src[0], upsampledLfoOutputs.getNumSamples());
                     continue;
                 }
 
-                const float step = static_cast<float>(lfoOutputs.getNumSamples() - 1)
-                                   / static_cast<float>(totalOversampledSamples - 1);
+                // LFO samples describe base-rate instants. Repeat each value
+                // for the corresponding oversampled interval so the mapping is
+                // independent of host callback and internal chunk boundaries.
+                // The previous endpoint-normalised interpolation changed its
+                // step with every callback length, producing different audio
+                // for the same timeline when a host repartitioned its blocks.
                 for (int i = 0; i < upsampledLfoOutputs.getNumSamples(); ++i)
                 {
-                    const float sourcePos = static_cast<float>(oversampledSampleOffset + i) * step;
-                    const float boundedSourcePos = juce::jlimit(
-                        0.0f, static_cast<float>(lfoOutputs.getNumSamples() - 1), sourcePos);
-                    const int index0 = static_cast<int>(boundedSourcePos);
-                    const int index1 = juce::jmin(index0 + 1, lfoOutputs.getNumSamples() - 1);
-                    const float frac = boundedSourcePos - static_cast<float>(index0);
-                    dest[i] = src[index0] * (1.0f - frac) + src[index1] * frac;
+                    const int sourceIndex = juce::jlimit(
+                        0,
+                        lfoOutputs.getNumSamples() - 1,
+                        lfoSampleOffset + i / safeOversamplingRatio);
+                    dest[i] = src[sourceIndex];
                 }
             }
         }
@@ -558,6 +572,13 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             paramsForProcessing.biasVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.biasLfoSourceIndex);
         if (juce::isPositiveAndBelow(params.recLfoSourceIndex, upsampledLfoOutputs.getNumChannels()))
             paramsForProcessing.recVal.lfoSignal = upsampledLfoOutputs.getReadPointer(params.recLfoSourceIndex);
+        if (std::abs(paramsForProcessing.shapeMixValProvider.modulationDepth) > 1.0e-6f
+            && juce::isPositiveAndBelow(params.shapeMixLfoSourceIndex,
+                                        upsampledLfoOutputs.getNumChannels()))
+        {
+            paramsForProcessing.shapeMixValProvider.lfoSignal =
+                upsampledLfoOutputs.getReadPointer(params.shapeMixLfoSourceIndex);
+        }
         // Output gain runs after downsampling, so it must use the original-rate
         // LFO. Using the oversampled signal here consumed only its first quarter.
         if (juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels())
@@ -581,9 +602,6 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     }
     else
     {
-        const bool hasCompleteBaseRateLfoChunk = lfoSampleOffset + buffer.getNumSamples()
-                                                 <= lfoOutputs.getNumSamples();
-
         // Bind the original LFO signals to the providers
         if (hasCompleteBaseRateLfoChunk
             && juce::isPositiveAndBelow(params.driveLfoSourceIndex, lfoOutputs.getNumChannels()))
@@ -601,6 +619,14 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             && juce::isPositiveAndBelow(params.outputLfoSourceIndex, lfoOutputs.getNumChannels()))
             paramsForProcessing.outputVal.lfoSignal = lfoOutputs.getReadPointer(params.outputLfoSourceIndex,
                                                                                  lfoSampleOffset);
+        if (hasCompleteBaseRateLfoChunk
+            && std::abs(paramsForProcessing.shapeMixValProvider.modulationDepth) > 1.0e-6f
+            && juce::isPositiveAndBelow(params.shapeMixLfoSourceIndex,
+                                        lfoOutputs.getNumChannels()))
+        {
+            paramsForProcessing.shapeMixValProvider.lfoSignal =
+                lfoOutputs.getReadPointer(params.shapeMixLfoSourceIndex, lfoSampleOffset);
+        }
 
         processDistortion(block,
                           paramsForProcessing,
@@ -653,7 +679,19 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
 
     // 5. Final Dry/Wet Mix. Always run the mixer so its dry delay remains
     // primed and HQ mix=0 stays aligned with wet/other-band paths.
-    dryWetMixer.mixWetSamples(block);
+    if (! hasSampleAccurateBandMix)
+    {
+        dryWetMixer.mixWetSamples(block);
+        return;
+    }
+
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        dryWetMixer.setWetMixProportion(juce::jlimit(
+            0.0f, 1.0f, paramsForProcessing.mixValProvider.get(sample)));
+        dryWetMixer.mixWetSamples(
+            block.getSubBlock(static_cast<size_t>(sample), 1));
+    }
 }
 
 void BandProcessor::processBypassed(juce::AudioBuffer<float>& buffer, bool useHQ)
@@ -689,8 +727,13 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // stale Mix value must not silently blend Drive back to the dry signal.
     // Keep the existing Shape-on sound, but make Shape-off bypass only the
     // Shape controls (Bias/Rectification/DC) rather than the Drive module.
+    const bool hasSampleAccurateShapeMix = params.isShapeEnabled
+                                           && params.shapeMixValProvider.lfoSignal != nullptr;
+    const float requestedShapeMix = hasSampleAccurateShapeMix
+                                        ? params.shapeMixValProvider.get(0)
+                                        : params.shapeMixVal;
     const float effectiveShapeMix = params.isShapeEnabled
-                                      ? juce::jlimit(0.0f, 1.0f, params.shapeMixVal)
+                                      ? juce::jlimit(0.0f, 1.0f, requestedShapeMix)
                                       : 1.0f;
     shapeMixer.setWetMixProportion(effectiveShapeMix);
     if (! shapeMixerPrimed)
@@ -843,7 +886,20 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         }
     }
 
-    shapeMixer.mixWetSamples(blockToProcess);
+    if (! hasSampleAccurateShapeMix)
+    {
+        shapeMixer.mixWetSamples(blockToProcess);
+    }
+    else
+    {
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            shapeMixer.setWetMixProportion(juce::jlimit(
+                0.0f, 1.0f, params.shapeMixValProvider.get(sample)));
+            shapeMixer.mixWetSamples(
+                blockToProcess.getSubBlock(static_cast<size_t>(sample), 1));
+        }
+    }
 
     if (params.isDcFilterEnabled && ! params.isHQ)
     {
@@ -3064,6 +3120,12 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 setupProvider(params.biasVal, params.biasLfoSourceIndex, parameters.bias);
                 setupProvider(params.recVal, params.recLfoSourceIndex, parameters.rec);
                 setupProvider(params.outputVal, params.outputLfoSourceIndex, parameters.output);
+                setupProvider(params.mixValProvider,
+                              params.mixLfoSourceIndex,
+                              parameters.mix);
+                setupProvider(params.shapeMixValProvider,
+                              params.shapeMixLfoSourceIndex,
+                              parameters.shapeMix);
 
                 // Linked output compensation is a DSP rule, not an editor side
                 // effect. It follows the unmodulated Drive base, matching the
@@ -3080,8 +3142,8 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 params.width = getBlockModulatedValue(parameters.width, lfoOutputs);
                 params.pan = getBlockModulatedValue(parameters.pan, lfoOutputs);
                 params.widthMixVal = getBlockModulatedValue(parameters.widthMix, lfoOutputs);
-                params.mixVal = getBlockModulatedValue(parameters.mix, lfoOutputs);
-                params.shapeMixVal = getBlockModulatedValue(parameters.shapeMix, lfoOutputs);
+                params.mixVal = params.mixValProvider.baseValue;
+                params.shapeMixVal = params.shapeMixValProvider.baseValue;
 
                 realtimeModulatedThresholds[i].store(params.compThreshold);
 

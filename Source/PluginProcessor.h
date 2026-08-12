@@ -35,6 +35,7 @@ struct BandProcessingParameters
 
     ModulatedValueProvider outputVal;
     float mixVal { 1.0f };
+    ModulatedValueProvider mixValProvider;
     float compThreshold { 0.0f };
     float compRatio { 1.0f };
     float compAttack { 10.0f };
@@ -56,12 +57,15 @@ struct BandProcessingParameters
     ModulatedValueProvider biasVal;
     ModulatedValueProvider recVal;
     float shapeMixVal { 1.0f };
+    ModulatedValueProvider shapeMixValProvider;
 
     // LFO source indices for the above parameters (-1 if not modulated)
     int driveLfoSourceIndex = -1;
     int biasLfoSourceIndex = -1;
     int recLfoSourceIndex = -1;
     int outputLfoSourceIndex = -1;
+    int mixLfoSourceIndex = -1;
+    int shapeMixLfoSourceIndex = -1;
 
 };
 
@@ -128,7 +132,6 @@ private:
                       const BandProcessingParameters& params,
                       const juce::AudioBuffer<float>& lfoOutputs,
                       int lfoSampleOffset,
-                      int totalNumSamples,
                       float inputPeak,
                       bool updateReductionMeter);
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,

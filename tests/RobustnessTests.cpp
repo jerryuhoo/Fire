@@ -300,6 +300,29 @@ TEST_CASE("LFO Smooth row changes crossfade without output steps", "[lfo][waveta
     CHECK(std::abs(engine.process() - previous) < 0.01f);
 }
 
+TEST_CASE("Restored LFO Smooth value is active on the first sample", "[lfo][wavetable][smoothing][state]")
+{
+    constexpr double sampleRate = 48000.0;
+
+    LfoData shape;
+    shape.points = { { 0.0f, 0.0f }, { 0.49f, 0.0f },
+                     { 0.5f, 1.0f }, { 1.0f, 1.0f } };
+    shape.curvatures = { 0.0f, 0.0f, 0.0f };
+    shape.sanitise();
+
+    LfoEngine engine;
+    engine.stageShape(shape);
+    engine.publishStagedShape();
+    engine.prepare({ sampleRate, 64, 1 });
+    engine.setSmoothness(1.0f);
+    engine.setPhase(0.5f);
+    engine.setPhaseDelta(0.0f);
+
+    const auto smoothReference = makeReferenceLfoTable(shape, 1.0f);
+    CHECK(engine.process()
+          == Catch::Approx(interpolateReferenceLfo(smoothReference, 0.5f)).margin(2.0e-6f));
+}
+
 TEST_CASE("Delay keeps independent channel histories and an exact delay", "[delay][robustness]")
 {
     Delay delay { 2 };

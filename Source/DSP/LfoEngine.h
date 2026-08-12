@@ -85,6 +85,7 @@ private:
     int stagedBank = 1;
     int activeSmoothnessStep = 0;
     bool stagedBankReady = false;
+    bool hasProcessedSample = false;
 
     // Smooth parameter changes crossfade from the currently audible table to
     // the newly selected prebuilt row. Keeping a private snapshot makes rapid

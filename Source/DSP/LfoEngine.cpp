@@ -20,6 +20,7 @@ void LfoEngine::reset()
     publishedPhase.store(phase, std::memory_order_relaxed);
     publishedOutput.store(lastOutput, std::memory_order_relaxed);
     transitionSamplesProcessed = transitionLengthSamples;
+    hasProcessedSample = false;
 }
 
 void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
@@ -30,6 +31,7 @@ void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
                                       : 44100.0;
     transitionLengthSamples = juce::jmax(1, juce::roundToInt(safeSampleRate * 0.01));
     transitionSamplesProcessed = transitionLengthSamples;
+    hasProcessedSample = false;
 }
 
 void LfoEngine::stageShape(const LfoData& shapeData)
@@ -170,6 +172,13 @@ void LfoEngine::setSmoothness(float newSmoothness) noexcept
     if (newStep == activeSmoothnessStep)
         return;
 
+    if (! hasProcessedSample || transitionLengthSamples <= 0)
+    {
+        activeSmoothnessStep = newStep;
+        transitionSamplesProcessed = transitionLengthSamples;
+        return;
+    }
+
     captureCurrentAudibleTable();
     activeSmoothnessStep = newStep;
     beginTableTransition();
@@ -222,10 +231,13 @@ float LfoEngine::process()
         && transitionSamplesProcessed < transitionLengthSamples)
     {
         ++transitionSamplesProcessed;
-        const float amount = static_cast<float>(transitionSamplesProcessed)
-                             / static_cast<float>(transitionLengthSamples);
-        const float sourceOutput = lookupTable(transitionSourceTable, safePhase);
-        unipolarOutput = sourceOutput + amount * (unipolarOutput - sourceOutput);
+        if (transitionSamplesProcessed < transitionLengthSamples)
+        {
+            const float amount = static_cast<float>(transitionSamplesProcessed)
+                                 / static_cast<float>(transitionLengthSamples);
+            const float sourceOutput = lookupTable(transitionSourceTable, safePhase);
+            unipolarOutput = sourceOutput + amount * (unipolarOutput - sourceOutput);
+        }
     }
 
     // Advance the phase using the externally calculated delta
@@ -236,6 +248,7 @@ float LfoEngine::process()
 
     // Convert the output to bipolar [-1, 1] for modulation
     lastOutput = unipolarOutput;
+    hasProcessedSample = true;
     publishedPhase.store(phase, std::memory_order_relaxed);
     publishedOutput.store(lastOutput, std::memory_order_relaxed);
     return unipolarOutput;

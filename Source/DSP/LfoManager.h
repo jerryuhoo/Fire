@@ -126,6 +126,7 @@ private:
     void updatePublishedRoutingState() noexcept;
 
     float mapRateSyncIndexToBeatMultiplier(int index) const;
+    float getSyncCycleLengthInQuarterNotes(int index, float quarterNotesPerBar) const noexcept;
 
     // =============================================================================
     // SECTION: Member Variables

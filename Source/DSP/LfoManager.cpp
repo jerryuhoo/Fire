@@ -328,6 +328,7 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
     juce::Optional<juce::AudioPlayHead::PositionInfo> positionInfo;
     bool transportIsPlaying = false;
     double currentBpm = 120.0;
+    float quarterNotesPerBar = 4.0f;
 
     if (playHead)
     {
@@ -338,6 +339,15 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
             if (auto bpm = positionInfo->getBpm())
                 if (std::isfinite(*bpm) && *bpm > 0.0)
                     currentBpm = *bpm;
+
+            if (const auto signature = positionInfo->getTimeSignature();
+                signature && signature->numerator > 0 && signature->denominator > 0)
+            {
+                const float candidate = static_cast<float>(signature->numerator) * 4.0f
+                                        / static_cast<float>(signature->denominator);
+                if (std::isfinite(candidate) && candidate > 0.0f)
+                    quarterNotesPerBar = candidate;
+            }
         }
     }
 
@@ -374,8 +384,8 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
         if (isInSyncMode)
         {
-            const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
-            const float beatsPerCycle = beatMultiplier * 4.0f;
+            const float beatsPerCycle = getSyncCycleLengthInQuarterNotes(rateIndex,
+                                                                          quarterNotesPerBar);
             if (beatsPerCycle > 0.0f)
             {
                 const double samplesPerCycle = (static_cast<double>(beatsPerCycle) / currentBpm)
@@ -396,8 +406,8 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
             {
                 if (auto ppq = positionInfo->getPpqPosition())
                 {
-                    const float beatMultiplier = mapRateSyncIndexToBeatMultiplier(rateIndex);
-                    const float cycleLengthInBeats = beatMultiplier * 4.0f;
+                    const float cycleLengthInBeats = getSyncCycleLengthInQuarterNotes(
+                        rateIndex, quarterNotesPerBar);
 
                     if (cycleLengthInBeats > 0.0f && std::isfinite(*ppq))
                         lfoEngines[static_cast<size_t>(i)].setPhase(wrapPhase(*ppq / cycleLengthInBeats + phaseOffset));
@@ -420,6 +430,20 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
         for (int sample = 0; sample < numSamples; ++sample)
             writer[sample] = engine.process();
     }
+}
+
+float LfoManager::getSyncCycleLengthInQuarterNotes(int index,
+                                                   float quarterNotesPerBar) const noexcept
+{
+    const float safeQuarterNotesPerBar = std::isfinite(quarterNotesPerBar)
+                                             && quarterNotesPerBar > 0.0f
+                                         ? quarterNotesPerBar
+                                         : 4.0f;
+
+    if (index >= 11 && index <= 13)
+        return safeQuarterNotesPerBar * static_cast<float>(1 << (index - 11));
+
+    return mapRateSyncIndexToBeatMultiplier(index) * 4.0f;
 }
 
 float LfoManager::mapRateSyncIndexToBeatMultiplier(int index) const

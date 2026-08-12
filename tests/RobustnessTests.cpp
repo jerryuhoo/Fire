@@ -13,6 +13,14 @@
 
 namespace
 {
+class TestPlayHead final : public juce::AudioPlayHead
+{
+public:
+    juce::Optional<PositionInfo> getPosition() const override { return position; }
+
+    PositionInfo position;
+};
+
 void setParameterNormalised(FireAudioProcessor& processor,
                             const juce::String& parameterID,
                             float normalisedValue)
@@ -290,6 +298,48 @@ TEST_CASE("Sample-accurate bipolar modulation matches block modulation depth", "
     CHECK(provider.get(0) == Catch::Approx(0.75f));
     provider.isBipolar = false;
     CHECK(provider.get(0) == Catch::Approx(1.0f));
+}
+
+TEST_CASE("Bar-synchronised LFO rates follow the host time signature", "[lfo][sync]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto& manager = processor.getLfoManager();
+    manager.prepare({ 48000.0, 1, 4 });
+
+    setParameterValue(processor, ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0), 1.0f);
+    setParameterValue(processor, ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, 0), 11.0f);
+
+    TestPlayHead playHead;
+    playHead.position.setIsPlaying(true);
+    playHead.position.setBpm(120.0);
+    playHead.position.setPpqPosition(0.0);
+
+    juce::AudioBuffer<float> output(4, 1);
+    for (const auto signature : { juce::AudioPlayHead::TimeSignature { 3, 4 },
+                                  juce::AudioPlayHead::TimeSignature { 6, 8 },
+                                  juce::AudioPlayHead::TimeSignature { 5, 4 } })
+    {
+        manager.reset();
+        playHead.position.setTimeSignature(signature);
+        manager.processBlock(output, 48000.0f, &playHead, 1);
+
+        const float quarterNotesPerBar = static_cast<float>(signature.numerator) * 4.0f
+                                         / static_cast<float>(signature.denominator);
+        const float expectedDelta = 1.0f / (quarterNotesPerBar * 0.5f * 48000.0f);
+        CAPTURE(signature.numerator, signature.denominator,
+                manager.getLfoPhase(0), expectedDelta);
+        CHECK(manager.getLfoPhase(0) == Catch::Approx(expectedDelta).margin(1.0e-8f));
+    }
+
+    // Two bars in 3/4 contain six quarter notes.
+    manager.reset();
+    setParameterValue(processor, ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, 0), 12.0f);
+    playHead.position.setTimeSignature(juce::AudioPlayHead::TimeSignature { 3, 4 });
+    playHead.position.setPpqPosition(1.5);
+    manager.processBlock(output, 48000.0f, &playHead, 1);
+    const float twoBarDelta = 1.0f / (6.0f * 0.5f * 48000.0f);
+    CHECK(manager.getLfoPhase(0) == Catch::Approx(0.25f + twoBarDelta).margin(1.0e-7f));
 }
 
 TEST_CASE("Logic clipping remains monotonic and saturated at high drive", "[distortion][robustness]")

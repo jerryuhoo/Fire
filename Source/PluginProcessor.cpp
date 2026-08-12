@@ -504,6 +504,30 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         paramsForProcessing.mixValProvider.lfoSignal =
             lfoOutputs.getReadPointer(params.mixLfoSourceIndex, lfoSampleOffset);
     }
+    if (hasCompleteBaseRateLfoChunk
+        && std::abs(paramsForProcessing.widthValProvider.modulationDepth) > 1.0e-6f
+        && juce::isPositiveAndBelow(params.widthLfoSourceIndex,
+                                    lfoOutputs.getNumChannels()))
+    {
+        paramsForProcessing.widthValProvider.lfoSignal =
+            lfoOutputs.getReadPointer(params.widthLfoSourceIndex, lfoSampleOffset);
+    }
+    if (hasCompleteBaseRateLfoChunk
+        && std::abs(paramsForProcessing.panValProvider.modulationDepth) > 1.0e-6f
+        && juce::isPositiveAndBelow(params.panLfoSourceIndex,
+                                    lfoOutputs.getNumChannels()))
+    {
+        paramsForProcessing.panValProvider.lfoSignal =
+            lfoOutputs.getReadPointer(params.panLfoSourceIndex, lfoSampleOffset);
+    }
+    if (hasCompleteBaseRateLfoChunk
+        && std::abs(paramsForProcessing.widthMixValProvider.modulationDepth) > 1.0e-6f
+        && juce::isPositiveAndBelow(params.widthMixLfoSourceIndex,
+                                    lfoOutputs.getNumChannels()))
+    {
+        paramsForProcessing.widthMixValProvider.lfoSignal =
+            lfoOutputs.getReadPointer(params.widthMixLfoSourceIndex, lfoSampleOffset);
+    }
 
     dryWetMixer.setWetLatency(useHQ ? oversampling->getLatencyInSamples() : 0.0f);
     const bool hasSampleAccurateBandMix = paramsForProcessing.mixValProvider.lfoSignal
@@ -661,16 +685,59 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         // disabled hard-switched between wet and dry samples at a block
         // boundary, which could produce an audible click at extreme Width/Pan
         // settings.
+        const bool hasSampleAccurateWidth = paramsForProcessing.widthValProvider.lfoSignal != nullptr
+                                            || paramsForProcessing.panValProvider.lfoSignal != nullptr;
+        const bool hasSampleAccurateWidthMix = params.isWidthEnabled
+                                               && paramsForProcessing.widthMixValProvider.lfoSignal != nullptr;
+        const float initialWidthMix = hasSampleAccurateWidthMix
+                                          ? paramsForProcessing.widthMixValProvider.get(0)
+                                          : params.widthMixVal;
         const float effectiveWidthMix = params.isWidthEnabled
-                                            ? juce::jlimit(0.0f, 1.0f, params.widthMixVal)
+                                            ? juce::jlimit(0.0f, 1.0f, initialWidthMix)
                                             : 0.0f;
         widthMixer.setWetMixProportion(effectiveWidthMix);
         if (! widthMixerPrimed)
             widthMixer.reset();
         widthMixerPrimed = true;
         widthMixer.pushDrySamples(postDistortionContext.getOutputBlock());
-        this->widthProcessor.process(buffer.getWritePointer(0), buffer.getWritePointer(1), params.width, params.pan, buffer.getNumSamples());
-        widthMixer.mixWetSamples(postDistortionContext.getOutputBlock());
+        if (hasSampleAccurateWidth)
+        {
+            auto widthProvider = paramsForProcessing.widthValProvider;
+            auto panProvider = paramsForProcessing.panValProvider;
+            if (widthProvider.lfoSignal == nullptr)
+                widthProvider.baseValue = params.width;
+            if (panProvider.lfoSignal == nullptr)
+                panProvider.baseValue = params.pan;
+            this->widthProcessor.process(buffer.getWritePointer(0),
+                                         buffer.getWritePointer(1),
+                                         widthProvider,
+                                         panProvider,
+                                         buffer.getNumSamples());
+        }
+        else
+        {
+            this->widthProcessor.process(buffer.getWritePointer(0),
+                                         buffer.getWritePointer(1),
+                                         params.width,
+                                         params.pan,
+                                         buffer.getNumSamples());
+        }
+
+        if (! hasSampleAccurateWidthMix)
+        {
+            widthMixer.mixWetSamples(postDistortionContext.getOutputBlock());
+        }
+        else
+        {
+            auto widthBlock = postDistortionContext.getOutputBlock();
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                widthMixer.setWetMixProportion(juce::jlimit(
+                    0.0f, 1.0f, paramsForProcessing.widthMixValProvider.get(sample)));
+                widthMixer.mixWetSamples(
+                    widthBlock.getSubBlock(static_cast<size_t>(sample), 1));
+            }
+        }
     }
 
     // 4. Post-Distortion Effects
@@ -3126,6 +3193,15 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 setupProvider(params.shapeMixValProvider,
                               params.shapeMixLfoSourceIndex,
                               parameters.shapeMix);
+                setupProvider(params.widthValProvider,
+                              params.widthLfoSourceIndex,
+                              parameters.width);
+                setupProvider(params.panValProvider,
+                              params.panLfoSourceIndex,
+                              parameters.pan);
+                setupProvider(params.widthMixValProvider,
+                              params.widthMixLfoSourceIndex,
+                              parameters.widthMix);
 
                 // Linked output compensation is a DSP rule, not an editor side
                 // effect. It follows the unmodulated Drive base, matching the
@@ -3139,9 +3215,9 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
                 params.compAttack = getBlockModulatedValue(parameters.compressorAttack, lfoOutputs);
                 params.compRelease = getBlockModulatedValue(parameters.compressorRelease, lfoOutputs);
                 params.compMixVal = getBlockModulatedValue(parameters.compressorMix, lfoOutputs);
-                params.width = getBlockModulatedValue(parameters.width, lfoOutputs);
-                params.pan = getBlockModulatedValue(parameters.pan, lfoOutputs);
-                params.widthMixVal = getBlockModulatedValue(parameters.widthMix, lfoOutputs);
+                params.width = params.widthValProvider.baseValue;
+                params.pan = params.panValProvider.baseValue;
+                params.widthMixVal = params.widthMixValProvider.baseValue;
                 params.mixVal = params.mixValProvider.baseValue;
                 params.shapeMixVal = params.shapeMixValProvider.baseValue;
 

@@ -43,8 +43,11 @@ struct BandProcessingParameters
     float compMixVal { 1.0f };
     bool isCompEnabled { false };
     float width { 0.5f };
+    ModulatedValueProvider widthValProvider;
     float pan { 0.0f };
+    ModulatedValueProvider panValProvider;
     float widthMixVal { 1.0f };
+    ModulatedValueProvider widthMixValProvider;
     bool isDriveEnabled { false };
     bool isWidthEnabled { false };
     bool isShapeEnabled { false };
@@ -66,6 +69,9 @@ struct BandProcessingParameters
     int outputLfoSourceIndex = -1;
     int mixLfoSourceIndex = -1;
     int shapeMixLfoSourceIndex = -1;
+    int widthLfoSourceIndex = -1;
+    int panLfoSourceIndex = -1;
+    int widthMixLfoSourceIndex = -1;
 
 };
 

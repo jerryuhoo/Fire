@@ -30,29 +30,76 @@ void WidthProcessor::reset() noexcept
 
 void WidthProcessor::process(float* channeldataL, float* channeldataR, float width, float pan, int numSamples) noexcept
 {
+    processInternal(channeldataL,
+                    channeldataR,
+                    width,
+                    pan,
+                    nullptr,
+                    nullptr,
+                    numSamples);
+}
+
+void WidthProcessor::process(float* channeldataL,
+                             float* channeldataR,
+                             const ModulatedValueProvider& width,
+                             const ModulatedValueProvider& pan,
+                             int numSamples) noexcept
+{
+    processInternal(channeldataL,
+                    channeldataR,
+                    width.baseValue,
+                    pan.baseValue,
+                    width.lfoSignal != nullptr ? &width : nullptr,
+                    pan.lfoSignal != nullptr ? &pan : nullptr,
+                    numSamples);
+}
+
+void WidthProcessor::processInternal(float* channeldataL,
+                                     float* channeldataR,
+                                     float width,
+                                     float pan,
+                                     const ModulatedValueProvider* widthProvider,
+                                     const ModulatedValueProvider* panProvider,
+                                     int numSamples) noexcept
+{
     if (channeldataL == nullptr || channeldataR == nullptr || numSamples <= 0)
         return;
 
-    const float safeWidth = std::isfinite(width) ? juce::jlimit(0.0f, 1.0f, width) : 0.5f;
-    const float safePan = std::isfinite(pan) ? juce::jlimit(-1.0f, 1.0f, pan) : 0.0f;
+    const auto getSafeWidth = [widthProvider, width](int sample)
+    {
+        const float value = widthProvider != nullptr ? widthProvider->get(sample) : width;
+        return std::isfinite(value) ? juce::jlimit(0.0f, 1.0f, value) : 0.5f;
+    };
+    const auto getSafePan = [panProvider, pan](int sample)
+    {
+        const float value = panProvider != nullptr ? panProvider->get(sample) : pan;
+        return std::isfinite(value) ? juce::jlimit(-1.0f, 1.0f, value) : 0.0f;
+    };
+    const float initialWidth = getSafeWidth(0);
+    const float initialPan = getSafePan(0);
     constexpr float inverseSqrtTwo = 0.7071067811865475244f;
 
     if (! parametersPrimed)
     {
         // The first block must preserve the old immediate-start behaviour.
         // Subsequent changes are ramped to avoid block-boundary zipper noise.
-        widthSmoother.setCurrentAndTargetValue(safeWidth);
-        panSmoother.setCurrentAndTargetValue(safePan);
+        widthSmoother.setCurrentAndTargetValue(initialWidth);
+        panSmoother.setCurrentAndTargetValue(initialPan);
         parametersPrimed = true;
     }
     else
     {
-        widthSmoother.setTargetValue(safeWidth);
-        panSmoother.setTargetValue(safePan);
+        widthSmoother.setTargetValue(initialWidth);
+        panSmoother.setTargetValue(initialPan);
     }
 
     for (int i = 0; i < numSamples; ++i)
     {
+        if (i > 0 && widthProvider != nullptr)
+            widthSmoother.setTargetValue(getSafeWidth(i));
+        if (i > 0 && panProvider != nullptr)
+            panSmoother.setTargetValue(getSafePan(i));
+
         const float currentWidth = widthSmoother.getNextValue();
         const float currentPan = panSmoother.getNextValue();
         const float midGain = 2.0f * (1.0f - currentWidth);

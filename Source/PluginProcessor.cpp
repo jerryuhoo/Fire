@@ -223,6 +223,85 @@ void updateButterworthCutFilter(CutFilter& chain,
 
     setCutStageBypassed(chain, stageCount);
 }
+
+template <typename StageProcessor>
+void processGlobalFilterStage(StageProcessor& leftProcessor,
+                              StageProcessor& rightProcessor,
+                              juce::dsp::AudioBlock<float>& fullBlock,
+                              juce::AudioBuffer<float>& scratchBuffer,
+                              juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>& wetMix,
+                              int startSample,
+                              int numSamples) noexcept
+{
+    if (numSamples <= 0 || fullBlock.getNumChannels() == 0)
+        return;
+
+    // The fully-enabled steady state retains the original in-place processing
+    // path and its exact processor ordering. During a transition or while a
+    // stage is bypassed, keep a private wet shadow running and blend (or
+    // discard) it without disturbing the audible dry signal.
+    if (! wetMix.isSmoothing() && wetMix.getCurrentValue() == 1.0f)
+    {
+        auto stageBlock = fullBlock.getSubBlock(static_cast<size_t>(startSample),
+                                                static_cast<size_t>(numSamples));
+        auto leftBlock = stageBlock.getSingleChannelBlock(0);
+        leftProcessor.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
+
+        if (stageBlock.getNumChannels() > 1)
+        {
+            auto rightBlock = stageBlock.getSingleChannelBlock(1);
+            rightProcessor.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
+        }
+        return;
+    }
+
+    const int scratchCapacity = scratchBuffer.getNumSamples();
+    jassert(scratchCapacity > 0);
+    if (scratchCapacity <= 0)
+        return;
+
+    int processed = 0;
+    while (processed < numSamples)
+    {
+        const int chunkSamples = juce::jmin(scratchCapacity, numSamples - processed);
+        auto stageBlock = fullBlock.getSubBlock(static_cast<size_t>(startSample + processed),
+                                                static_cast<size_t>(chunkSamples));
+        const int processedChannels = stageBlock.getNumChannels() > 1 ? 2 : 1;
+        auto scratchBlock = juce::dsp::AudioBlock<float>(scratchBuffer)
+                                .getSubsetChannelBlock(0, static_cast<size_t>(processedChannels))
+                                .getSubBlock(0, static_cast<size_t>(chunkSamples));
+        scratchBlock.copyFrom(stageBlock.getSubsetChannelBlock(
+            0, static_cast<size_t>(processedChannels)));
+
+        auto scratchLeft = scratchBlock.getSingleChannelBlock(0);
+        leftProcessor.process(juce::dsp::ProcessContextReplacing<float>(scratchLeft));
+
+        if (processedChannels > 1)
+        {
+            auto scratchRight = scratchBlock.getSingleChannelBlock(1);
+            rightProcessor.process(juce::dsp::ProcessContextReplacing<float>(scratchRight));
+        }
+
+        if (wetMix.isSmoothing() || wetMix.getCurrentValue() != 0.0f)
+        {
+            for (int sample = 0; sample < chunkSamples; ++sample)
+            {
+                const auto mix = wetMix.getNextValue();
+                for (int channel = 0; channel < processedChannels; ++channel)
+                {
+                    const auto dry = stageBlock.getSample(channel, sample);
+                    const auto wet = scratchBlock.getSample(channel, sample);
+                    const auto output = mix <= 0.0f ? dry
+                                      : mix >= 1.0f ? wet
+                                                    : dry + mix * (wet - dry);
+                    stageBlock.setSample(channel, sample, output);
+                }
+            }
+        }
+
+        processed += chunkSamples;
+    }
+}
 } // namespace
 
 static void applyGain(juce::AudioBuffer<float>& buffer,
@@ -1238,6 +1317,22 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     updateFilter(safeSampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
+    globalFilterStageDryBuffer.setSize(outputChannels, maximumBlockSize);
+    globalFilterStageDryBuffer.clear();
+
+    constexpr double stageBypassRampSeconds = 0.01;
+    const std::array<float, numGlobalFilterStages> initialStageMix {
+        initialFilterSettings.lowCutBypassed ? 0.0f : 1.0f,
+        initialFilterSettings.peakBypassed ? 0.0f : 1.0f,
+        initialFilterSettings.highCutBypassed ? 0.0f : 1.0f,
+        initialFilterSettings.lowCutBypassed ? 0.0f : 1.0f,
+        initialFilterSettings.highCutBypassed ? 0.0f : 1.0f
+    };
+    for (size_t stage = 0; stage < globalFilterStageMix.size(); ++stage)
+    {
+        globalFilterStageMix[stage].reset(safeSampleRate, stageBypassRampSeconds);
+        globalFilterStageMix[stage].setCurrentAndTargetValue(initialStageMix[stage]);
+    }
 
     // multiband filters
     mBuffer1.setSize(outputChannels, maximumBlockSize);
@@ -1421,6 +1516,15 @@ void FireAudioProcessor::performReset()
     synchroniseMultibandTopologyResetState();
     leftChain.reset();
     rightChain.reset();
+    const std::array<float, numGlobalFilterStages> initialStageMix {
+        loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f ? 0.0f : 1.0f,
+        loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f ? 0.0f : 1.0f,
+        loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f ? 0.0f : 1.0f,
+        loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f ? 0.0f : 1.0f,
+        loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f ? 0.0f : 1.0f
+    };
+    for (size_t stage = 0; stage < globalFilterStageMix.size(); ++stage)
+        globalFilterStageMix[stage].setCurrentAndTargetValue(initialStageMix[stage]);
     globalFilterMixer.reset();
     globalFilterMixerPrimed = false;
     dryWetMixerGlobal.reset();
@@ -2055,8 +2159,10 @@ void FireAudioProcessor::updatePeakFilter(const ChainSettings& chainSettings, do
         chainSettings.peakQuality,
         juce::Decibels::decibelsToGain(chainSettings.peakGainInDecibels));
 
-    leftChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
-    rightChain.setBypassed<ChainPositions::Peak>(chainSettings.peakBypassed);
+    // Logical stage bypassing is crossfaded after the processor. Keep the wet
+    // filter running so its recursive state is ready when the stage returns.
+    leftChain.setBypassed<ChainPositions::Peak>(false);
+    rightChain.setBypassed<ChainPositions::Peak>(false);
     *leftChain.get<ChainPositions::Peak>().coefficients = peakCoefficients;
     *rightChain.get<ChainPositions::Peak>().coefficients = peakCoefficients;
 }
@@ -2072,10 +2178,10 @@ void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings,
         chainSettings.lowCutQuality,
         juce::Decibels::decibelsToGain(chainSettings.lowCutGainInDecibels));
 
-    leftChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
-    rightChain.setBypassed<ChainPositions::LowCut>(chainSettings.lowCutBypassed);
-    leftChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
-    rightChain.setBypassed<ChainPositions::LowCutQ>(chainSettings.lowCutBypassed);
+    leftChain.setBypassed<ChainPositions::LowCut>(false);
+    rightChain.setBypassed<ChainPositions::LowCut>(false);
+    leftChain.setBypassed<ChainPositions::LowCutQ>(false);
+    rightChain.setBypassed<ChainPositions::LowCutQ>(false);
 
     updateButterworthCutFilter(rightLowCut,
                                chainSettings.lowCutFreq,
@@ -2103,10 +2209,10 @@ void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings
         chainSettings.highCutQuality,
         juce::Decibels::decibelsToGain(chainSettings.highCutGainInDecibels));
 
-    leftChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
-    rightChain.setBypassed<ChainPositions::HighCut>(chainSettings.highCutBypassed);
-    leftChain.setBypassed<ChainPositions::HighCutQ>(chainSettings.highCutBypassed);
-    rightChain.setBypassed<ChainPositions::HighCutQ>(chainSettings.highCutBypassed);
+    leftChain.setBypassed<ChainPositions::HighCut>(false);
+    rightChain.setBypassed<ChainPositions::HighCut>(false);
+    leftChain.setBypassed<ChainPositions::HighCutQ>(false);
+    rightChain.setBypassed<ChainPositions::HighCutQ>(false);
 
     updateButterworthCutFilter(leftHighCut,
                                chainSettings.highCutFreq,
@@ -3000,20 +3106,58 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
         auto block = juce::dsp::AudioBlock<float>(buffer);
 
+        const float lowCutMix = loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f
+                                    ? 0.0f
+                                    : 1.0f;
+        const float peakMix = loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f
+                                  ? 0.0f
+                                  : 1.0f;
+        const float highCutMix = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f
+                                     ? 0.0f
+                                     : 1.0f;
+        globalFilterStageMix[lowCutStage].setTargetValue(lowCutMix);
+        globalFilterStageMix[peakStage].setTargetValue(peakMix);
+        globalFilterStageMix[highCutStage].setTargetValue(highCutMix);
+        globalFilterStageMix[lowCutQStage].setTargetValue(lowCutMix);
+        globalFilterStageMix[highCutQStage].setTargetValue(highCutMix);
+
         const auto processRange = [&] (int startSample, int numSamples)
         {
-            auto leftBlock = block.getSingleChannelBlock(0)
-                                  .getSubBlock(static_cast<size_t>(startSample),
-                                               static_cast<size_t>(numSamples));
-            leftChain.process(juce::dsp::ProcessContextReplacing<float>(leftBlock));
-
-            if (buffer.getNumChannels() > 1)
-            {
-                auto rightBlock = block.getSingleChannelBlock(1)
-                                       .getSubBlock(static_cast<size_t>(startSample),
-                                                    static_cast<size_t>(numSamples));
-                rightChain.process(juce::dsp::ProcessContextReplacing<float>(rightBlock));
-            }
+            processGlobalFilterStage(leftChain.get<ChainPositions::LowCut>(),
+                                     rightChain.get<ChainPositions::LowCut>(),
+                                     block,
+                                     globalFilterStageDryBuffer,
+                                     globalFilterStageMix[lowCutStage],
+                                     startSample,
+                                     numSamples);
+            processGlobalFilterStage(leftChain.get<ChainPositions::Peak>(),
+                                     rightChain.get<ChainPositions::Peak>(),
+                                     block,
+                                     globalFilterStageDryBuffer,
+                                     globalFilterStageMix[peakStage],
+                                     startSample,
+                                     numSamples);
+            processGlobalFilterStage(leftChain.get<ChainPositions::HighCut>(),
+                                     rightChain.get<ChainPositions::HighCut>(),
+                                     block,
+                                     globalFilterStageDryBuffer,
+                                     globalFilterStageMix[highCutStage],
+                                     startSample,
+                                     numSamples);
+            processGlobalFilterStage(leftChain.get<ChainPositions::LowCutQ>(),
+                                     rightChain.get<ChainPositions::LowCutQ>(),
+                                     block,
+                                     globalFilterStageDryBuffer,
+                                     globalFilterStageMix[lowCutQStage],
+                                     startSample,
+                                     numSamples);
+            processGlobalFilterStage(leftChain.get<ChainPositions::HighCutQ>(),
+                                     rightChain.get<ChainPositions::HighCutQ>(),
+                                     block,
+                                     globalFilterStageDryBuffer,
+                                     globalFilterStageMix[highCutQStage],
+                                     startSample,
+                                     numSamples);
         };
 
         const auto isFilterSmoothing = [&]

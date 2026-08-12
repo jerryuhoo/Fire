@@ -443,6 +443,20 @@ private:
     juce::dsp::DryWetMixer<float> globalFilterMixer { 0 };
     bool globalFilterMixerPrimed = false;
 
+    enum GlobalFilterStageIndex : size_t
+    {
+        lowCutStage,
+        peakStage,
+        highCutStage,
+        lowCutQStage,
+        highCutQStage,
+        numGlobalFilterStages
+    };
+
+    std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>,
+               numGlobalFilterStages> globalFilterStageMix;
+    juce::AudioBuffer<float> globalFilterStageDryBuffer;
+
     ChainSettings cachedGlobalFilterSettings {};
     double cachedGlobalFilterSampleRate = 0.0;
     bool globalFilterCacheValid = false;

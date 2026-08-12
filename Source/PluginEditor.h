@@ -173,8 +173,7 @@ private:
     float assignModePulseAlpha = 0.0f;
     float assignModePulseAngle = 0.0f;
 
-    int focusIndex = 0;
-    void updateWhenChangingFocus();
+    void updateWhenChangingFocus(int bandIndex);
     void updateMainPanelVisibility();
     void rebuildBackgroundCache();
     void initialiseHeaderEmbers();
@@ -184,8 +183,6 @@ private:
     void selectWorkspace(int targetWorkspace, bool animateSelection);
 
     void buttonClicked(juce::Button* clickedButton) override;
-    void mouseDown(const juce::MouseEvent& e) override;
-
     // init editor
     void initEditor();
 

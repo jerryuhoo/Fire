@@ -311,6 +311,7 @@ namespace ParameterIDAndName
             { SHAPE_MIX_NAME, SHAPE_MIX_ID },
             { BAND_ENABLE_NAME, BAND_ENABLE_ID },
             { BAND_SOLO_NAME, BAND_SOLO_ID },
+            { DRIVE_BYPASS_NAME, DRIVE_BYPASS_ID },
             { COMP_BYPASS_NAME, COMP_BYPASS_ID },
             { WIDTH_BYPASS_NAME, WIDTH_BYPASS_ID },
             { SHAPE_BYPASS_NAME, SHAPE_BYPASS_ID },

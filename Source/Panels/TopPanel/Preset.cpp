@@ -132,6 +132,10 @@ namespace state
             manager.getModulationRoutings() = std::move(routingsToLoad);
         }
 
+        // A preset/A-B swap may replace every logical band while retaining the
+        // same NUM_BANDS value. Publish the completed migration explicitly so
+        // the audio thread cannot reuse DSP history from the previous slots.
+        fireProc.requestMultibandTopologyReset();
         fireProc.sendChangeMessage();
     }
 
@@ -502,6 +506,7 @@ namespace state
             manager.clearAllLfoData();
             manager.getModulationRoutings().clear();
         }
+        fireProc.requestMultibandTopologyReset();
         fireProc.sendChangeMessage();
     }
 

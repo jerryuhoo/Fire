@@ -40,7 +40,7 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
         const int requestedFrequency = juce::roundToInt(requestedValue);
 
         // Update the associated VerticalLine component when the text changes.
-        verticalLine.setValue(requestedFrequency);
+        verticalLine.setValue(requestedFrequency, juce::sendNotificationSync);
         mFrequency = juce::roundToInt(verticalLine.getValue());
 
         // Use the slider's clamped value. Invalid/empty text otherwise feeds

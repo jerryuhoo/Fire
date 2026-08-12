@@ -281,8 +281,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     addAndMakeVisible(processedSpectrum);
     addAndMakeVisible(originalSpectrum);
     addAndMakeVisible(multiband);
-    multiband.addMouseListener(this, false);
-    updateWhenChangingFocus();
+    multiband.setFocusChangedCallback([this](int bandIndex)
+    {
+        updateWhenChangingFocus(bandIndex);
+    });
+    updateWhenChangingFocus(multiband.getFocusIndex());
     addAndMakeVisible(filterControl);
 
     // Listen to ALL relevant buttons
@@ -409,8 +412,9 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     // more to close the narrow race between the first cancel and the join.
     cancelPendingUpdate();
 
-    // Mouse Listeners
-    multiband.removeMouseListener(this);
+    // The Multiband outlives the BandPanel member, so clear the callback before
+    // member teardown can leave it referring to this editor.
+    multiband.setFocusChangedCallback({});
 
     // StateComponent Listeners
     stateComponent.getPresetBox()->removeListener(this);
@@ -744,6 +748,11 @@ void FireAudioProcessorEditor::timerCallback()
     const auto deltaSeconds = static_cast<float>(nowSeconds - lastAnimationTimeSeconds);
     lastAnimationTimeSeconds = nowSeconds;
 
+    // NUM_BANDS is the authoritative topology parameter. Keep the visual
+    // dividers, hit targets and BandPanel attachments coherent even when a
+    // generic host surface automates only that parameter.
+    multiband.synchroniseBandCountFromParameter();
+
     // Hosts commonly keep an editor instance alive after hiding its window.
     // Keep the timer itself cheap in that state and resume from a fresh clock
     // when the peer becomes visible again.
@@ -974,25 +983,14 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
     slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
 }
 
-void FireAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
+void FireAudioProcessorEditor::updateWhenChangingFocus(int bandIndex)
 {
-    // The logic for clicking on graphs has been moved to BandPanel.
-    if (e.eventComponent == &multiband)
-    {
-        updateWhenChangingFocus();
-    }
-}
-
-void FireAudioProcessorEditor::updateWhenChangingFocus()
-{
-    focusIndex = multiband.getFocusIndex();
-    bool left = windowLeftButton.getToggleState();
-    if (left)
-    {
-        bandPanel.setFocusBandNum(focusIndex);
-    }
-
-    bandPanel.updateWhenChangingFocus();
+    // Keep attachments authoritative even while BAND LAB is hidden.  The old
+    // mouse-listener path missed close-button clicks and selections made from
+    // MOD FORGE, leaving the visible rail and the edited DSP band out of sync.
+    bandPanel.setFocusBandNum(juce::jlimit(0, 3, bandIndex), true);
+    modulationSnapshotFramesRemaining = 0;
+    updateModulationStates();
     repaint();
 }
 

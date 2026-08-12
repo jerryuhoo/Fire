@@ -19,6 +19,7 @@
 #include "FreqDividerGroup.h"
 #include "SoloButton.h"
 #include "SpectrumComponent.h"
+#include <functional>
 #include <vector>
 //==============================================================================
 /*
@@ -32,14 +33,16 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseEnter(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
     void visibilityChanged() override;
 
-    void setCloseButtonState();
     void dragLines(float xPercent, int index);
 
-    int getFocusIndex();
+    using FocusChangedCallback = std::function<void(int)>;
+    void setFocusChangedCallback(FocusChangedCallback callback);
+    int getFocusIndex() const noexcept;
     void setFocusIndex(int index);
     void setSoloRelatedBounds();
     EnableButton& getEnableButton(int index);
@@ -50,6 +53,7 @@ public:
     int sortLines();
     void setLineRelatedBoundsByX();
     void resortAndRedrawLines();
+    void synchroniseBandCountFromParameter();
 
 private:
     struct BandUIs
@@ -57,18 +61,15 @@ private:
         std::unique_ptr<SoloButton> soloButton;
         std::unique_ptr<EnableButton> enableButton;
         std::unique_ptr<CloseButton> closeButton;
-        int id = 0;
     };
     std::vector<BandUIs> bandUIs;
     FireAudioProcessor& processor;
     state::StateComponent& stateComponent;
-    float margin;
+    float margin = 0.0f;
     float size = 15.0f;
-    float width = 5.0f;
     // set vertical lines leftmost and rightmost percentage of the whole width
     const float limitLeft = 0.1f;
     const float limitRight = 1.0f - limitLeft;
-    bool isMoving = false;
 
     // multi-band
     void mouseUp(const juce::MouseEvent& e) override;
@@ -77,19 +78,30 @@ private:
     int lineNum = 0;
     int focusIndex = 0;
     bool isDragging = false;
+    bool isCanonicalisingLines = false;
     int hoveredBandIndex = -1;
+    FocusChangedCallback focusChangedCallback;
 
     // Use a 2D vector to store parameter arrays for each band
     std::vector<std::vector<juce::String>> paramsArrays;
 
-    bool isParamInArray(juce::String paramName, const std::vector<juce::String>& paramArray);
     void setParametersToAFromB(int toIndex, int fromIndex);
     void initParameters(int bandindex);
-    void setStatesWhenAdd(int changedIndex);
+    void setStatesWhenAdd(int changedIndex, bool newBandIsOnLeft);
     void setStatesWhenDelete(int changedIndex);
 
     void setLineIndex();
-    void updateLineNumAndSortedIndex(int option);
+    int sortLinesInternal(bool notifyFocusChange);
+    void applyAuthoritativeBandCount(int requestedBandCount,
+                                     bool forceFocusNotification,
+                                     bool publishCanonicalParameters);
+    std::array<float, 3> getCanonicalCrossoverFrequencies(int requestedBandCount) const;
+    void setDividerState(int dividerIndex,
+                         bool enabled,
+                         float frequency,
+                         juce::NotificationType parameterNotification);
+    bool updateFocusIndex(int requestedIndex, bool forceNotification);
+    void notifyFocusChanged();
 
     void sliderValueChanged(juce::Slider* slider) override;
     void buttonClicked(juce::Button* button) override;
@@ -103,6 +115,10 @@ private:
     float getDividerX(int index) const;
     juce::Rectangle<float> getBandBounds(int index) const;
     int getBandIndexAtX(int x) const;
+    int getDividerIndexForEvent(const juce::MouseEvent& event) const;
+    bool isEventFromDividerGroup(const juce::MouseEvent& event) const;
+    void updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside);
+    void refreshHoveredBandFromMouse();
     void updateCloseButtonVisibility();
 
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];

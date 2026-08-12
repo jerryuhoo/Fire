@@ -89,7 +89,11 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     }
 
     verticalLine.setXPercent(newXPercent);
-    verticalLine.setValue(transformFromLog(newXPercent)); // * (44100 / 2.0)
+    // Keep the APVTS frequency authoritative in the same message-thread turn.
+    // Publishing a larger NUM_BANDS value before SliderAttachment had consumed
+    // an async notification allowed the audio thread to process the new band
+    // with an old hidden crossover frequency.
+    verticalLine.setValue(transformFromLog(newXPercent), juce::sendNotificationSync);
 
     if (verticalLine.getLeft() >= 0 && freqDividerGroup[verticalLine.getLeft()]->getToggleState() && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
@@ -144,7 +148,7 @@ void FreqDividerGroup::mouseDoubleClick(const juce::MouseEvent& e)
     // do nothing, override the silder function, which will reset value.
 }
 
-void FreqDividerGroup::setFreq(float f)
+void FreqDividerGroup::setFreq(float f, juce::NotificationType notification)
 {
     if (f <= 0.0f)
     {
@@ -153,7 +157,7 @@ void FreqDividerGroup::setFreq(float f)
         return;
     }
 
-    verticalLine.setValue(f);
+    verticalLine.setValue(f, notification);
     const auto clampedFrequency = static_cast<float>(verticalLine.getValue());
     verticalLine.setXPercent(static_cast<float>(transformToLog(clampedFrequency)));
     freqTextLabel.setFreq(juce::roundToInt(clampedFrequency));

@@ -18,8 +18,6 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
     bandUIs.resize(4);
     for (int i = 0; i < 4; ++i)
     {
-        bandUIs[i].id = i;
-
         bandUIs[i].soloButton = std::make_unique<SoloButton>();
         addAndMakeVisible(*bandUIs[i].soloButton);
         bandUIs[i].soloButton->addListener(this);
@@ -42,7 +40,9 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor, i); // set index
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
-        (freqDividerGroup[i]->getVerticalLine()).addMouseListener(this, true);
+        // Listen recursively so moving between the divider, its value label and
+        // the Multiband background cannot leave the band hover state stale.
+        freqDividerGroup[i]->addMouseListener(this, true);
         float freqValue = freqDividerGroup[i]->getVerticalLine().getValue();
         float xPercent = static_cast<float>(transformToLog(freqValue));
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
@@ -78,6 +78,10 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         freqDividerGroupAttachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
             processor.treeState, ParameterIDAndName::getIDString(LINE_STATE_ID, i), *freqDividerGroup[i]);
     }
+
+    // NUM_BANDS is the single topology authority. LINE_STATE remains attached
+    // as a compatibility mirror, but no longer drives the presentation.
+    synchroniseBandCountFromParameter();
 }
 
 Multiband::~Multiband()
@@ -112,7 +116,7 @@ Multiband::~Multiband()
 
             // 它内部的 VerticalLine 滑块
             freqDividerGroup[i]->getVerticalLine().removeListener(this);
-            freqDividerGroup[i]->getVerticalLine().removeMouseListener(this);
+            freqDividerGroup[i]->removeMouseListener(this);
         }
     }
 }
@@ -135,7 +139,10 @@ void Multiband::paint(juce::Graphics& g)
         float xPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
         for (int i = 0; i < 3; i++)
         {
-            if ((freqDividerGroup[i]->getToggleState() && fabs(freqDividerGroup[i]->getVerticalLine().getXPercent() - xPercent) < limitLeft) || xPercent < limitLeft || xPercent > limitRight)
+            if ((freqDividerGroup[i]->getToggleState()
+                 && std::abs(freqDividerGroup[i]->getVerticalLine().getXPercent() - xPercent) < limitLeft)
+                || xPercent < limitLeft
+                || xPercent > limitRight)
             {
                 canCreate = false;
                 break;
@@ -167,7 +174,6 @@ void Multiband::resized()
 {
     margin = getHeight() / 20.0f;
     size = juce::jmax(15.0f, getWidth() / 1000.0f * 15.0f);
-    width = juce::jmax(5.0f, freqDividerGroup[0]->getVerticalLine().getWidth() / 2.0f);
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
 }
@@ -194,95 +200,62 @@ void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
         || ! juce::isPositiveAndBelow(fromIndex, static_cast<int>(paramsArrays.size())))
         return;
 
-    const auto& fromArray = paramsArrays[fromIndex];
-    const auto& toArray = paramsArrays[toIndex];
+    const auto& fromArray = paramsArrays[static_cast<size_t>(fromIndex)];
+    const auto& toArray = paramsArrays[static_cast<size_t>(toIndex)];
+    jassert(fromArray.size() == toArray.size());
 
-    for (const auto& param : processor.getParameters())
+    const auto parameterCount = juce::jmin(fromArray.size(), toArray.size());
+    for (size_t parameterIndex = 0; parameterIndex < parameterCount; ++parameterIndex)
     {
-        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-        {
-            juce::String paramFromID = p->getParameterID();
-            float paramFromValue = p->getValue();
-
-            for (size_t i = 0; i < fromArray.size(); ++i)
-            {
-                if (fromArray[i] == paramFromID)
-                {
-                    for (const auto& paramTo : processor.getParameters())
-                    {
-                        if (auto* pTo = dynamic_cast<juce::AudioProcessorParameterWithID*>(paramTo))
-                        {
-                            if (toArray[i] == pTo->getParameterID())
-                            {
-                                pTo->setValueNotifyingHost(paramFromValue);
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
+        auto* source = processor.treeState.getParameter(fromArray[parameterIndex]);
+        auto* target = processor.treeState.getParameter(toArray[parameterIndex]);
+        jassert(source != nullptr && target != nullptr);
+        if (source != nullptr && target != nullptr)
+            target->setValueNotifyingHost(source->getValue());
     }
-}
-
-bool Multiband::isParamInArray(juce::String paramName, const std::vector<juce::String>& paramArray)
-{
-    for (const auto& name : paramArray)
-    {
-        if (paramName == name)
-        {
-            return true;
-        }
-    }
-    return false;
 }
 
 void Multiband::initParameters(int bandindex)
 {
-    if (bandindex < 0 || bandindex >= paramsArrays.size())
+    if (! juce::isPositiveAndBelow(bandindex, static_cast<int>(paramsArrays.size())))
         return;
 
-    const auto& paramArray = paramsArrays[bandindex];
-    for (const auto& param : processor.getParameters())
+    const auto& paramArray = paramsArrays[static_cast<size_t>(bandindex)];
+    for (const auto& parameterID : paramArray)
     {
-        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-        {
-            if (isParamInArray(p->getParameterID(), paramArray))
-            {
-                p->setValueNotifyingHost(p->getDefaultValue());
-            }
-        }
+        auto* parameter = processor.treeState.getParameter(parameterID);
+        jassert(parameter != nullptr);
+        if (parameter != nullptr)
+            parameter->setValueNotifyingHost(parameter->getDefaultValue());
     }
 }
 
-void Multiband::setStatesWhenAdd(int insertionIndex)
+void Multiband::setStatesWhenAdd(int insertionIndex, bool newBandIsOnLeft)
 {
-    // 1. Update the visual focus.
-    // If a band is inserted at or before the current focus,
-    // the focus index must be shifted to the right.
-    if (insertionIndex <= focusIndex)
+    // lineNum already includes the divider that was just inserted.  Therefore
+    // the highest previously active band index is lineNum - 1.
+    const int oldLastBandIndex = lineNum - 1;
+    if (! juce::isPositiveAndBelow(insertionIndex, lineNum)
+        || ! juce::isPositiveAndBelow(oldLastBandIndex, 4))
     {
-        focusIndex += 1;
+        jassertfalse;
+        return;
     }
 
-    // 2. Determine if the user clicked on the left or right side of the band being split.
-    // We use the center point between the enable and solo buttons as the reference.
-    float bandCenterline = (bandUIs[insertionIndex].enableButton->getRight() + bandUIs[insertionIndex].soloButton->getX()) / 2.0f;
-    bool clickedOnTheLeft = getMouseXYRelative().getX() < bandCenterline;
-
-    // 3. Make space by shifting all bands from the insertion point onwards one step to the right.
+    // Make space by shifting active bands from the insertion point one step to
+    // the right.  Iterating backwards avoids overwriting a source band.
     // We loop backwards from the end to avoid overwriting the data we need to copy.
     // After this loop, the settings of the original band at `insertionIndex` are now temporarily stored at `insertionIndex + 1`.
-    for (int i = 2; i >= insertionIndex; --i)
-    {
+    for (int i = oldLastBandIndex; i >= insertionIndex; --i)
         copyBandSettings(i + 1, i);
-    }
-    // Also shift LFO targets for the same range of bands
-    processor.shiftLfoModulationTargets(insertionIndex, 2, 1);
 
-    // 4. Place the old and new bands correctly based on the exact user-defined logic.
-    if (clickedOnTheLeft)
+    // Also shift LFO targets for the same range of bands
+    processor.shiftLfoModulationTargets(insertionIndex, oldLastBandIndex, 1);
+
+    // Preserve the logical identity of the old band.  If the new region is on
+    // the left the old settings stay in insertionIndex + 1; otherwise restore
+    // them to insertionIndex and create the default band on the right.
+    if (newBandIsOnLeft)
     {
         // USER ACTION: Clicked on the LEFT side of the band.
         // EXPECTED RESULT: The NEW band appears on the LEFT, OLD band is shifted to the RIGHT.
@@ -325,30 +298,25 @@ void Multiband::setStatesWhenDelete(int deletedIndex)
         freqDividerGroup[deletedIndex]->setToggleState(false, juce::sendNotificationSync);
     }
 
-    // 2. Update the visual focus.
-    if (deletedIndex < focusIndex)
-    {
-        focusIndex -= 1;
-    }
-    else if (deletedIndex == focusIndex && focusIndex == lineNum)
-    {
-        focusIndex -= 1;
-    }
+    // Remove routings owned by the deleted logical band before moving later
+    // routings into its index.  Otherwise both the deleted band and its
+    // successor can target the same newly-visible parameter.
+    processor.clearLfoModulationForBand(deletedIndex);
 
-    // 3. Shift all bands that came after the deleted one forward.
+    // Shift all active bands that came after the deleted one forward.
     // e.g., if index 1 is deleted, copy settings from 2 to 1, and from 3 to 2.
-    for (int i = deletedIndex; i < 3; ++i)
-    {
+    const int oldLastBandIndex = lineNum;
+    for (int i = deletedIndex; i < oldLastBandIndex; ++i)
         copyBandSettings(i, i + 1);
-    }
+
     // Also shift LFO targets for the same range
-    processor.shiftLfoModulationTargets(deletedIndex + 1, 3, -1);
+    processor.shiftLfoModulationTargets(deletedIndex + 1, oldLastBandIndex, -1);
 
-    // 4. Clean up the state of the last band, as it is now redundant.
-    resetBandToDefault(3);
-    setBandState(3, { true, false }, juce::NotificationType::dontSendNotification);
-
-    processor.clearLfoModulationForBand(3);
+    // Clean up the slot that has just become inactive.  Resetting band 3
+    // unconditionally left stale state behind when deleting from a two- or
+    // three-band layout.
+    resetBandToDefault(oldLastBandIndex);
+    processor.clearLfoModulationForBand(oldLastBandIndex);
 
     // NOTE: We no longer need to call setSoloRelatedBounds() manually here,
     // as it will be handled automatically later in the call chain
@@ -370,6 +338,16 @@ int Multiband::countLines()
 
 int Multiband::sortLines()
 {
+    return sortLinesInternal(true);
+}
+
+int Multiband::sortLinesInternal(bool notifyFocusChange)
+{
+    if (isCanonicalisingLines)
+        return juce::jlimit(0, juce::jmax(0, lineNum - 1), 0);
+
+    const juce::ScopedValueSetter<bool> canonicalising(isCanonicalisingLines, true);
+
     // clear disabled lines and sort lines by frequency
     int newFreq = -1;
     std::vector<int> freqVector;
@@ -382,23 +360,176 @@ int Multiband::sortLines()
         }
     }
     std::sort(freqVector.begin(), freqVector.end());
-    const int changeIndex = newFreq >= 0
-                              ? static_cast<int>(std::find(freqVector.begin(), freqVector.end(), newFreq) - freqVector.begin())
+    const auto insertedPosition = newFreq >= 0
+                                    ? std::find(freqVector.begin(), freqVector.end(), newFreq)
+                                    : freqVector.end();
+    const int changeIndex = insertedPosition != freqVector.end()
+                              ? static_cast<int>(std::distance(freqVector.begin(), insertedPosition))
                               : 0;
     lineNum = static_cast<int>(freqVector.size());
 
-    for (int i = 0; i < freqVector.size(); i++)
+    for (int i = 0; i < static_cast<int>(freqVector.size()); ++i)
     {
-        freqDividerGroup[i]->setFreq(freqVector[i]);
+        freqDividerGroup[i]->setFreq(freqVector[static_cast<size_t>(i)]);
         freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
+        freqDividerGroup[i]->setVisible(true);
     }
-    for (auto i = freqVector.size(); i < 3; i++)
+    for (int i = static_cast<int>(freqVector.size()); i < 3; ++i)
     {
         freqDividerGroup[i]->setFreq(-1);
         freqDividerGroup[i]->setToggleState(false, juce::sendNotificationSync);
+        freqDividerGroup[i]->setVisible(false);
     }
     setLineIndex();
+
+    updateFocusIndex(focusIndex, notifyFocusChange);
     return changeIndex;
+}
+
+std::array<float, 3> Multiband::getCanonicalCrossoverFrequencies(int requestedBandCount) const
+{
+    constexpr std::array<float, 3> defaults { 200.0f, 1000.0f, 5000.0f };
+    std::array<float, 3> frequencies = defaults;
+    const int requestedCrossovers = juce::jlimit(0, 3, requestedBandCount - 1);
+
+    bool activeFrequenciesAreValid = true;
+    for (int divider = 0; divider < 3; ++divider)
+    {
+        const auto* value = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(FREQ_ID, divider));
+        const float frequency = value != nullptr ? value->load(std::memory_order_relaxed)
+                                                 : defaults[static_cast<size_t>(divider)];
+        frequencies[static_cast<size_t>(divider)] = frequency;
+
+        if (divider < requestedCrossovers)
+        {
+            activeFrequenciesAreValid = activeFrequenciesAreValid
+                                         && std::isfinite(frequency)
+                                         && frequency >= 40.0f
+                                         && frequency <= 10024.0f
+                                         && (divider == 0
+                                             || frequency
+                                                    > frequencies[static_cast<size_t>(divider - 1)]);
+        }
+    }
+
+    if (! activeFrequenciesAreValid)
+        for (int divider = 0; divider < requestedCrossovers; ++divider)
+            frequencies[static_cast<size_t>(divider)] = defaults[static_cast<size_t>(divider)];
+
+    return frequencies;
+}
+
+void Multiband::setDividerState(int dividerIndex,
+                                bool enabled,
+                                float frequency,
+                                juce::NotificationType parameterNotification)
+{
+    if (! juce::isPositiveAndBelow(dividerIndex, 3))
+        return;
+
+    auto& divider = *freqDividerGroup[static_cast<size_t>(dividerIndex)];
+    if (enabled)
+        divider.setFreq(frequency, juce::dontSendNotification);
+    else
+        divider.setFreq(-1, juce::dontSendNotification);
+
+    divider.setToggleState(enabled, parameterNotification);
+    divider.setVisible(enabled);
+}
+
+void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
+                                            bool forceFocusNotification,
+                                            bool publishCanonicalParameters)
+{
+    const int newBandCount = juce::jlimit(1, 4, requestedBandCount);
+    const int newLineCount = newBandCount - 1;
+    const auto frequencies = getCanonicalCrossoverFrequencies(newBandCount);
+
+    const juce::ScopedValueSetter<bool> canonicalising(isCanonicalisingLines, true);
+    for (int divider = 0; divider < 3; ++divider)
+    {
+        const bool enabled = divider < newLineCount;
+        setDividerState(divider,
+                        enabled,
+                        frequencies[static_cast<size_t>(divider)],
+                        juce::dontSendNotification);
+
+        if (! publishCanonicalParameters)
+            continue;
+
+        // A host can expose NUM_BANDS independently from the legacy divider
+        // parameters. Publish the complete canonical tuple before the view is
+        // considered synchronised; otherwise one visible fallback divider can
+        // move while DSP keeps rejecting another hidden 21 Hz sentinel.
+        if (enabled)
+        {
+            if (auto* frequencyParameter = processor.treeState.getParameter(
+                    ParameterIDAndName::getIDString(FREQ_ID, divider)))
+            {
+                const float normalised = frequencyParameter->getNormalisableRange().convertTo0to1(
+                    frequencies[static_cast<size_t>(divider)]);
+                if (! juce::approximatelyEqual(frequencyParameter->getValue(), normalised))
+                    frequencyParameter->setValueNotifyingHost(normalised);
+            }
+        }
+
+        if (auto* lineStateParameter = processor.treeState.getParameter(
+                ParameterIDAndName::getIDString(LINE_STATE_ID, divider)))
+        {
+            const float normalised = enabled ? 1.0f : 0.0f;
+            if (! juce::approximatelyEqual(lineStateParameter->getValue(), normalised))
+                lineStateParameter->setValueNotifyingHost(normalised);
+        }
+    }
+
+    lineNum = newLineCount;
+    setLineIndex();
+    updateFocusIndex(focusIndex, forceFocusNotification);
+    setLineRelatedBoundsByX();
+    setSoloRelatedBounds();
+    refreshHoveredBandFromMouse();
+    repaint();
+}
+
+void Multiband::synchroniseBandCountFromParameter()
+{
+    const auto* bandCount = processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    const int requestedBandCount = bandCount != nullptr
+                                     ? juce::roundToInt(bandCount->load(std::memory_order_relaxed))
+                                     : 1;
+    const int requestedLineCount = juce::jlimit(0, 3, requestedBandCount - 1);
+    const auto canonicalFrequencies = getCanonicalCrossoverFrequencies(requestedBandCount);
+
+    bool presentationIsCanonical = lineNum == requestedLineCount;
+    for (int divider = 0; divider < 3; ++divider)
+    {
+        const bool shouldBeEnabled = divider < requestedLineCount;
+        presentationIsCanonical = presentationIsCanonical
+                                   && freqDividerGroup[static_cast<size_t>(divider)]->getToggleState()
+                                          == shouldBeEnabled;
+
+        const auto* lineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, divider));
+        presentationIsCanonical = presentationIsCanonical
+                                   && lineState != nullptr
+                                   && (lineState->load(std::memory_order_relaxed) > 0.5f)
+                                          == shouldBeEnabled;
+
+        if (shouldBeEnabled)
+        {
+            const auto* frequency = processor.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(FREQ_ID, divider));
+            presentationIsCanonical = presentationIsCanonical
+                                       && frequency != nullptr
+                                       && juce::approximatelyEqual(
+                                           frequency->load(std::memory_order_relaxed),
+                                           canonicalFrequencies[static_cast<size_t>(divider)]);
+        }
+    }
+
+    if (! presentationIsCanonical)
+        applyAuthoritativeBandCount(requestedBandCount, true, true);
 }
 
 void Multiband::setLineIndex()
@@ -416,8 +547,8 @@ void Multiband::mouseUp(const juce::MouseEvent& e)
         return;
 
     isDragging = false;
-    hoveredBandIndex = getBandIndexAtX(e.getEventRelativeTo(this).x);
-    updateCloseButtonVisibility();
+    const auto localEvent = e.getEventRelativeTo(this);
+    updateHoveredBand(localEvent.getPosition(), getLocalBounds().contains(localEvent.getPosition()));
     repaint();
 }
 
@@ -432,23 +563,22 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
     // moving lines by dragging mouse
     if (e.mods.isLeftButtonDown())
     {
+        const int dividerIndex = getDividerIndexForEvent(e);
+        if (! juce::isPositiveAndBelow(dividerIndex, lineNum))
+            return;
+
         isDragging = true;
         hoveredBandIndex = -1;
         updateCloseButtonVisibility();
 
-        for (int i = 0; i < lineNum; i++)
-        {
-            if (e.eventComponent == &freqDividerGroup[i]->getVerticalLine())
-            {
-                float targetXPercent = getMouseXYRelative().getX() / static_cast<float>(getWidth());
-                dragLines(targetXPercent, i);
+        const auto localEvent = e.getEventRelativeTo(this);
+        const float targetXPercent = localEvent.position.x / static_cast<float>(getWidth());
+        dragLines(targetXPercent, dividerIndex);
 
-                sortLines();
-                setLineRelatedBoundsByX();
-                setSoloRelatedBounds();
-                repaint();
-            }
-        }
+        sortLinesInternal(false);
+        setLineRelatedBoundsByX();
+        setSoloRelatedBounds();
+        repaint();
     }
 }
 
@@ -460,9 +590,11 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
     if (getWidth() <= 0 || getHeight() <= 0)
         return;
 
-    isDragging = false;
-    for (int i = 0; i < lineNum; ++i)
-        isDragging = isDragging || freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging();
+    const int dividerIndex = getDividerIndexForEvent(e);
+    if (dividerIndex < 0 && isEventFromDividerGroup(e))
+        return;
+
+    isDragging = dividerIndex >= 0;
 
     const auto localEvent = e.getEventRelativeTo(this);
 
@@ -471,20 +603,24 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
         const float xPercent = localEvent.position.x / static_cast<float>(getWidth());
         if (lineNum < 3)
         {
-            bool canCreate = true;
+            bool canCreate = xPercent >= limitLeft && xPercent <= limitRight;
 
             int i = 0;
-            for (; i < lineNum; i++)
+            for (; canCreate && i < lineNum; ++i)
             {
                 // can't create near existed lines
-                if ((freqDividerGroup[i]->getToggleState() && fabs(freqDividerGroup[i]->getVerticalLine().getXPercent() - xPercent) <= limitLeft) || xPercent < limitLeft || xPercent > limitRight)
-                {
+                if (freqDividerGroup[i]->getToggleState()
+                    && std::abs(freqDividerGroup[i]->getVerticalLine().getXPercent() - xPercent) <= limitLeft)
                     canCreate = false;
-                    break;
-                }
             }
             if (canCreate)
             {
+                const int splitBandIndex = getBandIndexAtX(localEvent.x);
+                if (! juce::isPositiveAndBelow(splitBandIndex, lineNum + 1))
+                    return;
+
+                const bool newBandIsOnLeft = localEvent.position.x
+                                             < getBandBounds(splitBandIndex).getCentreX();
                 for (; i < 3; i++)
                 {
                     // create lines and close buttons and then set state
@@ -494,17 +630,32 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                         int freq = static_cast<int>(transformFromLog(xPercent));
                         freqDividerGroup[i]->setFreq(freq);
                         freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
-                        int changeIndex = sortLines();
+                        const int changeIndex = sortLinesInternal(false);
+                        setStatesWhenAdd(changeIndex, newBandIsOnLeft);
+
+                        int focusAfterInsert = focusIndex;
+                        if (focusIndex > changeIndex
+                            || (focusIndex == changeIndex && newBandIsOnLeft))
+                            ++focusAfterInsert;
+                        updateFocusIndex(focusAfterInsert, true);
+
+                        // Publish the larger DSP band count only after every
+                        // destination parameter and attachment is coherent.
                         if (auto* param = processor.treeState.getParameter(NUM_BANDS_ID))
-                        {
-                            param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(lineNum + 1));
-                        }
-                        setStatesWhenAdd(changeIndex);
+                            param->setValueNotifyingHost(
+                                param->getNormalisableRange().convertTo0to1(lineNum + 1));
+
+                        // Publish only after every parameter, routing,
+                        // frequency and the final band count are coherent.
+                        // This also catches add/delete pairs that happen
+                        // between audio blocks and finish on the same count.
+                        processor.requestMultibandTopologyReset();
                         break;
                     }
                 }
                 setLineRelatedBoundsByX(); // TODO: dont use this, only set freq
                 setSoloRelatedBounds();
+                refreshHoveredBandFromMouse();
                 repaint();
             }
         }
@@ -536,10 +687,40 @@ void Multiband::setLineRelatedBoundsByX()
             freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 10.0f, getHeight());
         }
     }
+
+    // Divider groups deliberately overlap neighbouring bands to provide a
+    // generous drag target.  Keep the compact band controls above those
+    // transparent children so the close button always receives the click.
+    for (int i = 0; i <= lineNum; ++i)
+    {
+        bandUIs[static_cast<size_t>(i)].closeButton->toFront(false);
+        bandUIs[static_cast<size_t>(i)].soloButton->toFront(false);
+        bandUIs[static_cast<size_t>(i)].enableButton->toFront(false);
+    }
 }
 
 void Multiband::setSoloRelatedBounds()
 {
+    const float closeHitSize = juce::jmax(size, 24.0f);
+    const auto placeBandButtons = [this, closeHitSize](int bandIndex, float centreX)
+    {
+        bandUIs[static_cast<size_t>(bandIndex)].enableButton->setBounds(
+            juce::roundToInt(centreX - size * 1.5f),
+            juce::roundToInt(margin),
+            juce::roundToInt(size),
+            juce::roundToInt(size));
+        bandUIs[static_cast<size_t>(bandIndex)].soloButton->setBounds(
+            juce::roundToInt(centreX + size * 0.5f),
+            juce::roundToInt(margin),
+            juce::roundToInt(size),
+            juce::roundToInt(size));
+        bandUIs[static_cast<size_t>(bandIndex)].closeButton->setBounds(
+            juce::roundToInt(centreX - closeHitSize * 0.5f),
+            juce::roundToInt(static_cast<float>(getHeight()) - closeHitSize - size * 0.5f),
+            juce::roundToInt(closeHitSize),
+            juce::roundToInt(closeHitSize));
+    };
+
     for (int i = 0; i < 4; i++)
     {
         if (i <= lineNum)
@@ -558,48 +739,71 @@ void Multiband::setSoloRelatedBounds()
     // setBounds of soloButtons and enableButtons
     if (lineNum >= 1)
     {
-        bandUIs[0].enableButton->setBounds(freqDividerGroup[0]->getX() / 2 - size, margin, size, size); // <--- MODIFIED
-        bandUIs[0].soloButton->setBounds(freqDividerGroup[0]->getX() / 2 + size, margin, size, size); // <--- MODIFIED
-        bandUIs[0].closeButton->setBounds(freqDividerGroup[0]->getX() / 2, getHeight() - size * 2, size, size); // <--- MODIFIED
+        placeBandButtons(0, getBandBounds(0).getCentreX());
         for (int i = 1; i < lineNum; i++)
-        {
-            bandUIs[i].enableButton->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 - size, margin, size, size); // <--- MODIFIED
-            bandUIs[i].soloButton->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2 + size, margin, size, size); // <--- MODIFIED
-            bandUIs[i].closeButton->setBounds((freqDividerGroup[i]->getX() + freqDividerGroup[i - 1]->getX()) / 2, getHeight() - size * 2, size, size); // <--- MODIFIED
-        }
-        bandUIs[lineNum].enableButton->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 - size, margin, size, size); // <--- MODIFIED
-        bandUIs[lineNum].soloButton->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2 + size, margin, size, size); // <--- MODIFIED
-        bandUIs[lineNum].closeButton->setBounds((freqDividerGroup[lineNum - 1]->getX() + getWidth()) / 2, getHeight() - size * 2, size, size); // <--- MODIFIED
+            placeBandButtons(i, getBandBounds(i).getCentreX());
+        placeBandButtons(lineNum, getBandBounds(lineNum).getCentreX());
     }
     else if (lineNum == 0)
     {
-        bandUIs[0].enableButton->setBounds(getWidth() / 2 - size, margin, size, size); // <--- MODIFIED
-        bandUIs[0].soloButton->setBounds(getWidth() / 2 + size, margin, size, size); // <--- MODIFIED
+        placeBandButtons(0, static_cast<float>(getWidth()) * 0.5f);
         bandUIs[0].closeButton->setVisible(false); // <--- MODIFIED
+    }
+
+    for (int i = 0; i <= lineNum; ++i)
+    {
+        bandUIs[static_cast<size_t>(i)].closeButton->toFront(false);
+        bandUIs[static_cast<size_t>(i)].soloButton->toFront(false);
+        bandUIs[static_cast<size_t>(i)].enableButton->toFront(false);
     }
 
     updateCloseButtonVisibility();
 }
 
-int Multiband::getFocusIndex()
+void Multiband::setFocusChangedCallback(FocusChangedCallback callback)
+{
+    focusChangedCallback = std::move(callback);
+}
+
+int Multiband::getFocusIndex() const noexcept
 {
     return focusIndex;
 }
 
 void Multiband::setFocusIndex(int index)
 {
-    const int newFocus = juce::jlimit(0, lineNum, index);
-    if (newFocus == focusIndex)
-        return;
+    updateFocusIndex(index, false);
+}
 
+bool Multiband::updateFocusIndex(int requestedIndex, bool forceNotification)
+{
+    const int newFocus = juce::jlimit(0, lineNum, requestedIndex);
+    const bool didChange = newFocus != focusIndex;
     focusIndex = newFocus;
+
+    if (didChange || forceNotification)
+        notifyFocusChanged();
+
+    if (didChange)
+        repaint();
+
+    return didChange;
+}
+
+void Multiband::notifyFocusChanged()
+{
     if (isShowing())
         processor.setHistoryArray(focusIndex);
-    repaint();
+
+    if (focusChangedCallback)
+        focusChangedCallback(focusIndex);
 }
 
 void Multiband::sliderValueChanged(juce::Slider* slider)
 {
+    if (isCanonicalisingLines)
+        return;
+
     lineNum = countLines();
     setLineIndex();
     for (int i = 0; i < lineNum; i++)
@@ -611,30 +815,41 @@ void Multiband::sliderValueChanged(juce::Slider* slider)
             freqDividerGroup[i]->moveToX(lineNum, freqDividerGroup[i]->getVerticalLine().getXPercent(), limitLeft, freqDividerGroup);
         }
     }
-    // set focus index if focus is larger than max line num
-    if (focusIndex > lineNum)
-    {
-        focusIndex = lineNum;
-    }
+    // Parameters and presets can reduce the band count asynchronously.  Route
+    // the clamp through the same focus notification path as direct clicks.
+    updateFocusIndex(focusIndex, false);
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
+    refreshHoveredBandFromMouse();
 }
 
 void Multiband::buttonClicked(juce::Button* button)
 {
     // click closebutton and delete line.
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i <= lineNum; ++i)
     {
         if (button == bandUIs[i].closeButton.get()) // <--- MODIFIED
         {
+            const int deletedIndex = i;
+            const int oldFocus = focusIndex;
             setStatesWhenDelete(i);
-            sortLines();
+            sortLinesInternal(false);
+
+            int focusAfterDelete = oldFocus;
+            if (deletedIndex < oldFocus
+                || (deletedIndex == oldFocus && oldFocus > lineNum))
+                --focusAfterDelete;
+            updateFocusIndex(focusAfterDelete, true);
+
             setLineRelatedBoundsByX();
             setSoloRelatedBounds();
             if (auto* param = processor.treeState.getParameter(NUM_BANDS_ID))
             {
                 param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(lineNum + 1));
             }
+            processor.requestMultibandTopologyReset();
+            refreshHoveredBandFromMouse();
+            break;
         }
     }
 
@@ -811,29 +1026,27 @@ void Multiband::resetBandToDefault(int bandIndex)
 
 void Multiband::mouseMove(const juce::MouseEvent& event)
 {
-    isDragging = false;
-    for (int i = 0; i < lineNum; ++i)
-        isDragging = isDragging || freqDividerGroup[i]->getVerticalLine().isMouseOverOrDragging();
-
     const auto relativeEvent = event.getEventRelativeTo(this);
-    const int newHoveredBand = isDragging ? -1 : getBandIndexAtX(relativeEvent.x);
-    if (newHoveredBand != hoveredBandIndex)
-    {
-        hoveredBandIndex = newHoveredBand;
-        updateCloseButtonVisibility();
-    }
+    if (! event.mods.isLeftButtonDown())
+        isDragging = false;
 
-    repaint();
+    updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
+    if (lineNum < 3
+        && relativeEvent.y >= 0
+        && relativeEvent.y <= getHeight() / 5)
+        repaint();
+}
+
+void Multiband::mouseEnter(const juce::MouseEvent& event)
+{
+    const auto relativeEvent = event.getEventRelativeTo(this);
+    updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
 }
 
 void Multiband::mouseExit(const juce::MouseEvent& event)
 {
     const auto relativeEvent = event.getEventRelativeTo(this);
-    hoveredBandIndex = getLocalBounds().contains(relativeEvent.getPosition())
-                         ? getBandIndexAtX(relativeEvent.x)
-                         : -1;
-    updateCloseButtonVisibility();
-    repaint();
+    updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
 }
 
 void Multiband::visibilityChanged()
@@ -854,6 +1067,56 @@ int Multiband::getBandIndexAtX(int x) const
     return lineNum;
 }
 
+int Multiband::getDividerIndexForEvent(const juce::MouseEvent& event) const
+{
+    for (int i = 0; i < lineNum; ++i)
+    {
+        auto* component = event.eventComponent;
+        while (component != nullptr && component != this)
+        {
+            if (component == &freqDividerGroup[i]->getVerticalLine())
+                return i;
+            component = component->getParentComponent();
+        }
+    }
+
+    return -1;
+}
+
+bool Multiband::isEventFromDividerGroup(const juce::MouseEvent& event) const
+{
+    auto* component = event.eventComponent;
+    while (component != nullptr && component != this)
+    {
+        for (const auto& group : freqDividerGroup)
+            if (component == group.get())
+                return true;
+
+        component = component->getParentComponent();
+    }
+
+    return false;
+}
+
+void Multiband::updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside)
+{
+    const int newHoveredBand = pointerIsInside && ! isDragging
+                                 ? getBandIndexAtX(localPosition.x)
+                                 : -1;
+    if (newHoveredBand == hoveredBandIndex)
+        return;
+
+    hoveredBandIndex = newHoveredBand;
+    updateCloseButtonVisibility();
+    repaint();
+}
+
+void Multiband::refreshHoveredBandFromMouse()
+{
+    const auto mousePosition = getMouseXYRelative();
+    updateHoveredBand(mousePosition, getLocalBounds().contains(mousePosition));
+}
+
 void Multiband::updateCloseButtonVisibility()
 {
     for (int i = 0; i < static_cast<int>(bandUIs.size()); ++i)
@@ -862,16 +1125,18 @@ void Multiband::updateCloseButtonVisibility()
                              && i <= lineNum
                              && i == hoveredBandIndex
                              && ! isDragging;
-        bandUIs[static_cast<size_t>(i)].closeButton->setVisible(shouldShow);
+        auto& closeButton = *bandUIs[static_cast<size_t>(i)].closeButton;
+        closeButton.setVisible(shouldShow);
+        if (shouldShow)
+            closeButton.toFront(false);
     }
 }
 
 void Multiband::resortAndRedrawLines()
 {
-    // This sequence correctly sorts the underlying parameters and
-    // ensures the UI is updated to reflect the new, canonical state.
-    sortLines();
-    setLineRelatedBoundsByX();
-    setSoloRelatedBounds();
-    repaint();
+    const auto* bandCount = processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    applyAuthoritativeBandCount(
+        bandCount != nullptr ? juce::roundToInt(bandCount->load(std::memory_order_relaxed)) : 1,
+        true,
+        false);
 }

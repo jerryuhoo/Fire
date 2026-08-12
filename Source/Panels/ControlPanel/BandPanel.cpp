@@ -841,10 +841,11 @@ void BandPanel::updateDistortionGraphFromParameters()
     };
 
     DistortionGraphValues values;
-    values.rec = readBandParameter(REC_ID, 0.0f);
+    const bool shapeEnabled = readBandParameter(SHAPE_BYPASS_ID, 0.0f) > 0.5f;
+    values.rec = shapeEnabled ? readBandParameter(REC_ID, 0.0f) : 0.0f;
     values.mix = readBandParameter(MIX_ID, 1.0f)
-                 * readBandParameter(SHAPE_MIX_ID, 1.0f);
-    values.bias = readBandParameter(BIAS_ID, 0.0f);
+                 * (shapeEnabled ? readBandParameter(SHAPE_MIX_ID, 1.0f) : 1.0f);
+    values.bias = shapeEnabled ? readBandParameter(BIAS_ID, 0.0f) : 0.0f;
     values.mode = juce::roundToInt(readBandParameter(MODE_ID, 0.0f));
 
     const float driveForCalc = readBandParameter(DRIVE_ID, 0.0f) * 6.5f / 100.0f;

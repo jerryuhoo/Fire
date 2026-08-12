@@ -31,7 +31,8 @@ public:
 
     VerticalLine& getVerticalLine();
     
-    void setFreq (float f);
+    void setFreq(float f,
+                 juce::NotificationType notification = juce::sendNotificationSync);
     int getFreq ();
 
     void clicked(const juce::ModifierKeys& modifiers) override;

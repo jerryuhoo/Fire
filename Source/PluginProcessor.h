@@ -288,6 +288,11 @@ public:
     void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
     void clearLfoModulationForBand(int bandIndex);
 
+    // Parameter migration for an add/remove operation is performed on the
+    // message thread. The audio thread consumes this generation and resets the
+    // slot-based DSP state once the complete topology has been published.
+    void requestMultibandTopologyReset() noexcept;
+
     bool getLatestDistortionGraphValues(DistortionGraphValues& values);
     void setUiFocusBand(int bandIndex);
 
@@ -370,7 +375,13 @@ private:
     std::atomic<int> uiFocusBand { 0 };
     // reset parameters
     void performReset();
+    void resetMultibandProcessingState() noexcept;
+    std::array<float, 3> getEffectiveCrossoverFrequencies() const noexcept;
+    void snapCrossoverSmoothersToParameters() noexcept;
+    void synchroniseMultibandTopologyResetState() noexcept;
     std::atomic<bool> needsReset { false };
+    std::atomic<std::uint32_t> multibandTopologyResetGeneration { 0 };
+    std::uint32_t appliedMultibandTopologyResetGeneration = 0;
 
     std::vector<std::unique_ptr<BandProcessor>> bands;
     std::atomic<float> totalLatency { 0.0f };

@@ -69,6 +69,31 @@ bool sameFilterSettings(const ChainSettings& lhs, const ChainSettings& rhs) noex
         && lhs.highCutBypassed == rhs.highCutBypassed;
 }
 
+struct BandParameterAddress
+{
+    const ModulatableParameterInfo* parameter = nullptr;
+    int bandIndex = -1;
+};
+
+BandParameterAddress findBandParameterAddress(const juce::String& parameterID)
+{
+    for (const auto& parameter : ParameterIDAndName::getBandParameterInfo())
+    {
+        for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
+        {
+            if (parameterID == ParameterIDAndName::getIDString(parameter.idBase, bandIndex))
+                return { &parameter, bandIndex };
+        }
+    }
+
+    return {};
+}
+
+void resetModulationRouting(ModulationRouting& routing)
+{
+    routing = {};
+}
+
 using BiquadCoefficients = std::array<float, 6>;
 
 void assignCutStage(CutFilter& chain,
@@ -248,6 +273,17 @@ void BandProcessor::reset()
 
     if (oversampling)
         oversampling->reset();
+
+    mInputLeftRMS.store(0.0f, std::memory_order_relaxed);
+    mInputRightRMS.store(0.0f, std::memory_order_relaxed);
+    mOutputLeftRMS.store(0.0f, std::memory_order_relaxed);
+    mOutputRightRMS.store(0.0f, std::memory_order_relaxed);
+    mInputLeftPeak.store(0.0f, std::memory_order_relaxed);
+    mInputRightPeak.store(0.0f, std::memory_order_relaxed);
+    mOutputLeftPeak.store(0.0f, std::memory_order_relaxed);
+    mOutputRightPeak.store(0.0f, std::memory_order_relaxed);
+    mReductionPercent.store(1.0f, std::memory_order_relaxed);
+    mSampleMaxValue.store(0.0f, std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -416,8 +452,15 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // This must be done BEFORE blockToProcess is modified.
     auto dryBlockForShapeMixer = blockToProcess;
 
-    // Now, push this correctly-sized dry block into the mixer.
-    shapeMixer.setWetMixProportion(params.shapeMixVal);
+    // Shape Mix historically wraps the complete distortion stage, including
+    // Drive. Once Shape is disabled its controls are frozen in the UI, so a
+    // stale Mix value must not silently blend Drive back to the dry signal.
+    // Keep the existing Shape-on sound, but make Shape-off bypass only the
+    // Shape controls (Bias/Rectification/DC) rather than the Drive module.
+    const float effectiveShapeMix = params.isShapeEnabled
+                                      ? juce::jlimit(0.0f, 1.0f, params.shapeMixVal)
+                                      : 1.0f;
+    shapeMixer.setWetMixProportion(effectiveShapeMix);
     if (! shapeMixerPrimed)
         shapeMixer.reset();
     shapeMixerPrimed = true;
@@ -955,11 +998,9 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     highcutQualitySmoother.setCurrentAndTargetValue(loadCachedParameter(filterParameterCache.highCutQuality));
 
     smoothedFreq1.reset(safeSampleRate, rampTimeSeconds * 2);
-    smoothedFreq1.setCurrentAndTargetValue(loadCachedParameter(crossoverFrequencyParameters[0]));
     smoothedFreq2.reset(safeSampleRate, rampTimeSeconds * 2);
-    smoothedFreq2.setCurrentAndTargetValue(loadCachedParameter(crossoverFrequencyParameters[1]));
     smoothedFreq3.reset(safeSampleRate, rampTimeSeconds * 2);
-    smoothedFreq3.setCurrentAndTargetValue(loadCachedParameter(crossoverFrequencyParameters[2]));
+    synchroniseMultibandTopologyResetState();
 
     // filter init
     updateFilter(safeSampleRate);
@@ -1037,7 +1078,12 @@ void FireAudioProcessor::reset()
     needsReset = true;
 }
 
-void FireAudioProcessor::performReset()
+void FireAudioProcessor::requestMultibandTopologyReset() noexcept
+{
+    multibandTopologyResetGeneration.fetch_add(1, std::memory_order_release);
+}
+
+void FireAudioProcessor::resetMultibandProcessingState() noexcept
 {
     lowpass1.reset();
     lowpass2.reset();
@@ -1049,6 +1095,92 @@ void FireAudioProcessor::performReset()
     compensatorHP.reset();
     secondCompensatorLP.reset();
     secondCompensatorHP.reset();
+
+    for (size_t bandIndex = 0; bandIndex < bands.size(); ++bandIndex)
+    {
+        auto& band = bands[bandIndex];
+        if (band == nullptr)
+            continue;
+
+        band->reset();
+
+        // juce::dsp::Gain::reset() snaps its smoother to the physical slot's
+        // previous target.  After an add/remove that slot can represent a
+        // different logical band, so initialise it from the completed
+        // parameter migration instead of ramping from stale output gain for
+        // the next 50 ms.
+        const auto& parameters = bandParameterCache[bandIndex];
+        const float initialOutput = loadCachedParameter(parameters.linked) > 0.5f
+                                        ? -0.1f * loadCachedParameter(parameters.drive)
+                                        : loadCachedParameter(parameters.output);
+        band->gain.setRampDurationSeconds(0.0);
+        band->gain.setGainDecibels(initialOutput);
+        band->gain.setRampDurationSeconds(0.05);
+    }
+}
+
+std::array<float, 3> FireAudioProcessor::getEffectiveCrossoverFrequencies() const noexcept
+{
+    constexpr std::array<float, 3> defaultCrossoverFrequencies { 200.0f, 1000.0f, 5000.0f };
+    constexpr float minimumParameterFrequency = 40.0f;
+    constexpr float maximumParameterFrequency = 10024.0f;
+
+    std::array<float, 3> frequencies {
+        loadCachedParameter(crossoverFrequencyParameters[0]),
+        loadCachedParameter(crossoverFrequencyParameters[1]),
+        loadCachedParameter(crossoverFrequencyParameters[2])
+    };
+
+    bool activeFrequenciesAreValid = true;
+    for (int index = 0; index < activeCrossovers; ++index)
+    {
+        const auto frequency = frequencies[static_cast<size_t>(index)];
+        activeFrequenciesAreValid = activeFrequenciesAreValid
+                                     && std::isfinite(frequency)
+                                     && frequency >= minimumParameterFrequency
+                                     && frequency <= maximumParameterFrequency
+                                     && (index == 0
+                                         || frequency > frequencies[static_cast<size_t>(index - 1)]);
+    }
+
+    // Old sessions use 21 Hz as the inactive-slot sentinel. If a host exposes
+    // NUM_BANDS on its generic parameter surface and enables those slots by
+    // itself, use safe local crossover values without rewriting the session's
+    // APVTS state.
+    if (! activeFrequenciesAreValid)
+    {
+        for (int index = 0; index < activeCrossovers; ++index)
+            frequencies[static_cast<size_t>(index)] = defaultCrossoverFrequencies[static_cast<size_t>(index)];
+    }
+
+    return frequencies;
+}
+
+void FireAudioProcessor::snapCrossoverSmoothersToParameters() noexcept
+{
+    const auto frequencies = getEffectiveCrossoverFrequencies();
+    smoothedFreq1.setCurrentAndTargetValue(frequencies[0]);
+    smoothedFreq2.setCurrentAndTargetValue(frequencies[1]);
+    smoothedFreq3.setCurrentAndTargetValue(frequencies[2]);
+}
+
+void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
+{
+    // The release/acquire pair makes the preceding message-thread parameter
+    // migration visible before its new slot layout is consumed here.
+    const auto requestedGeneration = multibandTopologyResetGeneration.load(std::memory_order_acquire);
+
+    numBands = juce::jlimit(1, 4,
+                            juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+    activeCrossovers = numBands - 1;
+    snapCrossoverSmoothersToParameters();
+    appliedMultibandTopologyResetGeneration = requestedGeneration;
+}
+
+void FireAudioProcessor::performReset()
+{
+    resetMultibandProcessingState();
+    synchroniseMultibandTopologyResetState();
     dryWetMixerGlobal.reset();
     globalMixerPrimed = false;
     bypassDelayMixer.reset();
@@ -1057,8 +1189,6 @@ void FireAudioProcessor::performReset()
     resetDownsamplingState();
     gainProcessorGlobal.reset();
     lfoManager->reset();
-    for (auto& band : bands)
-        band->reset();
 }
 
 void FireAudioProcessor::releaseResources()
@@ -1227,11 +1357,18 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         const int bandIndex = juce::jlimit(0, 3, uiFocusBand.load(std::memory_order_relaxed));
         const auto& parameters = bandParameterCache[static_cast<size_t>(bandIndex)];
 
-        vals.rec = getBlockModulatedValue(parameters.rec, lfoOutputBuffer);
+        const bool shapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
+        vals.rec = shapeEnabled
+                       ? getBlockModulatedValue(parameters.rec, lfoOutputBuffer)
+                       : 0.0f;
         const float bandMix = getBlockModulatedValue(parameters.mix, lfoOutputBuffer);
-        const float shapeMix = getBlockModulatedValue(parameters.shapeMix, lfoOutputBuffer);
+        const float shapeMix = shapeEnabled
+                                   ? getBlockModulatedValue(parameters.shapeMix, lfoOutputBuffer)
+                                   : 1.0f;
         vals.mix = bandMix * shapeMix;
-        vals.bias = getBlockModulatedValue(parameters.bias, lfoOutputBuffer);
+        vals.bias = shapeEnabled
+                        ? getBlockModulatedValue(parameters.bias, lfoOutputBuffer)
+                        : 0.0f;
         float driveBase = getBlockModulatedValue(parameters.drive, lfoOutputBuffer);
 
         vals.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
@@ -1483,6 +1620,11 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             lfoManager->getModulationRoutings() = std::move(loadedRoutings);
         }
 
+        // State replacement can migrate band parameters while NUM_BANDS stays
+        // unchanged. Publish an explicit topology generation so the next
+        // audio block cannot reuse crossover, mixer, oversampling or gain
+        // history from the previous logical band layout.
+        requestMultibandTopologyReset();
         sendChangeMessage();
     }
 }
@@ -2023,14 +2165,36 @@ void FireAudioProcessor::updateParameters()
     // 1. Update Global and Crossover Parameters
     //==============================================================================
 
-    // Get the number of active bands for processing loops.
-    numBands = juce::jlimit(1, 4, juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+    // Get the number of active bands for processing loops. A count change can
+    // also originate in host automation, where there is no UI callback to
+    // request the reset explicitly.
+    const auto requestedGeneration = multibandTopologyResetGeneration.load(std::memory_order_acquire);
+    const int requestedNumBands = juce::jlimit(
+        1, 4, juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+    const bool topologyChanged = requestedNumBands != numBands
+                                 || requestedGeneration != appliedMultibandTopologyResetGeneration;
+
+    numBands = requestedNumBands;
     activeCrossovers = numBands - 1;
 
-    // Update smoothers for crossover frequencies.
-    smoothedFreq1.setTargetValue(loadCachedParameter(crossoverFrequencyParameters[0]));
-    smoothedFreq2.setTargetValue(loadCachedParameter(crossoverFrequencyParameters[1]));
-    smoothedFreq3.setTargetValue(loadCachedParameter(crossoverFrequencyParameters[2]));
+    if (topologyChanged)
+    {
+        // Slot reuse after an add/remove must not inherit compressor,
+        // oversampling, mixer or crossover history from the previous logical
+        // band. Snapping the three smoothers also prevents the first block of
+        // a newly enabled crossover from ramping up from its hidden value.
+        resetMultibandProcessingState();
+        snapCrossoverSmoothersToParameters();
+        appliedMultibandTopologyResetGeneration = requestedGeneration;
+    }
+    else
+    {
+        // Ordinary divider dragging remains smoothly interpolated.
+        const auto frequencies = getEffectiveCrossoverFrequencies();
+        smoothedFreq1.setTargetValue(frequencies[0]);
+        smoothedFreq2.setTargetValue(frequencies[1]);
+        smoothedFreq3.setTargetValue(frequencies[2]);
+    }
 
     //==============================================================================
     // 2. Update Per-Band Smoothed Parameters
@@ -3038,45 +3202,87 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
  */
 void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount)
 {
-    const auto& bandParamBases = ParameterIDAndName::getBandParameterInfo();
+    if (! juce::isPositiveAndBelow(startIndex, 4)
+        || ! juce::isPositiveAndBelow(endIndex, 4)
+        || startIndex > endIndex
+        || shiftAmount == 0)
+        return;
+
     bool didUpdate = false;
     {
         const juce::ScopedLock lock(lfoManager->getLfoDataLock());
         auto& routings = lfoManager->getModulationRoutings();
+        juce::StringArray remappedTargets;
+        remappedTargets.ensureStorageAllocated(routings.size());
 
-        for (auto& routing : routings)
+        // Calculate the complete move from an immutable snapshot first. A band
+        // shift has memmove semantics: every destination slot is replaced even
+        // when its source band has no routing. This is especially important on
+        // deletion, where the routing on the deleted band must not survive and
+        // collide with the routing shifted in from its right-hand neighbour.
+        for (const auto& routing : routings)
         {
-            if (routing.targetParameterID.isEmpty())
-                continue;
+            auto newTarget = routing.targetParameterID;
+            const auto address = findBandParameterAddress(routing.targetParameterID);
 
-            for (const auto& paramInfo : bandParamBases)
+            if (address.parameter != nullptr)
             {
-                // Check if the target ID starts with a known band parameter ID base
-                if (routing.targetParameterID.startsWith(paramInfo.idBase))
+                if (address.bandIndex >= startIndex && address.bandIndex <= endIndex)
                 {
-                    // Extract the number part of the ID
-                    juce::String indexStr = routing.targetParameterID.substring(paramInfo.idBase.length());
-
-                    if (! indexStr.containsOnly("0123456789"))
-                        continue;
-
-                    int currentBandIndex = indexStr.getIntValue() - 1; // Convert to 0-based
-
-                    // Check if the current band is within the range we need to shift
-                    if (currentBandIndex >= startIndex && currentBandIndex <= endIndex)
-                    {
-                        int newBandIndex = currentBandIndex + shiftAmount;
-                        routing.targetParameterID = juce::isPositiveAndBelow(newBandIndex, 4)
-                                                        ? paramInfo.idBase + juce::String(newBandIndex + 1)
-                                                        : juce::String();
-                        didUpdate = true;
-
-                        // Found a match and processed it, no need to check other bases for this routing
-                        goto next_routing;
-                    }
+                    const int newBandIndex = address.bandIndex + shiftAmount;
+                    newTarget = juce::isPositiveAndBelow(newBandIndex, 4)
+                                    ? ParameterIDAndName::getIDString(address.parameter->idBase, newBandIndex)
+                                    : juce::String();
+                }
+                else
+                {
+                    // If this band is a destination of the requested move, its
+                    // old routing is overwritten even if the corresponding
+                    // source has no routing of its own.
+                    const int sourceBandIndex = address.bandIndex - shiftAmount;
+                    if (sourceBandIndex >= startIndex && sourceBandIndex <= endIndex)
+                        newTarget.clear();
                 }
             }
-        next_routing:; // Label to jump to for the next iteration of the outer loop
+
+            remappedTargets.add(newTarget);
+        }
+
+        // A band target is intentionally unique throughout the UI/API. Corrupt
+        // or legacy states can contain duplicate source routings; keep the
+        // first one produced by this move and reset the remaining slots. Leave
+        // unrelated (including global) routings exactly as they were.
+        for (int routingIndex = 0; routingIndex < remappedTargets.size(); ++routingIndex)
+        {
+            auto& target = remappedTargets.getReference(routingIndex);
+            if (target.isEmpty()
+                || target == routings.getReference(routingIndex).targetParameterID)
+                continue;
+
+            for (int earlierIndex = 0; earlierIndex < routingIndex; ++earlierIndex)
+            {
+                if (remappedTargets[earlierIndex] == target)
+                {
+                    target.clear();
+                    break;
+                }
+            }
+        }
+
+        for (int routingIndex = 0; routingIndex < routings.size(); ++routingIndex)
+        {
+            auto& routing = routings.getReference(routingIndex);
+            const auto& newTarget = remappedTargets[routingIndex];
+
+            if (newTarget == routing.targetParameterID)
+                continue;
+
+            if (newTarget.isEmpty())
+                resetModulationRouting(routing);
+            else
+                routing.targetParameterID = newTarget;
+
+            didUpdate = true;
         }
     }
 
@@ -3097,8 +3303,6 @@ void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
     if (! juce::isPositiveAndBelow(bandIndex, 4))
         return;
 
-    const auto& bandParamBases = ParameterIDAndName::getBandParameterInfo();
-    const juce::String bandSuffix = juce::String(bandIndex + 1);
     bool didUpdate = false;
     {
         const juce::ScopedLock lock(lfoManager->getLfoDataLock());
@@ -3106,20 +3310,12 @@ void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
 
         for (auto& routing : routings)
         {
-            if (routing.targetParameterID.isEmpty())
-                continue;
-
-            for (const auto& paramInfo : bandParamBases)
+            const auto address = findBandParameterAddress(routing.targetParameterID);
+            if (address.parameter != nullptr && address.bandIndex == bandIndex)
             {
-                // Check if the target is an exact match for a parameter in the specified band
-                if (routing.targetParameterID == (paramInfo.idBase + bandSuffix))
-                {
-                    routing.targetParameterID = ""; // Set target to "None"
-                    didUpdate = true;
-                    goto next_routing_clear;
-                }
+                resetModulationRouting(routing);
+                didUpdate = true;
             }
-        next_routing_clear:;
         }
     }
 

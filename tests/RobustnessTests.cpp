@@ -323,6 +323,90 @@ TEST_CASE("Restored LFO Smooth value is active on the first sample", "[lfo][wave
           == Catch::Approx(interpolateReferenceLfo(smoothReference, 0.5f)).margin(2.0e-6f));
 }
 
+TEST_CASE("Published LFO shapes crossfade without output steps", "[lfo][wavetable][smoothing]")
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int transitionSamples = 480;
+
+    const auto makeConstantShape = [](float value)
+    {
+        LfoData shape;
+        shape.points = { { 0.0f, value }, { 1.0f, value } };
+        shape.curvatures = { 0.0f };
+        shape.sanitise();
+        return shape;
+    };
+
+    // A restored shape must be exact on the first rendered sample. Crossfade
+    // only changes an already audible LFO, never startup/offline-render data.
+    LfoEngine restoredEngine;
+    restoredEngine.prepare({ sampleRate, 64, 1 });
+    restoredEngine.stageShape(makeConstantShape(1.0f));
+    restoredEngine.publishStagedShape();
+    restoredEngine.setPhase(0.5f);
+    restoredEngine.setPhaseDelta(0.0f);
+    CHECK(restoredEngine.process() == Catch::Approx(1.0f).margin(1.0e-7f));
+
+    LfoEngine engine;
+    engine.stageShape(makeConstantShape(0.0f));
+    engine.publishStagedShape();
+    engine.prepare({ sampleRate, 64, 1 });
+    engine.setPhaseDelta(0.0f);
+    engine.setPhase(0.5f);
+    float previous = engine.process();
+    REQUIRE(previous == Catch::Approx(0.0f).margin(1.0e-7f));
+
+    // Building an inactive bank must remain completely inaudible until the
+    // audio thread publishes it.
+    engine.stageShape(makeConstantShape(1.0f));
+    engine.setPhase(0.5f);
+    CHECK(engine.process() == Catch::Approx(previous).margin(1.0e-7f));
+
+    engine.publishStagedShape();
+    engine.setPhase(0.5f);
+    float current = engine.process();
+    CHECK(std::abs(current - previous) < 0.01f);
+    previous = current;
+
+    for (int sample = 1; sample < 50; ++sample)
+    {
+        engine.setPhase(0.5f);
+        previous = engine.process();
+    }
+
+    // Publish twice during active transitions. This reuses both banks and
+    // verifies that the fade reads its private snapshot, not an overwritten
+    // inactive bank.
+    engine.stageShape(makeConstantShape(0.3f));
+    engine.publishStagedShape();
+    engine.setPhase(0.5f);
+    current = engine.process();
+    CHECK(std::abs(current - previous) < 0.01f);
+    previous = current;
+
+    for (int sample = 1; sample < 50; ++sample)
+    {
+        engine.setPhase(0.5f);
+        previous = engine.process();
+    }
+
+    engine.stageShape(makeConstantShape(0.8f));
+    engine.publishStagedShape();
+    engine.setPhase(0.5f);
+    current = engine.process();
+    CHECK(std::abs(current - previous) < 0.01f);
+    previous = current;
+
+    for (int sample = 1; sample < transitionSamples; ++sample)
+    {
+        engine.setPhase(0.5f);
+        current = engine.process();
+        CHECK(std::abs(current - previous) < 0.01f);
+        previous = current;
+    }
+    CHECK(previous == Catch::Approx(0.8f).margin(2.0e-6f));
+}
+
 TEST_CASE("Delay keeps independent channel histories and an exact delay", "[delay][robustness]")
 {
     Delay delay { 2 };

@@ -151,13 +151,21 @@ void LfoEngine::publishStagedShape() noexcept
     if (! stagedBankReady)
         return;
 
+    if (! hasProcessedSample || transitionLengthSamples <= 0)
+    {
+        activeBank = stagedBank;
+        stagedBankReady = false;
+        transitionSamplesProcessed = transitionLengthSamples;
+        return;
+    }
+
+    // The producer may immediately reuse the old bank after this hand-off.
+    // Capture the currently audible table into audio-thread-owned storage
+    // before switching banks, then crossfade to the published shape.
+    captureCurrentAudibleTable();
     activeBank = stagedBank;
     stagedBankReady = false;
-
-    // Shape publication gets its own transition in a separate change. For
-    // now, make sure a Smooth-row transition cannot keep targeting the table
-    // in the old bank after this atomic publication.
-    transitionSamplesProcessed = transitionLengthSamples;
+    beginTableTransition();
 }
 
 void LfoEngine::setSmoothness(float newSmoothness) noexcept

@@ -1559,6 +1559,23 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     smoothedFreq1.reset(safeSampleRate, rampTimeSeconds * 2);
     smoothedFreq2.reset(safeSampleRate, rampTimeSeconds * 2);
     smoothedFreq3.reset(safeSampleRate, rampTimeSeconds * 2);
+    for (auto& smoother : bandSoloGainSmoothers)
+        smoother.reset(safeSampleRate, 0.01);
+    juce::dsp::ProcessSpec soloEnvelopeSpec {
+        safeSampleRate,
+        static_cast<juce::uint32>(maximumBlockSize),
+        1
+    };
+    const int maximumSoloEnvelopeDelay = juce::jmax(1, juce::roundToInt(
+        std::ceil(preparedHqLatency.load(std::memory_order_acquire))) + 2);
+    bandSoloGainDelayLinesPrepared = false;
+    for (auto& delayLine : bandSoloGainDelayLines)
+    {
+        delayLine.setMaximumDelayInSamples(maximumSoloEnvelopeDelay);
+        delayLine.prepare(soloEnvelopeSpec);
+        delayLine.setDelay(0.0f);
+    }
+    bandSoloGainDelayLinesPrepared = true;
     synchroniseMultibandTopologyResetState();
 
     // filter init
@@ -1590,6 +1607,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     mSplitTemp1.setSize(outputChannels, maximumBlockSize);
     mSplitTemp2.setSize(outputChannels, maximumBlockSize);
     mSplitTemp3.setSize(outputChannels, maximumBlockSize);
+    bandSoloGainEnvelope.setSize(4, maximumBlockSize);
+    delayedBandSoloGainEnvelope.setSize(4, maximumBlockSize);
     mBuffer1.clear();
     mBuffer2.clear();
     mBuffer3.clear();
@@ -1745,6 +1764,107 @@ void FireAudioProcessor::snapCrossoverSmoothersToParameters() noexcept
     smoothedFreq3.setCurrentAndTargetValue(frequencies[2]);
 }
 
+void FireAudioProcessor::snapBandSoloGainsToParameters() noexcept
+{
+    std::array<bool, 4> soloState {};
+    bool anySoloActive = false;
+    for (int band = 0; band < numBands; ++band)
+    {
+        soloState[static_cast<size_t>(band)] = loadCachedParameter(
+            bandParameterCache[static_cast<size_t>(band)].solo) > 0.5f;
+        anySoloActive = anySoloActive || soloState[static_cast<size_t>(band)];
+    }
+
+    for (size_t band = 0; band < bandSoloGainSmoothers.size(); ++band)
+    {
+        const bool isActiveBand = static_cast<int>(band) < numBands;
+        const float target = isActiveBand
+                                 && (! anySoloActive || soloState[band])
+                             ? 1.0f
+                             : 0.0f;
+        bandSoloGainSmoothers[band].setCurrentAndTargetValue(target);
+
+        // Topology changes can reuse a physical DSP slot for another logical
+        // band. Prime the latency-matched control delay with the new snapped
+        // gain so the first HQ samples cannot inherit the previous slot's Solo
+        // history (or fall through an all-zero reset buffer).
+        if (bandSoloGainDelayLinesPrepared)
+        {
+            auto& delayLine = bandSoloGainDelayLines[band];
+            delayLine.reset();
+            const int historySamples = delayLine.getMaximumDelayInSamples() + 2;
+            for (int sample = 0; sample < historySamples; ++sample)
+                delayLine.pushSample(0, target);
+        }
+    }
+}
+
+void FireAudioProcessor::updateBandSoloGainEnvelope(int numSamples,
+                                                    bool useHQ) noexcept
+{
+    if (numSamples <= 0)
+        return;
+
+    // Snapshot every Solo parameter once per callback. The same generated
+    // envelope is then reused for the dry and wet sums, so a message-thread
+    // change cannot select different bands on the two sides of Global Mix.
+    std::array<bool, 4> soloState {};
+    bool anySoloActive = false;
+    for (int band = 0; band < numBands; ++band)
+    {
+        soloState[static_cast<size_t>(band)] = loadCachedParameter(
+            bandParameterCache[static_cast<size_t>(band)].solo) > 0.5f;
+        anySoloActive = anySoloActive || soloState[static_cast<size_t>(band)];
+    }
+
+    bandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
+    delayedBandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
+    const float wetPathLatency = useHQ
+                                     ? preparedHqLatency.load(std::memory_order_acquire)
+                                     : 0.0f;
+    for (size_t band = 0; band < bandSoloGainSmoothers.size(); ++band)
+    {
+        const bool isActiveBand = static_cast<int>(band) < numBands;
+        const float target = isActiveBand
+                                 && (! anySoloActive || soloState[band])
+                             ? 1.0f
+                             : 0.0f;
+        auto& smoother = bandSoloGainSmoothers[band];
+        smoother.setTargetValue(target);
+
+        auto* gains = bandSoloGainEnvelope.getWritePointer(static_cast<int>(band));
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            // Emit the old audible value first, then advance. This keeps the
+            // switching sample continuous and reaches the target after exactly
+            // the configured 10 ms ramp.
+            gains[sample] = smoother.getCurrentValue();
+            smoother.getNextValue();
+        }
+
+        // In HQ mode the wet bands already carry the oversampler latency,
+        // while the dry bands are delayed later by Global Mix. Delay the wet
+        // contribution gain by the same amount so both arrive at the output
+        // with one identical Solo envelope.
+        auto& delayLine = bandSoloGainDelayLines[band];
+        delayLine.setDelay(wetPathLatency);
+        const juce::AudioBuffer<float> sourceView(
+            bandSoloGainEnvelope.getArrayOfWritePointers()
+                + static_cast<int>(band),
+            1,
+            numSamples);
+        juce::AudioBuffer<float> destinationView(
+            delayedBandSoloGainEnvelope.getArrayOfWritePointers()
+                + static_cast<int>(band),
+            1,
+            numSamples);
+        const auto inputBlock = juce::dsp::AudioBlock<const float>(sourceView);
+        auto outputBlock = juce::dsp::AudioBlock<float>(destinationView);
+        delayLine.process(juce::dsp::ProcessContextNonReplacing<float>(
+            inputBlock, outputBlock));
+    }
+}
+
 void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 {
     // The release/acquire pair makes the preceding message-thread parameter
@@ -1755,6 +1875,7 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
                             juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
     activeCrossovers = numBands - 1;
     snapCrossoverSmoothersToParameters();
+    snapBandSoloGainsToParameters();
     appliedMultibandTopologyResetGeneration = requestedGeneration;
 }
 
@@ -2878,6 +2999,7 @@ void FireAudioProcessor::updateParameters()
         // a newly enabled crossover from ramping up from its hidden value.
         resetMultibandProcessingState();
         snapCrossoverSmoothersToParameters();
+        snapBandSoloGainsToParameters();
         appliedMultibandTopologyResetGeneration = requestedGeneration;
     }
     else
@@ -2908,23 +3030,10 @@ void FireAudioProcessor::updateParameters()
 
 void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
                                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
-                                  bool ignoreSoloLogic = false)
+                                  bool ignoreSoloLogic,
+                                  bool useDelayedSoloEnvelope)
 {
     outputBuffer.clear();
-
-    bool anySoloActive = false;
-    // Only check for solo state if we are NOT ignoring the solo logic.
-    if (! ignoreSoloLogic)
-    {
-        for (int i = 0; i < numBands; ++i)
-        {
-            if (loadCachedParameter(bandParameterCache[static_cast<size_t>(i)].solo) > 0.5f)
-            {
-                anySoloActive = true;
-                break;
-            }
-        }
-    }
 
     // The main summing loop now operates on the provided sourceBandBuffers.
     for (int i = 0; i < numBands; ++i)
@@ -2936,27 +3045,50 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
         if (currentBandBuffer == nullptr)
             continue;
 
-        const bool isThisBandSoloed = loadCachedParameter(
-                                          bandParameterCache[static_cast<size_t>(i)].solo)
-                                      > 0.5f;
+        // The number of samples to process for this operation.
+        const int numSamples = juce::jmin(currentBandBuffer->getNumSamples(),
+                                          outputBuffer.getNumSamples());
+        const auto& gainBuffer = useDelayedSoloEnvelope
+                                     ? delayedBandSoloGainEnvelope
+                                     : bandSoloGainEnvelope;
+        const bool hasGainEnvelope = ! ignoreSoloLogic
+                                     && i < gainBuffer.getNumChannels()
+                                     && numSamples <= gainBuffer.getNumSamples();
+        const float* gainEnvelope = hasGainEnvelope
+                                        ? gainBuffer.getReadPointer(i)
+                                        : nullptr;
+        if (numSamples <= 0)
+            continue;
 
-        // Determine if this band should be added to the mix.
-        const bool shouldAddBand = anySoloActive ? isThisBandSoloed : true;
+        // A fast Solo retarget can make the first and last delayed gains equal
+        // while a transition still exists between them. Inspect the complete
+        // range before taking a constant-gain fast path.
+        const auto gainRange = gainEnvelope != nullptr
+                                   ? juce::FloatVectorOperations::findMinAndMax(
+                                       gainEnvelope, numSamples)
+                                   : juce::Range<float>(1.0f, 1.0f);
+        const bool isConstantZero = gainEnvelope != nullptr
+                                    && juce::exactlyEqual(gainRange.getStart(), 0.0f)
+                                    && juce::exactlyEqual(gainRange.getEnd(), 0.0f);
+        const bool isConstantUnity = gainEnvelope == nullptr
+                                     || (juce::exactlyEqual(gainRange.getStart(), 1.0f)
+                                         && juce::exactlyEqual(gainRange.getEnd(), 1.0f));
 
-        if (shouldAddBand || ignoreSoloLogic)
+        if (isConstantZero)
+            continue;
+
+        for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
         {
-            // The number of samples to process for this operation.
-            const int numSamples = juce::jmin(currentBandBuffer->getNumSamples(), outputBuffer.getNumSamples());
-
-            for (int channel = 0; channel < outputBuffer.getNumChannels(); ++channel)
+            if (channel < currentBandBuffer->getNumChannels())
             {
-                // Ensure the destination buffer has enough space before adding.
-                // This is a safety check.
-                if (channel < currentBandBuffer->getNumChannels())
-                {
-                    // Use the number of samples from the *source* buffer, not the destination.
+                if (isConstantUnity)
                     outputBuffer.addFrom(channel, 0, *currentBandBuffer, channel, 0, numSamples);
-                }
+                else
+                    juce::FloatVectorOperations::addWithMultiply(
+                        outputBuffer.getWritePointer(channel),
+                        currentBandBuffer->getReadPointer(channel),
+                        gainEnvelope,
+                        numSamples);
             }
         }
     }
@@ -3251,16 +3383,19 @@ float FireAudioProcessor::getTotalLatency() const
 void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
 {
     splitBands(wetBuffer, sampleRate);
+    // Snapshot HQ once for the entire multiband callback. A concurrent host
+    // automation change must not select one latency for the Solo envelope and
+    // another for the band processors in the same block.
+    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
+    updateBandSoloGainEnvelope(wetBuffer.getNumSamples(), useHQ);
 
     delayMatchedDryBuffer.clear();
 
     std::array<juce::AudioBuffer<float>*, 4> dryBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
     std::array<juce::AudioBuffer<float>*, 4> wetBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
-    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
-
     // Solo must affect both sides of the global dry/wet mix. Otherwise the
     // un-soloed bands leak back through the dry side whenever Mix is below 1.
-    sumBands(delayMatchedDryBuffer, dryBandBuffers, false);
+    sumBands(delayMatchedDryBuffer, dryBandBuffers, false, false);
 
     for (int i = 0; i < numBands; ++i)
     {
@@ -3373,7 +3508,7 @@ void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, c
         }
     }
 
-    sumBands(wetBuffer, wetBandBuffers, false);
+    sumBands(wetBuffer, wetBandBuffers, false, true);
 }
 
 void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)

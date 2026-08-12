@@ -306,7 +306,8 @@ public:
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer,
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
-                  bool ignoreSoloLogic);
+                  bool ignoreSoloLogic,
+                  bool useDelayedSoloEnvelope);
     void updateFilter(double sampleRate);
     bool updateGlobalFilters(double sampleRate, int lfoSampleIndex);
     void processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
@@ -413,6 +414,8 @@ private:
     void resetMultibandProcessingState() noexcept;
     std::array<float, 3> getEffectiveCrossoverFrequencies() const noexcept;
     void snapCrossoverSmoothersToParameters() noexcept;
+    void snapBandSoloGainsToParameters() noexcept;
+    void updateBandSoloGainEnvelope(int numSamples, bool useHQ) noexcept;
     void synchroniseMultibandTopologyResetState() noexcept;
     std::atomic<bool> needsReset { false };
     std::atomic<std::uint32_t> multibandTopologyResetGeneration { 0 };
@@ -525,10 +528,18 @@ private:
 
     juce::AudioBuffer<float> mBuffer1, mBuffer2, mBuffer3, mBuffer4;
     juce::AudioBuffer<float> mSplitTemp1, mSplitTemp2, mSplitTemp3;
+    juce::AudioBuffer<float> bandSoloGainEnvelope;
+    juce::AudioBuffer<float> delayedBandSoloGainEnvelope;
+    std::array<juce::dsp::DelayLine<float,
+                                    juce::dsp::DelayLineInterpolationTypes::Linear>, 4>
+        bandSoloGainDelayLines;
+    bool bandSoloGainDelayLinesPrepared = false;
 
     juce::SmoothedValue<float> smoothedFreq1 = 200.0f;
     juce::SmoothedValue<float> smoothedFreq2 = 1000.0f;
     juce::SmoothedValue<float> smoothedFreq3 = 5000.0f;
+    std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 4>
+        bandSoloGainSmoothers;
 
     // Save size
     std::atomic<int> editorWidth { static_cast<int>(INIT_WIDTH) };

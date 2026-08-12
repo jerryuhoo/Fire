@@ -440,6 +440,8 @@ private:
     // filter
     MonoChain leftChain;
     MonoChain rightChain;
+    juce::dsp::DryWetMixer<float> globalFilterMixer { 0 };
+    bool globalFilterMixerPrimed = false;
 
     ChainSettings cachedGlobalFilterSettings {};
     double cachedGlobalFilterSampleRate = 0.0;

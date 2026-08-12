@@ -1290,6 +1290,12 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
                                                        loadCachedParameter(globalMixParameter)));
     dryWetMixerGlobal.prepare(globalMixerSpec);
 
+    globalFilterMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
+    globalFilterMixer.setWetMixProportion(loadCachedParameter(filterEnabledParameter) > 0.5f
+                                              ? 1.0f
+                                              : 0.0f);
+    globalFilterMixer.prepare(globalMixerSpec);
+
     bypassDelayMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     // Set the target before prepare/reset so the first bypassed sample is not
     // blended with the undelayed wet input by DryWetMixer's 50 ms ramp.
@@ -1413,6 +1419,10 @@ void FireAudioProcessor::performReset()
 {
     resetMultibandProcessingState();
     synchroniseMultibandTopologyResetState();
+    leftChain.reset();
+    rightChain.reset();
+    globalFilterMixer.reset();
+    globalFilterMixerPrimed = false;
     dryWetMixerGlobal.reset();
     globalMixerPrimed = false;
     bypassDelayMixer.reset();
@@ -2980,8 +2990,14 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     // ==============================================================================
     // 1. Global Filter Processing (Block-based)
     // ==============================================================================
-    if (loadCachedParameter(filterEnabledParameter) > 0.5f)
     {
+        const bool filterEnabled = loadCachedParameter(filterEnabledParameter) > 0.5f;
+        globalFilterMixer.setWetMixProportion(filterEnabled ? 1.0f : 0.0f);
+        if (! globalFilterMixerPrimed)
+            globalFilterMixer.reset();
+        globalFilterMixerPrimed = true;
+        globalFilterMixer.pushDrySamples(juce::dsp::AudioBlock<float>(buffer));
+
         auto block = juce::dsp::AudioBlock<float>(buffer);
 
         const auto processRange = [&] (int startSample, int numSamples)
@@ -3034,6 +3050,8 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
         if (processedSamples < buffer.getNumSamples())
             processRange(processedSamples, buffer.getNumSamples() - processedSamples);
+
+        globalFilterMixer.mixWetSamples(block);
     }
 
     // ==============================================================================

@@ -1840,7 +1840,6 @@ void LfoPanel::handleAsyncUpdate()
         updateRateSlider();
 
     const auto smoothnessUpdates = pendingSmoothnessUpdates.exchange(0, std::memory_order_acquire);
-    bool dataChanged = false;
     for (int i = 0; i < 4; ++i)
     {
         if ((smoothnessUpdates & (1u << static_cast<unsigned int>(i))) == 0)
@@ -1854,12 +1853,8 @@ void LfoPanel::handleAsyncUpdate()
             processor.getLfoManager().setLfoData(i, lfoData);
             if (i == currentLfoIndex)
                 lfoEditor.setSmoothness(lfoData.smoothness);
-            dataChanged = true;
         }
     }
-
-    if (dataChanged && onDataChanged)
-        onDataChanged();
 }
 
 void LfoPanel::styleLfoSelectButton(juce::TextButton& button, juce::Colour colour)

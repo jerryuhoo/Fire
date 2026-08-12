@@ -10,6 +10,221 @@
 
 #include "Preset.h"
 #include "../../PluginProcessor.h"
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+
+namespace
+{
+constexpr juce::int64 maximumPresetFileBytes = 4 * 1024 * 1024;
+constexpr int maximumPresetFolderDepth = 16;
+constexpr int maximumPresetCount = 4096;
+constexpr int maximumPresetRoutings = 128;
+
+bool parseStrictDouble(const juce::String& text, double& result) noexcept
+{
+    const auto trimmed = text.trim();
+    if (trimmed.isEmpty())
+        return false;
+
+    const auto utf8 = trimmed.toRawUTF8();
+    char* end = nullptr;
+    errno = 0;
+    const auto parsed = std::strtod(utf8, &end);
+    if (end == utf8 || end == nullptr || *end != '\0' || errno == ERANGE || ! std::isfinite(parsed))
+        return false;
+
+    result = parsed;
+    return true;
+}
+
+float readNormalisedAttribute(const juce::XmlElement& xml,
+                              const juce::String& name,
+                              float fallback) noexcept
+{
+    double parsed = 0.0;
+    if (! parseStrictDouble(xml.getStringAttribute(name), parsed))
+        return fallback;
+
+    return juce::jlimit(0.0f, 1.0f, static_cast<float>(parsed));
+}
+
+bool readStrictIntegerAttribute(const juce::XmlElement& xml,
+                                const juce::String& name,
+                                int& result) noexcept
+{
+    double parsed = 0.0;
+    if (! xml.hasAttribute(name)
+        || ! parseStrictDouble(xml.getStringAttribute(name), parsed)
+        || parsed < static_cast<double>(std::numeric_limits<int>::min())
+        || parsed > static_cast<double>(std::numeric_limits<int>::max())
+        || std::floor(parsed) != parsed)
+        return false;
+
+    result = static_cast<int>(parsed);
+    return true;
+}
+
+bool isStrictNumberInRange(const juce::XmlElement& xml,
+                           const juce::String& name,
+                           double minimum,
+                           double maximum) noexcept
+{
+    double parsed = 0.0;
+    return xml.hasAttribute(name)
+           && parseStrictDouble(xml.getStringAttribute(name), parsed)
+           && parsed >= minimum
+           && parsed <= maximum;
+}
+
+bool isValidLfoState(const juce::XmlElement& lfoState) noexcept
+{
+    if (! lfoState.hasTagName("LFO_STATE")
+        || lfoState.getNumChildElements() != 4)
+        return false;
+
+    std::array<bool, 4> seenIndices {};
+    for (auto* lfo : lfoState.getChildIterator())
+    {
+        int index = -1;
+        if (! lfo->hasTagName("LFO")
+            || ! readStrictIntegerAttribute(*lfo, "index", index)
+            || ! juce::isPositiveAndBelow(index, 4)
+            || seenIndices[static_cast<size_t>(index)]
+            || lfo->getNumChildElements() > 2)
+            return false;
+
+        seenIndices[static_cast<size_t>(index)] = true;
+        if (lfo->hasAttribute("smoothness")
+            && ! isStrictNumberInRange(*lfo, "smoothness", 0.0, 1.0))
+            return false;
+
+        const juce::XmlElement* points = nullptr;
+        const juce::XmlElement* curvatures = nullptr;
+        for (auto* payload : lfo->getChildIterator())
+        {
+            if (payload->hasTagName("POINTS") && points == nullptr)
+                points = payload;
+            else if (payload->hasTagName("CURVATURES") && curvatures == nullptr)
+                curvatures = payload;
+            else
+                return false;
+        }
+
+        if (points == nullptr || curvatures == nullptr
+            || points->getNumChildElements() < 2
+            || points->getNumChildElements() > static_cast<int>(LfoData::maximumNumberOfPoints)
+            || curvatures->getNumChildElements() != points->getNumChildElements() - 1)
+            return false;
+
+        for (auto* point : points->getChildIterator())
+            if (! point->hasTagName("P")
+                || ! isStrictNumberInRange(*point, "x", 0.0, 1.0)
+                || ! isStrictNumberInRange(*point, "y", 0.0, 1.0))
+                return false;
+
+        for (auto* curvature : curvatures->getChildIterator())
+            if (! curvature->hasTagName("C")
+                || ! isStrictNumberInRange(*curvature, "v", -2.0, 2.0))
+                return false;
+    }
+
+    return true;
+}
+
+bool isValidRoutingState(const juce::XmlElement& routingState,
+                         const juce::AudioProcessor& processor) noexcept
+{
+    if (! routingState.hasTagName("MODULATION_STATE")
+        || routingState.getNumChildElements() > maximumPresetRoutings)
+        return false;
+
+    juce::StringArray seenTargets;
+    for (auto* routing : routingState.getChildIterator())
+    {
+        int source = -1;
+        if (! routing->hasTagName("ROUTING")
+            || ! readStrictIntegerAttribute(*routing, "source", source)
+            || ! juce::isPositiveAndBelow(source, 4)
+            || ! isStrictNumberInRange(*routing, "depth", -1.0, 1.0)
+            || routing->getNumChildElements() != 0)
+            return false;
+
+        const auto target = routing->getStringAttribute("target");
+        if (target.isEmpty())
+            continue; // Empty preallocated routing slots are part of Init.
+
+        bool isKnownTarget = false;
+        for (const auto* parameter : processor.getParameters())
+            if (const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
+                parameterWithID != nullptr && parameterWithID->paramID == target)
+            {
+                isKnownTarget = true;
+                break;
+            }
+
+        if (! isKnownTarget || seenTargets.contains(target))
+            return false;
+        seenTargets.add(target);
+    }
+
+    return true;
+}
+
+bool isValidABSnapshot(const juce::XmlElement& snapshot,
+                       const juce::AudioProcessor& processor) noexcept
+{
+    if (! snapshot.hasTagName("AB_STATE") || snapshot.getNumChildElements() > 2)
+        return false;
+
+    int expectedParameterCount = 0;
+    for (const auto* parameter : processor.getParameters())
+    {
+        const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
+        if (parameterWithID == nullptr)
+            continue;
+
+        ++expectedParameterCount;
+        if (! snapshot.hasAttribute(parameterWithID->paramID))
+            return false;
+
+        if (! isStrictNumberInRange(snapshot, parameterWithID->paramID, 0.0, 1.0))
+            return false;
+    }
+
+    if (expectedParameterCount == 0 || snapshot.getNumChildElements() != 2)
+        return false;
+
+    bool hasLfoState = false;
+    bool hasRoutingState = false;
+    for (auto* child : snapshot.getChildIterator())
+    {
+        if (child->hasTagName("LFO_STATE") && ! hasLfoState)
+        {
+            hasLfoState = true;
+            if (! isValidLfoState(*child))
+                return false;
+        }
+        else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
+        {
+            hasRoutingState = true;
+            if (! isValidRoutingState(*child, processor))
+                return false;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    return hasLfoState && hasRoutingState;
+}
+
+bool isSupportedPresetDocument(const juce::XmlElement& xml) noexcept
+{
+    return xml.hasTagName("WINGSFIRE");
+}
+} // namespace
 
 namespace state
 {
@@ -18,6 +233,8 @@ namespace state
     {
         auto& fireProc = static_cast<const FireAudioProcessor&>(proc);
         xml.deleteAllChildElements();
+        xml.setAttribute("presetFormatVersion", 2);
+        xml.setAttribute("pluginVersion", VERSION);
 
         for (const auto& param : fireProc.getParameters())
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
@@ -61,8 +278,11 @@ namespace state
                 float valueToLoad = p->getDefaultValue();
                 if (xml.hasAttribute(p->paramID))
                 {
-                    const auto valueFromXml = static_cast<float>(xml.getDoubleAttribute(p->paramID, p->getValue()));
-                    valueToLoad = std::isfinite(valueFromXml) ? juce::jlimit(0.0f, 1.0f, valueFromXml) : p->getDefaultValue();
+                    // XmlElement's numeric helpers accept a valid numeric prefix
+                    // (for example "0.5oops"). Presets are an external file
+                    // format, so only a complete, finite normalised number is
+                    // allowed to override the parameter default.
+                    valueToLoad = readNormalisedAttribute(xml, p->paramID, p->getDefaultValue());
                 }
                 else if (p->paramID.startsWith(SHAPE_BYPASS_ID))
                 {
@@ -76,6 +296,7 @@ namespace state
         std::array<LfoData, 4> lfoDataToLoad;
         std::array<bool, 4> loadedLfoSmoothness {};
         std::array<bool, 4> loadedSmoothnessParameter {};
+        std::array<bool, 4> loadedLfoIndices {};
         for (int i = 0; i < static_cast<int>(loadedSmoothnessParameter.size()); ++i)
             loadedSmoothnessParameter[static_cast<size_t>(i)] = xml.hasAttribute(
                 ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i));
@@ -84,11 +305,16 @@ namespace state
         {
             for (auto* lfoXml : lfoState->getChildIterator())
             {
+                if (! lfoXml->hasTagName("LFO"))
+                    continue;
+
                 const int index = lfoXml->getIntAttribute("index", -1);
-                if (juce::isPositiveAndBelow(index, (int) lfoDataToLoad.size()))
+                if (juce::isPositiveAndBelow(index, static_cast<int>(lfoDataToLoad.size()))
+                    && ! loadedLfoIndices[static_cast<size_t>(index)])
                 {
                     lfoDataToLoad[static_cast<size_t>(index)] = LfoData::readFromXml(*lfoXml);
                     loadedLfoSmoothness[static_cast<size_t>(index)] = lfoXml->hasAttribute("smoothness");
+                    loadedLfoIndices[static_cast<size_t>(index)] = true;
                 }
             }
         }
@@ -114,11 +340,25 @@ namespace state
         {
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
+                if (! routingXml->hasTagName("ROUTING")
+                    || routingsToLoad.size() >= maximumPresetRoutings)
+                    continue;
+
                 auto routing = ModulationRouting::readFromXml(*routingXml);
                 routing.sourceLfoIndex = juce::jlimit(0, 3, routing.sourceLfoIndex);
                 routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
 
-                if (routing.targetParameterID.isNotEmpty() && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
+                bool targetAlreadyUsed = false;
+                for (const auto& existing : routingsToLoad)
+                    if (existing.targetParameterID == routing.targetParameterID)
+                    {
+                        targetAlreadyUsed = true;
+                        break;
+                    }
+
+                if (! targetAlreadyUsed
+                    && routing.targetParameterID.isNotEmpty()
+                    && fireProc.treeState.getParameter(routing.targetParameterID) != nullptr)
                     routingsToLoad.add(std::move(routing));
             }
         }
@@ -143,22 +383,38 @@ namespace state
     StateAB::StateAB(juce::AudioProcessor& p)
         : pluginProcessor { p }
     {
-        copyAB();
+        copyAB(false);
     }
 
     void StateAB::toggleAB()
     {
-        juce::XmlElement temp { "Temp" };
-        saveStateToXml(pluginProcessor, temp); // current to temp
-        loadStateFromXml(ab, pluginProcessor); // ab to current
-        ab = temp; // temp to ab
+        {
+            const juce::ScopedLock lock(stateLock);
+            juce::XmlElement temp { "Temp" };
+            saveStateToXml(pluginProcessor, temp); // current to temp
+            loadStateFromXml(ab, pluginProcessor); // ab to current
+            ab = temp; // temp to ab
+            currentSideIsA.store(! currentSideIsA.load(std::memory_order_relaxed), std::memory_order_release);
+        }
+
+        pluginProcessor.updateHostDisplay(
+            juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
     }
 
-    void StateAB::copyAB()
+    void StateAB::copyAB(bool notifyHost)
     {
-        ab.removeAllAttributes();
-        ab.deleteAllChildElements();
-        saveStateToXml(pluginProcessor, ab);
+        {
+            const juce::ScopedLock lock(stateLock);
+            ab.removeAllAttributes();
+            ab.deleteAllChildElements();
+            saveStateToXml(pluginProcessor, ab);
+        }
+
+        if (notifyHost)
+        {
+            pluginProcessor.updateHostDisplay(
+                juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
+        }
     }
 
     void StateAB::reset()
@@ -166,12 +422,49 @@ namespace state
         pluginProcessor.reset();
     }
 
+    void StateAB::writeToXml(juce::XmlElement& parent) const
+    {
+        const juce::ScopedLock lock(stateLock);
+        parent.deleteAllChildElementsWithTagName("AB_STATE");
+        auto snapshot = std::make_unique<juce::XmlElement>(ab);
+        snapshot->setTagName("AB_STATE");
+        snapshot->setAttribute("currentSideIsA", currentSideIsA.load(std::memory_order_relaxed));
+        parent.addChildElement(snapshot.release());
+    }
+
+    void StateAB::readFromXml(const juce::XmlElement* state)
+    {
+        const juce::ScopedLock lock(stateLock);
+        if (state == nullptr || ! isValidABSnapshot(*state, pluginProcessor))
+        {
+            // Old host states never persisted A/B, and a damaged alternate
+            // must never turn the next toggle into an implicit Init. Preserve
+            // the historical default: A is current and B mirrors the live
+            // state that has just been restored.
+            ab.removeAllAttributes();
+            ab.deleteAllChildElements();
+            saveStateToXml(pluginProcessor, ab);
+            currentSideIsA.store(true, std::memory_order_release);
+            return;
+        }
+
+        ab = *state;
+        ab.setTagName("AB");
+        ab.removeAttribute("currentSideIsA");
+        currentSideIsA.store(state->getBoolAttribute("currentSideIsA", true), std::memory_order_release);
+    }
+
     //==============================================================================
 
     bool parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml)
     {
+        if (! file.existsAsFile()
+            || file.getSize() <= 0
+            || file.getSize() > maximumPresetFileBytes)
+            return false;
+
         auto parsed = juce::XmlDocument::parse(file);
-        if (parsed == nullptr)
+        if (parsed == nullptr || ! isSupportedPresetDocument(*parsed))
             return false;
 
         xml = *parsed;
@@ -181,22 +474,24 @@ namespace state
     bool writeXmlElementToFile(const juce::XmlElement& xml,
                                juce::File& file,
                                const juce::String& presetName,
-                               bool hasExtension)
+                               bool confirmOverwrite)
     {
         if (! file.exists())
             return xml.writeTo(file);
 
-        if (! hasExtension)
+        if (file.isDirectory())
+            return false;
+
+        if (confirmOverwrite)
         {
             const bool choice = juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::WarningIcon,
-                                                                        "\"" + presetName + PRESET_EXETENSION + "\" already exists. Do you want to replace it?",
-                                                                        "A file or folder with the same name already exists in the folder User. Replacing it will overwrite its current contents.",
+                                                                        "Replace preset?",
+                                                                        "\"" + presetName + PRESET_EXETENSION
+                                                                            + "\" already exists. Replacing it will overwrite its current contents.",
                                                                         nullptr,
                                                                         nullptr);
             if (! choice)
                 return false;
-
-            return xml.writeTo(file);
         }
 
         return xml.writeTo(file);
@@ -252,25 +547,76 @@ namespace state
         return "preset" + static_cast<juce::String>(newPresetIdNumber); // format: preset##
     }
 
-    void StatePresets::recursiveFileSearch(juce::XmlElement& parentXML, const juce::File& dir)
+    juce::String StatePresets::normalisePresetKey(juce::String key)
     {
+        key = key.trim().replaceCharacter('\\', '/');
+        while (key.startsWith("./"))
+            key = key.substring(2);
+        while (key.contains("//"))
+            key = key.replace("//", "/");
+
+        // A key is always relative to the configured preset root. Reject
+        // traversal and absolute paths rather than allowing identity to escape
+        // that root when it arrives from a host state.
+        if (key.isEmpty() || juce::File::isAbsolutePath(key))
+            return {};
+
+        const auto segments = juce::StringArray::fromTokens(key, "/", {});
+        for (const auto& segment : segments)
+            if (segment.isEmpty() || segment == "." || segment == "..")
+                return {};
+
+        return key;
+    }
+
+    void StatePresets::recursiveFileSearch(juce::XmlElement& parentXML,
+                                           const juce::File& dir,
+                                           int depth)
+    {
+        if (depth > maximumPresetFolderDepth || numPresets >= maximumPresetCount)
+            return;
+
         juce::RangedDirectoryIterator iterator(dir,
                                                 false,
                                                 "*",
-                                                juce::File::findFilesAndDirectories | juce::File::ignoreHiddenFiles);
+                                                juce::File::findFilesAndDirectories | juce::File::ignoreHiddenFiles,
+                                                juce::File::FollowSymlinks::no);
         for (auto file : iterator)
         {
+            if (numPresets >= maximumPresetCount)
+                break;
+
             if (file.isDirectory())
             {
                 auto currentState = std::make_unique<juce::XmlElement>("FOLDER");
                 currentState->setAttribute("folderName", file.getFile().getFileName());
-                recursiveFileSearch(*currentState, file.getFile());
-                parentXML.addChildElement(currentState.release());
+                recursiveFileSearch(*currentState, file.getFile(), depth + 1);
+                if (currentState->getNumChildElements() > 0)
+                    parentXML.addChildElement(currentState.release());
             }
             else if (file.getFile().hasFileExtension(PRESET_EXETENSION))
             {
                 auto currentState = std::make_unique<juce::XmlElement>("PRESET");
                 if (! parseFileToXmlElement(file.getFile(), *currentState))
+                    continue;
+
+                bool hasKnownParameter = false;
+                for (const auto* parameter : pluginProcessor.getParameters())
+                    if (const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
+                        parameterWithID != nullptr && currentState->hasAttribute(parameterWithID->paramID))
+                    {
+                        hasKnownParameter = true;
+                        break;
+                    }
+
+                // A bare <WINGSFIRE/> document is syntactically valid XML but
+                // not a preset. Exposing it would create a menu action that
+                // silently resets every parameter to its default.
+                if (! hasKnownParameter)
+                    continue;
+
+                const auto presetKey = normalisePresetKey(file.getFile().getRelativePathFrom(presetFile));
+                if (presetKey.isEmpty())
                     continue;
 
                 ++numPresets;
@@ -280,6 +626,7 @@ namespace state
                 const juce::String newName = file.getFile().getFileNameWithoutExtension();
                 if (newName != currentState->getStringAttribute("presetName"))
                     currentState->setAttribute("presetName", newName);
+                currentState->setAttribute("presetKey", presetKey);
 
                 parentXML.addChildElement(currentState.release());
             }
@@ -294,7 +641,7 @@ namespace state
         for (auto* child : parent->getChildIterator())
         {
             // If the child element is a folder (i.e., it doesn't have a "presetName" attribute), sort it recursively.
-            if (! child->hasAttribute("presetName"))
+            if (child->hasTagName("FOLDER"))
             {
                 recursiveSort(child);
             }
@@ -307,44 +654,62 @@ namespace state
         mPresetXml.deleteAllChildElements();
         //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
 
-        recursiveFileSearch(mPresetXml, presetFile);
+        recursiveFileSearch(mPresetXml, presetFile, 0);
 
         recursiveSort(&mPresetXml);
 
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
     }
 
-    juce::String StatePresets::savePreset(juce::File savePath)
+    juce::String StatePresets::savePreset(juce::File savePath, bool overwriteAlreadyConfirmed)
     {
-        juce::File userPresetFile;
-        bool hasExtension = false;
-        juce::String presetName = savePath.getFileNameWithoutExtension();
-
-        // If the filename is empty (e.g., user cancelled the dialog), return an empty string.
-        if (presetName.isEmpty())
+        if (savePath == juce::File())
             return juce::String();
 
-        if (! savePath.hasFileExtension(PRESET_EXETENSION))
-        {
-            userPresetFile = savePath.getFullPathName() + PRESET_EXETENSION;
-        }
-        else
-        {
-            userPresetFile = savePath.getFullPathName();
-            hasExtension = true;
-        }
+        juce::File userPresetFile = savePath.hasFileExtension(PRESET_EXETENSION)
+                                        ? savePath
+                                        : juce::File(savePath.getFullPathName() + PRESET_EXETENSION);
+        const auto presetName = userPresetFile.getFileNameWithoutExtension();
+        if (presetName.trim().isEmpty())
+            return juce::String();
+
+        const auto parentDirectory = userPresetFile.getParentDirectory();
+        if ((! parentDirectory.isDirectory() && parentDirectory.createDirectory().failed())
+            || ! parentDirectory.isDirectory())
+            return juce::String();
 
         // Save the single preset to a real file.
         presetXmlSingle.removeAllAttributes(); // Clear all first.
         presetXmlSingle.deleteAllChildElements();
         presetXmlSingle.setAttribute("presetName", presetName); // Set preset name.
+        presetXmlSingle.setAttribute("presetFormatVersion", 2);
+        presetXmlSingle.setAttribute("pluginVersion", VERSION);
         saveStateToXml(pluginProcessor, presetXmlSingle);
 
-        bool isSaved = writeXmlElementToFile(presetXmlSingle, userPresetFile, presetName, hasExtension);
+        const bool isSaved = writeXmlElementToFile(presetXmlSingle,
+                                                   userPresetFile,
+                                                   presetName,
+                                                   ! overwriteAlreadyConfirmed);
 
         if (isSaved)
         {
-            statePresetName = presetName; // Also update the internal state.
+            const auto savedPresetKey = normalisePresetKey(userPresetFile.getRelativePathFrom(presetFile));
+            {
+                const juce::ScopedLock lock(identityLock);
+                currentPresetKey = savedPresetKey;
+                if (savedPresetKey.isNotEmpty())
+                {
+                    statePresetName = presetName;
+                }
+                else
+                {
+                    // Exporting outside the configured preset root is valid,
+                    // but that file cannot be represented by a stable library
+                    // key and must not accidentally select a same-named preset.
+                    statePresetName.clear();
+                    mCurrentPresetId.store(0, std::memory_order_relaxed);
+                }
+            }
             scanAllPresets(); // Rescan and sort all presets.
 
             // Key change: Return the preset name on success.
@@ -364,20 +729,26 @@ namespace state
             if (child->hasAttribute("presetName") && child->getTagName() == presetId)
             {
                 loadStateFromXml(*child, pluginProcessor);
-                statePresetName = child->getStringAttribute("presetName");
+                {
+                    const juce::ScopedLock lock(identityLock);
+                    statePresetName = child->getStringAttribute("presetName");
+                    currentPresetKey = normalisePresetKey(child->getStringAttribute("presetKey"));
+                }
+                pluginProcessor.updateHostDisplay(
+                    juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
                 return true;
             }
 
-            if (recursivePresetLoad(*child, presetId))
+            if (child->hasTagName("FOLDER") && recursivePresetLoad(*child, presetId))
                 return true;
         }
 
         return false;
     }
 
-    void StatePresets::loadPreset(juce::String presetId)
+    bool StatePresets::loadPreset(const juce::String& presetId)
     {
-        recursivePresetLoad(mPresetXml, presetId);
+        return recursivePresetLoad(mPresetXml, presetId);
     }
 
     void StatePresets::deletePreset()
@@ -406,18 +777,22 @@ namespace state
         if (removeByTag(mPresetXml))
         {
             numPresets = juce::jmax(0, numPresets - 1);
+            const juce::ScopedLock lock(identityLock);
             mCurrentPresetId.store(0, std::memory_order_relaxed);
             statePresetName.clear();
+            currentPresetKey.clear();
         }
     }
 
     void StatePresets::setPresetName(juce::String name)
     {
+        const juce::ScopedLock lock(identityLock);
         statePresetName = std::move(name);
     }
 
-    juce::StringRef StatePresets::getPresetName()
+    juce::String StatePresets::getPresetName() const
     {
+        const juce::ScopedLock lock(identityLock);
         return statePresetName;
     }
 
@@ -434,14 +809,22 @@ namespace state
                     n = "(Unnamed preset)";
                 menu.addItem(n, index);
                 comboBoxIdToTagNameMap.set(index, child->getTagName());
+                const auto childKey = normalisePresetKey(child->getStringAttribute("presetKey"));
+                comboBoxIdToPresetKeyMap.set(index, childKey);
 
-                // save new preset and rescan, this will return new preset index
-                if (statePresetName == n)
+                // Stable relative-path identity wins. Name matching is retained
+                // only for legacy in-memory state created before preset keys.
+                if ((currentPresetKey.isNotEmpty() && currentPresetKey == childKey)
+                    || (currentPresetKey.isEmpty()
+                        && mCurrentPresetId.load(std::memory_order_relaxed) == 0
+                        && statePresetName == n))
                 {
                     mCurrentPresetId.store(index);
+                    currentPresetKey = childKey;
+                    statePresetName = n;
                 }
             }
-            else
+            else if (child->hasTagName("FOLDER"))
             {
                 // is folder
                 if (index != 0)
@@ -458,9 +841,29 @@ namespace state
 
     void StatePresets::setPresetAndFolderNames(juce::ComboBox& menu)
     {
+        const juce::ScopedLock lock(identityLock);
+        const int pendingLegacyId = mCurrentPresetId.load(std::memory_order_relaxed);
+        const bool hasStableIdentity = currentPresetKey.isNotEmpty() || statePresetName.isNotEmpty();
         comboBoxIdToTagNameMap.clear();
+        comboBoxIdToPresetKeyMap.clear();
+        if (hasStableIdentity)
+            mCurrentPresetId.store(0, std::memory_order_relaxed);
         int index = 0;
         recursivePresetNameAdd(mPresetXml, menu, index);
+
+        // Host states created before preset keys only contain the sorted menu
+        // ID. Keep that best-effort fallback until the first menu exists, then
+        // bind it to the discovered stable key for future saves.
+        if (! hasStableIdentity)
+        {
+            const int safeLegacyId = juce::isPositiveAndBelow(pendingLegacyId, index + 1)
+                                         ? pendingLegacyId
+                                         : 0;
+            mCurrentPresetId.store(safeLegacyId, std::memory_order_relaxed);
+            currentPresetKey = normalisePresetKey(comboBoxIdToPresetKeyMap[safeLegacyId]);
+            if (safeLegacyId > 0)
+                statePresetName = menu.getItemText(menu.indexOfItemId(safeLegacyId));
+        }
     }
 
     int StatePresets::getNumPresets() const
@@ -476,7 +879,26 @@ namespace state
 
     void StatePresets::setCurrentPresetId(int currentPresetId)
     {
-        mCurrentPresetId.store(juce::jmax(0, currentPresetId));
+        const juce::ScopedLock lock(identityLock);
+        const int safeId = juce::jmax(0, currentPresetId);
+        mCurrentPresetId.store(safeId);
+        currentPresetKey = normalisePresetKey(comboBoxIdToPresetKeyMap[safeId]);
+        if (safeId == 0 || currentPresetKey.isEmpty())
+            statePresetName.clear();
+    }
+
+    juce::String StatePresets::getCurrentPresetKey() const
+    {
+        const juce::ScopedLock lock(identityLock);
+        return currentPresetKey;
+    }
+
+    void StatePresets::setCurrentPresetKey(juce::String key)
+    {
+        const juce::ScopedLock lock(identityLock);
+        currentPresetKey = normalisePresetKey(std::move(key));
+        statePresetName.clear();
+        mCurrentPresetId.store(0, std::memory_order_relaxed);
     }
 
     juce::File StatePresets::getFile()
@@ -496,8 +918,12 @@ namespace state
                 // if not in xml set current
                 p->setValueNotifyingHost(p->getDefaultValue());
         // set preset combobox to 0
-        statePresetName = "";
-        mCurrentPresetId.store(0);
+        {
+            const juce::ScopedLock lock(identityLock);
+            statePresetName.clear();
+            currentPresetKey.clear();
+            mCurrentPresetId.store(0);
+        }
 
         auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
         auto& manager = fireProc.getLfoManager();
@@ -508,6 +934,8 @@ namespace state
         }
         fireProc.requestMultibandTopologyReset();
         fireProc.sendChangeMessage();
+        pluginProcessor.updateHostDisplay(
+            juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
     }
 
     //==============================================================================
@@ -575,61 +1003,7 @@ namespace state
         presetBox.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
         presetBox.setTextWhenNothingSelected("- Init -");
 
-        // when selecting the same preset, this will revert back to the original preset (in case you changed something)
-        presetBox.onChange = [this]
-        { updatePresetBox(presetBox.getSelectedId()); };
-
-        refreshPresetBox();
-
-        const int currentPresetId = procStatePresets.getCurrentPresetId();
-        const int numPresets = procStatePresets.getNumPresets();
-
-        if (currentPresetId > 0 && currentPresetId <= numPresets)
-        {
-            const juce::String presetNameFromHost = presetBox.getItemText(presetBox.indexOfItemId(currentPresetId));
-            const juce::XmlElement* presetXml = nullptr;
-
-            std::function<const juce::XmlElement*(const juce::XmlElement&, const juce::String&)> findPresetInXml =
-                [&](const juce::XmlElement& parentXml, const juce::String& nameToFind) -> const juce::XmlElement*
-            {
-                for (auto* child : parentXml.getChildIterator())
-                {
-                    if (child->hasAttribute("presetName") && child->getStringAttribute("presetName") == nameToFind)
-                        return child;
-
-                    if (child->getNumChildElements() > 0)
-                    {
-                        if (auto* foundChild = findPresetInXml(*child, nameToFind))
-                        {
-                            return foundChild;
-                        }
-                    }
-                }
-                return nullptr;
-            };
-
-            presetXml = findPresetInXml(procStatePresets.getPresetXml(), presetNameFromHost);
-
-            if (presetXml != nullptr)
-            {
-                auto& fireProc = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
-                bool areParametersEqual = fireProc.isCurrentStateEquivalentToPreset(*presetXml);
-
-                if (! areParametersEqual)
-                {
-                    isChanged = true;
-                    const juce::String nameToDisplay = presetNameFromHost + "*";
-                    presetBox.setText(nameToDisplay, juce::dontSendNotification);
-                    presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
-                    markAsDirty();
-                }
-                else
-                {
-                    presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
-                    presetBox.setText(presetNameFromHost, juce::dontSendNotification);
-                }
-            }
-        }
+        synchronisePresetSelectionFromManager();
 
         addAndMakeVisible(savePresetButton);
         savePresetButton.addListener(this);
@@ -673,6 +1047,7 @@ namespace state
         menuButton.setTooltip("Preset and application menu");
         menuButton.setTitle("Preset and application menu");
         presetMenu.setLookAndFeel(&fireLookAndFeel);
+        toggleABButton.setButtonText(procStateAB.isCurrentA() ? "A" : "B");
         startTimerHz(30);
     }
 
@@ -716,7 +1091,7 @@ namespace state
     {
         juce::ignoreUnused(parameterID, newValue);
 
-        if (isProgrammaticChange.load(std::memory_order_acquire))
+        if (programmaticChangeDepth.load(std::memory_order_acquire) > 0)
             return;
 
         dirtyUpdatePending.store(true, std::memory_order_release);
@@ -726,6 +1101,21 @@ namespace state
     {
         if (dirtyUpdatePending.exchange(false, std::memory_order_acq_rel))
             markAsDirty();
+    }
+
+    void StateComponent::beginProgrammaticChange()
+    {
+        dirtyUpdatePending.store(false, std::memory_order_release);
+        programmaticChangeDepth.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    void StateComponent::endProgrammaticChange()
+    {
+        dirtyUpdatePending.store(false, std::memory_order_release);
+        const int previousDepth = programmaticChangeDepth.fetch_sub(1, std::memory_order_acq_rel);
+        jassert(previousDepth > 0);
+        if (previousDepth <= 0)
+            programmaticChangeDepth.store(0, std::memory_order_release);
     }
 
     void StateComponent::handleAsyncUpdate()
@@ -902,11 +1292,17 @@ namespace state
 
             if (internalIdToLoad.isNotEmpty())
             {
-                cancelPendingUpdate();
-                isProgrammaticChange.store(true, std::memory_order_release);
+                beginProgrammaticChange();
+                const juce::ScopeGuard finishProgrammaticLoad { [this]
+                {
+                    endProgrammaticChange();
+                } };
                 presetManager->setCurrentPresetId(selectedId);
-                presetManager->loadPreset(internalIdToLoad);
-                isProgrammaticChange.store(false, std::memory_order_release);
+                if (! presetManager->loadPreset(internalIdToLoad))
+                {
+                    presetManager->setCurrentPresetId(0);
+                    return;
+                }
 
                 const juce::String loadedPresetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
 
@@ -916,6 +1312,7 @@ namespace state
             }
             else
             {
+                presetManager->setCurrentPresetId(0);
                 jassertfalse;
             }
         }
@@ -923,8 +1320,75 @@ namespace state
 
     void StateComponent::refreshPresetBox() // rescan, init, save, or delete
     {
-        presetBox.clear();
+        presetBox.clear(juce::dontSendNotification);
         procStatePresets.setPresetAndFolderNames(presetBox);
+    }
+
+    void StateComponent::synchronisePresetSelectionFromManager()
+    {
+        // A processor state restore changes the live state first and then
+        // publishes its stable preset key. Rebuild the menu mapping and only
+        // reflect that state in the ComboBox; this path must never load a file.
+        dirtyUpdatePending.store(false, std::memory_order_release);
+        refreshPresetBox();
+
+        const auto currentPresetKey = procStatePresets.getCurrentPresetKey();
+        const int currentPresetId = procStatePresets.getCurrentPresetId();
+        if (currentPresetKey.isEmpty()
+            || ! juce::isPositiveAndBelow(currentPresetId, procStatePresets.getNumPresets() + 1))
+        {
+            presetBox.setSelectedId(0, juce::dontSendNotification);
+            presetBox.setText({}, juce::dontSendNotification);
+            return;
+        }
+
+        std::function<const juce::XmlElement*(const juce::XmlElement&)> findPresetByKey =
+            [&](const juce::XmlElement& parentXml) -> const juce::XmlElement*
+        {
+            for (auto* child : parentXml.getChildIterator())
+            {
+                if (child->hasAttribute("presetName")
+                    && child->getStringAttribute("presetKey") == currentPresetKey)
+                    return child;
+
+                if (child->hasTagName("FOLDER"))
+                    if (auto* found = findPresetByKey(*child))
+                        return found;
+            }
+
+            return nullptr;
+        };
+
+        const auto* presetXml = findPresetByKey(procStatePresets.getPresetXml());
+        if (presetXml == nullptr)
+        {
+            presetBox.setSelectedId(0, juce::dontSendNotification);
+            presetBox.setText({}, juce::dontSendNotification);
+            return;
+        }
+
+        const int itemIndex = presetBox.indexOfItemId(currentPresetId);
+        const auto presetName = itemIndex >= 0
+                                    ? presetBox.getItemText(itemIndex)
+                                    : presetXml->getStringAttribute("presetName");
+        presetBox.setSelectedId(currentPresetId, juce::dontSendNotification);
+        presetBox.setText(presetName, juce::dontSendNotification);
+
+        auto& fireProc = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
+        if (! fireProc.isCurrentStateEquivalentToPreset(*presetXml))
+        {
+            isChanged = true;
+            markAsDirty();
+        }
+
+        // Discard parameter callbacks already queued by the host restore so a
+        // just-reconciled clean preset is not dirtied on the next timer tick.
+        dirtyUpdatePending.store(false, std::memory_order_release);
+    }
+
+    void StateComponent::synchroniseABButtonFromManager()
+    {
+        toggleABButton.setButtonText(procStateAB.isCurrentA() ? "A" : "B");
     }
 
     void StateComponent::deletePresetAndRefresh()
@@ -954,11 +1418,23 @@ namespace state
 
     void StateComponent::savePresetAlertWindow()
     {
+        if (fileChooser != nullptr)
+            return;
+
         juce::File userFile = procStatePresets.getFile().getChildFile("User");
         creatFolderIfNotExist(userFile);
+        if (! userFile.isDirectory())
+        {
+            juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                                        "Preset save failed",
+                                                        "The preset folder could not be created.",
+                                                        this);
+            return;
+        }
 
-        fileChooser = std::make_unique<juce::FileChooser>("save preset", userFile, "*");
-        const auto folderChooserFlags = juce::FileBrowserComponent::saveMode;
+        fileChooser = std::make_unique<juce::FileChooser>("Save preset", userFile, "*.fire", true, false, this);
+        const auto folderChooserFlags = juce::FileBrowserComponent::saveMode
+                                        | juce::FileBrowserComponent::canSelectFiles;
         juce::Component::SafePointer<StateComponent> safeThis(this);
 
         fileChooser->launchAsync(folderChooserFlags, [safeThis](const juce::FileChooser& chooser)
@@ -966,27 +1442,77 @@ namespace state
             if (safeThis == nullptr)
                 return;
 
-            juce::File inputName = chooser.getResult();
+            const juce::File inputName = chooser.getResult();
+            if (inputName == juce::File())
+            {
+                juce::MessageManager::callAsync([safeThis]
+                {
+                    if (safeThis != nullptr)
+                        safeThis->fileChooser.reset();
+                });
+                return;
+            }
 
-            const juce::String savedPresetName = safeThis->procStatePresets.savePreset(inputName);
+            // Confirm against the final path after appending .fire. Native
+            // choosers do not consistently apply the extension before their
+            // overwrite check, which could otherwise silently replace an
+            // existing preset when the user omitted the suffix.
+            const auto finalPath = inputName.hasFileExtension(PRESET_EXETENSION)
+                                       ? inputName
+                                       : juce::File(inputName.getFullPathName() + PRESET_EXETENSION);
+            const bool mayOverwrite = ! finalPath.existsAsFile()
+                                      || juce::NativeMessageBox::showOkCancelBox(
+                                          juce::AlertWindow::WarningIcon,
+                                          "Replace preset?",
+                                          "\"" + finalPath.getFileName()
+                                              + "\" already exists. Replacing it will overwrite its current contents.",
+                                          safeThis.getComponent(),
+                                          nullptr);
+
+            // A synchronous native dialog runs a nested event loop; the host
+            // may close the editor while it is open.
+            if (safeThis == nullptr)
+                return;
+
+            if (! mayOverwrite)
+            {
+                juce::MessageManager::callAsync([safeThis]
+                {
+                    if (safeThis != nullptr)
+                        safeThis->fileChooser.reset();
+                });
+                return;
+            }
+
+            const juce::String savedPresetName = safeThis->procStatePresets.savePreset(finalPath, true);
 
             if (savedPresetName.isNotEmpty())
             {
+                safeThis->dirtyUpdatePending.store(false, std::memory_order_release);
                 safeThis->refreshPresetBox();
 
-                int newPresetIdToSelect = 0;
-                for (int i = 0; i < safeThis->presetBox.getNumItems(); ++i)
-                {
-                    if (safeThis->presetBox.getItemId(i) > 0 && safeThis->presetBox.getItemText(i) == savedPresetName)
-                    {
-                        newPresetIdToSelect = safeThis->presetBox.getItemId(i);
-                        break;
-                    }
-                }
-
+                const int newPresetIdToSelect = safeThis->procStatePresets.getCurrentPresetId();
                 if (newPresetIdToSelect > 0)
-                    safeThis->presetBox.setSelectedId(newPresetIdToSelect);
-            } });
+                {
+                    safeThis->presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
+                    safeThis->presetBox.setText(savedPresetName, juce::dontSendNotification);
+                }
+            }
+            else
+            {
+                juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                                            "Preset save failed",
+                                                            "The preset could not be written to the selected location.",
+                                                            safeThis.getComponent());
+            }
+
+            // FileChooser invokes this callback from its own finished() stack.
+            // Defer destruction until that stack has unwound.
+            juce::MessageManager::callAsync([safeThis]
+            {
+                if (safeThis != nullptr)
+                    safeThis->fileChooser.reset();
+            }); });
     }
 
     void StateComponent::openPresetFolder()
@@ -1002,33 +1528,28 @@ namespace state
 
     void StateComponent::rescanPresetFolder()
     {
-        juce::String previouslySelectedName;
-        if (presetBox.getSelectedId() > 0)
-        {
-            previouslySelectedName = presetBox.getText();
-            if (previouslySelectedName.endsWith("*"))
-                previouslySelectedName = previouslySelectedName.dropLastCharacters(1);
-        }
+        const auto previouslySelectedKey = procStatePresets.getCurrentPresetKey();
+        const auto previousText = presetBox.getText();
+        const bool wasDirty = previousText.endsWith("*");
 
         procStatePresets.scanAllPresets();
+        procStatePresets.setCurrentPresetKey(previouslySelectedKey);
         refreshPresetBox();
 
-        int newPresetIdToSelect = 0;
-
-        if (previouslySelectedName.isNotEmpty())
+        const int newPresetIdToSelect = procStatePresets.getCurrentPresetId();
+        if (newPresetIdToSelect > 0)
         {
-            for (int i = 0; i < presetBox.getNumItems(); ++i)
-            {
-                if (presetBox.getItemId(i) > 0 && presetBox.getItemText(i) == previouslySelectedName)
-                {
-                    newPresetIdToSelect = presetBox.getItemId(i);
-                    break;
-                }
-            }
+            presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
+            if (wasDirty)
+                markAsDirty();
         }
-
-        procStatePresets.setCurrentPresetId(newPresetIdToSelect);
-        presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
+        else if (wasDirty)
+        {
+            // Keep an honest dirty display even if the backing file was
+            // removed externally during the rescan.
+            presetBox.setSelectedId(0, juce::dontSendNotification);
+            presetBox.setText(previousText, juce::dontSendNotification);
+        }
     }
 
     void StateComponent::creatFolderIfNotExist(juce::File userFile)
@@ -1071,9 +1592,15 @@ namespace state
                                      if (result == 1)
                                      {
                                          safeThis->isChanged = true;
+                                         safeThis->beginProgrammaticChange();
+                                         const juce::ScopeGuard finishInit { [component = safeThis.getComponent()]
+                                         {
+                                             if (component != nullptr)
+                                                 component->endProgrammaticChange();
+                                         } };
                                          safeThis->procStatePresets.initPreset();
                                          safeThis->resetMultiband();
-                                         safeThis->presetBox.setSelectedId(0);
+                                         safeThis->presetBox.setSelectedId(0, juce::dontSendNotification);
                                      }
                                      else if (result == 2)
                                      {

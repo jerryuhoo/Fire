@@ -37,12 +37,17 @@ methods from button callback in editor.
         explicit StateAB(juce::AudioProcessor& p);
 
         void toggleAB();
-        void copyAB();
+        void copyAB(bool notifyHost = true);
         void reset();
+        bool isCurrentA() const noexcept { return currentSideIsA.load(std::memory_order_acquire); }
+        void writeToXml(juce::XmlElement& parent) const;
+        void readFromXml(const juce::XmlElement* state);
 
     private:
         juce::AudioProcessor& pluginProcessor;
         juce::XmlElement ab { "AB" };
+        mutable juce::CriticalSection stateLock;
+        std::atomic<bool> currentSideIsA { true };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB)
     };
@@ -50,7 +55,10 @@ methods from button callback in editor.
     //==============================================================================
     //int createFileIfNonExistant(const File &file);
     bool parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml);
-    bool writeXmlElementToFile(const juce::XmlElement& xml, juce::File& file, const juce::String& presetName, bool hasExtension);
+    bool writeXmlElementToFile(const juce::XmlElement& xml,
+                               juce::File& file,
+                               const juce::String& presetName,
+                               bool confirmOverwrite);
 
     //==============================================================================
     /** Create StatePresets object with XML file saved relative to user
@@ -66,8 +74,8 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
 
         juce::HashMap<int, juce::String> comboBoxIdToTagNameMap;
 
-        juce::String savePreset(juce::File savePath);
-        void loadPreset(juce::String selectedName);
+        juce::String savePreset(juce::File savePath, bool overwriteAlreadyConfirmed = false);
+        bool loadPreset(const juce::String& selectedName);
         void deletePreset();
         juce::AudioProcessor& getProcessor() { return pluginProcessor; }
 
@@ -76,12 +84,16 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::String getNextAvailablePresetId();
         int getCurrentPresetId() const;
         void setCurrentPresetId(int currentPresetId);
+        juce::String getCurrentPresetKey() const;
+        void setCurrentPresetKey(juce::String key);
         void setPresetName(juce::String name);
-        juce::StringRef getPresetName();
+        juce::String getPresetName() const;
         void scanAllPresets();
         juce::File getFile();
         void initPreset();
-        void recursiveFileSearch(juce::XmlElement& parentXML, const juce::File& dir);
+        void recursiveFileSearch(juce::XmlElement& parentXML,
+                                 const juce::File& dir,
+                                 int depth = 0);
         bool recursivePresetLoad(const juce::XmlElement& parentXml, const juce::String& presetId);
         void recursivePresetNameAdd(const juce::XmlElement& parentXml, juce::ComboBox& menu, int& index);
         const juce::XmlElement& getPresetXml() const;
@@ -92,7 +104,11 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::XmlElement presetXmlSingle { "WINGSFIRE" }; // single preset for save file
         juce::File presetFile; // on-disk representation
         juce::String statePresetName { "" };
+        juce::String currentPresetKey;
+        juce::HashMap<int, juce::String> comboBoxIdToPresetKeyMap;
+        mutable juce::CriticalSection identityLock;
         void recursiveSort(juce::XmlElement* parent);
+        static juce::String normalisePresetKey(juce::String key);
         std::atomic<int> mCurrentPresetId { 0 };
         int numPresets = 0;
 
@@ -131,6 +147,8 @@ PluginProcessor).
         juce::ComboBox* getPresetBox();
         juce::Button* getToggleABButton();
         void updatePresetBox(int selectedId);
+        void synchronisePresetSelectionFromManager();
+        void synchroniseABButtonFromManager();
         StatePresets* getProcStatePresets();
         StateAB* getProcStateAB();
         juce::TextButton* getCopyABButton();
@@ -156,7 +174,7 @@ PluginProcessor).
 
         juce::AudioProcessorValueTreeState& valueTreeState;
 
-        std::atomic<bool> isProgrammaticChange { false };
+        std::atomic<int> programmaticChangeDepth { 0 };
         //Multiband multiband{};
         //FireAudioProcessorEditor& editor;
 
@@ -196,6 +214,8 @@ PluginProcessor).
         void popPresetMenu();
         void setPreviousPreset();
         void setNextPreset();
+        void beginProgrammaticChange();
+        void endProgrammaticChange();
 
         void resetMultiband();
         void publishManualUpdateResult(std::unique_ptr<VersionInfo> result);

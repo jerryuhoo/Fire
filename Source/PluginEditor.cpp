@@ -140,6 +140,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     auto bypassCallback = [this](const juce::String& parameterID)
     {
         processor.getLfoManager().toggleBypassForRouting(parameterID);
+        processor.lfoDataHasChanged();
         modulationSnapshotFramesRemaining = 0;
         updateModulationStates();
     };
@@ -889,11 +890,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     if (clickedButton == stateComponent.getToggleABButton())
     {
         stateComponent.getProcStateAB()->toggleAB();
-
-        if (clickedButton->getButtonText() == "A")
-            clickedButton->setButtonText("B");
-        else
-            clickedButton->setButtonText("A");
+        clickedButton->setButtonText(stateComponent.getProcStateAB()->isCurrentA() ? "A" : "B");
         multiband.resortAndRedrawLines();
     }
     if (multiband.getStateComponent().getChangedState())
@@ -962,16 +959,15 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
 {
     if (combobox == stateComponent.getPresetBox())
     {
-        int selectedId = combobox->getSelectedId();
+        const int selectedId = combobox->getSelectedId();
 
-        // do this because open and close GUI will use this function, but will reset the value if the presetbox is not "init"
-        // next, previous, change combobox will change the selectedId, but currentId will change only after this.
-        // and then, it will load the preset.
-
-        if (stateComponent.getProcStatePresets()->getCurrentPresetId() != selectedId)
-        {
+        // Programmatic synchronisation always uses dontSendNotification, so a
+        // real ComboBox callback is a user request to load that preset. This
+        // must also work when a dirty preset has kept its manager identity but
+        // cleared the ComboBox selection to allow an explicit restore.
+        if (selectedId > 0)
             stateComponent.updatePresetBox(selectedId);
-        }
+
         multiband.resortAndRedrawLines();
     }
 }
@@ -1069,6 +1065,8 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
     if (source == &processor)
     {
         modulationSnapshotFramesRemaining = 0;
+        stateComponent.synchronisePresetSelectionFromManager();
+        stateComponent.synchroniseABButtonFromManager();
         lfoPanel.refreshLfoDisplay();
         multiband.resortAndRedrawLines();
     }

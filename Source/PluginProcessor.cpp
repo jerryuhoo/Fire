@@ -10,10 +10,66 @@
 #include "PluginProcessor.h"
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
+#include <cerrno>
+#include <cstdlib>
 #include <limits>
 
 namespace
 {
+bool parseStrictFiniteDouble(const juce::String& textToParse, double& result) noexcept
+{
+    const auto trimmed = textToParse.trim();
+    if (trimmed.isEmpty())
+        return false;
+
+    const auto utf8 = trimmed.toRawUTF8();
+    char* end = nullptr;
+    errno = 0;
+    const auto parsed = std::strtod(utf8, &end);
+    if (end == utf8 || end == nullptr || *end != '\0'
+        || errno == ERANGE || ! std::isfinite(parsed))
+        return false;
+
+    result = parsed;
+    return true;
+}
+
+bool arePresetFloatsEquivalent(float lhs, float rhs) noexcept
+{
+    constexpr float tolerance = 1.0e-6f;
+    return std::isfinite(lhs) && std::isfinite(rhs)
+           && std::abs(lhs - rhs) <= tolerance;
+}
+
+bool areLfoShapesEquivalent(const LfoData& current, const LfoData& expected) noexcept
+{
+    if (current.points.size() != expected.points.size()
+        || current.curvatures.size() != expected.curvatures.size()
+        || ! arePresetFloatsEquivalent(current.smoothness, expected.smoothness))
+        return false;
+
+    for (size_t i = 0; i < current.points.size(); ++i)
+        if (! arePresetFloatsEquivalent(current.points[i].x, expected.points[i].x)
+            || ! arePresetFloatsEquivalent(current.points[i].y, expected.points[i].y))
+            return false;
+
+    for (size_t i = 0; i < current.curvatures.size(); ++i)
+        if (! arePresetFloatsEquivalent(current.curvatures[i], expected.curvatures[i]))
+            return false;
+
+    return true;
+}
+
+bool areModulationRoutingsEquivalent(const ModulationRouting& current,
+                                     const ModulationRouting& expected) noexcept
+{
+    return current.sourceLfoIndex == expected.sourceLfoIndex
+           && current.targetParameterID == expected.targetParameterID
+           && arePresetFloatsEquivalent(current.depth, expected.depth)
+           && current.isBipolar == expected.isBipolar
+           && current.isBypassed == expected.isBypassed;
+}
+
 struct FilterFrequencyRange
 {
     float minimum;
@@ -1449,6 +1505,7 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     // 2. save current preset ID, width and height
     auto currentStateXml = std::make_unique<juce::XmlElement>("otherState");
     currentStateXml->setAttribute("currentPresetID", statePresets.getCurrentPresetId());
+    currentStateXml->setAttribute("currentPresetKey", statePresets.getCurrentPresetKey());
     currentStateXml->setAttribute("editorWidth", editorWidth.load(std::memory_order_relaxed));
     currentStateXml->setAttribute("editorHeight", editorHeight.load(std::memory_order_relaxed));
 
@@ -1478,6 +1535,9 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     }
     xmlState.insertChildElement(modMatrixState.release(), xmlIndex++);
 
+    // Persist the inactive A/B snapshot alongside the currently active state.
+    stateAB.writeToXml(xmlState);
+
     copyXmlToBinary(xmlState, destData);
 }
 
@@ -1487,146 +1547,233 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         return;
 
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-    if (xmlState != nullptr && xmlState->hasTagName("state"))
+    if (xmlState == nullptr || ! xmlState->hasTagName("state"))
+        return;
+
+    // Parse and validate every section before mutating live state. Hosts may
+    // retain a damaged or truncated chunk for years; applying only its UI/LFO
+    // tail while leaving the old parameters in place creates a state that was
+    // never saved and is much harder to recover from than rejecting the chunk.
+    const auto* xmlTreeState = xmlState->getChildByName(treeState.state.getType().toString());
+    if (xmlTreeState == nullptr)
+        xmlTreeState = xmlState->getChildElement(0); // Legacy chunks relied on ordering.
+
+    if (xmlTreeState == nullptr)
+        return;
+
+    const auto incomingParameterState = juce::ValueTree::fromXml(*xmlTreeState);
+    if (! incomingParameterState.isValid()
+        || ! incomingParameterState.hasType(treeState.state.getType()))
+        return;
+
+    const auto parameterStateTemplate = treeState.copyState();
+    juce::ValueTree treeToLoad(parameterStateTemplate.getType());
+    juce::StringArray loadedParameterIDs;
+    std::array<bool, 4> smoothnessPresentInParameterState {};
+
+    const auto findParameterState = [](juce::ValueTree& state, const juce::String& parameterID)
     {
-        std::array<bool, 4> smoothnessPresentInParameterState {};
+        for (auto child : state)
+            if (child.getProperty("id").toString() == parameterID)
+                return child;
 
-        // 1. set treestate
-        const auto* xmlTreeState = xmlState->getChildByName(treeState.state.getType().toString());
-        if (xmlTreeState == nullptr)
-            xmlTreeState = xmlState->getChildElement(0); // Backward compatibility with unlabelled ordering.
+        return juce::ValueTree {};
+    };
 
-        if (xmlTreeState != nullptr)
+    // Begin with one canonical child for every current parameter. Missing
+    // parameters in an older state therefore migrate to their defaults instead
+    // of inheriting whatever value happened to be live before the load.
+    for (const auto& templateChild : parameterStateTemplate)
+    {
+        const auto parameterID = templateChild.getProperty("id").toString();
+        auto* parameter = treeState.getParameter(parameterID);
+        if (parameter == nullptr)
+            continue;
+
+        auto child = templateChild.createCopy();
+        child.setProperty("value",
+                          parameter->convertFrom0to1(parameter->getDefaultValue()),
+                          nullptr);
+        treeToLoad.addChild(child, -1, nullptr);
+    }
+
+    int recognisedParameterCount = 0;
+    for (const auto& incomingChild : incomingParameterState)
+    {
+        const auto parameterID = incomingChild.getProperty("id").toString();
+        auto* parameter = treeState.getParameter(parameterID);
+        if (parameterID.isEmpty() || parameter == nullptr
+            || loadedParameterIDs.contains(parameterID))
+            continue;
+
+        if (! incomingChild.hasProperty("value"))
+            return;
+
+        double parsedValue = 0.0;
+        if (! parseStrictFiniteDouble(incomingChild.getProperty("value").toString(), parsedValue))
+            return;
+
+        // APVTS child values are denormalised. Clamp before snapping so a
+        // damaged out-of-range chunk does not trip JUCE's debug assertion in
+        // convertTo0to1(), while integer/choice parameters remain legal.
+        const auto& range = parameter->getNormalisableRange();
+        const float boundedValue = juce::jlimit(range.start,
+                                                range.end,
+                                                static_cast<float>(parsedValue));
+        const float safeValue = range.snapToLegalValue(boundedValue);
+        auto targetChild = findParameterState(treeToLoad, parameterID);
+        if (! targetChild.isValid())
+            return;
+
+        targetChild.setProperty("value", safeValue, nullptr);
+        loadedParameterIDs.add(parameterID);
+        ++recognisedParameterCount;
+
+        for (int i = 0; i < static_cast<int>(smoothnessPresentInParameterState.size()); ++i)
+            if (parameterID == ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i))
+                smoothnessPresentInParameterState[static_cast<size_t>(i)] = true;
+    }
+
+    // A correctly named but empty/foreign PARAMETERS node is not a usable Fire
+    // state. Reject it transactionally rather than interpreting it as Init.
+    if (recognisedParameterCount == 0)
+        return;
+
+    // Shape was always active before its explicit enable parameter existed.
+    // Preserve that sound for old host chunks. The root-property lookup retains
+    // compatibility with the brief legacy representation used by some builds.
+    for (int i = 0; i < 4; ++i)
+    {
+        const auto shapeID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i);
+        if (loadedParameterIDs.contains(shapeID))
+            continue;
+
+        float legacyShapeValue = 1.0f;
+        if (incomingParameterState.hasProperty(shapeID))
         {
-            auto treeToLoad = juce::ValueTree::fromXml(*xmlTreeState);
-
-            if (treeToLoad.isValid() && treeToLoad.hasType(treeState.state.getType()))
-            {
-                // APVTS stores each parameter as a PARAM child (id/value), not as
-                // a property on the root. Older states genuinely lack the Shape
-                // children, so recreate them from the current APVTS template.
-                const auto parameterStateTemplate = treeState.copyState();
-                for (int i = 0; i < 4; ++i)
-                {
-                    const auto shapeBypassParamID = ParameterIDAndName::getIDString(SHAPE_BYPASS_ID, i);
-                    juce::ValueTree shapeState;
-
-                    for (const auto& child : treeToLoad)
-                    {
-                        if (child.getProperty("id").toString() == shapeBypassParamID)
-                        {
-                            shapeState = child;
-                            break;
-                        }
-                    }
-
-                    if (shapeState.isValid())
-                        continue;
-
-                    for (const auto& templateChild : parameterStateTemplate)
-                    {
-                        if (templateChild.getProperty("id").toString() == shapeBypassParamID)
-                        {
-                            auto upgradedState = templateChild.createCopy();
-                            const float legacyValue = treeToLoad.hasProperty(shapeBypassParamID)
-                                                          ? static_cast<float>(treeToLoad.getProperty(shapeBypassParamID))
-                                                          : 1.0f;
-                            upgradedState.setProperty("value", legacyValue > 0.5f ? 1.0f : 0.0f, nullptr);
-                            treeToLoad.addChild(upgradedState, -1, nullptr);
-                            break;
-                        }
-                    }
-                }
-
-                for (int i = 0; i < 4; ++i)
-                {
-                    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
-                    for (const auto& child : treeToLoad)
-                    {
-                        if (child.getProperty("id").toString() == smoothnessID)
-                        {
-                            smoothnessPresentInParameterState[static_cast<size_t>(i)] = true;
-                            break;
-                        }
-                    }
-                }
-
-                treeState.replaceState(treeToLoad);
-            }
+            double parsedValue = 0.0;
+            if (! parseStrictFiniteDouble(incomingParameterState.getProperty(shapeID).toString(), parsedValue))
+                return;
+            legacyShapeValue = parsedValue > 0.5 ? 1.0f : 0.0f;
         }
 
-        // 2. set current preset ID
-        const auto* xmlCurrentState = xmlState->getChildByName("otherState");
-        if (xmlCurrentState != nullptr)
-        {
-            statePresets.setCurrentPresetId(juce::jmax(0, xmlCurrentState->getIntAttribute("currentPresetID", 0)));
-            editorWidth.store(xmlCurrentState->getIntAttribute("editorWidth", static_cast<int>(INIT_WIDTH)), std::memory_order_relaxed);
-            editorHeight.store(xmlCurrentState->getIntAttribute("editorHeight", static_cast<int>(INIT_HEIGHT)), std::memory_order_relaxed);
-        }
+        if (auto shapeState = findParameterState(treeToLoad, shapeID); shapeState.isValid())
+            shapeState.setProperty("value", legacyShapeValue, nullptr);
+    }
 
-        std::array<LfoData, 4> loadedLfoData;
-        std::array<bool, 4> loadedLfoSmoothnessFromXml {};
-        if (auto* lfoState = xmlState->getChildByName("LFO_STATE"))
+    std::array<LfoData, 4> loadedLfoData;
+    std::array<bool, 4> loadedLfoSmoothnessFromXml {};
+    std::array<bool, 4> loadedLfoIndices {};
+    if (auto* lfoState = xmlState->getChildByName("LFO_STATE"))
+    {
+        for (auto* lfoXml : lfoState->getChildIterator())
         {
-            for (auto* lfoXml : lfoState->getChildIterator())
-            {
-                const int index = lfoXml->getIntAttribute("index", -1);
-                if (juce::isPositiveAndBelow(index, static_cast<int>(loadedLfoData.size())))
-                {
-                    loadedLfoData[static_cast<size_t>(index)] = LfoData::readFromXml(*lfoXml);
-                    loadedLfoSmoothnessFromXml[static_cast<size_t>(index)] = lfoXml->hasAttribute("smoothness");
-                }
-            }
-        }
-
-        // Legacy states may omit the entire LFO section or individual LFOs.
-        // In that case APVTS remains authoritative for Smoothness; otherwise a
-        // default-constructed LfoData would overwrite the value just restored.
-        for (size_t i = 0; i < loadedLfoData.size(); ++i)
-        {
-            // APVTS is the single authority whenever the parameter state
-            // explicitly contains Smoothness. LFO XML is only a compatibility
-            // fallback for states written before that parameter existed.
-            if ((! smoothnessPresentInParameterState[i] && loadedLfoSmoothnessFromXml[i])
-                || lfoSmoothParameters[i] == nullptr)
+            if (! lfoXml->hasTagName("LFO"))
                 continue;
 
-            const float smoothness = lfoSmoothParameters[i]->load(std::memory_order_relaxed);
-            if (std::isfinite(smoothness))
-                loadedLfoData[i].smoothness = smoothness;
-        }
-
-        juce::Array<ModulationRouting> loadedRoutings;
-        if (auto* modMatrixState = xmlState->getChildByName("MODULATION_STATE"))
-        {
-            for (auto* routingXml : modMatrixState->getChildIterator())
+            const int index = lfoXml->getIntAttribute("index", -1);
+            if (juce::isPositiveAndBelow(index, static_cast<int>(loadedLfoData.size()))
+                && ! loadedLfoIndices[static_cast<size_t>(index)])
             {
-                auto routing = ModulationRouting::readFromXml(*routingXml);
-                routing.sourceLfoIndex = juce::jlimit(0, 3, routing.sourceLfoIndex);
-                routing.depth = std::isfinite(routing.depth) ? juce::jlimit(-1.0f, 1.0f, routing.depth) : 0.5f;
-
-                if (routing.targetParameterID.isNotEmpty() && treeState.getParameter(routing.targetParameterID) == nullptr)
-                    continue;
-
-                loadedRoutings.add(std::move(routing));
+                loadedLfoData[static_cast<size_t>(index)] = LfoData::readFromXml(*lfoXml);
+                loadedLfoSmoothnessFromXml[static_cast<size_t>(index)] = lfoXml->hasAttribute("smoothness");
+                loadedLfoIndices[static_cast<size_t>(index)] = true;
             }
         }
-
-        {
-            const juce::ScopedLock lock(lfoManager->getLfoDataLock());
-            lfoManager->clearAllLfoData();
-            for (int i = 0; i < static_cast<int>(loadedLfoData.size()); ++i)
-                lfoManager->setLfoData(i, loadedLfoData[static_cast<size_t>(i)]);
-            lfoManager->getModulationRoutings() = std::move(loadedRoutings);
-        }
-
-        // State replacement can migrate band parameters while NUM_BANDS stays
-        // unchanged. Publish an explicit topology generation so the next
-        // audio block cannot reuse crossover, mixer, oversampling or gain
-        // history from the previous logical band layout.
-        requestMultibandTopologyReset();
-        sendChangeMessage();
     }
+
+    // The staged tree, rather than the still-live APVTS atomics, is authoritative
+    // while this transaction is being assembled.
+    for (size_t i = 0; i < loadedLfoData.size(); ++i)
+    {
+        if (! smoothnessPresentInParameterState[i] && loadedLfoSmoothnessFromXml[i])
+            continue;
+
+        const auto smoothnessID = ParameterIDAndName::getIDString(
+            LFO_SMOOTH_ID, static_cast<int>(i));
+        const auto smoothnessState = findParameterState(treeToLoad, smoothnessID);
+        if (smoothnessState.isValid())
+        {
+            const float smoothness = static_cast<float>(smoothnessState.getProperty("value"));
+            if (std::isfinite(smoothness))
+                loadedLfoData[i].smoothness = juce::jlimit(0.0f, 1.0f, smoothness);
+        }
+    }
+
+    constexpr int maximumStateModulationRoutings = 128;
+    juce::Array<ModulationRouting> loadedRoutings;
+    juce::StringArray loadedRoutingTargets;
+    if (auto* modMatrixState = xmlState->getChildByName("MODULATION_STATE"))
+    {
+        for (auto* routingXml : modMatrixState->getChildIterator())
+        {
+            if (loadedRoutings.size() >= maximumStateModulationRoutings)
+                break;
+            if (! routingXml->hasTagName("ROUTING"))
+                continue;
+
+            auto routing = ModulationRouting::readFromXml(*routingXml);
+            if (routing.targetParameterID.isEmpty()
+                || treeState.getParameter(routing.targetParameterID) == nullptr
+                || loadedRoutingTargets.contains(routing.targetParameterID))
+                continue;
+
+            loadedRoutingTargets.add(routing.targetParameterID);
+            loadedRoutings.add(std::move(routing));
+        }
+    }
+
+    const auto* xmlCurrentState = xmlState->getChildByName("otherState");
+    const auto presetKey = xmlCurrentState != nullptr
+                               ? xmlCurrentState->getStringAttribute("currentPresetKey").trim()
+                               : juce::String {};
+    const int legacyPresetID = xmlCurrentState != nullptr
+                                   ? juce::jlimit(0,
+                                                  statePresets.getNumPresets(),
+                                                  xmlCurrentState->getIntAttribute("currentPresetID", 0))
+                                   : 0;
+    const int restoredEditorWidth = xmlCurrentState != nullptr
+                                        ? juce::jlimit(static_cast<int>(INIT_WIDTH),
+                                                       2000,
+                                                       xmlCurrentState->getIntAttribute(
+                                                           "editorWidth", static_cast<int>(INIT_WIDTH)))
+                                        : editorWidth.load(std::memory_order_relaxed);
+    const int restoredEditorHeight = xmlCurrentState != nullptr
+                                         ? juce::jlimit(static_cast<int>(INIT_HEIGHT),
+                                                        1000,
+                                                        xmlCurrentState->getIntAttribute(
+                                                            "editorHeight", static_cast<int>(INIT_HEIGHT)))
+                                         : editorHeight.load(std::memory_order_relaxed);
+
+    // Commit only after the complete chunk has passed validation.
+    treeState.replaceState(treeToLoad);
+    if (xmlCurrentState != nullptr)
+    {
+        if (presetKey.isNotEmpty())
+            statePresets.setCurrentPresetKey(presetKey);
+        else
+            statePresets.setCurrentPresetId(legacyPresetID);
+        editorWidth.store(restoredEditorWidth, std::memory_order_relaxed);
+        editorHeight.store(restoredEditorHeight, std::memory_order_relaxed);
+    }
+
+    {
+        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
+        lfoManager->clearAllLfoData();
+        for (int i = 0; i < static_cast<int>(loadedLfoData.size()); ++i)
+            lfoManager->setLfoData(i, loadedLfoData[static_cast<size_t>(i)]);
+        lfoManager->getModulationRoutings() = std::move(loadedRoutings);
+    }
+
+    // A/B restoration mutates its internal snapshot, so keep it inside the
+    // commit phase after the complete host chunk has passed validation.
+    stateAB.readFromXml(xmlState->getChildByName("AB_STATE"));
+
+    // State replacement can migrate band parameters while NUM_BANDS stays
+    // unchanged. Publish an explicit topology generation so the next audio
+    // block cannot reuse DSP history from the previous logical band layout.
+    requestMultibandTopologyReset();
+    sendChangeMessage();
 }
 
 //==============================================================================
@@ -2968,6 +3115,9 @@ const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
 
 void FireAudioProcessor::lfoDataHasChanged()
 {
+    updateHostDisplay(
+        juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
+
     if (auto* editor = dynamic_cast<FireAudioProcessorEditor*>(getActiveEditor()))
     {
         editor->markPresetAsDirty();
@@ -3149,6 +3299,40 @@ void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& t
 bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml)
 {
     constexpr float comparisonTolerance = 1.0e-6f;
+
+    // Recreate the exact model produced by loadStateFromXml rather than
+    // comparing XML text. Older presets omit attributes whose loader defaults
+    // are well-defined, and decimal formatting is not part of the preset's
+    // audible state.
+    std::array<LfoData, 4> expectedLfoData;
+    std::array<bool, 4> expectedSmoothnessFromLfoXml {};
+    std::array<bool, 4> expectedSmoothnessFromParameter {};
+    std::array<bool, 4> loadedLfoIndices {};
+    for (int i = 0; i < static_cast<int>(expectedSmoothnessFromParameter.size()); ++i)
+        expectedSmoothnessFromParameter[static_cast<size_t>(i)] = presetXml.hasAttribute(
+            ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i));
+
+    // getChildByName intentionally selects the first section, matching the
+    // loader when a malformed/legacy document contains duplicate sections.
+    if (const auto* lfoState = presetXml.getChildByName("LFO_STATE"))
+    {
+        for (auto* lfoXml : lfoState->getChildIterator())
+        {
+            if (! lfoXml->hasTagName("LFO"))
+                continue;
+
+            const int index = lfoXml->getIntAttribute("index", -1);
+            if (juce::isPositiveAndBelow(index, static_cast<int>(expectedLfoData.size()))
+                && ! loadedLfoIndices[static_cast<size_t>(index)])
+            {
+                expectedLfoData[static_cast<size_t>(index)] = LfoData::readFromXml(*lfoXml);
+                expectedSmoothnessFromLfoXml[static_cast<size_t>(index)] =
+                    lfoXml->hasAttribute("smoothness");
+                loadedLfoIndices[static_cast<size_t>(index)] = true;
+            }
+        }
+    }
+
     for (const auto& parameter : getParameters())
     {
         auto* parameterWithID = dynamic_cast<juce::AudioProcessorParameterWithID*>(parameter);
@@ -3158,31 +3342,113 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
         float presetValue = parameterWithID->getDefaultValue();
         if (presetXml.hasAttribute(parameterWithID->paramID))
         {
-            const float parsedValue = static_cast<float>(presetXml.getDoubleAttribute(parameterWithID->paramID));
-            presetValue = std::isfinite(parsedValue) ? juce::jlimit(0.0f, 1.0f, parsedValue)
-                                                     : parameterWithID->getDefaultValue();
+            double parsedValue = 0.0;
+            if (parseStrictFiniteDouble(presetXml.getStringAttribute(parameterWithID->paramID),
+                                        parsedValue))
+                presetValue = juce::jlimit(0.0f, 1.0f, static_cast<float>(parsedValue));
         }
         else if (parameterWithID->paramID.startsWith(SHAPE_BYPASS_ID))
         {
             presetValue = 1.0f;
+        }
+        else
+        {
+            // Before Smoothness became an APVTS parameter it lived only on the
+            // LFO element. loadStateFromXml promotes that legacy value back to
+            // the parameter through setLfoData(), so compare against the same
+            // effective normalised parameter value.
+            for (int i = 0; i < static_cast<int>(expectedLfoData.size()); ++i)
+                if (parameterWithID->paramID
+                        == ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i)
+                    && expectedSmoothnessFromLfoXml[static_cast<size_t>(i)])
+                {
+                    if (const auto* ranged = treeState.getParameter(parameterWithID->paramID))
+                        presetValue = ranged->convertTo0to1(
+                            expectedLfoData[static_cast<size_t>(i)].smoothness);
+                    break;
+                }
         }
 
         if (std::abs(parameterWithID->getValue() - presetValue) > comparisonTolerance)
             return false;
     }
 
-    juce::XmlElement currentState("currentState");
-    state::saveStateToXml(*this, currentState);
-
-    for (const auto* childName : { "LFO_STATE", "MODULATION_STATE" })
+    for (size_t i = 0; i < expectedLfoData.size(); ++i)
     {
-        const auto* presetChild = presetXml.getChildByName(childName);
-        if (presetChild != nullptr)
+        if (! expectedSmoothnessFromParameter[i] && expectedSmoothnessFromLfoXml[i])
+            continue;
+
+        if (const auto* smoothness = treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(LFO_SMOOTH_ID, static_cast<int>(i))))
+            expectedLfoData[i].smoothness = juce::jlimit(
+                0.0f, 1.0f, smoothness->load(std::memory_order_relaxed));
+    }
+
+    const auto currentLfoData = lfoManager->getLfoDataCopy();
+    if (currentLfoData.size() != expectedLfoData.size())
+        return false;
+
+    for (size_t i = 0; i < expectedLfoData.size(); ++i)
+        if (! areLfoShapesEquivalent(currentLfoData[i], expectedLfoData[i]))
+            return false;
+
+    constexpr int maximumPresetRoutings = 128;
+    juce::Array<ModulationRouting> expectedRoutings;
+    if (const auto* routingState = presetXml.getChildByName("MODULATION_STATE"))
+    {
+        for (auto* routingXml : routingState->getChildIterator())
         {
-            const auto* currentChild = currentState.getChildByName(childName);
-            if (currentChild == nullptr || ! currentChild->isEquivalentTo(presetChild, true))
-                return false;
+            if (! routingXml->hasTagName("ROUTING")
+                || expectedRoutings.size() >= maximumPresetRoutings)
+                continue;
+
+            auto routing = ModulationRouting::readFromXml(*routingXml);
+            bool targetAlreadyUsed = false;
+            for (const auto& existing : expectedRoutings)
+                if (existing.targetParameterID == routing.targetParameterID)
+                {
+                    targetAlreadyUsed = true;
+                    break;
+                }
+
+            if (! targetAlreadyUsed
+                && routing.targetParameterID.isNotEmpty()
+                && treeState.getParameter(routing.targetParameterID) != nullptr)
+                expectedRoutings.add(std::move(routing));
         }
+    }
+
+    // Empty routing slots are an implementation detail of the live manager and
+    // are neither written nor restored by presets. Compare unique targets as a
+    // set because their array order has no DSP meaning.
+    juce::Array<ModulationRouting> currentRoutings;
+    juce::StringArray currentRoutingTargets;
+    for (const auto& routing : lfoManager->getModulationRoutingsCopy())
+    {
+        if (routing.targetParameterID.isEmpty())
+            continue;
+        if (currentRoutingTargets.contains(routing.targetParameterID))
+            return false;
+
+        currentRoutingTargets.add(routing.targetParameterID);
+        currentRoutings.add(routing);
+    }
+
+    if (currentRoutings.size() != expectedRoutings.size())
+        return false;
+
+    for (const auto& expected : expectedRoutings)
+    {
+        bool foundEquivalentRouting = false;
+        for (const auto& candidate : currentRoutings)
+            if (candidate.targetParameterID == expected.targetParameterID)
+            {
+                foundEquivalentRouting = areModulationRoutingsEquivalent(candidate, expected);
+                break;
+            }
+
+        if (! foundEquivalentRouting)
+            return false;
     }
 
     return true;

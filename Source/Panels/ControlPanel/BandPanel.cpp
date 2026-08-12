@@ -88,7 +88,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
     // We listen directly to the parameters that affect our "link" logic.
     constexpr std::array<const char*, distortionGraphParameterCount> graphParameterBases {
-        REC_ID, MIX_ID, SHAPE_MIX_ID, BIAS_ID, MODE_ID, SAFE_ID, DRIVE_BYPASS_ID
+        REC_ID, MIX_ID, SHAPE_MIX_ID, BIAS_ID, MODE_ID, SAFE_ID, DRIVE_BYPASS_ID, EXTREME_ID
     };
 
     for (int i = 0; i < 4; ++i)
@@ -849,8 +849,10 @@ void BandPanel::updateDistortionGraphFromParameters()
     values.mode = juce::roundToInt(readBandParameter(MODE_ID, 0.0f));
 
     const bool driveEnabled = readBandParameter(DRIVE_BYPASS_ID, 1.0f) > 0.5f;
-    const float driveForCalc = (driveEnabled ? readBandParameter(DRIVE_ID, 0.0f) : 0.0f)
-                               * 6.5f / 100.0f;
+    float driveAmount = driveEnabled ? readBandParameter(DRIVE_ID, 0.0f) : 0.0f;
+    if (driveEnabled && readBandParameter(EXTREME_ID, 0.0f) > 0.5f)
+        driveAmount *= std::log2(10.0f);
+    const float driveForCalc = driveAmount * 6.5f / 100.0f;
     const float powerDrive = std::pow(2.0f, driveForCalc);
     const float sampleMaxValue = processor.getSampleMaxValue(focusBandNum);
     const bool safeMode = readBandParameter(SAFE_ID, 1.0f) > 0.5f;

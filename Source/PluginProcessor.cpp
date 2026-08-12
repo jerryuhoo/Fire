@@ -1716,9 +1716,11 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
                         ? getBlockModulatedValue(parameters.bias, lfoOutputBuffer)
                         : 0.0f;
         const bool driveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
-        const float driveBase = driveEnabled
-                                    ? getBlockModulatedValue(parameters.drive, lfoOutputBuffer)
-                                    : 0.0f;
+        float driveBase = driveEnabled
+                              ? getBlockModulatedValue(parameters.drive, lfoOutputBuffer)
+                              : 0.0f;
+        if (driveEnabled && loadCachedParameter(parameters.extreme) > 0.5f)
+            driveBase *= std::log2(10.0f);
 
         vals.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
         const bool isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;

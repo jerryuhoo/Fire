@@ -92,7 +92,7 @@ private:
     void timerCallback() override;
     std::atomic<unsigned int> linkedValueDirtyMask { 0 };
     std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
-    static constexpr size_t distortionGraphParameterCount = 7;
+    static constexpr size_t distortionGraphParameterCount = 8;
     std::array<juce::String, 4> driveParameterIds;
     std::array<juce::String, 4> linkedParameterIds;
     std::array<juce::String, 4> outputParameterIds;

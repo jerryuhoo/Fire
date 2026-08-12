@@ -93,8 +93,23 @@ clap_juce_extensions_plugin(TARGET "${PROJECT_NAME}"
     CLAP_ID "${BUNDLE_ID}"
     CLAP_FEATURES audio-effect)
 
-# Enable fast math, C++20 and a few other target defaults
+# Configure shared compiler and language defaults.
 include(SharedCodeDefaults)
+
+# The shared defaults module enables fast-math, but Fire deliberately validates
+# external state and audio samples for NaN/Inf. Fast-math permits the compiler to
+# assume those values never occur and remove the guards entirely. Restore IEEE
+# floating-point semantics after the shared defaults while retaining the normal
+# optimisations supplied by the Release configuration.
+if (MSVC)
+    target_compile_options(SharedCode INTERFACE
+        $<$<CONFIG:Release>:/O2 /fp:precise>
+        $<$<CONFIG:RelWithDebInfo>:/O2 /fp:precise>)
+else ()
+    target_compile_options(SharedCode INTERFACE
+        $<$<CONFIG:Release>:-O3 -fno-fast-math>
+        $<$<CONFIG:RelWithDebInfo>:-O2 -fno-fast-math>)
+endif ()
 
 
 # Manually list all .h and .cpp files for the plugin

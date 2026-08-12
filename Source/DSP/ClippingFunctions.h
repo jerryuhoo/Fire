@@ -63,7 +63,11 @@ T cubicSoftClipping (T x) noexcept
     }
     else
     {
-        x = x - (std::pow(x, static_cast<T>(3)) / static_cast<T>(3));
+        // Keep this hot waveshaper path efficient without relying on
+        // fast-math, whose non-finite assumptions invalidate the guards used
+        // throughout the DSP. This multiplication is the same optimisation
+        // that fast-math previously applied to pow(x, 3).
+        x = x - (x * x * x / static_cast<T>(3));
     }
     return x * static_cast<T>(3) / static_cast<T>(2);
 }

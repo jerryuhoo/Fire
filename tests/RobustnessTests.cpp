@@ -1,5 +1,6 @@
 #include "../Source/DSP/Delay.h"
 #include "../Source/DSP/ClippingFunctions.h"
+#include "../Source/DSP/DistortionLogic.h"
 #include "../Source/DSP/LfoData.h"
 #include "../Source/DSP/LfoEngine.h"
 #include "../Source/PluginProcessor.h"
@@ -8,11 +9,33 @@
 #include <catch2/catch_test_macros.hpp>
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cstdint>
 #include <cmath>
 #include <limits>
 
 namespace
 {
+#if defined(_MSC_VER)
+#define FIRE_TEST_NOINLINE __declspec(noinline)
+#else
+#define FIRE_TEST_NOINLINE __attribute__((noinline))
+#endif
+
+FIRE_TEST_NOINLINE bool isPositiveZeroBits(std::uint32_t bits) noexcept
+{
+    return bits == std::bit_cast<std::uint32_t>(0.0f);
+}
+
+float runtimeFloatFromBits(std::uint32_t bits) noexcept
+{
+    volatile std::uint32_t runtimeBits = bits;
+    const std::uint32_t copiedBits = runtimeBits;
+    return std::bit_cast<float>(copiedBits);
+}
+
+#undef FIRE_TEST_NOINLINE
+
 class TestPlayHead final : public juce::AudioPlayHead
 {
 public:
@@ -380,6 +403,27 @@ TEST_CASE("Pit clipping preserves its high-drive foldback and polarity", "[disto
     CHECK(waveshaping::tanclip(100.0f) < -0.99f);
     CHECK(waveshaping::tanclip(-100.0f) > 0.99f);
     CHECK(waveshaping::tanclip(std::numeric_limits<float>::infinity()) == 0.0f);
+}
+
+TEST_CASE("Release DSP preserves non-finite input guards", "[distortion][robustness][release]")
+{
+    // Construct the values at runtime and inspect their result through a
+    // no-inline integer barrier. This keeps the canary meaningful even under
+    // LTO: a fast-math build cannot optimise the assertion itself on the
+    // assumption that floating-point inputs are always finite.
+    const float positiveInfinity = runtimeFloatFromBits(0x7f800000u);
+    const float quietNan = runtimeFloatFromBits(0x7fc00000u);
+
+    CHECK(isPositiveZeroBits(std::bit_cast<std::uint32_t>(waveshaping::tanclip(positiveInfinity))));
+    CHECK(isPositiveZeroBits(std::bit_cast<std::uint32_t>(waveshaping::logicClip(quietNan))));
+    CHECK(isPositiveZeroBits(std::bit_cast<std::uint32_t>(DistortionLogic::processSample(quietNan, {}))));
+
+    for (const float input : { -1.0f, -0.75f, -0.25f, 0.0f, 0.25f, 0.75f, 1.0f })
+    {
+        const float expected = (input - input * input * input / 3.0f) * 1.5f;
+        CHECK(waveshaping::cubicSoftClipping(input)
+              == Catch::Approx(expected).margin(2.0e-7f));
+    }
 }
 
 TEST_CASE("Stereo bypass crossfades without a block-boundary click", "[width][bypass]")

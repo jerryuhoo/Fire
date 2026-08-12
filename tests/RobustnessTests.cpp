@@ -382,6 +382,61 @@ TEST_CASE("Pit clipping preserves its high-drive foldback and polarity", "[disto
     CHECK(waveshaping::tanclip(std::numeric_limits<float>::infinity()) == 0.0f);
 }
 
+TEST_CASE("Stereo bypass crossfades without a block-boundary click", "[width][bypass]")
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int blockSize = 256;
+    constexpr float inputValue = 0.25f;
+
+    BandProcessor band;
+    band.prepare({ sampleRate, static_cast<juce::uint32>(blockSize), 2 });
+
+    BandProcessingParameters params;
+    params.mode = 4; // Hard clipping is transparent for the chosen input.
+    params.mixVal = 1.0f;
+    params.shapeMixVal = 1.0f;
+    params.width = 0.0f; // Pure mid: equal stereo input doubles at full wet.
+    params.pan = 0.0f;
+    params.widthMixVal = 1.0f;
+    params.outputVal.baseValue = 0.0f;
+
+    juce::AudioBuffer<float> audio(2, blockSize);
+    juce::AudioBuffer<float> lfoOutputs(4, blockSize);
+    lfoOutputs.clear();
+
+    const auto processConstantBlock = [&](bool widthEnabled)
+    {
+        for (int channel = 0; channel < audio.getNumChannels(); ++channel)
+            juce::FloatVectorOperations::fill(audio.getWritePointer(channel),
+                                              inputValue,
+                                              blockSize);
+
+        params.isWidthEnabled = widthEnabled;
+        band.process(audio, params, lfoOutputs);
+    };
+
+    // Prime every mixer in the same state used at plugin startup.
+    for (int block = 0; block < 12; ++block)
+        processConstantBlock(false);
+    CHECK(audio.getSample(0, blockSize - 1) == Catch::Approx(inputValue).margin(1.0e-6f));
+
+    const float beforeEnable = audio.getSample(0, blockSize - 1);
+    processConstantBlock(true);
+    CHECK(std::abs(audio.getSample(0, 0) - beforeEnable) < 0.02f);
+
+    for (int block = 0; block < 12; ++block)
+        processConstantBlock(true);
+    CHECK(audio.getSample(0, blockSize - 1) == Catch::Approx(inputValue * 2.0f).margin(1.0e-5f));
+
+    const float beforeDisable = audio.getSample(0, blockSize - 1);
+    processConstantBlock(false);
+    CHECK(std::abs(audio.getSample(0, 0) - beforeDisable) < 0.02f);
+
+    for (int block = 0; block < 12; ++block)
+        processConstantBlock(false);
+    CHECK(audio.getSample(0, blockSize - 1) == Catch::Approx(inputValue).margin(1.0e-5f));
+}
+
 TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[processor][robustness]")
 {
     juce::ScopedJuceInitialiser_GUI gui;

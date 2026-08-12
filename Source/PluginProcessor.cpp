@@ -461,9 +461,17 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
         this->compressor.process(postDistortionContext);
         compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
     }
-    if (params.isWidthEnabled && buffer.getNumChannels() == 2)
+    if (buffer.getNumChannels() == 2)
     {
-        widthMixer.setWetMixProportion(params.widthMixVal);
+        // Keep the width path warm and use the mixer's existing 50 ms ramp for
+        // bypass transitions. Skipping the complete branch when Stereo was
+        // disabled hard-switched between wet and dry samples at a block
+        // boundary, which could produce an audible click at extreme Width/Pan
+        // settings.
+        const float effectiveWidthMix = params.isWidthEnabled
+                                            ? juce::jlimit(0.0f, 1.0f, params.widthMixVal)
+                                            : 0.0f;
+        widthMixer.setWetMixProportion(effectiveWidthMix);
         if (! widthMixerPrimed)
             widthMixer.reset();
         widthMixerPrimed = true;

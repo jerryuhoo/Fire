@@ -313,6 +313,25 @@ TEST_CASE("Logic clipping remains monotonic and saturated at high drive", "[dist
     CHECK(waveshaping::logicClip(std::numeric_limits<float>::quiet_NaN()) == 0.0f);
 }
 
+TEST_CASE("Pit clipping preserves its high-drive foldback and polarity", "[distortion][robustness]")
+{
+    for (const float input : { -100.0f, -50.0f, -20.0f, -5.0f,
+                                0.0f, 5.0f, 20.0f, 50.0f, 100.0f })
+    {
+        const float output = waveshaping::tanclip(input);
+        const float expected = juce::jlimit(-1.0f, 1.0f,
+                                            std::tanh(input) - 0.02f * input);
+        CAPTURE(input, output, expected);
+        CHECK(std::isfinite(output));
+        CHECK(output == Catch::Approx(expected).margin(2.0e-4f));
+        CHECK(output == Catch::Approx(-waveshaping::tanclip(-input)).margin(1.0e-6f));
+    }
+
+    CHECK(waveshaping::tanclip(100.0f) < -0.99f);
+    CHECK(waveshaping::tanclip(-100.0f) > 0.99f);
+    CHECK(waveshaping::tanclip(std::numeric_limits<float>::infinity()) == 0.0f);
+}
+
 TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[processor][robustness]")
 {
     juce::ScopedJuceInitialiser_GUI gui;

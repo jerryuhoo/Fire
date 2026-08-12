@@ -170,7 +170,14 @@ T tanclip (T x) noexcept
         return T {};
 
     constexpr T soft {};
-    const T result = JMath::tanh((static_cast<T>(1) - static_cast<T>(0.5) * soft) * x)
+    // JUCE's Padé tanh approximation is only accurate over a small input
+    // interval. Keep its input inside that interval while preserving the
+    // unbounded linear term that gives this waveshaper its intended high-level
+    // foldback. Passing Extreme-drive samples directly to the approximation
+    // can otherwise reverse the curve and even produce the wrong polarity.
+    const T nonlinearInput = juce::jlimit(static_cast<T>(-5), static_cast<T>(5),
+                                          (static_cast<T>(1) - static_cast<T>(0.5) * soft) * x);
+    const T result = JMath::tanh(nonlinearInput)
                      - static_cast<T>(0.02) * x;
     return std::isfinite(result)
                ? juce::jlimit(static_cast<T>(-1), static_cast<T>(1), result)

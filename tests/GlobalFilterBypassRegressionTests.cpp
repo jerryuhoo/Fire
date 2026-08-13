@@ -116,10 +116,31 @@ float maximumAbsoluteDifference(const juce::AudioBuffer<float>& first,
     return maximumDifference;
 }
 
+juce::AudioBuffer<float> integerDelayedCopy(
+    const juce::AudioBuffer<float>& input,
+    int latencySamples)
+{
+    REQUIRE(latencySamples >= 0);
+    juce::AudioBuffer<float> delayed(input.getNumChannels(),
+                                     input.getNumSamples());
+    delayed.clear();
+    const int samplesToCopy = input.getNumSamples() - latencySamples;
+    if (samplesToCopy > 0)
+        for (int channel = 0; channel < input.getNumChannels(); ++channel)
+            delayed.copyFrom(channel,
+                             latencySamples,
+                             input,
+                             channel,
+                             0,
+                             samplesToCopy);
+    return delayed;
+}
+
 float maximumLinearBlendError(const juce::AudioBuffer<float>& actual,
                               const juce::AudioBuffer<float>& dry,
                               const juce::AudioBuffer<float>& wet,
-                              bool rampingToWet)
+                              bool rampingToWet,
+                              int latencySamples)
 {
     REQUIRE(actual.getNumChannels() == dry.getNumChannels());
     REQUIRE(actual.getNumChannels() == wet.getNumChannels());
@@ -131,8 +152,11 @@ float maximumLinearBlendError(const juce::AudioBuffer<float>& actual,
     {
         for (int sample = 0; sample < actual.getNumSamples(); ++sample)
         {
-            const float ramp = static_cast<float>(sample + 1)
-                             / static_cast<float>(transitionSamples);
+            const int preDelaySample = sample - latencySamples;
+            const float ramp = preDelaySample < 0
+                                   ? 0.0f
+                                   : static_cast<float>(preDelaySample + 1)
+                                         / static_cast<float>(transitionSamples);
             const float wetProportion = rampingToWet ? ramp : 1.0f - ramp;
             const float expected = dry.getSample(channel, sample)
                                  + wetProportion
@@ -160,6 +184,8 @@ TEST_CASE("Global filter enable crossfades while its wet state keeps advancing",
     configureFilter(subject, true);
     configureFilter(alwaysWet, true);
     configureFilter(alwaysDry, false);
+    const int latencySamples = subject.getLatencySamples();
+    REQUIRE(latencySamples > 0);
 
     int streamPosition = 0;
     const auto processAll = [&] (int numSamples)
@@ -185,13 +211,19 @@ TEST_CASE("Global filter enable crossfades while its wet state keeps advancing",
     const float fadeOutError = maximumLinearBlendError(fadeOut[0],
                                                         fadeOut[2],
                                                         fadeOut[1],
-                                                        false);
+                                                        false,
+                                                        latencySamples);
     INFO("fade-out wet/dry separation = " << wetDrySeparationOut);
     INFO("fade-out maximum linear blend error = " << fadeOutError);
     CHECK(wetDrySeparationOut > 0.5f);
     CHECK(fadeOutError < blendTolerance);
 
-    // The disabled result becomes exactly dry after the transition.
+    // The fixed output delay still contains the final transition samples at
+    // the next callback boundary. Move the observation window past that tail.
+    processAll(latencySamples);
+
+    // The disabled result becomes exactly dry after the transition reaches
+    // the host-visible output.
     const auto drySteadyState = processAll(317);
     CHECK(maximumAbsoluteDifference(drySteadyState[0], drySteadyState[2])
           < 1.0e-6f);
@@ -210,11 +242,14 @@ TEST_CASE("Global filter enable crossfades while its wet state keeps advancing",
     const float fadeInError = maximumLinearBlendError(fadeIn[0],
                                                        fadeIn[2],
                                                        fadeIn[1],
-                                                       true);
+                                                       true,
+                                                       latencySamples);
     INFO("fade-in wet/dry separation = " << wetDrySeparationIn);
     INFO("fade-in maximum linear blend error = " << fadeInError);
     CHECK(wetDrySeparationIn > 0.5f);
     CHECK(fadeInError < blendTolerance);
+
+    processAll(latencySamples);
 
     // Once fully enabled, exact agreement proves the wet filter was processed
     // continuously during bypass. This also rejects a stale recursive tail
@@ -241,10 +276,12 @@ TEST_CASE("Global filter mixer primes to its prepared enable state",
         const auto input = makeProbeInput(0, preparedBlockSize);
         const auto wetOutput = processCopy(enabled, input);
         const auto dryOutput = processCopy(disabled, input);
+        const auto delayedInput = integerDelayedCopy(
+            input, disabled.getLatencySamples());
         const float wetDrySeparation = maximumAbsoluteDifference(wetOutput,
                                                                   dryOutput);
         const float enabledInputSeparation = maximumAbsoluteDifference(
-            wetOutput, input);
+            wetOutput, delayedInput);
         INFO("first-block wet/dry separation = " << wetDrySeparation);
         INFO("enabled first-block input separation = "
              << enabledInputSeparation);
@@ -260,7 +297,9 @@ TEST_CASE("Global filter mixer primes to its prepared enable state",
 
         const auto input = makeProbeInput(0, preparedBlockSize);
         const auto output = processCopy(disabled, input);
-        CHECK(maximumAbsoluteDifference(output, input) < 1.0e-6f);
+        const auto delayedInput = integerDelayedCopy(
+            input, disabled.getLatencySamples());
+        CHECK(maximumAbsoluteDifference(output, delayedInput) < 1.0e-6f);
     }
 }
 
@@ -282,7 +321,10 @@ TEST_CASE("Host bypass before first processing callback does not poison filter p
     const auto subjectBypass = processBypassedCopy(subject, bypassInput);
     const auto referenceBypass = processBypassedCopy(enabledReference,
                                                      bypassInput);
-    CHECK(maximumAbsoluteDifference(subjectBypass, bypassInput) < 1.0e-6f);
+    const auto delayedBypassInput = integerDelayedCopy(
+        bypassInput, subject.getLatencySamples());
+    CHECK(maximumAbsoluteDifference(subjectBypass, delayedBypassInput)
+          < 1.0e-6f);
     CHECK(maximumAbsoluteDifference(subjectBypass, referenceBypass) < 1.0e-6f);
 
     // The first subsequent normal callback must still prime directly to the

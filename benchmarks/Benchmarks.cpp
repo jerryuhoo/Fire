@@ -213,7 +213,7 @@ TEST_CASE("Modular DSP Performance")
 
         BENCHMARK("processMultiBand (4 Bands)")
         {
-            plugin.processMultiBand(bufferCopy, lfoOutputBuffer, sampleRate);
+            plugin.processMultiBand(bufferCopy, lfoOutputBuffer, sampleRate, false);
         };
     }
 

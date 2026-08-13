@@ -73,9 +73,13 @@ int configureProcessor(FireAudioProcessor& processor,
     }
 
     processor.prepareToPlay(sampleRate, hostBlockSize);
+    // The host-facing PDC is fixed at round(natural HQ latency), even while
+    // HQ is off. The Solo control envelope itself is delayed inside the HQ
+    // topology only; in base mode the complete output delay moves the audible
+    // transition by the fixed integer PDC instead.
     return useHq
                ? static_cast<int>(std::ceil(processor.getTotalLatency()))
-               : 0;
+               : processor.getLatencySamples();
 }
 
 float inputSample(int channel, int absoluteSample)

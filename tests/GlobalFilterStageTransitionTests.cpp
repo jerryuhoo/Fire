@@ -222,6 +222,18 @@ float boundaryStep(const juce::AudioBuffer<float>& before,
                     - before.getSample(0, before.getNumSamples() - 1));
 }
 
+float audibleBoundaryStep(const juce::AudioBuffer<float>& before,
+                          const juce::AudioBuffer<float>& after,
+                          int latencySamples)
+{
+    REQUIRE(latencySamples >= 0);
+    REQUIRE(latencySamples < after.getNumSamples());
+    if (latencySamples == 0)
+        return boundaryStep(before, after);
+    return std::abs(after.getSample(0, latencySamples)
+                    - after.getSample(0, latencySamples - 1));
+}
+
 float maximumAdjacentStep(const juce::AudioBuffer<float>& before,
                           const juce::AudioBuffer<float>& during)
 {
@@ -326,25 +338,34 @@ StageBypassMetrics runStageBypassProbe(FilterStage stage)
     StageBypassMetrics metrics;
     setPlainParameter(subject, bypassParameterFor(stage), 1.0f);
     const auto bypassFirstBlock = processAll(preparedBlockSize);
+    const int audibleTransitionSample = subject.getLatencySamples();
+    REQUIRE(audibleTransitionSample >= 0);
+    REQUIRE(audibleTransitionSample < preparedBlockSize);
     metrics.wetDrySeparation = maximumAbsoluteDifference(bypassFirstBlock[1],
                                                           bypassFirstBlock[2]);
     metrics.fadeOutFirstSampleFromWet = std::abs(
-        bypassFirstBlock[0].getSample(0, 0)
-        - bypassFirstBlock[1].getSample(0, 0));
+        bypassFirstBlock[0].getSample(0, audibleTransitionSample)
+        - bypassFirstBlock[1].getSample(0, audibleTransitionSample));
     metrics.fadeOutFirstSampleFromDry = std::abs(
-        bypassFirstBlock[0].getSample(0, 0)
-        - bypassFirstBlock[2].getSample(0, 0));
+        bypassFirstBlock[0].getSample(0, audibleTransitionSample)
+        - bypassFirstBlock[2].getSample(0, audibleTransitionSample));
     metrics.fadeOutMaximumFromWet = maximumAbsoluteDifference(
         bypassFirstBlock[0], bypassFirstBlock[1]);
     metrics.fadeOutMaximumFromDry = maximumAbsoluteDifference(
         bypassFirstBlock[0], bypassFirstBlock[2]);
-    metrics.fadeOutBoundaryStep = boundaryStep(warmup[0], bypassFirstBlock[0]);
+    metrics.fadeOutBoundaryStep = audibleBoundaryStep(warmup[0],
+                                                       bypassFirstBlock[0],
+                                                       audibleTransitionSample);
 
     // The first block is 257 samples, shorter than the intended 10 ms stage
     // transition. Sample 64 sits well inside the crossfade and must not equal
     // either independently-running endpoint.
     metrics.fadeOutInteriorEndpointDistance = minimumDistanceFromEitherEndpoint(
-        bypassFirstBlock[0], bypassFirstBlock[1], bypassFirstBlock[2], 64, 1);
+        bypassFirstBlock[0],
+        bypassFirstBlock[1],
+        bypassFirstBlock[2],
+        64 + audibleTransitionSample,
+        1);
     metrics.fadeOutMaximumAdjacentStep = maximumAdjacentStep(warmup[0],
                                                               bypassFirstBlock[0]);
 
@@ -353,6 +374,7 @@ StageBypassMetrics runStageBypassProbe(FilterStage stage)
     metrics.fadeOutMaximumAdjacentStep = std::max(
         metrics.fadeOutMaximumAdjacentStep,
         maximumAdjacentStep(bypassFirstBlock[0], fadeOutRemainder[0]));
+    processAll(subject.getLatencySamples());
     const auto drySettled = processAll(193);
     metrics.settledDryError = maximumAbsoluteDifference(drySettled[0],
                                                          drySettled[2]);
@@ -362,16 +384,21 @@ StageBypassMetrics runStageBypassProbe(FilterStage stage)
     setPlainParameter(subject, bypassParameterFor(stage), 0.0f);
     const auto enableFirstBlock = processAll(preparedBlockSize);
     metrics.fadeInFirstSampleFromDry = std::abs(
-        enableFirstBlock[0].getSample(0, 0)
-        - enableFirstBlock[2].getSample(0, 0));
+        enableFirstBlock[0].getSample(0, audibleTransitionSample)
+        - enableFirstBlock[2].getSample(0, audibleTransitionSample));
     metrics.fadeInFirstSampleFromWet = std::abs(
-        enableFirstBlock[0].getSample(0, 0)
-        - enableFirstBlock[1].getSample(0, 0));
-    metrics.fadeInBoundaryStep = boundaryStep(beforeEnable[0],
-                                               enableFirstBlock[0]);
+        enableFirstBlock[0].getSample(0, audibleTransitionSample)
+        - enableFirstBlock[1].getSample(0, audibleTransitionSample));
+    metrics.fadeInBoundaryStep = audibleBoundaryStep(beforeEnable[0],
+                                                      enableFirstBlock[0],
+                                                      audibleTransitionSample);
 
     metrics.fadeInInteriorEndpointDistance = minimumDistanceFromEitherEndpoint(
-        enableFirstBlock[0], enableFirstBlock[1], enableFirstBlock[2], 64, 1);
+        enableFirstBlock[0],
+        enableFirstBlock[1],
+        enableFirstBlock[2],
+        64 + audibleTransitionSample,
+        1);
     metrics.fadeInMaximumAdjacentStep = maximumAdjacentStep(beforeEnable[0],
                                                              enableFirstBlock[0]);
 
@@ -521,6 +548,16 @@ TEST_CASE("All enabled global-filter stages retain the canonical chain response"
     prepareCanonicalChain(canonicalLeft, settings);
     prepareCanonicalChain(canonicalRight, settings);
 
+    juce::dsp::DelayLine<
+        float,
+        juce::dsp::DelayLineInterpolationTypes::None> canonicalLatency(64);
+    canonicalLatency.prepare({ sampleRate,
+                               static_cast<juce::uint32>(preparedBlockSize),
+                               2 });
+    canonicalLatency.setDelay(
+        static_cast<float>(subject.getLatencySamples()));
+    canonicalLatency.reset();
+
     int streamPosition = 0;
     for (int block = 0; block < 48; ++block)
     {
@@ -531,6 +568,9 @@ TEST_CASE("All enabled global-filter stages retain the canonical chain response"
         const auto subjectOutput = processCopy(subject, input);
         auto canonicalOutput = input;
         processCanonicalStereo(canonicalLeft, canonicalRight, canonicalOutput);
+        auto canonicalBlock = juce::dsp::AudioBlock<float>(canonicalOutput);
+        canonicalLatency.process(
+            juce::dsp::ProcessContextReplacing<float>(canonicalBlock));
         REQUIRE(maximumAbsoluteDifference(subjectOutput, canonicalOutput)
                 < 2.0e-5f);
     }

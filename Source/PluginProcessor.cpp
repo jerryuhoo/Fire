@@ -1607,7 +1607,15 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     float hqLatency = 0.0f;
     if (! bands.empty() && bands.front() != nullptr && bands.front()->oversampling != nullptr)
         hqLatency = bands.front()->oversampling->getLatencyInSamples();
+    if (! std::isfinite(hqLatency) || hqLatency < 0.0f)
+        hqLatency = 0.0f;
     preparedHqLatency.store(hqLatency, std::memory_order_release);
+    // Host PDC cannot safely follow an automatable quality switch. Report the
+    // prepared HQ latency for both modes; base processing is delayed by the
+    // same integer number of samples at the end of the callback.
+    totalLatency.store(hqLatency, std::memory_order_release);
+    nonHqOutputDelay.prepare(spec);
+    nonHqOutputDelay.setDelay(static_cast<float>(juce::roundToInt(hqLatency)));
 
     lfoManager->prepare(spec);
 
@@ -1776,7 +1784,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     lofiMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f,
                                                loadCachedParameter(downsampleMixParameter)));
     lofiMixer.prepare(globalMixerSpec);
-    updateReportedLatency();
     publishLatencyToHost();
     reset();
 }
@@ -2007,6 +2014,7 @@ void FireAudioProcessor::performReset()
     dryWetMixerGlobal.reset();
     globalMixerPrimed = false;
     bypassDelayMixer.reset();
+    nonHqOutputDelay.reset();
     lofiMixer.reset();
     lofiMixerPrimed = false;
     resetDownsamplingState();
@@ -2020,18 +2028,6 @@ void FireAudioProcessor::releaseResources()
     performReset();
 }
 
-void FireAudioProcessor::updateReportedLatency()
-{
-    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
-
-    const float newLatency = useHQ
-                                 ? preparedHqLatency.load(std::memory_order_acquire)
-                                 : 0.0f;
-
-    totalLatency.store(newLatency, std::memory_order_relaxed);
-
-}
-
 void FireAudioProcessor::publishLatencyToHost()
 {
     const int latencyInSamples = juce::roundToInt(totalLatency.load(std::memory_order_acquire));
@@ -2042,9 +2038,7 @@ void FireAudioProcessor::publishLatencyToHost()
 void FireAudioProcessor::timerCallback()
 {
     // setLatencySamples synchronously notifies the host, so keep it on the
-    // message thread. Re-read HQ here as well so stopped transports update PDC
-    // without waiting for the next audio callback.
-    updateReportedLatency();
+    // message thread. The prepared maximum is invariant across HQ automation.
     publishLatencyToHost();
 }
 
@@ -2080,11 +2074,12 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
 
-    updateReportedLatency();
+    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
 
     calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
     resetDownsamplingState();
-    processLatencyMatchedBypass(buffer);
+    advanceNonHqOutputDelay(buffer);
+    processLatencyMatchedBypass(buffer, useHQ);
     calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
 }
 
@@ -2095,8 +2090,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
-
-    updateReportedLatency();
 
     juce::ScopedNoDenormals noDenormals;
     const int totalNumInputChannels = getTotalNumInputChannels();
@@ -2122,6 +2115,13 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         return;
     }
 
+    // One quality snapshot owns the entire callback. A concurrent automation
+    // change cannot select different latencies for the bands, Solo envelope,
+    // Global Mix, and host-bypass shadow paths within the same block.
+    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
+    if (useHQ)
+        advanceNonHqOutputDelay(buffer);
+
     lfoOutputBuffer.setSize(4, numSamples, false, false, true);
     lfoOutputBuffer.clear();
     lfoManager->processBlock(lfoOutputBuffer, static_cast<float>(sampleRate), getPlayHead(), numSamples);
@@ -2138,16 +2138,22 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     // Keep a raw-input delay line warm while processing normally. This makes a
     // host bypass transition retain the same latency as the HQ signal path.
-    primeLatencyMatchedBypass(buffer);
+    primeLatencyMatchedBypass(buffer, useHQ);
 
-    processMultiBand(buffer, lfoOutputBuffer, sampleRate);
+    processMultiBand(buffer, lfoOutputBuffer, sampleRate, useHQ);
 
     applyDownsamplingEffect(buffer);
     // Call the simplified global effects function.
     applyGlobalEffects(buffer, lfoOutputBuffer, sampleRate);
 
     // Call the simplified global mix function.
-    applyGlobalMix(buffer);
+    applyGlobalMix(buffer, useHQ);
+
+    // Keep legacy base-mode samples unchanged after host compensation: delay
+    // the complete output by exactly the integer latency reported to the host.
+    // HQ already carries the oversampler's natural latency and is untouched.
+    if (! useHQ)
+        applyNonHqOutputDelay(buffer);
 
     mWetBuffer.makeCopyOf(buffer, true);
     captureHistorySamples();
@@ -2251,6 +2257,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
         pushToFifo(meterFifo, meterFifoBuffer, values);
     }
+
 }
 
 //==============================================================================
@@ -3488,13 +3495,12 @@ float FireAudioProcessor::getTotalLatency() const
     return totalLatency.load(std::memory_order_relaxed);
 }
 
-void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
+void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer,
+                                          const juce::AudioBuffer<float>& lfoOutputs,
+                                          double sampleRate,
+                                          bool useHQ)
 {
     splitBands(wetBuffer, sampleRate);
-    // Snapshot HQ once for the entire multiband callback. A concurrent host
-    // automation change must not select one latency for the Solo envelope and
-    // another for the band processors in the same block.
-    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
     updateBandSoloGainEnvelope(wetBuffer.getNumSamples(), useHQ);
 
     delayMatchedDryBuffer.clear();
@@ -3956,34 +3962,70 @@ void FireAudioProcessor::resetDownsamplingState() noexcept
     lofiMixerPrimed = false;
 }
 
-void FireAudioProcessor::primeLatencyMatchedBypass(juce::AudioBuffer<float>& inputBuffer)
+void FireAudioProcessor::primeLatencyMatchedBypass(
+    juce::AudioBuffer<float>& inputBuffer,
+    bool useHQ)
 {
     if (inputBuffer.getNumChannels() == 0 || inputBuffer.getNumSamples() == 0)
         return;
 
     mWetBuffer.makeCopyOf(inputBuffer, true);
-    bypassDelayMixer.setWetLatency(totalLatency.load(std::memory_order_acquire));
+    const float bypassLatency = useHQ
+                                    ? preparedHqLatency.load(std::memory_order_acquire)
+                                    : static_cast<float>(juce::roundToInt(
+                                          preparedHqLatency.load(
+                                              std::memory_order_acquire)));
+    bypassDelayMixer.setWetLatency(bypassLatency);
     bypassDelayMixer.setWetMixProportion(0.0f);
     bypassDelayMixer.pushDrySamples(juce::dsp::AudioBlock<float>(inputBuffer));
     bypassDelayMixer.mixWetSamples(juce::dsp::AudioBlock<float>(mWetBuffer));
 }
 
-void FireAudioProcessor::processLatencyMatchedBypass(juce::AudioBuffer<float>& buffer)
+void FireAudioProcessor::processLatencyMatchedBypass(
+    juce::AudioBuffer<float>& buffer,
+    bool useHQ)
 {
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
-    bypassDelayMixer.setWetLatency(totalLatency.load(std::memory_order_acquire));
+    const float bypassLatency = useHQ
+                                    ? preparedHqLatency.load(std::memory_order_acquire)
+                                    : static_cast<float>(juce::roundToInt(
+                                          preparedHqLatency.load(
+                                              std::memory_order_acquire)));
+    bypassDelayMixer.setWetLatency(bypassLatency);
     bypassDelayMixer.setWetMixProportion(0.0f);
     bypassDelayMixer.pushDrySamples(juce::dsp::AudioBlock<float>(buffer));
     bypassDelayMixer.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
 }
 
-void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer)
+void FireAudioProcessor::advanceNonHqOutputDelay(
+    const juce::AudioBuffer<float>& inputBuffer)
 {
-    if (loadCachedParameter(hqParameter) > 0.5f)
+    for (int sample = 0; sample < inputBuffer.getNumSamples(); ++sample)
     {
-        dryWetMixerGlobal.setWetLatency(totalLatency.load(std::memory_order_relaxed));
+        for (int channel = 0; channel < inputBuffer.getNumChannels(); ++channel)
+        {
+            nonHqOutputDelay.pushSample(channel,
+                                       inputBuffer.getSample(channel, sample));
+            juce::ignoreUnused(nonHqOutputDelay.popSample(channel));
+        }
+    }
+}
+
+void FireAudioProcessor::applyNonHqOutputDelay(juce::AudioBuffer<float>& buffer)
+{
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    nonHqOutputDelay.process(juce::dsp::ProcessContextReplacing<float>(block));
+}
+
+void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer,
+                                        bool useHQ)
+{
+    if (useHQ)
+    {
+        dryWetMixerGlobal.setWetLatency(
+            preparedHqLatency.load(std::memory_order_acquire));
     }
     else
     {

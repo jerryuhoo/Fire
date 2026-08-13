@@ -800,7 +800,7 @@ TEST_CASE("Processor accepts zero, mono, and larger-than-prepared blocks", "[pro
     CHECK(bufferContainsOnlyFiniteSamples(monoBuffer));
 }
 
-TEST_CASE("Disabling HQ clears the processor latency", "[processor][latency]")
+TEST_CASE("HQ automation keeps the processor host latency fixed", "[processor][latency]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
@@ -810,15 +810,26 @@ TEST_CASE("Disabling HQ clears the processor latency", "[processor][latency]")
     buffer.clear();
     juce::MidiBuffer midi;
 
+    const auto preparedPhysicalLatency = processor.getTotalLatency();
+    const int preparedHostLatency = processor.getLatencySamples();
+    REQUIRE(preparedPhysicalLatency > 0.0f);
+    REQUIRE(preparedHostLatency > 0);
+    CHECK(preparedHostLatency
+          == juce::roundToInt(preparedPhysicalLatency));
+
     setParameterNormalised(processor, HQ_ID, 1.0f);
+    processor.processBlock(buffer, midi);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    CHECK(processor.getLatencySamples() > 0);
-    CHECK(processor.getTotalLatency() > 0.0f);
+    CHECK(processor.getLatencySamples() == preparedHostLatency);
+    CHECK(processor.getTotalLatency()
+          == Catch::Approx(preparedPhysicalLatency));
 
     setParameterNormalised(processor, HQ_ID, 0.0f);
+    processor.processBlock(buffer, midi);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    CHECK(processor.getLatencySamples() == 0);
-    CHECK(processor.getTotalLatency() == Catch::Approx(0.0f));
+    CHECK(processor.getLatencySamples() == preparedHostLatency);
+    CHECK(processor.getTotalLatency()
+          == Catch::Approx(preparedPhysicalLatency));
 }
 
 TEST_CASE("Downsampling state is independent of host block boundaries", "[processor][downsampling]")
@@ -875,35 +886,43 @@ TEST_CASE("Downsampling state is independent of host block boundaries", "[proces
                   == Catch::Approx(wholeOutput.getSample(channel, sample)).margin(1.0e-6f));
 }
 
-TEST_CASE("HQ host bypass retains the reported latency", "[processor][latency][bypass]")
+TEST_CASE("Host bypass retains the fixed latency in base and HQ modes",
+          "[processor][latency][bypass]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
-    FireAudioProcessor processor;
-    setParameterNormalised(processor, HQ_ID, 1.0f);
-    processor.prepareToPlay(48000.0, 128);
-
-    juce::AudioBuffer<float> impulse(2, 128);
-    impulse.clear();
-    impulse.setSample(0, 0, 1.0f);
-    impulse.setSample(1, 0, 1.0f);
-    juce::MidiBuffer midi;
-    processor.processBlockBypassed(impulse, midi);
-
-    int peakIndex = 0;
-    float peakMagnitude = 0.0f;
-    for (int sample = 0; sample < impulse.getNumSamples(); ++sample)
+    for (const bool useHq : { false, true })
     {
-        const float magnitude = std::abs(impulse.getSample(0, sample));
-        if (magnitude > peakMagnitude)
-        {
-            peakMagnitude = magnitude;
-            peakIndex = sample;
-        }
-    }
+        FireAudioProcessor processor;
+        setParameterNormalised(processor, HQ_ID, useHq ? 1.0f : 0.0f);
+        processor.prepareToPlay(48000.0, 128);
 
-    CAPTURE(peakIndex, processor.getTotalLatency(), processor.getLatencySamples());
-    CHECK(peakMagnitude > 0.5f);
-    CHECK(std::abs(peakIndex - juce::roundToInt(processor.getTotalLatency())) <= 1);
+        juce::AudioBuffer<float> impulse(2, 128);
+        impulse.clear();
+        impulse.setSample(0, 0, 1.0f);
+        impulse.setSample(1, 0, 1.0f);
+        juce::MidiBuffer midi;
+        processor.processBlockBypassed(impulse, midi);
+
+        int peakIndex = 0;
+        float peakMagnitude = 0.0f;
+        for (int sample = 0; sample < impulse.getNumSamples(); ++sample)
+        {
+            const float magnitude = std::abs(impulse.getSample(0, sample));
+            if (magnitude > peakMagnitude)
+            {
+                peakMagnitude = magnitude;
+                peakIndex = sample;
+            }
+        }
+
+        CAPTURE(useHq,
+                peakIndex,
+                processor.getTotalLatency(),
+                processor.getLatencySamples());
+        REQUIRE(processor.getLatencySamples() > 0);
+        CHECK(peakMagnitude > 0.5f);
+        CHECK(std::abs(peakIndex - processor.getLatencySamples()) <= 1);
+    }
 }
 
 TEST_CASE("Neutral three-band crossover keeps a flat summed magnitude", "[processor][crossover]")

@@ -319,9 +319,12 @@ public:
                   bool useDelayedSoloEnvelope);
     void updateFilter(double sampleRate);
     bool updateGlobalFilters(double sampleRate, int lfoSampleIndex);
-    void processMultiBand(juce::AudioBuffer<float>& wetBuffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
+    void processMultiBand(juce::AudioBuffer<float>& wetBuffer,
+                          const juce::AudioBuffer<float>& lfoOutputs,
+                          double sampleRate,
+                          bool useHQ);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
-    void applyGlobalMix(juce::AudioBuffer<float>& buffer);
+    void applyGlobalMix(juce::AudioBuffer<float>& buffer, bool useHQ);
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
 
     void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
@@ -435,13 +438,16 @@ private:
     std::atomic<float> preparedHqLatency { 0.0f };
 
     void updateParameters();
-    void updateReportedLatency();
     void publishLatencyToHost();
     void timerCallback() override;
     void captureHistorySamples();
     void resetDownsamplingState() noexcept;
-    void primeLatencyMatchedBypass(juce::AudioBuffer<float>& inputBuffer);
-    void processLatencyMatchedBypass(juce::AudioBuffer<float>& buffer);
+    void primeLatencyMatchedBypass(juce::AudioBuffer<float>& inputBuffer,
+                                   bool useHQ);
+    void processLatencyMatchedBypass(juce::AudioBuffer<float>& buffer,
+                                     bool useHQ);
+    void advanceNonHqOutputDelay(const juce::AudioBuffer<float>& inputBuffer);
+    void applyNonHqOutputDelay(juce::AudioBuffer<float>& buffer);
 
     // preset id
     int numBands = 1;
@@ -517,6 +523,8 @@ private:
     GainProcessor gainProcessorGlobal;
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
     juce::dsp::DryWetMixer<float> bypassDelayMixer { 2048 };
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>
+        nonHqOutputDelay { 2048 };
     bool globalMixerPrimed = false;
 
     juce::dsp::DryWetMixer<float> lofiMixer { 2048 };

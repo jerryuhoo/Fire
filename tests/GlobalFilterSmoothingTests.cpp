@@ -65,6 +65,7 @@ juce::AudioBuffer<float> makeProbeInput(int firstStreamSample,
 
 struct AutomationProbe
 {
+    int firstAudibleSample = 0;
     float firstDistanceFromHeld = 0.0f;
     float firstHardJumpDistance = 0.0f;
     float firstDistanceFromHardJump = 0.0f;
@@ -96,6 +97,12 @@ AutomationProbe runAutomationProbe(const juce::String& parameterID,
         processor->prepareToPlay(sampleRate, blockSize);
     }
 
+    const int firstAudibleSample = subject.getLatencySamples();
+    REQUIRE(firstAudibleSample > 0);
+    REQUIRE(firstAudibleSample < blockSize);
+    REQUIRE(heldReference.getLatencySamples() == firstAudibleSample);
+    REQUIRE(hardJumpReference.getLatencySamples() == firstAudibleSample);
+
     juce::MidiBuffer midi;
     int streamPosition = 0;
 
@@ -122,9 +129,18 @@ AutomationProbe runAutomationProbe(const juce::String& parameterID,
     streamPosition += blockSize;
 
     AutomationProbe result;
-    const float firstSubject = subjectOutput.getSample(0, 0);
-    const float firstHeld = heldOutput.getSample(0, 0);
-    const float firstHard = hardOutput.getSample(0, 0);
+    result.firstAudibleSample = firstAudibleSample;
+    // The parameter event occurs at this callback's input sample zero. Base
+    // processing now has a fixed integer output delay, so output samples
+    // [0, D) still belong to the preceding callback. Compare all three
+    // processors at output sample D, where that first automated input sample
+    // actually becomes audible.
+    const float firstSubject = subjectOutput.getSample(0,
+                                                       firstAudibleSample);
+    const float firstHeld = heldOutput.getSample(0,
+                                                 firstAudibleSample);
+    const float firstHard = hardOutput.getSample(0,
+                                                 firstAudibleSample);
     result.firstDistanceFromHeld = std::abs(firstSubject - firstHeld);
     result.firstHardJumpDistance = std::abs(firstHard - firstHeld);
     result.firstDistanceFromHardJump = std::abs(firstSubject - firstHard);
@@ -151,6 +167,7 @@ AutomationProbe runAutomationProbe(const juce::String& parameterID,
 
 void requireSmoothedTransition(const AutomationProbe& result)
 {
+    INFO("first audible transition sample = " << result.firstAudibleSample);
     INFO("first distance from held response = " << result.firstDistanceFromHeld);
     INFO("hard-jump reference distance = " << result.firstHardJumpDistance);
     INFO("first distance from hard-jump response = " << result.firstDistanceFromHardJump);

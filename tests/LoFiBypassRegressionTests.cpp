@@ -100,10 +100,31 @@ float maximumAbsoluteDifference(const juce::AudioBuffer<float>& first,
     return maximumDifference;
 }
 
+juce::AudioBuffer<float> integerDelayedCopy(
+    const juce::AudioBuffer<float>& input,
+    int latencySamples)
+{
+    REQUIRE(latencySamples >= 0);
+    juce::AudioBuffer<float> delayed(input.getNumChannels(),
+                                     input.getNumSamples());
+    delayed.clear();
+    const int samplesToCopy = input.getNumSamples() - latencySamples;
+    if (samplesToCopy > 0)
+        for (int channel = 0; channel < input.getNumChannels(); ++channel)
+            delayed.copyFrom(channel,
+                             latencySamples,
+                             input,
+                             channel,
+                             0,
+                             samplesToCopy);
+    return delayed;
+}
+
 float maximumLinearBlendError(const juce::AudioBuffer<float>& actual,
                               const juce::AudioBuffer<float>& dry,
                               const juce::AudioBuffer<float>& wet,
-                              bool rampingToWet)
+                              bool rampingToWet,
+                              int latencySamples)
 {
     REQUIRE(actual.getNumChannels() == dry.getNumChannels());
     REQUIRE(actual.getNumChannels() == wet.getNumChannels());
@@ -115,8 +136,11 @@ float maximumLinearBlendError(const juce::AudioBuffer<float>& actual,
     {
         for (int sample = 0; sample < actual.getNumSamples(); ++sample)
         {
-            const float ramp = static_cast<float>(sample + 1)
-                             / static_cast<float>(bypassTransitionSamples);
+            const int preDelaySample = sample - latencySamples;
+            const float ramp = preDelaySample < 0
+                                   ? 0.0f
+                                   : static_cast<float>(preDelaySample + 1)
+                                         / static_cast<float>(bypassTransitionSamples);
             const float wetProportion = rampingToWet ? ramp : 1.0f - ramp;
             const float expected = dry.getSample(channel, sample)
                                  + wetProportion
@@ -144,7 +168,9 @@ TEST_CASE("Lo-Fi has exact dry and sample-and-hold steady states",
 
         const auto input = makeProbeInput(0, 97);
         const auto output = processCopy(processor, input);
-        CHECK(maximumAbsoluteDifference(output, input) < 1.0e-6f);
+        const auto delayedInput = integerDelayedCopy(
+            input, processor.getLatencySamples());
+        CHECK(maximumAbsoluteDifference(output, delayedInput) < 1.0e-6f);
     }
 
     SECTION("enabled holds each captured sample until the next rate interval")
@@ -160,16 +186,25 @@ TEST_CASE("Lo-Fi has exact dry and sample-and-hold steady states",
                                     + 0.2f * static_cast<float>(channel));
 
         const auto output = processCopy(processor, input);
+        const int latencySamples = processor.getLatencySamples();
         float maximumHoldError = 0.0f;
         for (int channel = 0; channel < output.getNumChannels(); ++channel)
         {
             for (int sample = 0; sample < output.getNumSamples(); ++sample)
             {
-                const int capturedSample = sample - sample % holdLength;
+                const int preDelaySample = sample - latencySamples;
+                const int capturedSample = preDelaySample < 0
+                                               ? -1
+                                               : preDelaySample
+                                                     - preDelaySample % holdLength;
+                const float expected = capturedSample < 0
+                                           ? 0.0f
+                                           : input.getSample(channel,
+                                                             capturedSample);
                 maximumHoldError = std::max(
                     maximumHoldError,
                     std::abs(output.getSample(channel, sample)
-                             - input.getSample(channel, capturedSample)));
+                             - expected));
             }
         }
         CHECK(maximumHoldError < 1.0e-6f);
@@ -187,6 +222,8 @@ TEST_CASE("Lo-Fi enable transitions crossfade for 50 ms without resetting its we
     configureLoFi(subject, true);
     configureLoFi(alwaysWet, true);
     configureLoFi(alwaysDry, false);
+    const int latencySamples = subject.getLatencySamples();
+    REQUIRE(latencySamples > 0);
 
     int streamPosition = 0;
     const auto processAll = [&](int numSamples)
@@ -208,8 +245,16 @@ TEST_CASE("Lo-Fi enable transitions crossfade for 50 ms without resetting its we
     setPlainParameter(subject, DOWNSAMPLE_BYPASS_ID, 0.0f);
     const auto fadeOut = processAll(bypassTransitionSamples);
     CHECK(maximumAbsoluteDifference(fadeOut[1], fadeOut[2]) > 0.25f);
-    CHECK(maximumLinearBlendError(fadeOut[0], fadeOut[2], fadeOut[1], false)
+    CHECK(maximumLinearBlendError(fadeOut[0],
+                                  fadeOut[2],
+                                  fadeOut[1],
+                                  false,
+                                  latencySamples)
           < linearBlendTolerance);
+
+    // Let the fixed output delay emit the last samples of the transition
+    // before checking the exact endpoint.
+    processAll(latencySamples);
 
     // Once the 50 ms transition is complete the bypassed result is exactly dry.
     const auto drySteadyState = processAll(97);
@@ -219,8 +264,14 @@ TEST_CASE("Lo-Fi enable transitions crossfade for 50 ms without resetting its we
     setPlainParameter(subject, DOWNSAMPLE_BYPASS_ID, 1.0f);
     const auto fadeIn = processAll(bypassTransitionSamples);
     CHECK(maximumAbsoluteDifference(fadeIn[1], fadeIn[2]) > 0.25f);
-    CHECK(maximumLinearBlendError(fadeIn[0], fadeIn[2], fadeIn[1], true)
+    CHECK(maximumLinearBlendError(fadeIn[0],
+                                  fadeIn[2],
+                                  fadeIn[1],
+                                  true,
+                                  latencySamples)
           < linearBlendTolerance);
+
+    processAll(latencySamples);
 
     // The wet processor kept advancing while bypassed, so re-enabling cannot
     // restart the hold counter or capture a different sample.

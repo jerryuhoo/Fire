@@ -76,9 +76,12 @@ int configureProcessor(FireAudioProcessor& processor,
     setPlainParameter(processor, bandParameter(MIX_ID), 1.0f);
 
     processor.prepareToPlay(sampleRate, preparedBlockSize);
+    // HQ carries its natural fractional oversampler latency through the band;
+    // base mode instead receives the fixed integer output delay reported to
+    // the host. Both move the audible Enable envelope, but at different sites.
     return useHq
                ? static_cast<int>(std::ceil(processor.getTotalLatency()))
-               : 0;
+               : processor.getLatencySamples();
 }
 
 float inputSample(int channel, int absoluteSample)

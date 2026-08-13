@@ -148,32 +148,34 @@ namespace TestHelpers
  * This simulates how a DAW compensates for plugin-reported latency.
  * @param rawOutput The unprocessed buffer straight from the plugin.
  * @param latencySamples The number of samples to shift the audio by.
- * @return A new juce::AudioBuffer<float> with latency compensation applied.
+ * @param outputSamples Number of compensated samples to return.
+ * @return A new juce::AudioBuffer<float> containing [latency, latency + N).
  */
-    static juce::AudioBuffer<float> applyLatencyCompensation(const juce::AudioBuffer<float>& rawOutput, int latencySamples)
+    static juce::AudioBuffer<float> applyLatencyCompensation(
+        const juce::AudioBuffer<float>& rawOutput,
+        int latencySamples,
+        int outputSamples)
     {
-        juce::AudioBuffer<float> compensatedOutput(rawOutput.getNumChannels(), rawOutput.getNumSamples());
+        REQUIRE(latencySamples >= 0);
+        REQUIRE(outputSamples >= 0);
+        juce::AudioBuffer<float> compensatedOutput(rawOutput.getNumChannels(),
+                                                   outputSamples);
         compensatedOutput.clear();
 
-        if (latencySamples > 0)
+        const int availableSamples = std::max(
+            0,
+            std::min(outputSamples,
+                     rawOutput.getNumSamples() - latencySamples));
+
+        for (int channel = 0; channel < rawOutput.getNumChannels(); ++channel)
         {
-            // Calculate how many samples will remain after shifting.
-            const int numSamplesToCopy = rawOutput.getNumSamples() - latencySamples;
-            if (numSamplesToCopy > 0)
-            {
-                for (int channel = 0; channel < rawOutput.getNumChannels(); ++channel)
-                {
-                    // Copy the relevant part of the raw output into the start of the compensated buffer.
-                    compensatedOutput.copyFrom(channel, 0, rawOutput, channel, latencySamples, numSamplesToCopy);
-                }
-            }
-            // If numSamplesToCopy is not > 0, the buffer is shorter than the latency,
-            // so the output remains silent, which is correct.
-        }
-        else
-        {
-            // If there's no latency, just make a direct copy.
-            compensatedOutput.makeCopyOf(rawOutput);
+            if (availableSamples > 0)
+                compensatedOutput.copyFrom(channel,
+                                           0,
+                                           rawOutput,
+                                           channel,
+                                           latencySamples,
+                                           availableSamples);
         }
         return compensatedOutput;
     }
@@ -223,19 +225,57 @@ namespace TestHelpers
 
             const int blockSize = 512;
             processor.prepareToPlay(sampleRate, blockSize);
+            const int latencySamples = processor.getLatencySamples();
+            REQUIRE(latencySamples > 0);
 
-            // --- 2. Process Audio in Blocks ---
-            juce::AudioBuffer<float> rawOutputBuffer(inputBuffer.getNumChannels(), inputBuffer.getNumSamples());
+            const auto* hqParameter = processor.treeState.getParameter(HQ_ID);
+            REQUIRE(hqParameter != nullptr);
+            const bool useHq = hqParameter->getValue() > 0.5f;
+            const int compensationLatency = useHq
+                                                ? static_cast<int>(
+                                                      processor.getTotalLatency())
+                                                : latencySamples;
+            REQUIRE(compensationLatency > 0);
+
+            // --- 2. Process audio in blocks ---
+            // Base presets need D tail samples because the new integer pad is
+            // part of this fix. HQ audio itself is unchanged, so preserve the
+            // historical golden harness (including its D zero tail) rather
+            // than rewriting otherwise-identical HQ fixtures.
+            const int sourceSamples = inputBuffer.getNumSamples();
+            const int renderedSamples = sourceSamples
+                                      + (useHq ? 0 : latencySamples);
+            juce::AudioBuffer<float> rawOutputBuffer(inputBuffer.getNumChannels(),
+                                                     renderedSamples);
             rawOutputBuffer.clear();
             juce::MidiBuffer midi;
 
-            for (int startSample = 0; startSample < inputBuffer.getNumSamples(); startSample += blockSize)
+            for (int startSample = 0;
+                 startSample < renderedSamples;
+                 startSample += blockSize)
             {
-                int numSamplesThisBlock = std::min(blockSize, inputBuffer.getNumSamples() - startSample);
+                const int numSamplesThisBlock = std::min(blockSize,
+                                                         renderedSamples
+                                                             - startSample);
                 juce::AudioBuffer<float> blockToProcess(inputBuffer.getNumChannels(), numSamplesThisBlock);
-                for (int channel = 0; channel < inputBuffer.getNumChannels(); ++channel)
+                blockToProcess.clear();
+                const int inputSamplesThisBlock = std::max(
+                    0,
+                    std::min(numSamplesThisBlock,
+                             sourceSamples - startSample));
+                if (inputSamplesThisBlock > 0)
                 {
-                    blockToProcess.copyFrom(channel, 0, inputBuffer, channel, startSample, numSamplesThisBlock);
+                    for (int channel = 0;
+                         channel < inputBuffer.getNumChannels();
+                         ++channel)
+                    {
+                        blockToProcess.copyFrom(channel,
+                                                0,
+                                                inputBuffer,
+                                                channel,
+                                                startSample,
+                                                inputSamplesThisBlock);
+                    }
                 }
 
                 processor.processBlock(blockToProcess, midi);
@@ -246,20 +286,15 @@ namespace TestHelpers
                 }
             }
 
-            // --- 3. Apply Latency Compensation for HQ Mode ---
-            // This is the crucial step for handling the delay introduced by the oversampler.
-            int latencySamples = 0;
-            if (auto* hqParam = processor.treeState.getParameter("hq"))
-            {
-                if (hqParam->getValue() > 0.5f) // HQ mode is ON
-                {
-                    // Get the latency introduced by the oversampling process.
-                    // This value is used to simulate the host's latency compensation.
-                    latencySamples = static_cast<int>(processor.getTotalLatency());
-                }
-            }
-
-            auto compensatedOutputBuffer = applyLatencyCompensation(rawOutputBuffer, latencySamples);
+            // --- 3. Apply the host's fixed latency compensation ---
+            // HQ automation must not change the latency reported to the host.
+            // Base processing carries an integer delay of the same length, so
+            // compensating every preset preserves the historical base golden
+            // samples while the natural HQ signal path remains unchanged.
+            auto compensatedOutputBuffer = applyLatencyCompensation(
+                rawOutputBuffer,
+                compensationLatency,
+                sourceSamples);
 
             // --- 4. Write, Reload, and Compare ---
             juce::AudioFormatManager formatManager;

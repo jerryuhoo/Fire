@@ -104,7 +104,7 @@ bool LfoManager::isModulationActive() const
 
 void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
-    refreshRuntimeStateIfAvailable();
+    routingSnapshotRefreshedThisBlock = refreshRuntimeStateIfAvailable();
     modulatedValueCount = 0;
 
     // Smoothness is a 0.01-stepped APVTS parameter. Selecting a prebuilt row is
@@ -251,11 +251,11 @@ bool LfoManager::getAudioThreadRoutingInfo(const juce::RangedAudioParameter* par
 // Private Helper Functions
 // =============================================================================
 
-void LfoManager::refreshRuntimeStateIfAvailable()
+bool LfoManager::refreshRuntimeStateIfAvailable()
 {
     const juce::ScopedTryLock lock(dataAccessLock);
     if (! lock.isLocked())
-        return;
+        return false;
 
     runtimeRoutingCount = 0;
     bool hasAnyRouting = false;
@@ -304,6 +304,8 @@ void LfoManager::refreshRuntimeStateIfAvailable()
                 lfoData[i].smoothness = smoothness;
         }
     }
+
+    return true;
 }
 
 void LfoManager::updatePublishedRoutingState() noexcept

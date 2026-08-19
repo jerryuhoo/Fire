@@ -1980,12 +1980,52 @@ void FireAudioProcessor::reset()
     needsReset = true;
 }
 
-void FireAudioProcessor::requestMultibandTopologyReset() noexcept
+void FireAudioProcessor::beginMultibandTopologyEdit() noexcept
 {
-    multibandTopologyResetGeneration.fetch_add(1, std::memory_order_release);
+    // Keep one recursive writer-lock level alive until the matching publish.
+    // This serialises editor, preset and host-state writers without ever
+    // involving the audio thread. Nested edits on the same thread coalesce
+    // into one odd/even publication.
+    multibandTopologyWriterLock.enter();
+    if (multibandTopologyEditDepth++ == 0)
+    {
+        const auto previous = multibandTopologyResetGeneration.fetch_add(
+            1u, std::memory_order_acq_rel);
+        jassert((previous & 1u) == 0u);
+    }
 }
 
-void FireAudioProcessor::resetMultibandProcessingState() noexcept
+void FireAudioProcessor::requestMultibandTopologyReset() noexcept
+{
+    // CriticalSection is recursive. The extra level acquired here lets the
+    // owner finish its transaction while competing writers wait; the second
+    // exit balances the level deliberately retained by begin().
+    multibandTopologyWriterLock.enter();
+
+    if (multibandTopologyEditDepth > 0)
+    {
+        --multibandTopologyEditDepth;
+        if (multibandTopologyEditDepth == 0)
+        {
+            const auto previous = multibandTopologyResetGeneration.fetch_add(
+                1u, std::memory_order_release);
+            jassert((previous & 1u) != 0u);
+        }
+
+        multibandTopologyWriterLock.exit();
+        multibandTopologyWriterLock.exit();
+        return;
+    }
+
+    // A standalone request represents a complete same-count publication.
+    const auto previous = multibandTopologyResetGeneration.fetch_add(
+        2u, std::memory_order_release);
+    jassert((previous & 1u) == 0u);
+    multibandTopologyWriterLock.exit();
+}
+
+void FireAudioProcessor::resetMultibandProcessingState(
+    const HqCallbackContext* callbackContext) noexcept
 {
     lowpass1.reset();
     lowpass2.reset();
@@ -2011,17 +2051,19 @@ void FireAudioProcessor::resetMultibandProcessingState() noexcept
         // different logical band, so initialise it from the completed
         // parameter migration instead of ramping from stale output gain for
         // the next 50 ms.
-        const auto& parameters = bandParameterCache[bandIndex];
-        const float initialOutput = loadCachedParameter(parameters.linked) > 0.5f
-                                        ? -0.1f * loadCachedParameter(parameters.drive)
-                                        : loadCachedParameter(parameters.output);
+        const float initialOutput = callbackContext != nullptr
+                                        ? callbackContext->bandParameters[bandIndex]
+                                              .outputVal.baseValue
+                                        : loadCachedParameter(
+                                              bandParameterCache[bandIndex].output);
         band->gain.setRampDurationSeconds(0.0);
         band->gain.setGainDecibels(initialOutput);
         band->gain.setRampDurationSeconds(0.05);
     }
 }
 
-std::array<float, 3> FireAudioProcessor::getEffectiveCrossoverFrequencies() const noexcept
+std::array<float, 3> FireAudioProcessor::getEffectiveCrossoverFrequencies(
+    int crossoversToValidate) const noexcept
 {
     constexpr std::array<float, 3> defaultCrossoverFrequencies { 200.0f, 1000.0f, 5000.0f };
     constexpr float minimumParameterFrequency = 40.0f;
@@ -2034,7 +2076,8 @@ std::array<float, 3> FireAudioProcessor::getEffectiveCrossoverFrequencies() cons
     };
 
     bool activeFrequenciesAreValid = true;
-    for (int index = 0; index < activeCrossovers; ++index)
+    crossoversToValidate = juce::jlimit(0, 3, crossoversToValidate);
+    for (int index = 0; index < crossoversToValidate; ++index)
     {
         const auto frequency = frequencies[static_cast<size_t>(index)];
         activeFrequenciesAreValid = activeFrequenciesAreValid
@@ -2051,37 +2094,31 @@ std::array<float, 3> FireAudioProcessor::getEffectiveCrossoverFrequencies() cons
     // APVTS state.
     if (! activeFrequenciesAreValid)
     {
-        for (int index = 0; index < activeCrossovers; ++index)
+        for (int index = 0; index < crossoversToValidate; ++index)
             frequencies[static_cast<size_t>(index)] = defaultCrossoverFrequencies[static_cast<size_t>(index)];
     }
 
     return frequencies;
 }
 
-void FireAudioProcessor::snapCrossoverSmoothersToParameters() noexcept
+void FireAudioProcessor::snapCrossoverSmoothers(
+    const std::array<float, 3>& frequencies) noexcept
 {
-    const auto frequencies = getEffectiveCrossoverFrequencies();
     smoothedFreq1.setCurrentAndTargetValue(frequencies[0]);
     smoothedFreq2.setCurrentAndTargetValue(frequencies[1]);
     smoothedFreq3.setCurrentAndTargetValue(frequencies[2]);
 }
 
-void FireAudioProcessor::snapBandSoloGainsToParameters() noexcept
+void FireAudioProcessor::snapBandSoloGains(
+    int snapshotNumBands,
+    const HqCallbackContext& callbackContext) noexcept
 {
-    std::array<bool, 4> soloState {};
-    bool anySoloActive = false;
-    for (int band = 0; band < numBands; ++band)
-    {
-        soloState[static_cast<size_t>(band)] = loadCachedParameter(
-            bandParameterCache[static_cast<size_t>(band)].solo) > 0.5f;
-        anySoloActive = anySoloActive || soloState[static_cast<size_t>(band)];
-    }
-
     for (size_t band = 0; band < bandSoloGainSmoothers.size(); ++band)
     {
-        const bool isActiveBand = static_cast<int>(band) < numBands;
+        const bool isActiveBand = static_cast<int>(band) < snapshotNumBands;
         const float target = isActiveBand
-                                 && (! anySoloActive || soloState[band])
+                                 && (! callbackContext.anySoloActive
+                                     || callbackContext.soloState[band])
                              ? 1.0f
                              : 0.0f;
         bandSoloGainSmoothers[band].setCurrentAndTargetValue(target);
@@ -2158,24 +2195,128 @@ void FireAudioProcessor::updateBandSoloGainEnvelope(
     }
 }
 
+bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
+    const juce::AudioBuffer<float>& lfoOutputs,
+    std::uint32_t sequenceAtCallbackStart,
+    bool routingSnapshotWasRefreshed,
+    MultibandTopologySnapshot& snapshot)
+{
+    const auto sequenceBefore = multibandTopologyResetGeneration.load(
+        std::memory_order_acquire);
+    if (sequenceBefore != sequenceAtCallbackStart
+        || (sequenceBefore & 1u) != 0u)
+        return false;
+
+    MultibandTopologySnapshot candidate;
+    candidate.publicationSequence = sequenceBefore;
+    candidate.numBands = juce::jlimit(
+        1,
+        4,
+        juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+    candidate.crossoverFrequencies = getEffectiveCrossoverFrequencies(
+        candidate.numBands - 1);
+    prepareHqCallbackContext(lfoOutputs,
+                             candidate.numBands,
+                             candidate.callbackContext);
+
+    const auto sequenceAfter = multibandTopologyResetGeneration.load(
+        std::memory_order_acquire);
+    if (sequenceAfter != sequenceBefore || (sequenceAfter & 1u) != 0u)
+        return false;
+
+    // Topology migrations can move LFO targets between physical band slots.
+    // LfoManager publishes those routes with a non-blocking try-lock at the
+    // callback boundary. If that refresh missed, keep the complete old audio
+    // snapshot instead of combining new APVTS slots with stale runtime routes.
+    const bool topologyIdentityChanged =
+        ! activeMultibandTopologySnapshotInitialised
+        || candidate.numBands != numBands
+        || candidate.publicationSequence
+               != appliedMultibandTopologyResetGeneration;
+    if (topologyIdentityChanged && ! routingSnapshotWasRefreshed)
+        return false;
+
+    snapshot = std::move(candidate);
+    return true;
+}
+
+void FireAudioProcessor::publishMultibandTelemetry(
+    const HqCallbackContext& callbackContext,
+    int snapshotNumBands,
+    const juce::AudioBuffer<float>& lfoOutputs) noexcept
+{
+    snapshotNumBands = juce::jlimit(0, 4, snapshotNumBands);
+    for (int band = 0; band < snapshotNumBands; ++band)
+    {
+        auto provider = callbackContext.bandParameters[static_cast<size_t>(band)]
+                            .compThresholdValProvider;
+        const int sourceIndex = callbackContext.bandParameters[static_cast<size_t>(band)]
+                                    .compThresholdLfoSourceIndex;
+        if (juce::isPositiveAndBelow(sourceIndex, lfoOutputs.getNumChannels())
+            && lfoOutputs.getNumSamples() > 0)
+            provider.lfoSignal = lfoOutputs.getReadPointer(sourceIndex);
+
+        realtimeModulatedThresholds[band].store(
+            provider.get(0), std::memory_order_relaxed);
+    }
+}
+
 void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 {
-    // The release/acquire pair makes the preceding message-thread parameter
-    // migration visible before its new slot layout is consumed here.
-    const auto requestedGeneration = multibandTopologyResetGeneration.load(std::memory_order_acquire);
+    juce::AudioBuffer<float> noLfoOutputs;
+    MultibandTopologySnapshot requestedSnapshot;
+    const auto sequenceAtReset = multibandTopologyResetGeneration.load(
+        std::memory_order_acquire);
+    // A lifecycle reset runs before the callback's non-blocking LFO routing
+    // refresh. Do not mark a newly published topology as applied here: when an
+    // older audible snapshot exists, the first successful audio-thread refresh
+    // must validate its migrated routing at the same time.
+    if (tryCaptureMultibandTopologySnapshot(noLfoOutputs,
+                                            sequenceAtReset,
+                                            false,
+                                            requestedSnapshot))
+    {
+        activeMultibandTopologySnapshot = std::move(requestedSnapshot);
+        activeMultibandTopologySnapshotInitialised = true;
+    }
+    else if (! activeMultibandTopologySnapshotInitialised)
+    {
+        // prepare/reset normally runs while parameter publication is quiescent.
+        // Keep a safe fallback for hosts that violate that lifecycle contract;
+        // the next stable callback will replace it atomically.
+        activeMultibandTopologySnapshot.numBands = juce::jlimit(
+            1,
+            4,
+            juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+        activeMultibandTopologySnapshot.crossoverFrequencies =
+            getEffectiveCrossoverFrequencies(
+                activeMultibandTopologySnapshot.numBands - 1);
+        prepareHqCallbackContext(
+            noLfoOutputs,
+            activeMultibandTopologySnapshot.numBands,
+            activeMultibandTopologySnapshot.callbackContext);
+        activeMultibandTopologySnapshot.publicationSequence =
+            multibandTopologyResetGeneration.load(std::memory_order_relaxed)
+            & ~std::uint32_t { 1 };
+        activeMultibandTopologySnapshotInitialised = true;
+    }
 
-    numBands = juce::jlimit(1, 4,
-                            juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
+    numBands = activeMultibandTopologySnapshot.numBands;
     activeCrossovers = numBands - 1;
-    snapCrossoverSmoothersToParameters();
-    snapBandSoloGainsToParameters();
-    appliedMultibandTopologyResetGeneration = requestedGeneration;
+    snapCrossoverSmoothers(
+        activeMultibandTopologySnapshot.crossoverFrequencies);
+    snapBandSoloGains(
+        numBands,
+        activeMultibandTopologySnapshot.callbackContext);
+    appliedMultibandTopologyResetGeneration =
+        activeMultibandTopologySnapshot.publicationSequence;
 }
 
 void FireAudioProcessor::performReset()
 {
-    resetMultibandProcessingState();
     synchroniseMultibandTopologyResetState();
+    resetMultibandProcessingState(
+        &activeMultibandTopologySnapshot.callbackContext);
     leftChain.reset();
     rightChain.reset();
     lowCutSlopeTransition.leftStandby.reset();
@@ -2341,12 +2482,20 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // two internally consistent quality ranges in this callback, but a
     // concurrent automation write cannot change the plan halfway through it.
     const bool requestedHq = loadCachedParameter(hqParameter) > 0.5f;
+    const auto topologySequenceAtCallbackStart =
+        multibandTopologyResetGeneration.load(std::memory_order_acquire);
 
     lfoOutputBuffer.setSize(4, numSamples, false, false, true);
     lfoOutputBuffer.clear();
     lfoManager->processBlock(lfoOutputBuffer, static_cast<float>(sampleRate), getPlayHead(), numSamples);
+    const bool routingSnapshotWasRefreshed =
+        lfoManager->wasRoutingSnapshotRefreshedThisBlock();
 
-    updateParameters();
+    HqCallbackContext callbackContext;
+    updateParameters(lfoOutputBuffer,
+                     topologySequenceAtCallbackStart,
+                     routingSnapshotWasRefreshed,
+                     callbackContext);
 
     mBuffer1.setSize(numBufferChannels, numSamples, false, false, true);
     mBuffer2.setSize(numBufferChannels, numSamples, false, false, true);
@@ -2361,8 +2510,6 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // peak semantics even when the quality transition uses two audio ranges.
     splitBands(buffer, sampleRate);
 
-    HqCallbackContext callbackContext;
-    prepareHqCallbackContext(lfoOutputBuffer, callbackContext);
     const std::array<juce::AudioBuffer<float>*, 4> fullBandBuffers {
         &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4
     };
@@ -2773,7 +2920,10 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                                             "editorHeight", static_cast<int>(INIT_HEIGHT)))
                                          : editorHeight.load(std::memory_order_relaxed);
 
-    // Commit only after the complete chunk has passed validation.
+    // Commit only after the complete chunk has passed validation. Keep the
+    // audio thread on its previous coherent multiband snapshot until the APVTS
+    // state and modulation routings have both been replaced.
+    beginMultibandTopologyEdit();
     treeState.replaceState(treeToLoad);
     if (xmlCurrentState != nullptr)
     {
@@ -3519,75 +3669,103 @@ float FireAudioProcessor::getLfoPhase(int lfoIndex) const
     return lfoManager->getLfoPhase(lfoIndex);
 }
 
-void FireAudioProcessor::updateParameters()
+void FireAudioProcessor::updateParameters(
+    const juce::AudioBuffer<float>& lfoOutputs,
+    std::uint32_t topologySequenceAtCallbackStart,
+    bool routingSnapshotWasRefreshed,
+    HqCallbackContext& callbackContext)
 {
     //==============================================================================
     // 1. Update Global and Crossover Parameters
     //==============================================================================
 
-    // Get the number of active bands for processing loops. A count change can
-    // also originate in host automation, where there is no UI callback to
-    // request the reset explicitly.
-    const auto requestedGeneration = multibandTopologyResetGeneration.load(std::memory_order_acquire);
-    const int requestedNumBands = juce::jlimit(
-        1, 4, juce::roundToInt(loadCachedParameter(numBandsParameter, 1.0f)));
-    const bool topologyChanged = requestedNumBands != numBands
-                                 || requestedGeneration != appliedMultibandTopologyResetGeneration;
+    MultibandTopologySnapshot requestedSnapshot;
+    const bool hasStablePublication = tryCaptureMultibandTopologySnapshot(
+        lfoOutputs,
+        topologySequenceAtCallbackStart,
+        routingSnapshotWasRefreshed,
+        requestedSnapshot);
 
-    numBands = requestedNumBands;
-    activeCrossovers = numBands - 1;
+    if (! activeMultibandTopologySnapshotInitialised)
+        synchroniseMultibandTopologyResetState();
 
-    if (topologyChanged)
+    if (hasStablePublication)
     {
-        // Slot reuse after an add/remove must not inherit compressor,
-        // oversampling, mixer or crossover history from the previous logical
-        // band. Snapping the three smoothers also prevents the first block of
-        // a newly enabled crossover from ramping up from its hidden value.
-        resetMultibandProcessingState();
-        snapCrossoverSmoothersToParameters();
-        snapBandSoloGainsToParameters();
-        appliedMultibandTopologyResetGeneration = requestedGeneration;
-    }
-    else
-    {
-        // Ordinary divider dragging remains smoothly interpolated.
-        const auto frequencies = getEffectiveCrossoverFrequencies();
-        smoothedFreq1.setTargetValue(frequencies[0]);
-        smoothedFreq2.setTargetValue(frequencies[1]);
-        smoothedFreq3.setTargetValue(frequencies[2]);
-    }
+        const bool topologyChanged =
+            requestedSnapshot.numBands != numBands
+            || requestedSnapshot.publicationSequence
+                   != appliedMultibandTopologyResetGeneration;
 
-    //==============================================================================
-    // 2. Update Per-Band Smoothed Parameters
-    //==============================================================================
+        activeMultibandTopologySnapshot = std::move(requestedSnapshot);
+        activeMultibandTopologySnapshotInitialised = true;
+        numBands = activeMultibandTopologySnapshot.numBands;
+        activeCrossovers = numBands - 1;
 
-    // Iterate through the bands vector to update each BandProcessor's smoothers.
-    for (int i = 0; i < 4; ++i)
-    {
-        if (auto* band = bands[i].get())
+        if (topologyChanged)
         {
-            const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
-            band->recSmoother.setTargetValue(loadCachedParameter(parameters.rec));
-            band->biasSmoother.setTargetValue(loadCachedParameter(parameters.bias));
+            // Slot reuse after an add/remove must not inherit compressor,
+            // oversampling, mixer or crossover history from the previous
+            // logical band. The snapshot was accepted only after a stable even
+            // publication, so every value below belongs to one complete edit.
+            resetMultibandProcessingState(
+                &activeMultibandTopologySnapshot.callbackContext);
+            snapCrossoverSmoothers(
+                activeMultibandTopologySnapshot.crossoverFrequencies);
+            snapBandSoloGains(
+                numBands,
+                activeMultibandTopologySnapshot.callbackContext);
+            appliedMultibandTopologyResetGeneration =
+                activeMultibandTopologySnapshot.publicationSequence;
+        }
+        else
+        {
+            // Ordinary divider dragging remains smoothly interpolated.
+            const auto& frequencies =
+                activeMultibandTopologySnapshot.crossoverFrequencies;
+            smoothedFreq1.setTargetValue(frequencies[0]);
+            smoothedFreq2.setTargetValue(frequencies[1]);
+            smoothedFreq3.setTargetValue(frequencies[2]);
+        }
+
+        for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
+        {
+            if (auto* band = bands[static_cast<size_t>(bandIndex)].get())
+            {
+                const auto& params = activeMultibandTopologySnapshot
+                                         .callbackContext
+                                         .bandParameters[static_cast<size_t>(bandIndex)];
+                band->recSmoother.setTargetValue(params.recVal.baseValue);
+                band->biasSmoother.setTargetValue(params.biasVal.baseValue);
+            }
         }
     }
 
+    callbackContext = activeMultibandTopologySnapshot.callbackContext;
+    publishMultibandTelemetry(callbackContext,
+                              numBands,
+                              lfoOutputs);
 }
 
 void FireAudioProcessor::prepareHqCallbackContext(
     const juce::AudioBuffer<float>& lfoOutputs,
+    int snapshotNumBands,
     HqCallbackContext& callbackContext)
 {
+    juce::ignoreUnused(lfoOutputs);
+    callbackContext = HqCallbackContext {};
     callbackContext.anySoloActive = false;
 
-    for (int i = 0; i < numBands; ++i)
+    snapshotNumBands = juce::jlimit(1, 4, snapshotNumBands);
+    for (int i = 0; i < 4; ++i)
     {
         const auto index = static_cast<size_t>(i);
         const auto& parameters = bandParameterCache[index];
         callbackContext.soloState[index] =
-            loadCachedParameter(parameters.solo) > 0.5f;
-        callbackContext.anySoloActive = callbackContext.anySoloActive
-                                     || callbackContext.soloState[index];
+            i < snapshotNumBands
+            && loadCachedParameter(parameters.solo) > 0.5f;
+        if (i < snapshotNumBands)
+            callbackContext.anySoloActive = callbackContext.anySoloActive
+                                         || callbackContext.soloState[index];
 
         BandProcessingParameters params;
         params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
@@ -3672,8 +3850,6 @@ void FireAudioProcessor::prepareHqCallbackContext(
         params.shapeMixVal = params.shapeMixValProvider.baseValue;
 
         callbackContext.bandParameters[index] = params;
-        realtimeModulatedThresholds[index].store(
-            getBlockModulatedValue(parameters.compressorThreshold, lfoOutputs));
     }
 }
 

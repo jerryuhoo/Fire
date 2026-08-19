@@ -62,6 +62,12 @@ public:
     bool getAudioThreadRoutingInfo(const juce::RangedAudioParameter* parameter,
                                    AudioThreadRoutingInfo& result) const noexcept;
 
+    /** True when processBlock refreshed the fixed routing snapshot this call. */
+    bool wasRoutingSnapshotRefreshedThisBlock() const noexcept
+    {
+        return routingSnapshotRefreshedThisBlock;
+    }
+
     // =============================================================================
     // SECTION: Accessors for UI and State Management
     // =============================================================================
@@ -122,7 +128,7 @@ private:
      * @brief Internal helper to generate raw LFO signals into the internal buffer.
      */
     void generateLfoOutput(double sampleRate, juce::AudioPlayHead* playHead, int numSamples);
-    void refreshRuntimeStateIfAvailable();
+    bool refreshRuntimeStateIfAvailable();
     void updatePublishedRoutingState() noexcept;
 
     float mapRateSyncIndexToBeatMultiplier(int index) const;
@@ -149,6 +155,7 @@ private:
     size_t runtimeRoutingCount = 0;
     size_t modulatedValueCount = 0;
     std::atomic<bool> hasPublishedRouting { false };
+    bool routingSnapshotRefreshedThisBlock = false;
 
     // Internal buffer to hold the raw LFO signals.
     juce::AudioBuffer<float> lfoOutputBuffer;

@@ -359,8 +359,11 @@ public:
     void clearLfoModulationForBand(int bandIndex);
 
     // Parameter migration for an add/remove operation is performed on the
-    // message thread. The audio thread consumes this generation and resets the
-    // slot-based DSP state once the complete topology has been published.
+    // message thread. Mark the start before the first slot/routing write, then
+    // publish the completed transaction with requestMultibandTopologyReset().
+    // While the sequence is odd the audio thread keeps using its last coherent
+    // fixed-size snapshot instead of observing a half-migrated layout.
+    void beginMultibandTopologyEdit() noexcept;
     void requestMultibandTopologyReset() noexcept;
 
     bool getLatestDistortionGraphValues(DistortionGraphValues& values);
@@ -420,6 +423,14 @@ private:
         CachedParameter highCutBypassed;
     };
 
+    struct MultibandTopologySnapshot
+    {
+        HqCallbackContext callbackContext;
+        std::array<float, 3> crossoverFrequencies { 200.0f, 1000.0f, 5000.0f };
+        std::uint32_t publicationSequence = 0;
+        int numBands = 1;
+    };
+
     void initialiseParameterCache();
     CachedParameter cacheParameter(const juce::String& parameterID);
     static float loadCachedParameter(const CachedParameter& parameter, float fallback = 0.0f) noexcept;
@@ -451,19 +462,44 @@ private:
     std::atomic<int> uiFocusBand { 0 };
     // reset parameters
     void performReset();
-    void resetMultibandProcessingState() noexcept;
-    std::array<float, 3> getEffectiveCrossoverFrequencies() const noexcept;
-    void snapCrossoverSmoothersToParameters() noexcept;
-    void snapBandSoloGainsToParameters() noexcept;
+    void resetMultibandProcessingState(
+        const HqCallbackContext* callbackContext = nullptr) noexcept;
+    std::array<float, 3> getEffectiveCrossoverFrequencies(
+        int crossoversToValidate) const noexcept;
+    void snapCrossoverSmoothers(
+        const std::array<float, 3>& frequencies) noexcept;
+    void snapBandSoloGains(
+        int snapshotNumBands,
+        const HqCallbackContext& callbackContext) noexcept;
     void updateBandSoloGainEnvelope(
         int numSamples,
         bool useHQ,
         const std::array<bool, 4>& soloState,
         bool anySoloActive) noexcept;
     void synchroniseMultibandTopologyResetState() noexcept;
+    bool tryCaptureMultibandTopologySnapshot(
+        const juce::AudioBuffer<float>& lfoOutputs,
+        std::uint32_t sequenceAtCallbackStart,
+        bool routingSnapshotWasRefreshed,
+        MultibandTopologySnapshot& snapshot);
+    void publishMultibandTelemetry(
+        const HqCallbackContext& callbackContext,
+        int snapshotNumBands,
+        const juce::AudioBuffer<float>& lfoOutputs) noexcept;
     std::atomic<bool> needsReset { false };
+    // Even values identify complete publications; odd values mean a
+    // message-thread migration is in progress.
     std::atomic<std::uint32_t> multibandTopologyResetGeneration { 0 };
+    // Writer-side only. The audio thread never enters this recursive lock; it
+    // observes the odd/even publication sequence above.  A writer holds one
+    // recursion level from beginMultibandTopologyEdit() until the matching
+    // requestMultibandTopologyReset(), so another writer cannot publish an
+    // outer transaction prematurely.
+    juce::CriticalSection multibandTopologyWriterLock;
+    int multibandTopologyEditDepth = 0;
     std::uint32_t appliedMultibandTopologyResetGeneration = 0;
+    MultibandTopologySnapshot activeMultibandTopologySnapshot;
+    bool activeMultibandTopologySnapshotInitialised = false;
 
     std::vector<std::unique_ptr<BandProcessor>> bands;
     std::atomic<float> totalLatency { 0.0f };
@@ -471,9 +507,13 @@ private:
 
     enum class HqTransitionPhase;
 
-    void updateParameters();
+    void updateParameters(const juce::AudioBuffer<float>& lfoOutputs,
+                          std::uint32_t topologySequenceAtCallbackStart,
+                          bool routingSnapshotWasRefreshed,
+                          HqCallbackContext& callbackContext);
     void prepareHqCallbackContext(
         const juce::AudioBuffer<float>& lfoOutputs,
+        int snapshotNumBands,
         HqCallbackContext& callbackContext);
     void publishLatencyToHost();
     void timerCallback() override;

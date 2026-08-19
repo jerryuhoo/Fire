@@ -626,6 +626,7 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                     // create lines and close buttons and then set state
                     if (! freqDividerGroup[i]->getToggleState())
                     {
+                        processor.beginMultibandTopologyEdit();
                         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
                         int freq = static_cast<int>(transformFromLog(xPercent));
                         freqDividerGroup[i]->setFreq(freq);
@@ -832,6 +833,7 @@ void Multiband::buttonClicked(juce::Button* button)
         {
             const int deletedIndex = i;
             const int oldFocus = focusIndex;
+            processor.beginMultibandTopologyEdit();
             setStatesWhenDelete(i);
             sortLinesInternal(false);
 

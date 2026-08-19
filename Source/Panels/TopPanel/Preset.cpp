@@ -270,6 +270,7 @@ namespace state
     void loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
     {
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
+        fireProc.beginMultibandTopologyEdit();
 
         for (const auto& param : proc.getParameters())
         {
@@ -913,6 +914,8 @@ namespace state
 
     void StatePresets::initPreset()
     {
+        auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
+        fireProc.beginMultibandTopologyEdit();
         for (const auto& param : pluginProcessor.getParameters())
             if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
                 // if not in xml set current
@@ -925,7 +928,6 @@ namespace state
             mCurrentPresetId.store(0);
         }
 
-        auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
         auto& manager = fireProc.getLfoManager();
         {
             const juce::ScopedLock lock(manager.getLfoDataLock());

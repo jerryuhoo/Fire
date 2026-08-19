@@ -142,9 +142,15 @@ struct BandProcessor
 
     void prepare(const juce::dsp::ProcessSpec& spec);
     void reset();
+    void resetQualityTransitionState() noexcept;
     void process(juce::AudioBuffer<float>& buffer,
                  const BandProcessingParameters& params,
                  const juce::AudioBuffer<float>& lfoOutputs);
+    void process(juce::AudioBuffer<float>& buffer,
+                 const BandProcessingParameters& params,
+                 const juce::AudioBuffer<float>& lfoOutputs,
+                 float callbackInputPeak,
+                 bool updateReductionMeter);
 
     const int oversampleFactor = 2;
 
@@ -318,14 +324,31 @@ public:
                   bool ignoreSoloLogic,
                   bool useDelayedSoloEnvelope);
     void updateFilter(double sampleRate);
-    bool updateGlobalFilters(double sampleRate, int lfoSampleIndex);
-    void processMultiBand(juce::AudioBuffer<float>& wetBuffer,
-                          const juce::AudioBuffer<float>& lfoOutputs,
-                          double sampleRate,
-                          bool useHQ);
+    bool updateGlobalFilters(double sampleRate,
+                             const juce::AudioBuffer<float>& lfoOutputs,
+                             int lfoSampleIndex);
+    struct HqCallbackContext
+    {
+        std::array<BandProcessingParameters, 4> bandParameters;
+        std::array<float, 4> bandInputPeaks {};
+        std::array<bool, 4> soloState {};
+        bool anySoloActive = false;
+    };
+    void processMultiBandRange(
+        juce::AudioBuffer<float>& wetBuffer,
+        juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
+        const std::array<juce::AudioBuffer<float>*, 4>& bandBuffers,
+        const juce::AudioBuffer<float>& lfoOutputs,
+        const HqCallbackContext& callbackContext,
+        bool useHQ,
+        bool updateReductionMeter);
     void applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate);
-    void applyGlobalMix(juce::AudioBuffer<float>& buffer, bool useHQ);
-    void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer);
+    void applyGlobalMix(juce::AudioBuffer<float>& buffer,
+                        juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
+                        const juce::AudioBuffer<float>& lfoOutputs,
+                        bool useHQ);
+    void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer,
+                                 const juce::AudioBuffer<float>& lfoOutputs);
 
     void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
     void clearLfoModulationForBand(int bandIndex);
@@ -427,7 +450,11 @@ private:
     std::array<float, 3> getEffectiveCrossoverFrequencies() const noexcept;
     void snapCrossoverSmoothersToParameters() noexcept;
     void snapBandSoloGainsToParameters() noexcept;
-    void updateBandSoloGainEnvelope(int numSamples, bool useHQ) noexcept;
+    void updateBandSoloGainEnvelope(
+        int numSamples,
+        bool useHQ,
+        const std::array<bool, 4>& soloState,
+        bool anySoloActive) noexcept;
     void synchroniseMultibandTopologyResetState() noexcept;
     std::atomic<bool> needsReset { false };
     std::atomic<std::uint32_t> multibandTopologyResetGeneration { 0 };
@@ -437,7 +464,12 @@ private:
     std::atomic<float> totalLatency { 0.0f };
     std::atomic<float> preparedHqLatency { 0.0f };
 
+    enum class HqTransitionPhase;
+
     void updateParameters();
+    void prepareHqCallbackContext(
+        const juce::AudioBuffer<float>& lfoOutputs,
+        HqCallbackContext& callbackContext);
     void publishLatencyToHost();
     void timerCallback() override;
     void captureHistorySamples();
@@ -448,6 +480,27 @@ private:
                                      bool useHQ);
     void advanceNonHqOutputDelay(const juce::AudioBuffer<float>& inputBuffer);
     void applyNonHqOutputDelay(juce::AudioBuffer<float>& buffer);
+    void beginHqTransitionCallback(bool requestedHq) noexcept;
+    void noteHqRequestWhileBypassed(bool requestedHq) noexcept;
+    void processHqTransitionBlock(juce::AudioBuffer<float>& buffer,
+                                  const juce::AudioBuffer<float>& lfoOutputs,
+                                  double sampleRate,
+                                  bool requestedHq,
+                                  const HqCallbackContext& callbackContext);
+    void processActiveHqRange(
+        juce::AudioBuffer<float>& buffer,
+        juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
+        const std::array<juce::AudioBuffer<float>*, 4>& bandBuffers,
+        const juce::AudioBuffer<float>& lfoOutputs,
+        double sampleRate,
+        bool useHQ,
+        bool updateReductionMeter,
+        const HqCallbackContext& callbackContext);
+    void startHqTransitionRamp(float target,
+                              HqTransitionPhase phase) noexcept;
+    void applyHqTransitionRamp(juce::AudioBuffer<float>& buffer) noexcept;
+    void resetHqQualityPathState() noexcept;
+    void snapHqTransitionToParameter() noexcept;
 
     // preset id
     int numBands = 1;
@@ -526,6 +579,25 @@ private:
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>
         nonHqOutputDelay { 2048 };
     bool globalMixerPrimed = false;
+
+    enum class HqTransitionPhase
+    {
+        steady,
+        fadingOut,
+        warmingUp,
+        fadingIn
+    };
+
+    HqTransitionPhase hqTransitionPhase = HqTransitionPhase::steady;
+    bool activeHqMode = false;
+    bool pendingHqMode = false;
+    bool hqTransitionInitialised = false;
+    float hqTransitionGain = 1.0f;
+    float hqTransitionGainStep = 0.0f;
+    int hqTransitionRampSamples = 1;
+    int hqTransitionRampRemaining = 0;
+    int hqTransitionWarmupSamples = 1;
+    int hqTransitionWarmupRemaining = 0;
 
     juce::dsp::DryWetMixer<float> lofiMixer { 2048 };
     bool lofiMixerPrimed = false;

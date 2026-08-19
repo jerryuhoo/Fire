@@ -460,6 +460,16 @@ void BandProcessor::reset()
     mSampleMaxValue.store(0.0f, std::memory_order_relaxed);
 }
 
+void BandProcessor::resetQualityTransitionState() noexcept
+{
+    // The oversampler is the only per-band state that stops advancing in base
+    // mode. Band/Shape/Enable mixers and their delay lines consume every input
+    // sample in both modes, so retaining them preserves LFO smoother history
+    // and a continuous raw timeline while their latency tap changes.
+    if (oversampling != nullptr)
+        oversampling->reset();
+}
+
 //==============================================================================
 // This is the new, self-contained processing function for a single band.
 // It replaces the old `processOneBand` and `processDistortion` functions.
@@ -471,13 +481,36 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
+    process(buffer,
+            params,
+            lfoOutputs,
+            buffer.getMagnitude(0, buffer.getNumSamples()),
+            true);
+}
+
+void BandProcessor::process(juce::AudioBuffer<float>& buffer,
+                            const BandProcessingParameters& params,
+                            const juce::AudioBuffer<float>& lfoOutputs,
+                            float callbackInputPeak,
+                            bool updateReductionMeter)
+{
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+        return;
+
     const int totalNumSamples = buffer.getNumSamples();
-    const float inputPeak = buffer.getMagnitude(0, totalNumSamples);
+    const float inputPeak = std::isfinite(callbackInputPeak)
+                                ? juce::jmax(0.0f, callbackInputPeak)
+                                : 0.0f;
     const int chunkCapacity = juce::jmax(1, maximumPreparedBlockSize);
 
     if (totalNumSamples <= chunkCapacity)
     {
-        processChunk(buffer, params, lfoOutputs, 0, inputPeak, true);
+        processChunk(buffer,
+                     params,
+                     lfoOutputs,
+                     0,
+                     inputPeak,
+                     updateReductionMeter);
         return;
     }
 
@@ -499,7 +532,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
                      lfoOutputs,
                      sampleOffset,
                      inputPeak,
-                     sampleOffset == 0);
+                     updateReductionMeter && sampleOffset == 0);
     }
 }
 
@@ -1616,6 +1649,16 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     totalLatency.store(hqLatency, std::memory_order_release);
     nonHqOutputDelay.prepare(spec);
     nonHqOutputDelay.setDelay(static_cast<float>(juce::roundToInt(hqLatency)));
+    hqTransitionRampSamples = juce::jmax(
+        1, juce::roundToInt(static_cast<float>(safeSampleRate) * 0.005f));
+    hqTransitionGain = 1.0f;
+    hqTransitionGainStep = 0.0f;
+    hqTransitionRampRemaining = 0;
+    hqTransitionWarmupSamples = juce::jmax(
+        juce::roundToInt(static_cast<float>(safeSampleRate) * 0.001f),
+        juce::roundToInt(std::ceil(hqLatency))
+            + juce::roundToInt(hqLatency)
+            + 2);
 
     lfoManager->prepare(spec);
 
@@ -1914,23 +1957,14 @@ void FireAudioProcessor::snapBandSoloGainsToParameters() noexcept
     }
 }
 
-void FireAudioProcessor::updateBandSoloGainEnvelope(int numSamples,
-                                                    bool useHQ) noexcept
+void FireAudioProcessor::updateBandSoloGainEnvelope(
+    int numSamples,
+    bool useHQ,
+    const std::array<bool, 4>& soloState,
+    bool anySoloActive) noexcept
 {
     if (numSamples <= 0)
         return;
-
-    // Snapshot every Solo parameter once per callback. The same generated
-    // envelope is then reused for the dry and wet sums, so a message-thread
-    // change cannot select different bands on the two sides of Global Mix.
-    std::array<bool, 4> soloState {};
-    bool anySoloActive = false;
-    for (int band = 0; band < numBands; ++band)
-    {
-        soloState[static_cast<size_t>(band)] = loadCachedParameter(
-            bandParameterCache[static_cast<size_t>(band)].solo) > 0.5f;
-        anySoloActive = anySoloActive || soloState[static_cast<size_t>(band)];
-    }
 
     bandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
     delayedBandSoloGainEnvelope.setSize(4, numSamples, false, false, true);
@@ -2020,6 +2054,7 @@ void FireAudioProcessor::performReset()
     resetDownsamplingState();
     gainProcessorGlobal.reset();
     lfoManager->reset();
+    snapHqTransitionToParameter();
 }
 
 void FireAudioProcessor::releaseResources()
@@ -2074,9 +2109,15 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
 
-    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
-
     calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+    {
+        calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
+        return;
+    }
+
+    noteHqRequestWhileBypassed(loadCachedParameter(hqParameter) > 0.5f);
+    const bool useHQ = activeHqMode;
     resetDownsamplingState();
     advanceNonHqOutputDelay(buffer);
     processLatencyMatchedBypass(buffer, useHQ);
@@ -2115,12 +2156,10 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         return;
     }
 
-    // One quality snapshot owns the entire callback. A concurrent automation
-    // change cannot select different latencies for the bands, Solo envelope,
-    // Global Mix, and host-bypass shadow paths within the same block.
-    const bool useHQ = loadCachedParameter(hqParameter) > 0.5f;
-    if (useHQ)
-        advanceNonHqOutputDelay(buffer);
+    // Read the requested quality once. A live transition may deliberately use
+    // two internally consistent quality ranges in this callback, but a
+    // concurrent automation write cannot change the plan halfway through it.
+    const bool requestedHq = loadCachedParameter(hqParameter) > 0.5f;
 
     lfoOutputBuffer.setSize(4, numSamples, false, false, true);
     lfoOutputBuffer.clear();
@@ -2136,24 +2175,52 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mWetBuffer.setSize(numBufferChannels, numSamples, false, false, true);
     lofiDryBuffer.setSize(numBufferChannels, numSamples, false, false, true);
 
-    // Keep a raw-input delay line warm while processing normally. This makes a
-    // host bypass transition retain the same latency as the HQ signal path.
-    primeLatencyMatchedBypass(buffer, useHQ);
+    // Crossover processing is independent of HQ. Split the complete callback
+    // once so Safe Drive and band meters retain their historical full-block
+    // peak semantics even when the quality transition uses two audio ranges.
+    splitBands(buffer, sampleRate);
 
-    processMultiBand(buffer, lfoOutputBuffer, sampleRate, useHQ);
+    HqCallbackContext callbackContext;
+    prepareHqCallbackContext(lfoOutputBuffer, callbackContext);
+    const std::array<juce::AudioBuffer<float>*, 4> fullBandBuffers {
+        &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4
+    };
+    for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
+    {
+        auto* band = bands[static_cast<size_t>(bandIndex)].get();
+        auto* bandBuffer = fullBandBuffers[static_cast<size_t>(bandIndex)];
+        if (band == nullptr || bandBuffer == nullptr)
+            continue;
 
-    applyDownsamplingEffect(buffer);
-    // Call the simplified global effects function.
-    applyGlobalEffects(buffer, lfoOutputBuffer, sampleRate);
+        callbackContext.bandInputPeaks[static_cast<size_t>(bandIndex)] =
+            bandBuffer->getMagnitude(0, bandBuffer->getNumSamples());
+        calculateAndStoreLevels(*bandBuffer,
+                                band->mInputLeftRMS,
+                                band->mInputRightRMS,
+                                band->mInputLeftPeak,
+                                band->mInputRightPeak);
+    }
 
-    // Call the simplified global mix function.
-    applyGlobalMix(buffer, useHQ);
+    delayMatchedDryBuffer.clear();
+    processHqTransitionBlock(buffer,
+                             lfoOutputBuffer,
+                             sampleRate,
+                             requestedHq,
+                             callbackContext);
 
-    // Keep legacy base-mode samples unchanged after host compensation: delay
-    // the complete output by exactly the integer latency reported to the host.
-    // HQ already carries the oversampler's natural latency and is untouched.
-    if (! useHQ)
-        applyNonHqOutputDelay(buffer);
+    for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
+    {
+        auto* band = bands[static_cast<size_t>(bandIndex)].get();
+        auto* bandBuffer = fullBandBuffers[static_cast<size_t>(bandIndex)];
+        if (band == nullptr || bandBuffer == nullptr)
+            continue;
+
+        calculateAndStoreLevels(*bandBuffer,
+                                band->mOutputLeftRMS,
+                                band->mOutputRightRMS,
+                                band->mOutputLeftPeak,
+                                band->mOutputRightPeak);
+    }
 
     mWetBuffer.makeCopyOf(buffer, true);
     captureHistorySamples();
@@ -3143,6 +3210,109 @@ void FireAudioProcessor::updateParameters()
 
 }
 
+void FireAudioProcessor::prepareHqCallbackContext(
+    const juce::AudioBuffer<float>& lfoOutputs,
+    HqCallbackContext& callbackContext)
+{
+    callbackContext.anySoloActive = false;
+
+    for (int i = 0; i < numBands; ++i)
+    {
+        const auto index = static_cast<size_t>(i);
+        const auto& parameters = bandParameterCache[index];
+        callbackContext.soloState[index] =
+            loadCachedParameter(parameters.solo) > 0.5f;
+        callbackContext.anySoloActive = callbackContext.anySoloActive
+                                     || callbackContext.soloState[index];
+
+        BandProcessingParameters params;
+        params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
+        params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
+        params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
+        params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
+        params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
+        params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
+        params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
+        params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
+        params.isDcFilterEnabled = params.isShapeEnabled
+                                && loadCachedParameter(parameters.dcFilterEnabled) > 0.5f;
+
+        const auto setupProvider = [this](ModulatedValueProvider& provider,
+                                          int& lfoIndex,
+                                          const CachedParameter& parameter)
+        {
+            if (parameter.ranged == nullptr)
+                return;
+
+            provider.baseValue = loadCachedParameter(parameter);
+            provider.range = parameter.ranged->getNormalisableRange();
+
+            LfoManager::AudioThreadRoutingInfo routingInfo;
+            if (lfoManager->getAudioThreadRoutingInfo(parameter.ranged,
+                                                      routingInfo))
+            {
+                provider.modulationDepth = routingInfo.depth;
+                provider.isBipolar = routingInfo.isBipolar;
+                lfoIndex = routingInfo.sourceLfoIndex;
+            }
+        };
+
+        setupProvider(params.driveVal, params.driveLfoSourceIndex, parameters.drive);
+        setupProvider(params.biasVal, params.biasLfoSourceIndex, parameters.bias);
+        setupProvider(params.recVal, params.recLfoSourceIndex, parameters.rec);
+        setupProvider(params.outputVal, params.outputLfoSourceIndex, parameters.output);
+        setupProvider(params.mixValProvider,
+                      params.mixLfoSourceIndex,
+                      parameters.mix);
+        setupProvider(params.shapeMixValProvider,
+                      params.shapeMixLfoSourceIndex,
+                      parameters.shapeMix);
+        setupProvider(params.widthValProvider,
+                      params.widthLfoSourceIndex,
+                      parameters.width);
+        setupProvider(params.panValProvider,
+                      params.panLfoSourceIndex,
+                      parameters.pan);
+        setupProvider(params.widthMixValProvider,
+                      params.widthMixLfoSourceIndex,
+                      parameters.widthMix);
+        setupProvider(params.compThresholdValProvider,
+                      params.compThresholdLfoSourceIndex,
+                      parameters.compressorThreshold);
+        setupProvider(params.compRatioValProvider,
+                      params.compRatioLfoSourceIndex,
+                      parameters.compressorRatio);
+        setupProvider(params.compAttackValProvider,
+                      params.compAttackLfoSourceIndex,
+                      parameters.compressorAttack);
+        setupProvider(params.compReleaseValProvider,
+                      params.compReleaseLfoSourceIndex,
+                      parameters.compressorRelease);
+        setupProvider(params.compMixValProvider,
+                      params.compMixLfoSourceIndex,
+                      parameters.compressorMix);
+
+        if (loadCachedParameter(parameters.linked) > 0.5f)
+            params.outputVal.baseValue = -0.1f
+                                       * loadCachedParameter(parameters.drive);
+
+        params.compRatio = params.compRatioValProvider.baseValue;
+        params.compThreshold = params.compThresholdValProvider.baseValue;
+        params.compAttack = params.compAttackValProvider.baseValue;
+        params.compRelease = params.compReleaseValProvider.baseValue;
+        params.compMixVal = params.compMixValProvider.baseValue;
+        params.width = params.widthValProvider.baseValue;
+        params.pan = params.panValProvider.baseValue;
+        params.widthMixVal = params.widthMixValProvider.baseValue;
+        params.mixVal = params.mixValProvider.baseValue;
+        params.shapeMixVal = params.shapeMixValProvider.baseValue;
+
+        callbackContext.bandParameters[index] = params;
+        realtimeModulatedThresholds[index].store(
+            getBlockModulatedValue(parameters.compressorThreshold, lfoOutputs));
+    }
+}
+
 void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
                                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
                                   bool ignoreSoloLogic,
@@ -3396,10 +3566,14 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     }
 }
 
-bool FireAudioProcessor::updateGlobalFilters(double sampleRate, int lfoSampleIndex)
+bool FireAudioProcessor::updateGlobalFilters(
+    double sampleRate,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    int lfoSampleIndex)
 {
     // Get the final, modulated settings for the entire filter chain.
-    auto chainSettings = getCachedChainSettingsAtSample(lfoOutputBuffer, lfoSampleIndex);
+    auto chainSettings = getCachedChainSettingsAtSample(lfoOutputs,
+                                                         lfoSampleIndex);
 
     // It's good practice to ensure frequencies are within a valid range.
     if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
@@ -3495,130 +3669,41 @@ float FireAudioProcessor::getTotalLatency() const
     return totalLatency.load(std::memory_order_relaxed);
 }
 
-void FireAudioProcessor::processMultiBand(juce::AudioBuffer<float>& wetBuffer,
-                                          const juce::AudioBuffer<float>& lfoOutputs,
-                                          double sampleRate,
-                                          bool useHQ)
+void FireAudioProcessor::processMultiBandRange(
+    juce::AudioBuffer<float>& wetBuffer,
+    juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
+    const std::array<juce::AudioBuffer<float>*, 4>& bandBuffers,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    const HqCallbackContext& callbackContext,
+    bool useHQ,
+    bool updateReductionMeter)
 {
-    splitBands(wetBuffer, sampleRate);
-    updateBandSoloGainEnvelope(wetBuffer.getNumSamples(), useHQ);
+    updateBandSoloGainEnvelope(wetBuffer.getNumSamples(),
+                               useHQ,
+                               callbackContext.soloState,
+                               callbackContext.anySoloActive);
 
-    delayMatchedDryBuffer.clear();
-
-    std::array<juce::AudioBuffer<float>*, 4> dryBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
-    std::array<juce::AudioBuffer<float>*, 4> wetBandBuffers = { &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4 };
     // Solo must affect both sides of the global dry/wet mix. Otherwise the
     // un-soloed bands leak back through the dry side whenever Mix is below 1.
-    sumBands(delayMatchedDryBuffer, dryBandBuffers, false, false);
+    sumBands(delayMatchedDryBufferForRange, bandBuffers, false, false);
 
     for (int i = 0; i < numBands; ++i)
     {
-        if (auto* band = bands[i].get())
-        {
-            const auto& parameters = bandParameterCache[static_cast<size_t>(i)];
-            calculateAndStoreLevels(*dryBandBuffers[i], band->mInputLeftRMS, band->mInputRightRMS, band->mInputLeftPeak, band->mInputRightPeak);
+        auto* band = bands[static_cast<size_t>(i)].get();
+        auto* bandBuffer = bandBuffers[static_cast<size_t>(i)];
+        if (band == nullptr || bandBuffer == nullptr)
+            continue;
 
-            {
-                BandProcessingParameters params;
-
-                // 1. Fill General Settings
-                params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
-                params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
-                params.isHQ = useHQ;
-                params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
-                params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
-                params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
-                params.isWidthEnabled = loadCachedParameter(parameters.widthEnabled) > 0.5f;
-                params.isSafeModeOn = loadCachedParameter(parameters.safe) > 0.5f;
-                params.isExtremeModeOn = loadCachedParameter(parameters.extreme) > 0.5f;
-                params.isDcFilterEnabled = params.isShapeEnabled
-                                           && loadCachedParameter(parameters.dcFilterEnabled) > 0.5f;
-
-                // 2. Setup ModulatedValueProviders AND their LFO source indices
-                auto setupProvider = [&](ModulatedValueProvider& provider,
-                                         int& lfoIndex,
-                                         const CachedParameter& parameter)
-                {
-                    if (parameter.ranged == nullptr)
-                        return;
-
-                    provider.baseValue = loadCachedParameter(parameter);
-                    provider.range = parameter.ranged->getNormalisableRange();
-
-                    LfoManager::AudioThreadRoutingInfo routingInfo;
-                    if (lfoManager->getAudioThreadRoutingInfo(parameter.ranged, routingInfo))
-                    {
-                        provider.modulationDepth = routingInfo.depth;
-                        provider.isBipolar = routingInfo.isBipolar;
-                        lfoIndex = routingInfo.sourceLfoIndex;
-                    }
-                };
-
-                setupProvider(params.driveVal, params.driveLfoSourceIndex, parameters.drive);
-                setupProvider(params.biasVal, params.biasLfoSourceIndex, parameters.bias);
-                setupProvider(params.recVal, params.recLfoSourceIndex, parameters.rec);
-                setupProvider(params.outputVal, params.outputLfoSourceIndex, parameters.output);
-                setupProvider(params.mixValProvider,
-                              params.mixLfoSourceIndex,
-                              parameters.mix);
-                setupProvider(params.shapeMixValProvider,
-                              params.shapeMixLfoSourceIndex,
-                              parameters.shapeMix);
-                setupProvider(params.widthValProvider,
-                              params.widthLfoSourceIndex,
-                              parameters.width);
-                setupProvider(params.panValProvider,
-                              params.panLfoSourceIndex,
-                              parameters.pan);
-                setupProvider(params.widthMixValProvider,
-                              params.widthMixLfoSourceIndex,
-                              parameters.widthMix);
-                setupProvider(params.compThresholdValProvider,
-                              params.compThresholdLfoSourceIndex,
-                              parameters.compressorThreshold);
-                setupProvider(params.compRatioValProvider,
-                              params.compRatioLfoSourceIndex,
-                              parameters.compressorRatio);
-                setupProvider(params.compAttackValProvider,
-                              params.compAttackLfoSourceIndex,
-                              parameters.compressorAttack);
-                setupProvider(params.compReleaseValProvider,
-                              params.compReleaseLfoSourceIndex,
-                              parameters.compressorRelease);
-                setupProvider(params.compMixValProvider,
-                              params.compMixLfoSourceIndex,
-                              parameters.compressorMix);
-
-                // Linked output compensation is a DSP rule, not an editor side
-                // effect. It follows the unmodulated Drive base, matching the
-                // original UI formula while keeping Output's own range/LFO.
-                if (loadCachedParameter(parameters.linked) > 0.5f)
-                    params.outputVal.baseValue = -0.1f * loadCachedParameter(parameters.drive);
-
-                // 3. Get final values for Block-wise parameters
-                params.compRatio = params.compRatioValProvider.baseValue;
-                params.compThreshold = params.compThresholdValProvider.baseValue;
-                params.compAttack = params.compAttackValProvider.baseValue;
-                params.compRelease = params.compReleaseValProvider.baseValue;
-                params.compMixVal = params.compMixValProvider.baseValue;
-                params.width = params.widthValProvider.baseValue;
-                params.pan = params.panValProvider.baseValue;
-                params.widthMixVal = params.widthMixValProvider.baseValue;
-                params.mixVal = params.mixValProvider.baseValue;
-                params.shapeMixVal = params.shapeMixValProvider.baseValue;
-
-                realtimeModulatedThresholds[i].store(
-                    getBlockModulatedValue(parameters.compressorThreshold,
-                                           lfoOutputs));
-
-                // 4. Call BandProcessor
-                band->process(*wetBandBuffers[i], params, lfoOutputs);
-            }
-            calculateAndStoreLevels(*wetBandBuffers[i], band->mOutputLeftRMS, band->mOutputRightRMS, band->mOutputLeftPeak, band->mOutputRightPeak);
-        }
+        auto params = callbackContext.bandParameters[static_cast<size_t>(i)];
+        params.isHQ = useHQ;
+        band->process(*bandBuffer,
+                      params,
+                      lfoOutputs,
+                      callbackContext.bandInputPeaks[static_cast<size_t>(i)],
+                      updateReductionMeter);
     }
 
-    sumBands(wetBuffer, wetBandBuffers, false, true);
+    sumBands(wetBuffer, bandBuffers, false, true);
 }
 
 void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, const juce::AudioBuffer<float>& lfoOutputs, double sampleRate)
@@ -3705,7 +3790,9 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
         int processedSamples = 0;
         const bool filterHasModulation = hasActiveFilterModulation();
-        const bool coefficientsChanged = updateGlobalFilters(sampleRate, 0);
+        const bool coefficientsChanged = updateGlobalFilters(sampleRate,
+                                                              lfoOutputs,
+                                                              0);
         const bool needsPerSampleUpdates = filterHasModulation || isFilterSmoothing();
 
         if ((coefficientsChanged || needsPerSampleUpdates) && buffer.getNumSamples() > 0)
@@ -3716,7 +3803,9 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
             while (processedSamples < buffer.getNumSamples()
                    && (filterHasModulation || isFilterSmoothing()))
             {
-                updateGlobalFilters(sampleRate, processedSamples);
+                updateGlobalFilters(sampleRate,
+                                    lfoOutputs,
+                                    processedSamples);
                 processRange(processedSamples, 1);
                 ++processedSamples;
             }
@@ -3756,7 +3845,9 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     applyGain(buffer, globalGainProvider, gainProcessorGlobal);
 }
 
-void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffer)
+void FireAudioProcessor::applyDownsamplingEffect(
+    juce::AudioBuffer<float>& buffer,
+    const juce::AudioBuffer<float>& lfoOutputs)
 {
     const bool isActive = loadCachedParameter(downsampleEnabledParameter) > 0.5f;
     if (! downsamplingWasActive)
@@ -3770,8 +3861,9 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
     // A copy of the original signal is needed for the dry/wet mix.
     lofiDryBuffer.makeCopyOf(buffer, true);
 
-    const auto configureProvider = [this, &buffer](const CachedParameter& parameter,
-                                                   ModulatedValueProvider& provider)
+    const auto configureProvider = [this, &buffer, &lfoOutputs](
+                                       const CachedParameter& parameter,
+                                       ModulatedValueProvider& provider)
     {
         const float defaultValue = parameter.ranged != nullptr
                                        ? parameter.ranged->convertFrom0to1(
@@ -3783,19 +3875,19 @@ void FireAudioProcessor::applyDownsamplingEffect(juce::AudioBuffer<float>& buffe
 
         provider.range = parameter.ranged->getNormalisableRange();
         LfoManager::AudioThreadRoutingInfo routingInfo;
-        const bool hasCompleteLfoBlock = lfoOutputBuffer.getNumSamples()
+        const bool hasCompleteLfoBlock = lfoOutputs.getNumSamples()
                                          >= buffer.getNumSamples();
         if (! hasCompleteLfoBlock
             || ! lfoManager->getAudioThreadRoutingInfo(parameter.ranged,
                                                         routingInfo)
             || std::abs(routingInfo.depth) <= 1.0e-6f
             || ! juce::isPositiveAndBelow(routingInfo.sourceLfoIndex,
-                                           lfoOutputBuffer.getNumChannels()))
+                                           lfoOutputs.getNumChannels()))
         {
             return false;
         }
 
-        provider.lfoSignal = lfoOutputBuffer.getReadPointer(
+        provider.lfoSignal = lfoOutputs.getReadPointer(
             routingInfo.sourceLfoIndex);
         provider.modulationDepth = routingInfo.depth;
         provider.isBipolar = routingInfo.isBipolar;
@@ -4019,8 +4111,349 @@ void FireAudioProcessor::applyNonHqOutputDelay(juce::AudioBuffer<float>& buffer)
     nonHqOutputDelay.process(juce::dsp::ProcessContextReplacing<float>(block));
 }
 
-void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer,
-                                        bool useHQ)
+void FireAudioProcessor::snapHqTransitionToParameter() noexcept
+{
+    activeHqMode = loadCachedParameter(hqParameter) > 0.5f;
+    pendingHqMode = activeHqMode;
+    hqTransitionInitialised = true;
+    hqTransitionPhase = HqTransitionPhase::steady;
+    hqTransitionGain = 1.0f;
+    hqTransitionGainStep = 0.0f;
+    hqTransitionRampRemaining = 0;
+    hqTransitionWarmupRemaining = 0;
+}
+
+void FireAudioProcessor::resetHqQualityPathState() noexcept
+{
+    for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
+        if (auto* band = bands[static_cast<size_t>(bandIndex)].get())
+            band->resetQualityTransitionState();
+
+    // Global/Band/Solo/bypass mixers all remain balanced and warm in both
+    // modes. Only the non-HQ output delay changes what signal feeds its
+    // history (raw shadow in HQ, processed output in base), so rebuild that
+    // path under the muted warm-up instead of reviving incompatible samples.
+    nonHqOutputDelay.reset();
+}
+
+void FireAudioProcessor::startHqTransitionRamp(
+    float target,
+    HqTransitionPhase phase) noexcept
+{
+    target = juce::jlimit(0.0f, 1.0f, target);
+    const float difference = target - hqTransitionGain;
+    if (std::abs(difference) <= std::numeric_limits<float>::epsilon())
+    {
+        hqTransitionGain = target;
+        hqTransitionGainStep = 0.0f;
+        hqTransitionRampRemaining = 0;
+        hqTransitionPhase = target >= 1.0f
+                                ? HqTransitionPhase::steady
+                                : phase;
+        return;
+    }
+
+    hqTransitionRampRemaining = juce::jmax(1, hqTransitionRampSamples);
+    hqTransitionGainStep = difference
+                         / static_cast<float>(hqTransitionRampRemaining);
+    hqTransitionPhase = phase;
+}
+
+void FireAudioProcessor::beginHqTransitionCallback(bool requestedHq) noexcept
+{
+    if (! hqTransitionInitialised)
+    {
+        activeHqMode = requestedHq;
+        pendingHqMode = requestedHq;
+        hqTransitionInitialised = true;
+        hqTransitionPhase = HqTransitionPhase::steady;
+        hqTransitionGain = 1.0f;
+        hqTransitionGainStep = 0.0f;
+        hqTransitionRampRemaining = 0;
+        hqTransitionWarmupRemaining = 0;
+        return;
+    }
+
+    const bool pendingRequestChanged = requestedHq != pendingHqMode;
+    pendingHqMode = requestedHq;
+    switch (hqTransitionPhase)
+    {
+        case HqTransitionPhase::steady:
+            if (requestedHq != activeHqMode)
+                startHqTransitionRamp(0.0f,
+                                      HqTransitionPhase::fadingOut);
+            break;
+
+        case HqTransitionPhase::fadingOut:
+            // A request returning to the audible mode before silence cancels
+            // the switch from the current gain instead of introducing a jump.
+            if (requestedHq == activeHqMode)
+                startHqTransitionRamp(1.0f,
+                                      HqTransitionPhase::fadingIn);
+            break;
+
+        case HqTransitionPhase::warmingUp:
+            // A rapidly changing request must not briefly escape the muted
+            // warm-up merely because the pending value happens to equal the
+            // active mode when the current warm-up counter reaches zero.
+            // Re-arm only the cheap stability window here; the quality path
+            // itself is reset at most once per completed window below.
+            if (pendingRequestChanged)
+                hqTransitionWarmupRemaining = hqTransitionWarmupSamples;
+            break;
+
+        case HqTransitionPhase::fadingIn:
+            if (requestedHq != activeHqMode)
+            {
+                if (hqTransitionGain <= 0.0f)
+                {
+                    activeHqMode = pendingHqMode;
+                    resetHqQualityPathState();
+                    hqTransitionWarmupRemaining = hqTransitionWarmupSamples;
+                    hqTransitionPhase = HqTransitionPhase::warmingUp;
+                }
+                else
+                {
+                    startHqTransitionRamp(0.0f,
+                                          HqTransitionPhase::fadingOut);
+                }
+            }
+            break;
+    }
+}
+
+void FireAudioProcessor::noteHqRequestWhileBypassed(
+    bool requestedHq) noexcept
+{
+    if (! hqTransitionInitialised)
+    {
+        activeHqMode = requestedHq;
+        hqTransitionInitialised = true;
+    }
+
+    pendingHqMode = requestedHq;
+
+    // Host bypass owns the audible crossfade. Do not fade delayed raw to
+    // silence merely because its hidden quality setting changed. If bypass
+    // interrupts an audible ramp, restart the eventual normal-path transition
+    // from unity; a muted warm-up remains frozen until real DSP resumes.
+    if (hqTransitionPhase == HqTransitionPhase::fadingOut
+        || hqTransitionPhase == HqTransitionPhase::fadingIn)
+    {
+        hqTransitionPhase = HqTransitionPhase::steady;
+        hqTransitionGain = 1.0f;
+        hqTransitionGainStep = 0.0f;
+        hqTransitionRampRemaining = 0;
+    }
+}
+
+void FireAudioProcessor::applyHqTransitionRamp(
+    juce::AudioBuffer<float>& buffer) noexcept
+{
+    if (buffer.getNumSamples() <= 0 || buffer.getNumChannels() <= 0)
+        return;
+
+    auto* const* channels = buffer.getArrayOfWritePointers();
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        const float gain = juce::jlimit(0.0f, 1.0f, hqTransitionGain);
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            channels[channel][sample] *= gain;
+
+        hqTransitionGain += hqTransitionGainStep;
+        if (hqTransitionRampRemaining > 0)
+            --hqTransitionRampRemaining;
+    }
+}
+
+void FireAudioProcessor::processActiveHqRange(
+    juce::AudioBuffer<float>& buffer,
+    juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
+    const std::array<juce::AudioBuffer<float>*, 4>& bandBuffers,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    double sampleRate,
+    bool useHQ,
+    bool updateReductionMeter,
+    const HqCallbackContext& callbackContext)
+{
+    if (useHQ)
+        advanceNonHqOutputDelay(buffer);
+
+    // Keep the host-bypass delay line on the same raw timeline as the audible
+    // path before this range is overwritten in place.
+    primeLatencyMatchedBypass(buffer, useHQ);
+
+    processMultiBandRange(buffer,
+                          delayMatchedDryBufferForRange,
+                          bandBuffers,
+                          lfoOutputs,
+                          callbackContext,
+                          useHQ,
+                          updateReductionMeter);
+    applyDownsamplingEffect(buffer, lfoOutputs);
+    applyGlobalEffects(buffer, lfoOutputs, sampleRate);
+    applyGlobalMix(buffer,
+                   delayMatchedDryBufferForRange,
+                   lfoOutputs,
+                   useHQ);
+
+    if (! useHQ)
+        applyNonHqOutputDelay(buffer);
+}
+
+void FireAudioProcessor::processHqTransitionBlock(
+    juce::AudioBuffer<float>& buffer,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    double sampleRate,
+    bool requestedHq,
+    const HqCallbackContext& callbackContext)
+{
+    beginHqTransitionCallback(requestedHq);
+
+    const int numSamples = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+    int sampleOffset = 0;
+    bool reductionMeterUpdated = false;
+
+    while (sampleOffset < numSamples)
+    {
+        const auto phaseForRange = hqTransitionPhase;
+        int samplesInRange = numSamples - sampleOffset;
+        if (phaseForRange == HqTransitionPhase::fadingOut
+            || phaseForRange == HqTransitionPhase::fadingIn)
+        {
+            samplesInRange = juce::jmin(samplesInRange,
+                                        hqTransitionRampRemaining);
+        }
+        else if (phaseForRange == HqTransitionPhase::warmingUp)
+        {
+            samplesInRange = juce::jmin(samplesInRange,
+                                        hqTransitionWarmupRemaining);
+        }
+
+        // Every phase is entered with a positive counter. Guarding here keeps
+        // malformed restored state from turning the audio thread into a loop.
+        if (samplesInRange <= 0)
+        {
+            if (phaseForRange == HqTransitionPhase::warmingUp)
+            {
+                hqTransitionWarmupRemaining = hqTransitionWarmupSamples;
+                samplesInRange = juce::jmin(numSamples - sampleOffset,
+                                            hqTransitionWarmupRemaining);
+            }
+            else
+            {
+                startHqTransitionRamp(
+                    phaseForRange == HqTransitionPhase::fadingOut ? 0.0f : 1.0f,
+                    phaseForRange);
+                samplesInRange = juce::jmin(numSamples - sampleOffset,
+                                            hqTransitionRampRemaining);
+            }
+        }
+
+        juce::AudioBuffer<float> audioRange(buffer.getArrayOfWritePointers(),
+                                            numChannels,
+                                            sampleOffset,
+                                            samplesInRange);
+        juce::AudioBuffer<float> dryRange(
+            delayMatchedDryBuffer.getArrayOfWritePointers(),
+            numChannels,
+            sampleOffset,
+            samplesInRange);
+        juce::AudioBuffer<float> lfoRange(
+            lfoOutputBuffer.getArrayOfWritePointers(),
+            lfoOutputs.getNumChannels(),
+            sampleOffset,
+            samplesInRange);
+        juce::AudioBuffer<float> band1(mBuffer1.getArrayOfWritePointers(),
+                                       numChannels,
+                                       sampleOffset,
+                                       samplesInRange);
+        juce::AudioBuffer<float> band2(mBuffer2.getArrayOfWritePointers(),
+                                       numChannels,
+                                       sampleOffset,
+                                       samplesInRange);
+        juce::AudioBuffer<float> band3(mBuffer3.getArrayOfWritePointers(),
+                                       numChannels,
+                                       sampleOffset,
+                                       samplesInRange);
+        juce::AudioBuffer<float> band4(mBuffer4.getArrayOfWritePointers(),
+                                       numChannels,
+                                       sampleOffset,
+                                       samplesInRange);
+        const std::array<juce::AudioBuffer<float>*, 4> bandRanges {
+            &band1, &band2, &band3, &band4
+        };
+
+        processActiveHqRange(audioRange,
+                             dryRange,
+                             bandRanges,
+                             lfoRange,
+                             sampleRate,
+                             activeHqMode,
+                             ! reductionMeterUpdated,
+                             callbackContext);
+
+        reductionMeterUpdated = true;
+
+        if (phaseForRange == HqTransitionPhase::fadingOut
+            || phaseForRange == HqTransitionPhase::fadingIn)
+        {
+            applyHqTransitionRamp(audioRange);
+        }
+        else if (phaseForRange == HqTransitionPhase::warmingUp)
+        {
+            audioRange.clear();
+            hqTransitionWarmupRemaining -= samplesInRange;
+        }
+
+        sampleOffset += samplesInRange;
+
+        if (phaseForRange == HqTransitionPhase::fadingOut
+            && hqTransitionRampRemaining == 0)
+        {
+            hqTransitionGain = 0.0f;
+            hqTransitionGainStep = 0.0f;
+            activeHqMode = pendingHqMode;
+            resetHqQualityPathState();
+            hqTransitionWarmupRemaining = hqTransitionWarmupSamples;
+            hqTransitionPhase = HqTransitionPhase::warmingUp;
+        }
+        else if (phaseForRange == HqTransitionPhase::fadingIn
+                 && hqTransitionRampRemaining == 0)
+        {
+            hqTransitionGain = 1.0f;
+            hqTransitionGainStep = 0.0f;
+            hqTransitionPhase = HqTransitionPhase::steady;
+        }
+        else if (phaseForRange == HqTransitionPhase::warmingUp
+                 && hqTransitionWarmupRemaining <= 0)
+        {
+            hqTransitionWarmupRemaining = 0;
+            if (pendingHqMode != activeHqMode)
+            {
+                // Rapid automation is coalesced while silent. The expensive
+                // oversampling reset can happen at most once per completed
+                // warm-up window, never once per tiny host callback.
+                activeHqMode = pendingHqMode;
+                resetHqQualityPathState();
+                hqTransitionWarmupRemaining = hqTransitionWarmupSamples;
+            }
+            else
+            {
+                hqTransitionGain = 0.0f;
+                startHqTransitionRamp(1.0f,
+                                      HqTransitionPhase::fadingIn);
+            }
+        }
+    }
+}
+
+void FireAudioProcessor::applyGlobalMix(
+    juce::AudioBuffer<float>& buffer,
+    juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    bool useHQ)
 {
     if (useHQ)
     {
@@ -4044,12 +4477,13 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer,
                                           && std::abs(routingInfo.depth) > 1.0e-6f
                                           && juce::isPositiveAndBelow(
                                               routingInfo.sourceLfoIndex,
-                                              lfoOutputBuffer.getNumChannels())
-                                          && lfoOutputBuffer.getNumSamples()
+                                              lfoOutputs.getNumChannels())
+                                          && lfoOutputs.getNumSamples()
                                                  >= buffer.getNumSamples();
     if (hasSampleAccurateModulation)
     {
-        mixProvider.lfoSignal = lfoOutputBuffer.getReadPointer(routingInfo.sourceLfoIndex);
+        mixProvider.lfoSignal = lfoOutputs.getReadPointer(
+            routingInfo.sourceLfoIndex);
         mixProvider.modulationDepth = routingInfo.depth;
         mixProvider.isBipolar = routingInfo.isBipolar;
     }
@@ -4065,7 +4499,7 @@ void FireAudioProcessor::applyGlobalMix(juce::AudioBuffer<float>& buffer,
 
     auto wetBlock = juce::dsp::AudioBlock<float>(buffer);
     dryWetMixerGlobal.pushDrySamples(
-        juce::dsp::AudioBlock<float>(delayMatchedDryBuffer));
+        juce::dsp::AudioBlock<float>(delayMatchedDryBufferForRange));
 
     if (! hasSampleAccurateModulation)
     {

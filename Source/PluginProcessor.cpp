@@ -686,6 +686,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
     compressorAttackBaseSmoother.reset(spec.sampleRate, 0.01);
     compressorAttackBaseSmoother.setCurrentAndTargetValue(10.0f);
+    compressorReleaseBaseSmoother.reset(spec.sampleRate, 0.01);
+    compressorReleaseBaseSmoother.setCurrentAndTargetValue(100.0f);
     compressorThresholdRecipeTransition.prepare(spec.sampleRate, 0.0f);
     compressorRatioRecipeTransition.prepare(spec.sampleRate, 1.0f);
     compressorAttackRecipeTransition.prepare(spec.sampleRate, 10.0f);
@@ -741,6 +743,7 @@ void BandProcessor::reset()
     compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
     compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
     compressorAttackBaseSmoother.setCurrentAndTargetValue(10.0f);
+    compressorReleaseBaseSmoother.setCurrentAndTargetValue(100.0f);
     compressorThresholdRecipeTransition.reset(0.0f);
     compressorRatioRecipeTransition.reset(1.0f);
     compressorAttackRecipeTransition.reset(10.0f);
@@ -1115,12 +1118,18 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         hasAttackModulation
             ? paramsForProcessing.compAttackValProvider.baseValue
             : params.compAttack);
+    const float releaseBaseTarget = safeRelease(
+        hasReleaseModulation
+            ? paramsForProcessing.compReleaseValProvider.baseValue
+            : params.compRelease);
     if (! compressorBaseSmoothersPrimed)
     {
         compressorThresholdBaseSmoother.setCurrentAndTargetValue(
             thresholdBaseTarget);
         compressorRatioBaseSmoother.setCurrentAndTargetValue(ratioBaseTarget);
         compressorAttackBaseSmoother.setCurrentAndTargetValue(attackBaseTarget);
+        compressorReleaseBaseSmoother.setCurrentAndTargetValue(
+            releaseBaseTarget);
         compressorBaseSmoothersPrimed = true;
     }
     else
@@ -1128,6 +1137,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         compressorThresholdBaseSmoother.setTargetValue(thresholdBaseTarget);
         compressorRatioBaseSmoother.setTargetValue(ratioBaseTarget);
         compressorAttackBaseSmoother.setTargetValue(attackBaseTarget);
+        compressorReleaseBaseSmoother.setTargetValue(releaseBaseTarget);
     }
 
     auto thresholdProvider = paramsForProcessing.compThresholdValProvider;
@@ -1141,9 +1151,12 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         compressorRatioBaseSmoother.getCurrentValue();
     const float initialAttackBase =
         compressorAttackBaseSmoother.getCurrentValue();
+    const float initialReleaseBase =
+        compressorReleaseBaseSmoother.getCurrentValue();
     thresholdProvider.baseValue = initialThresholdBase;
     ratioProvider.baseValue = initialRatioBase;
     attackProvider.baseValue = initialAttackBase;
+    releaseProvider.baseValue = initialReleaseBase;
 
     const float initialThresholdTarget = safeThreshold(
         hasThresholdModulation ? thresholdProvider.get(0)
@@ -1154,7 +1167,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         hasAttackModulation ? attackProvider.get(0) : initialAttackBase);
     const float initialReleaseTarget = safeRelease(
         hasReleaseModulation ? releaseProvider.get(0)
-                             : params.compRelease);
+                             : initialReleaseBase);
 
     serviceCompressorRecipeTransition(
         compressorThresholdRecipeTransition,
@@ -1178,7 +1191,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     const bool compressorBaseIsSmoothing =
         compressorThresholdBaseSmoother.isSmoothing()
         || compressorRatioBaseSmoother.isSmoothing()
-        || compressorAttackBaseSmoother.isSmoothing();
+        || compressorAttackBaseSmoother.isSmoothing()
+        || compressorReleaseBaseSmoother.isSmoothing();
     const bool compressorRecipeIsSmoothing =
         compressorThresholdRecipeTransition.routeTransitionMix.isSmoothing()
         || compressorRatioRecipeTransition.routeTransitionMix.isSmoothing()
@@ -1194,7 +1208,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             compressorThresholdBaseSmoother.getTargetValue();
         const float ratio = compressorRatioBaseSmoother.getTargetValue();
         const float attack = compressorAttackBaseSmoother.getTargetValue();
-        const float release = safeRelease(params.compRelease);
+        const float release = compressorReleaseBaseSmoother.getTargetValue();
         this->compressor.setThreshold(threshold);
         this->compressor.setRatio(ratio);
         this->compressor.setAttack(attack);
@@ -1217,9 +1231,12 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                 compressorRatioBaseSmoother.getCurrentValue();
             const float attackBase =
                 compressorAttackBaseSmoother.getCurrentValue();
+            const float releaseBase =
+                compressorReleaseBaseSmoother.getCurrentValue();
             thresholdProvider.baseValue = thresholdBase;
             ratioProvider.baseValue = ratioBase;
             attackProvider.baseValue = attackBase;
+            releaseProvider.baseValue = releaseBase;
 
             const float thresholdTarget = safeThreshold(
                 hasThresholdModulation ? thresholdProvider.get(sample)
@@ -1231,7 +1248,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                     : attackBase);
             const float releaseTarget = safeRelease(
                 hasReleaseModulation ? releaseProvider.get(sample)
-                                     : params.compRelease);
+                                     : releaseBase);
 
             const float threshold = safeThreshold(
                 applyCompressorRecipeTransition(
@@ -1277,6 +1294,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             compressorThresholdBaseSmoother.getNextValue();
             compressorRatioBaseSmoother.getNextValue();
             compressorAttackBaseSmoother.getNextValue();
+            compressorReleaseBaseSmoother.getNextValue();
         }
     }
 

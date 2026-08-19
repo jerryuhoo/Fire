@@ -178,6 +178,8 @@ struct BandProcessor
     // final sample when the target is very short.
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>
         compressorAttackBaseSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>
+        compressorReleaseBaseSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         shapeMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>

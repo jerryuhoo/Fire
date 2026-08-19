@@ -574,6 +574,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
     compressorRatioBaseSmoother.reset(spec.sampleRate, 0.01);
     compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
+    compressorAttackBaseSmoother.reset(spec.sampleRate, 0.01);
+    compressorAttackBaseSmoother.setCurrentAndTargetValue(10.0f);
     shapeMixSmoother.reset(spec.sampleRate, 0.05);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.reset(spec.sampleRate, 0.01);
@@ -624,6 +626,7 @@ void BandProcessor::reset()
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
     compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
     compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
+    compressorAttackBaseSmoother.setCurrentAndTargetValue(10.0f);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
@@ -990,22 +993,29 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         hasRatioModulation
             ? paramsForProcessing.compRatioValProvider.baseValue
             : params.compRatio);
+    const float attackBaseTarget = safeAttack(
+        hasAttackModulation
+            ? paramsForProcessing.compAttackValProvider.baseValue
+            : params.compAttack);
     if (! compressorBaseSmoothersPrimed)
     {
         compressorThresholdBaseSmoother.setCurrentAndTargetValue(
             thresholdBaseTarget);
         compressorRatioBaseSmoother.setCurrentAndTargetValue(ratioBaseTarget);
+        compressorAttackBaseSmoother.setCurrentAndTargetValue(attackBaseTarget);
         compressorBaseSmoothersPrimed = true;
     }
     else
     {
         compressorThresholdBaseSmoother.setTargetValue(thresholdBaseTarget);
         compressorRatioBaseSmoother.setTargetValue(ratioBaseTarget);
+        compressorAttackBaseSmoother.setTargetValue(attackBaseTarget);
     }
 
     const bool compressorBaseIsSmoothing =
         compressorThresholdBaseSmoother.isSmoothing()
-        || compressorRatioBaseSmoother.isSmoothing();
+        || compressorRatioBaseSmoother.isSmoothing()
+        || compressorAttackBaseSmoother.isSmoothing();
     const bool needsSampleAccurateCompressorCore =
         hasModulatedCompressorCore || compressorBaseIsSmoothing;
 
@@ -1015,7 +1025,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             compressorThresholdBaseSmoother.getTargetValue());
         this->compressor.setRatio(
             compressorRatioBaseSmoother.getTargetValue());
-        this->compressor.setAttack(safeAttack(params.compAttack));
+        this->compressor.setAttack(
+            compressorAttackBaseSmoother.getTargetValue());
         this->compressor.setRelease(safeRelease(params.compRelease));
         this->compressor.process(postDistortionContext);
     }
@@ -1023,6 +1034,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     {
         auto thresholdProvider = paramsForProcessing.compThresholdValProvider;
         auto ratioProvider = paramsForProcessing.compRatioValProvider;
+        auto attackProvider = paramsForProcessing.compAttackValProvider;
         auto* const* channelData = buffer.getArrayOfWritePointers();
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
@@ -1030,8 +1042,11 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                 compressorThresholdBaseSmoother.getCurrentValue();
             const float ratioBase =
                 compressorRatioBaseSmoother.getCurrentValue();
+            const float attackBase =
+                compressorAttackBaseSmoother.getCurrentValue();
             thresholdProvider.baseValue = thresholdBase;
             ratioProvider.baseValue = ratioBase;
+            attackProvider.baseValue = attackBase;
 
             this->compressor.setThreshold(safeThreshold(
                 hasThresholdModulation ? thresholdProvider.get(sample)
@@ -1040,8 +1055,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                 hasRatioModulation ? ratioProvider.get(sample) : ratioBase));
             this->compressor.setAttack(safeAttack(
                 hasAttackModulation
-                    ? paramsForProcessing.compAttackValProvider.get(sample)
-                    : params.compAttack));
+                    ? attackProvider.get(sample)
+                    : attackBase));
             this->compressor.setRelease(safeRelease(
                 hasReleaseModulation
                     ? paramsForProcessing.compReleaseValProvider.get(sample)
@@ -1057,6 +1072,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             // 10 ms bridge advances once after every channel has consumed it.
             compressorThresholdBaseSmoother.getNextValue();
             compressorRatioBaseSmoother.getNextValue();
+            compressorAttackBaseSmoother.getNextValue();
         }
     }
 

@@ -144,6 +144,11 @@ struct BandProcessor
         compressorThresholdBaseSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         compressorRatioBaseSmoother;
+    // A multiplicative ramp moves the detector pole smoothly across the
+    // 0.1-200 ms range; a linear-ms ramp merely moves its largest jump to the
+    // final sample when the target is very short.
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>
+        compressorAttackBaseSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         shapeMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>

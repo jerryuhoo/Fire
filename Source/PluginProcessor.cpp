@@ -430,6 +430,10 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
+    compressorThresholdBaseSmoother.reset(spec.sampleRate, 0.01);
+    compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
+    compressorRatioBaseSmoother.reset(spec.sampleRate, 0.01);
+    compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
     shapeMixSmoother.reset(spec.sampleRate, 0.05);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.reset(spec.sampleRate, 0.01);
@@ -443,6 +447,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     isFirstBlock = true;
     dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
+    compressorBaseSmoothersPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -460,6 +465,7 @@ void BandProcessor::reset()
     isFirstBlock = true;
     dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
+    compressorBaseSmoothersPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -475,6 +481,8 @@ void BandProcessor::reset()
     dcFilter.reset();
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
+    compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
+    compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
@@ -791,10 +799,10 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                      != nullptr;
     const bool hasReleaseModulation = paramsForProcessing.compReleaseValProvider.lfoSignal
                                       != nullptr;
-    const bool hasSampleAccurateCompressorCore = hasThresholdModulation
-                                                 || hasRatioModulation
-                                                 || hasAttackModulation
-                                                 || hasReleaseModulation;
+    const bool hasModulatedCompressorCore = hasThresholdModulation
+                                            || hasRatioModulation
+                                            || hasAttackModulation
+                                            || hasReleaseModulation;
     const bool hasSampleAccurateCompressorMix = params.isCompEnabled
                                                 && paramsForProcessing.compMixValProvider.lfoSignal
                                                        != nullptr;
@@ -830,54 +838,84 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         return std::isfinite(value) ? juce::jmax(0.01f, value) : 100.0f;
     };
 
-    // Seed the coefficient cache with the value that is actually audible at
-    // this chunk's first sample.  Applying the unmodulated base first would do
-    // needless transcendental work at every internal chunk boundary before the
-    // routed value immediately replaced it.
-    this->compressor.setThreshold(safeThreshold(
+    // Smooth only the user-controlled base values. A routed LFO is still
+    // evaluated directly for every sample after that base has moved, so its
+    // waveform, depth, and timing remain sample-accurate.
+    const float thresholdBaseTarget = safeThreshold(
         hasThresholdModulation
-            ? paramsForProcessing.compThresholdValProvider.get(0)
-            : params.compThreshold));
-    this->compressor.setRatio(safeRatio(
+            ? paramsForProcessing.compThresholdValProvider.baseValue
+            : params.compThreshold);
+    const float ratioBaseTarget = safeRatio(
         hasRatioModulation
-            ? paramsForProcessing.compRatioValProvider.get(0)
-            : params.compRatio));
-    this->compressor.setAttack(safeAttack(
-        hasAttackModulation
-            ? paramsForProcessing.compAttackValProvider.get(0)
-            : params.compAttack));
-    this->compressor.setRelease(safeRelease(
-        hasReleaseModulation
-            ? paramsForProcessing.compReleaseValProvider.get(0)
-            : params.compRelease));
-
-    if (! hasSampleAccurateCompressorCore)
+            ? paramsForProcessing.compRatioValProvider.baseValue
+            : params.compRatio);
+    if (! compressorBaseSmoothersPrimed)
     {
+        compressorThresholdBaseSmoother.setCurrentAndTargetValue(
+            thresholdBaseTarget);
+        compressorRatioBaseSmoother.setCurrentAndTargetValue(ratioBaseTarget);
+        compressorBaseSmoothersPrimed = true;
+    }
+    else
+    {
+        compressorThresholdBaseSmoother.setTargetValue(thresholdBaseTarget);
+        compressorRatioBaseSmoother.setTargetValue(ratioBaseTarget);
+    }
+
+    const bool compressorBaseIsSmoothing =
+        compressorThresholdBaseSmoother.isSmoothing()
+        || compressorRatioBaseSmoother.isSmoothing();
+    const bool needsSampleAccurateCompressorCore =
+        hasModulatedCompressorCore || compressorBaseIsSmoothing;
+
+    if (! needsSampleAccurateCompressorCore)
+    {
+        this->compressor.setThreshold(
+            compressorThresholdBaseSmoother.getTargetValue());
+        this->compressor.setRatio(
+            compressorRatioBaseSmoother.getTargetValue());
+        this->compressor.setAttack(safeAttack(params.compAttack));
+        this->compressor.setRelease(safeRelease(params.compRelease));
         this->compressor.process(postDistortionContext);
     }
     else
     {
+        auto thresholdProvider = paramsForProcessing.compThresholdValProvider;
+        auto ratioProvider = paramsForProcessing.compRatioValProvider;
         auto* const* channelData = buffer.getArrayOfWritePointers();
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
-            if (hasThresholdModulation)
-                this->compressor.setThreshold(safeThreshold(
-                    paramsForProcessing.compThresholdValProvider.get(sample)));
-            if (hasRatioModulation)
-                this->compressor.setRatio(safeRatio(
-                    paramsForProcessing.compRatioValProvider.get(sample)));
-            if (hasAttackModulation)
-                this->compressor.setAttack(safeAttack(
-                    paramsForProcessing.compAttackValProvider.get(sample)));
-            if (hasReleaseModulation)
-                this->compressor.setRelease(safeRelease(
-                    paramsForProcessing.compReleaseValProvider.get(sample)));
+            const float thresholdBase =
+                compressorThresholdBaseSmoother.getCurrentValue();
+            const float ratioBase =
+                compressorRatioBaseSmoother.getCurrentValue();
+            thresholdProvider.baseValue = thresholdBase;
+            ratioProvider.baseValue = ratioBase;
+
+            this->compressor.setThreshold(safeThreshold(
+                hasThresholdModulation ? thresholdProvider.get(sample)
+                                       : thresholdBase));
+            this->compressor.setRatio(safeRatio(
+                hasRatioModulation ? ratioProvider.get(sample) : ratioBase));
+            this->compressor.setAttack(safeAttack(
+                hasAttackModulation
+                    ? paramsForProcessing.compAttackValProvider.get(sample)
+                    : params.compAttack));
+            this->compressor.setRelease(safeRelease(
+                hasReleaseModulation
+                    ? paramsForProcessing.compReleaseValProvider.get(sample)
+                    : params.compRelease));
 
             for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
             {
                 channelData[channel][sample] = this->compressor.processSample(
                     channel, channelData[channel][sample]);
             }
+
+            // The event sample itself uses the previous audible base, then the
+            // 10 ms bridge advances once after every channel has consumed it.
+            compressorThresholdBaseSmoother.getNextValue();
+            compressorRatioBaseSmoother.getNextValue();
         }
     }
 

@@ -113,6 +113,10 @@ struct BandProcessor
     juce::SmoothedValue<float> biasSmoother;
     juce::SmoothedValue<float> recSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        compressorThresholdBaseSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        compressorRatioBaseSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         shapeMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         waveshaperModeMixSmoother;
@@ -124,6 +128,7 @@ struct BandProcessor
     bool isFirstBlock = true;
     bool dryWetMixerPrimed = false;
     bool shapeMixSmootherPrimed = false;
+    bool compressorBaseSmoothersPrimed = false;
     bool compressorMixerPrimed = false;
     bool widthMixerPrimed = false;
     bool bandEnableMixPrimed = false;

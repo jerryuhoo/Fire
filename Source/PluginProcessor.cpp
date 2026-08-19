@@ -1774,6 +1774,14 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         juce::roundToInt(std::ceil(hqLatency))
             + juce::roundToInt(hqLatency)
             + 2);
+    topologyTransitionRampSamples = juce::jmax(
+        1, juce::roundToInt(static_cast<float>(safeSampleRate) * 0.005f));
+    topologyTransitionWarmupSamples = juce::jmax(
+        48,
+        juce::roundToInt(static_cast<float>(safeSampleRate) * 0.001f),
+        juce::roundToInt(std::ceil(hqLatency))
+            + juce::roundToInt(hqLatency)
+            + 2);
 
     lfoManager->prepare(spec);
 
@@ -2377,6 +2385,7 @@ void FireAudioProcessor::performReset()
     gainProcessorGlobal.reset();
     lfoManager->reset();
     snapHqTransitionToParameter();
+    snapTopologyTransitionToActive();
 }
 
 void FireAudioProcessor::releaseResources()
@@ -2436,6 +2445,18 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     {
         calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
         return;
+    }
+
+    // Host bypass must remain a full-level latency-matched dry path. Cancel an
+    // audible topology ramp back to unity; a zero-gain warm-up (which follows
+    // an already committed reset) is frozen until normal DSP resumes.
+    if (topologyTransitionPhase == TopologyTransitionPhase::fadingOut
+        || topologyTransitionPhase == TopologyTransitionPhase::fadingIn)
+    {
+        topologyTransitionPhase = TopologyTransitionPhase::steady;
+        topologyTransitionGain = 1.0f;
+        topologyTransitionGainStep = 0.0f;
+        topologyTransitionRampRemaining = 0;
     }
 
     noteHqRequestWhileBypassed(loadCachedParameter(hqParameter) > 0.5f);
@@ -2505,36 +2526,55 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     mWetBuffer.setSize(numBufferChannels, numSamples, false, false, true);
     lofiDryBuffer.setSize(numBufferChannels, numSamples, false, false, true);
 
-    // Crossover processing is independent of HQ. Split the complete callback
-    // once so Safe Drive and band meters retain their historical full-block
-    // peak semantics even when the quality transition uses two audio ranges.
-    splitBands(buffer, sampleRate);
-
     const std::array<juce::AudioBuffer<float>*, 4> fullBandBuffers {
         &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4
     };
-    for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
-    {
-        auto* band = bands[static_cast<size_t>(bandIndex)].get();
-        auto* bandBuffer = fullBandBuffers[static_cast<size_t>(bandIndex)];
-        if (band == nullptr || bandBuffer == nullptr)
-            continue;
-
-        callbackContext.bandInputPeaks[static_cast<size_t>(bandIndex)] =
-            bandBuffer->getMagnitude(0, bandBuffer->getNumSamples());
-        calculateAndStoreLevels(*bandBuffer,
-                                band->mInputLeftRMS,
-                                band->mInputRightRMS,
-                                band->mInputLeftPeak,
-                                band->mInputRightPeak);
-    }
-
     delayMatchedDryBuffer.clear();
-    processHqTransitionBlock(buffer,
-                             lfoOutputBuffer,
-                             sampleRate,
-                             requestedHq,
-                             callbackContext);
+
+    const bool topologyTransitionActive =
+        topologyTransitionPhase != TopologyTransitionPhase::steady;
+    const bool hqTransitionNeedsService =
+        hqTransitionPhase != HqTransitionPhase::steady
+        || requestedHq != activeHqMode;
+    const bool startTopologyTransition =
+        ! topologyTransitionActive
+        && hasPendingTopologyChange()
+        && ! hqTransitionNeedsService;
+
+    if (topologyTransitionActive || startTopologyTransition)
+    {
+        processTopologyTransitionBlock(buffer,
+                                       lfoOutputBuffer,
+                                       sampleRate,
+                                       requestedHq);
+    }
+    else
+    {
+        // The steady/HQ-only fast path retains the historical full-callback
+        // crossover, Safe peak and meter semantics bit for bit.
+        splitBands(buffer, sampleRate);
+        for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
+        {
+            auto* band = bands[static_cast<size_t>(bandIndex)].get();
+            auto* bandBuffer = fullBandBuffers[static_cast<size_t>(bandIndex)];
+            if (band == nullptr || bandBuffer == nullptr)
+                continue;
+
+            callbackContext.bandInputPeaks[static_cast<size_t>(bandIndex)] =
+                bandBuffer->getMagnitude(0, bandBuffer->getNumSamples());
+            calculateAndStoreLevels(*bandBuffer,
+                                    band->mInputLeftRMS,
+                                    band->mInputRightRMS,
+                                    band->mInputLeftPeak,
+                                    band->mInputRightPeak);
+        }
+
+        processHqTransitionBlock(buffer,
+                                 lfoOutputBuffer,
+                                 sampleRate,
+                                 requestedHq,
+                                 callbackContext);
+    }
 
     for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
     {
@@ -3685,57 +3725,50 @@ void FireAudioProcessor::updateParameters(
         topologySequenceAtCallbackStart,
         routingSnapshotWasRefreshed,
         requestedSnapshot);
+    topologyPendingChangedThisCallback = false;
 
     if (! activeMultibandTopologySnapshotInitialised)
         synchroniseMultibandTopologyResetState();
 
+    if (! pendingMultibandTopologySnapshotInitialised)
+    {
+        pendingMultibandTopologySnapshot = activeMultibandTopologySnapshot;
+        pendingMultibandTopologySnapshotInitialised = true;
+    }
+
     if (hasStablePublication)
     {
-        const bool topologyChanged =
-            requestedSnapshot.numBands != numBands
-            || requestedSnapshot.publicationSequence
-                   != appliedMultibandTopologyResetGeneration;
+        topologyPendingChangedThisCallback =
+            ! sameTopologyIdentity(requestedSnapshot,
+                                    pendingMultibandTopologySnapshot);
+        pendingMultibandTopologySnapshot = requestedSnapshot;
 
-        activeMultibandTopologySnapshot = std::move(requestedSnapshot);
-        activeMultibandTopologySnapshotInitialised = true;
-        numBands = activeMultibandTopologySnapshot.numBands;
-        activeCrossovers = numBands - 1;
+        if (sameTopologyIdentity(requestedSnapshot,
+                                 activeMultibandTopologySnapshot))
+        {
+            // Ordinary parameter/divider edits keep updating the audible
+            // snapshot immediately. A true topology identity change remains
+            // pending until the output bus has faded to zero.
+            activeMultibandTopologySnapshot = requestedSnapshot;
+            numBands = activeMultibandTopologySnapshot.numBands;
+            activeCrossovers = numBands - 1;
 
-        if (topologyChanged)
-        {
-            // Slot reuse after an add/remove must not inherit compressor,
-            // oversampling, mixer or crossover history from the previous
-            // logical band. The snapshot was accepted only after a stable even
-            // publication, so every value below belongs to one complete edit.
-            resetMultibandProcessingState(
-                &activeMultibandTopologySnapshot.callbackContext);
-            snapCrossoverSmoothers(
-                activeMultibandTopologySnapshot.crossoverFrequencies);
-            snapBandSoloGains(
-                numBands,
-                activeMultibandTopologySnapshot.callbackContext);
-            appliedMultibandTopologyResetGeneration =
-                activeMultibandTopologySnapshot.publicationSequence;
-        }
-        else
-        {
             // Ordinary divider dragging remains smoothly interpolated.
             const auto& frequencies =
                 activeMultibandTopologySnapshot.crossoverFrequencies;
             smoothedFreq1.setTargetValue(frequencies[0]);
             smoothedFreq2.setTargetValue(frequencies[1]);
             smoothedFreq3.setTargetValue(frequencies[2]);
-        }
-
-        for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
-        {
-            if (auto* band = bands[static_cast<size_t>(bandIndex)].get())
+            for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
             {
-                const auto& params = activeMultibandTopologySnapshot
-                                         .callbackContext
-                                         .bandParameters[static_cast<size_t>(bandIndex)];
-                band->recSmoother.setTargetValue(params.recVal.baseValue);
-                band->biasSmoother.setTargetValue(params.biasVal.baseValue);
+                if (auto* band = bands[static_cast<size_t>(bandIndex)].get())
+                {
+                    const auto& params = activeMultibandTopologySnapshot
+                                             .callbackContext
+                                             .bandParameters[static_cast<size_t>(bandIndex)];
+                    band->recSmoother.setTargetValue(params.recVal.baseValue);
+                    band->biasSmoother.setTargetValue(params.biasVal.baseValue);
+                }
             }
         }
     }
@@ -3921,20 +3954,38 @@ void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
 
 void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate)
 {
-    const int totalNumOutputChannels = inputBuffer.getNumChannels();
-    const int numSamples = inputBuffer.getNumSamples();
+    splitBandsRange(inputBuffer, 0, inputBuffer.getNumSamples(), sampleRate);
+}
 
-    if (! std::isfinite(sampleRate) || sampleRate <= 0.0 || numSamples <= 0)
+void FireAudioProcessor::splitBandsRange(
+    const juce::AudioBuffer<float>& inputBuffer,
+    int rangeStartSample,
+    int rangeNumSamples,
+    double sampleRate)
+{
+    const int totalNumOutputChannels = inputBuffer.getNumChannels();
+    const int totalSamples = inputBuffer.getNumSamples();
+
+    if (! std::isfinite(sampleRate) || sampleRate <= 0.0
+        || totalSamples <= 0 || rangeNumSamples <= 0)
         return;
+    rangeStartSample = juce::jlimit(0, totalSamples, rangeStartSample);
+    const int rangeEndSample = juce::jlimit(
+        rangeStartSample,
+        totalSamples,
+        rangeStartSample + rangeNumSamples);
+    if (rangeEndSample <= rangeStartSample)
+        return;
+
     const int lineNum = activeCrossovers;
 
     const auto frequencyRange = getSafeFilterFrequencyRange(sampleRate);
     if (lineNum >= 2)
     {
-        mSplitTemp1.setSize(totalNumOutputChannels, numSamples, false, false, true);
-        mSplitTemp2.setSize(totalNumOutputChannels, numSamples, false, false, true);
+        mSplitTemp1.setSize(totalNumOutputChannels, totalSamples, false, false, true);
+        mSplitTemp2.setSize(totalNumOutputChannels, totalSamples, false, false, true);
         if (lineNum == 3)
-            mSplitTemp3.setSize(totalNumOutputChannels, numSamples, false, false, true);
+            mSplitTemp3.setSize(totalNumOutputChannels, totalSamples, false, false, true);
     }
 
     const auto copyRange = [totalNumOutputChannels](juce::AudioBuffer<float>& destination,
@@ -4085,12 +4136,15 @@ void FireAudioProcessor::splitBands(const juce::AudioBuffer<float>& inputBuffer,
     // turning a 1 ms divider glide into a full block-size-dependent jump. Only
     // the short active ramp uses single-sample ranges; steady state retains the
     // original whole-block processing path.
-    for (int startSample = 0; startSample < numSamples;)
+    for (int startSample = rangeStartSample;
+         startSample < rangeEndSample;)
     {
         const bool crossoverIsSmoothing = (lineNum >= 1 && smoothedFreq1.isSmoothing())
                                           || (lineNum >= 2 && smoothedFreq2.isSmoothing())
                                           || (lineNum >= 3 && smoothedFreq3.isSmoothing());
-        int samplesInRange = crossoverIsSmoothing ? 1 : numSamples - startSample;
+        int samplesInRange = crossoverIsSmoothing
+                                 ? 1
+                                 : rangeEndSample - startSample;
         const float freqValue1 = smoothedFreq1.getNextValue();
         const float freqValue2 = smoothedFreq2.getNextValue();
         const float freqValue3 = smoothedFreq3.getNextValue();
@@ -4651,6 +4705,159 @@ void FireAudioProcessor::applyNonHqOutputDelay(juce::AudioBuffer<float>& buffer)
     nonHqOutputDelay.process(juce::dsp::ProcessContextReplacing<float>(block));
 }
 
+bool FireAudioProcessor::sameTopologyIdentity(
+    const MultibandTopologySnapshot& first,
+    const MultibandTopologySnapshot& second) noexcept
+{
+    return first.numBands == second.numBands
+        && first.publicationSequence == second.publicationSequence;
+}
+
+bool FireAudioProcessor::hasPendingTopologyChange() const noexcept
+{
+    return pendingMultibandTopologySnapshotInitialised
+        && activeMultibandTopologySnapshotInitialised
+        && ! sameTopologyIdentity(pendingMultibandTopologySnapshot,
+                                  activeMultibandTopologySnapshot);
+}
+
+void FireAudioProcessor::snapTopologyTransitionToActive() noexcept
+{
+    if (activeMultibandTopologySnapshotInitialised)
+    {
+        pendingMultibandTopologySnapshot = activeMultibandTopologySnapshot;
+        pendingMultibandTopologySnapshotInitialised = true;
+    }
+
+    topologyTransitionPhase = TopologyTransitionPhase::steady;
+    topologyTransitionGain = 1.0f;
+    topologyTransitionGainStep = 0.0f;
+    topologyTransitionRampRemaining = 0;
+    topologyTransitionWarmupRemaining = 0;
+    topologyPendingChangedThisCallback = false;
+}
+
+void FireAudioProcessor::startTopologyTransitionRamp(
+    float target,
+    TopologyTransitionPhase phase) noexcept
+{
+    target = juce::jlimit(0.0f, 1.0f, target);
+    const float difference = target - topologyTransitionGain;
+    if (std::abs(difference) <= std::numeric_limits<float>::epsilon())
+    {
+        topologyTransitionGain = target;
+        topologyTransitionGainStep = 0.0f;
+        topologyTransitionRampRemaining = 0;
+        topologyTransitionPhase = target >= 1.0f
+                                      ? TopologyTransitionPhase::steady
+                                      : phase;
+        return;
+    }
+
+    topologyTransitionRampRemaining = juce::jmax(
+        1, topologyTransitionRampSamples);
+    topologyTransitionGainStep = difference
+                               / static_cast<float>(
+                                     topologyTransitionRampRemaining);
+    topologyTransitionPhase = phase;
+}
+
+void FireAudioProcessor::beginTopologyTransitionCallback() noexcept
+{
+    if (! pendingMultibandTopologySnapshotInitialised)
+    {
+        snapTopologyTransitionToActive();
+        return;
+    }
+
+    switch (topologyTransitionPhase)
+    {
+        case TopologyTransitionPhase::steady:
+            if (hasPendingTopologyChange())
+                startTopologyTransitionRamp(
+                    0.0f, TopologyTransitionPhase::fadingOut);
+            break;
+
+        case TopologyTransitionPhase::fadingOut:
+            if (! hasPendingTopologyChange())
+                startTopologyTransitionRamp(
+                    1.0f, TopologyTransitionPhase::fadingIn);
+            break;
+
+        case TopologyTransitionPhase::warmingUp:
+            // Require one stable muted window after the latest complete
+            // publication, but never repeatedly reset the large DSP graph for
+            // rapid add/delete automation.
+            if (topologyPendingChangedThisCallback)
+                topologyTransitionWarmupRemaining =
+                    topologyTransitionWarmupSamples;
+            break;
+
+        case TopologyTransitionPhase::fadingIn:
+            if (hasPendingTopologyChange())
+            {
+                if (topologyTransitionGain <= 0.0f)
+                {
+                    topologyTransitionWarmupRemaining =
+                        topologyTransitionWarmupSamples;
+                    topologyTransitionPhase =
+                        TopologyTransitionPhase::warmingUp;
+                }
+                else
+                {
+                    startTopologyTransitionRamp(
+                        0.0f, TopologyTransitionPhase::fadingOut);
+                }
+            }
+            break;
+    }
+}
+
+void FireAudioProcessor::applyTopologyTransitionRamp(
+    juce::AudioBuffer<float>& buffer) noexcept
+{
+    auto* const* channels = buffer.getArrayOfWritePointers();
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        const float gain = juce::jlimit(
+            0.0f, 1.0f, topologyTransitionGain);
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            channels[channel][sample] *= gain;
+
+        topologyTransitionGain += topologyTransitionGainStep;
+        if (topologyTransitionRampRemaining > 0)
+            --topologyTransitionRampRemaining;
+    }
+}
+
+bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
+{
+    // pendingMultibandTopologySnapshot is written only after a stable even
+    // publication and a successful routing refresh. It remains a coherent,
+    // consumable target if a later callback temporarily misses the LFO
+    // try-lock; tying commit to that later refresh could mute indefinitely.
+    if (! hasPendingTopologyChange())
+        return false;
+
+    activeMultibandTopologySnapshot = pendingMultibandTopologySnapshot;
+    numBands = activeMultibandTopologySnapshot.numBands;
+    activeCrossovers = numBands - 1;
+
+    resetMultibandProcessingState(
+        &activeMultibandTopologySnapshot.callbackContext);
+    snapCrossoverSmoothers(
+        activeMultibandTopologySnapshot.crossoverFrequencies);
+    snapBandSoloGains(
+        numBands,
+        activeMultibandTopologySnapshot.callbackContext);
+    appliedMultibandTopologyResetGeneration =
+        activeMultibandTopologySnapshot.publicationSequence;
+
+    pendingMultibandTopologySnapshot = activeMultibandTopologySnapshot;
+    topologyPendingChangedThisCallback = false;
+    return true;
+}
+
 void FireAudioProcessor::snapHqTransitionToParameter() noexcept
 {
     activeHqMode = loadCachedParameter(hqParameter) > 0.5f;
@@ -4814,7 +5021,8 @@ void FireAudioProcessor::processActiveHqRange(
     double sampleRate,
     bool useHQ,
     bool updateReductionMeter,
-    const HqCallbackContext& callbackContext)
+    const HqCallbackContext& callbackContext,
+    bool applyFinalNonHqDelay)
 {
     if (useHQ)
         advanceNonHqOutputDelay(buffer);
@@ -4837,7 +5045,7 @@ void FireAudioProcessor::processActiveHqRange(
                    lfoOutputs,
                    useHQ);
 
-    if (! useHQ)
+    if (! useHQ && applyFinalNonHqDelay)
         applyNonHqOutputDelay(buffer);
 }
 
@@ -4986,6 +5194,177 @@ void FireAudioProcessor::processHqTransitionBlock(
                                       HqTransitionPhase::fadingIn);
             }
         }
+    }
+}
+
+void FireAudioProcessor::processTopologyTransitionBlock(
+    juce::AudioBuffer<float>& buffer,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    double sampleRate,
+    bool requestedHq)
+{
+    beginTopologyTransitionCallback();
+
+    // A topology reset and an HQ reset must never be nested. Keep the current
+    // quality graph coherent for this complete transition; the latest HQ
+    // request is serviced by the existing state machine on a later callback.
+    pendingHqMode = requestedHq;
+
+    const int numSamples = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+    mBuffer1.clear();
+    mBuffer2.clear();
+    mBuffer3.clear();
+    mBuffer4.clear();
+
+    int sampleOffset = 0;
+    bool reductionMeterUpdated = false;
+    while (sampleOffset < numSamples)
+    {
+        // Complete state boundaries before rendering the next sample. The
+        // destructive topology reset can therefore only occur at exact zero.
+        if (topologyTransitionPhase == TopologyTransitionPhase::fadingOut
+            && topologyTransitionRampRemaining <= 0)
+        {
+            topologyTransitionGain = 0.0f;
+            topologyTransitionGainStep = 0.0f;
+            if (hasPendingTopologyChange())
+            {
+                if (commitPendingTopologySnapshot())
+                    reductionMeterUpdated = false;
+                topologyTransitionWarmupRemaining =
+                    topologyTransitionWarmupSamples;
+                topologyTransitionPhase =
+                    TopologyTransitionPhase::warmingUp;
+            }
+            else
+            {
+                startTopologyTransitionRamp(
+                    1.0f, TopologyTransitionPhase::fadingIn);
+            }
+        }
+        else if (topologyTransitionPhase == TopologyTransitionPhase::warmingUp
+                 && topologyTransitionWarmupRemaining <= 0)
+        {
+            if (hasPendingTopologyChange())
+            {
+                if (commitPendingTopologySnapshot())
+                    reductionMeterUpdated = false;
+                topologyTransitionWarmupRemaining =
+                    topologyTransitionWarmupSamples;
+            }
+            else
+            {
+                topologyTransitionGain = 0.0f;
+                startTopologyTransitionRamp(
+                    1.0f, TopologyTransitionPhase::fadingIn);
+            }
+        }
+        else if (topologyTransitionPhase == TopologyTransitionPhase::fadingIn
+                 && topologyTransitionRampRemaining <= 0)
+        {
+            topologyTransitionGain = 1.0f;
+            topologyTransitionGainStep = 0.0f;
+            topologyTransitionPhase = TopologyTransitionPhase::steady;
+        }
+
+        const auto phaseForRange = topologyTransitionPhase;
+        int samplesInRange = numSamples - sampleOffset;
+        if (phaseForRange == TopologyTransitionPhase::fadingOut
+            || phaseForRange == TopologyTransitionPhase::fadingIn)
+        {
+            samplesInRange = juce::jmin(
+                samplesInRange,
+                juce::jmax(1, topologyTransitionRampRemaining));
+        }
+        else if (phaseForRange == TopologyTransitionPhase::warmingUp)
+        {
+            samplesInRange = juce::jmin(
+                samplesInRange,
+                juce::jmax(1, topologyTransitionWarmupRemaining));
+        }
+
+        splitBandsRange(buffer,
+                        sampleOffset,
+                        samplesInRange,
+                        sampleRate);
+
+        HqCallbackContext rangeContext =
+            activeMultibandTopologySnapshot.callbackContext;
+        const std::array<juce::AudioBuffer<float>*, 4> fullBandBuffers {
+            &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4
+        };
+        std::array<juce::AudioBuffer<float>, 4> bandRanges;
+        std::array<juce::AudioBuffer<float>*, 4> bandRangePointers {};
+        for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
+        {
+            auto* owner = fullBandBuffers[static_cast<size_t>(bandIndex)];
+            bandRanges[static_cast<size_t>(bandIndex)] =
+                juce::AudioBuffer<float>(owner->getArrayOfWritePointers(),
+                                         numChannels,
+                                         sampleOffset,
+                                         samplesInRange);
+            bandRangePointers[static_cast<size_t>(bandIndex)] =
+                &bandRanges[static_cast<size_t>(bandIndex)];
+
+            if (bandIndex < numBands)
+            {
+                rangeContext.bandInputPeaks[static_cast<size_t>(bandIndex)] =
+                    owner->getMagnitude(sampleOffset, samplesInRange);
+                if (auto* band = bands[static_cast<size_t>(bandIndex)].get())
+                    calculateAndStoreLevels(
+                        bandRanges[static_cast<size_t>(bandIndex)],
+                        band->mInputLeftRMS,
+                        band->mInputRightRMS,
+                        band->mInputLeftPeak,
+                        band->mInputRightPeak);
+            }
+        }
+
+        juce::AudioBuffer<float> audioRange(buffer.getArrayOfWritePointers(),
+                                            numChannels,
+                                            sampleOffset,
+                                            samplesInRange);
+        juce::AudioBuffer<float> dryRange(
+            delayMatchedDryBuffer.getArrayOfWritePointers(),
+            numChannels,
+            sampleOffset,
+            samplesInRange);
+        juce::AudioBuffer<float> lfoRange(
+            lfoOutputBuffer.getArrayOfWritePointers(),
+            lfoOutputs.getNumChannels(),
+            sampleOffset,
+            samplesInRange);
+
+        processActiveHqRange(audioRange,
+                             dryRange,
+                             bandRangePointers,
+                             lfoRange,
+                             sampleRate,
+                             activeHqMode,
+                             ! reductionMeterUpdated,
+                             rangeContext,
+                             false);
+        reductionMeterUpdated = true;
+
+        if (phaseForRange == TopologyTransitionPhase::fadingOut
+            || phaseForRange == TopologyTransitionPhase::fadingIn)
+        {
+            applyTopologyTransitionRamp(audioRange);
+        }
+        else if (phaseForRange == TopologyTransitionPhase::warmingUp)
+        {
+            audioRange.clear();
+            topologyTransitionWarmupRemaining -= samplesInRange;
+        }
+
+        // The topology envelope is part of the complete Base signal and must
+        // reach the host through the same fixed PDC pad. HQ already carries
+        // its natural upstream latency.
+        if (! activeHqMode)
+            applyNonHqOutputDelay(audioRange);
+
+        sampleOffset += samplesInRange;
     }
 }
 

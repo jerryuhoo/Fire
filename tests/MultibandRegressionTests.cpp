@@ -831,22 +831,62 @@ TEST_CASE("A rapid add-delete cycle resets reused DSP slots even when the band c
     copyAllParameterValues(editedProcessor, freshProcessor);
     freshProcessor.prepareToPlay(sampleRate, blockSize);
 
-    juce::AudioBuffer<float> editedOutput(2, blockSize);
-    juce::AudioBuffer<float> freshOutput(2, blockSize);
-    editedOutput.clear();
-    freshOutput.clear();
+    // The published slot replacement now fades the old graph out, resets it
+    // only at zero, keeps it muted for 1 ms, then fades the replacement in.
+    // Feed silence through that complete 5+1+5 ms transaction before judging
+    // the replacement slot; the audible fade-out may legitimately contain the
+    // deliberately primed old tail.
+    constexpr int topologyRampSamples = 240;
+    constexpr int topologyWarmupSamples = 48;
+    constexpr int topologyTransitionSamples = 2 * topologyRampSamples
+                                            + topologyWarmupSamples;
+    const int settledStart = topologyTransitionSamples
+                           + static_cast<int>(std::ceil(
+                                 editedProcessor.getTotalLatency()))
+                           + 2;
+    REQUIRE(settledStart < blockSize);
+
+    juce::AudioBuffer<float> transitionEdited(2, blockSize);
+    juce::AudioBuffer<float> transitionFresh(2, blockSize);
+    transitionEdited.clear();
+    transitionFresh.clear();
     juce::MidiBuffer editedMidi;
     juce::MidiBuffer freshMidi;
-    editedProcessor.processBlock(editedOutput, editedMidi);
-    freshProcessor.processBlock(freshOutput, freshMidi);
+    editedProcessor.processBlock(transitionEdited, editedMidi);
+    freshProcessor.processBlock(transitionFresh, freshMidi);
 
-    const auto resetError = meanSquaredDifference(editedOutput, freshOutput, 0);
-    const auto residualMagnitude = juce::jmax(
-        editedOutput.getMagnitude(0, 0, blockSize),
-        editedOutput.getMagnitude(1, 0, blockSize));
-    CAPTURE(resetError, residualMagnitude);
-    CHECK(resetError < 1.0e-12);
-    CHECK(residualMagnitude < 1.0e-6f);
+    const auto postWarmError = meanSquaredDifference(transitionEdited,
+                                                     transitionFresh,
+                                                     settledStart);
+    const auto postWarmResidual = juce::jmax(
+        transitionEdited.getMagnitude(0,
+                                      settledStart,
+                                      blockSize - settledStart),
+        transitionEdited.getMagnitude(1,
+                                      settledStart,
+                                      blockSize - settledStart));
+
+    juce::AudioBuffer<float> settledEdited(2, blockSize);
+    juce::AudioBuffer<float> settledFresh(2, blockSize);
+    settledEdited.clear();
+    settledFresh.clear();
+    editedProcessor.processBlock(settledEdited, editedMidi);
+    freshProcessor.processBlock(settledFresh, freshMidi);
+    const auto settledError = meanSquaredDifference(settledEdited,
+                                                    settledFresh,
+                                                    0);
+    const auto settledResidual = juce::jmax(
+        settledEdited.getMagnitude(0, 0, blockSize),
+        settledEdited.getMagnitude(1, 0, blockSize));
+    CAPTURE(settledStart,
+            postWarmError,
+            postWarmResidual,
+            settledError,
+            settledResidual);
+    CHECK(postWarmError < 1.0e-12);
+    CHECK(postWarmResidual < 1.0e-6f);
+    CHECK(settledError < 1.0e-12);
+    CHECK(settledResidual < 1.0e-6f);
 }
 
 TEST_CASE("Close controls remain hit-testable while crossing a divider child",

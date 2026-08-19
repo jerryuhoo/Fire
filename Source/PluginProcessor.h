@@ -324,6 +324,10 @@ public:
     bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
 
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
+    void splitBandsRange(const juce::AudioBuffer<float>& inputBuffer,
+                         int startSample,
+                         int numSamples,
+                         double sampleRate);
     void sumBands(juce::AudioBuffer<float>& outputBuffer,
                   const std::array<juce::AudioBuffer<float>*, 4>& sourceBandBuffers,
                   bool ignoreSoloLogic,
@@ -506,6 +510,7 @@ private:
     std::atomic<float> preparedHqLatency { 0.0f };
 
     enum class HqTransitionPhase;
+    enum class TopologyTransitionPhase;
 
     void updateParameters(const juce::AudioBuffer<float>& lfoOutputs,
                           std::uint32_t topologySequenceAtCallbackStart,
@@ -540,12 +545,30 @@ private:
         double sampleRate,
         bool useHQ,
         bool updateReductionMeter,
-        const HqCallbackContext& callbackContext);
+        const HqCallbackContext& callbackContext,
+        bool applyFinalNonHqDelay = true);
     void startHqTransitionRamp(float target,
                               HqTransitionPhase phase) noexcept;
     void applyHqTransitionRamp(juce::AudioBuffer<float>& buffer) noexcept;
     void resetHqQualityPathState() noexcept;
     void snapHqTransitionToParameter() noexcept;
+    static bool sameTopologyIdentity(
+        const MultibandTopologySnapshot& first,
+        const MultibandTopologySnapshot& second) noexcept;
+    bool hasPendingTopologyChange() const noexcept;
+    void snapTopologyTransitionToActive() noexcept;
+    void startTopologyTransitionRamp(
+        float target,
+        TopologyTransitionPhase phase) noexcept;
+    void beginTopologyTransitionCallback() noexcept;
+    void applyTopologyTransitionRamp(
+        juce::AudioBuffer<float>& buffer) noexcept;
+    bool commitPendingTopologySnapshot() noexcept;
+    void processTopologyTransitionBlock(
+        juce::AudioBuffer<float>& buffer,
+        const juce::AudioBuffer<float>& lfoOutputs,
+        double sampleRate,
+        bool requestedHq);
 
     // preset id
     int numBands = 1;
@@ -674,6 +697,26 @@ private:
     int hqTransitionRampRemaining = 0;
     int hqTransitionWarmupSamples = 1;
     int hqTransitionWarmupRemaining = 0;
+
+    enum class TopologyTransitionPhase
+    {
+        steady,
+        fadingOut,
+        warmingUp,
+        fadingIn
+    };
+
+    TopologyTransitionPhase topologyTransitionPhase =
+        TopologyTransitionPhase::steady;
+    MultibandTopologySnapshot pendingMultibandTopologySnapshot;
+    bool pendingMultibandTopologySnapshotInitialised = false;
+    bool topologyPendingChangedThisCallback = false;
+    float topologyTransitionGain = 1.0f;
+    float topologyTransitionGainStep = 0.0f;
+    int topologyTransitionRampSamples = 1;
+    int topologyTransitionRampRemaining = 0;
+    int topologyTransitionWarmupSamples = 1;
+    int topologyTransitionWarmupRemaining = 0;
 
     juce::dsp::DryWetMixer<float> lofiMixer { 2048 };
     bool lofiMixerPrimed = false;

@@ -13,6 +13,10 @@ constexpr double sampleRate = 48000.0;
 constexpr int hostBlockSize = 257;
 constexpr int warmupSamples = 12000;
 constexpr int transitionSamples = 480; // 10 ms
+constexpr int topologyRampSamples = 240; // 5 ms
+constexpr int topologyWarmupSamples = 48; // 1 ms
+constexpr int topologyTransitionSamples = 2 * topologyRampSamples
+                                        + topologyWarmupSamples;
 constexpr int finalStateSamples = 4096;
 
 using SoloState = std::array<bool, 2>;
@@ -699,7 +703,7 @@ Timeline renderAfterHqTopologyReset(int targetBandCount,
     result.soloEnvelopeDelaySamples = latency;
     processInputRange(processor,
                       warmupSamples,
-                      transitionSamples + finalStateSamples,
+                      topologyTransitionSamples + finalStateSamples,
                       &result);
     return result;
 }
@@ -718,24 +722,47 @@ void checkHqTopologyResetSoloEnvelopePriming(int targetBandCount,
     REQUIRE(cleanNoSoloReference.finite);
 
     const int latency = subject.soloEnvelopeDelaySamples;
-    const float firstSampleError = maximumDifference(subject,
-                                                     cleanNoSoloReference,
-                                                     0,
-                                                     1);
-    const float primingWindowError = maximumDifference(subject,
-                                                       cleanNoSoloReference,
-                                                       0,
-                                                       latency + 2);
-    const float fullRenderError = maximumDifference(
+    const int fadeInStart = topologyRampSamples
+                          + topologyWarmupSamples;
+    const int settledStart = topologyTransitionSamples + latency + 2;
+    const int renderedSamples = static_cast<int>(subject.output.front().size());
+    REQUIRE(settledStart < renderedSamples);
+
+    // Before commit the subject is allowed to fade out its deliberately
+    // soloed old topology. At zero the replacement snapshot is committed and
+    // its Solo delay is primed from no-Solo; the complete fade-in and settled
+    // output must then be indistinguishable from a clean no-Solo processor.
+    const float fadeInError = maximumDifference(subject,
+                                                cleanNoSoloReference,
+                                                fadeInStart,
+                                                topologyRampSamples);
+    const float settledError = maximumDifference(
         subject,
         cleanNoSoloReference,
-        0,
-        static_cast<int>(subject.output.front().size()));
+        settledStart,
+        renderedSamples - settledStart);
+    float subjectWarmMagnitude = 0.0f;
+    float referenceWarmMagnitude = 0.0f;
     float referenceMagnitude = 0.0f;
     float subjectMagnitude = 0.0f;
     for (int channel = 0; channel < 2; ++channel)
     {
-        for (int sample = 0; sample < latency + 2; ++sample)
+        for (int sample = topologyRampSamples;
+             sample < fadeInStart;
+             ++sample)
+        {
+            subjectWarmMagnitude = std::max(
+                subjectWarmMagnitude,
+                std::abs(subject.output[static_cast<size_t>(channel)]
+                                       [static_cast<size_t>(sample)]));
+            referenceWarmMagnitude = std::max(
+                referenceWarmMagnitude,
+                std::abs(cleanNoSoloReference.output[
+                    static_cast<size_t>(channel)][static_cast<size_t>(sample)]));
+        }
+        for (int sample = fadeInStart;
+             sample < fadeInStart + topologyRampSamples;
+             ++sample)
         {
             referenceMagnitude = std::max(
                 referenceMagnitude,
@@ -751,16 +778,18 @@ void checkHqTopologyResetSoloEnvelopePriming(int targetBandCount,
     CAPTURE(targetBandCount,
             requestGenerationReset,
             latency,
-            firstSampleError,
-            primingWindowError,
-            fullRenderError,
+            fadeInError,
+            settledError,
+            subjectWarmMagnitude,
+            referenceWarmMagnitude,
             referenceMagnitude,
             subjectMagnitude);
     REQUIRE(latency > 0);
     REQUIRE(referenceMagnitude > 0.1f);
-    CHECK(firstSampleError < 2.0e-4f);
-    CHECK(primingWindowError < 2.0e-4f);
-    CHECK(fullRenderError < 2.0e-4f);
+    CHECK(subjectWarmMagnitude < 1.0e-7f);
+    CHECK(referenceWarmMagnitude < 1.0e-7f);
+    CHECK(fadeInError < 2.0e-4f);
+    CHECK(settledError < 2.0e-4f);
     CHECK(subjectMagnitude > referenceMagnitude * 0.9f);
 }
 } // namespace

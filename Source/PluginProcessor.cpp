@@ -1933,6 +1933,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
                                       : 48000.0;
     const int maximumBlockSize = juce::jmax(minimumProcessingBlockCapacity,
                                              juce::jmax(1, samplesPerBlock));
+    preparedProcessingBlockCapacity = maximumBlockSize;
     const int outputChannels = juce::jmax(1, getMainBusNumOutputChannels());
     juce::dsp::ProcessSpec spec { safeSampleRate,
                                   static_cast<juce::uint32>(maximumBlockSize),
@@ -4924,8 +4925,20 @@ void FireAudioProcessor::processLatencyMatchedBypass(
                                               std::memory_order_acquire)));
     bypassDelayMixer.setWetLatency(bypassLatency);
     bypassDelayMixer.setWetMixProportion(0.0f);
-    bypassDelayMixer.pushDrySamples(juce::dsp::AudioBlock<float>(buffer));
-    bypassDelayMixer.mixWetSamples(juce::dsp::AudioBlock<float>(buffer));
+    auto block = juce::dsp::AudioBlock<float>(buffer);
+    const int rangeCapacity = juce::jmax(1,
+                                         preparedProcessingBlockCapacity);
+    int sampleOffset = 0;
+    while (sampleOffset < buffer.getNumSamples())
+    {
+        const int samplesInRange = juce::jmin(
+            rangeCapacity, buffer.getNumSamples() - sampleOffset);
+        auto range = block.getSubBlock(static_cast<size_t>(sampleOffset),
+                                       static_cast<size_t>(samplesInRange));
+        bypassDelayMixer.pushDrySamples(range);
+        bypassDelayMixer.mixWetSamples(range);
+        sampleOffset += samplesInRange;
+    }
 }
 
 void FireAudioProcessor::advanceNonHqOutputDelay(
@@ -5320,6 +5333,13 @@ void FireAudioProcessor::processHqTransitionBlock(
             }
         }
 
+        // JUCE DryWetMixer owns a finite FIFO sized during prepare(). Hosts
+        // may still deliver a callback larger than their advertised maximum,
+        // so keep every paired global mixer push/mix within prepared capacity.
+        samplesInRange = juce::jmin(
+            samplesInRange,
+            juce::jmax(1, preparedProcessingBlockCapacity));
+
         juce::AudioBuffer<float> audioRange(buffer.getArrayOfWritePointers(),
                                             numChannels,
                                             sampleOffset,
@@ -5507,6 +5527,12 @@ void FireAudioProcessor::processTopologyTransitionBlock(
                 samplesInRange,
                 juce::jmax(1, topologyTransitionWarmupRemaining));
         }
+
+        // See processHqTransitionBlock(): all global DryWetMixer calls below
+        // must receive a range that fits the FIFO allocated at prepare time.
+        samplesInRange = juce::jmin(
+            samplesInRange,
+            juce::jmax(1, preparedProcessingBlockCapacity));
 
         splitBandsRange(buffer,
                         sampleOffset,

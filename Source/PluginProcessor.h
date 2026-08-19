@@ -640,6 +640,7 @@ private:
     juce::AudioBuffer<float> hostBypassWetBuffer;
     juce::AudioBuffer<float> lfoOutputBuffer;
     juce::AudioBuffer<float> lofiDryBuffer;
+    int preparedProcessingBlockCapacity = 1;
 
     // filter
     MonoChain leftChain;

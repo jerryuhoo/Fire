@@ -431,6 +431,9 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
+    waveshaperModeMixSmoother.reset(spec.sampleRate, 0.01);
+    waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
+
     // prepare() may be called again on an existing processor.  JUCE's mixer
     // prepare resets its FIFO and delay line, but preserves the previously
     // requested wet proportion.  Force every first post-prepare callback to
@@ -441,6 +444,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     shapeMixerPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
+    waveshaperModeMixPrimed = false;
     bandEnableMixSmoother.reset(spec.sampleRate, 0.01);
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     bandEnableMixPrimed = false;
@@ -457,6 +461,7 @@ void BandProcessor::reset()
     shapeMixerPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
+    waveshaperModeMixPrimed = false;
     bandEnableMixPrimed = false;
     dcFilterMixPrimed = false;
     compressor.reset();
@@ -470,6 +475,7 @@ void BandProcessor::reset()
     dcFilter.reset();
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
+    waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
     if (oversampling)
         oversampling->reset();
@@ -1057,7 +1063,50 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     // partitioning and could audibly change gain at each internal boundary.
     const float sampleMaxValue = std::isfinite(inputPeak) ? juce::jmax(0.0f, inputPeak) : 0.0f;
     mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
-    auto waveshaperFunction = DistortionLogic::getWaveshaperForMode(params.mode);
+
+    const auto normaliseMode = [] (int mode) noexcept
+    {
+        return juce::isPositiveAndBelow(mode, 12) ? mode : 3;
+    };
+    const auto serviceModeRequest = [&] (int rawRequestedMode)
+    {
+        const int requestedMode = normaliseMode(rawRequestedMode);
+        requestedWaveshaperMode = requestedMode;
+
+        if (! waveshaperModeMixPrimed)
+        {
+            waveshaperModeSlots = { requestedMode, requestedMode };
+            waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
+            waveshaperModeMixPrimed = true;
+            return;
+        }
+
+        if (waveshaperModeMixSmoother.isSmoothing())
+        {
+            const int targetSlot = waveshaperModeMixSmoother.getTargetValue() >= 0.5f ? 1 : 0;
+            const int sourceSlot = 1 - targetSlot;
+
+            // A request for the mode we are fading away from reverses the
+            // current transition without changing either audible function.
+            // A third mode remains queued in requestedWaveshaperMode until an
+            // endpoint makes one slot fully inaudible.
+            if (requestedMode == waveshaperModeSlots[static_cast<size_t>(sourceSlot)])
+                waveshaperModeMixSmoother.setTargetValue(sourceSlot == 1 ? 1.0f : 0.0f);
+            return;
+        }
+
+        const int activeSlot = waveshaperModeMixSmoother.getCurrentValue() >= 0.5f ? 1 : 0;
+        if (requestedMode == waveshaperModeSlots[static_cast<size_t>(activeSlot)])
+            return;
+
+        const int targetSlot = 1 - activeSlot;
+        waveshaperModeSlots[static_cast<size_t>(targetSlot)] = requestedMode;
+        waveshaperModeMixSmoother.setTargetValue(targetSlot == 1 ? 1.0f : 0.0f);
+    };
+
+    serviceModeRequest(params.mode);
+    auto mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
+    auto mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
 
     // The providers are now correctly prepared with LFO signals (if any)
     auto driveProvider = params.driveVal;
@@ -1179,18 +1228,58 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         }
 
         // 5. Apply audio processing using the correctly smoothed values
+        const float modeMix = waveshaperModeMixSmoother.getCurrentValue();
+        const float negativeScale = (0.5f - currentState.rec) * 2.0f;
         for (int channel = 0; channel < numChannels; ++channel)
         {
             float currentSample = blockToProcess.getSample(channel, sample);
 
             currentSample *= currentState.drive;
             currentSample += currentState.bias;
-            currentSample = waveshaperFunction(currentSample);
-            if (currentSample < 0.0f)
-                currentSample *= (0.5f - currentState.rec) * 2.0f;
+
+            const auto shapeAndRectify = [&] (DistortionLogic::WaveshaperFunction function)
+            {
+                auto shaped = function(currentSample);
+                if (shaped < 0.0f)
+                    shaped *= negativeScale;
+                return shaped;
+            };
+
+            if (modeMix <= 0.0f)
+            {
+                currentSample = shapeAndRectify(mode0Function);
+            }
+            else if (modeMix >= 1.0f)
+            {
+                currentSample = shapeAndRectify(mode1Function);
+            }
+            else
+            {
+                const auto mode0Sample = shapeAndRectify(mode0Function);
+                const auto mode1Sample = shapeAndRectify(mode1Function);
+                currentSample = mode0Sample
+                              + modeMix * (mode1Sample - mode0Sample);
+            }
+
             currentSample -= currentState.bias;
 
             blockToProcess.setSample(channel, sample, currentSample);
+        }
+
+        // The HQ distortion loop contains four oversampled frames for each
+        // base-rate frame.  Hold the same crossfade weight for that whole
+        // group and advance only at its end, so the transition remains 10 ms
+        // in both modes and across internal chunks.
+        if (((sample + 1) % smoothingStride) == 0
+            && waveshaperModeMixSmoother.isSmoothing())
+        {
+            waveshaperModeMixSmoother.getNextValue();
+            if (! waveshaperModeMixSmoother.isSmoothing())
+            {
+                serviceModeRequest(requestedWaveshaperMode);
+                mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
+                mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
+            }
         }
     }
 

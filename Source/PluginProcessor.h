@@ -113,6 +113,11 @@ struct BandProcessor
     juce::SmoothedValue<float> driveSmoother;
     juce::SmoothedValue<float> biasSmoother;
     juce::SmoothedValue<float> recSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        waveshaperModeMixSmoother;
+    std::array<int, 2> waveshaperModeSlots { 3, 3 };
+    int requestedWaveshaperMode = 3;
+    bool waveshaperModeMixPrimed = false;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bandEnableMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> dcFilterMixSmoother;
     bool isFirstBlock = true;

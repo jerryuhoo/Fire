@@ -402,7 +402,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     juce::dsp::ProcessSpec mixerSpec = spec;
     mixerSpec.maximumBlockSize = spec.maximumBlockSize * 4 + 64;
     dryWetMixer.prepare(mixerSpec);
-    shapeMixer.prepare(mixerSpec);
     compressorMixer.prepare(mixerSpec);
     widthMixer.prepare(mixerSpec);
     bandEnableDryDelay.prepare(spec);
@@ -431,6 +430,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
+    shapeMixSmoother.reset(spec.sampleRate, 0.05);
+    shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.reset(spec.sampleRate, 0.01);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
@@ -441,7 +442,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     // stale state left by the previous playback configuration.
     isFirstBlock = true;
     dryWetMixerPrimed = false;
-    shapeMixerPrimed = false;
+    shapeMixSmootherPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -458,7 +459,7 @@ void BandProcessor::reset()
 {
     isFirstBlock = true;
     dryWetMixerPrimed = false;
-    shapeMixerPrimed = false;
+    shapeMixSmootherPrimed = false;
     compressorMixerPrimed = false;
     widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -468,13 +469,13 @@ void BandProcessor::reset()
     widthProcessor.reset();
     gain.reset();
     dryWetMixer.reset();
-    shapeMixer.reset();
     compressorMixer.reset();
     widthMixer.reset();
     bandEnableDryDelay.reset();
     dcFilter.reset();
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
+    shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
     if (oversampling)
@@ -495,9 +496,10 @@ void BandProcessor::reset()
 void BandProcessor::resetQualityTransitionState() noexcept
 {
     // The oversampler is the only per-band state that stops advancing in base
-    // mode. Band/Shape/Enable mixers and their delay lines consume every input
-    // sample in both modes, so retaining them preserves LFO smoother history
-    // and a continuous raw timeline while their latency tap changes.
+    // mode. Band/Enable mixers, the Shape Mix smoother, and their delay lines
+    // consume every base-rate frame in both modes, so retaining them preserves
+    // LFO smoother history and a continuous raw timeline while latency taps
+    // change.
     if (oversampling != nullptr)
         oversampling->reset();
 }
@@ -1031,10 +1033,8 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
                                       float inputPeak,
                                       bool updateReductionMeter)
 {
-    // Create a copy of the incoming block (which might be oversampled)
-    // to use as the correctly-sized "dry" signal for the shape mixer.
-    // This must be done BEFORE blockToProcess is modified.
-    auto dryBlockForShapeMixer = blockToProcess;
+    const int numSamples = static_cast<int>(blockToProcess.getNumSamples());
+    const int numChannels = static_cast<int>(blockToProcess.getNumChannels());
 
     // Shape Mix historically wraps the complete distortion stage, including
     // Drive. Once Shape is disabled its controls are frozen in the UI, so a
@@ -1049,14 +1049,15 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     const float effectiveShapeMix = params.isShapeEnabled
                                       ? juce::jlimit(0.0f, 1.0f, requestedShapeMix)
                                       : 1.0f;
-    shapeMixer.setWetMixProportion(effectiveShapeMix);
-    if (! shapeMixerPrimed)
-        shapeMixer.reset();
-    shapeMixerPrimed = true;
-    shapeMixer.pushDrySamples(dryBlockForShapeMixer);
-
-    const int numSamples = (int) blockToProcess.getNumSamples();
-    const int numChannels = (int) blockToProcess.getNumChannels();
+    if (! shapeMixSmootherPrimed)
+    {
+        shapeMixSmoother.setCurrentAndTargetValue(effectiveShapeMix);
+        shapeMixSmootherPrimed = true;
+    }
+    else
+    {
+        shapeMixSmoother.setTargetValue(effectiveShapeMix);
+    }
 
     // For an oversized callback, every chunk must use the original callback's
     // peak. Recomputing per chunk would make Safe mode depend on host block
@@ -1161,8 +1162,22 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         isFirstBlock = false;
     }
 
+    const int smoothingStride = params.isHQ ? (1 << oversampleFactor) : 1;
+    float currentShapeMix = shapeMixSmoother.getCurrentValue();
     for (int sample = 0; sample < numSamples; ++sample)
     {
+        if ((sample % smoothingStride) == 0)
+        {
+            const float targetShapeMix = hasSampleAccurateShapeMix
+                                             ? juce::jlimit(
+                                                   0.0f,
+                                                   1.0f,
+                                                   params.shapeMixValProvider.get(sample))
+                                             : effectiveShapeMix;
+            shapeMixSmoother.setTargetValue(targetShapeMix);
+            currentShapeMix = shapeMixSmoother.getNextValue();
+        }
+
         // 1. Get the final, LFO-modulated value for each parameter for the CURRENT sample.
         float currentDrive = driveProvider.get(sample);
         const float currentBias = biasProvider.get(sample);
@@ -1200,7 +1215,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // In HQ mode the block contains 4x as many samples, while these
         // smoothers were prepared at the base sample rate. Advance them once
         // per base-rate sample so their time constants do not become 4x faster.
-        const int smoothingStride = params.isHQ ? (1 << oversampleFactor) : 1;
         if ((sample % smoothingStride) == 0)
         {
             currentState.drive = driveSmoother.getNextValue();
@@ -1233,6 +1247,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         for (int channel = 0; channel < numChannels; ++channel)
         {
             float currentSample = blockToProcess.getSample(channel, sample);
+            const float drySample = currentSample;
 
             currentSample *= currentState.drive;
             currentSample += currentState.bias;
@@ -1263,6 +1278,13 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
             currentSample -= currentState.bias;
 
+            // Shape Mix is a base-rate control even though the distortion is
+            // evaluated at 4x in HQ mode. Reuse one weight for the complete
+            // oversampled frame so its 50 ms ramp has the same wall-clock
+            // duration in both quality modes.
+            currentSample *= currentShapeMix;
+            currentSample += drySample * (1.0f - currentShapeMix);
+
             blockToProcess.setSample(channel, sample, currentSample);
         }
 
@@ -1280,21 +1302,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
                 mode0Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[0]);
                 mode1Function = DistortionLogic::getWaveshaperForMode(waveshaperModeSlots[1]);
             }
-        }
-    }
-
-    if (! hasSampleAccurateShapeMix)
-    {
-        shapeMixer.mixWetSamples(blockToProcess);
-    }
-    else
-    {
-        for (int sample = 0; sample < numSamples; ++sample)
-        {
-            shapeMixer.setWetMixProportion(juce::jlimit(
-                0.0f, 1.0f, params.shapeMixValProvider.get(sample)));
-            shapeMixer.mixWetSamples(
-                blockToProcess.getSubBlock(static_cast<size_t>(sample), 1));
         }
     }
 

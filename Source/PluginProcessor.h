@@ -102,17 +102,18 @@ struct BandProcessor
     DCFilter dcFilter;
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
-    juce::dsp::DryWetMixer<float> shapeMixer;
     juce::dsp::DryWetMixer<float> compressorMixer;
     juce::dsp::DryWetMixer<float> widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
 
-    BandProcessor() : dryWetMixer(2048), shapeMixer(2048), compressorMixer(2048), widthMixer(2048) {}
+    BandProcessor() : dryWetMixer(2048), compressorMixer(2048), widthMixer(2048) {}
 
     // And its own set of smoothed parameter values.
     juce::SmoothedValue<float> driveSmoother;
     juce::SmoothedValue<float> biasSmoother;
     juce::SmoothedValue<float> recSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        shapeMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         waveshaperModeMixSmoother;
     std::array<int, 2> waveshaperModeSlots { 3, 3 };
@@ -122,7 +123,7 @@ struct BandProcessor
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> dcFilterMixSmoother;
     bool isFirstBlock = true;
     bool dryWetMixerPrimed = false;
-    bool shapeMixerPrimed = false;
+    bool shapeMixSmootherPrimed = false;
     bool compressorMixerPrimed = false;
     bool widthMixerPrimed = false;
     bool bandEnableMixPrimed = false;

@@ -626,10 +626,11 @@ void checkContinuousHostBypassSwitch(bool useHq,
     }
     else if (maximumError >= 1.0e-6f)
     {
-        // HQ nonlinear/recursive band state is intentionally not advanced by
-        // the host-bypass callback today. Record that existing behaviour, but
-        // do not make it part of this fixed-PDC commit's acceptance gate.
-        WARN("HQ host-bypass continuity diagnostic: maximum error = "
+        // The audible host-bypass path is deliberately delayed raw audio, so
+        // it need not match the naturally delayed HQ wet signal while bypass
+        // is active. Hidden wet-state continuity and the first normal callback
+        // are locked independently by HostBypassWetStateRegressionTests.
+        WARN("HQ audible wet/raw host-bypass difference: maximum error = "
              << maximumError);
     }
 }

@@ -671,7 +671,7 @@ TEST_CASE("Simultaneous HQ and topology requests serialize to the final target",
     CHECK(finalError < endpointTolerance);
 }
 
-TEST_CASE("A topology request remains transparent during host bypass",
+TEST_CASE("A topology request completes behind the transparent host-bypass tap",
           "[processor][multiband][topology][transition][bypass]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -684,25 +684,25 @@ TEST_CASE("A topology request remains transparent during host bypass",
         {
             FireAudioProcessor subject;
             FireAudioProcessor bypassReference;
-            FireAudioProcessor finalReference;
+            FireAudioProcessor continuousReference;
             for (auto* processor : { &subject,
                                      &bypassReference,
-                                     &finalReference })
+                                     &continuousReference })
                 setLayout(*processor, 2);
             configureProcessor(subject, 2, useHq);
             configureProcessor(bypassReference, 2, useHq);
-            configureProcessor(finalReference,
-                               targetBandCount,
-                               useHq);
+            configureProcessor(continuousReference, 2, useHq);
 
             const int fixedLatency = subject.getLatencySamples();
             int streamPosition = 0;
             float warmupError = 0.0f;
             float bypassError = 0.0f;
             float bypassMagnitude = 0.0f;
+            float firstResumeError = 0.0f;
             float finalError = 0.0f;
             float finalEndpointSeparation = 0.0f;
             bool allFinite = true;
+            int resumeSample = -1;
 
             const auto processThree = [&] (int numSamples,
                                            bool bypassed,
@@ -711,7 +711,8 @@ TEST_CASE("A topology request remains transparent during host bypass",
             {
                 auto subjectOutput = juce::AudioBuffer<float>(2, numSamples);
                 auto bypassOutput = juce::AudioBuffer<float>(2, numSamples);
-                auto finalOutput = juce::AudioBuffer<float>(2, numSamples);
+                auto continuousOutput = juce::AudioBuffer<float>(2,
+                                                                  numSamples);
                 for (int channel = 0; channel < 2; ++channel)
                     for (int sample = 0; sample < numSamples; ++sample)
                     {
@@ -719,30 +720,31 @@ TEST_CASE("A topology request remains transparent during host bypass",
                             channel, streamPosition + sample);
                         subjectOutput.setSample(channel, sample, value);
                         bypassOutput.setSample(channel, sample, value);
-                        finalOutput.setSample(channel, sample, value);
+                        continuousOutput.setSample(channel, sample, value);
                     }
 
                 juce::MidiBuffer subjectMidi;
                 juce::MidiBuffer bypassMidi;
-                juce::MidiBuffer finalMidi;
+                juce::MidiBuffer continuousMidi;
                 if (bypassed)
                 {
                     subject.processBlockBypassed(subjectOutput, subjectMidi);
                     bypassReference.processBlockBypassed(bypassOutput,
                                                          bypassMidi);
-                    finalReference.processBlockBypassed(finalOutput,
-                                                        finalMidi);
+                    continuousReference.processBlock(continuousOutput,
+                                                     continuousMidi);
                 }
                 else
                 {
                     subject.processBlock(subjectOutput, subjectMidi);
                     bypassReference.processBlock(bypassOutput, bypassMidi);
-                    finalReference.processBlock(finalOutput, finalMidi);
+                    continuousReference.processBlock(continuousOutput,
+                                                     continuousMidi);
                 }
 
                 allFinite = allFinite && isFinite(subjectOutput)
                                       && isFinite(bypassOutput)
-                                      && isFinite(finalOutput);
+                                      && isFinite(continuousOutput);
                 if (streamPosition < warmupSamples)
                     warmupError = std::max(
                         warmupError,
@@ -761,13 +763,14 @@ TEST_CASE("A topology request remains transparent during host bypass",
                 }
                 if (compareFinal)
                 {
-                    finalError = std::max(
-                        finalError,
-                        maximumBufferDifference(subjectOutput,
-                                                finalOutput));
+                    const float callbackError = maximumBufferDifference(
+                        subjectOutput, continuousOutput);
+                    finalError = std::max(finalError, callbackError);
+                    if (streamPosition == resumeSample)
+                        firstResumeError = callbackError;
                     finalEndpointSeparation = std::max(
                         finalEndpointSeparation,
-                        maximumBufferDifference(finalOutput,
+                        maximumBufferDifference(continuousOutput,
                                                 bypassOutput));
                 }
                 streamPosition += numSamples;
@@ -783,26 +786,21 @@ TEST_CASE("A topology request remains transparent during host bypass",
             setPlainParameter(subject,
                               NUM_BANDS_ID,
                               static_cast<float>(targetBandCount));
+            setPlainParameter(continuousReference,
+                              NUM_BANDS_ID,
+                              static_cast<float>(targetBandCount));
             for (int block = 0; block < bypassBlocks; ++block)
                 processThree(preparedBlockSize, true, true, false);
 
-            const int resumeSample = streamPosition;
-            const int finalWindowStart = resumeSample
-                                       + topologyTotalTransitionSamples
-                                       + transitionGuardSamples
-                                       + (useHq ? 0 : fixedLatency);
-            const int endSample = finalWindowStart + finalComparisonSamples;
+            resumeSample = streamPosition;
+            const int endSample = resumeSample + finalComparisonSamples;
             while (streamPosition < endSample)
             {
-                int blockSize = std::min(preparedBlockSize,
-                                         endSample - streamPosition);
-                if (streamPosition < finalWindowStart)
-                    blockSize = std::min(blockSize,
-                                         finalWindowStart - streamPosition);
-                processThree(blockSize,
+                processThree(std::min(preparedBlockSize,
+                                      endSample - streamPosition),
                              false,
                              false,
-                             streamPosition >= finalWindowStart);
+                             true);
             }
 
             CAPTURE(useHq,
@@ -810,6 +808,7 @@ TEST_CASE("A topology request remains transparent during host bypass",
                     warmupError,
                     bypassError,
                     bypassMagnitude,
+                    firstResumeError,
                     finalError,
                     finalEndpointSeparation);
             CHECK(allFinite);
@@ -818,6 +817,7 @@ TEST_CASE("A topology request remains transparent during host bypass",
             CHECK(bypassError < 1.0e-6f);
             REQUIRE(bypassMagnitude > 0.01f);
             REQUIRE(finalEndpointSeparation > 0.02f);
+            CHECK(firstResumeError < endpointTolerance);
             CHECK(finalError < endpointTolerance);
         }
     }

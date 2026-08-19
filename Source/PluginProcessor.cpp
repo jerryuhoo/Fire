@@ -2005,6 +2005,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     mWetBuffer.setSize(outputChannels, maximumBlockSize);
     mWetBuffer.clear();
+    hostBypassWetBuffer.setSize(outputChannels, maximumBlockSize);
+    hostBypassWetBuffer.clear();
     lfoOutputBuffer.setSize(4, maximumBlockSize);
     lfoOutputBuffer.clear();
     lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
@@ -2594,6 +2596,8 @@ void FireAudioProcessor::performReset()
     lfoManager->reset();
     snapHqTransitionToParameter();
     snapTopologyTransitionToActive();
+    hostBypassSessionActive = false;
+    hostBypassSessionHqMode = activeHqMode;
 }
 
 void FireAudioProcessor::releaseResources()
@@ -2642,47 +2646,58 @@ bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
 void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    juce::ignoreUnused(midiMessages);
     isBypassed.store(true, std::memory_order_relaxed);
 
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
 
-    calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
+    calculateAndStoreLevels(buffer,
+                            mInputLeftRMSGlobal,
+                            mInputRightRMSGlobal,
+                            mInputLeftPeakGlobal,
+                            mInputRightPeakGlobal);
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
     {
         calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
         return;
     }
 
-    // Host bypass must remain a full-level latency-matched dry path. Cancel an
-    // audible topology ramp back to unity; a zero-gain warm-up (which follows
-    // an already committed reset) is frozen until normal DSP resumes.
-    if (topologyTransitionPhase == TopologyTransitionPhase::fadingOut
-        || topologyTransitionPhase == TopologyTransitionPhase::fadingIn)
+    if (! hostBypassSessionActive)
     {
-        topologyTransitionPhase = TopologyTransitionPhase::steady;
-        topologyTransitionGain = 1.0f;
-        topologyTransitionGainStep = 0.0f;
-        topologyTransitionRampRemaining = 0;
+        // Keep the audible raw tap fixed for the complete host-bypass session.
+        // The hidden wet graph may finish an HQ transition meanwhile, but a
+        // delayed dry signal must never expose that fractional-tap switch.
+        hostBypassSessionHqMode = activeHqMode;
+        hostBypassSessionActive = true;
     }
 
-    noteHqRequestWhileBypassed(loadCachedParameter(hqParameter) > 0.5f);
-    const bool useHQ = activeHqMode;
-    resetDownsamplingState();
-    advanceNonHqOutputDelay(buffer);
-    processLatencyMatchedBypass(buffer, useHQ);
+    // The host hears only latency-matched raw audio. In parallel, render a
+    // discarded copy through the complete wet graph so recursive filters,
+    // compressors, Lo-Fi, LFOs and live HQ/topology state machines remain on
+    // the same timeline they would have followed without host bypass.
+    hostBypassWetBuffer.makeCopyOf(buffer, true);
+    processLatencyMatchedBypass(buffer, hostBypassSessionHqMode);
+    processWetBlock(hostBypassWetBuffer, midiMessages, true);
     calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
 }
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    juce::ignoreUnused(midiMessages);
     isBypassed.store(false, std::memory_order_relaxed);
+    hostBypassSessionActive = false;
 
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
 
+    processWetBlock(buffer, midiMessages, false);
+}
+
+void FireAudioProcessor::processWetBlock(
+    juce::AudioBuffer<float>& buffer,
+    juce::MidiBuffer& midiMessages,
+    bool hostBypassShadow)
+{
+    juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
     const int totalNumInputChannels = getTotalNumInputChannels();
     const int numBufferChannels = buffer.getNumChannels();
@@ -2699,7 +2714,12 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
          ++channel)
         buffer.clear(channel, 0, numSamples);
 
-    calculateAndStoreLevels(buffer, mInputLeftRMSGlobal, mInputRightRMSGlobal, mInputLeftPeakGlobal, mInputRightPeakGlobal);
+    if (! hostBypassShadow)
+        calculateAndStoreLevels(buffer,
+                                mInputLeftRMSGlobal,
+                                mInputRightRMSGlobal,
+                                mInputLeftPeakGlobal,
+                                mInputRightPeakGlobal);
 
     if (numBufferChannels == 0 || numSamples == 0)
     {
@@ -2754,7 +2774,8 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         processTopologyTransitionBlock(buffer,
                                        lfoOutputBuffer,
                                        sampleRate,
-                                       requestedHq);
+                                       requestedHq,
+                                       ! hostBypassShadow);
     }
     else
     {
@@ -2781,8 +2802,16 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
                                  lfoOutputBuffer,
                                  sampleRate,
                                  requestedHq,
-                                 callbackContext);
+                                 callbackContext,
+                                 ! hostBypassShadow);
     }
+
+    // Shadow rendering exists only to advance audible DSP state. Preserve the
+    // established host-bypass UI/analysis contract: the wrapper publishes the
+    // actual delayed-raw output meters, while wet history/FFT/graph FIFOs stay
+    // untouched until normal processing resumes.
+    if (hostBypassShadow)
+        return;
 
     for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
     {
@@ -5183,31 +5212,6 @@ void FireAudioProcessor::beginHqTransitionCallback(bool requestedHq) noexcept
     }
 }
 
-void FireAudioProcessor::noteHqRequestWhileBypassed(
-    bool requestedHq) noexcept
-{
-    if (! hqTransitionInitialised)
-    {
-        activeHqMode = requestedHq;
-        hqTransitionInitialised = true;
-    }
-
-    pendingHqMode = requestedHq;
-
-    // Host bypass owns the audible crossfade. Do not fade delayed raw to
-    // silence merely because its hidden quality setting changed. If bypass
-    // interrupts an audible ramp, restart the eventual normal-path transition
-    // from unity; a muted warm-up remains frozen until real DSP resumes.
-    if (hqTransitionPhase == HqTransitionPhase::fadingOut
-        || hqTransitionPhase == HqTransitionPhase::fadingIn)
-    {
-        hqTransitionPhase = HqTransitionPhase::steady;
-        hqTransitionGain = 1.0f;
-        hqTransitionGainStep = 0.0f;
-        hqTransitionRampRemaining = 0;
-    }
-}
-
 void FireAudioProcessor::applyHqTransitionRamp(
     juce::AudioBuffer<float>& buffer) noexcept
 {
@@ -5236,14 +5240,16 @@ void FireAudioProcessor::processActiveHqRange(
     bool useHQ,
     bool updateReductionMeter,
     const HqCallbackContext& callbackContext,
-    bool applyFinalNonHqDelay)
+    bool applyFinalNonHqDelay,
+    bool primeBypassDelay)
 {
     if (useHQ)
         advanceNonHqOutputDelay(buffer);
 
     // Keep the host-bypass delay line on the same raw timeline as the audible
     // path before this range is overwritten in place.
-    primeLatencyMatchedBypass(buffer, useHQ);
+    if (primeBypassDelay)
+        primeLatencyMatchedBypass(buffer, useHQ);
 
     processMultiBandRange(buffer,
                           delayMatchedDryBufferForRange,
@@ -5268,7 +5274,8 @@ void FireAudioProcessor::processHqTransitionBlock(
     const juce::AudioBuffer<float>& lfoOutputs,
     double sampleRate,
     bool requestedHq,
-    const HqCallbackContext& callbackContext)
+    const HqCallbackContext& callbackContext,
+    bool primeBypassDelay)
 {
     beginHqTransitionCallback(requestedHq);
 
@@ -5354,7 +5361,9 @@ void FireAudioProcessor::processHqTransitionBlock(
                              sampleRate,
                              activeHqMode,
                              ! reductionMeterUpdated,
-                             callbackContext);
+                             callbackContext,
+                             true,
+                             primeBypassDelay);
 
         reductionMeterUpdated = true;
 
@@ -5415,7 +5424,8 @@ void FireAudioProcessor::processTopologyTransitionBlock(
     juce::AudioBuffer<float>& buffer,
     const juce::AudioBuffer<float>& lfoOutputs,
     double sampleRate,
-    bool requestedHq)
+    bool requestedHq,
+    bool primeBypassDelay)
 {
     beginTopologyTransitionCallback();
 
@@ -5558,7 +5568,8 @@ void FireAudioProcessor::processTopologyTransitionBlock(
                              activeHqMode,
                              ! reductionMeterUpdated,
                              rangeContext,
-                             false);
+                             false,
+                             primeBypassDelay);
         reductionMeterUpdated = true;
 
         if (phaseForRange == TopologyTransitionPhase::fadingOut

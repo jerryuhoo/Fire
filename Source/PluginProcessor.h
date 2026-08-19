@@ -551,6 +551,9 @@ private:
     enum class HqTransitionPhase;
     enum class TopologyTransitionPhase;
 
+    void processWetBlock(juce::AudioBuffer<float>& buffer,
+                         juce::MidiBuffer& midiMessages,
+                         bool hostBypassShadow);
     void updateParameters(const juce::AudioBuffer<float>& lfoOutputs,
                           std::uint32_t topologySequenceAtCallbackStart,
                           bool routingSnapshotWasRefreshed,
@@ -570,12 +573,12 @@ private:
     void advanceNonHqOutputDelay(const juce::AudioBuffer<float>& inputBuffer);
     void applyNonHqOutputDelay(juce::AudioBuffer<float>& buffer);
     void beginHqTransitionCallback(bool requestedHq) noexcept;
-    void noteHqRequestWhileBypassed(bool requestedHq) noexcept;
     void processHqTransitionBlock(juce::AudioBuffer<float>& buffer,
                                   const juce::AudioBuffer<float>& lfoOutputs,
                                   double sampleRate,
                                   bool requestedHq,
-                                  const HqCallbackContext& callbackContext);
+                                  const HqCallbackContext& callbackContext,
+                                  bool primeBypassDelay);
     void processActiveHqRange(
         juce::AudioBuffer<float>& buffer,
         juce::AudioBuffer<float>& delayMatchedDryBufferForRange,
@@ -585,7 +588,8 @@ private:
         bool useHQ,
         bool updateReductionMeter,
         const HqCallbackContext& callbackContext,
-        bool applyFinalNonHqDelay = true);
+        bool applyFinalNonHqDelay = true,
+        bool primeBypassDelay = true);
     void startHqTransitionRamp(float target,
                               HqTransitionPhase phase) noexcept;
     void applyHqTransitionRamp(juce::AudioBuffer<float>& buffer) noexcept;
@@ -607,7 +611,8 @@ private:
         juce::AudioBuffer<float>& buffer,
         const juce::AudioBuffer<float>& lfoOutputs,
         double sampleRate,
-        bool requestedHq);
+        bool requestedHq,
+        bool primeBypassDelay);
 
     // preset id
     int numBands = 1;
@@ -632,6 +637,7 @@ private:
     juce::AudioBuffer<float> delayMatchedDryBuffer;
     // wet audio buffer
     juce::AudioBuffer<float> mWetBuffer;
+    juce::AudioBuffer<float> hostBypassWetBuffer;
     juce::AudioBuffer<float> lfoOutputBuffer;
     juce::AudioBuffer<float> lofiDryBuffer;
 
@@ -795,6 +801,8 @@ private:
 
     // bypass state
     std::atomic<bool> isBypassed { false };
+    bool hostBypassSessionActive = false;
+    bool hostBypassSessionHqMode = false;
 
     // VU meters data
     std::atomic<float> mInputLeftRMSGlobal { 0.0f };

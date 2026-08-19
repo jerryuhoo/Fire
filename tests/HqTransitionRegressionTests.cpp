@@ -1350,7 +1350,10 @@ void checkHostBypassToggle(bool startHq, int numChannels)
                                + 2 * transitionGuardSamples
                                + finalStateSamples;
     const std::vector<HqEvent> events {
-        { eventSample, ! startHq }
+        { eventSample, ! startHq },
+        // A no-op event gives the always-normal canonical the same callback
+        // boundary at host-bypass exit without changing the requested mode.
+        { bypassEndSample, ! startHq }
     };
     const std::vector<int> pattern { 73, 257, 11, 149, 37, 251 };
     const auto subject = render(startHq,
@@ -1369,33 +1372,31 @@ void checkHostBypassToggle(bool startHq, int numChannels)
                                         preparedBlockSize,
                                         eventSample,
                                         bypassEndSample);
-    const auto alwaysBase = render(false,
-                                   {},
-                                   pattern,
-                                   totalSamples,
-                                   numChannels);
-    const auto alwaysHq = render(true,
-                                 {},
-                                 pattern,
-                                 totalSamples,
-                                 numChannels);
-    const auto& fromReference = startHq ? alwaysHq : alwaysBase;
-    const auto& toReference = startHq ? alwaysBase : alwaysHq;
+    const auto continuousReference = render(startHq,
+                                            events,
+                                            pattern,
+                                            totalSamples,
+                                            numChannels);
+    const auto oldModeReference = render(startHq,
+                                         {},
+                                         pattern,
+                                         totalSamples,
+                                         numChannels);
     REQUIRE(subject.finite);
     REQUIRE(subject.latencyInvariant);
     REQUIRE(bypassReference.finite);
     REQUIRE(bypassReference.latencyInvariant);
-    REQUIRE(alwaysBase.finite);
-    REQUIRE(alwaysHq.finite);
+    REQUIRE(continuousReference.finite);
+    REQUIRE(continuousReference.latencyInvariant);
+    REQUIRE(oldModeReference.finite);
+    REQUIRE(oldModeReference.latencyInvariant);
     REQUIRE(subject.reportedLatency == bypassReference.reportedLatency);
-    REQUIRE(subject.reportedLatency == alwaysBase.reportedLatency);
-    REQUIRE(subject.reportedLatency == alwaysHq.reportedLatency);
+    REQUIRE(subject.reportedLatency == continuousReference.reportedLatency);
+    REQUIRE(subject.reportedLatency == oldModeReference.reportedLatency);
 
-    const int mutedWarmSamples = std::max(subject.reportedLatency,
-                                          oneMillisecondSamples);
     const int preEventProbe = eventSample - subject.reportedLatency - 1;
     const float preEventEndpointError = maximumDifference(subject,
-                                                          fromReference,
+                                                          continuousReference,
                                                           preEventProbe,
                                                           1);
     const float bypassTransparencyError = maximumDifference(
@@ -1406,39 +1407,22 @@ void checkHostBypassToggle(bool startHq, int numChannels)
     const float bypassPeak = maximumMagnitude(subject,
                                               eventSample,
                                               bypassEndSample - eventSample);
-    const int expectedSilent = bypassEndSample + fadeSamples;
-    const int firstSilent = findFirstSilentWindow(
+    constexpr int firstResumeWindowSamples = 64;
+    const float firstResumeError = maximumDifference(
         subject,
-        expectedSilent - 1,
-        expectedSilent + preparedBlockSize,
-        16);
-    REQUIRE(firstSilent >= 0);
-    const float mutedPeak = maximumMagnitude(subject,
-                                             firstSilent,
-                                             mutedWarmSamples);
-    constexpr int settledWindow = 64;
-    const int firstSettledCandidate = firstSilent
-                                    + mutedWarmSamples
-                                    + fadeSamples
-                                    - 32;
-    const int lastSettledCandidate = firstSettledCandidate
-                                   + 2 * preparedBlockSize
-                                   + transitionGuardSamples;
-    const int firstSettled = findFirstSettledWindow(subject,
-                                                    toReference,
-                                                    firstSettledCandidate,
-                                                    lastSettledCandidate,
-                                                    settledWindow);
-    REQUIRE(firstSettled >= 0);
-    const int finalStateStart = lastSettledCandidate + settledWindow;
-    const float endpointSeparation = maximumDifference(fromReference,
-                                                       toReference,
+        continuousReference,
+        bypassEndSample,
+        firstResumeWindowSamples);
+    const float recoveryError = maximumDifference(
+        subject,
+        continuousReference,
+        bypassEndSample,
+        totalSamples - bypassEndSample);
+    const int finalStateStart = totalSamples - finalStateSamples;
+    const float endpointSeparation = maximumDifference(oldModeReference,
+                                                       continuousReference,
                                                        finalStateStart,
                                                        finalStateSamples);
-    const float finalError = maximumDifference(subject,
-                                                toReference,
-                                                finalStateStart,
-                                                finalStateSamples);
     CAPTURE(startHq,
             numChannels,
             subject.reportedLatency,
@@ -1446,17 +1430,16 @@ void checkHostBypassToggle(bool startHq, int numChannels)
             preEventEndpointError,
             bypassTransparencyError,
             bypassPeak,
-            firstSilent,
-            mutedPeak,
-            firstSettled,
+            firstResumeError,
+            recoveryError,
             endpointSeparation,
-            finalError);
+            finalStateStart);
     CHECK(preEventEndpointError < endpointTolerance);
     CHECK(bypassTransparencyError < 1.0e-6f);
     REQUIRE(bypassPeak > 0.20f);
-    CHECK(mutedPeak < silentTolerance);
+    CHECK(firstResumeError < endpointTolerance);
+    CHECK(recoveryError < endpointTolerance);
     REQUIRE(endpointSeparation > 0.05f);
-    CHECK(finalError < endpointTolerance);
 }
 
 void checkToggleEntirelyInsideHostBypass(bool startHq, int numChannels)
@@ -1471,7 +1454,10 @@ void checkToggleEntirelyInsideHostBypass(bool startHq, int numChannels)
                                + 2 * transitionGuardSamples
                                + finalStateSamples;
     const std::vector<HqEvent> events {
-        { eventSample, ! startHq }
+        { eventSample, ! startHq },
+        // Keep the continuous reference's callback partition identical at the
+        // point where the subject returns from host bypass.
+        { returnToNormalSample, ! startHq }
     };
     const std::vector<int> pattern { 257, 29, 181, 7, 113, 251 };
     const auto subject = render(startHq,
@@ -1492,18 +1478,26 @@ void checkToggleEntirelyInsideHostBypass(bool startHq, int numChannels)
                                             0,
                                             returnToNormalSample,
                                             RenderPath::hostBypass);
-    const auto target = render(! startHq,
-                               {},
-                               pattern,
-                               totalSamples,
-                               numChannels);
+    const auto continuousReference = render(startHq,
+                                            events,
+                                            pattern,
+                                            totalSamples,
+                                            numChannels);
+    const auto oldModeReference = render(startHq,
+                                         {},
+                                         pattern,
+                                         totalSamples,
+                                         numChannels);
     REQUIRE(subject.finite);
     REQUIRE(subject.latencyInvariant);
     REQUIRE(bypassFromReference.finite);
     REQUIRE(bypassFromReference.latencyInvariant);
-    REQUIRE(target.finite);
-    REQUIRE(target.latencyInvariant);
-    REQUIRE(subject.reportedLatency == target.reportedLatency);
+    REQUIRE(continuousReference.finite);
+    REQUIRE(continuousReference.latencyInvariant);
+    REQUIRE(oldModeReference.finite);
+    REQUIRE(oldModeReference.latencyInvariant);
+    REQUIRE(subject.reportedLatency == continuousReference.reportedLatency);
+    REQUIRE(subject.reportedLatency == oldModeReference.reportedLatency);
 
     const float bypassTransparencyError = maximumDifference(
         subject,
@@ -1514,52 +1508,37 @@ void checkToggleEntirelyInsideHostBypass(bool startHq, int numChannels)
                                               eventSample,
                                               returnToNormalSample
                                                   - eventSample);
-
-    const int mutedWarmSamples = std::max(subject.reportedLatency,
-                                          oneMillisecondSamples);
-    const int expectedSilent = returnToNormalSample + fadeSamples;
-    const int firstSilent = findFirstSilentWindow(
+    constexpr int firstResumeWindowSamples = 64;
+    const float firstResumeError = maximumDifference(
         subject,
-        expectedSilent - 1,
-        expectedSilent + preparedBlockSize,
-        16);
-    REQUIRE(firstSilent >= 0);
-    const float mutedPeak = maximumMagnitude(subject,
-                                             firstSilent,
-                                             mutedWarmSamples);
-    constexpr int settledWindow = 64;
-    const int firstSettledCandidate = firstSilent
-                                    + mutedWarmSamples
-                                    + fadeSamples
-                                    - 32;
-    const int lastSettledCandidate = firstSettledCandidate
-                                   + 2 * preparedBlockSize
-                                   + transitionGuardSamples;
-    const int firstSettled = findFirstSettledWindow(subject,
-                                                    target,
-                                                    firstSettledCandidate,
-                                                    lastSettledCandidate,
-                                                    settledWindow);
-    REQUIRE(firstSettled >= 0);
-    const int finalStateStart = lastSettledCandidate + settledWindow;
-    const float finalError = maximumDifference(subject,
-                                                target,
-                                                finalStateStart,
-                                                finalStateSamples);
+        continuousReference,
+        returnToNormalSample,
+        firstResumeWindowSamples);
+    const float recoveryError = maximumDifference(
+        subject,
+        continuousReference,
+        returnToNormalSample,
+        totalSamples - returnToNormalSample);
+    const int finalStateStart = totalSamples - finalStateSamples;
+    const float endpointSeparation = maximumDifference(oldModeReference,
+                                                       continuousReference,
+                                                       finalStateStart,
+                                                       finalStateSamples);
     CAPTURE(startHq,
             numChannels,
             subject.reportedLatency,
             subject.latencyInvariant,
             bypassTransparencyError,
             bypassPeak,
-            firstSilent,
-            mutedPeak,
-            firstSettled,
-            finalError);
+            firstResumeError,
+            recoveryError,
+            endpointSeparation,
+            finalStateStart);
     CHECK(bypassTransparencyError < 1.0e-6f);
     REQUIRE(bypassPeak > 0.20f);
-    CHECK(mutedPeak < silentTolerance);
-    CHECK(finalError < endpointTolerance);
+    CHECK(firstResumeError < endpointTolerance);
+    CHECK(recoveryError < endpointTolerance);
+    REQUIRE(endpointSeparation > 0.05f);
 }
 
 void checkHostBypassImmediatelyAfterQualitySwitch(bool startHq,
@@ -1574,8 +1553,9 @@ void checkHostBypassImmediatelyAfterQualitySwitch(bool startHq,
     };
 
     // A 240-sample callback makes the fade-out finish exactly at its final
-    // sample. The very next callback is host-bypassed, so no normal-path
-    // warm-up range can hide a cleared raw-delay history.
+    // sample. The very next callback is host-bypassed, so the newly latched
+    // raw tap must already contain real history even while wet warm-up keeps
+    // running invisibly behind it.
     const std::vector<int> pattern { fadeSamples };
     const auto subject = render(startHq,
                                 events,
@@ -1804,7 +1784,7 @@ TEST_CASE("A complex modulated four-band graph survives an oversized HQ transiti
     checkComplexOversizedTransition(true);
 }
 
-TEST_CASE("Host bypass defers HQ changes without muting its transparent raw path",
+TEST_CASE("Host bypass advances hidden HQ changes behind its latched raw tap",
           "[processor][hq][transition][host-bypass]")
 {
     for (const int numChannels : { 1, 2 })

@@ -350,6 +350,116 @@ void OutputGainTransitionState::reset() noexcept
     initialised = false;
 }
 
+void CompressorRecipeTransitionState::prepare(double sampleRate,
+                                               float initialValue) noexcept
+{
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : 48000.0;
+    routeTransitionMix.reset(safeSampleRate, 0.01);
+    reset(initialValue);
+}
+
+void CompressorRecipeTransitionState::reset(float initialValue) noexcept
+{
+    const float safeInitialValue = std::isfinite(initialValue)
+                                       ? initialValue
+                                       : 0.0f;
+    routeTransitionMix.setCurrentAndTargetValue(1.0f);
+    lastRecipe = {};
+    anchorValue = safeInitialValue;
+    lastAppliedValue = safeInitialValue;
+    initialised = false;
+}
+
+static CompressorRecipeTransitionState::RecipeSignature
+makeCompressorRecipe(const ModulatedValueProvider& provider,
+                     int sourceIndex) noexcept
+{
+    CompressorRecipeTransitionState::RecipeSignature recipe;
+    recipe.routed = provider.lfoSignal != nullptr;
+    recipe.sourceIndex = recipe.routed ? sourceIndex : -1;
+    recipe.modulationDepth = recipe.routed
+                                 && std::isfinite(provider.modulationDepth)
+                                 ? juce::jlimit(-1.0f,
+                                                1.0f,
+                                                provider.modulationDepth)
+                                 : 0.0f;
+    recipe.isBipolar = recipe.routed ? provider.isBipolar : true;
+    return recipe;
+}
+
+static bool sameCompressorRecipe(
+    const CompressorRecipeTransitionState::RecipeSignature& lhs,
+    const CompressorRecipeTransitionState::RecipeSignature& rhs) noexcept
+{
+    if (lhs.routed != rhs.routed)
+        return false;
+    if (! lhs.routed)
+        return true;
+
+    return lhs.sourceIndex == rhs.sourceIndex
+           && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
+           && lhs.isBipolar == rhs.isBipolar;
+}
+
+static void serviceCompressorRecipeTransition(
+    CompressorRecipeTransitionState& transition,
+    const CompressorRecipeTransitionState::RecipeSignature& recipe,
+    float currentTarget) noexcept
+{
+    if (! transition.initialised)
+    {
+        transition.initialised = true;
+        transition.lastRecipe = recipe;
+        transition.routeTransitionMix.setCurrentAndTargetValue(1.0f);
+        transition.anchorValue = currentTarget;
+        transition.lastAppliedValue = currentTarget;
+        return;
+    }
+
+    if (! sameCompressorRecipe(recipe, transition.lastRecipe))
+    {
+        // Anchor to the value that the detector actually consumed on the
+        // preceding sample.  Rapid edits therefore retarget continuously and
+        // never rewrite a partly audible trajectory.
+        transition.anchorValue = transition.lastAppliedValue;
+        transition.routeTransitionMix.setCurrentAndTargetValue(0.0f);
+        transition.routeTransitionMix.setTargetValue(1.0f);
+        transition.lastRecipe = recipe;
+    }
+}
+
+static float applyCompressorRecipeTransition(
+    const CompressorRecipeTransitionState& transition,
+    float targetValue,
+    bool useLogarithmicDomain) noexcept
+{
+    const float mix = transition.routeTransitionMix.getCurrentValue();
+    if (mix <= 0.0f)
+        return transition.anchorValue;
+    if (mix >= 1.0f)
+        return targetValue;
+
+    if (! useLogarithmicDomain)
+        return transition.anchorValue
+               + mix * (targetValue - transition.anchorValue);
+
+    // Attack and release control detector poles.  Interpolating milliseconds
+    // geometrically avoids recreating a large coefficient step at the short
+    // end of an otherwise linear time ramp.
+    constexpr float minimumTimeMs = 0.01f;
+    const float safeAnchor = std::isfinite(transition.anchorValue)
+                                 ? juce::jmax(minimumTimeMs,
+                                              transition.anchorValue)
+                                 : minimumTimeMs;
+    const float safeTarget = std::isfinite(targetValue)
+                                 ? juce::jmax(minimumTimeMs, targetValue)
+                                 : minimumTimeMs;
+    return std::exp(std::log(safeAnchor)
+                    + mix * (std::log(safeTarget) - std::log(safeAnchor)));
+}
+
 static OutputGainTransitionState::RecipeSignature makeOutputGainRecipe(
     const ModulatedValueProvider& provider,
     int sourceIndex) noexcept
@@ -576,6 +686,10 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
     compressorAttackBaseSmoother.reset(spec.sampleRate, 0.01);
     compressorAttackBaseSmoother.setCurrentAndTargetValue(10.0f);
+    compressorThresholdRecipeTransition.prepare(spec.sampleRate, 0.0f);
+    compressorRatioRecipeTransition.prepare(spec.sampleRate, 1.0f);
+    compressorAttackRecipeTransition.prepare(spec.sampleRate, 10.0f);
+    compressorReleaseRecipeTransition.prepare(spec.sampleRate, 100.0f);
     shapeMixSmoother.reset(spec.sampleRate, 0.05);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.reset(spec.sampleRate, 0.01);
@@ -627,6 +741,10 @@ void BandProcessor::reset()
     compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
     compressorRatioBaseSmoother.setCurrentAndTargetValue(1.0f);
     compressorAttackBaseSmoother.setCurrentAndTargetValue(10.0f);
+    compressorThresholdRecipeTransition.reset(0.0f);
+    compressorRatioRecipeTransition.reset(1.0f);
+    compressorAttackRecipeTransition.reset(10.0f);
+    compressorReleaseRecipeTransition.reset(100.0f);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
@@ -1012,29 +1130,84 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         compressorAttackBaseSmoother.setTargetValue(attackBaseTarget);
     }
 
+    auto thresholdProvider = paramsForProcessing.compThresholdValProvider;
+    auto ratioProvider = paramsForProcessing.compRatioValProvider;
+    auto attackProvider = paramsForProcessing.compAttackValProvider;
+    auto releaseProvider = paramsForProcessing.compReleaseValProvider;
+
+    const float initialThresholdBase =
+        compressorThresholdBaseSmoother.getCurrentValue();
+    const float initialRatioBase =
+        compressorRatioBaseSmoother.getCurrentValue();
+    const float initialAttackBase =
+        compressorAttackBaseSmoother.getCurrentValue();
+    thresholdProvider.baseValue = initialThresholdBase;
+    ratioProvider.baseValue = initialRatioBase;
+    attackProvider.baseValue = initialAttackBase;
+
+    const float initialThresholdTarget = safeThreshold(
+        hasThresholdModulation ? thresholdProvider.get(0)
+                               : initialThresholdBase);
+    const float initialRatioTarget = safeRatio(
+        hasRatioModulation ? ratioProvider.get(0) : initialRatioBase);
+    const float initialAttackTarget = safeAttack(
+        hasAttackModulation ? attackProvider.get(0) : initialAttackBase);
+    const float initialReleaseTarget = safeRelease(
+        hasReleaseModulation ? releaseProvider.get(0)
+                             : params.compRelease);
+
+    serviceCompressorRecipeTransition(
+        compressorThresholdRecipeTransition,
+        makeCompressorRecipe(thresholdProvider,
+                             params.compThresholdLfoSourceIndex),
+        initialThresholdTarget);
+    serviceCompressorRecipeTransition(
+        compressorRatioRecipeTransition,
+        makeCompressorRecipe(ratioProvider, params.compRatioLfoSourceIndex),
+        initialRatioTarget);
+    serviceCompressorRecipeTransition(
+        compressorAttackRecipeTransition,
+        makeCompressorRecipe(attackProvider, params.compAttackLfoSourceIndex),
+        initialAttackTarget);
+    serviceCompressorRecipeTransition(
+        compressorReleaseRecipeTransition,
+        makeCompressorRecipe(releaseProvider,
+                             params.compReleaseLfoSourceIndex),
+        initialReleaseTarget);
+
     const bool compressorBaseIsSmoothing =
         compressorThresholdBaseSmoother.isSmoothing()
         || compressorRatioBaseSmoother.isSmoothing()
         || compressorAttackBaseSmoother.isSmoothing();
+    const bool compressorRecipeIsSmoothing =
+        compressorThresholdRecipeTransition.routeTransitionMix.isSmoothing()
+        || compressorRatioRecipeTransition.routeTransitionMix.isSmoothing()
+        || compressorAttackRecipeTransition.routeTransitionMix.isSmoothing()
+        || compressorReleaseRecipeTransition.routeTransitionMix.isSmoothing();
     const bool needsSampleAccurateCompressorCore =
-        hasModulatedCompressorCore || compressorBaseIsSmoothing;
+        hasModulatedCompressorCore || compressorBaseIsSmoothing
+        || compressorRecipeIsSmoothing;
 
     if (! needsSampleAccurateCompressorCore)
     {
-        this->compressor.setThreshold(
-            compressorThresholdBaseSmoother.getTargetValue());
-        this->compressor.setRatio(
-            compressorRatioBaseSmoother.getTargetValue());
-        this->compressor.setAttack(
-            compressorAttackBaseSmoother.getTargetValue());
-        this->compressor.setRelease(safeRelease(params.compRelease));
+        const float threshold =
+            compressorThresholdBaseSmoother.getTargetValue();
+        const float ratio = compressorRatioBaseSmoother.getTargetValue();
+        const float attack = compressorAttackBaseSmoother.getTargetValue();
+        const float release = safeRelease(params.compRelease);
+        this->compressor.setThreshold(threshold);
+        this->compressor.setRatio(ratio);
+        this->compressor.setAttack(attack);
+        this->compressor.setRelease(release);
         this->compressor.process(postDistortionContext);
+
+        compressorThresholdRecipeTransition.lastAppliedValue = threshold;
+        compressorRatioRecipeTransition.lastAppliedValue = ratio;
+        compressorAttackRecipeTransition.lastAppliedValue = attack;
+        compressorReleaseRecipeTransition.lastAppliedValue = release;
     }
     else
     {
-        auto thresholdProvider = paramsForProcessing.compThresholdValProvider;
-        auto ratioProvider = paramsForProcessing.compRatioValProvider;
-        auto attackProvider = paramsForProcessing.compAttackValProvider;
         auto* const* channelData = buffer.getArrayOfWritePointers();
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
         {
@@ -1048,19 +1221,40 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
             ratioProvider.baseValue = ratioBase;
             attackProvider.baseValue = attackBase;
 
-            this->compressor.setThreshold(safeThreshold(
+            const float thresholdTarget = safeThreshold(
                 hasThresholdModulation ? thresholdProvider.get(sample)
-                                       : thresholdBase));
-            this->compressor.setRatio(safeRatio(
-                hasRatioModulation ? ratioProvider.get(sample) : ratioBase));
-            this->compressor.setAttack(safeAttack(
-                hasAttackModulation
-                    ? attackProvider.get(sample)
-                    : attackBase));
-            this->compressor.setRelease(safeRelease(
-                hasReleaseModulation
-                    ? paramsForProcessing.compReleaseValProvider.get(sample)
-                    : params.compRelease));
+                                       : thresholdBase);
+            const float ratioTarget = safeRatio(
+                hasRatioModulation ? ratioProvider.get(sample) : ratioBase);
+            const float attackTarget = safeAttack(
+                hasAttackModulation ? attackProvider.get(sample)
+                                    : attackBase);
+            const float releaseTarget = safeRelease(
+                hasReleaseModulation ? releaseProvider.get(sample)
+                                     : params.compRelease);
+
+            const float threshold = safeThreshold(
+                applyCompressorRecipeTransition(
+                    compressorThresholdRecipeTransition,
+                    thresholdTarget,
+                    false));
+            const float ratio = safeRatio(applyCompressorRecipeTransition(
+                compressorRatioRecipeTransition,
+                ratioTarget,
+                false));
+            const float attack = safeAttack(applyCompressorRecipeTransition(
+                compressorAttackRecipeTransition,
+                attackTarget,
+                true));
+            const float release = safeRelease(applyCompressorRecipeTransition(
+                compressorReleaseRecipeTransition,
+                releaseTarget,
+                true));
+
+            this->compressor.setThreshold(threshold);
+            this->compressor.setRatio(ratio);
+            this->compressor.setAttack(attack);
+            this->compressor.setRelease(release);
 
             for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
             {
@@ -1068,8 +1262,18 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                     channel, channelData[channel][sample]);
             }
 
+            compressorThresholdRecipeTransition.lastAppliedValue = threshold;
+            compressorRatioRecipeTransition.lastAppliedValue = ratio;
+            compressorAttackRecipeTransition.lastAppliedValue = attack;
+            compressorReleaseRecipeTransition.lastAppliedValue = release;
+
             // The event sample itself uses the previous audible base, then the
-            // 10 ms bridge advances once after every channel has consumed it.
+            // base and route bridges advance once after every channel has
+            // consumed it.
+            compressorThresholdRecipeTransition.routeTransitionMix.getNextValue();
+            compressorRatioRecipeTransition.routeTransitionMix.getNextValue();
+            compressorAttackRecipeTransition.routeTransitionMix.getNextValue();
+            compressorReleaseRecipeTransition.routeTransitionMix.getNextValue();
             compressorThresholdBaseSmoother.getNextValue();
             compressorRatioBaseSmoother.getNextValue();
             compressorAttackBaseSmoother.getNextValue();

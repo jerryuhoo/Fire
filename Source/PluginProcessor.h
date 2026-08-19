@@ -114,6 +114,31 @@ struct OutputGainTransitionState
     void reset() noexcept;
 };
 
+// Keeps discrete compressor routing changes continuous while leaving the
+// routed LFO trajectory itself sample-accurate. Base-value automation is kept
+// separate from route identity so it cannot restart this bridge at callback or
+// internal-chunk boundaries.
+struct CompressorRecipeTransitionState
+{
+    struct RecipeSignature
+    {
+        bool routed = false;
+        int sourceIndex = -1;
+        float modulationDepth = 0.0f;
+        bool isBipolar = true;
+    };
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        routeTransitionMix;
+    RecipeSignature lastRecipe;
+    float anchorValue = 0.0f;
+    float lastAppliedValue = 0.0f;
+    bool initialised = false;
+
+    void prepare(double sampleRate, float initialValue) noexcept;
+    void reset(float initialValue) noexcept;
+};
+
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
@@ -133,6 +158,10 @@ struct BandProcessor
     juce::dsp::DryWetMixer<float> widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     OutputGainTransitionState outputGainTransition;
+    CompressorRecipeTransitionState compressorThresholdRecipeTransition;
+    CompressorRecipeTransitionState compressorRatioRecipeTransition;
+    CompressorRecipeTransitionState compressorAttackRecipeTransition;
+    CompressorRecipeTransitionState compressorReleaseRecipeTransition;
 
     BandProcessor() : dryWetMixer(2048), compressorMixer(2048), widthMixer(2048) {}
 

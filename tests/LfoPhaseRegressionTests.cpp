@@ -12,6 +12,7 @@ namespace
 constexpr float sampleRate = 48000.0f;
 constexpr int preparedBlockSize = 64;
 constexpr int testBlockSize = 37;
+constexpr int phaseTransitionSamples = 480;
 constexpr float freeRateHz = 100.0f;
 constexpr int quarterNoteSyncRateIndex = 8;
 constexpr float stoppedHostBpm = 120.0f;
@@ -114,6 +115,34 @@ void checkLinearBlock(const juce::AudioBuffer<float>& output,
     CHECK(allSamplesAreFinite);
     CHECK(maximumError <= 2.0e-5f);
 }
+
+void checkLinearRange(const juce::AudioBuffer<float>& output,
+                      int firstSample,
+                      int numSamples,
+                      float firstPhase,
+                      float delta)
+{
+    REQUIRE(output.getNumChannels() >= 1);
+    REQUIRE(firstSample >= 0);
+    REQUIRE(numSamples >= 0);
+    REQUIRE(firstSample + numSamples <= output.getNumSamples());
+
+    float maximumError = 0.0f;
+    bool allSamplesAreFinite = true;
+    for (int offset = 0; offset < numSamples; ++offset)
+    {
+        const float actual = output.getSample(0, firstSample + offset);
+        allSamplesAreFinite = allSamplesAreFinite && std::isfinite(actual);
+        maximumError = std::max(
+            maximumError,
+            std::abs(actual - wrapPhase(firstPhase
+                                        + static_cast<float>(offset) * delta)));
+    }
+
+    CAPTURE(firstSample, numSamples, firstPhase, delta, maximumError);
+    CHECK(allSamplesAreFinite);
+    CHECK(maximumError <= 2.0e-5f);
+}
 } // namespace
 
 TEST_CASE("Stopped LFO phase offset is applied once without a playhead",
@@ -158,22 +187,37 @@ TEST_CASE("Stopped LFO phase offset is applied once without a playhead",
                          .margin(2.0e-5f));
         }
 
-        // Changing Phase while the oscillator is running applies only the
-        // offset delta (+0.25 here), retaining all elapsed phase progression.
+        // Changing Phase retains the currently audible event sample, then
+        // applies only the offset delta (+0.25 here) over 10 ms. The oscillator
+        // remains free-running throughout instead of restarting at a block.
         setPlainParameter(shiftedPhaseProcessor, lfoParameter(LFO_PHASE_ID), 0.5f);
-        for (int block = 0; block < 2; ++block)
-        {
-            const float expectedFirstPhase = 0.5f
-                                           + static_cast<float>(processedSamples) * delta;
-            const auto output = processLfoBlock(shiftedPhase, testBlockSize);
-            checkLinearBlock(output, expectedFirstPhase, delta);
+        const float oldEventPhase = 0.25f
+                                    + static_cast<float>(processedSamples) * delta;
+        const auto transition = processLfoBlock(
+            shiftedPhase,
+            phaseTransitionSamples + testBlockSize);
+        CHECK(transition.getSample(0, 0)
+              == Catch::Approx(wrapPhase(oldEventPhase)).margin(2.0e-5f));
+        checkLinearRange(
+            transition,
+            phaseTransitionSamples,
+            testBlockSize,
+            0.5f + static_cast<float>(processedSamples
+                                      + phaseTransitionSamples)
+                       * delta,
+            delta);
 
-            processedSamples += testBlockSize;
-            CHECK(shiftedPhase.getLfoPhase(0)
-                  == Catch::Approx(wrapPhase(0.5f
-                                             + static_cast<float>(processedSamples) * delta))
-                         .margin(2.0e-5f));
-        }
+        processedSamples += phaseTransitionSamples + testBlockSize;
+        CHECK(shiftedPhase.getLfoPhase(0)
+              == Catch::Approx(wrapPhase(0.5f
+                                         + static_cast<float>(processedSamples) * delta))
+                     .margin(2.0e-5f));
+
+        const auto settled = processLfoBlock(shiftedPhase, testBlockSize);
+        checkLinearBlock(settled,
+                         0.5f + static_cast<float>(processedSamples) * delta,
+                         delta);
+        processedSamples += testBlockSize;
 
         CHECK_FALSE(zeroPhase.isDawPlaying());
         CHECK_FALSE(shiftedPhase.isDawPlaying());
@@ -212,10 +256,24 @@ TEST_CASE("Playing synced LFO remains locked to absolute PPQ plus Phase",
     setPlainParameter(processor, lfoParameter(LFO_PHASE_ID), 0.5f);
     const double changedPpq = secondPpq + ppqPerSample * testBlockSize;
     playHead.position.setPpqPosition(changedPpq);
-    const auto changed = processLfoBlock(manager, testBlockSize, &playHead);
-    checkLinearBlock(changed, wrapPhase(static_cast<float>(changedPpq) + 0.5f), delta);
+    const auto changed = processLfoBlock(manager,
+                                         phaseTransitionSamples + testBlockSize,
+                                         &playHead);
+    CHECK(changed.getSample(0, 0)
+          == Catch::Approx(wrapPhase(static_cast<float>(changedPpq) + 0.25f))
+                 .margin(2.0e-5f));
+    checkLinearRange(
+        changed,
+        phaseTransitionSamples,
+        testBlockSize,
+        wrapPhase(static_cast<float>(changedPpq
+                                     + ppqPerSample * phaseTransitionSamples)
+                  + 0.5f),
+        delta);
 
-    const double finalPpq = changedPpq + ppqPerSample * testBlockSize;
+    const double finalPpq = changedPpq
+                            + ppqPerSample
+                                  * (phaseTransitionSamples + testBlockSize);
     playHead.position.setPpqPosition(finalPpq);
     const auto final = processLfoBlock(manager, testBlockSize, &playHead);
     checkLinearBlock(final, wrapPhase(static_cast<float>(finalPpq) + 0.5f), delta);
@@ -324,14 +382,31 @@ TEST_CASE("Playing LFO without its required timeline coordinate free-runs",
         }
 
         setPlainParameter(processor, lfoParameter(LFO_PHASE_ID), 0.5f);
-        for (int block = 0; block < 2; ++block)
-        {
-            const float expectedFirstPhase = 0.5f
-                                           + static_cast<float>(processedSamples) * delta;
-            const auto output = processLfoBlock(manager, testBlockSize, &playHead);
-            checkLinearBlock(output, expectedFirstPhase, delta);
-            processedSamples += testBlockSize;
-        }
+        const float oldEventPhase = 0.25f
+                                    + static_cast<float>(processedSamples) * delta;
+        const auto transition = processLfoBlock(
+            manager,
+            phaseTransitionSamples + testBlockSize,
+            &playHead);
+        CHECK(transition.getSample(0, 0)
+              == Catch::Approx(wrapPhase(oldEventPhase)).margin(2.0e-5f));
+        checkLinearRange(
+            transition,
+            phaseTransitionSamples,
+            testBlockSize,
+            0.5f + static_cast<float>(processedSamples
+                                      + phaseTransitionSamples)
+                       * delta,
+            delta);
+        processedSamples += phaseTransitionSamples + testBlockSize;
+
+        const auto settled = processLfoBlock(manager,
+                                             testBlockSize,
+                                             &playHead);
+        checkLinearBlock(settled,
+                         0.5f + static_cast<float>(processedSamples) * delta,
+                         delta);
+        processedSamples += testBlockSize;
 
         CHECK(manager.isDawPlaying());
         CHECK(manager.getLfoPhase(0)

@@ -77,6 +77,10 @@ void LfoManager::reset()
     }
     appliedPhaseOffsets.fill(0.0f);
     phaseOffsetInitialised.fill(false);
+    timingSignatureInitialised.fill(false);
+    previousSyncModes.fill(false);
+    previousActiveRateKeys.fill(0.0f);
+    usedAbsoluteTimelineLastBlock.fill(false);
     isPlaying.store(false, std::memory_order_relaxed);
     modulatedValueCount = 0;
     lfoOutputBuffer.clear();
@@ -377,6 +381,16 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
         return static_cast<float>(value);
     };
 
+    const auto wrappedPhaseDistance = [](float first, float second) noexcept
+    {
+        if (! std::isfinite(first) || ! std::isfinite(second))
+            return 0.0f;
+
+        float difference = first - second;
+        difference -= std::round(difference);
+        return std::abs(difference);
+    };
+
     for (int i = 0; i < 4; ++i)
     {
         const auto lfoIndex = static_cast<size_t>(i);
@@ -386,14 +400,18 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
         const float freqInHz = juce::jmax(0.0f, loadParameter(parameters.freeRate, 1.0f));
         const float phaseOffset = juce::jlimit(0.0f, 1.0f, loadParameter(parameters.phaseOffset, 0.0f));
         float phaseDelta = 0.0f;
+        float activeRateKey = freqInHz;
+        float syncCycleLengthInBeats = 0.0f;
 
         if (isInSyncMode)
         {
-            const float beatsPerCycle = getSyncCycleLengthInQuarterNotes(rateIndex,
-                                                                          quarterNotesPerBar);
-            if (beatsPerCycle > 0.0f)
+            syncCycleLengthInBeats = getSyncCycleLengthInQuarterNotes(
+                rateIndex,
+                quarterNotesPerBar);
+            activeRateKey = syncCycleLengthInBeats;
+            if (syncCycleLengthInBeats > 0.0f)
             {
-                const double samplesPerCycle = (static_cast<double>(beatsPerCycle) / currentBpm)
+                const double samplesPerCycle = (static_cast<double>(syncCycleLengthInBeats) / currentBpm)
                                                * 60.0 * safeSampleRate;
                 if (std::isfinite(samplesPerCycle) && samplesPerCycle > 0.0)
                     phaseDelta = static_cast<float>(1.0 / samplesPerCycle);
@@ -404,10 +422,49 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
             phaseDelta = freqInHz / static_cast<float>(safeSampleRate);
         }
 
+        auto& engine = lfoEngines[lfoIndex];
+        const bool phaseChanged = phaseOffsetInitialised[lfoIndex]
+                                  && std::abs(phaseOffset
+                                              - appliedPhaseOffsets[lfoIndex])
+                                         > 1.0e-6f;
+        const bool rateSignatureChanged = timingSignatureInitialised[lfoIndex]
+                                          && (previousSyncModes[lfoIndex]
+                                                  != isInSyncMode
+                                              || std::abs(previousActiveRateKeys[lfoIndex]
+                                                          - activeRateKey)
+                                                     > 1.0e-6f);
+
         // While the host is playing, derive phase from its absolute timeline so seeks are deterministic.
         // If the host is stopped or omits the required timeline coordinate, keep free-running and apply
         // only changes in the Phase offset. Reapplying the full offset every block would make it drift.
         bool usedAbsoluteTimeline = false;
+        const auto synchroniseAbsolutePhase = [&] (float canonicalPhase)
+        {
+            const float seekTolerance = juce::jlimit(
+                1.0e-3f,
+                1.0e-2f,
+                4.0f * std::abs(phaseDelta));
+            const bool timelineJump =
+                timingSignatureInitialised[lfoIndex]
+                && usedAbsoluteTimelineLastBlock[lfoIndex]
+                && ! rateSignatureChanged
+                && ! phaseChanged
+                && wrappedPhaseDistance(engine.getPhase(), canonicalPhase)
+                       > seekTolerance;
+            const bool shouldCorrect =
+                timingSignatureInitialised[lfoIndex]
+                && (rateSignatureChanged
+                    || phaseChanged
+                    || ! usedAbsoluteTimelineLastBlock[lfoIndex]
+                    || timelineJump);
+
+            if (shouldCorrect)
+                engine.setPhaseWithCorrection(canonicalPhase);
+            else
+                engine.setPhase(canonicalPhase);
+            usedAbsoluteTimeline = true;
+        };
+
         if (transportIsPlaying && positionInfo)
         {
             if (isInSyncMode)
@@ -419,9 +476,8 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
                     if (cycleLengthInBeats > 0.0f && std::isfinite(*ppq))
                     {
-                        lfoEngines[lfoIndex].setPhase(
-                            wrapPhase(*ppq / cycleLengthInBeats + phaseOffset));
-                        usedAbsoluteTimeline = true;
+                        synchroniseAbsolutePhase(wrapPhase(
+                            *ppq / cycleLengthInBeats + phaseOffset));
                     }
                 }
             }
@@ -431,15 +487,12 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
                 {
                     if (std::isfinite(*timeSec))
                     {
-                        lfoEngines[lfoIndex].setPhase(
-                            wrapPhase(*timeSec * freqInHz + phaseOffset));
-                        usedAbsoluteTimeline = true;
+                        synchroniseAbsolutePhase(wrapPhase(
+                            *timeSec * freqInHz + phaseOffset));
                     }
                 }
             }
         }
-
-        auto& engine = lfoEngines[lfoIndex];
         if (usedAbsoluteTimeline)
         {
             appliedPhaseOffsets[lfoIndex] = phaseOffset;
@@ -452,11 +505,17 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
                                              : 0.0f;
             const float offsetDelta = phaseOffset - previousOffset;
             if (offsetDelta != 0.0f)
-                engine.setPhase(wrapPhase(engine.getPhase() + offsetDelta));
+                engine.setPhaseWithCorrection(
+                    wrapPhase(engine.getPhase() + offsetDelta));
 
             appliedPhaseOffsets[lfoIndex] = phaseOffset;
             phaseOffsetInitialised[lfoIndex] = true;
         }
+
+        timingSignatureInitialised[lfoIndex] = true;
+        previousSyncModes[lfoIndex] = isInSyncMode;
+        previousActiveRateKeys[lfoIndex] = activeRateKey;
+        usedAbsoluteTimelineLastBlock[lfoIndex] = usedAbsoluteTimeline;
 
         engine.setPhaseDelta(phaseDelta);
 

@@ -167,6 +167,14 @@ private:
     std::array<float, 4> appliedPhaseOffsets {};
     std::array<bool, 4> phaseOffsetInitialised {};
 
+    // Audio-thread-only signature of the timing recipe used on the previous
+    // callback. It distinguishes a real live parameter/transport change from
+    // the host's ordinary absolute re-anchor at every block boundary.
+    std::array<bool, 4> timingSignatureInitialised {};
+    std::array<bool, 4> previousSyncModes {};
+    std::array<float, 4> previousActiveRateKeys {};
+    std::array<bool, 4> usedAbsoluteTimelineLastBlock {};
+
     std::atomic<bool> isPlaying { false };
 
     juce::StringArray lfoRateSyncDivisions;

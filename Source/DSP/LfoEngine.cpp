@@ -16,6 +16,9 @@ LfoEngine::LfoEngine() = default;
 void LfoEngine::reset()
 {
     phase = 0.0f;
+    phaseCorrection = 0.0f;
+    phaseCorrectionStep = 0.0f;
+    phaseCorrectionRemaining = 0;
     lastOutput = 0.0f;
     publishedPhase.store(phase, std::memory_order_relaxed);
     publishedOutput.store(lastOutput, std::memory_order_relaxed);
@@ -31,6 +34,10 @@ void LfoEngine::prepare(const juce::dsp::ProcessSpec& spec)
                                       : 44100.0;
     transitionLengthSamples = juce::jmax(1, juce::roundToInt(safeSampleRate * 0.01));
     transitionSamplesProcessed = transitionLengthSamples;
+    phaseCorrectionLengthSamples = transitionLengthSamples;
+    phaseCorrection = 0.0f;
+    phaseCorrectionStep = 0.0f;
+    phaseCorrectionRemaining = 0;
     hasProcessedSample = false;
 }
 
@@ -231,7 +238,15 @@ float LfoEngine::process()
     if (! std::isfinite(phase))
         phase = 0.0f;
 
-    const float safePhase = juce::jlimit(0.0f, 1.0f, phase);
+    float safePhase = juce::jlimit(0.0f, 1.0f, phase);
+    if (phaseCorrectionRemaining > 0)
+    {
+        auto audiblePhase = phase + phaseCorrection;
+        if (! std::isfinite(audiblePhase))
+            audiblePhase = phase;
+        audiblePhase -= std::floor(audiblePhase);
+        safePhase = juce::jlimit(0.0f, 1.0f, audiblePhase);
+    }
     const auto& table = wavetableBanks[static_cast<size_t>(activeBank)]
                                       [static_cast<size_t>(activeSmoothnessStep)];
     float unipolarOutput = lookupTable(table, safePhase);
@@ -254,6 +269,21 @@ float LfoEngine::process()
     if (phase >= 1.0f || phase < 0.0f)
         phase -= std::floor(phase);
 
+    // Emit the complete correction at the event sample, then advance it once
+    // per generated LFO sample. At 48 kHz samples 0..479 transition and sample
+    // 480 is exactly the newly anchored canonical phase.
+    if (phaseCorrectionRemaining > 0)
+    {
+        --phaseCorrectionRemaining;
+        if (phaseCorrectionRemaining > 0)
+            phaseCorrection += phaseCorrectionStep;
+        else
+        {
+            phaseCorrection = 0.0f;
+            phaseCorrectionStep = 0.0f;
+        }
+    }
+
     // Convert the output to bipolar [-1, 1] for modulation
     lastOutput = unipolarOutput;
     hasProcessedSample = true;
@@ -271,8 +301,56 @@ void LfoEngine::setPhaseDelta(float newPhaseDelta)
 
 void LfoEngine::setPhase(float newPhase)
 {
-    // Directly sets the internal phase, ensuring it stays within the valid [0, 1] range.
+    // Set only the canonical phase. Any live correction deliberately survives
+    // the host's normal absolute re-anchor at each callback boundary.
     phase = std::isfinite(newPhase) ? juce::jlimit(0.0f, 1.0f, newPhase) : 0.0f;
+    publishedPhase.store(phase, std::memory_order_relaxed);
+}
+
+void LfoEngine::setPhaseWithCorrection(float newPhase)
+{
+    auto wrapPhase = [] (float value) noexcept
+    {
+        if (! std::isfinite(value))
+            return 0.0f;
+        value -= std::floor(value);
+        return value;
+    };
+
+    const float newCanonicalPhase = wrapPhase(newPhase);
+    if (! hasProcessedSample || phaseCorrectionLengthSamples <= 0)
+    {
+        phase = newCanonicalPhase;
+        phaseCorrection = 0.0f;
+        phaseCorrectionStep = 0.0f;
+        phaseCorrectionRemaining = 0;
+        publishedPhase.store(phase, std::memory_order_relaxed);
+        return;
+    }
+
+    const float previousAudiblePhase = wrapPhase(phase + phaseCorrection);
+    phase = newCanonicalPhase;
+
+    // The two phases are circular values. Choose the shortest signed offset so
+    // a large Rate/Sync change never makes the transition rotate unnecessarily
+    // through almost a complete cycle.
+    float wrappedDifference = previousAudiblePhase - newCanonicalPhase;
+    wrappedDifference -= std::round(wrappedDifference);
+    if (! std::isfinite(wrappedDifference)
+        || std::abs(wrappedDifference) <= 1.0e-7f)
+    {
+        phaseCorrection = 0.0f;
+        phaseCorrectionStep = 0.0f;
+        phaseCorrectionRemaining = 0;
+    }
+    else
+    {
+        phaseCorrection = wrappedDifference;
+        phaseCorrectionRemaining = phaseCorrectionLengthSamples;
+        phaseCorrectionStep = -phaseCorrection
+                              / static_cast<float>(phaseCorrectionRemaining);
+    }
+
     publishedPhase.store(phase, std::memory_order_relaxed);
 }
 

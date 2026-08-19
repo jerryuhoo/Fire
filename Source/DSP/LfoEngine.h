@@ -52,6 +52,14 @@ public:
     // Directly sets the LFO's current phase.
     void setPhase(float newPhase);
 
+    /** Re-anchors the canonical phase while preserving the currently audible
+        phase, then removes that wrapped phase difference over 10 ms. This is
+        used for live Rate/Sync/Phase changes and transport seeks; ordinary
+        per-callback host synchronisation must continue to use setPhase() so an
+        in-flight correction is not restarted at every block boundary.
+    */
+    void setPhaseWithCorrection(float newPhase);
+
     /** Sets the phase increment per sample, controlling the LFO's speed. */
     void setPhaseDelta(float newPhaseDelta);
 
@@ -73,6 +81,13 @@ private:
     float phase = 0.0f;
     float phaseDelta = 0.0f;
     float lastOutput = 0.0f;
+
+    // Live timing changes keep the canonical host phase immediately correct,
+    // while this shortest wrapped offset makes the audible lookup continuous.
+    float phaseCorrection = 0.0f;
+    float phaseCorrectionStep = 0.0f;
+    int phaseCorrectionLengthSamples = 1;
+    int phaseCorrectionRemaining = 0;
 
     // The UI reads these while the audio thread updates the working values above.
     std::atomic<float> publishedPhase { 0.0f };

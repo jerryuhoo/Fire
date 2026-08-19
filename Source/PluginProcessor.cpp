@@ -330,20 +330,134 @@ void processGlobalFilterStage(StageProcessor& leftProcessor,
 }
 } // namespace
 
+void OutputGainTransitionState::prepare(double sampleRate) noexcept
+{
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : 48000.0;
+    routeTransitionMix.reset(safeSampleRate, 0.01);
+    legacyGainTracker.reset(safeSampleRate, 0.05);
+    reset();
+}
+
+void OutputGainTransitionState::reset() noexcept
+{
+    routeTransitionMix.setCurrentAndTargetValue(1.0f);
+    legacyGainTracker.setCurrentAndTargetValue(0.0f);
+    lastRecipe = {};
+    anchorLinearGain = 1.0f;
+    lastAppliedLinearGain = 1.0f;
+    initialised = false;
+}
+
+static OutputGainTransitionState::RecipeSignature makeOutputGainRecipe(
+    const ModulatedValueProvider& provider,
+    int sourceIndex) noexcept
+{
+    OutputGainTransitionState::RecipeSignature recipe;
+    recipe.routed = provider.lfoSignal != nullptr;
+    recipe.sourceIndex = recipe.routed ? sourceIndex : -1;
+    recipe.baseValue = std::isfinite(provider.baseValue)
+                           ? provider.baseValue
+                           : 0.0f;
+    recipe.modulationDepth = std::isfinite(provider.modulationDepth)
+                                 ? juce::jlimit(-1.0f,
+                                                1.0f,
+                                                provider.modulationDepth)
+                                 : 0.0f;
+    recipe.isBipolar = provider.isBipolar;
+    return recipe;
+}
+
+static bool sameOutputGainRecipe(
+    const OutputGainTransitionState::RecipeSignature& lhs,
+    const OutputGainTransitionState::RecipeSignature& rhs) noexcept
+{
+    if (lhs.routed != rhs.routed)
+        return false;
+    if (! lhs.routed)
+        return true;
+
+    return lhs.sourceIndex == rhs.sourceIndex
+           && juce::exactlyEqual(lhs.baseValue, rhs.baseValue)
+           && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
+           && lhs.isBipolar == rhs.isBipolar;
+}
+
+static void synchroniseLegacyGain(juce::dsp::Gain<float>& gain,
+                                  OutputGainTransitionState& transition,
+                                  float linearGain) noexcept
+{
+    transition.lastAppliedLinearGain = linearGain;
+    transition.legacyGainTracker.setCurrentAndTargetValue(linearGain);
+    gain.setRampDurationSeconds(0.0);
+    gain.setGainLinear(linearGain);
+    gain.setRampDurationSeconds(0.05);
+}
+
 static void applyGain(juce::AudioBuffer<float>& buffer,
                       const ModulatedValueProvider& gainProvider,
-                      juce::dsp::Gain<float>& gain)
+                      juce::dsp::Gain<float>& gain,
+                      OutputGainTransitionState& transition,
+                      int sourceIndex)
 {
+    if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
+        return;
+
+    const auto recipe = makeOutputGainRecipe(gainProvider, sourceIndex);
     if (gainProvider.lfoSignal == nullptr)
     {
-        gain.setGainDecibels(gainProvider.baseValue);
+        if (! transition.initialised)
+        {
+            // Gain exposes its target rather than its current smoothed value.
+            // Immediately after prepare/reset those are equal; from there this
+            // tracker advances in exact lockstep with Gain's 50 ms ramp.
+            transition.legacyGainTracker.setCurrentAndTargetValue(
+                gain.getGainLinear());
+            transition.initialised = true;
+        }
+
+        transition.lastRecipe = recipe;
+        transition.routeTransitionMix.setCurrentAndTargetValue(1.0f);
+        const float safeBaseDb = std::isfinite(gainProvider.baseValue)
+                                     ? gainProvider.baseValue
+                                     : 0.0f;
+        gain.setGainDecibels(safeBaseDb);
+        const float targetLinearGain = juce::Decibels::decibelsToGain(
+            safeBaseDb);
+        transition.legacyGainTracker.setTargetValue(targetLinearGain);
 
         auto block = juce::dsp::AudioBlock<float>(buffer);
         auto context = juce::dsp::ProcessContextReplacing<float>(block);
         gain.process(context);
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            transition.lastAppliedLinearGain =
+                transition.legacyGainTracker.getNextValue();
+        return;
     }
-    else
+
+    if (! transition.initialised)
     {
+        transition.initialised = true;
+        transition.lastRecipe = recipe;
+        transition.routeTransitionMix.setCurrentAndTargetValue(1.0f);
+    }
+    else if (! sameOutputGainRecipe(recipe, transition.lastRecipe))
+    {
+        // Keep the target LFO fully sample-accurate. Only the discrete recipe
+        // boundary is bridged from the gain that was actually audible.
+        transition.anchorLinearGain = transition.lastAppliedLinearGain;
+        transition.routeTransitionMix.setCurrentAndTargetValue(0.0f);
+        transition.routeTransitionMix.setTargetValue(1.0f);
+        transition.lastRecipe = recipe;
+    }
+
+    if (! transition.routeTransitionMix.isSmoothing())
+    {
+        // Preserve the historical steady routed path exactly: no smoother is
+        // placed in front of the LFO, and each channel follows the same direct
+        // provider evaluation it used before recipe bridging was added.
         for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         {
             auto* channelData = buffer.getWritePointer(channel);
@@ -355,14 +469,39 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
             }
         }
 
-        // Synchronise the block gain with the last value that was actually
-        // applied. If modulation is disabled on the next block, smoothing then
-        // starts from the audible value rather than from stale internal state.
         const float lastGainDb = gainProvider.get(buffer.getNumSamples() - 1);
-        gain.setRampDurationSeconds(0.0);
-        gain.setGainDecibels(lastGainDb);
-        gain.setRampDurationSeconds(0.05);
+        const float lastLinearGain = juce::Decibels::decibelsToGain(lastGainDb);
+        synchroniseLegacyGain(gain,
+                              transition,
+                              lastLinearGain);
+        return;
     }
+
+    auto* const* channelData = buffer.getArrayOfWritePointers();
+    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+    {
+        const float targetLinearGain = juce::Decibels::decibelsToGain(
+            gainProvider.get(sample));
+        const float mix = transition.routeTransitionMix.getCurrentValue();
+        const float effectiveLinearGain = mix <= 0.0f
+                                              ? transition.anchorLinearGain
+                                          : mix >= 1.0f
+                                              ? targetLinearGain
+                                              : transition.anchorLinearGain
+                                                    + mix
+                                                          * (targetLinearGain
+                                                             - transition.anchorLinearGain);
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+            channelData[channel][sample] *= effectiveLinearGain;
+
+        transition.lastAppliedLinearGain = effectiveLinearGain;
+        transition.routeTransitionMix.getNextValue();
+    }
+
+    synchroniseLegacyGain(
+        gain,
+        transition,
+        transition.lastAppliedLinearGain);
 }
 
 template <typename ValueType>
@@ -399,6 +538,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     widthProcessor.prepare(spec.sampleRate);
     gain.setRampDurationSeconds(0.05);
     gain.prepare(spec);
+    outputGainTransition.prepare(spec.sampleRate);
     juce::dsp::ProcessSpec mixerSpec = spec;
     mixerSpec.maximumBlockSize = spec.maximumBlockSize * 4 + 64;
     dryWetMixer.prepare(mixerSpec);
@@ -474,6 +614,7 @@ void BandProcessor::reset()
     compressor.reset();
     widthProcessor.reset();
     gain.reset();
+    outputGainTransition.reset();
     dryWetMixer.reset();
     compressorMixer.reset();
     widthMixer.reset();
@@ -999,7 +1140,11 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
 
     // 4. Post-Distortion Effects
     // Per-sample Output Gain
-    applyGain(buffer, paramsForProcessing.outputVal, gain);
+    applyGain(buffer,
+              paramsForProcessing.outputVal,
+              gain,
+              outputGainTransition,
+              params.outputLfoSourceIndex);
 
     // 5. Final Dry/Wet Mix. Always run the mixer so its dry delay remains
     // primed and HQ mix=0 stays aligned with wet/other-band paths.
@@ -1999,6 +2144,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     gainProcessorGlobal.setRampDurationSeconds(0.0);
     gainProcessorGlobal.setGainDecibels(loadCachedParameter(globalOutputParameter));
     gainProcessorGlobal.setRampDurationSeconds(0.05);
+    globalOutputGainTransition.prepare(safeSampleRate);
 
     // dry wet
     juce::dsp::ProcessSpec globalMixerSpec = spec;
@@ -2428,6 +2574,7 @@ void FireAudioProcessor::performReset()
     lofiMixerPrimed = false;
     resetDownsamplingState();
     gainProcessorGlobal.reset();
+    globalOutputGainTransition.reset();
     lfoManager->reset();
     snapHqTransitionToParameter();
     snapTopologyTransitionToActive();
@@ -4468,6 +4615,7 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     globalGainProvider.baseValue = loadCachedParameter(globalOutputParameter);
     globalGainProvider.range = globalOutputParameter.ranged->getNormalisableRange();
 
+    int globalGainLfoSourceIndex = -1;
     LfoManager::AudioThreadRoutingInfo routingInfo;
     if (lfoManager->getAudioThreadRoutingInfo(globalOutputParameter.ranged, routingInfo))
     {
@@ -4477,11 +4625,16 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
             globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(sourceIndex);
             globalGainProvider.modulationDepth = routingInfo.depth;
             globalGainProvider.isBipolar = routingInfo.isBipolar;
+            globalGainLfoSourceIndex = sourceIndex;
         }
     }
 
     // b. Apply the gain using our new, clean helper function.
-    applyGain(buffer, globalGainProvider, gainProcessorGlobal);
+    applyGain(buffer,
+              globalGainProvider,
+              gainProcessorGlobal,
+              globalOutputGainTransition,
+              globalGainLfoSourceIndex);
 }
 
 void FireAudioProcessor::applyDownsamplingEffect(

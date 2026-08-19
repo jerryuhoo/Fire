@@ -87,6 +87,33 @@ struct BandProcessingParameters
 
 };
 
+// Keeps LFO-routed output recipe changes continuous without low-pass filtering
+// the LFO waveform itself. The legacy tracker mirrors juce::dsp::Gain only so
+// attaching a route can start from the gain that was actually audible.
+struct OutputGainTransitionState
+{
+    struct RecipeSignature
+    {
+        bool routed = false;
+        int sourceIndex = -1;
+        float baseValue = 0.0f;
+        float modulationDepth = 0.0f;
+        bool isBipolar = true;
+    };
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        routeTransitionMix;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        legacyGainTracker;
+    RecipeSignature lastRecipe;
+    float anchorLinearGain = 1.0f;
+    float lastAppliedLinearGain = 1.0f;
+    bool initialised = false;
+
+    void prepare(double sampleRate) noexcept;
+    void reset() noexcept;
+};
+
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
@@ -105,6 +132,7 @@ struct BandProcessor
     juce::dsp::DryWetMixer<float> compressorMixer;
     juce::dsp::DryWetMixer<float> widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
+    OutputGainTransitionState outputGainTransition;
 
     BandProcessor() : dryWetMixer(2048), compressorMixer(2048), widthMixer(2048) {}
 
@@ -679,6 +707,7 @@ private:
     using GainProcessor = juce::dsp::Gain<float>;
 
     GainProcessor gainProcessorGlobal;
+    OutputGainTransitionState globalOutputGainTransition;
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
     juce::dsp::DryWetMixer<float> bypassDelayMixer { 2048 };
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>

@@ -182,11 +182,12 @@ void setCutStageBypassed(CutFilter& chain, int stageCount) noexcept
     chain.setBypassed<3>(stageCount < 4);
 }
 
-void updateButterworthCutFilter(CutFilter& chain,
-                                float frequency,
-                                double sampleRate,
-                                Slope slope,
-                                bool highPass) noexcept
+void updateButterworthCutFilterPair(CutFilter& leftChain,
+                                    CutFilter& rightChain,
+                                    float frequency,
+                                    double sampleRate,
+                                    Slope slope,
+                                    bool highPass) noexcept
 {
     const int stageCount = juce::jlimit(1, 4, static_cast<int>(slope) + 1);
     const int order = stageCount * 2;
@@ -200,7 +201,8 @@ void updateButterworthCutFilter(CutFilter& chain,
             // Keep even bypassed stages second-order. Otherwise a later slope
             // increase changes JUCE IIR::Filter's order from one to two and
             // makes its internal state allocate/reset on the audio thread.
-            assignCutStage(chain, stage, identityBiquad);
+            assignCutStage(leftChain, stage, identityBiquad);
+            assignCutStage(rightChain, stage, identityBiquad);
             continue;
         }
 
@@ -218,10 +220,34 @@ void updateButterworthCutFilter(CutFilter& chain,
                                       : juce::dsp::IIR::ArrayCoefficients<float>::makeLowPass(sampleRate,
                                                                                                frequency,
                                                                                                q);
-        assignCutStage(chain, stage, coefficients);
+        assignCutStage(leftChain, stage, coefficients);
+        assignCutStage(rightChain, stage, coefficients);
     }
 
-    setCutStageBypassed(chain, stageCount);
+    setCutStageBypassed(leftChain, stageCount);
+    setCutStageBypassed(rightChain, stageCount);
+}
+
+float processCutFilterSample(CutFilter& chain, float sample) noexcept
+{
+    const auto processStage = [] (Filter& filter, bool bypassed, float input)
+    {
+        const auto filtered = filter.processSample(input);
+        return bypassed ? input : filtered;
+    };
+    sample = processStage(chain.get<0>(), chain.isBypassed<0>(), sample);
+    sample = processStage(chain.get<1>(), chain.isBypassed<1>(), sample);
+    sample = processStage(chain.get<2>(), chain.isBypassed<2>(), sample);
+    sample = processStage(chain.get<3>(), chain.isBypassed<3>(), sample);
+    return sample;
+}
+
+void snapCutFilterToZero(CutFilter& chain) noexcept
+{
+    chain.get<0>().snapToZero();
+    chain.get<1>().snapToZero();
+    chain.get<2>().snapToZero();
+    chain.get<3>().snapToZero();
 }
 
 template <typename StageProcessor>
@@ -1738,11 +1764,40 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     synchroniseMultibandTopologyResetState();
 
     // filter init
+    constexpr double cutSlopeRampSeconds = 0.01;
+    const auto initialiseCutSlopeTransition = [&] (CutSlopeTransitionState& transition,
+                                                    Slope initialSlope,
+                                                    float initialFrequency,
+                                                    bool highPass)
+    {
+        transition.standbyMix.reset(safeSampleRate, cutSlopeRampSeconds);
+        transition.standbyMix.setCurrentAndTargetValue(0.0f);
+        transition.slotSlopes = { initialSlope, initialSlope };
+        transition.requestedSlope = initialSlope;
+        transition.lastFrequency = initialFrequency;
+        transition.lastSampleRate = safeSampleRate;
+        transition.highPass = highPass;
+        transition.initialised = false;
+    };
+    initialiseCutSlopeTransition(lowCutSlopeTransition,
+                                 initialFilterSettings.lowCutSlope,
+                                 initialFilterSettings.lowCutFreq,
+                                 true);
+    initialiseCutSlopeTransition(highCutSlopeTransition,
+                                 initialFilterSettings.highCutSlope,
+                                 initialFilterSettings.highCutFreq,
+                                 false);
     updateFilter(safeSampleRate);
     leftChain.prepare(spec);
     rightChain.prepare(spec);
+    lowCutSlopeTransition.leftStandby.prepare(spec);
+    lowCutSlopeTransition.rightStandby.prepare(spec);
+    highCutSlopeTransition.leftStandby.prepare(spec);
+    highCutSlopeTransition.rightStandby.prepare(spec);
     globalFilterStageDryBuffer.setSize(outputChannels, maximumBlockSize);
     globalFilterStageDryBuffer.clear();
+    globalCutSlopeShadowBuffer.setSize(outputChannels, maximumBlockSize);
+    globalCutSlopeShadowBuffer.clear();
 
     constexpr double stageBypassRampSeconds = 0.01;
     const std::array<float, numGlobalFilterStages> initialStageMix {
@@ -2034,6 +2089,43 @@ void FireAudioProcessor::performReset()
     synchroniseMultibandTopologyResetState();
     leftChain.reset();
     rightChain.reset();
+    lowCutSlopeTransition.leftStandby.reset();
+    lowCutSlopeTransition.rightStandby.reset();
+    highCutSlopeTransition.leftStandby.reset();
+    highCutSlopeTransition.rightStandby.reset();
+    const auto snapCutSlopeTransition = [&] (CutSlopeTransitionState& transition,
+                                             CutFilter& leftPrimary,
+                                             CutFilter& rightPrimary,
+                                             Slope requestedSlope)
+    {
+        transition.requestedSlope = requestedSlope;
+        transition.slotSlopes = { requestedSlope, requestedSlope };
+        transition.standbyMix.setCurrentAndTargetValue(0.0f);
+        if (! transition.initialised)
+            return;
+
+        updateButterworthCutFilterPair(leftPrimary,
+                                       rightPrimary,
+                                       transition.lastFrequency,
+                                       transition.lastSampleRate,
+                                       requestedSlope,
+                                       transition.highPass);
+        updateButterworthCutFilterPair(transition.leftStandby,
+                                       transition.rightStandby,
+                                       transition.lastFrequency,
+                                       transition.lastSampleRate,
+                                       requestedSlope,
+                                       transition.highPass);
+    };
+    snapCutSlopeTransition(lowCutSlopeTransition,
+                           leftChain.get<ChainPositions::LowCut>(),
+                           rightChain.get<ChainPositions::LowCut>(),
+                           getSlopeParameterValue(filterParameterCache.lowCutSlope.raw));
+    snapCutSlopeTransition(highCutSlopeTransition,
+                           leftChain.get<ChainPositions::HighCut>(),
+                           rightChain.get<ChainPositions::HighCut>(),
+                           getSlopeParameterValue(filterParameterCache.highCutSlope.raw));
+    globalFilterCacheValid = false;
     const std::array<float, numGlobalFilterStages> initialStageMix {
         loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f ? 0.0f : 1.0f,
         loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f ? 0.0f : 1.0f,
@@ -2724,6 +2816,195 @@ void FireAudioProcessor::updatePeakFilter(const ChainSettings& chainSettings, do
     *rightChain.get<ChainPositions::Peak>().coefficients = peakCoefficients;
 }
 
+void FireAudioProcessor::updateCutSlopeTransition(
+    CutSlopeTransitionState& transition,
+    CutFilter& leftPrimary,
+    CutFilter& rightPrimary,
+    float frequency,
+    double sampleRate,
+    Slope requestedSlope,
+    bool highPass)
+{
+    transition.lastFrequency = frequency;
+    transition.lastSampleRate = sampleRate;
+    transition.highPass = highPass;
+
+    if (! transition.initialised)
+    {
+        transition.slotSlopes = { requestedSlope, requestedSlope };
+        transition.requestedSlope = requestedSlope;
+        transition.standbyMix.setCurrentAndTargetValue(0.0f);
+        transition.initialised = true;
+    }
+    else
+    {
+        transition.requestedSlope = requestedSlope;
+        if (transition.standbyMix.isSmoothing())
+        {
+            const int targetSlot = transition.standbyMix.getTargetValue() >= 0.5f ? 1 : 0;
+            const int sourceSlot = 1 - targetSlot;
+
+            // A request for the chain we are fading away from can reverse the
+            // same two warm recursive states without rewriting either one.
+            if (requestedSlope == transition.slotSlopes[static_cast<size_t>(sourceSlot)])
+                transition.standbyMix.setTargetValue(sourceSlot == 1 ? 1.0f : 0.0f);
+            // A third recipe is remembered in requestedSlope and starts after
+            // the current pair reaches an endpoint. Rewriting a partially
+            // audible IIR bank here would recreate the coefficient hard cut.
+        }
+        else
+        {
+            const int activeSlot = transition.standbyMix.getCurrentValue() >= 0.5f ? 1 : 0;
+            if (requestedSlope != transition.slotSlopes[static_cast<size_t>(activeSlot)])
+            {
+                const int targetSlot = 1 - activeSlot;
+                if (transition.slotSlopes[static_cast<size_t>(targetSlot)] != requestedSlope)
+                    transition.slotSlopes[static_cast<size_t>(targetSlot)] = requestedSlope;
+                transition.standbyMix.setTargetValue(targetSlot == 1 ? 1.0f : 0.0f);
+            }
+        }
+    }
+
+    updateButterworthCutFilterPair(leftPrimary,
+                                   rightPrimary,
+                                   frequency,
+                                   sampleRate,
+                                   transition.slotSlopes[0],
+                                   highPass);
+    updateButterworthCutFilterPair(transition.leftStandby,
+                                   transition.rightStandby,
+                                   frequency,
+                                   sampleRate,
+                                   transition.slotSlopes[1],
+                                   highPass);
+}
+
+void FireAudioProcessor::processCutFilterStage(
+    CutFilter& leftPrimary,
+    CutFilter& rightPrimary,
+    CutSlopeTransitionState& transition,
+    juce::dsp::AudioBlock<float>& fullBlock,
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>& wetMix,
+    int startSample,
+    int numSamples) noexcept
+{
+    if (numSamples <= 0 || fullBlock.getNumChannels() == 0)
+        return;
+
+    const int shadowCapacity = globalCutSlopeShadowBuffer.getNumSamples();
+    jassert(shadowCapacity > 0);
+    if (shadowCapacity <= 0)
+        return;
+
+    const auto processShadowRange = [&] (CutFilter& leftProcessor,
+                                         CutFilter& rightProcessor,
+                                         int rangeStart,
+                                         int rangeSamples)
+    {
+        int processed = 0;
+        while (processed < rangeSamples)
+        {
+            const int chunkSamples = juce::jmin(shadowCapacity, rangeSamples - processed);
+            auto sourceBlock = fullBlock.getSubBlock(
+                static_cast<size_t>(rangeStart + processed),
+                static_cast<size_t>(chunkSamples));
+            const int processedChannels = sourceBlock.getNumChannels() > 1 ? 2 : 1;
+            auto shadowBlock = juce::dsp::AudioBlock<float>(globalCutSlopeShadowBuffer)
+                                   .getSubsetChannelBlock(0, static_cast<size_t>(processedChannels))
+                                   .getSubBlock(0, static_cast<size_t>(chunkSamples));
+            shadowBlock.copyFrom(sourceBlock.getSubsetChannelBlock(
+                0, static_cast<size_t>(processedChannels)));
+
+            auto shadowLeft = shadowBlock.getSingleChannelBlock(0);
+            leftProcessor.process(juce::dsp::ProcessContextReplacing<float>(shadowLeft));
+            if (processedChannels > 1)
+            {
+                auto shadowRight = shadowBlock.getSingleChannelBlock(1);
+                rightProcessor.process(juce::dsp::ProcessContextReplacing<float>(shadowRight));
+            }
+            processed += chunkSamples;
+        }
+    };
+
+    int processedSamples = 0;
+    while (processedSamples < numSamples)
+    {
+        if (! transition.standbyMix.isSmoothing())
+        {
+            const bool standbyIsActive = transition.standbyMix.getCurrentValue() >= 0.5f;
+            auto& activeLeft = standbyIsActive ? transition.leftStandby : leftPrimary;
+            auto& activeRight = standbyIsActive ? transition.rightStandby : rightPrimary;
+            auto& inactiveLeft = standbyIsActive ? leftPrimary : transition.leftStandby;
+            auto& inactiveRight = standbyIsActive ? rightPrimary : transition.rightStandby;
+            const int remainingSamples = numSamples - processedSamples;
+            const int rangeStart = startSample + processedSamples;
+
+            // Keep the other slope recipe on the same input timeline so a
+            // quick reversal can reuse its recursive history. Its output is
+            // discarded and cannot perturb the legacy steady-state path.
+            processShadowRange(inactiveLeft,
+                               inactiveRight,
+                               rangeStart,
+                               remainingSamples);
+            processGlobalFilterStage(activeLeft,
+                                     activeRight,
+                                     fullBlock,
+                                     globalFilterStageDryBuffer,
+                                     wetMix,
+                                     rangeStart,
+                                     remainingSamples);
+            return;
+        }
+
+        const int sampleIndex = startSample + processedSamples;
+        const auto slopeMix = transition.standbyMix.getCurrentValue();
+        auto stageMix = wetMix.getCurrentValue();
+        if (wetMix.isSmoothing())
+            stageMix = wetMix.getNextValue();
+
+        const int processedChannels = fullBlock.getNumChannels() > 1 ? 2 : 1;
+        for (int channel = 0; channel < processedChannels; ++channel)
+        {
+            auto& primary = channel == 0 ? leftPrimary : rightPrimary;
+            auto& standby = channel == 0 ? transition.leftStandby
+                                         : transition.rightStandby;
+            auto* channelData = fullBlock.getChannelPointer(static_cast<size_t>(channel));
+            const auto dry = channelData[sampleIndex];
+            const auto primaryWet = processCutFilterSample(primary, dry);
+            const auto standbyWet = processCutFilterSample(standby, dry);
+            const auto slopeWet = slopeMix <= 0.0f ? primaryWet
+                                : slopeMix >= 1.0f ? standbyWet
+                                                   : primaryWet
+                                                       + slopeMix * (standbyWet - primaryWet);
+            channelData[sampleIndex] = stageMix <= 0.0f ? dry
+                                     : stageMix >= 1.0f ? slopeWet
+                                                        : dry + stageMix * (slopeWet - dry);
+        }
+
+        transition.standbyMix.getNextValue();
+        ++processedSamples;
+
+        if (! transition.standbyMix.isSmoothing())
+        {
+            snapCutFilterToZero(leftPrimary);
+            snapCutFilterToZero(rightPrimary);
+            snapCutFilterToZero(transition.leftStandby);
+            snapCutFilterToZero(transition.rightStandby);
+
+            // A third recipe requested during the crossfade starts only after
+            // one bank is fully inaudible. This preserves continuity while
+            // still making the latest automation value win.
+            updateCutSlopeTransition(transition,
+                                     leftPrimary,
+                                     rightPrimary,
+                                     transition.lastFrequency,
+                                     transition.lastSampleRate,
+                                     transition.requestedSlope,
+                                     transition.highPass);
+        }
+    }
+}
+
 void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings, double sampleRate)
 {
     auto& leftLowCut = leftChain.get<ChainPositions::LowCut>();
@@ -2740,16 +3021,13 @@ void FireAudioProcessor::updateLowCutFilters(const ChainSettings& chainSettings,
     leftChain.setBypassed<ChainPositions::LowCutQ>(false);
     rightChain.setBypassed<ChainPositions::LowCutQ>(false);
 
-    updateButterworthCutFilter(rightLowCut,
-                               chainSettings.lowCutFreq,
-                               sampleRate,
-                               chainSettings.lowCutSlope,
-                               true);
-    updateButterworthCutFilter(leftLowCut,
-                               chainSettings.lowCutFreq,
-                               sampleRate,
-                               chainSettings.lowCutSlope,
-                               true);
+    updateCutSlopeTransition(lowCutSlopeTransition,
+                             leftLowCut,
+                             rightLowCut,
+                             chainSettings.lowCutFreq,
+                             sampleRate,
+                             chainSettings.lowCutSlope,
+                             true);
 
     *leftChain.get<ChainPositions::LowCutQ>().coefficients = lowcutQCoefficients;
     *rightChain.get<ChainPositions::LowCutQ>().coefficients = lowcutQCoefficients;
@@ -2771,16 +3049,13 @@ void FireAudioProcessor::updateHighCutFilters(const ChainSettings& chainSettings
     leftChain.setBypassed<ChainPositions::HighCutQ>(false);
     rightChain.setBypassed<ChainPositions::HighCutQ>(false);
 
-    updateButterworthCutFilter(leftHighCut,
-                               chainSettings.highCutFreq,
-                               sampleRate,
-                               chainSettings.highCutSlope,
-                               false);
-    updateButterworthCutFilter(rightHighCut,
-                               chainSettings.highCutFreq,
-                               sampleRate,
-                               chainSettings.highCutSlope,
-                               false);
+    updateCutSlopeTransition(highCutSlopeTransition,
+                             leftHighCut,
+                             rightHighCut,
+                             chainSettings.highCutFreq,
+                             sampleRate,
+                             chainSettings.highCutSlope,
+                             false);
 
     *leftChain.get<ChainPositions::HighCutQ>().coefficients = highcutQCoefficients;
     *rightChain.get<ChainPositions::HighCutQ>().coefficients = highcutQCoefficients;
@@ -3738,13 +4013,13 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
         const auto processRange = [&] (int startSample, int numSamples)
         {
-            processGlobalFilterStage(leftChain.get<ChainPositions::LowCut>(),
-                                     rightChain.get<ChainPositions::LowCut>(),
-                                     block,
-                                     globalFilterStageDryBuffer,
-                                     globalFilterStageMix[lowCutStage],
-                                     startSample,
-                                     numSamples);
+            processCutFilterStage(leftChain.get<ChainPositions::LowCut>(),
+                                  rightChain.get<ChainPositions::LowCut>(),
+                                  lowCutSlopeTransition,
+                                  block,
+                                  globalFilterStageMix[lowCutStage],
+                                  startSample,
+                                  numSamples);
             processGlobalFilterStage(leftChain.get<ChainPositions::Peak>(),
                                      rightChain.get<ChainPositions::Peak>(),
                                      block,
@@ -3752,13 +4027,13 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
                                      globalFilterStageMix[peakStage],
                                      startSample,
                                      numSamples);
-            processGlobalFilterStage(leftChain.get<ChainPositions::HighCut>(),
-                                     rightChain.get<ChainPositions::HighCut>(),
-                                     block,
-                                     globalFilterStageDryBuffer,
-                                     globalFilterStageMix[highCutStage],
-                                     startSample,
-                                     numSamples);
+            processCutFilterStage(leftChain.get<ChainPositions::HighCut>(),
+                                  rightChain.get<ChainPositions::HighCut>(),
+                                  highCutSlopeTransition,
+                                  block,
+                                  globalFilterStageMix[highCutStage],
+                                  startSample,
+                                  numSamples);
             processGlobalFilterStage(leftChain.get<ChainPositions::LowCutQ>(),
                                      rightChain.get<ChainPositions::LowCutQ>(),
                                      block,

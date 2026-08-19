@@ -547,6 +547,23 @@ private:
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>,
                numGlobalFilterStages> globalFilterStageMix;
     juce::AudioBuffer<float> globalFilterStageDryBuffer;
+    juce::AudioBuffer<float> globalCutSlopeShadowBuffer;
+
+    struct CutSlopeTransitionState
+    {
+        CutFilter leftStandby;
+        CutFilter rightStandby;
+        std::array<Slope, 2> slotSlopes { Slope_12, Slope_12 };
+        juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> standbyMix;
+        Slope requestedSlope { Slope_12 };
+        float lastFrequency = 1000.0f;
+        double lastSampleRate = 48000.0;
+        bool highPass = false;
+        bool initialised = false;
+    };
+
+    CutSlopeTransitionState lowCutSlopeTransition;
+    CutSlopeTransitionState highCutSlopeTransition;
 
     ChainSettings cachedGlobalFilterSettings {};
     double cachedGlobalFilterSampleRate = 0.0;
@@ -555,6 +572,20 @@ private:
     void updateLowCutFilters(const ChainSettings& chainSettings, double sampleRate);
     void updateHighCutFilters(const ChainSettings& chainSettings, double sampleRate);
     void updatePeakFilter(const ChainSettings& chainSettings, double sampleRate);
+    void updateCutSlopeTransition(CutSlopeTransitionState& transition,
+                                  CutFilter& leftPrimary,
+                                  CutFilter& rightPrimary,
+                                  float frequency,
+                                  double sampleRate,
+                                  Slope requestedSlope,
+                                  bool highPass);
+    void processCutFilterStage(CutFilter& leftPrimary,
+                               CutFilter& rightPrimary,
+                               CutSlopeTransitionState& transition,
+                               juce::dsp::AudioBlock<float>& fullBlock,
+                               juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>& wetMix,
+                               int startSample,
+                               int numSamples) noexcept;
 
     // Low-Cut / Low-Shelf Filter
     juce::SmoothedValue<float> lowcutFreqSmoother;

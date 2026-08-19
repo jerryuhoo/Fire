@@ -1348,6 +1348,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                          buffer.getWritePointer(1),
                                          widthProvider,
                                          panProvider,
+                                         params.widthLfoSourceIndex,
+                                         params.panLfoSourceIndex,
                                          buffer.getNumSamples());
         }
         else

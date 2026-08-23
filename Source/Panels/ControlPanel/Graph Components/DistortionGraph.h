@@ -15,6 +15,8 @@
 #include "../../../DSP/ClippingFunctions.h"
 #include "GraphTemplate.h"
 
+struct DistortionGraphSourceEpochTestAccess;
+
 //==============================================================================
 /*
 */
@@ -30,6 +32,8 @@ public:
     void setState(int mode, float rec, float mix, float bias, float drive, float rateDivide);
 
 private:
+    friend struct DistortionGraphSourceEpochTestAccess;
+
     int mode = 0;
     float rec = 0.0f;
     float mix = 1.0f;

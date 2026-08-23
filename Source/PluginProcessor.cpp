@@ -3999,7 +3999,12 @@ void FireAudioProcessor::processWetBlock(
     if (graphFifo.getFreeSpace() >= 1)
     {
         DistortionGraphValues vals;
-        const int bandIndex = juce::jlimit(0, 3, uiFocusBand.load(std::memory_order_relaxed));
+        // A single acquire pairs the selected band with the generation copied
+        // into this packet. Reading separate band/epoch atomics here would let
+        // a focus change label Band A values as Band B (or vice versa).
+        vals.sourceToken = distortionGraphSourceToken.load(std::memory_order_acquire);
+        const int bandIndex = static_cast<int>(vals.sourceToken
+                                               & distortionGraphBandMask);
         const auto& parameters = bandParameterCache[static_cast<size_t>(bandIndex)];
 
         const bool shapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
@@ -7705,28 +7710,75 @@ void FireAudioProcessor::clearLfoModulationForBand(int bandIndex,
 
 bool FireAudioProcessor::getLatestDistortionGraphValues(DistortionGraphValues& values)
 {
-    int numAvailable = graphFifo.getNumReady();
-    if (numAvailable > 0)
+    const int numAvailable = graphFifo.getNumReady();
+    if (numAvailable <= 0)
+        return false;
+
+    const auto requestedSourceToken = distortionGraphSourceToken.load(
+        std::memory_order_acquire);
+    int start1 = 0;
+    int size1 = 0;
+    int start2 = 0;
+    int size2 = 0;
+    graphFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+
+    DistortionGraphValues latestMatchingValues;
+    bool foundMatchingPacket = false;
+    const auto inspectRange = [&] (int start, int size)
     {
-        int start1, size1, start2, size2;
-        graphFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+        for (int offset = 0; offset < size; ++offset)
+        {
+            const auto& candidate = graphFifoBuffer[static_cast<size_t>(start + offset)];
+            if (candidate.sourceToken == requestedSourceToken)
+            {
+                latestMatchingValues = candidate;
+                foundMatchingPacket = true;
+            }
+        }
+    };
 
-        if (size2 > 0)
-            values = graphFifoBuffer[start2 + size2 - 1];
-        else
-            values = graphFifoBuffer[start1 + size1 - 1];
+    inspectRange(start1, size1);
+    inspectRange(start2, size2);
+    // Stale packets are deliberately consumed too. Otherwise a hidden editor
+    // or repeated focus changes could leave the FIFO permanently clogged.
+    graphFifo.finishedRead(numAvailable);
 
-        graphFifo.finishedRead(numAvailable);
-        return true;
-    }
-    return false;
+    // Focus may have changed while the message thread was draining. Never
+    // publish a value unless it still belongs to the current source epoch.
+    if (! foundMatchingPacket
+        || distortionGraphSourceToken.load(std::memory_order_acquire)
+               != requestedSourceToken)
+        return false;
+
+    values = latestMatchingValues;
+    return true;
 }
 
 void FireAudioProcessor::setUiFocusBand(int bandIndex)
 {
-    if (juce::isPositiveAndBelow(bandIndex, 4))
+    if (! juce::isPositiveAndBelow(bandIndex, 4))
+        return;
+
+    // Publish band and generation atomically. Advancing the generation on
+    // every valid publication (including A -> B -> A and forced A -> A
+    // refreshes) prevents a queued packet from an earlier visit to a band from
+    // becoming current again.
+    auto currentToken = distortionGraphSourceToken.load(std::memory_order_relaxed);
+    for (;;)
     {
-        uiFocusBand.store(bandIndex);
+        auto nextGeneration = (currentToken & ~distortionGraphBandMask)
+                              + (distortionGraphBandMask + 1u);
+        if ((nextGeneration & ~distortionGraphBandMask) == 0)
+            nextGeneration = distortionGraphBandMask + 1u;
+
+        const auto nextToken = nextGeneration
+                               | static_cast<std::uint64_t>(bandIndex);
+        if (distortionGraphSourceToken.compare_exchange_weak(
+                currentToken,
+                nextToken,
+                std::memory_order_release,
+                std::memory_order_relaxed))
+            break;
     }
 }
 

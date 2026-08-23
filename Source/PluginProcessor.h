@@ -724,7 +724,13 @@ private:
     CachedParameter jitterParameter;
     CachedParameter downsampleMixParameter;
 
-    std::atomic<int> uiFocusBand { 0 };
+    static constexpr std::uint64_t distortionGraphBandMask { 0x3u };
+    static constexpr std::uint64_t initialDistortionGraphSourceToken { 0x4u };
+    static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
+                  "Distortion graph source publication must remain RT-safe");
+    std::atomic<std::uint64_t> distortionGraphSourceToken {
+        initialDistortionGraphSourceToken
+    };
     // reset parameters
     void performReset();
     void resetMultibandProcessingState(

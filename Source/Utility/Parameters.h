@@ -13,6 +13,7 @@
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_core/juce_core.h"
 #include <array>
+#include <cstdint>
 #include <vector>
 
 // =============================================================================
@@ -80,6 +81,10 @@ struct MeterValues
 
 struct DistortionGraphValues
 {
+    // The band index and its publication generation are encoded in one token.
+    // Keeping this value indivisible lets the audio thread select the source
+    // and label the packet from the same atomic snapshot.
+    std::uint64_t sourceToken { 0 };
     int mode = 0;
     float rec = 0.0f;
     float mix = 1.0f;

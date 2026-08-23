@@ -802,6 +802,14 @@ void FireAudioProcessorEditor::timerCallback()
     // generic host surface automates only that parameter.
     multiband.synchroniseBandCountFromParameter();
 
+    // Always consume graph telemetry, even while the host keeps this editor
+    // instance hidden. A hidden frame deliberately discards the value below;
+    // showing the editor again must wait for a packet from the current source
+    // epoch rather than replaying FIFO backlog.
+    DistortionGraphValues latestDistortionGraphValues;
+    const bool hasLatestDistortionGraphValues =
+        processor.getLatestDistortionGraphValues(latestDistortionGraphValues);
+
     // Hosts commonly keep an editor instance alive after hiding its window.
     // Keep the timer itself cheap in that state and resume from a fresh clock
     // when the peer becomes visible again.
@@ -809,6 +817,17 @@ void FireAudioProcessorEditor::timerCallback()
     {
         multiband.dismissTransientUi();
         return;
+    }
+
+    if (hasLatestDistortionGraphValues)
+    {
+        bandPanel.getDistortionGraph()->setState(
+            latestDistortionGraphValues.mode,
+            latestDistortionGraphValues.rec,
+            latestDistortionGraphValues.mix,
+            latestDistortionGraphValues.bias,
+            latestDistortionGraphValues.drive,
+            latestDistortionGraphValues.rateDivide);
     }
 
     if (hasCachedMeterValues)
@@ -885,18 +904,6 @@ void FireAudioProcessorEditor::timerCallback()
             processedSpectrum.updateSpectrum(processedFftFrame.data(), processor.getNumBins(), binWidth);
             originalSpectrum.updateSpectrum(originalFftFrame.data(), processor.getNumBins(), binWidth);
         }
-    }
-
-    DistortionGraphValues latestValues;
-    if (processor.getLatestDistortionGraphValues(latestValues))
-    {
-        bandPanel.getDistortionGraph()->setState(
-            latestValues.mode,
-            latestValues.rec,
-            latestValues.mix,
-            latestValues.bias,
-            latestValues.drive,
-            latestValues.rateDivide);
     }
 
     if ((animationFrame & 1) == 0)

@@ -27,6 +27,8 @@
 
 // Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
 
+struct DistortionGraphSourceEpochTestAccess;
+
 struct Version
 {
     int major = 0;
@@ -114,6 +116,7 @@ public:
     void hideValuePopup();
 
 private:
+    friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
 
     class UpdateCheckThread final : public juce::Thread

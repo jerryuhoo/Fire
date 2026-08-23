@@ -34,6 +34,24 @@ bool parseStrictFiniteDouble(const juce::String& textToParse, double& result) no
     return true;
 }
 
+bool parseStrictNonNegativeIntegerAttribute(const juce::XmlElement& xml,
+                                            const char* attributeName,
+                                            int& result) noexcept
+{
+    double parsed = 0.0;
+    if (! xml.hasAttribute(attributeName)
+        || ! parseStrictFiniteDouble(xml.getStringAttribute(attributeName), parsed)
+        || parsed < 0.0
+        || parsed > static_cast<double>(std::numeric_limits<int>::max())
+        || parsed != std::floor(parsed))
+    {
+        return false;
+    }
+
+    result = static_cast<int>(parsed);
+    return true;
+}
+
 bool arePresetFloatsEquivalent(float lhs, float rhs) noexcept
 {
     constexpr float tolerance = 1.0e-6f;
@@ -100,6 +118,18 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
+constexpr int hostStateFormatVersion = 1;
+constexpr int oldestWrappedHostParameterCount = 19;
+constexpr std::array<const char*, 8> legacyHostStateParameterAnchors {
+    HQ_ID,
+    DOWNSAMPLE_ID,
+    OFF_ID,
+    PRE_ID,
+    POST_ID,
+    LOW_ID,
+    BAND_ID,
+    HIGH_ID,
+};
 
 void replaceNonFiniteSamplesWithSilence(
     juce::AudioBuffer<float>& buffer) noexcept
@@ -4036,6 +4066,9 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     // replacements; inactive-only copies are serialised by StateAB's lock.
     // Therefore every section below belongs to one valid state generation.
     auto mainState = captureCoherentSerializableMainStateSnapshot();
+    xmlState.setAttribute("stateFormatVersion", hostStateFormatVersion);
+    xmlState.setAttribute("savedParameterCount",
+                          mainState.parameterState.getNumChildren());
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::function<void()> mainCaptureHook;
@@ -4112,6 +4145,86 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     const auto incomingParameterState = juce::ValueTree::fromXml(*xmlTreeState);
     if (! incomingParameterState.isValid()
         || ! incomingParameterState.hasType(treeState.state.getType()))
+        return;
+
+    // APVTS always serialises a complete list of unique id/value children.
+    // Validate even unknown legacy IDs so duplicates or junk cannot be used to
+    // make a sparse, damaged tree look complete. Unknown but well-formed IDs
+    // remain available for backward compatibility and are ignored below.
+    juce::StringArray incomingParameterIDs;
+    for (const auto& incomingChild : incomingParameterState)
+    {
+        const auto parameterID = incomingChild.getProperty("id").toString();
+        if (parameterID.isEmpty() || incomingParameterIDs.contains(parameterID)
+            || ! incomingChild.hasProperty("value"))
+        {
+            return;
+        }
+
+        double parsedValue = 0.0;
+        if (! parseStrictFiniteDouble(
+                incomingChild.getProperty("value").toString(), parsedValue))
+        {
+            return;
+        }
+
+        incomingParameterIDs.add(parameterID);
+    }
+
+    const bool hasStateFormatVersion =
+        xmlState->hasAttribute("stateFormatVersion");
+    const bool hasSavedParameterCount =
+        xmlState->hasAttribute("savedParameterCount");
+    if (hasStateFormatVersion != hasSavedParameterCount)
+        return;
+
+    if (hasStateFormatVersion)
+    {
+        int incomingFormatVersion = 0;
+        int declaredParameterCount = 0;
+        if (! parseStrictNonNegativeIntegerAttribute(
+                *xmlState, "stateFormatVersion", incomingFormatVersion)
+            || ! parseStrictNonNegativeIntegerAttribute(
+                *xmlState, "savedParameterCount", declaredParameterCount)
+            || incomingFormatVersion != hostStateFormatVersion
+            || declaredParameterCount != incomingParameterIDs.size()
+            || xmlState->getChildByName("otherState") == nullptr
+            || xmlState->getChildByName("LFO_STATE") == nullptr
+            || xmlState->getChildByName("MODULATION_STATE") == nullptr
+            || xmlState->getChildByName("AB_STATE") == nullptr)
+        {
+            return;
+        }
+    }
+    else if (incomingParameterIDs.size()
+             < oldestWrappedHostParameterCount)
+    {
+        // Fire 0.751 introduced the outer <state> wrapper with 19 APVTS
+        // children. Older direct-PARAMETERS chunks are a different format and
+        // were never accepted by this loader. Fewer children therefore means
+        // this wrapped state was truncated, not merely saved by an old build.
+        return;
+    }
+
+    for (const auto* anchor : legacyHostStateParameterAnchors)
+        if (! incomingParameterIDs.contains(anchor))
+            return;
+
+    // The first wrapped state used one global "mix" parameter. Early
+    // multiband builds temporarily replaced it with mix1..mix4, and later
+    // versions restored the global control. Accept either complete historical
+    // family without weakening the structural checks above.
+    bool hasCompleteMixFamily = incomingParameterIDs.contains(MIX_ID);
+    if (! hasCompleteMixFamily)
+    {
+        hasCompleteMixFamily = true;
+        for (int band = 0; band < 4; ++band)
+            hasCompleteMixFamily = hasCompleteMixFamily
+                                   && incomingParameterIDs.contains(
+                                       ParameterIDAndName::getIDString(
+                                           MIX_ID, band));
+    }
+    if (! hasCompleteMixFamily)
         return;
 
     const auto parameterStateTemplate = treeState.copyState();

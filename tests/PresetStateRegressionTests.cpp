@@ -727,6 +727,227 @@ TEST_CASE("Corrupt host state without a valid APVTS tree is rejected atomically"
     CHECK(getPlainParameter(processor, driveID) == Catch::Approx(22.0f));
 }
 
+TEST_CASE("Sparse host parameter trees are rejected atomically",
+          "[state][host][corrupt][transaction]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    setPlainParameter(processor, driveID, 31.0f);
+    processor.setSavedWidth(1432);
+    processor.setSavedHeight(811);
+    processor.statePresets.setCurrentPresetId(7);
+
+    const auto shape = makeLfoShape(0.38f, 0.88f, 0.57f);
+    setPlainParameter(processor,
+                      ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 1),
+                      shape.smoothness);
+    processor.getLfoManager().setLfoData(1, shape);
+    processor.assignLfoToTarget(1, driveID);
+    processor.setModulationDepth(driveID, 0.42f);
+
+    FireAudioProcessor incoming;
+    juce::MemoryBlock incomingState;
+    incoming.getStateInformation(incomingState);
+    auto sparseXml = juce::AudioProcessor::getXmlFromBinary(
+        incomingState.getData(), static_cast<int>(incomingState.getSize()));
+    REQUIRE(sparseXml != nullptr);
+
+    auto* parameterState = sparseXml->getChildByName(
+        incoming.treeState.state.getType().toString());
+    REQUIRE(parameterState != nullptr);
+    auto* retainedParameter = findHostParameter(*sparseXml, incoming, HQ_ID);
+    REQUIRE(retainedParameter != nullptr);
+    for (int childIndex = parameterState->getNumChildElements() - 1;
+         childIndex >= 0;
+         --childIndex)
+    {
+        auto* child = parameterState->getChildElement(childIndex);
+        if (child != retainedParameter)
+            parameterState->removeChildElement(child, true);
+    }
+    REQUIRE(parameterState->getNumChildElements() == 1);
+
+    auto* otherState = sparseXml->getChildByName("otherState");
+    REQUIRE(otherState != nullptr);
+    otherState->setAttribute("currentPresetID", 1);
+    otherState->setAttribute("editorWidth", 999);
+    otherState->setAttribute("editorHeight", 600);
+
+    SECTION("versioned state rejects a declared-count mismatch")
+    {
+        REQUIRE(sparseXml->hasAttribute("stateFormatVersion"));
+        REQUIRE(sparseXml->hasAttribute("savedParameterCount"));
+    }
+
+    SECTION("unversioned state rejects an implausibly sparse legacy wrapper")
+    {
+        sparseXml->removeAttribute("stateFormatVersion");
+        sparseXml->removeAttribute("savedParameterCount");
+    }
+
+    juce::MemoryBlock sparseState;
+    juce::AudioProcessor::copyXmlToBinary(*sparseXml, sparseState);
+    processor.setStateInformation(sparseState.getData(),
+                                  static_cast<int>(sparseState.getSize()));
+
+    CHECK(getPlainParameter(processor, driveID) == Catch::Approx(31.0f));
+    CHECK(processor.getSavedWidth() == 1432);
+    CHECK(processor.getSavedHeight() == 811);
+    CHECK(processor.statePresets.getCurrentPresetId() == 7);
+
+    const auto shapes = processor.getLfoManager().getLfoDataCopy();
+    REQUIRE(shapes.size() == 4);
+    REQUIRE(shapes[1].points.size() == 3);
+    CHECK(shapes[1].points[1].x == Catch::Approx(0.38f));
+    CHECK(shapes[1].points[1].y == Catch::Approx(0.88f));
+    CHECK(shapes[1].smoothness == Catch::Approx(0.57f));
+
+    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+    const auto* routing = findRouting(routings, driveID);
+    REQUIRE(routing != nullptr);
+    CHECK(routing->sourceLfoIndex == 1);
+    CHECK(routing->depth == Catch::Approx(0.42f));
+}
+
+TEST_CASE("The oldest wrapped host parameter layout remains loadable",
+          "[state][host][legacy][compatibility]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto templateState = processor.treeState.copyState();
+    juce::ValueTree legacyParameters(templateState.getType());
+
+    const std::array<std::pair<const char*, float>, 9> legacyAnchors {{
+        { HQ_ID, 1.0f },
+        { DOWNSAMPLE_ID, 4.0f },
+        { MIX_ID, 0.37f },
+        { OFF_ID, 0.0f },
+        { PRE_ID, 1.0f },
+        { POST_ID, 0.0f },
+        { LOW_ID, 1.0f },
+        { BAND_ID, 0.0f },
+        { HIGH_ID, 0.0f },
+    }};
+
+    for (const auto& [parameterID, value] : legacyAnchors)
+    {
+        juce::ValueTree matchingChild;
+        for (const auto& child : templateState)
+            if (child.getProperty("id").toString() == parameterID)
+            {
+                matchingChild = child.createCopy();
+                break;
+            }
+
+        REQUIRE(matchingChild.isValid());
+        matchingChild.setProperty("value", value, nullptr);
+        legacyParameters.addChild(matchingChild, -1, nullptr);
+    }
+
+    const auto parameterChildType = templateState.getChild(0).getType();
+    for (int retiredIndex = 0; retiredIndex < 10; ++retiredIndex)
+    {
+        juce::ValueTree retiredParameter(parameterChildType);
+        retiredParameter.setProperty("id",
+                                     "retiredParameter" + juce::String(retiredIndex),
+                                     nullptr);
+        retiredParameter.setProperty("value", retiredIndex * 0.1f, nullptr);
+        legacyParameters.addChild(retiredParameter, -1, nullptr);
+    }
+    REQUIRE(legacyParameters.getNumChildren() == 19);
+
+    juce::XmlElement legacyState("state");
+    legacyState.addChildElement(legacyParameters.createXml().release());
+    juce::MemoryBlock legacyBinary;
+    juce::AudioProcessor::copyXmlToBinary(legacyState, legacyBinary);
+
+    processor.setStateInformation(legacyBinary.getData(),
+                                  static_cast<int>(legacyBinary.getSize()));
+
+    CHECK(getPlainParameter(processor, HQ_ID) == Catch::Approx(1.0f));
+    CHECK(getPlainParameter(processor, DOWNSAMPLE_ID) == Catch::Approx(4.0f));
+    CHECK(getPlainParameter(processor, MIX_ID) == Catch::Approx(0.37f));
+    CHECK(getPlainParameter(processor, OFF_ID) == Catch::Approx(0.0f));
+    CHECK(getPlainParameter(processor, PRE_ID) == Catch::Approx(1.0f));
+    CHECK(getPlainParameter(processor, POST_ID) == Catch::Approx(0.0f));
+    CHECK(getPlainParameter(processor, LOW_ID) == Catch::Approx(1.0f));
+    CHECK(getPlainParameter(processor, BAND_ID) == Catch::Approx(0.0f));
+    CHECK(getPlainParameter(processor, HIGH_ID) == Catch::Approx(0.0f));
+}
+
+TEST_CASE("Legacy multiband host state can omit the temporary global Mix",
+          "[state][host][legacy][compatibility][multiband]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto templateState = processor.treeState.copyState();
+    juce::ValueTree legacyParameters(templateState.getType());
+
+    const auto appendCurrentParameter = [&](const juce::String& parameterID,
+                                            float value)
+    {
+        juce::ValueTree matchingChild;
+        for (const auto& child : templateState)
+            if (child.getProperty("id").toString() == parameterID)
+            {
+                matchingChild = child.createCopy();
+                break;
+            }
+
+        REQUIRE(matchingChild.isValid());
+        matchingChild.setProperty("value", value, nullptr);
+        legacyParameters.addChild(matchingChild, -1, nullptr);
+    };
+
+    const std::array<std::pair<const char*, float>, 8> stableAnchors {{
+        { HQ_ID, 1.0f },
+        { DOWNSAMPLE_ID, 4.0f },
+        { OFF_ID, 0.0f },
+        { PRE_ID, 1.0f },
+        { POST_ID, 0.0f },
+        { LOW_ID, 1.0f },
+        { BAND_ID, 0.0f },
+        { HIGH_ID, 0.0f },
+    }};
+    for (const auto& [parameterID, value] : stableAnchors)
+        appendCurrentParameter(parameterID, value);
+
+    for (int band = 0; band < 4; ++band)
+        appendCurrentParameter(ParameterIDAndName::getIDString(MIX_ID, band),
+                               0.23f + 0.1f * static_cast<float>(band));
+
+    const auto parameterChildType = templateState.getChild(0).getType();
+    for (int retiredIndex = 0; retiredIndex < 51; ++retiredIndex)
+    {
+        juce::ValueTree retiredParameter(parameterChildType);
+        retiredParameter.setProperty("id",
+                                     "retiredMultibandParameter"
+                                         + juce::String(retiredIndex),
+                                     nullptr);
+        retiredParameter.setProperty("value", retiredIndex * 0.01f, nullptr);
+        legacyParameters.addChild(retiredParameter, -1, nullptr);
+    }
+    REQUIRE(legacyParameters.getNumChildren() == 63);
+    CHECK(countValueTreeChildrenWithID(legacyParameters, MIX_ID) == 0);
+
+    juce::XmlElement legacyState("state");
+    legacyState.addChildElement(legacyParameters.createXml().release());
+    juce::MemoryBlock legacyBinary;
+    juce::AudioProcessor::copyXmlToBinary(legacyState, legacyBinary);
+
+    processor.setStateInformation(legacyBinary.getData(),
+                                  static_cast<int>(legacyBinary.getSize()));
+
+    CHECK(getPlainParameter(
+              processor, ParameterIDAndName::getIDString(MIX_ID, 0))
+          == Catch::Approx(0.23f));
+    CHECK(getPlainParameter(
+              processor, ParameterIDAndName::getIDString(MIX_ID, 3))
+          == Catch::Approx(0.53f));
+    CHECK(getPlainParameter(processor, MIX_ID) == Catch::Approx(1.0f));
+}
+
 TEST_CASE("Reentrant host saves never mix multiband topology generations",
           "[state][host][topology][transaction][reentrant]")
 {
@@ -880,6 +1101,8 @@ TEST_CASE("Host loading promotes legacy LFO-only smoothness into APVTS",
     REQUIRE(lfo != nullptr);
 
     parameterState->removeChildElement(smoothnessParameter, true);
+    legacyXml->removeAttribute("stateFormatVersion");
+    legacyXml->removeAttribute("savedParameterCount");
     lfo->setAttribute("smoothness", legacySmoothness);
     juce::AudioProcessor::copyXmlToBinary(*legacyXml, legacyState);
 
@@ -1474,7 +1697,7 @@ TEST_CASE("Bundled legacy LFO preset is clean after semantic model loading",
     CHECK_FALSE(processor.isCurrentStateEquivalentToPreset(*preset));
 }
 
-TEST_CASE("Host parameter migration clamps ranges and canonicalises duplicate or unknown IDs",
+TEST_CASE("Host parameter migration clamps ranges and rejects corrupt manifests",
           "[state][host][migration][corrupt]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -1510,7 +1733,7 @@ TEST_CASE("Host parameter migration clamps ranges and canonicalises duplicate or
               == Catch::Approx(numBandsParameter->getNormalisableRange().start));
     }
 
-    SECTION("first known ID wins and foreign IDs are discarded")
+    SECTION("duplicate IDs and an invalid declared count reject the transaction")
     {
         FireAudioProcessor source;
         const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
@@ -1534,13 +1757,48 @@ TEST_CASE("Host parameter migration clamps ranges and canonicalises duplicate or
         juce::AudioProcessor::copyXmlToBinary(*xml, stateBlock);
 
         FireAudioProcessor restored;
+        setPlainParameter(restored, driveID, 13.0f);
+        restored.setStateInformation(stateBlock.getData(),
+                                     static_cast<int>(stateBlock.getSize()));
+        CHECK(getPlainParameter(restored, driveID) == Catch::Approx(13.0f));
+
+        const auto canonicalState = restored.treeState.copyState();
+        CHECK(countValueTreeChildrenWithID(canonicalState, driveID) == 1);
+        CHECK(countValueTreeChildrenWithID(canonicalState, "futureUnknownParameter") == 0);
+    }
+
+    SECTION("unique future IDs are ignored when the declared count is coherent")
+    {
+        FireAudioProcessor source;
+        const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        setPlainParameter(source, driveID, 28.0f);
+        juce::MemoryBlock stateBlock;
+        source.getStateInformation(stateBlock);
+        auto xml = juce::AudioProcessor::getXmlFromBinary(
+            stateBlock.getData(), static_cast<int>(stateBlock.getSize()));
+        REQUIRE(xml != nullptr);
+        auto* parameters = xml->getChildByName(
+            source.treeState.state.getType().toString());
+        REQUIRE(parameters != nullptr);
+        auto* knownParameter = findHostParameter(*xml, source, driveID);
+        REQUIRE(knownParameter != nullptr);
+
+        auto* unknown = parameters->createNewChildElement(
+            knownParameter->getTagName());
+        unknown->setAttribute("id", "futureUnknownParameter");
+        unknown->setAttribute("value", 9.0);
+        xml->setAttribute("savedParameterCount",
+                          parameters->getNumChildElements());
+        juce::AudioProcessor::copyXmlToBinary(*xml, stateBlock);
+
+        FireAudioProcessor restored;
         restored.setStateInformation(stateBlock.getData(),
                                      static_cast<int>(stateBlock.getSize()));
         CHECK(getPlainParameter(restored, driveID) == Catch::Approx(28.0f));
 
         const auto canonicalState = restored.treeState.copyState();
-        CHECK(countValueTreeChildrenWithID(canonicalState, driveID) == 1);
-        CHECK(countValueTreeChildrenWithID(canonicalState, "futureUnknownParameter") == 0);
+        CHECK(countValueTreeChildrenWithID(canonicalState,
+                                           "futureUnknownParameter") == 0);
     }
 }
 

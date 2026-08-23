@@ -522,6 +522,86 @@ TEST_CASE("Deleting the focused last band rebinds Drive to the remaining audible
     CHECK(hiddenDrive->load() == Catch::Approx(0.0f));
 }
 
+TEST_CASE("Set Value popup keeps the modulation target that opened it",
+          "[multiband][ui][modulation][value-entry]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    const auto firstDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto secondDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    constexpr float firstBaseValue = 10.0f;
+    constexpr float secondBaseValue = 70.0f;
+    constexpr float firstInitialDepth = 0.15f;
+    constexpr float secondInitialDepth = -0.35f;
+    constexpr float enteredValue = 40.0f;
+
+    setPlainParameter(processor, firstDriveID, firstBaseValue);
+    setPlainParameter(processor, secondDriveID, secondBaseValue);
+    processor.assignLfoToTarget(0, firstDriveID);
+    processor.assignLfoToTarget(1, secondDriveID);
+    processor.setModulationDepth(firstDriveID, firstInitialDepth);
+    processor.setModulationDepth(secondDriveID, secondInitialDepth);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    auto* bandPanel = findDescendant<BandPanel>(*editor);
+    auto* valueEntryPopup = findDescendant<ValueEntryPopup>(*editor);
+    REQUIRE(multiband != nullptr);
+    REQUIRE(bandPanel != nullptr);
+    REQUIRE(valueEntryPopup != nullptr);
+
+    multiband->setFocusIndex(0);
+    auto* reusedDriveKnob = bandPanel->getDriveKnob();
+    REQUIRE(reusedDriveKnob != nullptr);
+    REQUIRE(reusedDriveKnob->getParamID() == firstDriveID);
+    REQUIRE(static_cast<bool>(reusedDriveKnob->onSetValueRequested));
+    reusedDriveKnob->onSetValueRequested(reusedDriveKnob);
+    REQUIRE(valueEntryPopup->isVisible());
+
+    // The non-modal popup remains open while the one shared BandPanel slider
+    // is rebound to another band.  Accepting the value must still address the
+    // parameter that opened the popup, not the slider's newer parameter ID.
+    multiband->setFocusIndex(1);
+    REQUIRE(bandPanel->getDriveKnob() == reusedDriveKnob);
+    REQUIRE(reusedDriveKnob->getParamID() == secondDriveID);
+    REQUIRE(valueEntryPopup->isVisible());
+    REQUIRE(static_cast<bool>(valueEntryPopup->onOk));
+    valueEntryPopup->onOk(enteredValue);
+    CHECK_FALSE(valueEntryPopup->isVisible());
+
+    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+    const auto* firstRouting = findRouting(routings, firstDriveID);
+    const auto* secondRouting = findRouting(routings, secondDriveID);
+    REQUIRE(firstRouting != nullptr);
+    REQUIRE(secondRouting != nullptr);
+    REQUIRE(firstRouting->isBipolar);
+
+    auto* firstParameter = processor.treeState.getParameter(firstDriveID);
+    REQUIRE(firstParameter != nullptr);
+    const auto range = firstParameter->getNormalisableRange();
+    const auto expectedFirstDepth = juce::jlimit(
+        -1.0f,
+        1.0f,
+        2.0f * (range.convertTo0to1(enteredValue)
+                - range.convertTo0to1(firstBaseValue)));
+
+    CHECK(firstRouting->depth == Catch::Approx(expectedFirstDepth));
+    CHECK(secondRouting->depth == Catch::Approx(secondInitialDepth));
+
+    const auto* firstBase = processor.treeState.getRawParameterValue(firstDriveID);
+    const auto* secondBase = processor.treeState.getRawParameterValue(secondDriveID);
+    REQUIRE(firstBase != nullptr);
+    REQUIRE(secondBase != nullptr);
+    CHECK(firstBase->load() == Catch::Approx(firstBaseValue));
+    CHECK(secondBase->load() == Catch::Approx(secondBaseValue));
+}
+
 TEST_CASE("Deleting a middle band moves every survivor setting and resets the inactive slot",
           "[multiband][ui][delete][parameters]")
 {

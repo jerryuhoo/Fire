@@ -132,7 +132,7 @@ private:
 
     ValuePopup valuePopup;
     ValueEntryPopup valueEntryPopup;
-    ModulatableSlider* sliderForValueEntry = nullptr;
+    juce::String valueEntryTargetParameterID;
 
     juce::Image backgroundCache;
     float currentDisplayScale = 1.0f;

@@ -65,19 +65,21 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     valueEntryPopup.onOk = [this](double value)
     {
-        if (sliderForValueEntry != nullptr)
-        {
-            processor.setModulationValue(sliderForValueEntry->getParamID(), (float) value);
-        }
-
+        const auto targetParameterID = valueEntryTargetParameterID;
+        valueEntryTargetParameterID.clear();
         valueEntryPopup.setVisible(false);
-        sliderForValueEntry = nullptr;
+
+        if (targetParameterID.isNotEmpty())
+        {
+            processor.setModulationValue(targetParameterID, (float) value);
+            modulationSnapshotFramesRemaining = 0;
+        }
     };
 
     valueEntryPopup.onCancel = [this]()
     {
+        valueEntryTargetParameterID.clear();
         valueEntryPopup.setVisible(false);
-        sliderForValueEntry = nullptr;
     };
 
     processor.addChangeListener(this);
@@ -202,7 +204,19 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
         slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit)
         {
-            sliderForValueEntry = sliderToEdit;
+            if (sliderToEdit == nullptr)
+            {
+                valueEntryTargetParameterID.clear();
+                valueEntryPopup.setVisible(false);
+                return;
+            }
+
+            valueEntryTargetParameterID = sliderToEdit->getParamID();
+            if (valueEntryTargetParameterID.isEmpty())
+            {
+                valueEntryPopup.setVisible(false);
+                return;
+            }
 
             auto sliderBounds = sliderToEdit->getScreenBounds();
 
@@ -215,7 +229,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                                          .constrainedWithin(getLocalBounds());
             valueEntryPopup.setBounds(popupBounds);
             valueEntryPopup.setVisible(true);
-            valueEntryPopup.grabKeyboardFocus();
+            if (valueEntryPopup.isShowing())
+                valueEntryPopup.grabKeyboardFocus();
         };
 
         slider->onBypassToggled = [slider, bypassCallback]()

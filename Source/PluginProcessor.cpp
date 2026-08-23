@@ -6546,18 +6546,25 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
         lfoDataHasChanged();
 }
 
-void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, const juce::String& targetParameterID)
+bool FireAudioProcessor::assignModulation(int routingIndex,
+                                          int sourceLfoIndex,
+                                          const juce::String& targetParameterID,
+                                          const juce::String& expectedTargetParameterID)
 {
     if (targetParameterID.isNotEmpty()
         && (! juce::isPositiveAndBelow(sourceLfoIndex, 4) || treeState.getParameter(targetParameterID) == nullptr))
-        return;
+        return false;
 
     bool didUpdate = false;
     {
         const juce::ScopedLock lock(lfoManager->getLfoDataLock());
         auto& routings = lfoManager->getModulationRoutings();
         if (! juce::isPositiveAndBelow(routingIndex, routings.size()))
-            return;
+            return false;
+
+        auto& currentRouting = routings.getReference(routingIndex);
+        if (currentRouting.targetParameterID != expectedTargetParameterID)
+            return false;
 
         if (targetParameterID.isNotEmpty())
         {
@@ -6568,7 +6575,6 @@ void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, 
             }
         }
 
-        auto& currentRouting = routings.getReference(routingIndex);
         currentRouting.sourceLfoIndex = juce::jlimit(0, 3, sourceLfoIndex);
         currentRouting.targetParameterID = targetParameterID;
         didUpdate = true;
@@ -6576,6 +6582,8 @@ void FireAudioProcessor::assignModulation(int routingIndex, int sourceLfoIndex, 
 
     if (didUpdate)
         lfoDataHasChanged();
+
+    return didUpdate;
 }
 
 float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const

@@ -56,10 +56,13 @@ private:
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
     void comboBoxChanged(juce::ComboBox* comboBox) override;
+    bool isParentRebuildPending();
+    void requestParentRebuild();
 
     FireAudioProcessor& processor;
     FireLookAndFeel fireLookAndFeel;
     int index; // The index of the routing this row represents in the processor's array
+    const juce::String targetParameterIDAtBuild;
     std::function<void()> onDeleteCallback; // The function to call when the delete button is pressed.
 
     juce::ComboBox sourceMenu;
@@ -77,6 +80,7 @@ private:
 //
 class ModulationMatrixPanel : public juce::Component,
                               public juce::Button::Listener,
+                              private juce::ChangeListener,
                               private juce::AsyncUpdater
 {
 public:
@@ -89,9 +93,11 @@ public:
     // Rebuilds the UI from the processor's data model
     void buildUiFromProcessorState();
     void requestUiRebuild();
+    bool isUiRebuildPending() const noexcept;
 
 private:
     void buttonClicked(juce::Button* button) override;
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void handleAsyncUpdate() override;
     FireAudioProcessor& processor;
     FireLookAndFeel fireLookAndFeel;

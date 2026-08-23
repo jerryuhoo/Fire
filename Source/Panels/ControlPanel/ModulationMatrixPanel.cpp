@@ -73,7 +73,10 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
                                          int routingIndex,
                                          const ModulationRouting& routing,
                                          std::function<void()> onDelete)
-    : processor(p), index(routingIndex), onDeleteCallback(onDelete)
+    : processor(p),
+      index(routingIndex),
+      targetParameterIDAtBuild(routing.targetParameterID),
+      onDeleteCallback(onDelete)
 {
     setOpaque(false);
     setLookAndFeel(&fireLookAndFeel);
@@ -111,12 +114,19 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bipolarButton.onStateChange = [this]
     {
         bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
+        if (isParentRebuildPending())
+        {
+            requestParentRebuild();
+            return;
+        }
+
         auto& manager = processor.getLfoManager();
         bool didUpdate = false;
         {
             const juce::ScopedLock lock(manager.getLfoDataLock());
             auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size()))
+            if (juce::isPositiveAndBelow(index, routings.size())
+                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
             {
                 routings.getReference(index).isBipolar = bipolarButton.getToggleState();
                 didUpdate = true;
@@ -125,6 +135,8 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
         if (didUpdate)
             processor.lfoDataHasChanged();
+        else
+            requestParentRebuild();
     };
 
     // BYPASS BUTTON
@@ -141,12 +153,19 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bypassButton.onStateChange = [this]
     {
         bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+        if (isParentRebuildPending())
+        {
+            requestParentRebuild();
+            return;
+        }
+
         auto& manager = processor.getLfoManager();
         bool didUpdate = false;
         {
             const juce::ScopedLock lock(manager.getLfoDataLock());
             auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size()))
+            if (juce::isPositiveAndBelow(index, routings.size())
+                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
             {
                 routings.getReference(index).isBypassed = bypassButton.getToggleState();
                 didUpdate = true;
@@ -155,6 +174,8 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
         if (didUpdate)
             processor.lfoDataHasChanged();
+        else
+            requestParentRebuild();
     };
 
     // === DESTINATION MENU ===
@@ -237,6 +258,12 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
 {
     if (button == &removeButton)
     {
+        if (isParentRebuildPending())
+        {
+            requestParentRebuild();
+            return;
+        }
+
         if (onDeleteCallback)
             onDeleteCallback();
     }
@@ -246,12 +273,19 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 {
     if (slider == &amountSlider)
     {
+        if (isParentRebuildPending())
+        {
+            requestParentRebuild();
+            return;
+        }
+
         auto& manager = processor.getLfoManager();
         bool didUpdate = false;
         {
             const juce::ScopedLock lock(manager.getLfoDataLock());
             auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size()))
+            if (juce::isPositiveAndBelow(index, routings.size())
+                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
             {
                 routings.getReference(index).depth = (float) amountSlider.getValue();
                 didUpdate = true;
@@ -260,6 +294,8 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 
         if (didUpdate)
             processor.lfoDataHasChanged();
+        else
+            requestParentRebuild();
     }
 }
 
@@ -268,6 +304,12 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
     // This function now handles changes from BOTH combo boxes.
     if (comboBox == &sourceMenu || comboBox == &destinationMenu)
     {
+        if (isParentRebuildPending())
+        {
+            requestParentRebuild();
+            return;
+        }
+
         // 1. Get the current selections from both menus.
         int selectedSourceIndex = sourceMenu.getSelectedId() - 1;
         juce::String selectedTargetID = "";
@@ -283,15 +325,29 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
         }
 
         // 2. Call the new, safe method in the processor to apply the changes.
-        processor.assignModulation(index, selectedSourceIndex, selectedTargetID);
+        processor.assignModulation(index,
+                                   selectedSourceIndex,
+                                   selectedTargetID,
+                                   targetParameterIDAtBuild);
 
         // 3. IMPORTANT: Tell the parent panel to rebuild its UI.
         // This ensures that if another row was cleared, it will visually update to "None".
-        if (auto* panel = findParentComponentOfClass<ModulationMatrixPanel>())
-        {
-            panel->requestUiRebuild();
-        }
+        requestParentRebuild();
     }
+}
+
+bool ModulationMatrixRow::isParentRebuildPending()
+{
+    if (auto* panel = findParentComponentOfClass<ModulationMatrixPanel>())
+        return panel->isUiRebuildPending();
+
+    return false;
+}
+
+void ModulationMatrixRow::requestParentRebuild()
+{
+    if (auto* panel = findParentComponentOfClass<ModulationMatrixPanel>())
+        panel->requestUiRebuild();
 }
 
 //==============================================================================
@@ -301,6 +357,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
 {
     setOpaque(true);
     setLookAndFeel(&fireLookAndFeel);
+    processor.addChangeListener(this);
     addAndMakeVisible(header);
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&contentComponent, false);
@@ -322,6 +379,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
 
 ModulationMatrixPanel::~ModulationMatrixPanel()
 {
+    processor.removeChangeListener(this);
     cancelPendingUpdate();
     addButton.removeListener(this);
     closeButton.removeListener(this);
@@ -370,6 +428,9 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 {
     if (button == &addButton)
     {
+        if (isUiRebuildPending())
+            return;
+
         auto& manager = processor.getLfoManager();
         {
             const juce::ScopedLock lock(manager.getLfoDataLock());
@@ -398,7 +459,9 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
     {
         // When creating a row, pass a lambda function that captures the index 'i'.
         // This lambda will be called when the row's remove button is clicked.
-        auto onDelete = [this, index = i]()
+        auto onDelete = [this,
+                         index = i,
+                         expectedTargetParameterID = routings.getReference(i).targetParameterID]()
         {
             // Remove the routing from the processor's data model.
             auto& manager = processor.getLfoManager();
@@ -406,7 +469,9 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
             {
                 const juce::ScopedLock lock(manager.getLfoDataLock());
                 auto& mutableRoutings = manager.getModulationRoutings();
-                if (juce::isPositiveAndBelow(index, mutableRoutings.size()))
+                if (juce::isPositiveAndBelow(index, mutableRoutings.size())
+                    && mutableRoutings.getReference(index).targetParameterID
+                           == expectedTargetParameterID)
                 {
                     mutableRoutings.remove(index);
                     didRemove = true;
@@ -432,6 +497,17 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
 void ModulationMatrixPanel::requestUiRebuild()
 {
     triggerAsyncUpdate();
+}
+
+bool ModulationMatrixPanel::isUiRebuildPending() const noexcept
+{
+    return isUpdatePending();
+}
+
+void ModulationMatrixPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
+{
+    if (source == &processor)
+        requestUiRebuild();
 }
 
 void ModulationMatrixPanel::handleAsyncUpdate()

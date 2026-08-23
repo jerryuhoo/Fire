@@ -181,6 +181,9 @@ PluginProcessor).
         juce::TextButton* getCopyABButton();
         juce::TextButton* getPreviousButton();
         juce::TextButton* getNextButton();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        juce::PopupMenu::Options getPresetMenuOptionsForTesting();
+#endif
 
     private:
         class ManualUpdateCheckThread final : public juce::Thread
@@ -213,8 +216,6 @@ PluginProcessor).
         std::atomic<bool> versionCheckReady { false };
         juce::Component::SafePointer<juce::DialogWindow> settingsDialog;
 
-        FireLookAndFeel fireLookAndFeel;
-
         juce::TextButton toggleABButton;
         juce::TextButton copyABButton;
         juce::ComboBox presetBox;
@@ -239,6 +240,8 @@ PluginProcessor).
         void rescanPresetFolder();
         void creatFolderIfNotExist(juce::File userFile);
         void popPresetMenu();
+        float getPresetMenuScale() const noexcept;
+        juce::PopupMenu::Options createPresetMenuOptions(float menuScale);
         void setPreviousPreset();
         void setNextPreset();
         void beginProgrammaticChange();

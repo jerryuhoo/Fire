@@ -1250,7 +1250,6 @@ namespace state
         menuButton.setComponentID("header_menu");
         menuButton.setTooltip("Preset and application menu");
         menuButton.setTitle("Preset and application menu");
-        presetMenu.setLookAndFeel(&fireLookAndFeel);
         toggleABButton.setButtonText(procStateAB.isCurrentA() ? "A" : "B");
         startTimerHz(30);
     }
@@ -1258,7 +1257,6 @@ namespace state
     StateComponent::~StateComponent()
     {
         stopTimer();
-        juce::PopupMenu::dismissAllActiveMenus();
         presetMenu.setLookAndFeel(nullptr);
 
         if (settingsDialog != nullptr)
@@ -1791,6 +1789,47 @@ namespace state
         return procStatePresets.getPresetName();
     }
 
+    float StateComponent::getPresetMenuScale() const noexcept
+    {
+        constexpr float minimumScale = 1.0f;
+        constexpr float maximumScale = 2.0f;
+
+        const auto* scaleSource = getTopLevelComponent();
+        if (scaleSource == nullptr
+            || scaleSource->getWidth() <= 0
+            || scaleSource->getHeight() <= 0)
+            return minimumScale;
+
+        const auto widthScale = static_cast<float>(scaleSource->getWidth()) / INIT_WIDTH;
+        const auto heightScale = static_cast<float>(scaleSource->getHeight()) / INIT_HEIGHT;
+        return juce::jlimit(minimumScale, maximumScale,
+                            juce::jmin(widthScale, heightScale));
+    }
+
+    juce::PopupMenu::Options StateComponent::createPresetMenuOptions(float menuScale)
+    {
+        auto options = juce::PopupMenu::Options()
+                           .withTargetComponent(menuButton)
+                           .withDeletionCheck(*this)
+                           .withStandardItemHeight(
+                               juce::roundToInt(30.0f * menuScale))
+                           .withMinimumWidth(
+                               juce::roundToInt(250.0f * menuScale));
+
+        if (auto* topLevel = getTopLevelComponent();
+            topLevel != nullptr && topLevel != &menuButton)
+            options = options.withParentComponent(topLevel);
+
+        return options;
+    }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    juce::PopupMenu::Options StateComponent::getPresetMenuOptionsForTesting()
+    {
+        return createPresetMenuOptions(getPresetMenuScale());
+    }
+#endif
+
     void StateComponent::popPresetMenu()
     {
         presetMenu.clear();
@@ -1801,17 +1840,16 @@ namespace state
         presetMenu.addItem(5, "Check for New Version", true);
         presetMenu.addItem(6, "Settings", true);
 
-        float heightScale = getHeight() / 50.0f;
-        float widthScale = getWidth() / 1000.0f;
-        float scale = juce::jmin(heightScale, widthScale);
-        fireLookAndFeel.scale = scale;
+        const auto menuScale = getPresetMenuScale();
+        auto menuLookAndFeel = std::make_shared<FireLookAndFeel>();
+        menuLookAndFeel->scale = menuScale;
+        presetMenu.setLookAndFeel(menuLookAndFeel.get());
 
         juce::Component::SafePointer<StateComponent> safeThis(this);
-        presetMenu.showMenuAsync(juce::PopupMenu::Options()
-                                     .withStandardItemHeight(juce::roundToInt(30.0f * heightScale))
-                                     .withMinimumWidth(juce::roundToInt(250.0f * widthScale)),
-                                 [safeThis](int result)
+        presetMenu.showMenuAsync(createPresetMenuOptions(menuScale),
+                                 [safeThis, menuLookAndFeel](int result)
                                  {
+                                     juce::ignoreUnused(menuLookAndFeel);
                                      if (safeThis == nullptr)
                                          return;
 

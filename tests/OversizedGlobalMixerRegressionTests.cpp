@@ -11,13 +11,16 @@ namespace
 {
 constexpr double sampleRate = 48000.0;
 constexpr double hostBpm = 123.0;
-constexpr int preparedBlockSize = 257;
+// One sample beyond the processor's 8192-sample defensive minimum keeps the
+// internal range length off the 512-sample LFO cycle boundary. Replaying each
+// range from LFO sample zero therefore cannot pass this fixture accidentally.
+constexpr int preparedBlockSize = 8193;
 constexpr int oversizedSamples = 262145;
 constexpr int tailSamples = 16384;
-// The absolute-time LFO uses float phase accumulation. Across a 262145-sample
-// callback its partition-dependent rounding is slightly larger than in the
-// ordinary Global Mix regression, while the pre-fix dry-tail loss is orders of
-// magnitude larger.
+// Use an exactly representable 512-sample free-running cycle and phase. This
+// keeps the defensive oversized-vs-partitioned comparison focused on mixer
+// range/FIFO correctness instead of float phase accumulation over 262145
+// samples.
 constexpr float comparisonTolerance = 3.0e-4f;
 
 const std::vector<int> referenceBlocks { 4093, 2053, 3079, 257 };
@@ -114,8 +117,8 @@ void configureProcessor(FireAudioProcessor& processor,
     setPlainParameter(processor, bandParameter(MIX_ID), 1.0f);
 
     setPlainParameter(processor, lfoParameter(LFO_SYNC_MODE_ID), 0.0f);
-    setPlainParameter(processor, lfoParameter(LFO_RATE_HZ_ID), 100.0f);
-    setPlainParameter(processor, lfoParameter(LFO_PHASE_ID), 0.13f);
+    setPlainParameter(processor, lfoParameter(LFO_RATE_HZ_ID), 93.75f);
+    setPlainParameter(processor, lfoParameter(LFO_PHASE_ID), 0.25f);
     setPlainParameter(processor, lfoParameter(LFO_SMOOTH_ID), 0.0f);
     processor.getLfoManager().setLfoData(0, makeTriangleLfo());
     if (modulateGlobalMix)
@@ -124,8 +127,8 @@ void configureProcessor(FireAudioProcessor& processor,
         processor.setModulationDepth(MIX_ID, 1.0f);
     }
 
-    // Intentionally retain the small host declaration. The regression covers
-    // defensive handling when a host violates that advertised block hint.
+    // The regression covers defensive handling when a host greatly exceeds
+    // its advertised block hint.
     processor.prepareToPlay(sampleRate, preparedBlockSize);
 }
 
@@ -277,8 +280,8 @@ TEST_CASE("Oversized callbacks preserve global mixer and host-bypass state",
 {
     juce::ScopedJuceInitialiser_GUI gui;
 
-    // The processor reserves at least 8192 samples and prepares its global
-    // DryWetMixers from that capacity. Their FIFO rounds 20 * 8192 up to
+    // The processor prepares its global DryWetMixers from the 8193-sample
+    // hint above. Their FIFO still rounds 20 * 8193 up to
     // 262144 samples, so the one-sample-larger callback below used to jassert
     // in Debug and lose the dry tail in release builds.
     for (const bool useHq : std::array { false, true })

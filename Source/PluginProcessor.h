@@ -675,6 +675,7 @@ private:
     juce::AudioBuffer<float> hostBypassWetBuffer;
     juce::AudioBuffer<float> lfoOutputBuffer;
     juce::AudioBuffer<float> lofiDryBuffer;
+    juce::AudioBuffer<float> globalMixAlignedDryBuffer;
     int preparedProcessingBlockCapacity = 1;
 
     // filter
@@ -755,11 +756,13 @@ private:
 
     GainProcessor gainProcessorGlobal;
     OutputGainTransitionState globalOutputGainTransition;
+    // Retain JUCE's Thiran dry alignment, while the coefficient stage below
+    // keeps routed LFO trajectories out of DryWetMixer's 50 ms smoother.
     juce::dsp::DryWetMixer<float> dryWetMixerGlobal { 2048 };
+    ZeroLatencyModulatedDryWetMixer globalMixMixer;
     juce::dsp::DryWetMixer<float> bypassDelayMixer { 2048 };
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::None>
         nonHqOutputDelay { 2048 };
-    bool globalMixerPrimed = false;
 
     enum class HqTransitionPhase
     {

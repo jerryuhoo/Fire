@@ -2277,6 +2277,8 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     lfoOutputBuffer.clear();
     lofiDryBuffer.setSize(outputChannels, maximumBlockSize);
     lofiDryBuffer.clear();
+    globalMixAlignedDryBuffer.setSize(outputChannels, maximumBlockSize);
+    globalMixAlignedDryBuffer.clear();
 
     const float rampTimeSeconds = 0.0005f;
     auto initialFilterSettings = getCachedChainSettings(nullptr);
@@ -2434,9 +2436,11 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     juce::dsp::ProcessSpec globalMixerSpec = spec;
     globalMixerSpec.maximumBlockSize = spec.maximumBlockSize * 20; // set 20 to pass PluginVal
     dryWetMixerGlobal.setMixingRule(juce::dsp::DryWetMixingRule::linear);
-    dryWetMixerGlobal.setWetMixProportion(juce::jlimit(0.0f, 1.0f,
-                                                       loadCachedParameter(globalMixParameter)));
+    // This mixer now only supplies the legacy HQ dry-path alignment. The
+    // coefficient stage below owns static and routed Global Mix control.
+    dryWetMixerGlobal.setWetMixProportion(0.0f);
     dryWetMixerGlobal.prepare(globalMixerSpec);
+    globalMixMixer.prepare(spec);
 
     globalFilterMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
     globalFilterMixer.setWetMixProportion(loadCachedParameter(filterEnabledParameter) > 0.5f
@@ -2848,7 +2852,8 @@ void FireAudioProcessor::performReset()
     globalFilterMixer.reset();
     globalFilterMixerPrimed = false;
     dryWetMixerGlobal.reset();
-    globalMixerPrimed = false;
+    globalMixMixer.reset();
+    globalMixAlignedDryBuffer.clear();
     bypassDelayMixer.reset();
     nonHqOutputDelay.reset();
     lofiMixer.reset();
@@ -5905,32 +5910,30 @@ void FireAudioProcessor::applyGlobalMix(
         mixProvider.isBipolar = routingInfo.isBipolar;
     }
 
-    // Set the first target before reset so the initial callback still snaps to
-    // the restored value. Later callbacks retain the mixer's existing 50 ms
-    // smoothing while following every LFO sample instead of only sample zero.
-    dryWetMixerGlobal.setWetMixProportion(
-        juce::jlimit(0.0f, 1.0f, mixProvider.get(0)));
-    if (! globalMixerPrimed)
-        dryWetMixerGlobal.reset();
-    globalMixerPrimed = true;
-
     auto wetBlock = juce::dsp::AudioBlock<float>(buffer);
+    jassert(wetBlock.getNumChannels()
+            <= static_cast<size_t>(globalMixAlignedDryBuffer.getNumChannels()));
+    jassert(wetBlock.getNumSamples()
+            <= static_cast<size_t>(globalMixAlignedDryBuffer.getNumSamples()));
+
+    auto alignedDryBlock = juce::dsp::AudioBlock<float>(globalMixAlignedDryBuffer)
+                               .getSubsetChannelBlock(0, wetBlock.getNumChannels())
+                               .getSubBlock(0, wetBlock.getNumSamples());
+    alignedDryBlock.clear();
+
+    // Keep JUCE's established Base/HQ dry alignment, but force this stage to
+    // output dry only. The second, zero-latency stage owns the Mix envelope.
     dryWetMixerGlobal.pushDrySamples(
         juce::dsp::AudioBlock<float>(delayMatchedDryBufferForRange));
+    dryWetMixerGlobal.mixWetSamples(alignedDryBlock);
 
-    if (! hasSampleAccurateModulation)
-    {
-        dryWetMixerGlobal.mixWetSamples(wetBlock);
-        return;
-    }
-
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-    {
-        dryWetMixerGlobal.setWetMixProportion(
-            juce::jlimit(0.0f, 1.0f, mixProvider.get(sample)));
-        dryWetMixerGlobal.mixWetSamples(
-            wetBlock.getSubBlock(static_cast<size_t>(sample), 1));
-    }
+    globalMixMixer.pushDrySamples(alignedDryBlock);
+    globalMixMixer.mixWetSamples(
+        wetBlock,
+        mixProvider,
+        mixProvider.baseValue,
+        hasSampleAccurateModulation ? routingInfo.sourceLfoIndex : -1,
+        true);
 }
 
 FireAudioProcessor::ModulationInfo FireAudioProcessor::getModulationInfoForParameter(const juce::String& parameterID) const

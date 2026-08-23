@@ -493,8 +493,10 @@ void checkFiniteAndBounded(const Timeline& subject,
         maximumMagnitude(alwaysBase, 0, totalSamples),
         maximumMagnitude(alwaysHq, 0, totalSamples));
     CAPTURE(subjectPeak, endpointPeak);
+    // Bound the transition against its legal static endpoints. An absolute
+    // ceiling below an endpoint peak would reject the fixture itself rather
+    // than detect transition overshoot.
     CHECK(subjectPeak <= endpointPeak * 1.10f + 0.02f);
-    CHECK(subjectPeak < 1.5f);
 }
 
 void checkStaticModeIdentity(bool useHq, int numChannels)
@@ -1334,8 +1336,9 @@ void checkComplexOversizedTransition(bool startHq)
     REQUIRE(lfoFixtureSeparation > 0.005f);
     REQUIRE(endpointSeparation > 0.02f);
     CHECK(lfoAbsoluteSampleError < endpointTolerance);
+    // The canonical complex endpoint can legitimately exceed 1.5; the
+    // relative bound is the meaningful guard against transition overshoot.
     CHECK(subjectPeak <= endpointPeak * 1.10f + 0.02f);
-    CHECK(subjectPeak < 1.5f);
 }
 
 void checkHostBypassToggle(bool startHq, int numChannels)

@@ -127,6 +127,8 @@ void CloseButton::setPresented(bool shouldBePresented, bool animate)
         // keyboard focus immediately: the tile remains visible during its
         // fade, but Space/Return must no longer be able to delete a band.
         setInterceptsMouseClicks(false, false);
+        primaryPointerDown = false;
+        setState(juce::Button::buttonNormal);
         if (hasKeyboardFocus(true))
             giveAwayKeyboardFocus();
         if (! animate || visibilityAnimation.current <= 0.001f)
@@ -153,6 +155,32 @@ bool CloseButton::advanceAnimation(float deltaSeconds)
     }
 
     return visibilityChanged || hoverChanged || pressChanged;
+}
+
+void CloseButton::mouseDown(const juce::MouseEvent& event)
+{
+    // JUCE Button accepts every mouse button by default. A secondary click on
+    // a destructive affordance must never delete a band; on macOS this also
+    // covers Ctrl-click through isPopupMenu().
+    primaryPointerDown = event.mods.isLeftButtonDown()
+                         && ! event.mods.isPopupMenu();
+    if (primaryPointerDown)
+        juce::Button::mouseDown(event);
+}
+
+void CloseButton::mouseDrag(const juce::MouseEvent& event)
+{
+    if (primaryPointerDown)
+        juce::Button::mouseDrag(event);
+}
+
+void CloseButton::mouseUp(const juce::MouseEvent& event)
+{
+    if (! primaryPointerDown)
+        return;
+
+    primaryPointerDown = false;
+    juce::Button::mouseUp(event);
 }
 
 void CloseButton::buttonStateChanged()

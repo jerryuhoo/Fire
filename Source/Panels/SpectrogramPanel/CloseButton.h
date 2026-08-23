@@ -37,9 +37,13 @@ public:
 private:
     void paintButton(juce::Graphics&, bool, bool) override;
     void buttonStateChanged() override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
     void updateInteractionTargets() noexcept;
 
     bool presentationTarget = false;
+    bool primaryPointerDown = false;
     fire::ui::DampedValue visibilityAnimation;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;

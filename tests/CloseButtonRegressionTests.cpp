@@ -39,6 +39,28 @@ std::uint64_t renderFingerprint(CloseButton& button)
 
     return fingerprint;
 }
+
+juce::MouseEvent makeMouseEvent(juce::Component& component,
+                                juce::ModifierKeys modifiers)
+{
+    const auto position = component.getLocalBounds().toFloat().getCentre();
+    const auto time = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             time,
+             position,
+             time,
+             1,
+             false };
+}
 } // namespace
 
 TEST_CASE("Band delete control has an accessible full-size hit target",
@@ -166,4 +188,41 @@ TEST_CASE("Band delete tile scales and animates without changing its hit geometr
         CHECK(button.hitTest(0, 0));
         CHECK(button.hitTest(size - 1, size - 1));
     }
+}
+
+TEST_CASE("Band deletion requires a primary click",
+          "[close-button][multiband][ui][input]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    CloseButton button;
+    button.setBounds(0,
+                     0,
+                     CloseButton::minimumHitTargetSize,
+                     CloseButton::minimumHitTargetSize);
+    button.setPresented(true, false);
+
+    int clickCount = 0;
+    button.onClick = [&clickCount] { ++clickCount; };
+    auto& component = static_cast<juce::Component&>(button);
+
+    const auto rightClick = juce::ModifierKeys {
+        juce::ModifierKeys::rightButtonModifier };
+    component.mouseDown(makeMouseEvent(button, rightClick));
+    component.mouseUp(makeMouseEvent(button, {}));
+    CHECK(clickCount == 0);
+
+#if JUCE_MAC
+    const auto controlClick = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::ctrlModifier };
+    component.mouseDown(makeMouseEvent(button, controlClick));
+    component.mouseUp(makeMouseEvent(button, juce::ModifierKeys::ctrlModifier));
+    CHECK(clickCount == 0);
+#endif
+
+    const auto leftClick = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier };
+    component.mouseDown(makeMouseEvent(button, leftClick));
+    component.mouseUp(makeMouseEvent(button, {}));
+    CHECK(clickCount == 1);
 }

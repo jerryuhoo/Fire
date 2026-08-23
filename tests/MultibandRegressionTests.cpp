@@ -13,6 +13,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <memory>
 #include <set>
 #include <vector>
 
@@ -1279,6 +1280,45 @@ TEST_CASE("Set Value popup keeps the modulation target that opened it",
     REQUIRE(secondBase != nullptr);
     CHECK(firstBase->load() == Catch::Approx(firstBaseValue));
     CHECK(secondBase->load() == Catch::Approx(secondBaseValue));
+}
+
+TEST_CASE("Assign callbacks remain alive while assigning clears the slider callback",
+          "[multiband][ui][modulation][assign]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ModulatableSlider slider;
+    slider.parameterID = "assign-target";
+    slider.setBounds(0, 0, 100, 100);
+
+    auto lifetimeOwner = std::make_shared<int>(1);
+    std::weak_ptr<int> lifetimeObserver = lifetimeOwner;
+    bool callbackStayedAlive = false;
+    juce::String receivedTarget;
+
+    slider.onClickInAssignMode = [&slider,
+                                  lifetimeGuard = std::move(lifetimeOwner),
+                                  &callbackStayedAlive,
+                                  &receivedTarget](const juce::String& target)
+    {
+        const std::weak_ptr<int> observer { lifetimeGuard };
+        receivedTarget = target;
+
+        // FireAudioProcessorEditor::exitAssignMode performs this same clear.
+        // The callback's captured state must remain alive for the rest of the
+        // invocation even though the slider no longer owns it.
+        slider.onClickInAssignMode = nullptr;
+        callbackStayedAlive = ! observer.expired();
+    };
+
+    slider.mouseDown(makeMouseEvent(
+        slider,
+        { 50.0f, 50.0f },
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+
+    CHECK(receivedTarget == "assign-target");
+    CHECK(callbackStayedAlive);
+    CHECK(lifetimeObserver.expired());
+    CHECK_FALSE(static_cast<bool>(slider.onClickInAssignMode));
 }
 
 TEST_CASE("Delayed modulation menu actions retain the target present when the menu opened",

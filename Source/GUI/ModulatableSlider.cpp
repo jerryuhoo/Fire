@@ -194,7 +194,12 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 {
     if (onClickInAssignMode && event.mods.isLeftButtonDown())
     {
-        onClickInAssignMode(parameterID);
+        // Assigning a target exits assign mode, which clears the callback on
+        // every slider (including this one).  Keep the callable alive until
+        // it returns instead of destroying the std::function target while it
+        // is still executing.
+        auto assignCallback = onClickInAssignMode;
+        assignCallback(parameterID);
         return;
     }
 

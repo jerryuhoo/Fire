@@ -17,6 +17,9 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 
 class FireAudioProcessor;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct LfoEditorTestAccess;
+#endif
 
 inline LfoData lfoClipboard;
 
@@ -68,6 +71,10 @@ public:
     };
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct LfoEditorTestAccess;
+#endif
+
     // This pointer holds the currently active LFO data. It does not own the data.
     LfoData activeLfoData;
     bool dataIsActive = false;
@@ -77,6 +84,14 @@ private:
     void removePoint(int index);
     void updateAndSortPoints();
     void rebuildCurvatures();
+    bool isValidPointIndex(int index) const noexcept;
+    bool isValidCurveIndex(int index) const noexcept;
+    bool hasValidSelectedPointIndices() const noexcept;
+    bool hasValidPointDragState() const noexcept;
+    bool validateCurveInteractionOrCancel() noexcept;
+    bool validatePointDragInteractionOrCancel() noexcept;
+    void cancelPointAndCurveInteraction() noexcept;
+    void cancelAllInteraction() noexcept;
 
     // Helper methods for brush mode
     int getOrCreatePointAtX(float targetX);

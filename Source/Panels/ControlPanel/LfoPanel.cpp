@@ -23,8 +23,79 @@ LfoEditor::LfoEditor()
 
 LfoEditor::~LfoEditor() {}
 
+bool LfoEditor::isValidPointIndex(int index) const noexcept
+{
+    return index >= 0
+        && static_cast<size_t>(index) < activeLfoData.points.size();
+}
+
+bool LfoEditor::isValidCurveIndex(int index) const noexcept
+{
+    return index >= 0
+        && static_cast<size_t>(index) < activeLfoData.curvatures.size()
+        && static_cast<size_t>(index) + 1 < activeLfoData.points.size();
+}
+
+bool LfoEditor::hasValidSelectedPointIndices() const noexcept
+{
+    return std::all_of(selectedPointIndices.begin(),
+                       selectedPointIndices.end(),
+                       [this](int index) { return isValidPointIndex(index); });
+}
+
+bool LfoEditor::hasValidPointDragState() const noexcept
+{
+    const bool isPointDrag = draggingState == DraggingState::Point
+                          || draggingState == DraggingState::Selection;
+    return isPointDrag
+        && ! selectedPointIndices.empty()
+        && selectedPointIndices.size() == initialDragPositions.size()
+        && hasValidSelectedPointIndices();
+}
+
+bool LfoEditor::validateCurveInteractionOrCancel() noexcept
+{
+    if (isValidCurveIndex(editingCurveIndex))
+        return true;
+
+    cancelPointAndCurveInteraction();
+    return false;
+}
+
+bool LfoEditor::validatePointDragInteractionOrCancel() noexcept
+{
+    if (hasValidPointDragState())
+        return true;
+
+    cancelPointAndCurveInteraction();
+    return false;
+}
+
+void LfoEditor::cancelPointAndCurveInteraction() noexcept
+{
+    selectedPointIndices.clear();
+    initialDragPositions.clear();
+    draggingState = DraggingState::None;
+    draggingPointIndex = -1;
+    editingCurveIndex = -1;
+    hoveredPointIndex = -1;
+    initialCurvature = 0.0f;
+    initialDragY = 0;
+    dragAnchor = {};
+    selectionRectangle = {};
+}
+
+void LfoEditor::cancelAllInteraction() noexcept
+{
+    cancelPointAndCurveInteraction();
+    isBrushing = false;
+    lastBrushCell = { -1, -1 };
+}
+
 void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
 {
+    cancelAllInteraction();
+
     // Safely switch the data source by copying and normalising malformed
     // preset data before any paint or interaction code indexes it.
     activeLfoData = dataToDisplay;
@@ -62,12 +133,6 @@ void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
     for (auto& curvature : activeLfoData.curvatures)
         curvature = std::isfinite(curvature) ? juce::jlimit(-2.0f, 2.0f, curvature) : 0.0f;
 
-    selectedPointIndices.clear();
-    initialDragPositions.clear();
-    draggingState = DraggingState::None;
-    editingCurveIndex = -1;
-    hoveredPointIndex = -1;
-    isBrushing = false;
     dataIsActive = true;
     repaint();
 }
@@ -332,7 +397,8 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
     if (! dataIsActive)
         return;
-    grabKeyboardFocus();
+    if (isShowing() || isOnDesktop())
+        grabKeyboardFocus();
 
     if (currentMode == LfoEditMode::BrushPaint)
     {
@@ -358,6 +424,15 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     {
         return;
     }
+
+    // A topology-changing command may have run between mouse gestures. Never
+    // carry an index from the old point vector into a new gesture.
+    if (! hasValidSelectedPointIndices())
+        cancelPointAndCurveInteraction();
+
+    initialDragPositions.clear();
+    draggingState = DraggingState::None;
+    editingCurveIndex = -1;
 
     // --- Shift + Drag for Marquee Selection ---
     if (event.mods.isShiftDown())
@@ -406,10 +481,15 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
         }
 
         editingCurveIndex = findSegmentIndexAt(event.getPosition());
-        if (editingCurveIndex != -1)
+        if (isValidCurveIndex(editingCurveIndex))
         {
-            initialCurvature = activeLfoData.curvatures[editingCurveIndex];
+            const auto curveIndex = static_cast<size_t>(editingCurveIndex);
+            initialCurvature = activeLfoData.curvatures[curveIndex];
             initialDragY = event.y;
+        }
+        else
+        {
+            editingCurveIndex = -1;
         }
     }
 
@@ -419,7 +499,16 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
         dragAnchor = toNormalized(event.getPosition());
         initialDragPositions.clear();
         for (int index : selectedPointIndices)
-            initialDragPositions.push_back(activeLfoData.points[index]);
+        {
+            if (! isValidPointIndex(index))
+            {
+                cancelPointAndCurveInteraction();
+                repaint();
+                return;
+            }
+            initialDragPositions.push_back(
+                activeLfoData.points[static_cast<size_t>(index)]);
+        }
     }
 
     repaint();
@@ -452,9 +541,17 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
     if (editingCurveIndex != -1)
     {
+        if (! validateCurveInteractionOrCancel())
+        {
+            repaint();
+            return;
+        }
+
+        const auto curveIndex = static_cast<size_t>(editingCurveIndex);
+
         // Get the start and end points of the segment in screen coordinates to calculate the visual slope.
-        auto p1_screen = fromNormalized(activeLfoData.points[editingCurveIndex]);
-        auto p2_screen = fromNormalized(activeLfoData.points[editingCurveIndex + 1]);
+        auto p1_screen = fromNormalized(activeLfoData.points[curveIndex]);
+        auto p2_screen = fromNormalized(activeLfoData.points[curveIndex + 1]);
 
         float dx = p2_screen.x - p1_screen.x;
         // Note: in screen coordinates, a smaller Y is higher up.
@@ -472,7 +569,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         // but we invert it if the line is visually sloping downwards on the screen (positive slope).
         float curvatureChange = (slope > 0.0f) ? -dragDistY * sensitivity : dragDistY * sensitivity;
 
-        activeLfoData.curvatures[editingCurveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
+        activeLfoData.curvatures[curveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
 
         repaint();
         if (onDataChanged)
@@ -490,8 +587,13 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         case DraggingState::Point:
         case DraggingState::Selection:
         {
-            if (selectedPointIndices.empty())
+            // Validate the complete parallel state before reading either
+            // vector. A partial drag would be worse than cancelling it.
+            if (! validatePointDragInteractionOrCancel())
+            {
+                repaint();
                 return;
+            }
 
             // 1. Calculate the raw, un-snapped delta from the anchor point.
             auto currentNormPos = toNormalized(event.getPosition());
@@ -536,11 +638,14 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
                             initialLeftmostX = initialDragPositions[i].x;
                             break;
                         }
-                    maxLeftDelta = activeLfoData.points[leftNeighborIndex].x - initialLeftmostX;
+                    if (isValidPointIndex(leftNeighborIndex))
+                        maxLeftDelta = activeLfoData.points[static_cast<size_t>(leftNeighborIndex)].x
+                                     - initialLeftmostX;
                 }
             }
 
-            if (rightmostSelectedPointIndex < activeLfoData.points.size() - 1)
+            if (rightmostSelectedPointIndex
+                < static_cast<int>(activeLfoData.points.size()) - 1)
             {
                 int rightNeighborIndex = rightmostSelectedPointIndex + 1;
                 if (std::find(selectedPointIndices.begin(), selectedPointIndices.end(), rightNeighborIndex) == selectedPointIndices.end())
@@ -552,7 +657,9 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
                             initialRightmostX = initialDragPositions[i].x;
                             break;
                         }
-                    maxRightDelta = activeLfoData.points[rightNeighborIndex].x - initialRightmostX;
+                    if (isValidPointIndex(rightNeighborIndex))
+                        maxRightDelta = activeLfoData.points[static_cast<size_t>(rightNeighborIndex)].x
+                                      - initialRightmostX;
                 }
             }
 
@@ -563,9 +670,10 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             {
                 int pointIndex = selectedPointIndices[i];
                 auto& initialPos = initialDragPositions[i];
-                auto& point = activeLfoData.points[pointIndex];
+                auto& point = activeLfoData.points[static_cast<size_t>(pointIndex)];
                 point.y = juce::jlimit(0.0f, 1.0f, initialPos.y + delta.y);
-                if (pointIndex > 0 && pointIndex < activeLfoData.points.size() - 1)
+                if (pointIndex > 0
+                    && pointIndex < static_cast<int>(activeLfoData.points.size()) - 1)
                 {
                     point.x = initialPos.x + delta.x;
                 }
@@ -663,12 +771,20 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
     if (draggingState == DraggingState::Point || draggingState == DraggingState::Selection)
     {
-        updateAndSortPoints();
-        dataWasChanged = true;
+        if (hasValidPointDragState())
+        {
+            updateAndSortPoints();
+            dataWasChanged = true;
+        }
+        else
+        {
+            cancelPointAndCurveInteraction();
+        }
     }
 
     draggingState = DraggingState::None;
     editingCurveIndex = -1;
+    initialDragPositions.clear();
 
     if (isBrushing)
     {
@@ -682,7 +798,12 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     if (dataWasChanged && onDataChanged)
     {
         if (dataIsActive)
+        {
+            const auto pointCountBeforeMerge = activeLfoData.points.size();
             activeLfoData.mergeDuplicatePoints();
+            if (activeLfoData.points.size() != pointCountBeforeMerge)
+                cancelPointAndCurveInteraction();
+        }
         onDataChanged(activeLfoData);
     }
 }
@@ -758,6 +879,8 @@ void LfoEditor::addPoint(juce::Point<float> newPoint)
     if (! dataIsActive || activeLfoData.points.size() >= maxPoints)
         return;
 
+    cancelAllInteraction();
+
     // Add the point and sort the list to find its correct position.
     activeLfoData.points.push_back(newPoint);
     updateAndSortPoints();
@@ -789,8 +912,13 @@ void LfoEditor::addPoint(juce::Point<float> newPoint)
 
 void LfoEditor::removePoint(int index)
 {
-    if (! dataIsActive || index <= 0 || index >= activeLfoData.points.size() - 1)
+    if (! dataIsActive
+        || ! isValidPointIndex(index)
+        || index == 0
+        || index == static_cast<int>(activeLfoData.points.size()) - 1)
         return;
+
+    cancelAllInteraction();
 
     activeLfoData.points.erase(activeLfoData.points.begin() + index);
 
@@ -800,9 +928,10 @@ void LfoEditor::removePoint(int index)
         activeLfoData.curvatures.erase(activeLfoData.curvatures.begin() + index - 1);
 
     // We then set the curvature of the new, merged segment to 0.0 (linear).
-    if (index - 1 < activeLfoData.curvatures.size())
+    if (juce::isPositiveAndBelow(index - 1,
+                                 static_cast<int>(activeLfoData.curvatures.size())))
     {
-        activeLfoData.curvatures[index - 1] = 0.0f;
+        activeLfoData.curvatures[static_cast<size_t>(index - 1)] = 0.0f;
     }
 
     repaint();
@@ -891,6 +1020,11 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 {
     if (! dataIsActive)
         return;
+
+    // Brush painting replaces and reorders points, invalidating every point or
+    // curve index. Keep the brush gesture itself alive so drag-to-paint and its
+    // final mouseUp notification retain their existing semantics.
+    cancelPointAndCurveInteraction();
 
     // 1. Identify grid cell and its boundaries.
     const float gridW = 1.0f / (float) hGridDivs;
@@ -1027,12 +1161,9 @@ int LfoEditor::findSegmentIndexAt(const juce::Point<int>& position) const
 
 void LfoEditor::setEditMode(LfoEditMode newMode)
 {
+    cancelAllInteraction();
     currentMode = newMode;
-
-    // Reset any interaction state when changing modes
-    draggingPointIndex = -1;
-    editingCurveIndex = -1;
-    hoveredPointIndex = -1;
+    repaint();
 }
 
 void LfoEditor::setCurrentBrush(LfoPresetShape newBrush)
@@ -1079,13 +1210,17 @@ void LfoEditor::deleteSelectedPoints()
 {
     if (! dataIsActive || selectedPointIndices.empty())
         return;
-    std::sort(selectedPointIndices.rbegin(), selectedPointIndices.rend());
-    for (int index : selectedPointIndices)
+
+    auto indicesToDelete = selectedPointIndices;
+    cancelAllInteraction();
+    std::sort(indicesToDelete.rbegin(), indicesToDelete.rend());
+    for (int index : indicesToDelete)
     {
-        if (index > 0 && index < activeLfoData.points.size() - 1)
+        if (isValidPointIndex(index)
+            && index > 0
+            && index < static_cast<int>(activeLfoData.points.size()) - 1)
             removePoint(index);
     }
-    selectedPointIndices.clear();
     repaint();
 }
 
@@ -1762,8 +1897,8 @@ void LfoEditor::selectAllPoints()
     if (! dataIsActive)
         return;
 
-    selectedPointIndices.clear();
-    for (int i = 0; i < activeLfoData.points.size(); ++i)
+    cancelAllInteraction();
+    for (int i = 0; i < static_cast<int>(activeLfoData.points.size()); ++i)
     {
         selectedPointIndices.push_back(i);
     }
@@ -1775,8 +1910,8 @@ void LfoEditor::clearAllPoints()
     if (! dataIsActive)
         return;
 
+    cancelAllInteraction();
     activeLfoData.resetToDefault();
-    selectedPointIndices.clear();
     repaint();
 }
 
@@ -1799,6 +1934,8 @@ void LfoEditor::invertShape(bool invertX, bool invertY)
 {
     if (! dataIsActive || activeLfoData.points.size() < 2)
         return;
+
+    cancelAllInteraction();
 
     for (auto& point : activeLfoData.points)
     {

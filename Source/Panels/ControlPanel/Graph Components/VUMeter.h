@@ -33,6 +33,8 @@ public:
     bool decayToSilence();
 
 private:
+    friend struct VUMeterTestAccess;
+
     FireAudioProcessor* mProcessor;
     bool mIsInput;
     int mBandIndex;
@@ -62,6 +64,7 @@ private:
     bool cachedIsInput = true;
 
     bool updateBallistics(float rmsCh0, float rmsCh1, float peakCh0, float peakCh1);
+    void updateMeterBounds(int channelCount);
     void rebuildBackgroundCache(float displayScale);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VUMeter)

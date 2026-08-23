@@ -55,6 +55,9 @@ void VUMeter::paint(juce::Graphics& g)
         || cachedChannelCount != channelCount
         || cachedIsInput != mIsInput)
     {
+        if (cachedChannelCount != channelCount)
+            updateMeterBounds(channelCount);
+
         rebuildBackgroundCache(displayScale);
     }
 
@@ -109,22 +112,7 @@ void VUMeter::paint(juce::Graphics& g)
 
 void VUMeter::resized()
 {
-    auto bounds = getLocalBounds();
-
-    if (mProcessor->getTotalNumInputChannels() == 2)
-    {
-        // Stereo layout: two bars with a gap
-        auto meterWidth = bounds.getWidth() / 3;
-        leftMeterBounds = bounds.removeFromLeft(meterWidth);
-        rightMeterBounds = bounds.removeFromRight(meterWidth);
-    }
-    else // Mono layout
-    {
-        // Mono layout: one centered bar
-        auto meterWidth = bounds.getWidth() / 3;
-        leftMeterBounds = bounds.reduced((bounds.getWidth() - meterWidth) / 2, 0);
-        rightMeterBounds = {}; // Not used
-    }
+    updateMeterBounds(mProcessor->getTotalNumInputChannels());
 
     backgroundCache = {};
     backgroundCacheBounds = {};
@@ -266,6 +254,25 @@ float VUMeter::getRmsLeftChannelLevel() const noexcept { return mRmsCh0Level; }
 float VUMeter::getRmsRightChannelLevel() const noexcept { return mRmsCh1Level; }
 float VUMeter::getPeakLeftChannelLevel() const noexcept { return mPeakHoldCh0Level; }
 float VUMeter::getPeakRightChannelLevel() const noexcept { return mPeakHoldCh1Level; }
+
+void VUMeter::updateMeterBounds(int channelCount)
+{
+    auto bounds = getLocalBounds();
+    const auto meterWidth = bounds.getWidth() / 3;
+
+    if (channelCount == 2)
+    {
+        // Stereo layout: two bars with a gap
+        leftMeterBounds = bounds.removeFromLeft(meterWidth);
+        rightMeterBounds = bounds.removeFromRight(meterWidth);
+    }
+    else // Mono layout
+    {
+        // Mono layout: one centered bar
+        leftMeterBounds = bounds.reduced((bounds.getWidth() - meterWidth) / 2, 0);
+        rightMeterBounds = {}; // Not used
+    }
+}
 
 void VUMeter::rebuildBackgroundCache(float displayScale)
 {

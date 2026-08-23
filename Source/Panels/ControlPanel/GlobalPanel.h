@@ -16,6 +16,7 @@
 #include "Graph Components/WidthGraph.h"
 #include "PanelBase.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <cstdint>
 #include <vector>
 
 //==============================================================================
@@ -46,6 +47,7 @@ public:
     ModulatableSlider& getHighcutGainKnob();
 
     void setToggleButtonState(juce::String toggleButton);
+    void presentMeterValues(const MeterValues& values, std::uint64_t generation);
     float scale = 1.0f;
 
 private:

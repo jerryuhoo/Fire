@@ -13,6 +13,8 @@
 #include "../../../PluginProcessor.h"
 #include "GraphTemplate.h"
 #include "VUMeter.h"
+#include <array>
+#include <cstdint>
 
 //==============================================================================
 /*
@@ -28,6 +30,7 @@ public:
     void setFocusBandNum(int num);
     void timerCallback() override;
     void updateRealtimeThreshold(float newThresholdDb);
+    void presentMeterValues(const MeterValues& values, std::uint64_t generation);
 
 private:
     friend struct VUPanelTestAccess;
@@ -41,6 +44,8 @@ private:
     std::atomic<float>* compBypassValue = nullptr;
     int staleTimerTicks = 0;
     bool thresholdVisible = false;
+    bool meterPresentationActive = false;
+    std::array<std::uint64_t, 5> lastPresentedMeterGenerationBySource {};
 
     juce::Image scaleLayer;
     juce::Rectangle<int> scaleLayerBounds;
@@ -61,6 +66,7 @@ private:
     int outputRmsTenths = -960;
 
     void rebuildScaleLayer(float displayScale);
+    void resetMeterPresentation();
     bool refreshReadoutText();
     void graphShowingStateChanged(bool isNowShowing) override;
 

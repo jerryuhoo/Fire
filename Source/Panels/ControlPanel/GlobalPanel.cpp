@@ -97,6 +97,12 @@ GlobalPanel::~GlobalPanel()
     filterHighCutButton.removeListener(this);
 }
 
+void GlobalPanel::presentMeterValues(const MeterValues& values,
+                                     std::uint64_t generation)
+{
+    vuPanel.presentMeterValues(values, generation);
+}
+
 void GlobalPanel::createSliders()
 {
     // Global Knobs

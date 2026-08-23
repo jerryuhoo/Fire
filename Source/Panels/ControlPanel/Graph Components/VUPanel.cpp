@@ -163,6 +163,35 @@ void VUPanel::setFocusBandNum(int num)
     repaint();
 }
 
+void VUPanel::presentMeterValues(const MeterValues& values,
+                                 std::uint64_t generation)
+{
+    if (! meterPresentationActive || generation == 0)
+        return;
+
+    const auto sourceIndex = static_cast<size_t>(focusBandNum + 1);
+    auto& lastPresentedGeneration =
+        lastPresentedMeterGenerationBySource[sourceIndex];
+    if (generation <= lastPresentedGeneration)
+        return;
+
+    lastPresentedGeneration = generation;
+    staleTimerTicks = 0;
+
+    const bool inputChanged = vuMeterIn.updateLevels(values);
+    const bool outputChanged = vuMeterOut.updateLevels(values);
+
+    if (inputChanged)
+        vuMeterIn.repaint();
+    if (outputChanged)
+        vuMeterOut.repaint();
+    if (refreshReadoutText())
+    {
+        repaint(leftReadoutBounds.getSmallestIntegerContainer());
+        repaint(rightReadoutBounds.getSmallestIntegerContainer());
+    }
+}
+
 void VUPanel::timerCallback()
 {
     if (! isShowing())
@@ -176,16 +205,9 @@ void VUPanel::timerCallback()
         repaint(scaleBounds.getSmallestIntegerContainer());
     }
 
-    MeterValues latestValues;
     bool inputChanged = false;
     bool outputChanged = false;
-    if (processor.getLatestMeterValues(latestValues))
-    {
-        staleTimerTicks = 0;
-        inputChanged = vuMeterIn.updateLevels(latestValues);
-        outputChanged = vuMeterOut.updateLevels(latestValues);
-    }
-    else if (++staleTimerTicks > 3)
+    if (++staleTimerTicks > 3)
     {
         inputChanged = vuMeterIn.decayToSilence();
         outputChanged = vuMeterOut.decayToSilence();
@@ -217,6 +239,9 @@ void VUPanel::updateRealtimeThreshold(float newThresholdDb)
 
 void VUPanel::graphShowingStateChanged(bool isNowShowing)
 {
+    meterPresentationActive = isNowShowing;
+    resetMeterPresentation();
+
     if (! isNowShowing)
     {
         stopTimer();
@@ -226,6 +251,14 @@ void VUPanel::graphShowingStateChanged(bool isNowShowing)
     startTimerHz(60);
     timerCallback();
     repaint();
+}
+
+void VUPanel::resetMeterPresentation()
+{
+    staleTimerTicks = 0;
+    vuMeterIn.resetLevels();
+    vuMeterOut.resetLevels();
+    refreshReadoutText();
 }
 
 void VUPanel::rebuildScaleLayer(float displayScale)

@@ -33,6 +33,7 @@ public:
     bool decayToSilence();
 
 private:
+    friend class VUPanel;
     friend struct VUMeterTestAccess;
 
     FireAudioProcessor* mProcessor;

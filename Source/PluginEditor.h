@@ -22,6 +22,7 @@
 #include "Panels/SpectrogramPanel/SpectrumBackground.h"
 #include "Utility/VersionInfo.h"
 #include <array>
+#include <cstdint>
 #include <vector>
 
 // Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
@@ -113,6 +114,8 @@ public:
     void hideValuePopup();
 
 private:
+    friend struct MeterFreshnessTestAccess;
+
     class UpdateCheckThread final : public juce::Thread
     {
     public:
@@ -153,6 +156,10 @@ private:
     float headerEnergy = 0.0f;
     int animationFrame = 0;
     bool lastBypassedState = false;
+
+    MeterValues cachedMeterValues;
+    std::uint64_t meterPacketGeneration = 0;
+    bool hasCachedMeterValues = false;
 
     fire::ui::DampedValue workspaceSelection;
     int activeWorkspace = 0;

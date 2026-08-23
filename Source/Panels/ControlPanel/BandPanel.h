@@ -19,6 +19,7 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <vector>
 
 struct BandPanelGraphTestAccess;
@@ -60,6 +61,7 @@ public:
     // Public getters for graphs so PluginEditor can update them
     DistortionGraph* getDistortionGraph() { return &distortionGraph; }
     void updateRealtimeThreshold(float newThreshold);
+    void presentMeterValues(const MeterValues& values, std::uint64_t generation);
 
     float scale = 1.0f;
 

@@ -55,6 +55,13 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
       lfoPanel(p),
       updateCheckThread(*this)
 {
+    // Meter telemetry has one audio-thread producer and one message-thread
+    // reader. Drop packets left by a previous editor before establishing this
+    // editor's freshness epoch; the first visible value must come from a
+    // packet published after this editor was opened.
+    MeterValues staleMeterValues;
+    processor.getLatestMeterValues(staleMeterValues);
+
     addAndMakeVisible(valuePopup);
     valuePopup.setAlwaysOnTop(true);
     valuePopup.setVisible(false);
@@ -776,6 +783,16 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
 
 void FireAudioProcessorEditor::timerCallback()
 {
+    MeterValues latestMeterValues;
+    if (processor.getLatestMeterValues(latestMeterValues))
+    {
+        cachedMeterValues = latestMeterValues;
+        hasCachedMeterValues = true;
+        ++meterPacketGeneration;
+        if (meterPacketGeneration == 0)
+            ++meterPacketGeneration;
+    }
+
     const auto nowSeconds = juce::Time::getMillisecondCounterHiRes() * 0.001;
     const auto deltaSeconds = static_cast<float>(nowSeconds - lastAnimationTimeSeconds);
     lastAnimationTimeSeconds = nowSeconds;
@@ -790,6 +807,12 @@ void FireAudioProcessorEditor::timerCallback()
     // when the peer becomes visible again.
     if (! isShowing())
         return;
+
+    if (hasCachedMeterValues)
+    {
+        bandPanel.presentMeterValues(cachedMeterValues, meterPacketGeneration);
+        globalPanel.presentMeterValues(cachedMeterValues, meterPacketGeneration);
+    }
 
     advanceAnimations(deltaSeconds);
 

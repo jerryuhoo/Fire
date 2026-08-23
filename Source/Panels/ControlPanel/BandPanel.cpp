@@ -1089,6 +1089,12 @@ void BandPanel::updateRealtimeThreshold(float newThreshold)
     vuPanel.updateRealtimeThreshold(newThreshold);
 }
 
+void BandPanel::presentMeterValues(const MeterValues& values,
+                                   std::uint64_t generation)
+{
+    vuPanel.presentMeterValues(values, generation);
+}
+
 void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
 {
     if (isDragging)

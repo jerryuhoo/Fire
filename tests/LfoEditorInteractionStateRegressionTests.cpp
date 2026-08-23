@@ -423,6 +423,43 @@ TEST_CASE("LFO brush painting never publishes more points than the DSP accepts",
     }
 }
 
+#if JUCE_MAC
+TEST_CASE("macOS Control-click never paints the active LFO brush",
+          "[lfo][editor][brush][popup-menu][macos]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    LfoEditor editor;
+    prepareEditor(editor);
+    const auto original = makeLfoData({
+        { 0.0f, 0.20f }, { 0.45f, 0.75f }, { 1.0f, 0.30f }
+    });
+    editor.setDataToDisplay(original);
+    editor.setGridDivisions(4, 4);
+    editor.setCurrentBrush(LfoPresetShape::SawUp);
+    editor.setEditMode(LfoEditMode::BrushPaint);
+
+    int publicationCount = 0;
+    editor.onDataChanged = [&publicationCount](const LfoData&)
+    {
+        ++publicationCount;
+    };
+
+    const auto controlClick = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::ctrlModifier };
+    editor.mouseDown(makeMouseEvent(editor,
+                                    { 200.0f, 100.0f },
+                                    controlClick));
+
+    CHECK(publicationCount == 0);
+    CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+    CHECK(LfoEditorTestAccess::lastBrushCell(editor)
+          == juce::Point<int>(-1, -1));
+    CHECK(LfoEditorTestAccess::interactionStateIsValid(editor));
+    checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+}
+#endif
+
 TEST_CASE("LFO point removal clears indices from the previous topology",
           "[lfo][editor][interaction][regression]")
 {

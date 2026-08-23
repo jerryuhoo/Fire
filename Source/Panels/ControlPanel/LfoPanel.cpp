@@ -397,6 +397,13 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
     if (! dataIsActive)
         return;
+
+    // Treat macOS Ctrl-click exactly like a physical right-click. The former
+    // mouseUp-only check allowed a popup gesture to paint a brush cell or
+    // begin a point edit before the context menu opened.
+    if (event.mods.isPopupMenu() || ! event.mods.isLeftButtonDown())
+        return;
+
     if (isShowing() || isOnDesktop())
         grabKeyboardFocus();
 
@@ -418,12 +425,6 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
     if (currentMode != LfoEditMode::PointEdit)
         return;
-
-    // --- Right-click is always for curvature ---
-    if (event.mods.isRightButtonDown())
-    {
-        return;
-    }
 
     // A topology-changing command may have run between mouse gestures. Never
     // carry an index from the old point vector into a new gesture.
@@ -694,7 +695,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
 void LfoEditor::mouseUp(const juce::MouseEvent& event)
 {
-    if (event.mods.isRightButtonDown())
+    if (event.mods.isPopupMenu())
     {
         juce::PopupMenu m;
         m.addItem(CommandIDs::selectAll, "Select All");
@@ -809,7 +810,8 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    if (! dataIsActive || currentMode != LfoEditMode::PointEdit)
+    if (! dataIsActive || currentMode != LfoEditMode::PointEdit
+        || event.mods.isPopupMenu() || ! event.mods.isLeftButtonDown())
         return;
 
     // First, check if double-clicking on an existing point to delete it.

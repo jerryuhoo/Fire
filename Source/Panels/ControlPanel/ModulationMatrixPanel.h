@@ -15,6 +15,34 @@
 #include "../../Utility/Parameters.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
+class ModulationMatrixPrimaryButton final : public juce::TextButton
+{
+public:
+    using juce::TextButton::TextButton;
+
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
+    void visibilityChanged() override;
+    void enablementChanged() override;
+
+private:
+    enum class PointerGesture
+    {
+        none,
+        rejected,
+        primary
+    };
+
+    void cancelPointerGesture() noexcept;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+
+    PointerGesture pointerGesture = PointerGesture::none;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+};
+
 //
 //  A header component to display titles for the matrix columns.
 //
@@ -78,10 +106,10 @@ private:
 
     juce::ComboBox sourceMenu;
     PrimaryButtonSlider amountSlider;
-    juce::TextButton bipolarButton;
-    juce::TextButton bypassButton;
+    ModulationMatrixPrimaryButton bipolarButton;
+    ModulationMatrixPrimaryButton bypassButton;
     juce::ComboBox destinationMenu;
-    juce::TextButton removeButton;
+    ModulationMatrixPrimaryButton removeButton;
 
     std::vector<ModulationTarget> allPossibleTargets;
 };
@@ -115,8 +143,8 @@ private:
 
     ModulationMatrixHeader header;
     std::vector<std::unique_ptr<ModulationMatrixRow>> rows;
-    juce::TextButton addButton { "+" };
-    juce::TextButton closeButton { "Close" };
+    ModulationMatrixPrimaryButton addButton { "+" };
+    ModulationMatrixPrimaryButton closeButton { "Close" };
 
     juce::Viewport viewport;
     juce::Component contentComponent;

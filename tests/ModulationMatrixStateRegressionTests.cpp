@@ -145,6 +145,80 @@ public:
     int dragStartCount = 0;
     int dragEndCount = 0;
 };
+
+class ButtonClickCapture final : private juce::Button::Listener
+{
+public:
+    explicit ButtonClickCapture(juce::Button& buttonToObserve)
+        : button(buttonToObserve)
+    {
+        button.addListener(this);
+    }
+
+    ~ButtonClickCapture() override
+    {
+        button.removeListener(this);
+    }
+
+    int getClickCount() const noexcept { return clickCount; }
+
+private:
+    void buttonClicked(juce::Button*) override { ++clickCount; }
+
+    juce::Button& button;
+    int clickCount = 0;
+};
+
+std::vector<juce::ModifierKeys> getRejectedButtonModifiers()
+{
+    std::vector<juce::ModifierKeys> modifiers {
+        juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier }
+    };
+
+#if JUCE_MAC
+    modifiers.emplace_back(juce::ModifierKeys::leftButtonModifier
+                           | juce::ModifierKeys::ctrlModifier);
+#endif
+
+    return modifiers;
+}
+
+void exerciseButtonPointerGesture(juce::Button& button,
+                                  juce::ModifierKeys downModifiers)
+{
+    const auto position = button.getLocalBounds().toFloat().getCentre();
+    auto& component = static_cast<juce::Component&>(button);
+    component.mouseDown(makeMouseEvent(button,
+                                       position,
+                                       downModifiers,
+                                       position,
+                                       false));
+    component.mouseUp(makeMouseEvent(button,
+                                     position,
+                                     {},
+                                     position,
+                                     false));
+}
+
+void endButtonPointerGesture(juce::Button& button)
+{
+    const auto position = button.getLocalBounds().toFloat().getCentre();
+    static_cast<juce::Component&>(button).mouseUp(
+        makeMouseEvent(button, position, {}, position, false));
+}
+
+void beginButtonPointerGesture(juce::Button& button,
+                               juce::ModifierKeys downModifiers)
+{
+    const auto position = button.getLocalBounds().toFloat().getCentre();
+    static_cast<juce::Component&>(button).mouseDown(
+        makeMouseEvent(button,
+                       position,
+                       downModifiers,
+                       position,
+                       false));
+}
 } // namespace
 
 TEST_CASE("Modulation matrix amount accepts only primary-button drags",
@@ -259,6 +333,334 @@ TEST_CASE("Modulation matrix amount accepts only primary-button drags",
     }
 
     amountSlider->removeListener(&sliderCapture);
+}
+
+TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks",
+          "[ui][modulation-matrix][input][buttons]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.5f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    int deleteCount = 0;
+    ModulationMatrixRow row(processor, 0, routing, [&deleteCount]
+                            { ++deleteCount; });
+    row.setBounds(0, 0, 760, 40);
+    auto* polarityButton = findTextButton(row, "Bi");
+    auto* bypassButton = findTextButton(row, "Off");
+    auto* removeButton = dynamic_cast<juce::TextButton*>(
+        row.findChildWithID("remove_button"));
+    REQUIRE(polarityButton != nullptr);
+    REQUIRE(bypassButton != nullptr);
+    REQUIRE(removeButton != nullptr);
+
+    ModulationMatrixPanel panel(processor);
+    panel.setBounds(0, 0, 760, 420);
+    auto* addButton = findTextButton(panel, "+ ADD ROUTE");
+    auto* closeButton = findTextButton(panel, "Close");
+    REQUIRE(addButton != nullptr);
+    REQUIRE(closeButton != nullptr);
+
+    NonParameterChangeCapture host(processor);
+
+    const auto exerciseRejectedGestures = [](juce::Button& button,
+                                             const auto& checkInvariant)
+    {
+        for (const auto modifiers : getRejectedButtonModifiers())
+        {
+            exerciseButtonPointerGesture(button, modifiers);
+            checkInvariant();
+        }
+    };
+
+    SECTION("polarity")
+    {
+        ButtonClickCapture clicks(*polarityButton);
+        const auto checkUnchanged = [&]
+        {
+            const auto routings = manager.getModulationRoutingsCopy();
+            REQUIRE(routings.size() == 1);
+            CHECK(routings[0].isBipolar);
+            CHECK(polarityButton->getToggleState());
+            CHECK(polarityButton->getButtonText() == "Bi");
+            CHECK(clicks.getClickCount() == 0);
+            CHECK(host.notificationCount == 0);
+        };
+
+        exerciseRejectedGestures(*polarityButton, checkUnchanged);
+        exerciseButtonPointerGesture(
+            *polarityButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK_FALSE(routings[0].isBipolar);
+        CHECK_FALSE(polarityButton->getToggleState());
+        CHECK(polarityButton->getButtonText() == "Uni");
+        CHECK(clicks.getClickCount() == 1);
+        CHECK(host.notificationCount == 1);
+    }
+
+    SECTION("bypass")
+    {
+        ButtonClickCapture clicks(*bypassButton);
+        const auto checkUnchanged = [&]
+        {
+            const auto routings = manager.getModulationRoutingsCopy();
+            REQUIRE(routings.size() == 1);
+            CHECK_FALSE(routings[0].isBypassed);
+            CHECK_FALSE(bypassButton->getToggleState());
+            CHECK(bypassButton->getButtonText() == "Off");
+            CHECK(clicks.getClickCount() == 0);
+            CHECK(host.notificationCount == 0);
+        };
+
+        exerciseRejectedGestures(*bypassButton, checkUnchanged);
+        exerciseButtonPointerGesture(
+            *bypassButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].isBypassed);
+        CHECK(bypassButton->getToggleState());
+        CHECK(bypassButton->getButtonText() == "On");
+        CHECK(clicks.getClickCount() == 1);
+        CHECK(host.notificationCount == 1);
+    }
+
+    SECTION("remove")
+    {
+        ButtonClickCapture clicks(*removeButton);
+        const auto checkUnchanged = [&]
+        {
+            CHECK(manager.getModulationRoutingsCopy().size() == 1);
+            CHECK(deleteCount == 0);
+            CHECK(clicks.getClickCount() == 0);
+            CHECK(host.notificationCount == 0);
+        };
+
+        exerciseRejectedGestures(*removeButton, checkUnchanged);
+        exerciseButtonPointerGesture(
+            *removeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(manager.getModulationRoutingsCopy().size() == 1);
+        CHECK(deleteCount == 1);
+        CHECK(clicks.getClickCount() == 1);
+        CHECK(host.notificationCount == 0);
+    }
+
+    SECTION("add")
+    {
+        ButtonClickCapture clicks(*addButton);
+        const auto checkUnchanged = [&]
+        {
+            CHECK(manager.getModulationRoutingsCopy().size() == 1);
+            CHECK_FALSE(panel.isUiRebuildPending());
+            CHECK(clicks.getClickCount() == 0);
+            CHECK(host.notificationCount == 0);
+        };
+
+        exerciseRejectedGestures(*addButton, checkUnchanged);
+        exerciseButtonPointerGesture(
+            *addButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(manager.getModulationRoutingsCopy().size() == 2);
+        CHECK(panel.isUiRebuildPending());
+        CHECK(clicks.getClickCount() == 1);
+        CHECK(host.notificationCount == 1);
+    }
+
+    SECTION("close")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        const auto checkUnchanged = [&]
+        {
+            CHECK(clicks.getClickCount() == 0);
+            CHECK(host.notificationCount == 0);
+        };
+
+        exerciseRejectedGestures(*closeButton, checkUnchanged);
+        exerciseButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(clicks.getClickCount() == 1);
+        CHECK(host.notificationCount == 0);
+    }
+
+    SECTION("a new primary down replaces stale rejected ownership")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        beginButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier });
+
+        exerciseButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(clicks.getClickCount() == 1);
+        CHECK_FALSE(closeButton->isDown());
+    }
+
+    SECTION("a new primary down safely replaces stale primary ownership")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        beginButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+        REQUIRE(closeButton->isDown());
+
+        exerciseButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(clicks.getClickCount() == 1);
+        CHECK_FALSE(closeButton->isDown());
+    }
+
+    SECTION("hiding cancels a primary gesture without clicking")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        beginButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+        REQUIRE(closeButton->isDown());
+
+        closeButton->setVisible(false);
+        CHECK(clicks.getClickCount() == 0);
+        CHECK_FALSE(closeButton->isDown());
+
+        closeButton->setVisible(true);
+        endButtonPointerGesture(*closeButton);
+        CHECK(clicks.getClickCount() == 0);
+        exerciseButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(clicks.getClickCount() == 1);
+        CHECK_FALSE(closeButton->isDown());
+    }
+
+    SECTION("disabling cancels a primary gesture without clicking")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        beginButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+        REQUIRE(closeButton->isDown());
+
+        closeButton->setEnabled(false);
+        CHECK(clicks.getClickCount() == 0);
+        CHECK_FALSE(closeButton->isDown());
+
+        closeButton->setEnabled(true);
+        endButtonPointerGesture(*closeButton);
+        CHECK(clicks.getClickCount() == 0);
+        exerciseButtonPointerGesture(
+            *closeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(clicks.getClickCount() == 1);
+        CHECK_FALSE(closeButton->isDown());
+    }
+}
+
+TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
+          "[ui][modulation-matrix][input][buttons][keyboard]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.5f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    int deleteCount = 0;
+    ModulationMatrixRow row(processor, 0, routing, [&deleteCount]
+                            { ++deleteCount; });
+    row.setBounds(0, 0, 760, 40);
+    auto* polarityButton = findTextButton(row, "Bi");
+    auto* bypassButton = findTextButton(row, "Off");
+    auto* removeButton = dynamic_cast<juce::TextButton*>(
+        row.findChildWithID("remove_button"));
+    REQUIRE(polarityButton != nullptr);
+    REQUIRE(bypassButton != nullptr);
+    REQUIRE(removeButton != nullptr);
+
+    ModulationMatrixPanel panel(processor);
+    panel.setBounds(0, 0, 760, 420);
+    auto* addButton = findTextButton(panel, "+ ADD ROUTE");
+    auto* closeButton = findTextButton(panel, "Close");
+    REQUIRE(addButton != nullptr);
+    REQUIRE(closeButton != nullptr);
+
+    SECTION("polarity triggerClick")
+    {
+        polarityButton->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK_FALSE(routings[0].isBipolar);
+    }
+
+    SECTION("bypass triggerClick")
+    {
+        bypassButton->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].isBypassed);
+    }
+
+    SECTION("remove triggerClick")
+    {
+        removeButton->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        CHECK(deleteCount == 1);
+    }
+
+    SECTION("add triggerClick")
+    {
+        addButton->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        CHECK(manager.getModulationRoutingsCopy().size() == 2);
+    }
+
+    SECTION("close Return key")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        CHECK(static_cast<juce::Component&>(*closeButton).keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        CHECK(clicks.getClickCount() == 1);
+    }
 }
 
 TEST_CASE("Modulation matrix toggle buttons publish only real model changes",

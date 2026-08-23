@@ -11,6 +11,91 @@
 #include "ModulationMatrixPanel.h"
 #include "../../Utility/AudioHelpers.h"
 
+void ModulationMatrixPrimaryButton::mouseDown(const juce::MouseEvent& event)
+{
+    if (pointerGesture == PointerGesture::primary
+        && ! isPointerSource(event))
+        return;
+
+    // A host can hide or disable its editor without delivering the matching
+    // mouseUp. Treat every new mouseDown as a new ownership boundary: cancel
+    // any abandoned gesture without invoking Button::mouseUp (which could
+    // click), then classify this event from scratch.
+    cancelPointerGesture();
+
+    const auto isPrimaryButton = event.mods.isLeftButtonDown()
+                                 && ! event.mods.isRightButtonDown()
+                                 && ! event.mods.isMiddleButtonDown()
+                                 && ! event.mods.isPopupMenu();
+    pointerGesture = isPrimaryButton ? PointerGesture::primary
+                                     : PointerGesture::rejected;
+
+    if (pointerGesture == PointerGesture::primary)
+    {
+        pointerSourceType = event.source.getType();
+        pointerSourceIndex = event.source.getIndex();
+        juce::TextButton::mouseDown(event);
+    }
+}
+
+void ModulationMatrixPrimaryButton::mouseDrag(const juce::MouseEvent& event)
+{
+    if (pointerGesture == PointerGesture::primary && isPointerSource(event))
+        juce::TextButton::mouseDrag(event);
+}
+
+void ModulationMatrixPrimaryButton::mouseUp(const juce::MouseEvent& event)
+{
+    if (pointerGesture == PointerGesture::primary
+        && ! isPointerSource(event))
+        return;
+
+    const auto completedGesture = pointerGesture;
+    pointerGesture = PointerGesture::none;
+    pointerSourceIndex = -1;
+
+    if (completedGesture == PointerGesture::primary)
+        juce::TextButton::mouseUp(event);
+    else
+        cancelPointerGesture();
+}
+
+void ModulationMatrixPrimaryButton::visibilityChanged()
+{
+    juce::TextButton::visibilityChanged();
+
+    if (! isShowing())
+        cancelPointerGesture();
+}
+
+void ModulationMatrixPrimaryButton::enablementChanged()
+{
+    juce::TextButton::enablementChanged();
+
+    // Enabling is also a new lifecycle boundary. If the host re-enables the
+    // editor before the physical button is released, Button::updateState may
+    // otherwise redraw a down state for a gesture that we already cancelled.
+    cancelPointerGesture();
+}
+
+void ModulationMatrixPrimaryButton::cancelPointerGesture() noexcept
+{
+    pointerGesture = PointerGesture::none;
+    pointerSourceIndex = -1;
+
+    const auto restingState = isEnabled() && isShowing() && isMouseOver(true)
+                                  ? juce::Button::buttonOver
+                                  : juce::Button::buttonNormal;
+    setState(restingState);
+}
+
+bool ModulationMatrixPrimaryButton::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
 //==============================================================================
 // ModulationMatrixHeader Implementation
 //==============================================================================

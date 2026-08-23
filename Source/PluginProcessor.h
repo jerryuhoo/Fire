@@ -140,6 +140,30 @@ struct CompressorRecipeTransitionState
     void reset(float initialValue) noexcept;
 };
 
+// Bias and rectification keep their ordinary 50 ms base automation while a
+// stable routed LFO remains sample-accurate. Only discrete route-recipe edits
+// use this independent 10 ms bridge.
+struct ShapeControlRecipeTransitionState
+{
+    struct RecipeSignature
+    {
+        bool routed = false;
+        int sourceIndex = -1;
+        float modulationDepth = 0.0f;
+        bool isBipolar = true;
+    };
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        routeTransitionMix;
+    RecipeSignature lastRecipe;
+    float anchorValue = 0.0f;
+    float lastAppliedValue = 0.0f;
+    bool initialised = false;
+
+    void prepare(double sampleRate) noexcept;
+    void reset() noexcept;
+};
+
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
@@ -159,6 +183,8 @@ struct BandProcessor
     ZeroLatencyModulatedDryWetMixer widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     OutputGainTransitionState outputGainTransition;
+    ShapeControlRecipeTransitionState biasRecipeTransition;
+    ShapeControlRecipeTransitionState recRecipeTransition;
     CompressorRecipeTransitionState compressorThresholdRecipeTransition;
     CompressorRecipeTransitionState compressorRatioRecipeTransition;
     CompressorRecipeTransitionState compressorAttackRecipeTransition;

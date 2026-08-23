@@ -462,6 +462,99 @@ static float applyCompressorRecipeTransition(
                     + mix * (std::log(safeTarget) - std::log(safeAnchor)));
 }
 
+void ShapeControlRecipeTransitionState::prepare(double sampleRate) noexcept
+{
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : 48000.0;
+    routeTransitionMix.reset(safeSampleRate, 0.01);
+    reset();
+}
+
+void ShapeControlRecipeTransitionState::reset() noexcept
+{
+    routeTransitionMix.setCurrentAndTargetValue(1.0f);
+    lastRecipe = {};
+    anchorValue = 0.0f;
+    lastAppliedValue = 0.0f;
+    initialised = false;
+}
+
+static ShapeControlRecipeTransitionState::RecipeSignature
+makeShapeControlRecipe(const ModulatedValueProvider& provider,
+                       int sourceIndex) noexcept
+{
+    ShapeControlRecipeTransitionState::RecipeSignature recipe;
+    recipe.routed = provider.lfoSignal != nullptr;
+    recipe.sourceIndex = recipe.routed ? sourceIndex : -1;
+    recipe.modulationDepth = recipe.routed
+                                 && std::isfinite(provider.modulationDepth)
+                                 ? juce::jlimit(-1.0f,
+                                                1.0f,
+                                                provider.modulationDepth)
+                                 : 0.0f;
+    recipe.isBipolar = recipe.routed ? provider.isBipolar : true;
+    return recipe;
+}
+
+static bool sameShapeControlRecipe(
+    const ShapeControlRecipeTransitionState::RecipeSignature& lhs,
+    const ShapeControlRecipeTransitionState::RecipeSignature& rhs) noexcept
+{
+    if (lhs.routed != rhs.routed)
+        return false;
+    if (! lhs.routed)
+        return true;
+
+    return lhs.sourceIndex == rhs.sourceIndex
+           && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
+           && lhs.isBipolar == rhs.isBipolar;
+}
+
+static void serviceShapeControlRecipeTransition(
+    ShapeControlRecipeTransitionState& transition,
+    const ShapeControlRecipeTransitionState::RecipeSignature& recipe,
+    float currentTarget) noexcept
+{
+    const float safeTarget = std::isfinite(currentTarget)
+                                 ? currentTarget
+                                 : 0.0f;
+    if (! transition.initialised)
+    {
+        transition.initialised = true;
+        transition.lastRecipe = recipe;
+        transition.routeTransitionMix.setCurrentAndTargetValue(1.0f);
+        transition.anchorValue = safeTarget;
+        transition.lastAppliedValue = safeTarget;
+        return;
+    }
+
+    if (! sameShapeControlRecipe(recipe, transition.lastRecipe))
+    {
+        transition.anchorValue = transition.lastAppliedValue;
+        transition.routeTransitionMix.setCurrentAndTargetValue(0.0f);
+        transition.routeTransitionMix.setTargetValue(1.0f);
+        transition.lastRecipe = recipe;
+    }
+}
+
+static float applyShapeControlRecipeTransition(
+    const ShapeControlRecipeTransitionState& transition,
+    float targetValue) noexcept
+{
+    const float safeTarget = std::isfinite(targetValue)
+                                 ? targetValue
+                                 : transition.anchorValue;
+    const float mix = transition.routeTransitionMix.getCurrentValue();
+    if (mix <= 0.0f)
+        return transition.anchorValue;
+    if (mix >= 1.0f)
+        return safeTarget;
+
+    return transition.anchorValue
+           + mix * (safeTarget - transition.anchorValue);
+}
+
 static OutputGainTransitionState::RecipeSignature makeOutputGainRecipe(
     const ModulatedValueProvider& provider,
     int sourceIndex) noexcept
@@ -696,6 +789,8 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     driveSmoother.reset(spec.sampleRate, 0.05);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
+    biasRecipeTransition.prepare(spec.sampleRate);
+    recRecipeTransition.prepare(spec.sampleRate);
     compressorThresholdBaseSmoother.reset(spec.sampleRate, 0.01);
     compressorThresholdBaseSmoother.setCurrentAndTargetValue(0.0f);
     compressorRatioBaseSmoother.reset(spec.sampleRate, 0.01);
@@ -756,6 +851,8 @@ void BandProcessor::reset()
     compressorRatioRecipeTransition.reset(1.0f);
     compressorAttackRecipeTransition.reset(10.0f);
     compressorReleaseRecipeTransition.reset(100.0f);
+    biasRecipeTransition.reset();
+    recRecipeTransition.reset();
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
     safePeakEnvelope = 0.0f;
@@ -1574,6 +1671,13 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         recProvider.lfoSignal = nullptr;
     }
 
+    const auto safeBaseValue = [] (float value) noexcept
+    {
+        return std::isfinite(value) ? value : 0.0f;
+    };
+    const float biasBaseTarget = safeBaseValue(biasProvider.baseValue);
+    const float recBaseTarget = safeBaseValue(recProvider.baseValue);
+
     DistortionLogic::State currentState;
     currentState.mode = params.mode;
 
@@ -1601,12 +1705,25 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
         driveSmoother.setCurrentAndTargetValue(initialRequestedDriveGain);
 
-        // Initialize Bias and Rec smoothers with their final modulated value for sample 0
-        biasSmoother.setCurrentAndTargetValue(biasProvider.get(0));
-        recSmoother.setCurrentAndTargetValue(recProvider.get(0));
+        // Static automation retains its established 50 ms dezipper, but the
+        // routed LFO trajectory is applied after that base-only smoother.
+        biasSmoother.setCurrentAndTargetValue(biasBaseTarget);
+        recSmoother.setCurrentAndTargetValue(recBaseTarget);
 
         isFirstBlock = false;
     }
+
+    biasSmoother.setTargetValue(biasBaseTarget);
+    recSmoother.setTargetValue(recBaseTarget);
+
+    serviceShapeControlRecipeTransition(
+        biasRecipeTransition,
+        makeShapeControlRecipe(biasProvider, params.biasLfoSourceIndex),
+        biasProvider.get(0, biasSmoother.getCurrentValue()));
+    serviceShapeControlRecipeTransition(
+        recRecipeTransition,
+        makeShapeControlRecipe(recProvider, params.recLfoSourceIndex),
+        recProvider.get(0, recSmoother.getCurrentValue()));
 
     float currentShapeMix = shapeMixSmoother.getCurrentValue();
     float finalReductionDriveForCalc = 0.0f;
@@ -1626,10 +1743,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             currentShapeMix = shapeMixSmoother.getNextValue();
         }
 
-        // 1. Get the final, LFO-modulated value for each parameter for the CURRENT sample.
+        // 1. Get the requested Drive value for the current sample. Bias and
+        // Rectification apply their routed trajectories below after advancing
+        // only the ordinary base-value smoothers.
         float currentDrive = driveProvider.get(sample);
-        const float currentBias = biasProvider.get(sample);
-        const float currentRec = recProvider.get(sample);
 
         // 2. Calculate the requested Drive gain. User/LFO changes retain the
         // established 50 ms dezipper; Safe applies an independent causal
@@ -1646,8 +1763,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // move down immediately, but releasing that reduction still returns
         // through this same 50 ms Drive ramp.
         driveSmoother.setTargetValue(requestedDriveGain);
-        biasSmoother.setTargetValue(currentBias);
-        recSmoother.setTargetValue(currentRec);
 
         // In HQ mode the block contains 4x as many samples, while these
         // smoothers were prepared at the base sample rate. Advance them once
@@ -1655,8 +1770,14 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         if ((sample % smoothingStride) == 0)
         {
             currentState.drive = driveSmoother.getNextValue();
-            currentState.bias = biasSmoother.getNextValue();
-            currentState.rec = recSmoother.getNextValue();
+            const float biasBase = biasSmoother.getNextValue();
+            const float recBase = recSmoother.getNextValue();
+            currentState.bias = applyShapeControlRecipeTransition(
+                biasRecipeTransition,
+                biasProvider.get(sample, biasBase));
+            currentState.rec = applyShapeControlRecipeTransition(
+                recRecipeTransition,
+                recProvider.get(sample, recBase));
 
             if (params.isDriveEnabled && params.isSafeModeOn)
             {
@@ -1677,8 +1798,6 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         else
         {
             currentState.drive = driveSmoother.getCurrentValue();
-            currentState.bias = biasSmoother.getCurrentValue();
-            currentState.rec = recSmoother.getCurrentValue();
         }
 
         // Publish the causal Safe result at base rate. Internal oversized
@@ -1742,8 +1861,17 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // base-rate frame.  Hold the same crossfade weight for that whole
         // group and advance only at its end, so the transition remains 10 ms
         // in both modes and across internal chunks.
-        if (((sample + 1) % smoothingStride) == 0
-            && waveshaperModeMixSmoother.isSmoothing())
+        const bool completesBaseFrame = ((sample + 1) % smoothingStride) == 0
+                                        || sample + 1 == numSamples;
+        if (completesBaseFrame)
+        {
+            biasRecipeTransition.lastAppliedValue = currentState.bias;
+            recRecipeTransition.lastAppliedValue = currentState.rec;
+            biasRecipeTransition.routeTransitionMix.getNextValue();
+            recRecipeTransition.routeTransitionMix.getNextValue();
+        }
+
+        if (completesBaseFrame && waveshaperModeMixSmoother.isSmoothing())
         {
             waveshaperModeMixSmoother.getNextValue();
             if (! waveshaperModeMixSmoother.isSmoothing())

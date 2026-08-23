@@ -862,6 +862,8 @@ private:
     // 2. For VUMeter
     juce::AbstractFifo meterFifo { 1024 };
     std::vector<MeterValues> meterFifoBuffer;
+    MeterValues lastPublishedMeterValues;
+    void publishMeterValues(bool refreshBandMeters);
     void calculateAndStoreLevels(const juce::AudioBuffer<float>& buffer,
                                        std::atomic<float>& rmsLeft,
                                        std::atomic<float>& rmsRight,

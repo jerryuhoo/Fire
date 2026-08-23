@@ -2863,6 +2863,7 @@ void FireAudioProcessor::performReset()
     lfoManager->reset();
     snapHqTransitionToParameter();
     snapTopologyTransitionToActive();
+    lastPublishedMeterValues = {};
     hostBypassSessionActive = false;
     hostBypassSessionHqMode = activeHqMode;
 }
@@ -2926,6 +2927,7 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
     {
         calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
+        publishMeterValues(false);
         return;
     }
 
@@ -2946,6 +2948,7 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     processLatencyMatchedBypass(buffer, hostBypassSessionHqMode);
     processWetBlock(hostBypassWetBuffer, midiMessages, true);
     calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
+    publishMeterValues(false);
 }
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
@@ -3164,39 +3167,7 @@ void FireAudioProcessor::processWetBlock(
 
         pushToFifo(graphFifo, graphFifoBuffer, vals);
     }
-    if (meterFifo.getFreeSpace() >= 1)
-    {
-        MeterValues values;
-
-        // Global Meters
-        values.inputRMS_L = mInputLeftRMSGlobal.load();
-        values.inputRMS_R = mInputRightRMSGlobal.load();
-        values.inputPeak_L = mInputLeftPeakGlobal.load();
-        values.inputPeak_R = mInputRightPeakGlobal.load();
-        values.outputRMS_L = mOutputLeftRMSGlobal.load();
-        values.outputRMS_R = mOutputRightRMSGlobal.load();
-        values.outputPeak_L = mOutputLeftPeakGlobal.load();
-        values.outputPeak_R = mOutputRightPeakGlobal.load();
-
-        // Per-Band Meters
-        for (int i = 0; i < 4; ++i)
-        {
-            if (auto* band = bands[i].get())
-            {
-                values.bandInputRMS_L[i] = band->mInputLeftRMS.load();
-                values.bandInputRMS_R[i] = band->mInputRightRMS.load();
-                values.bandInputPeak_L[i] = band->mInputLeftPeak.load();
-                values.bandInputPeak_R[i] = band->mInputRightPeak.load();
-
-                values.bandOutputRMS_L[i] = band->mOutputLeftRMS.load();
-                values.bandOutputRMS_R[i] = band->mOutputRightRMS.load();
-                values.bandOutputPeak_L[i] = band->mOutputLeftPeak.load();
-                values.bandOutputPeak_R[i] = band->mOutputRightPeak.load();
-            }
-        }
-
-        pushToFifo(meterFifo, meterFifoBuffer, values);
-    }
+    publishMeterValues(true);
 
 }
 
@@ -6154,6 +6125,45 @@ bool FireAudioProcessor::getLatestMeterValues(MeterValues& values)
 
     // If no new data was available, return false.
     return false;
+}
+
+void FireAudioProcessor::publishMeterValues(bool refreshBandMeters)
+{
+    if (meterFifo.getFreeSpace() < 1)
+        return;
+
+    auto values = lastPublishedMeterValues;
+
+    values.inputRMS_L = mInputLeftRMSGlobal.load();
+    values.inputRMS_R = mInputRightRMSGlobal.load();
+    values.inputPeak_L = mInputLeftPeakGlobal.load();
+    values.inputPeak_R = mInputRightPeakGlobal.load();
+    values.outputRMS_L = mOutputLeftRMSGlobal.load();
+    values.outputRMS_R = mOutputRightRMSGlobal.load();
+    values.outputPeak_L = mOutputLeftPeakGlobal.load();
+    values.outputPeak_R = mOutputRightPeakGlobal.load();
+
+    if (refreshBandMeters)
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            if (auto* band = bands[static_cast<size_t>(i)].get())
+            {
+                values.bandInputRMS_L[static_cast<size_t>(i)] = band->mInputLeftRMS.load();
+                values.bandInputRMS_R[static_cast<size_t>(i)] = band->mInputRightRMS.load();
+                values.bandInputPeak_L[static_cast<size_t>(i)] = band->mInputLeftPeak.load();
+                values.bandInputPeak_R[static_cast<size_t>(i)] = band->mInputRightPeak.load();
+
+                values.bandOutputRMS_L[static_cast<size_t>(i)] = band->mOutputLeftRMS.load();
+                values.bandOutputRMS_R[static_cast<size_t>(i)] = band->mOutputRightRMS.load();
+                values.bandOutputPeak_L[static_cast<size_t>(i)] = band->mOutputLeftPeak.load();
+                values.bandOutputPeak_R[static_cast<size_t>(i)] = band->mOutputRightPeak.load();
+            }
+        }
+    }
+
+    lastPublishedMeterValues = values;
+    pushToFifo(meterFifo, meterFifoBuffer, values);
 }
 
 bool FireAudioProcessor::getLatestModulatedFilterValues(ModulatedFilterValues& values)

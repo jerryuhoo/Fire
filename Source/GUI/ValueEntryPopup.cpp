@@ -1,5 +1,29 @@
 #include "ValueEntryPopup.h"
 #include "InterfaceDefines.h"
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+
+namespace
+{
+bool parseStrictFiniteDouble(const juce::String& text, double& value) noexcept
+{
+    const auto trimmed = text.trim();
+    if (trimmed.isEmpty())
+        return false;
+
+    const auto first = trimmed.toRawUTF8();
+    char* last = nullptr;
+    errno = 0;
+    const auto parsed = std::strtod(first, &last);
+    if (last == first || last == nullptr || *last != '\0'
+        || errno == ERANGE || ! std::isfinite(parsed))
+        return false;
+
+    value = parsed;
+    return true;
+}
+} // namespace
 
 ValueEntryPopup::ValueEntryPopup()
 {
@@ -29,8 +53,7 @@ ValueEntryPopup::ValueEntryPopup()
     okButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     okButton.onClick = [this]
     {
-        if (onOk)
-            onOk(editor.getText().getDoubleValue());
+        submitEditorText();
     };
 
     // ==================================================================
@@ -86,4 +109,41 @@ void ValueEntryPopup::paint(juce::Graphics& g)
 void ValueEntryPopup::textEditorReturnKeyPressed(juce::TextEditor&)
 {
     okButton.triggerClick(); // Trigger the "OK" button's click action
+}
+
+void ValueEntryPopup::textEditorTextChanged(juce::TextEditor&)
+{
+    setInputError(false);
+}
+
+bool ValueEntryPopup::submitEditorText()
+{
+    double value = 0.0;
+    if (! parseStrictFiniteDouble(editor.getText(), value))
+    {
+        setInputError(true);
+        editor.selectAll();
+        if (editor.isShowing())
+            editor.grabKeyboardFocus();
+        return false;
+    }
+
+    setInputError(false);
+    if (onOk)
+    {
+        auto callback = onOk;
+        callback(value);
+    }
+    return true;
+}
+
+void ValueEntryPopup::setInputError(bool shouldShowError)
+{
+    editor.setColour(juce::TextEditor::outlineColourId,
+                     shouldShowError ? fire::ui::colours::danger
+                                     : fire::ui::colours::hairline);
+    editor.setColour(juce::TextEditor::focusedOutlineColourId,
+                     shouldShowError ? fire::ui::colours::danger
+                                     : fire::ui::colours::ember);
+    editor.repaint();
 }

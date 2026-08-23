@@ -13,6 +13,8 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <functional>
 
+struct ValueEntryPopupTestAccess;
+
 //==============================================================================
 class ValueEntryPopup : public juce::Component,
                         private juce::TextEditor::Listener
@@ -25,11 +27,17 @@ public:
     void paint(juce::Graphics& g) override;
 
     void textEditorReturnKeyPressed(juce::TextEditor&) override;
+    void textEditorTextChanged(juce::TextEditor&) override;
 
     std::function<void(double)> onOk;
     std::function<void()> onCancel;
 
 private:
+    friend struct ValueEntryPopupTestAccess;
+
+    bool submitEditorText();
+    void setInputError(bool shouldShowError);
+
     juce::TextEditor editor;
     juce::TextButton okButton;
     juce::TextButton cancelButton;

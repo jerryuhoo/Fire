@@ -101,6 +101,28 @@ constexpr int minimumProcessingBlockCapacity = 8192;
 constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
 
+void replaceNonFiniteSamplesWithSilence(
+    juce::AudioBuffer<float>& buffer) noexcept
+{
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples = buffer.getNumSamples();
+    if (numChannels <= 0 || numSamples <= 0)
+        return;
+
+    for (int channel = 0; channel < numChannels; ++channel)
+    {
+        const auto* channelData = buffer.getReadPointer(channel);
+        float* writableChannelData = nullptr;
+        for (int sample = 0; sample < numSamples; ++sample)
+            if (! std::isfinite(channelData[sample]))
+            {
+                if (writableChannelData == nullptr)
+                    writableChannelData = buffer.getWritePointer(channel);
+                writableChannelData[sample] = 0.0f;
+            }
+    }
+}
+
 template <typename FloatType>
 bool sameCachedValue(FloatType lhs, FloatType rhs) noexcept
 {
@@ -3047,6 +3069,12 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
 
+    // Treat a non-finite host sample as silence before it can enter any
+    // recursive filter, detector, oversampler or latency-compensation state.
+    // Cleaning only the final output would hide the symptom while leaving the
+    // wet graph and the audible host-bypass delay permanently poisoned.
+    replaceNonFiniteSamplesWithSilence(buffer);
+
     calculateAndStoreLevels(buffer,
                             mInputLeftRMSGlobal,
                             mInputRightRMSGlobal,
@@ -3087,6 +3115,7 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
 
+    replaceNonFiniteSamplesWithSilence(buffer);
     processWetBlock(buffer, midiMessages, false);
 }
 

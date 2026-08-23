@@ -235,8 +235,16 @@ void Multiband::dismissTransientUi()
             dividerGroup->dismissImmediately();
 
     for (auto& bandUI : bandUIs)
+    {
+        if (bandUI.soloButton != nullptr)
+            bandUI.soloButton->dismissPointerGesture();
+
+        if (bandUI.enableButton != nullptr)
+            bandUI.enableButton->dismissPointerGesture();
+
         if (bandUI.closeButton != nullptr)
             bandUI.closeButton->setPresented(false, false);
+    }
 }
 
 bool Multiband::shouldSetBlackMask(int index)

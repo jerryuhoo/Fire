@@ -1,0 +1,334 @@
+#include <Panels/SpectrogramPanel/EnableButton.h>
+#include <Panels/SpectrogramPanel/SoloButton.h>
+#include <PluginEditor.h>
+#include <PluginProcessor.h>
+
+#include <catch2/catch_test_macros.hpp>
+
+namespace
+{
+template <typename ComponentType>
+ComponentType* findDescendant(juce::Component& root)
+{
+    if (auto* match = dynamic_cast<ComponentType*>(&root);
+        match != nullptr && match->isVisible() && ! match->getBounds().isEmpty())
+        return match;
+
+    for (int childIndex = 0; childIndex < root.getNumChildComponents(); ++childIndex)
+        if (auto* child = root.getChildComponent(childIndex))
+            if (auto* match = findDescendant<ComponentType>(*child))
+                return match;
+
+    return nullptr;
+}
+
+juce::MouseEvent makeMouseEvent(juce::Component& component,
+                                juce::ModifierKeys modifiers,
+                                bool wasDragged = false)
+{
+    const auto position = component.getLocalBounds().toFloat().getCentre();
+    const auto time = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             time,
+             position,
+             time,
+             1,
+             wasDragged };
+}
+
+template <typename Callback>
+void forEachBandToggle(Callback&& callback)
+{
+    {
+        INFO("SoloButton");
+        SoloButton button;
+        button.setBounds(0, 0, 24, 24);
+        button.setVisible(true);
+        callback(button);
+    }
+
+    {
+        INFO("EnableButton");
+        EnableButton button;
+        button.setBounds(0, 0, 24, 24);
+        button.setVisible(true);
+        callback(button);
+    }
+}
+
+template <typename ButtonType>
+void checkRejectedGesture(ButtonType& button,
+                          juce::ModifierKeys downModifiers,
+                          juce::ModifierKeys upModifiers = {})
+{
+    int clickCount = 0;
+    button.onClick = [&clickCount] { ++clickCount; };
+    auto& component = static_cast<juce::Component&>(button);
+
+    component.mouseDown(makeMouseEvent(button, downModifiers));
+    CHECK_FALSE(button.isDown());
+    component.mouseDrag(makeMouseEvent(button, downModifiers, true));
+    CHECK_FALSE(button.isDown());
+    component.mouseUp(makeMouseEvent(button, upModifiers, true));
+
+    CHECK_FALSE(button.getToggleState());
+    CHECK(clickCount == 0);
+}
+} // namespace
+
+TEST_CASE("Band toggles reject popup and auxiliary mouse gestures",
+          "[band-toggle][multiband][ui][input]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("physical right button")
+    {
+        forEachBandToggle([](auto& button)
+        {
+            checkRejectedGesture(
+                button,
+                juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier });
+        });
+    }
+
+    SECTION("middle button")
+    {
+        forEachBandToggle([](auto& button)
+        {
+            checkRejectedGesture(
+                button,
+                juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier });
+        });
+    }
+
+#if JUCE_MAC
+    SECTION("macOS Control-click")
+    {
+        forEachBandToggle([](auto& button)
+        {
+            checkRejectedGesture(
+                button,
+                juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                                     | juce::ModifierKeys::ctrlModifier },
+                juce::ModifierKeys { juce::ModifierKeys::ctrlModifier });
+        });
+    }
+#endif
+}
+
+TEST_CASE("Band toggles pair only accepted primary mouse gestures",
+          "[band-toggle][multiband][ui][input][gesture]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("a primary click toggles exactly once")
+    {
+        forEachBandToggle([leftButton](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+            component.mouseUp(makeMouseEvent(button, {}));
+
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+        });
+    }
+
+    SECTION("an accepted drag is forwarded to JUCE before release")
+    {
+        forEachBandToggle([leftButton](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+
+            // The headless mouse source is not over this unattached component.
+            // Button::mouseDrag therefore leaves its down state only when the
+            // accepted drag was actually forwarded.
+            component.mouseDrag(makeMouseEvent(button, leftButton, true));
+            CHECK_FALSE(button.isDown());
+            component.mouseUp(makeMouseEvent(button, {}, true));
+
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 0);
+        });
+    }
+
+    SECTION("a new rejected down cancels stale primary ownership")
+    {
+        forEachBandToggle([leftButton](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+            component.mouseDown(makeMouseEvent(
+                button,
+                juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier }));
+            CHECK_FALSE(button.isDown());
+            component.mouseUp(makeMouseEvent(button, {}));
+
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 0);
+        });
+    }
+}
+
+TEST_CASE("Band toggles discard pointer ownership when hidden or disabled",
+          "[band-toggle][multiband][ui][input][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("hidden")
+    {
+        forEachBandToggle([leftButton](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+            button.setVisible(false);
+            CHECK_FALSE(button.isDown());
+            button.setVisible(true);
+
+            // Recreate a hostile stale visual state: the old release must
+            // still be ignored after the control returns.
+            button.setState(juce::Button::buttonDown);
+            component.mouseUp(makeMouseEvent(button, {}));
+            CHECK_FALSE(button.isDown());
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 0);
+        });
+    }
+
+    SECTION("disabled")
+    {
+        forEachBandToggle([leftButton](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+            button.setEnabled(false);
+            CHECK_FALSE(button.isDown());
+            button.setEnabled(true);
+
+            button.setState(juce::Button::buttonDown);
+            component.mouseUp(makeMouseEvent(button, {}));
+            CHECK_FALSE(button.isDown());
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 0);
+        });
+    }
+}
+
+TEST_CASE("Band toggles preserve keyboard and programmatic activation",
+          "[band-toggle][multiband][ui][input][keyboard]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("triggerClick")
+    {
+        forEachBandToggle([](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            button.triggerClick();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+        });
+    }
+
+    SECTION("Return key")
+    {
+        forEachBandToggle([](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            REQUIRE(component.keyPressed(
+                juce::KeyPress { juce::KeyPress::returnKey }));
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+        });
+    }
+}
+
+TEST_CASE("Editor hiding discards active band-toggle gestures",
+          "[band-toggle][multiband][ui][input][host-visibility][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+
+    auto* soloButton = findDescendant<SoloButton>(*editor);
+    auto* enableButton = findDescendant<EnableButton>(*editor);
+    REQUIRE(soloButton != nullptr);
+    REQUIRE(enableButton != nullptr);
+
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    const auto checkButton = [&](auto& button)
+    {
+        int clickCount = 0;
+        button.onClick = [&clickCount] { ++clickCount; };
+        button.setToggleState(false, juce::dontSendNotification);
+        auto& component = static_cast<juce::Component&>(button);
+        CAPTURE(button.isVisible(), button.isEnabled(), button.getBounds().toString());
+
+        component.mouseDown(makeMouseEvent(button, leftButton));
+        REQUIRE(button.isDown());
+
+        editor->setVisible(false);
+        CHECK_FALSE(button.isDown());
+
+        editor->setVisible(true);
+        component.mouseUp(makeMouseEvent(button, {}));
+
+        CHECK_FALSE(button.isDown());
+        CHECK_FALSE(button.getToggleState());
+        CHECK(clickCount == 0);
+        button.onClick = nullptr;
+    };
+
+    checkButton(*soloButton);
+    checkButton(*enableButton);
+}

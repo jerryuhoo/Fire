@@ -10,6 +10,17 @@
 
 #include "SoloButton.h"
 
+namespace
+{
+bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isPopupMenu()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown();
+}
+} // namespace
+
 //==============================================================================
 SoloButton::SoloButton()
 {
@@ -56,6 +67,77 @@ void SoloButton::mouseExit(const juce::MouseEvent& e)
     juce::ToggleButton::mouseExit(e);
     isEntered = false;
     repaint();
+}
+
+void SoloButton::mouseDown(const juce::MouseEvent& event)
+{
+    if (primaryPointerDown && ! isPointerSource(event))
+        return;
+
+    // A missing mouseUp (for example, while a host hides the editor) must not
+    // let a later secondary-button event complete an old toggle gesture.
+    dismissPointerGesture();
+    primaryPointerDown = isPrimaryPointerDown(event);
+
+    if (primaryPointerDown)
+    {
+        pointerSourceType = event.source.getType();
+        pointerSourceIndex = event.source.getIndex();
+        juce::ToggleButton::mouseDown(event);
+    }
+}
+
+void SoloButton::mouseDrag(const juce::MouseEvent& event)
+{
+    if (primaryPointerDown && isPointerSource(event))
+        juce::ToggleButton::mouseDrag(event);
+}
+
+void SoloButton::mouseUp(const juce::MouseEvent& event)
+{
+    if (! primaryPointerDown)
+    {
+        dismissPointerGesture();
+        return;
+    }
+
+    if (! isPointerSource(event))
+        return;
+
+    primaryPointerDown = false;
+    pointerSourceIndex = -1;
+    juce::ToggleButton::mouseUp(event);
+}
+
+void SoloButton::visibilityChanged()
+{
+    juce::ToggleButton::visibilityChanged();
+
+    if (! isVisible())
+        dismissPointerGesture();
+}
+
+void SoloButton::enablementChanged()
+{
+    juce::ToggleButton::enablementChanged();
+
+    if (! isEnabled())
+        dismissPointerGesture();
+}
+
+void SoloButton::dismissPointerGesture() noexcept
+{
+    primaryPointerDown = false;
+    pointerSourceIndex = -1;
+
+    if (isDown())
+        setState(juce::Button::buttonNormal);
+}
+
+bool SoloButton::isPointerSource(const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
 }
 
 juce::Colour SoloButton::getColour()

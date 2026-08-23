@@ -10,6 +10,17 @@
 
 #include "DraggableButton.h"
 
+namespace
+{
+bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isPopupMenu()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown();
+}
+} // namespace
+
 //==============================================================================
 DraggableButton::DraggableButton()
 {
@@ -78,6 +89,9 @@ void DraggableButton::setState(const bool state)
     if (mState == state)
         return;
 
+    if (! state)
+        dismissTransientInteraction();
+
     mState = state;
     repaint();
 }
@@ -85,20 +99,42 @@ void DraggableButton::setState(const bool state)
 void DraggableButton::mouseDown(const juce::MouseEvent& event)
 {
     juce::Component::mouseDown(event);
-    if (mState && onDrag)
-        onDrag(*this, event);
+
+    // A host can hide the editor before JUCE delivers mouseUp. Close that
+    // stale ownership before deciding whether this new pointer is eligible.
+    dismissTransientInteraction();
+
+    if (! mState || ! onDrag || ! isPrimaryPointerDown(event))
+        return;
+
+    primaryDragActive = true;
+    onDrag(*this, event);
 }
 
 void DraggableButton::mouseDrag(const juce::MouseEvent& event)
 {
     juce::Component::mouseDrag(event);
-    if (mState && onDrag)
+
+    if (primaryDragActive && mState && onDrag)
         onDrag(*this, event);
 }
 
 void DraggableButton::mouseUp(const juce::MouseEvent& event)
 {
     juce::Component::mouseUp(event);
+
+    if (! primaryDragActive)
+        return;
+
+    dismissTransientInteraction();
+}
+
+void DraggableButton::dismissTransientInteraction()
+{
+    if (! primaryDragActive)
+        return;
+
+    primaryDragActive = false;
     if (onDragFinished)
         onDragFinished();
 }

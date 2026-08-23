@@ -301,6 +301,9 @@ void FilterControl::visibilityChanged()
     }
     else
     {
+        draggableLowButton.dismissTransientInteraction();
+        draggablePeakButton.dismissTransientInteraction();
+        draggableHighButton.dismissTransientInteraction();
         finishDragParameterGestures();
         dragTooltipVisible = false;
     }

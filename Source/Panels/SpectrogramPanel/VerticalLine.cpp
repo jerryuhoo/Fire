@@ -11,6 +11,17 @@
 #include "VerticalLine.h"
 #include "Multiband.h"
 
+namespace
+{
+bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isPopupMenu()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown();
+}
+} // namespace
+
 //==============================================================================
 VerticalLine::VerticalLine()
 {
@@ -80,6 +91,11 @@ void VerticalLine::resized()
 void VerticalLine::mouseUp (const juce::MouseEvent& e)
 {
     juce::ignoreUnused(e);
+
+    if (! primaryDragActive)
+        return;
+
+    primaryDragActive = false;
     endParameterGesture();
     updateAnimationTargets();
 }
@@ -112,8 +128,11 @@ void VerticalLine::mouseDrag (const juce::MouseEvent& e)
 
 void VerticalLine::mouseDown (const juce::MouseEvent& e)
 {
-    if (e.mods.isLeftButtonDown())
-        beginParameterGesture();
+    if (! isPrimaryPointerDown(e))
+        return;
+
+    primaryDragActive = true;
+    beginParameterGesture();
     updateAnimationTargets();
 }
 
@@ -127,6 +146,7 @@ bool VerticalLine::advanceAnimation(float deltaSeconds) noexcept
 void VerticalLine::dismissTransientInteraction()
 {
     isEntered = false;
+    primaryDragActive = false;
 
     // Hosts may keep an editor object alive after hiding its window. If that
     // happens during a drag, no later mouseUp is guaranteed, so close the

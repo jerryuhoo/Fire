@@ -31,6 +31,19 @@ struct ModulatableSliderTestAccess
     }
 };
 
+struct MultibandPointerTestAccess
+{
+    static bool isDragging(const Multiband& multiband)
+    {
+        return multiband.isDragging;
+    }
+
+    static bool hasPrimaryDrag(const Multiband& multiband)
+    {
+        return multiband.primaryDragActive;
+    }
+};
+
 namespace
 {
 void setPlainParameter(FireAudioProcessor& processor,
@@ -355,6 +368,18 @@ void checkBalancedGesture(const ParameterGestureCapture& capture)
     REQUIRE_FALSE(capture.events.empty());
     CHECK(capture.events.front() == 'B');
     CHECK(capture.events.back() == 'E');
+}
+
+void checkNoGestureActivity(const ParameterGestureCapture& capture)
+{
+    CHECK(capture.beginCount == 0);
+    CHECK(capture.endCount == 0);
+    CHECK(capture.valueChangeCount == 0);
+    CHECK(capture.gestureDepth == 0);
+    CHECK(capture.maximumGestureDepth == 0);
+    CHECK(capture.minimumGestureDepth == 0);
+    CHECK_FALSE(capture.valueChangedOutsideGesture);
+    CHECK(capture.events.empty());
 }
 
 juce::MouseEvent makeMouseEvent(juce::Component& component,
@@ -716,6 +741,117 @@ TEST_CASE("Crossover mouse and text edits bracket host automation gestures",
         CHECK(host.events.front() == 'B');
         CHECK(host.events.back() == 'E');
     }
+}
+
+TEST_CASE("Crossover controls reject popup and auxiliary pointer gestures",
+          "[multiband][ui][automation][gesture][input]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+
+    auto& divider = dividerGroups[0]->getVerticalLine();
+    auto& dividerComponent = static_cast<juce::Component&>(divider);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    const auto* bandCount = processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    REQUIRE(bandCount != nullptr);
+
+    auto* frequencyParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 0));
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor, frequencyParameter->getParameterIndex());
+
+    const auto exerciseRejectedGesture = [&](const char* description,
+                                             juce::ModifierKeys downModifiers,
+                                             juce::ModifierKeys upModifiers)
+    {
+        INFO(description);
+
+        const auto addPoint = juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * 0.82f,
+            static_cast<float>(multiband->getHeight()) * 0.10f
+        };
+        multibandComponent.mouseDown(
+            makeMouseEvent(*multiband, addPoint, downModifiers));
+        CHECK_FALSE(MultibandPointerTestAccess::isDragging(*multiband));
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+        multibandComponent.mouseUp(
+            makeMouseEvent(*multiband, addPoint, upModifiers));
+        CHECK(bandCount->load(std::memory_order_relaxed) == Catch::Approx(2.0f));
+
+        const auto focusPoint = juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * 0.82f,
+            static_cast<float>(multiband->getHeight()) * 0.70f
+        };
+        multibandComponent.mouseDown(
+            makeMouseEvent(*multiband, focusPoint, downModifiers));
+        multibandComponent.mouseUp(
+            makeMouseEvent(*multiband, focusPoint, upModifiers));
+        CHECK(multiband->getFocusIndex() == 0);
+
+        const auto initialX = divider.getXPercent();
+        const auto initialFrequency = divider.getValue();
+        const auto downPosition = divider.getLocalBounds().toFloat().getCentre();
+        const auto downEvent = makeMouseEvent(divider,
+                                               downPosition,
+                                               downModifiers);
+        dividerComponent.mouseDown(downEvent);
+        multibandComponent.mouseDown(downEvent);
+        CHECK_FALSE(MultibandPointerTestAccess::isDragging(*multiband));
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+
+        const auto targetInMultiband = juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * 0.75f,
+            static_cast<float>(multiband->getHeight()) * 0.50f
+        };
+        const auto targetInDivider = divider.getLocalPoint(multiband,
+                                                            targetInMultiband);
+        const auto dragEvent = makeDragMouseEvent(divider,
+                                                   targetInDivider,
+                                                   downPosition,
+                                                   downModifiers);
+        dividerComponent.mouseDrag(dragEvent);
+        multibandComponent.mouseDrag(dragEvent);
+
+        const auto upEvent = makeMouseEvent(divider,
+                                            targetInDivider,
+                                            upModifiers);
+        dividerComponent.mouseUp(upEvent);
+        multibandComponent.mouseUp(upEvent);
+
+        CHECK(divider.getXPercent() == Catch::Approx(initialX));
+        CHECK(divider.getValue() == Catch::Approx(initialFrequency));
+        CHECK_FALSE(MultibandPointerTestAccess::isDragging(*multiband));
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+        checkNoGestureActivity(host);
+    };
+
+    exerciseRejectedGesture(
+        "physical right click",
+        juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier },
+        {});
+    exerciseRejectedGesture(
+        "middle click",
+        juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier },
+        {});
+
+#if JUCE_MAC
+    exerciseRejectedGesture(
+        "macOS Control-click",
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                             | juce::ModifierKeys::ctrlModifier },
+        juce::ModifierKeys { juce::ModifierKeys::ctrlModifier });
+#endif
 }
 
 TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",

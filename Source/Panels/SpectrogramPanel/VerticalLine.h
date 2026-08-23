@@ -70,6 +70,7 @@ private:
     ParameterGestureCallback parameterChange;
     ParameterGestureCallback parameterGestureEnd;
     int parameterGestureDepth = 0;
+    bool primaryDragActive = false;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;
 

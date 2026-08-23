@@ -11,6 +11,18 @@
 #include "Multiband.h"
 #include <algorithm>
 #include <cmath>
+
+namespace
+{
+bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isPopupMenu()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown();
+}
+} // namespace
+
 //==============================================================================
 Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : processor(p), stateComponent(sc)
 {
@@ -215,6 +227,7 @@ void Multiband::animationTick(float deltaSeconds)
 void Multiband::dismissTransientUi()
 {
     isDragging = false;
+    primaryDragActive = false;
     hoveredBandIndex = -1;
 
     for (const auto& dividerGroup : freqDividerGroup)
@@ -618,6 +631,10 @@ void Multiband::mouseUp(const juce::MouseEvent& e)
     if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
         return;
 
+    if (! primaryDragActive)
+        return;
+
+    primaryDragActive = false;
     isDragging = false;
     const auto localEvent = e.getEventRelativeTo(this);
     updateHoveredBand(localEvent.getPosition(), getLocalBounds().contains(localEvent.getPosition()));
@@ -629,29 +646,26 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
     if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
         return;
 
-    if (getWidth() <= 0)
+    if (! primaryDragActive || getWidth() <= 0)
         return;
 
     // moving lines by dragging mouse
-    if (e.mods.isLeftButtonDown())
-    {
-        const int dividerIndex = getDividerIndexForEvent(e);
-        if (! juce::isPositiveAndBelow(dividerIndex, lineNum))
-            return;
+    const int dividerIndex = getDividerIndexForEvent(e);
+    if (! juce::isPositiveAndBelow(dividerIndex, lineNum))
+        return;
 
-        isDragging = true;
-        hoveredBandIndex = -1;
-        updateCloseButtonVisibility();
+    isDragging = true;
+    hoveredBandIndex = -1;
+    updateCloseButtonVisibility();
 
-        const auto localEvent = e.getEventRelativeTo(this);
-        const float targetXPercent = localEvent.position.x / static_cast<float>(getWidth());
-        dragLines(targetXPercent, dividerIndex);
+    const auto localEvent = e.getEventRelativeTo(this);
+    const float targetXPercent = localEvent.position.x / static_cast<float>(getWidth());
+    dragLines(targetXPercent, dividerIndex);
 
-        sortLinesInternal(false);
-        setLineRelatedBoundsByX();
-        setSoloRelatedBounds();
-        repaint();
-    }
+    sortLinesInternal(false);
+    setLineRelatedBoundsByX();
+    setSoloRelatedBounds();
+    repaint();
 }
 
 void Multiband::mouseDown(const juce::MouseEvent& e)
@@ -662,10 +676,14 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
     if (getWidth() <= 0 || getHeight() <= 0)
         return;
 
+    if (! isPrimaryPointerDown(e))
+        return;
+
     const int dividerIndex = getDividerIndexForEvent(e);
     if (dividerIndex < 0 && isEventFromDividerGroup(e))
         return;
 
+    primaryDragActive = true;
     isDragging = dividerIndex >= 0;
 
     const auto localEvent = e.getEventRelativeTo(this);
@@ -1168,7 +1186,10 @@ void Multiband::mouseMove(const juce::MouseEvent& event)
 {
     const auto relativeEvent = event.getEventRelativeTo(this);
     if (! event.mods.isLeftButtonDown())
+    {
         isDragging = false;
+        primaryDragActive = false;
+    }
 
     updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
     if (lineNum < 3

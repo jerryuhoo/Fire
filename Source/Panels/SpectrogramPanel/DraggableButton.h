@@ -31,6 +31,7 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void setState(const bool state);
+    void dismissTransientInteraction();
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
     std::function<void(float)> onQValueChanged;
     std::function<void(DraggableButton&, const juce::MouseEvent&)> onDrag;
@@ -38,6 +39,7 @@ public:
 
 private:
     bool isEntered = false;
+    bool primaryDragActive = false;
     juce::Colour getColour();
     bool mState = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DraggableButton)

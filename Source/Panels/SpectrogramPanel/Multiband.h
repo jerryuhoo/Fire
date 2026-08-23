@@ -21,6 +21,10 @@
 #include "SpectrumComponent.h"
 #include <functional>
 #include <vector>
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct MultibandPointerTestAccess;
+#endif
 //==============================================================================
 /*
 */
@@ -58,6 +62,10 @@ public:
     void synchroniseBandCountFromParameter();
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct MultibandPointerTestAccess;
+#endif
+
     struct BandUIs
     {
         std::unique_ptr<SoloButton> soloButton;
@@ -80,6 +88,7 @@ private:
     int lineNum = 0;
     int focusIndex = 0;
     bool isDragging = false;
+    bool primaryDragActive = false;
     bool isCanonicalisingLines = false;
     bool isPublishingCrossoverCascade = false;
     int hoveredBandIndex = -1;

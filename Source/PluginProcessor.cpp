@@ -722,7 +722,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
-    compressorMixerPrimed = false;
     widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
     bandEnableMixSmoother.reset(spec.sampleRate, 0.01);
@@ -740,7 +739,6 @@ void BandProcessor::reset()
     dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
-    compressorMixerPrimed = false;
     widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
     bandEnableMixPrimed = false;
@@ -1152,20 +1150,6 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                             || hasRatioModulation
                                             || hasAttackModulation
                                             || hasReleaseModulation;
-    const bool hasSampleAccurateCompressorMix = params.isCompEnabled
-                                                && paramsForProcessing.compMixValProvider.lfoSignal
-                                                       != nullptr;
-    const float initialCompressorMix = hasSampleAccurateCompressorMix
-                                           ? paramsForProcessing.compMixValProvider.get(0)
-                                           : params.compMixVal;
-    const float effectiveCompressorMix = params.isCompEnabled
-                                             ? juce::jlimit(0.0f, 1.0f,
-                                                            initialCompressorMix)
-                                             : 0.0f;
-    compressorMixer.setWetMixProportion(effectiveCompressorMix);
-    if (! compressorMixerPrimed)
-        compressorMixer.reset();
-    compressorMixerPrimed = true;
     compressorMixer.pushDrySamples(postDistortionContext.getOutputBlock());
     const auto safeThreshold = [](float value)
     {
@@ -1382,22 +1366,12 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         }
     }
 
-    if (! hasSampleAccurateCompressorMix)
-    {
-        compressorMixer.mixWetSamples(postDistortionContext.getOutputBlock());
-    }
-    else
-    {
-        auto compressorBlock = postDistortionContext.getOutputBlock();
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            compressorMixer.setWetMixProportion(juce::jlimit(
-                0.0f, 1.0f,
-                paramsForProcessing.compMixValProvider.get(sample)));
-            compressorMixer.mixWetSamples(
-                compressorBlock.getSubBlock(static_cast<size_t>(sample), 1));
-        }
-    }
+    compressorMixer.mixWetSamples(
+        postDistortionContext.getOutputBlock(),
+        paramsForProcessing.compMixValProvider,
+        params.compMixVal,
+        params.compMixLfoSourceIndex,
+        params.isCompEnabled);
     if (buffer.getNumChannels() == 2)
     {
         // Keep the width path warm and use the mixer's existing 50 ms ramp for

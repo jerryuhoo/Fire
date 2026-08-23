@@ -69,7 +69,23 @@ struct ModulatedValueProvider
      */
     inline float get(int sampleIndex) const
     {
-        const float safeBaseValue = std::isfinite(baseValue) ? baseValue : 0.0f;
+        return get(sampleIndex, baseValue);
+    }
+
+    /**
+     * @brief Gets the modulated value while substituting a caller-supplied
+     * base value.
+     *
+     * This keeps the modulation recipe immutable while a DSP module smooths
+     * only the user-controlled base value. In particular, it avoids copying a
+     * NormalisableRange (which may own callable mapping functions) on the
+     * audio thread merely to replace baseValue.
+     */
+    inline float get(int sampleIndex, float baseValueOverride) const
+    {
+        const float safeBaseValue = std::isfinite(baseValueOverride)
+                                        ? baseValueOverride
+                                        : 0.0f;
 
         // // This branch is highly predictable by the CPU, resulting in negligible
         // // performance cost for non-modulated parameters.

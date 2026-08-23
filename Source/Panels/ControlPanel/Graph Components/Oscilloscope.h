@@ -30,12 +30,13 @@ public:
     void timerCallback() override;
 
 private:
+    friend struct OscilloscopeHistorySourceTestAccess;
+
     FireAudioProcessor& processor;
 
     juce::Array<float> historyL;
     juce::Array<float> historyR;
-    juce::Array<float> historyScratchL;
-    juce::Array<float> historyScratchR;
+    FireAudioProcessor::HistorySnapshot historyScratch;
     juce::Path waveformL;
     juce::Path waveformR;
     juce::ColourGradient leftGradient;
@@ -43,9 +44,11 @@ private:
     std::vector<int> sampleIndexByPixel;
     bool monoChannel = false;
     bool waveformGeometryDirty = true;
+    std::uint64_t historySourceToken = 0;
     std::uint64_t lastHistoryGeneration = 0;
 
     static bool arraysMatch(const juce::Array<float>& lhs, const juce::Array<float>& rhs) noexcept;
+    bool synchroniseHistorySource();
     void rebuildIndexMap(int sampleCount);
     void updateWaveformPaths();
     void graphShowingStateChanged(bool isNowShowing) override;

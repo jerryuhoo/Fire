@@ -24,6 +24,7 @@
 #include "DSP/ZeroLatencyModulatedDryWetMixer.h"
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 #include <functional>
@@ -428,8 +429,18 @@ public:
 
     void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
 
+    struct HistorySnapshot
+    {
+        juce::Array<float> left;
+        juce::Array<float> right;
+        std::uint64_t sourceToken = 0;
+        std::uint64_t generation = 0;
+    };
+
     void setHistoryArray(int bandIndex);
+    std::uint64_t getHistorySourceToken() const noexcept;
     std::uint64_t getHistoryGeneration() const noexcept;
+    bool copyHistorySnapshot(HistorySnapshot& destination) const;
     void copyHistoryArrays(juce::Array<float>& leftDestination,
                            juce::Array<float>& rightDestination) const;
     juce::Array<float> getHistoryArrayL();
@@ -872,12 +883,21 @@ private:
 
     // Oscilloscope
     static constexpr int historyLength = 400;
+    static constexpr std::uint64_t historySourceMask = 0x7u;
+    static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
+                  "History source publication must remain RT-safe");
     std::array<std::atomic<float>, historyLength> historyArrayL {};
     std::array<std::atomic<float>, historyLength> historyArrayR {};
     std::atomic<int> historyWritePosition { 0 };
-    std::atomic<int> historySamplesAvailable { historyLength };
-    std::atomic<int> historySourceBand { 4 };
+    std::atomic<int> historySamplesAvailable { 0 };
+    // The message thread advances the epoch whenever the normalised source
+    // changes. Keeping epoch and source in one atomic prevents the audio
+    // thread from ever pairing one request's source with another's identity.
+    std::atomic<std::uint64_t> historySourceRequestToken { 4u };
+    std::uint64_t activeHistorySourceToken = 4u;
+    std::atomic<std::uint64_t> publishedHistorySourceToken { 4u };
     std::atomic<std::uint64_t> historyGeneration { 0 };
+    std::atomic<std::uint64_t> historyPublicationSequence { 0 };
 
     // Spectrum
     SpectrumProcessor spectrumProcessor;

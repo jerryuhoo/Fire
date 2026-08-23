@@ -1,0 +1,211 @@
+#include <PluginProcessor.h>
+#include "Panels/ControlPanel/Graph Components/Oscilloscope.h"
+#include "Panels/ControlPanel/Graph Components/WidthGraph.h"
+
+#include <catch2/catch_test_macros.hpp>
+
+#include <cstdint>
+
+struct OscilloscopeHistorySourceTestAccess
+{
+    static void seedStaleHistory(Oscilloscope& graph)
+    {
+        graph.historyL.add(0.75f);
+        graph.historyR.add(-0.5f);
+        graph.historyScratch.left.add(0.25f);
+        graph.historyScratch.right.add(-0.25f);
+        graph.waveformL.startNewSubPath(1.0f, 1.0f);
+        graph.waveformL.lineTo(2.0f, 2.0f);
+        graph.waveformR.startNewSubPath(1.0f, 2.0f);
+        graph.waveformR.lineTo(2.0f, 1.0f);
+        graph.sampleIndexByPixel.push_back(0);
+        graph.lastHistoryGeneration = 99;
+    }
+
+    static bool synchronise(Oscilloscope& graph)
+    {
+        return graph.synchroniseHistorySource();
+    }
+
+    static bool isHardCleared(const Oscilloscope& graph)
+    {
+        return graph.historyL.isEmpty()
+               && graph.historyR.isEmpty()
+               && graph.historyScratch.left.isEmpty()
+               && graph.historyScratch.right.isEmpty()
+               && graph.waveformL.isEmpty()
+               && graph.waveformR.isEmpty()
+               && graph.sampleIndexByPixel.empty()
+               && graph.lastHistoryGeneration == 0;
+    }
+};
+
+struct WidthGraphHistorySourceTestAccess
+{
+    static void seedStaleHistory(WidthGraph& graph)
+    {
+        graph.historyL.add(0.75f);
+        graph.historyR.add(-0.5f);
+        graph.historyScratch.left.add(0.25f);
+        graph.historyScratch.right.add(-0.25f);
+        graph.pointCloudCache = juce::Image(juce::Image::ARGB, 8, 8, true);
+        graph.pointCloudCacheBounds = { 1.0f, 2.0f, 8.0f, 8.0f };
+        graph.pointCloudCacheScale = 2.0f;
+        graph.fadeFramesRemaining = 17;
+        graph.cacheHasContent = true;
+        graph.cacheGeometryDirty = false;
+        graph.restoreTrailOnCacheRebuild = true;
+        graph.lastHistoryGeneration = 99;
+    }
+
+    static bool synchronise(WidthGraph& graph)
+    {
+        return graph.synchroniseHistorySource();
+    }
+
+    static bool isHardCleared(const WidthGraph& graph)
+    {
+        return graph.historyL.isEmpty()
+               && graph.historyR.isEmpty()
+               && graph.historyScratch.left.isEmpty()
+               && graph.historyScratch.right.isEmpty()
+               && ! graph.pointCloudCache.isValid()
+               && graph.pointCloudCacheBounds.isEmpty()
+               && graph.pointCloudCacheScale == 0.0f
+               && graph.fadeFramesRemaining == 0
+               && ! graph.cacheHasContent
+               && graph.cacheGeometryDirty
+               && ! graph.restoreTrailOnCacheRebuild
+               && graph.lastHistoryGeneration == 0;
+    }
+};
+
+namespace
+{
+constexpr double sampleRate = 48000.0;
+constexpr int blockSize = 64;
+constexpr int capturedSamplesPerBlock = 7;
+constexpr std::uint64_t sourceMask = 0x7u;
+
+void processHistoryBlock(FireAudioProcessor& processor, float value)
+{
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    buffer.clear();
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            buffer.setSample(channel, sample, value);
+
+    juce::MidiBuffer midi;
+    processor.processBlock(buffer, midi);
+}
+} // namespace
+
+TEST_CASE("History source requests publish one epoch-tagged snapshot",
+          "[processor][history][source-epoch]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+
+    FireAudioProcessor::HistorySnapshot initial;
+    REQUIRE(processor.copyHistorySnapshot(initial));
+    CHECK(initial.left.isEmpty());
+    CHECK(initial.right.isEmpty());
+    const auto initialToken = processor.getHistorySourceToken();
+    CHECK((initialToken & sourceMask) == 4u);
+
+    // Invalid indices normalise to the already-selected global source and
+    // therefore must not create an artificial epoch.
+    processor.setHistoryArray(99);
+    CHECK(processor.getHistorySourceToken() == initialToken);
+
+    processor.setHistoryArray(0);
+    const auto firstAToken = processor.getHistorySourceToken();
+    REQUIRE(firstAToken != initialToken);
+    CHECK((firstAToken & sourceMask) == 0u);
+
+    // Re-selecting the same normalised source is a no-op.
+    processor.setHistoryArray(0);
+    CHECK(processor.getHistorySourceToken() == firstAToken);
+
+    FireAudioProcessor::HistorySnapshot beforeAudio;
+    CHECK_FALSE(processor.copyHistorySnapshot(beforeAudio));
+    CHECK(beforeAudio.left.isEmpty());
+    CHECK(beforeAudio.right.isEmpty());
+
+    processHistoryBlock(processor, 0.2f);
+    FireAudioProcessor::HistorySnapshot firstA;
+    REQUIRE(processor.copyHistorySnapshot(firstA));
+    CHECK(firstA.sourceToken == firstAToken);
+    CHECK(firstA.left.size() == capturedSamplesPerBlock);
+    CHECK(firstA.right.size() == capturedSamplesPerBlock);
+    CHECK(firstA.generation > initial.generation);
+
+    processHistoryBlock(processor, 0.3f);
+    FireAudioProcessor::HistorySnapshot accumulatedA;
+    REQUIRE(processor.copyHistorySnapshot(accumulatedA));
+    CHECK(accumulatedA.sourceToken == firstAToken);
+    CHECK(accumulatedA.left.size() == capturedSamplesPerBlock * 2);
+    CHECK(accumulatedA.generation > firstA.generation);
+}
+
+TEST_CASE("History A to B to A cannot reuse the first A ring buffer",
+          "[processor][history][source-epoch]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+
+    processor.setHistoryArray(0);
+    processHistoryBlock(processor, 0.2f);
+    FireAudioProcessor::HistorySnapshot firstA;
+    REQUIRE(processor.copyHistorySnapshot(firstA));
+    REQUIRE(firstA.left.size() == capturedSamplesPerBlock);
+
+    processor.setHistoryArray(1);
+    const auto bToken = processor.getHistorySourceToken();
+    CHECK((bToken & sourceMask) == 1u);
+    FireAudioProcessor::HistorySnapshot staleA;
+    CHECK_FALSE(processor.copyHistorySnapshot(staleA));
+
+    // Return before the audio thread sees B. The source bits match the first
+    // request again, but its newer epoch must still invalidate firstA.
+    processor.setHistoryArray(0);
+    const auto secondAToken = processor.getHistorySourceToken();
+    REQUIRE(secondAToken != firstA.sourceToken);
+    CHECK((secondAToken & sourceMask) == 0u);
+    CHECK_FALSE(processor.copyHistorySnapshot(staleA));
+
+    processHistoryBlock(processor, 0.4f);
+    FireAudioProcessor::HistorySnapshot secondA;
+    REQUIRE(processor.copyHistorySnapshot(secondA));
+    CHECK(secondA.sourceToken == secondAToken);
+    // A source epoch starts empty and exposes only samples captured since the
+    // audio thread accepted that exact request.
+    CHECK(secondA.left.size() == capturedSamplesPerBlock);
+    CHECK(secondA.right.size() == capturedSamplesPerBlock);
+}
+
+TEST_CASE("History graphs hard-clear on a source request without audio",
+          "[ui][history][source-epoch][freshness]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+
+    Oscilloscope oscilloscope(processor);
+    WidthGraph widthGraph(processor);
+    OscilloscopeHistorySourceTestAccess::seedStaleHistory(oscilloscope);
+    WidthGraphHistorySourceTestAccess::seedStaleHistory(widthGraph);
+
+    processor.setHistoryArray(0);
+    REQUIRE(OscilloscopeHistorySourceTestAccess::synchronise(oscilloscope));
+    REQUIRE(WidthGraphHistorySourceTestAccess::synchronise(widthGraph));
+    CHECK(OscilloscopeHistorySourceTestAccess::isHardCleared(oscilloscope));
+    CHECK(WidthGraphHistorySourceTestAccess::isHardCleared(widthGraph));
+
+    FireAudioProcessor::HistorySnapshot notYetPublished;
+    CHECK_FALSE(processor.copyHistorySnapshot(notYetPublished));
+    CHECK(notYetPublished.left.isEmpty());
+    CHECK(notYetPublished.right.isEmpty());
+}

@@ -13,6 +13,7 @@
 //==============================================================================
 Oscilloscope::Oscilloscope(FireAudioProcessor& p) : processor(p)
 {
+    historySourceToken = processor.getHistorySourceToken();
     setGraphIdentity("WAVEFORM", fire::ui::ModuleRole::drive);
 }
 
@@ -56,6 +57,8 @@ void Oscilloscope::paint(juce::Graphics& g)
 
 void Oscilloscope::timerCallback()
 {
+    synchroniseHistorySource();
+
     if (! isShowing() || getWidth() <= 0 || getHeight() <= 0)
         return;
 
@@ -69,14 +72,21 @@ void Oscilloscope::timerCallback()
         }
         return;
     }
-    lastHistoryGeneration = historyGeneration;
 
     const bool nextMonoChannel = processor.getTotalNumInputChannels() == 1;
-    processor.copyHistoryArrays(historyScratchL, historyScratchR);
+    if (! processor.copyHistorySnapshot(historyScratch)
+        || historyScratch.sourceToken != historySourceToken
+        || processor.getHistorySourceToken() != historySourceToken)
+    {
+        synchroniseHistorySource();
+        return;
+    }
+
+    lastHistoryGeneration = historyScratch.generation;
     const bool historyChanged = monoChannel != nextMonoChannel
-                                || ! arraysMatch(historyL, historyScratchL)
+                                || ! arraysMatch(historyL, historyScratch.left)
                                 || (! nextMonoChannel
-                                    && ! arraysMatch(historyR, historyScratchR));
+                                    && ! arraysMatch(historyR, historyScratch.right));
 
     if (! historyChanged && ! waveformGeometryDirty)
         return;
@@ -84,11 +94,11 @@ void Oscilloscope::timerCallback()
     if (historyChanged)
     {
         monoChannel = nextMonoChannel;
-        historyL.swapWith(historyScratchL);
+        historyL.swapWith(historyScratch.left);
         if (monoChannel)
             historyR.clearQuick();
         else
-            historyR.swapWith(historyScratchR);
+            historyR.swapWith(historyScratch.right);
     }
 
     updateWaveformPaths();
@@ -110,6 +120,7 @@ void Oscilloscope::resized()
 void Oscilloscope::visibilityChanged()
 {
     GraphTemplate::visibilityChanged();
+    synchroniseHistorySource();
     if (isShowing() && waveformGeometryDirty)
     {
         updateWaveformPaths();
@@ -125,9 +136,32 @@ void Oscilloscope::graphShowingStateChanged(bool isNowShowing)
         return;
     }
 
+    synchroniseHistorySource();
     startTimerHz(60);
     timerCallback();
     repaint();
+}
+
+bool Oscilloscope::synchroniseHistorySource()
+{
+    const auto requestedSourceToken = processor.getHistorySourceToken();
+    if (requestedSourceToken == historySourceToken)
+        return false;
+
+    historySourceToken = requestedSourceToken;
+    lastHistoryGeneration = 0;
+    historyL.clearQuick();
+    historyR.clearQuick();
+    historyScratch.left.clearQuick();
+    historyScratch.right.clearQuick();
+    historyScratch.sourceToken = requestedSourceToken;
+    historyScratch.generation = 0;
+    waveformL.clear();
+    waveformR.clear();
+    sampleIndexByPixel.clear();
+    waveformGeometryDirty = false;
+    repaint(getGraphPlotBounds().getSmallestIntegerContainer());
+    return true;
 }
 
 bool Oscilloscope::arraysMatch(const juce::Array<float>& lhs,

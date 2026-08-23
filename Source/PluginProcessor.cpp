@@ -2843,14 +2843,20 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     lfoManager->prepare(spec);
 
+    historyPublicationSequence.fetch_add(1, std::memory_order_acq_rel);
     for (int i = 0; i < historyLength; ++i)
     {
         historyArrayL[static_cast<size_t>(i)].store(0.0f, std::memory_order_relaxed);
         historyArrayR[static_cast<size_t>(i)].store(0.0f, std::memory_order_relaxed);
     }
     historyWritePosition.store(0, std::memory_order_relaxed);
-    historySamplesAvailable.store(historyLength, std::memory_order_release);
+    historySamplesAvailable.store(0, std::memory_order_relaxed);
+    activeHistorySourceToken = historySourceRequestToken.load(
+        std::memory_order_acquire);
+    publishedHistorySourceToken.store(activeHistorySourceToken,
+                                      std::memory_order_relaxed);
     historyGeneration.fetch_add(1, std::memory_order_release);
+    historyPublicationSequence.fetch_add(1, std::memory_order_release);
 
     delayMatchedDryBuffer.setSize(outputChannels, maximumBlockSize);
     delayMatchedDryBuffer.clear();
@@ -4879,8 +4885,29 @@ bool FireAudioProcessor::isSlient(const juce::AudioBuffer<float>& buffer)
 
 void FireAudioProcessor::setHistoryArray(int bandIndex)
 {
-    historySourceBand.store(juce::isPositiveAndBelow(bandIndex, 4) ? bandIndex : 4,
-                            std::memory_order_relaxed);
+    const auto normalisedSource = static_cast<std::uint64_t>(
+        juce::isPositiveAndBelow(bandIndex, 4) ? bandIndex : 4);
+    auto currentToken = historySourceRequestToken.load(
+        std::memory_order_relaxed);
+
+    for (;;)
+    {
+        if ((currentToken & historySourceMask) == normalisedSource)
+            return;
+
+        auto nextEpoch = (currentToken & ~historySourceMask)
+                         + (historySourceMask + 1u);
+        if ((nextEpoch & ~historySourceMask) == 0)
+            nextEpoch = historySourceMask + 1u;
+
+        const auto nextToken = nextEpoch | normalisedSource;
+        if (historySourceRequestToken.compare_exchange_weak(
+                currentToken,
+                nextToken,
+                std::memory_order_release,
+                std::memory_order_relaxed))
+            return;
+    }
 }
 
 void FireAudioProcessor::captureHistorySamples()
@@ -4888,27 +4915,69 @@ void FireAudioProcessor::captureHistorySamples()
     const std::array<const juce::AudioBuffer<float>*, 5> sourceBuffers {
         &mBuffer1, &mBuffer2, &mBuffer3, &mBuffer4, &mWetBuffer
     };
-    const int sourceIndex = juce::jlimit(0, 4, historySourceBand.load(std::memory_order_relaxed));
+    const auto requestedSourceToken = historySourceRequestToken.load(
+        std::memory_order_acquire);
+    const int sourceIndex = juce::jlimit(
+        0,
+        4,
+        static_cast<int>(requestedSourceToken & historySourceMask));
     const auto* sourceBuffer = sourceBuffers[static_cast<size_t>(sourceIndex)];
+    const bool sourceChanged = requestedSourceToken != activeHistorySourceToken;
 
-    if (sourceBuffer == nullptr || sourceBuffer->getNumChannels() == 0 || sourceBuffer->getNumSamples() == 0)
+    const bool hasSamples = sourceBuffer != nullptr
+                            && sourceBuffer->getNumChannels() > 0
+                            && sourceBuffer->getNumSamples() > 0;
+    if (! sourceChanged && ! hasSamples)
         return;
 
-    const auto* left = sourceBuffer->getReadPointer(0);
-    const auto* right = sourceBuffer->getNumChannels() > 1 ? sourceBuffer->getReadPointer(1) : left;
-    int writePosition = historyWritePosition.load(std::memory_order_relaxed);
+    // This is the sole history writer. The odd/even sequence lets the message
+    // thread reject a snapshot that overlaps these relaxed atomic writes,
+    // without adding a lock or allocating on the audio thread.
+    historyPublicationSequence.fetch_add(1, std::memory_order_acq_rel);
 
-    for (int sample = 0; sample < sourceBuffer->getNumSamples(); sample += 10)
+    if (sourceChanged)
     {
-        const auto index = static_cast<size_t>(writePosition);
-        historyArrayL[index].store(left[sample], std::memory_order_relaxed);
-        historyArrayR[index].store(right[sample], std::memory_order_relaxed);
-        writePosition = (writePosition + 1) % historyLength;
+        activeHistorySourceToken = requestedSourceToken;
+        historyWritePosition.store(0, std::memory_order_relaxed);
+        historySamplesAvailable.store(0, std::memory_order_relaxed);
     }
 
-    historySamplesAvailable.store(historyLength, std::memory_order_relaxed);
-    historyWritePosition.store(writePosition, std::memory_order_release);
-    historyGeneration.fetch_add(1, std::memory_order_release);
+    int writePosition = historyWritePosition.load(std::memory_order_relaxed);
+    int samplesAvailable = historySamplesAvailable.load(
+        std::memory_order_relaxed);
+    int capturedSamples = 0;
+
+    if (hasSamples)
+    {
+        const auto* left = sourceBuffer->getReadPointer(0);
+        const auto* right = sourceBuffer->getNumChannels() > 1
+                                ? sourceBuffer->getReadPointer(1)
+                                : left;
+
+        for (int sample = 0; sample < sourceBuffer->getNumSamples(); sample += 10)
+        {
+            const auto index = static_cast<size_t>(writePosition);
+            historyArrayL[index].store(left[sample], std::memory_order_relaxed);
+            historyArrayR[index].store(right[sample], std::memory_order_relaxed);
+            writePosition = (writePosition + 1) % historyLength;
+            ++capturedSamples;
+        }
+    }
+
+    samplesAvailable = juce::jmin(historyLength,
+                                  samplesAvailable + capturedSamples);
+    historySamplesAvailable.store(samplesAvailable,
+                                  std::memory_order_relaxed);
+    historyWritePosition.store(writePosition, std::memory_order_relaxed);
+    publishedHistorySourceToken.store(activeHistorySourceToken,
+                                      std::memory_order_relaxed);
+    historyGeneration.fetch_add(1, std::memory_order_relaxed);
+    historyPublicationSequence.fetch_add(1, std::memory_order_release);
+}
+
+std::uint64_t FireAudioProcessor::getHistorySourceToken() const noexcept
+{
+    return historySourceRequestToken.load(std::memory_order_acquire);
 }
 
 std::uint64_t FireAudioProcessor::getHistoryGeneration() const noexcept
@@ -4916,21 +4985,85 @@ std::uint64_t FireAudioProcessor::getHistoryGeneration() const noexcept
     return historyGeneration.load(std::memory_order_acquire);
 }
 
+bool FireAudioProcessor::copyHistorySnapshot(HistorySnapshot& destination) const
+{
+    constexpr int maximumAttempts = 4;
+    for (int attempt = 0; attempt < maximumAttempts; ++attempt)
+    {
+        const auto requestedTokenBefore = historySourceRequestToken.load(
+            std::memory_order_acquire);
+        const auto sequenceBefore = historyPublicationSequence.load(
+            std::memory_order_acquire);
+        if ((sequenceBefore & 1u) != 0u)
+            continue;
+
+        const auto publishedToken = publishedHistorySourceToken.load(
+            std::memory_order_relaxed);
+        const auto generation = historyGeneration.load(
+            std::memory_order_relaxed);
+        const int writePosition = historyWritePosition.load(
+            std::memory_order_relaxed);
+        const int count = juce::jlimit(
+            0,
+            historyLength,
+            historySamplesAvailable.load(std::memory_order_relaxed));
+        const int start = (writePosition - count + historyLength)
+                          % historyLength;
+
+        destination.left.resize(count);
+        destination.right.resize(count);
+        for (int i = 0; i < count; ++i)
+        {
+            const auto index = static_cast<size_t>(
+                (start + i) % historyLength);
+            destination.left.setUnchecked(
+                i,
+                historyArrayL[index].load(std::memory_order_relaxed));
+            destination.right.setUnchecked(
+                i,
+                historyArrayR[index].load(std::memory_order_relaxed));
+        }
+
+        // Prevent the copied atomic samples from moving past the validation
+        // read on weakly ordered CPUs. A changed/odd sequence then rejects the
+        // whole candidate rather than exposing a torn ring-buffer frame.
+        std::atomic_thread_fence(std::memory_order_acq_rel);
+        const auto sequenceAfter = historyPublicationSequence.load(
+            std::memory_order_relaxed);
+        const auto requestedTokenAfter = historySourceRequestToken.load(
+            std::memory_order_acquire);
+        if (sequenceBefore == sequenceAfter
+            && (sequenceAfter & 1u) == 0u
+            && requestedTokenBefore == requestedTokenAfter
+            && publishedToken == requestedTokenAfter)
+        {
+            destination.sourceToken = publishedToken;
+            destination.generation = generation;
+            return true;
+        }
+    }
+
+    destination.left.clearQuick();
+    destination.right.clearQuick();
+    destination.sourceToken = historySourceRequestToken.load(
+        std::memory_order_acquire);
+    destination.generation = 0;
+    return false;
+}
+
 void FireAudioProcessor::copyHistoryArrays(juce::Array<float>& leftDestination,
                                            juce::Array<float>& rightDestination) const
 {
-    const int writePosition = historyWritePosition.load(std::memory_order_acquire);
-    const int count = juce::jlimit(0, historyLength, historySamplesAvailable.load(std::memory_order_relaxed));
-    const int start = (writePosition - count + historyLength) % historyLength;
-
-    leftDestination.resize(count);
-    rightDestination.resize(count);
-    for (int i = 0; i < count; ++i)
+    HistorySnapshot snapshot;
+    if (! copyHistorySnapshot(snapshot))
     {
-        const auto index = static_cast<size_t>((start + i) % historyLength);
-        leftDestination.setUnchecked(i, historyArrayL[index].load(std::memory_order_relaxed));
-        rightDestination.setUnchecked(i, historyArrayR[index].load(std::memory_order_relaxed));
+        leftDestination.clearQuick();
+        rightDestination.clearQuick();
+        return;
     }
+
+    leftDestination.swapWith(snapshot.left);
+    rightDestination.swapWith(snapshot.right);
 }
 
 juce::Array<float> FireAudioProcessor::getHistoryArrayL()

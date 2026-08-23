@@ -29,11 +29,12 @@ public:
     void visibilityChanged() override;
 
 private:
+    friend struct WidthGraphHistorySourceTestAccess;
+
     FireAudioProcessor& processor;
     juce::Array<float> historyL;
     juce::Array<float> historyR;
-    juce::Array<float> historyScratchL;
-    juce::Array<float> historyScratchR;
+    FireAudioProcessor::HistorySnapshot historyScratch;
     juce::Image pointCloudCache;
     juce::Rectangle<float> pointCloudCacheBounds;
     float pointCloudCacheScale = 0.0f;
@@ -42,9 +43,11 @@ private:
     bool cacheGeometryDirty = true;
     bool restoreTrailOnCacheRebuild = false;
     bool monoChannel = false;
+    std::uint64_t historySourceToken = 0;
     std::uint64_t lastHistoryGeneration = 0;
 
     static bool arraysMatch(const juce::Array<float>& lhs, const juce::Array<float>& rhs) noexcept;
+    bool synchroniseHistorySource();
     void rebuildPointCloudCache(float displayScale);
     bool drawLatestFrame(bool hasNewSamples);
     void graphShowingStateChanged(bool isNowShowing) override;

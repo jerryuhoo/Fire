@@ -14,6 +14,7 @@
 //==============================================================================
 WidthGraph::WidthGraph(FireAudioProcessor& p) : processor(p)
 {
+    historySourceToken = processor.getHistorySourceToken();
     setGraphIdentity("STEREO FIELD", fire::ui::ModuleRole::stereo);
 }
 
@@ -61,6 +62,8 @@ void WidthGraph::paint(juce::Graphics& g)
 
 void WidthGraph::timerCallback()
 {
+    synchroniseHistorySource();
+
     if (! isShowing())
         return;
 
@@ -77,23 +80,29 @@ void WidthGraph::timerCallback()
             repaint(getGraphPlotBounds().getSmallestIntegerContainer());
         return;
     }
-    lastHistoryGeneration = historyGeneration;
-
     const bool nextMonoChannel = processor.getTotalNumInputChannels() != 2;
-    processor.copyHistoryArrays(historyScratchL, historyScratchR);
+    if (! processor.copyHistorySnapshot(historyScratch)
+        || historyScratch.sourceToken != historySourceToken
+        || processor.getHistorySourceToken() != historySourceToken)
+    {
+        synchroniseHistorySource();
+        return;
+    }
+
+    lastHistoryGeneration = historyScratch.generation;
     const bool historyContentsChanged = monoChannel != nextMonoChannel
-                                        || ! arraysMatch(historyL, historyScratchL)
+                                        || ! arraysMatch(historyL, historyScratch.left)
                                         || (! nextMonoChannel
-                                            && ! arraysMatch(historyR, historyScratchR));
+                                            && ! arraysMatch(historyR, historyScratch.right));
 
     if (historyContentsChanged)
     {
         monoChannel = nextMonoChannel;
-        historyL.swapWith(historyScratchL);
+        historyL.swapWith(historyScratch.left);
         if (monoChannel)
             historyR.clearQuick();
         else
-            historyR.swapWith(historyScratchR);
+            historyR.swapWith(historyScratch.right);
     }
 
     // A new generation is a new visual frame even if its values happen to be
@@ -120,6 +129,7 @@ void WidthGraph::resized()
 void WidthGraph::visibilityChanged()
 {
     GraphTemplate::visibilityChanged();
+    synchroniseHistorySource();
     if (isShowing() && cacheGeometryDirty)
         repaint();
 }
@@ -132,8 +142,34 @@ void WidthGraph::graphShowingStateChanged(bool isNowShowing)
         return;
     }
 
+    synchroniseHistorySource();
     startTimerHz(60);
     repaint();
+}
+
+bool WidthGraph::synchroniseHistorySource()
+{
+    const auto requestedSourceToken = processor.getHistorySourceToken();
+    if (requestedSourceToken == historySourceToken)
+        return false;
+
+    historySourceToken = requestedSourceToken;
+    lastHistoryGeneration = 0;
+    historyL.clearQuick();
+    historyR.clearQuick();
+    historyScratch.left.clearQuick();
+    historyScratch.right.clearQuick();
+    historyScratch.sourceToken = requestedSourceToken;
+    historyScratch.generation = 0;
+    pointCloudCache = {};
+    pointCloudCacheBounds = {};
+    pointCloudCacheScale = 0.0f;
+    fadeFramesRemaining = 0;
+    cacheHasContent = false;
+    cacheGeometryDirty = true;
+    restoreTrailOnCacheRebuild = false;
+    repaint(getGraphPlotBounds().getSmallestIntegerContainer());
+    return true;
 }
 
 void WidthGraph::rebuildPointCloudCache(float displayScale)

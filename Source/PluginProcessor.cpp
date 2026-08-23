@@ -5419,6 +5419,7 @@ void FireAudioProcessor::applyDownsamplingEffect(
     {
         downsampleSamplesRemaining.fill(0);
         downsampleHeldSamples.fill(0.0f);
+        downsampleHoldResiduals.fill(0.0);
         downsamplingWasActive = true;
     }
 
@@ -5578,8 +5579,31 @@ void FireAudioProcessor::applyDownsamplingEffect(
                     currentRateReduce *= randomFactor;
                 }
 
-                // Set how many samples we need to hold for. Must be at least 1.
-                downsampleSamplesRemaining[stateIndex] = juce::jmax(1, static_cast<int>(currentRateReduce));
+                // Preserve the Rate parameter's advertised fractional
+                // resolution.  A hold duration must be an integer number of
+                // samples, so carry the unused fraction into the next capture
+                // instead of flooring every request independently.  Integer
+                // rates remain sample-for-sample identical, while e.g. 2.5x
+                // produces deterministic 2, 3, 2, 3 ... holds.
+                const double requestedHold = std::isfinite(currentRateReduce)
+                                                 ? juce::jlimit(
+                                                       1.0,
+                                                       128.0,
+                                                       static_cast<double>(
+                                                           currentRateReduce))
+                                                 : 1.0;
+                auto& residual = downsampleHoldResiduals[stateIndex];
+                if (! std::isfinite(residual) || residual < 0.0
+                    || residual >= 1.0)
+                    residual = 0.0;
+
+                const double accumulatedHold = requestedHold + residual;
+                const int holdSamples = juce::jmax(
+                    1,
+                    static_cast<int>(std::floor(accumulatedHold)));
+                residual = accumulatedHold
+                         - static_cast<double>(holdSamples);
+                downsampleSamplesRemaining[stateIndex] = holdSamples;
             }
 
             // Output the held sample.
@@ -5608,6 +5632,7 @@ void FireAudioProcessor::resetDownsamplingState() noexcept
 {
     downsampleSamplesRemaining.fill(0);
     downsampleHeldSamples.fill(0.0f);
+    downsampleHoldResiduals.fill(0.0);
     downsamplingWasActive = false;
 }
 

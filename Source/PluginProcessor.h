@@ -876,6 +876,7 @@ private:
     static constexpr size_t downsamplingStateChannels = 64;
     std::array<int, downsamplingStateChannels> downsampleSamplesRemaining {};
     std::array<float, downsamplingStateChannels> downsampleHeldSamples {};
+    std::array<double, downsamplingStateChannels> downsampleHoldResiduals {};
     bool downsamplingWasActive = false;
 
     // multiband dsp

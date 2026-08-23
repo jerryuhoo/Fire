@@ -8,9 +8,46 @@
 #include <cstdint>
 #include <memory>
 #include <set>
+#include <vector>
 
 namespace
 {
+struct ParameterGestureRecorder final : juce::AudioProcessorParameter::Listener
+{
+    void parameterValueChanged(int, float) override {}
+
+    void parameterGestureChanged(int, bool gestureIsStarting) override
+    {
+        gestures.push_back(gestureIsStarting);
+    }
+
+    std::vector<bool> gestures;
+};
+
+juce::MouseEvent makeMouseEvent(juce::Component& component,
+                                juce::Point<float> position,
+                                juce::ModifierKeys modifiers,
+                                juce::Point<float> mouseDownPosition,
+                                bool wasDragged)
+{
+    const auto now = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             now,
+             mouseDownPosition,
+             now,
+             1,
+             wasDragged };
+}
+
 juce::Image renderEditorAtSize(FireAudioProcessorEditor& editor, int width, int height)
 {
     editor.setBounds(0, 0, width, height);
@@ -254,6 +291,71 @@ TEST_CASE("LFO Rate text entry is available only in Free Hz mode",
     CHECK_FALSE(rateSlider->isTextBoxEditable());
     CHECK(rateSlider->getValue() == Catch::Approx(6.0));
     CHECK(rateSlider->getTextFromValue(rateSlider->getValue()) == "1/8");
+}
+
+TEST_CASE("LFO Rate defers Sync attachment changes until the active host gesture ends",
+          "[ui][lfo][rate][sync][gesture]")
+{
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    const auto syncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0);
+    const auto syncRateID = ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, 0);
+    const auto freeRateID = ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, 0);
+    setParameterValue(processor, syncModeID, 0.0f);
+
+    LfoPanel lfoPanel(processor);
+    lfoPanel.setBounds(0, 0, 1000, 500);
+
+    auto* rateSlider = findSliderAttachedToLabel(lfoPanel, "Rate");
+    auto* freeRate = processor.treeState.getParameter(freeRateID);
+    auto* syncRate = processor.treeState.getParameter(syncRateID);
+    REQUIRE(rateSlider != nullptr);
+    REQUIRE(freeRate != nullptr);
+    REQUIRE(syncRate != nullptr);
+
+    ParameterGestureRecorder freeRecorder;
+    ParameterGestureRecorder syncRecorder;
+    freeRate->addListener(&freeRecorder);
+    syncRate->addListener(&syncRecorder);
+
+    const auto downPosition = rateSlider->getLocalBounds().toFloat().getCentre();
+    rateSlider->mouseDown(makeMouseEvent(
+        *rateSlider,
+        downPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+        downPosition,
+        false));
+    REQUIRE(freeRecorder.gestures == std::vector<bool> { true });
+
+    // Model host automation changing Sync while the user is still dragging.
+    // The visible knob must finish its old Free-Hz gesture before rebinding.
+    setParameterValue(processor, syncModeID, 1.0f);
+    lfoPanel.animationTick();
+    CHECK(rateSlider->isTextBoxEditable());
+    CHECK(syncRecorder.gestures.empty());
+
+    rateSlider->setValue(2.75, juce::sendNotificationSync);
+    CHECK(processor.treeState.getRawParameterValue(freeRateID)->load()
+          == Catch::Approx(2.75f));
+
+    rateSlider->mouseUp(makeMouseEvent(
+        *rateSlider,
+        downPosition,
+        juce::ModifierKeys {},
+        downPosition,
+        false));
+
+    REQUIRE(freeRecorder.gestures == std::vector<bool> { true, false });
+    CHECK(syncRecorder.gestures.empty());
+
+    lfoPanel.animationTick();
+    CHECK_FALSE(rateSlider->isTextBoxEditable());
+    CHECK(freeRecorder.gestures == std::vector<bool> { true, false });
+    CHECK(syncRecorder.gestures.empty());
+
+    freeRate->removeListener(&freeRecorder);
+    syncRate->removeListener(&syncRecorder);
 }
 
 TEST_CASE("Fire settings dialog uses the shared visual language", "[ui][smoke]")

@@ -1299,6 +1299,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
     rateSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);
+    rateSlider.addListener(this);
 
     addAndMakeVisible(rateLabel);
     rateLabel.setText("Rate", juce::dontSendNotification);
@@ -1406,6 +1407,7 @@ LfoPanel::~LfoPanel()
     // Remove listeners from sliders
     gridXSlider.removeListener(this);
     gridYSlider.removeListener(this);
+    rateSlider.removeListener(this);
     lfoPhaseSlider.removeListener(this);
 
     for (int i = 0; i < 4; ++i)
@@ -1718,6 +1720,19 @@ LfoData LfoPanel::getLfoDataCopy(int index)
 
 void LfoPanel::updateRateSlider()
 {
+    // A SliderAttachment owns the begin/end gesture pair for its parameter.
+    // Replacing it while the slider is down strands the old parameter's begin
+    // gesture and sends the eventual end gesture to the new parameter. Keep
+    // the current attachment alive until Slider has finished notifying all of
+    // its drag listeners, then refresh it on the next shared-clock tick.
+    if (isDraggingRateSlider)
+    {
+        rateSliderRefreshWasDeferred = true;
+        return;
+    }
+
+    rateSliderRefreshWasDeferred = false;
+
     // --- Get Parameter IDs using the robust ParameterID namespace ---
     // The currentLfoIndex is 0-based, which matches our arrays perfectly.
     const auto& syncModeID = syncParameterIDs[static_cast<size_t>(currentLfoIndex)];
@@ -1820,7 +1835,11 @@ void LfoPanel::sliderValueChanged(juce::Slider* slider)
 
 void LfoPanel::sliderDragStarted(juce::Slider* slider)
 {
-    if (slider == &lfoPhaseSlider)
+    if (slider == &rateSlider)
+    {
+        isDraggingRateSlider = true;
+    }
+    else if (slider == &lfoPhaseSlider)
     {
         isDraggingPhaseSlider = true;
         lfoEditor.setPhaseOffsetLinePosition(lfoPhaseSlider.getValue());
@@ -1829,7 +1848,17 @@ void LfoPanel::sliderDragStarted(juce::Slider* slider)
 
 void LfoPanel::sliderDragEnded(juce::Slider* slider)
 {
-    if (slider == &lfoPhaseSlider)
+    if (slider == &rateSlider)
+    {
+        isDraggingRateSlider = false;
+
+        // Do not replace the attachment from inside Slider's ListenerList:
+        // its own listener still needs this drag-ended callback in order to
+        // close the old host gesture.
+        if (rateSliderRefreshWasDeferred)
+            pendingRateSliderUpdate.store(true, std::memory_order_release);
+    }
+    else if (slider == &lfoPhaseSlider)
     {
         isDraggingPhaseSlider = false;
         lfoEditor.setPhaseOffsetLinePosition(-1.0f);

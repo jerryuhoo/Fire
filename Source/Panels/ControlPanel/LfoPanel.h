@@ -245,6 +245,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoSmoothAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lfoPhaseAttachment;
     bool isUpdatingRateSlider = false;
+    bool isDraggingRateSlider = false;
+    bool rateSliderRefreshWasDeferred = false;
     bool isDraggingPhaseSlider = false;
     std::atomic<bool> pendingRateSliderUpdate { false };
     std::atomic<unsigned int> pendingSmoothnessUpdates { 0 };

@@ -24,6 +24,10 @@ ModulatableSlider::ModulatableSlider()
     isDraggingMainSlider = false;
 
     addAndMakeVisible(label);
+    // The title is presentation only. The slider deliberately counts the
+    // header as part of its hit target, so allowing this child to intercept
+    // events makes the visible title strip a dead zone.
+    label.setInterceptsMouseClicks(false, false);
     label.setJustificationType(juce::Justification::centred);
     label.setFont(juce::Font { juce::FontOptions().withName(KNOB_FONT).withHeight(KNOB_FONT_SIZE).withStyle("Plain") });
     setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);

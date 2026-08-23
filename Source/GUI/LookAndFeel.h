@@ -46,7 +46,10 @@ public:
         setColour(juce::ComboBox::textColourId, colours::textPrimary);
         setColour(juce::ComboBox::arrowColourId, colours::flame);
 
-        setColour(juce::PopupMenu::backgroundColourId, colours::surface0);
+        // A non-opaque menu peer lets the rounded Fire surface keep genuinely
+        // transparent corners instead of JUCE's opaque white fallback fill.
+        setColour(juce::PopupMenu::backgroundColourId,
+                  colours::surface0.withAlpha(0.98f));
         setColour(juce::PopupMenu::textColourId, colours::textSecondary);
         setColour(juce::PopupMenu::highlightedBackgroundColourId, colours::raised);
         setColour(juce::PopupMenu::highlightedTextColourId, colours::whiteHot);

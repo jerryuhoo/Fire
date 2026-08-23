@@ -1,5 +1,6 @@
 #include "LfoPanel.h"
 #include "../../DSP/LfoShapeGenerator.h"
+#include "../../GUI/FireTheme.h"
 #include "../../PluginProcessor.h"
 
 static juce::Rectangle<int> makeNormalised(const juce::Point<int>& p1,
@@ -744,8 +745,9 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
             }
         };
 
-        const auto screenArea = juce::Rectangle<int>(event.getScreenX(), event.getScreenY(), 1, 1);
-        m.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(screenArea), callback);
+        m.showMenuAsync(fire::ui::prepareContextMenu(
+                            m, *this, event.getScreenPosition()),
+                        callback);
 
         return; // We've handled the right-click, so we exit here.
     }

@@ -66,6 +66,38 @@ struct Metrics
     static constexpr float radiusLarge = 12.0f;
 };
 
+inline juce::PopupMenu::Options prepareContextMenu(
+    juce::PopupMenu& menu,
+    juce::Component& target,
+    juce::Point<int> screenPosition)
+{
+    auto options = juce::PopupMenu::Options()
+                       .withTargetComponent(target)
+                       .withTargetScreenArea(
+                           juce::Rectangle<int>(screenPosition.x,
+                                                screenPosition.y,
+                                                1,
+                                                1))
+                       .withDeletionCheck(target);
+
+    if (auto* topLevel = target.getTopLevelComponent();
+        topLevel != nullptr && topLevel != &target)
+    {
+        // A child MenuWindow inherits the editor theme without borrowing a
+        // raw LookAndFeel pointer that could outlive the editor instance.
+        menu.setLookAndFeel(nullptr);
+        options = options.withParentComponent(topLevel);
+    }
+    else
+    {
+        // Desktop menus have no parent from which to inherit a theme. The
+        // deletion check above keeps their lifetime tied to the target.
+        menu.setLookAndFeel(&target.getLookAndFeel());
+    }
+
+    return options;
+}
+
 // Critically damped scalar motion for selection rails and short UI
 // transitions.  It begins and ends at rest, remains stable across uneven
 // message-thread frame times, and allocates nothing while ticking.

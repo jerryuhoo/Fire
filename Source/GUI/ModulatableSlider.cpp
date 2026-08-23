@@ -307,7 +307,8 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
             juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
             menu.addItem(5, bypassToggleText);
 
-            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+            menu.showMenuAsync(fire::ui::prepareContextMenu(
+                                   menu, *this, event.getScreenPosition()),
                                createModulationMenuResultHandler());
         }
         else if (parameterID.isNotEmpty())
@@ -319,7 +320,8 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
                              true,
                              isModulated && lfoSource == lfoIndex + 1);
 
-            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+            menu.showMenuAsync(fire::ui::prepareContextMenu(
+                                   menu, *this, event.getScreenPosition()),
                                createLfoAssignmentMenuResultHandler());
         }
 

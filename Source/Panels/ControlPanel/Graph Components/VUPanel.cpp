@@ -157,6 +157,7 @@ void VUPanel::setFocusBandNum(int num)
     thresholdVisible = compBypassValue != nullptr
                        && compBypassValue->load(std::memory_order_relaxed) > 0.5f;
     staleTimerTicks = 0;
+    refreshReadoutText();
     vuMeterIn.repaint();
     vuMeterOut.repaint();
     repaint();

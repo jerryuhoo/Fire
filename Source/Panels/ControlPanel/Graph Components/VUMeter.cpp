@@ -127,12 +127,24 @@ void VUMeter::setParameters(bool isInput, int bandIndex)
     const bool appearanceChanged = mIsInput != isInput;
     mIsInput = isInput;
     mBandIndex = bandIndex;
+    resetLevels();
     if (appearanceChanged)
     {
         backgroundCache = {};
         backgroundCacheBounds = {};
         backgroundCacheScale = 0.0f;
     }
+}
+
+void VUMeter::resetLevels() noexcept
+{
+    mRmsCh0Level = 0.0f;
+    mRmsCh1Level = 0.0f;
+    mPeakCh0Level = 0.0f;
+    mPeakCh1Level = 0.0f;
+    mPeakHoldCh0Level = 0.0f;
+    mPeakHoldCh1Level = 0.0f;
+    mPeakHoldDecayCounter = 0;
 }
 
 bool VUMeter::updateLevels(const MeterValues& latestValues)

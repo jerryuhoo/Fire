@@ -64,6 +64,7 @@ private:
     bool cachedIsInput = true;
 
     bool updateBallistics(float rmsCh0, float rmsCh1, float peakCh0, float peakCh1);
+    void resetLevels() noexcept;
     void updateMeterBounds(int channelCount);
     void rebuildBackgroundCache(float displayScale);
 

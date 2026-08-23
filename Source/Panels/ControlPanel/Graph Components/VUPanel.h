@@ -30,6 +30,8 @@ public:
     void updateRealtimeThreshold(float newThresholdDb);
 
 private:
+    friend struct VUPanelTestAccess;
+
     FireAudioProcessor& processor;
     int focusBandNum;
     VUMeter vuMeterIn;

@@ -238,16 +238,24 @@ private:
                       bool updateReductionMeter);
     void processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                            const BandProcessingParameters& params,
+                           const float* safePeakEnvelope,
+                           int safePeakEnvelopeSamples,
                            float inputPeak,
                            bool updateReductionMeter);
+    void fillSafePeakEnvelope(const juce::AudioBuffer<float>& buffer) noexcept;
     void processBandEnable(juce::AudioBuffer<float>& buffer, bool enabled);
     void processDcFilter(juce::AudioBuffer<float>& buffer, bool enabled);
 
     juce::AudioBuffer<float> dryBuffer;
     juce::AudioBuffer<float> dcFilterDryBuffer;
     juce::AudioBuffer<float> upsampledLfoOutputs;
+    juce::AudioBuffer<float> safePeakEnvelopeBuffer;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran>
         bandEnableDryDelay { 2048 };
+    float safePeakEnvelope = 0.0f;
+    float safePeakReleaseCoefficient = 0.0f;
+    int safePeakHoldSamples = 1;
+    int safePeakHoldRemaining = 0;
     int maximumPreparedBlockSize = 1;
 };
 

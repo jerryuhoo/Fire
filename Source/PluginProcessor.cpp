@@ -98,6 +98,8 @@ Slope getSlopeParameterValue(const std::atomic<float>* parameter) noexcept
 // Reserving a practical safety capacity keeps JUCE mixers/oversamplers inside
 // their prepared bounds without allocating on the audio thread.
 constexpr int minimumProcessingBlockCapacity = 8192;
+constexpr double safePeakHoldSeconds = 0.05;
+constexpr double safePeakReleaseSeconds = 0.05;
 
 template <typename FloatType>
 bool sameCachedValue(FloatType lhs, FloatType rhs) noexcept
@@ -675,6 +677,20 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     dryBuffer.setSize(numChannels, maximumBlockSize);
     dcFilterDryBuffer.setSize(numChannels, maximumBlockSize);
     upsampledLfoOutputs.setSize(4, maximumBlockSize * 4);
+    safePeakEnvelopeBuffer.setSize(1, maximumBlockSize);
+    safePeakEnvelopeBuffer.clear();
+
+    const double safeSampleRate = std::isfinite(spec.sampleRate)
+                                      && spec.sampleRate > 0.0
+                                      ? spec.sampleRate
+                                      : 48000.0;
+    safePeakHoldSamples = juce::jmax(
+        1,
+        juce::roundToInt(safeSampleRate * safePeakHoldSeconds));
+    safePeakReleaseCoefficient = static_cast<float>(
+        std::exp(-1.0 / (safeSampleRate * safePeakReleaseSeconds)));
+    safePeakEnvelope = 0.0f;
+    safePeakHoldRemaining = 0;
 
     // Reset all smoothed values with the current sample rate and a ramp time.
     driveSmoother.reset(spec.sampleRate, 0.05);
@@ -750,6 +766,9 @@ void BandProcessor::reset()
     compressorReleaseRecipeTransition.reset(100.0f);
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
+    safePeakEnvelope = 0.0f;
+    safePeakHoldRemaining = 0;
+    safePeakEnvelopeBuffer.clear();
 
     if (oversampling)
         oversampling->reset();
@@ -775,6 +794,66 @@ void BandProcessor::resetQualityTransitionState() noexcept
     // change.
     if (oversampling != nullptr)
         oversampling->reset();
+}
+
+void BandProcessor::fillSafePeakEnvelope(
+    const juce::AudioBuffer<float>& buffer) noexcept
+{
+    const int numSamples = buffer.getNumSamples();
+    jassert(numSamples <= safePeakEnvelopeBuffer.getNumSamples());
+    if (numSamples <= 0 || safePeakEnvelopeBuffer.getNumSamples() <= 0)
+        return;
+
+    auto* envelopeValues = safePeakEnvelopeBuffer.getWritePointer(0);
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        float instantaneousPeak = 0.0f;
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {
+            const float value = buffer.getSample(channel, sample);
+            if (std::isfinite(value))
+                instantaneousPeak = juce::jmax(instantaneousPeak,
+                                                std::abs(value));
+        }
+
+        if (instantaneousPeak > 0.0f
+            && instantaneousPeak >= safePeakEnvelope)
+        {
+            // Safe must react to a new linked-channel peak on the same sample.
+            // Holding the peak avoids gain breathing between ordinary waveform
+            // crests and keeps steady periodic material on the established
+            // block-peak recipe.
+            safePeakEnvelope = instantaneousPeak;
+            safePeakHoldRemaining = juce::jmax(0,
+                                                safePeakHoldSamples - 1);
+        }
+        else if (safePeakHoldRemaining > 0)
+        {
+            --safePeakHoldRemaining;
+        }
+        else
+        {
+            const float releasedPeak = safePeakEnvelope
+                                       * safePeakReleaseCoefficient;
+            if (instantaneousPeak >= releasedPeak)
+            {
+                safePeakEnvelope = instantaneousPeak;
+                if (instantaneousPeak > 0.0f)
+                    safePeakHoldRemaining = juce::jmax(
+                        0,
+                        safePeakHoldSamples - 1);
+            }
+            else
+            {
+                safePeakEnvelope = releasedPeak;
+            }
+
+            if (safePeakEnvelope < 1.0e-12f)
+                safePeakEnvelope = 0.0f;
+        }
+
+        envelopeValues[sample] = safePeakEnvelope;
+    }
 }
 
 //==============================================================================
@@ -839,7 +918,7 @@ void BandProcessor::process(juce::AudioBuffer<float>& buffer,
                      lfoOutputs,
                      sampleOffset,
                      inputPeak,
-                     updateReductionMeter && sampleOffset == 0);
+                     updateReductionMeter);
     }
 }
 
@@ -851,6 +930,7 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                  bool updateReductionMeter)
 {
     // 1. Preparation
+    fillSafePeakEnvelope(buffer);
     dryBuffer.makeCopyOf(buffer, true);
     auto block = juce::dsp::AudioBlock<float>(buffer);
     auto paramsForProcessing = params; // Create a mutable copy
@@ -1006,6 +1086,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
 
         processDistortion(oversampledBlock,
                           paramsForProcessing,
+                          safePeakEnvelopeBuffer.getReadPointer(0),
+                          buffer.getNumSamples(),
                           inputPeak,
                           updateReductionMeter);
         oversampling->processSamplesDown(block);
@@ -1040,6 +1122,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
 
         processDistortion(block,
                           paramsForProcessing,
+                          safePeakEnvelopeBuffer.getReadPointer(0),
+                          buffer.getNumSamples(),
                           inputPeak,
                           updateReductionMeter);
     }
@@ -1453,11 +1537,25 @@ void BandProcessor::processBandEnable(juce::AudioBuffer<float>& buffer,
 
 void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProcess,
                                       const BandProcessingParameters& params,
+                                      const float* safePeakEnvelopeValues,
+                                      int safePeakEnvelopeSamples,
                                       float inputPeak,
                                       bool updateReductionMeter)
 {
     const int numSamples = static_cast<int>(blockToProcess.getNumSamples());
     const int numChannels = static_cast<int>(blockToProcess.getNumChannels());
+    const int smoothingStride = params.isHQ ? (1 << oversampleFactor) : 1;
+    const auto getSafePeak = [&](int sample) noexcept
+    {
+        if (safePeakEnvelopeValues == nullptr || safePeakEnvelopeSamples <= 0)
+            return 0.0f;
+
+        const int baseSample = juce::jlimit(0,
+                                            safePeakEnvelopeSamples - 1,
+                                            sample / smoothingStride);
+        const float peak = safePeakEnvelopeValues[baseSample];
+        return std::isfinite(peak) ? juce::jmax(0.0f, peak) : 0.0f;
+    };
 
     // Shape Mix historically wraps the complete distortion stage, including
     // Drive. Once Shape is disabled its controls are frozen in the UI, so a
@@ -1482,9 +1580,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         shapeMixSmoother.setTargetValue(effectiveShapeMix);
     }
 
-    // For an oversized callback, every chunk must use the original callback's
-    // peak. Recomputing per chunk would make Safe mode depend on host block
-    // partitioning and could audibly change gain at each internal boundary.
+    // Keep the callback maximum for UI telemetry only. The audible Safe path
+    // uses the causal per-sample envelope above; allowing this future-looking
+    // maximum to drive the audio made identical timelines sound different at
+    // different host callback sizes.
     const float sampleMaxValue = std::isfinite(inputPeak) ? juce::jmax(0.0f, inputPeak) : 0.0f;
     mSampleMaxValue.store(sampleMaxValue, std::memory_order_relaxed);
 
@@ -1551,32 +1650,27 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
     if (isFirstBlock)
     {
-        // On the first block, calculate the FINAL gain for the *first sample*
-        // to properly initialize the smoothers and prevent clicks.
-
-        float initialFinalDriveGain;
+        // Prime the ordinary Drive dezipper from the requested first-sample
+        // gain. The causal Safe ceiling is applied below on that same sample,
+        // so startup has neither a fade from unity nor callback lookahead.
+        float initialRequestedDriveGain;
 
         if (! params.isDriveEnabled)
         {
             // If bypassed at startup, initialize the smoother to a gain of 1.0.
-            initialFinalDriveGain = 1.0f;
+            initialRequestedDriveGain = 1.0f;
         }
         else
         {
-            // If not bypassed, perform the full calculation as before.
             float initialDrive = driveProvider.get(0); // Get LFO-modulated value for sample 0
             if (params.isExtremeModeOn)
                 initialDrive = log2f(10.0f) * initialDrive;
             const float initialDriveForCalc = initialDrive * 6.5f / 100.0f;
-            float initialPowerDrive = std::pow(2.0f, initialDriveForCalc);
-
-            if (params.isSafeModeOn && sampleMaxValue > 0.0001f && sampleMaxValue * initialPowerDrive > 2.0f)
-                initialFinalDriveGain = 2.0f / sampleMaxValue + 0.1f * initialDriveForCalc;
-            else
-                initialFinalDriveGain = initialPowerDrive;
+            initialRequestedDriveGain = std::pow(2.0f,
+                                                  initialDriveForCalc);
         }
 
-        driveSmoother.setCurrentAndTargetValue(initialFinalDriveGain);
+        driveSmoother.setCurrentAndTargetValue(initialRequestedDriveGain);
 
         // Initialize Bias and Rec smoothers with their final modulated value for sample 0
         biasSmoother.setCurrentAndTargetValue(biasProvider.get(0));
@@ -1585,8 +1679,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         isFirstBlock = false;
     }
 
-    const int smoothingStride = params.isHQ ? (1 << oversampleFactor) : 1;
     float currentShapeMix = shapeMixSmoother.getCurrentValue();
+    float finalReductionDriveForCalc = 0.0f;
+    float finalReductionDriveGain = 1.0f;
+    bool hasReductionForRange = false;
     for (int sample = 0; sample < numSamples; ++sample)
     {
         if ((sample % smoothingStride) == 0)
@@ -1606,32 +1702,21 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         const float currentBias = biasProvider.get(sample);
         const float currentRec = recProvider.get(sample);
 
-        // 2. Calculate the final drive gain, including Extreme and Safe modes. This is the potentially "blocky" signal.
+        // 2. Calculate the requested Drive gain. User/LFO changes retain the
+        // established 50 ms dezipper; Safe applies an independent causal
+        // ceiling after that smoother.
         if (params.isExtremeModeOn)
             currentDrive = log2f(10.0f) * currentDrive;
 
         const float driveForCalc = currentDrive * 6.5f / 100.0f;
-        float powerDrive = std::pow(2.0f, driveForCalc);
+        const float requestedDriveGain = params.isDriveEnabled
+                                             ? std::pow(2.0f, driveForCalc)
+                                             : 1.0f;
 
-        float finalDriveGain;
-        if (! params.isDriveEnabled)
-        {
-            // If drive is bypassed, the gain should be 1.0 (no change).
-            finalDriveGain = 1.0f;
-        }
-        else
-        {
-            // Otherwise, use the existing Safe Mode logic.
-            if (params.isSafeModeOn && sampleMaxValue > 0.0001f && sampleMaxValue * powerDrive > 2.0f)
-                finalDriveGain = 2.0f / sampleMaxValue + 0.1f * driveForCalc;
-            else
-                finalDriveGain = powerDrive;
-        }
-
-        // 3. Set the smoothers' targets to these final, per-sample values.
-        // This makes the smoothers act like a one-pole filter, restoring the old behavior
-        // where the output of the complex logic was smoothed.
-        driveSmoother.setTargetValue(finalDriveGain);
+        // 3. Smooth the requested controls. A Safe reduction is allowed to
+        // move down immediately, but releasing that reduction still returns
+        // through this same 50 ms Drive ramp.
+        driveSmoother.setTargetValue(requestedDriveGain);
         biasSmoother.setTargetValue(currentBias);
         recSmoother.setTargetValue(currentRec);
 
@@ -1643,6 +1728,22 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             currentState.drive = driveSmoother.getNextValue();
             currentState.bias = biasSmoother.getNextValue();
             currentState.rec = recSmoother.getNextValue();
+
+            if (params.isDriveEnabled && params.isSafeModeOn)
+            {
+                const float causalPeak = getSafePeak(sample);
+                if (causalPeak > 0.0001f)
+                {
+                    const float safeCeiling = 2.0f / causalPeak
+                                              + 0.1f * driveForCalc;
+                    if (std::isfinite(safeCeiling)
+                        && safeCeiling < currentState.drive)
+                    {
+                        currentState.drive = safeCeiling;
+                        driveSmoother.setCurrentAndTargetValue(safeCeiling);
+                    }
+                }
+            }
         }
         else
         {
@@ -1651,17 +1752,14 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             currentState.rec = recSmoother.getCurrentValue();
         }
 
-        // Update reduction meter (can be done once per block)
-        if (sample == 0 && updateReductionMeter)
+        // Publish the causal Safe result at base rate. Internal oversized
+        // chunks share this state, so the meter and the audio follow the same
+        // absolute timeline rather than whichever callback peak arrived first.
+        if ((sample % smoothingStride) == 0 && updateReductionMeter)
         {
-            if (! params.isDriveEnabled || ! params.isSafeModeOn
-                || driveForCalc == 0.0f || sampleMaxValue <= 0.001f)
-                mReductionPercent.store(1.0f, std::memory_order_relaxed);
-            else
-                // Use the smoothed value for a more stable meter reading
-                mReductionPercent.store(
-                    juce::jlimit(0.0f, 1.0f, std::log2(currentState.drive) / driveForCalc),
-                    std::memory_order_relaxed);
+            finalReductionDriveForCalc = driveForCalc;
+            finalReductionDriveGain = currentState.drive;
+            hasReductionForRange = true;
         }
 
         // 5. Apply audio processing using the correctly smoothed values
@@ -1728,6 +1826,20 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         }
     }
 
+    if (hasReductionForRange)
+    {
+        float reduction = 1.0f;
+        if (params.isDriveEnabled && params.isSafeModeOn
+            && std::abs(finalReductionDriveForCalc) > 1.0e-8f)
+        {
+            reduction = juce::jlimit(
+                0.0f,
+                1.0f,
+                std::log2(juce::jmax(finalReductionDriveGain, 1.0e-12f))
+                    / finalReductionDriveForCalc);
+        }
+        mReductionPercent.store(reduction, std::memory_order_relaxed);
+    }
 }
 
 void BandProcessor::processDcFilter(juce::AudioBuffer<float>& buffer,
@@ -3005,7 +3117,8 @@ void FireAudioProcessor::processWetBlock(
     else
     {
         // The steady/HQ-only fast path retains the historical full-callback
-        // crossover, Safe peak and meter semantics bit for bit.
+        // crossover and meter snapshots. Audible Safe control is deliberately
+        // causal and advances inside each BandProcessor range.
         splitBands(buffer, sampleRate);
         for (int bandIndex = 0; bandIndex < numBands; ++bandIndex)
         {
@@ -5519,7 +5632,6 @@ void FireAudioProcessor::processHqTransitionBlock(
     const int numSamples = buffer.getNumSamples();
     const int numChannels = buffer.getNumChannels();
     int sampleOffset = 0;
-    bool reductionMeterUpdated = false;
 
     while (sampleOffset < numSamples)
     {
@@ -5604,12 +5716,10 @@ void FireAudioProcessor::processHqTransitionBlock(
                              lfoRange,
                              sampleRate,
                              activeHqMode,
-                             ! reductionMeterUpdated,
+                             true,
                              callbackContext,
                              true,
                              primeBypassDelay);
-
-        reductionMeterUpdated = true;
 
         if (phaseForRange == HqTransitionPhase::fadingOut
             || phaseForRange == HqTransitionPhase::fadingIn)
@@ -5686,7 +5796,6 @@ void FireAudioProcessor::processTopologyTransitionBlock(
     mBuffer4.clear();
 
     int sampleOffset = 0;
-    bool reductionMeterUpdated = false;
     while (sampleOffset < numSamples)
     {
         // Complete state boundaries before rendering the next sample. The
@@ -5698,8 +5807,7 @@ void FireAudioProcessor::processTopologyTransitionBlock(
             topologyTransitionGainStep = 0.0f;
             if (hasPendingTopologyChange())
             {
-                if (commitPendingTopologySnapshot())
-                    reductionMeterUpdated = false;
+                commitPendingTopologySnapshot();
                 topologyTransitionWarmupRemaining =
                     topologyTransitionWarmupSamples;
                 topologyTransitionPhase =
@@ -5716,8 +5824,7 @@ void FireAudioProcessor::processTopologyTransitionBlock(
         {
             if (hasPendingTopologyChange())
             {
-                if (commitPendingTopologySnapshot())
-                    reductionMeterUpdated = false;
+                commitPendingTopologySnapshot();
                 topologyTransitionWarmupRemaining =
                     topologyTransitionWarmupSamples;
             }
@@ -5816,11 +5923,10 @@ void FireAudioProcessor::processTopologyTransitionBlock(
                              lfoRange,
                              sampleRate,
                              activeHqMode,
-                             ! reductionMeterUpdated,
+                             true,
                              rangeContext,
                              false,
                              primeBypassDelay);
-        reductionMeterUpdated = true;
 
         if (phaseForRange == TopologyTransitionPhase::fadingOut
             || phaseForRange == TopologyTransitionPhase::fadingIn)

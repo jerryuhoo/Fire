@@ -68,8 +68,9 @@ juce::AudioBuffer<float> makeInput()
         buffer.setSample(1, sample, 0.09f * static_cast<float>(std::cos(phase * 1.37)));
     }
 
-    // Put the callback peak exclusively in the one-sample overflow chunk. Safe
-    // mode must still use this peak while processing the preceding 8192 samples.
+    // Put the callback peak exclusively in the one-sample overflow chunk.
+    // Telemetry must still report it, while the causal Safe envelope must reach
+    // that sample at the same absolute time without affecting earlier audio.
     buffer.setSample(0, oversizedBlockSize - 1, 0.95f);
     buffer.setSample(1, oversizedBlockSize - 1, -0.85f);
     return buffer;

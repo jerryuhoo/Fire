@@ -89,7 +89,7 @@ SafeDriveSnapshot runSafeDriveProbe(bool useHq, int activeChannel, int peakSampl
 }
 } // namespace
 
-TEST_CASE("Safe Drive uses the callback peak independently of stereo channel order",
+TEST_CASE("Safe Drive telemetry and causal envelope ignore stereo channel order",
           "[processor][band][safe-drive][stereo]")
 {
     for (const bool useHq : std::array { false, true })
@@ -98,8 +98,10 @@ TEST_CASE("Safe Drive uses the callback peak independently of stereo channel ord
 
         // The callback is deliberately larger than the prepared capacity, and
         // its only full-scale peak is in the final one-sample internal chunk.
-        // Safe Drive must scan the complete host callback, not channel zero or
-        // only the first internal chunk.
+        // The public peak telemetry must scan the complete host callback, not
+        // channel zero or only the first internal chunk. The audible envelope
+        // remains causal: the late peak takes effect only on its own sample,
+        // then the shared hold makes the final reduction position-independent.
         const auto leftPeakAtEnd = runSafeDriveProbe(useHq, 0, callbackSize - 1);
         const auto rightPeakAtEnd = runSafeDriveProbe(useHq, 1, callbackSize - 1);
         const auto leftPeakAtStart = runSafeDriveProbe(useHq, 0, 0);

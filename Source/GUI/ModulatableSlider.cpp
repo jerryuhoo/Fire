@@ -192,7 +192,8 @@ void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 {
-    if (onClickInAssignMode && event.mods.isLeftButtonDown())
+    if (onClickInAssignMode && event.mods.isLeftButtonDown()
+        && ! event.mods.isPopupMenu())
     {
         // Assigning a target exits assign mode, which clears the callback on
         // every slider (including this one).  Keep the callable alive until
@@ -206,14 +207,17 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     const bool isOnModulationHandle = isModulated
         && getModulationHandleBounds().contains(event.getPosition().toFloat());
 
+    // On macOS a Ctrl-left-click is a popup-menu click. Handle it before the
+    // polarity shortcut or Slider's drag state so it behaves like a physical
+    // right click on every platform.
+    if (event.mods.isPopupMenu())
+        return;
+
     // Test the actual mouse-down position rather than relying on the last
     // mouseMove event. A fast click can otherwise start a main-slider drag
     // while the pointer is already over the modulation handle.
     if (isOnModulationHandle)
     {
-        if (event.mods.isRightButtonDown())
-            return;
-
         if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
             if (onBipolarModeToggled)
@@ -282,21 +286,40 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 {
-    if (event.mods.isRightButtonDown() && isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
+    if (event.mods.isPopupMenu())
     {
+        const bool isOnModulationHandle = isModulated
+            && getModulationHandleBounds().contains(event.getPosition().toFloat());
         juce::PopupMenu menu;
-        menu.addItem(1, "Set Value");
-        menu.addItem(2, "Clear LFO");
-        menu.addItem(3, "Invert Depth");
+        if (isOnModulationHandle)
+        {
+            menu.addItem(1, "Set Value");
+            menu.addItem(2, "Clear LFO");
+            menu.addItem(3, "Invert Depth");
 
-        juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
-        menu.addItem(4, bipolarToggleText);
+            juce::String bipolarToggleText = isBipolar ? "Switch to Unipolar" : "Switch to Bipolar";
+            menu.addItem(4, bipolarToggleText);
 
-        juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
-        menu.addItem(5, bypassToggleText);
+            juce::String bypassToggleText = isBypassed ? "Enable modulation" : "Bypass modulation";
+            menu.addItem(5, bypassToggleText);
 
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
-                           createModulationMenuResultHandler());
+            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+                               createModulationMenuResultHandler());
+        }
+        else if (parameterID.isNotEmpty())
+        {
+            menu.addSectionHeader("Assign modulation");
+            for (int lfoIndex = 0; lfoIndex < 4; ++lfoIndex)
+                menu.addItem(lfoIndex + 1,
+                             "LFO " + juce::String(lfoIndex + 1),
+                             true,
+                             isModulated && lfoSource == lfoIndex + 1);
+
+            menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
+                               createLfoAssignmentMenuResultHandler());
+        }
+
+        return;
     }
 
     if (isDraggingMainSlider)
@@ -332,6 +355,21 @@ std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler()
         safeThis->executeModulationMenuCommand(
             static_cast<ModulationMenuCommand>(result),
             targetParameterIDAtOpen);
+    };
+}
+
+std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler()
+{
+    return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
+            targetParameterIDAtOpen = parameterID](int result)
+    {
+        if (! safeThis || ! juce::isPositiveAndBelow(result - 1, 4)
+            || targetParameterIDAtOpen.isEmpty())
+            return;
+
+        auto callback = safeThis->onLfoAssignmentRequested;
+        if (callback)
+            callback(result - 1, targetParameterIDAtOpen);
     };
 }
 

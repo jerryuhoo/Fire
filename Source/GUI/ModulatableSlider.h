@@ -67,6 +67,7 @@ public:
     std::function<void(const juce::String&)> onBipolarModeToggled;
     std::function<void()> onModulationReset;
     std::function<void(const juce::String&)> onClickInAssignMode;
+    std::function<void(int, const juce::String&)> onLfoAssignmentRequested;
     std::function<void(const juce::String&)> onModulationCleared;
     std::function<void(const juce::String&)> onModulationInverted;
     std::function<void(const juce::String&)> onBypassToggled;
@@ -104,6 +105,7 @@ private:
     friend struct ModulatableSliderTestAccess;
 
     std::function<void(int)> createModulationMenuResultHandler();
+    std::function<void(int)> createLfoAssignmentMenuResultHandler();
     void executeModulationMenuCommand(ModulationMenuCommand command,
                                       const juce::String& targetParameterID);
 

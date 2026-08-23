@@ -235,6 +235,20 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 valueEntryPopup.grabKeyboardFocus();
         };
 
+        slider->onLfoAssignmentRequested = [this](int lfoIndex,
+                                                   const juce::String& targetParameterID)
+        {
+            if (! juce::isPositiveAndBelow(lfoIndex, 4)
+                || targetParameterID.isEmpty())
+                return;
+
+            processor.assignLfoToTarget(lfoIndex, targetParameterID);
+            modulationSnapshotFramesRemaining = 0;
+            updateModulationStates();
+            if (isLfoAssignMode)
+                exitAssignMode();
+        };
+
         slider->onBypassToggled = [bypassCallback](const juce::String& targetParameterID)
         {
             bypassCallback(targetParameterID);

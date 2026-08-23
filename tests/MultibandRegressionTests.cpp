@@ -23,6 +23,12 @@ struct ModulatableSliderTestAccess
     {
         return slider.createModulationMenuResultHandler();
     }
+
+    static std::function<void(int)> createAssignmentResultHandler(
+        ModulatableSlider& slider)
+    {
+        return slider.createLfoAssignmentMenuResultHandler();
+    }
 };
 
 namespace
@@ -1451,6 +1457,76 @@ TEST_CASE("Delayed modulation menu actions retain the target present when the me
         CHECK_FALSE(secondRouting->isBypassed);
     }
 }
+
+TEST_CASE("Slider context assignment retains its target while a shared panel knob rebinds",
+          "[multiband][ui][modulation][assign][popup-menu][target]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    auto* bandPanel = findDescendant<BandPanel>(*editor);
+    REQUIRE(multiband != nullptr);
+    REQUIRE(bandPanel != nullptr);
+
+    multiband->setFocusIndex(0);
+    auto* reusedDriveKnob = bandPanel->getDriveKnob();
+    REQUIRE(reusedDriveKnob != nullptr);
+    REQUIRE(static_cast<bool>(reusedDriveKnob->onLfoAssignmentRequested));
+    const auto targetWhenMenuOpened = reusedDriveKnob->getParamID();
+    REQUIRE(targetWhenMenuOpened
+            == ParameterIDAndName::getIDString(DRIVE_ID, 0));
+    auto deliverAssignment = ModulatableSliderTestAccess::createAssignmentResultHandler(
+        *reusedDriveKnob);
+
+    // Popup completion is asynchronous; the shared BandPanel knob may point
+    // at another band before the user chooses an LFO.
+    multiband->setFocusIndex(1);
+    REQUIRE(bandPanel->getDriveKnob() == reusedDriveKnob);
+    const auto reboundTarget = reusedDriveKnob->getParamID();
+    REQUIRE(reboundTarget == ParameterIDAndName::getIDString(DRIVE_ID, 1));
+
+    deliverAssignment(4);
+
+    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+    const auto* assigned = findRouting(routings, targetWhenMenuOpened);
+    REQUIRE(assigned != nullptr);
+    CHECK(assigned->sourceLfoIndex == 3);
+    CHECK(findRouting(routings, reboundTarget) == nullptr);
+}
+
+#if JUCE_MAC
+TEST_CASE("macOS Control-click on a modulation handle remains a popup gesture",
+          "[multiband][ui][modulation][popup-menu][macos]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ModulatableSlider slider;
+    slider.setBounds(0, 0, 120, 120);
+    slider.isModulated = true;
+    slider.parameterID = "popup-target";
+    int polarityToggleCount = 0;
+    slider.onBipolarModeToggled = [&](const juce::String&)
+    {
+        ++polarityToggleCount;
+    };
+
+    const auto handleCentre = slider.getModulationHandleBounds().getCentre();
+    slider.mouseDown(makeMouseEvent(
+        slider,
+        handleCentre,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                             | juce::ModifierKeys::ctrlModifier }));
+
+    CHECK(polarityToggleCount == 0);
+    CHECK_FALSE(slider.isModHandleMouseDown);
+}
+#endif
 
 TEST_CASE("Deleting a middle band moves every survivor setting and resets the inactive slot",
           "[multiband][ui][delete][parameters]")

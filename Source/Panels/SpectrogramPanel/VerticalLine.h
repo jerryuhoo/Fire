@@ -45,9 +45,14 @@ public:
     void endParameterGesture();
     void setValueAsPartOfGesture (double newValue,
                                   juce::NotificationType notification);
+    bool advanceAnimation(float deltaSeconds) noexcept;
+    void dismissTransientInteraction();
+    float getHoverAnimation() const noexcept { return hoverAnimation.current; }
+    float getPressAnimation() const noexcept { return pressAnimation.current; }
 
 private:
     bool isEntered = false;
+    void updateAnimationTargets() noexcept;
 
     void mouseUp (const juce::MouseEvent& e) override;
     void mouseEnter (const juce::MouseEvent& e) override;
@@ -65,6 +70,8 @@ private:
     ParameterGestureCallback parameterChange;
     ParameterGestureCallback parameterGestureEnd;
     int parameterGestureDepth = 0;
+    fire::ui::DampedValue hoverAnimation;
+    fire::ui::DampedValue pressAnimation;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

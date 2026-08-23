@@ -18,7 +18,7 @@
 //==============================================================================
 /*
 */
-class FreqTextLabel : public juce::Component, juce::Timer
+class FreqTextLabel : public juce::Component
 {
 public:
     using FrequencyEditCallback = std::function<void(float)>;
@@ -29,11 +29,12 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void setFreq (int freq);
-    int getFreq();
+    int getFreq() const noexcept;
     void setScale (float scale);
-    bool isMouseOverCustom();
-    void timerCallback() override;
+    bool isMouseOverCustom() const;
+    bool advanceAnimation(float deltaSeconds);
     void setFade (bool update, bool isFadeIn);
+    void dismissImmediately();
     void setFrequencyEditCallback(FrequencyEditCallback callback);
 
 private:
@@ -41,10 +42,11 @@ private:
     void updateLabelText();
 
     VerticalLine& verticalLine;
-    int mFrequency;
+    int mFrequency = -1;
     float mScale = 1.0f;
-    float currentAlpha = 0.0f;
-    float targetAlpha = 0.0f;
+    fire::ui::DampedValue revealAnimation;
+    fire::ui::DampedValue hoverAnimation;
+    bool editorGestureOpen = false;
 
     juce::Label freqLabel;
     FrequencyEditCallback frequencyEditCallback;

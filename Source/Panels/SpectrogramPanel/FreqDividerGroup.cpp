@@ -53,13 +53,22 @@ void FreqDividerGroup::resized()
     const float uiScale = juce::jlimit(0.75f, 2.0f, getWidth() / 100.0f);
     margin = 7.5f * uiScale;
     size = 15.0f * uiScale;
-    verticalLine.setBounds(0, 0, getWidth() / 10.0f, getHeight());
-    width = verticalLine.getWidth() / 2.0f;
+    const int lineHitWidth = juce::jmax(4, juce::roundToInt(getWidth() / 10.0f));
+    verticalLine.setBounds(0, 0, lineHitWidth, getHeight());
+    width = verticalLine.getWidth() * 0.5f;
     freqTextLabel.setScale(uiScale);
-    freqTextLabel.setBounds(juce::roundToInt(width + margin),
-                            juce::roundToInt(getHeight() / 5.0f + margin),
-                            juce::roundToInt(size * 5.0f),
-                            juce::roundToInt(size * 1.9f));
+
+    const int labelX = juce::roundToInt(width + 5.0f * uiScale);
+    const int rightInset = juce::jmax(1, juce::roundToInt(2.0f * uiScale));
+    const int availableWidth = juce::jmax(0, getWidth() - labelX - rightInset);
+    const int labelWidth = juce::jmin(juce::roundToInt(72.0f * uiScale),
+                                     availableWidth);
+    const int labelHeight = juce::jmin(getHeight(),
+        juce::roundToInt(juce::jlimit(20.0f, 38.0f, 22.0f * uiScale)));
+    const int labelY = juce::jlimit(0,
+                                    juce::jmax(0, getHeight() - labelHeight),
+                                    juce::roundToInt(getHeight() / 5.0f + margin));
+    freqTextLabel.setBounds(labelX, labelY, labelWidth, labelHeight);
 }
 
 void FreqDividerGroup::setDeleteState(bool deleteState)
@@ -71,6 +80,17 @@ void FreqDividerGroup::setFrequencyEditCallback(
     FreqTextLabel::FrequencyEditCallback callback)
 {
     freqTextLabel.setFrequencyEditCallback(std::move(callback));
+}
+
+bool FreqDividerGroup::advanceAnimation(float deltaSeconds)
+{
+    return freqTextLabel.advanceAnimation(deltaSeconds);
+}
+
+void FreqDividerGroup::dismissImmediately()
+{
+    freqTextLabel.dismissImmediately();
+    verticalLine.dismissTransientInteraction();
 }
 
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])

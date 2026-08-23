@@ -11,53 +11,159 @@
 #include "CloseButton.h"
 
 //==============================================================================
-CloseButton::CloseButton ()
+CloseButton::CloseButton()
+    : juce::Button("Delete band")
 {
-    setClickingTogglesState(false);
+    setTitle("Delete band");
+    setDescription("Remove this frequency band");
+    setHelpText("Deletes this band and keeps the remaining crossover bands in order.");
+    setTooltip("Delete band");
+    setAccessible(true);
+    setWantsKeyboardFocus(true);
+    setMouseCursor(juce::MouseCursor::PointingHandCursor);
+
+    visibilityAnimation.snapTo(0.0f);
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+    setInterceptsMouseClicks(false, false);
+    juce::Component::setVisible(false);
 }
 
-CloseButton::~CloseButton()
+void CloseButton::paintButton(juce::Graphics& g, bool, bool)
 {
-}
+    const auto visibility = juce::jlimit(0.0f, 1.0f, visibilityAnimation.current);
+    if (visibility <= 0.001f || getWidth() <= 0 || getHeight() <= 0)
+        return;
 
-void CloseButton::paint(juce::Graphics& g)
-{
-    auto bounds = getLocalBounds().toFloat().reduced(1.0f);
-    if (isEntered)
+    const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
+    const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
+    const auto focus = hasKeyboardFocus(true) ? 1.0f : 0.0f;
+    const auto shortestSide = static_cast<float>(juce::jmin(getWidth(), getHeight()));
+    if (shortestSide < 4.0f)
+        return;
+
+    const auto visualSide = juce::jlimit(2.0f, 20.0f, shortestSide * 0.75f);
+    const auto pressScale = 1.0f - 0.045f * press;
+    auto surface = juce::Rectangle<float>(visualSide * pressScale,
+                                          visualSide * pressScale)
+                       .withCentre(getLocalBounds().toFloat().getCentre());
+    const auto radius = juce::jmin(fire::ui::Metrics::radiusSmall,
+                                   surface.getWidth() * 0.23f);
+    const auto physicalScale = juce::jmax(
+        1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+
+    // The old control was a conspicuous outlined circle. This compact raised
+    // tile keeps the destructive affordance clear without competing with the
+    // spectrum and crossover rails.
+    g.setColour(juce::Colours::black.withAlpha(
+        visibility * (0.10f + 0.08f * hover)));
+    g.fillRoundedRectangle(surface.translated(0.0f, 0.75f / physicalScale),
+                           radius);
+
+    const auto surfaceColour = fire::ui::colours::surface2.interpolatedWith(
+        fire::ui::colours::danger, 0.06f + 0.10f * hover + 0.05f * press);
+    g.setColour(surfaceColour.withAlpha(
+        visibility * (0.54f + 0.26f * hover + 0.10f * press)));
+    g.fillRoundedRectangle(surface, radius);
+
+    const auto edgeEmphasis = juce::jlimit(0.0f, 1.0f,
+                                           0.15f + hover * 0.70f + focus * 0.50f);
+    g.setColour(fire::ui::colours::danger.withAlpha(
+        visibility * (0.12f + 0.43f * edgeEmphasis)));
+    g.drawRoundedRectangle(surface.reduced(0.5f / physicalScale),
+                           radius,
+                           1.0f / physicalScale);
+
+    if (focus > 0.0f)
     {
-        g.setColour(fire::ui::colours::danger.withAlpha(0.13f));
-        g.fillEllipse(bounds);
-        g.setColour(fire::ui::colours::danger.withAlpha(0.62f));
-        g.drawEllipse(bounds, 1.0f);
+        g.setColour(fire::ui::colours::gold.withAlpha(visibility * 0.58f));
+        g.drawRoundedRectangle(surface.expanded(1.5f / physicalScale),
+                               radius + 1.0f / physicalScale,
+                               1.0f / physicalScale);
     }
 
-    const auto cross = bounds.reduced(bounds.getWidth() * 0.29f);
-    g.setColour((isEntered ? fire::ui::colours::danger : fire::ui::colours::textMuted)
-                    .withAlpha(isEntered ? 0.94f : 0.58f));
-    const auto stroke = juce::jmax(1.0f, bounds.getWidth() * 0.085f);
-    g.drawLine({ cross.getTopLeft(), cross.getBottomRight() }, stroke);
-    g.drawLine({ cross.getTopRight(), cross.getBottomLeft() }, stroke);
+    const auto halfCross = surface.getWidth() * (0.185f + 0.045f * hover);
+    const auto centre = surface.getCentre();
+    juce::Path cross;
+    cross.startNewSubPath(centre.x - halfCross, centre.y - halfCross);
+    cross.lineTo(centre.x + halfCross, centre.y + halfCross);
+    cross.startNewSubPath(centre.x + halfCross, centre.y - halfCross);
+    cross.lineTo(centre.x - halfCross, centre.y + halfCross);
+
+    const auto iconColour = fire::ui::colours::textSecondary.interpolatedWith(
+        fire::ui::colours::danger, 0.34f + 0.58f * hover);
+    g.setColour(iconColour.withAlpha(
+        visibility * (0.74f + 0.24f * hover)));
+    g.strokePath(cross,
+                 juce::PathStrokeType(juce::jlimit(1.1f,
+                                                   1.8f,
+                                                   surface.getWidth() * 0.085f),
+                                      juce::PathStrokeType::curved,
+                                      juce::PathStrokeType::rounded));
 }
 
-void CloseButton::resized()
+void CloseButton::setPresented(bool shouldBePresented, bool animate)
 {
-}
+    presentationTarget = shouldBePresented;
+    visibilityAnimation.setTarget(shouldBePresented ? 1.0f : 0.0f);
 
-void CloseButton::mouseDown(const juce::MouseEvent& e)
-{
-    juce::ToggleButton::mouseDown(e);
-}
+    if (! animate)
+    {
+        visibilityAnimation.snapTo(shouldBePresented ? 1.0f : 0.0f);
+        hoverAnimation.snapTo(0.0f);
+        pressAnimation.snapTo(0.0f);
+    }
 
-void CloseButton::mouseEnter(const juce::MouseEvent& e)
-{
-    juce::ToggleButton::mouseEnter(e);
-    isEntered = true;
+    if (shouldBePresented)
+    {
+        if (! isVisible())
+            juce::Component::setVisible(true);
+        setInterceptsMouseClicks(true, false);
+    }
+    else
+    {
+        // A fading control must not steal the next click from the newly
+        // hovered band or an overlapping divider. It must also relinquish
+        // keyboard focus immediately: the tile remains visible during its
+        // fade, but Space/Return must no longer be able to delete a band.
+        setInterceptsMouseClicks(false, false);
+        if (hasKeyboardFocus(true))
+            giveAwayKeyboardFocus();
+        if (! animate || visibilityAnimation.current <= 0.001f)
+            juce::Component::setVisible(false);
+    }
+
+    updateInteractionTargets();
     repaint();
 }
 
-void CloseButton::mouseExit(const juce::MouseEvent& e)
+bool CloseButton::advanceAnimation(float deltaSeconds)
 {
-    juce::ToggleButton::mouseExit(e);
-    isEntered = false;
-    repaint();
+    const auto visibilityChanged = visibilityAnimation.advance(deltaSeconds, 0.11f);
+    const auto hoverChanged = hoverAnimation.advance(deltaSeconds, 0.10f);
+    const auto pressChanged = pressAnimation.advance(deltaSeconds, 0.065f);
+
+    if (! presentationTarget
+        && visibilityAnimation.isSettled(0.001f, 0.01f)
+        && visibilityAnimation.current <= 0.001f
+        && isVisible())
+    {
+        visibilityAnimation.snapTo(0.0f);
+        juce::Component::setVisible(false);
+    }
+
+    return visibilityChanged || hoverChanged || pressChanged;
+}
+
+void CloseButton::buttonStateChanged()
+{
+    updateInteractionTargets();
+}
+
+void CloseButton::updateInteractionTargets() noexcept
+{
+    const bool pressed = presentationTarget && isEnabled() && isDown();
+    const bool hovered = presentationTarget && isEnabled() && isOver();
+    hoverAnimation.setTarget(hovered || pressed ? 1.0f : 0.0f);
+    pressAnimation.setTarget(pressed ? 1.0f : 0.0f);
 }

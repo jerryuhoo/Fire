@@ -58,25 +58,54 @@ std::optional<double> parseFrequencyText(juce::String text)
 //==============================================================================
 FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
 {
-    mFrequency = -1;
+    setOpaque(false);
+    revealAnimation.snapTo(0.0f);
+    hoverAnimation.snapTo(0.0f);
 
     // Add and configure the child juce::Label component.
     addAndMakeVisible(freqLabel);
     freqLabel.setEditable(true);
+    freqLabel.setMouseCursor(juce::MouseCursor::IBeamCursor);
+    freqLabel.setMinimumHorizontalScale(0.78f);
+    freqLabel.setBorderSize({ 1, 5, 1, 5 });
 
     // --- One-time setup for the child Label ---
     // These properties are set once here instead of inefficiently in paint().
-    freqLabel.setColour(juce::Label::textColourId, fire::ui::colours::whiteHot);
+    freqLabel.setColour(juce::Label::textColourId, fire::ui::colours::textPrimary);
     freqLabel.setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
     freqLabel.setColour(juce::Label::outlineColourId, juce::Colours::transparentBlack);
-    freqLabel.setColour(juce::Label::backgroundWhenEditingColourId, fire::ui::colours::surface0);
-    freqLabel.setColour(juce::Label::outlineWhenEditingColourId, fire::ui::colours::ember);
+    freqLabel.setColour(juce::Label::backgroundWhenEditingColourId,
+                        juce::Colours::transparentBlack);
+    freqLabel.setColour(juce::Label::outlineWhenEditingColourId,
+                        juce::Colours::transparentBlack);
     freqLabel.setJustificationType(juce::Justification::centred);
     freqLabel.setAlpha(0.0f);
 
     freqLabel.onEditorShow = [this]
     {
-        verticalLine.beginParameterGesture();
+        setFade(true, true);
+
+        if (auto* editor = freqLabel.getCurrentTextEditor())
+        {
+            editor->setJustification(juce::Justification::centred);
+            editor->setColour(juce::TextEditor::backgroundColourId,
+                              juce::Colours::transparentBlack);
+            editor->setColour(juce::TextEditor::outlineColourId,
+                              juce::Colours::transparentBlack);
+            editor->setColour(juce::TextEditor::focusedOutlineColourId,
+                              juce::Colours::transparentBlack);
+            editor->setColour(juce::TextEditor::highlightColourId,
+                              fire::ui::colours::ember.withAlpha(0.38f));
+            editor->setColour(juce::TextEditor::highlightedTextColourId,
+                              fire::ui::colours::whiteHot);
+            editor->selectAll();
+        }
+
+        if (! editorGestureOpen)
+        {
+            editorGestureOpen = true;
+            verticalLine.beginParameterGesture();
+        }
     };
 
     freqLabel.onEditorHide = [this]
@@ -86,7 +115,11 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
         // value change before the matching endChangeGesture notification.
         applyEditedText();
         updateLabelText();
-        verticalLine.endParameterGesture();
+        if (editorGestureOpen)
+        {
+            editorGestureOpen = false;
+            verticalLine.endParameterGesture();
+        }
     };
 }
 
@@ -95,17 +128,12 @@ FreqTextLabel::~FreqTextLabel()
     // Close the editor while our callbacks and the VerticalLine are still alive.
     // This also balances a gesture if the containing editor is destroyed midway
     // through frequency text entry.
-    if (freqLabel.isBeingEdited())
-        freqLabel.hideEditor(true);
+    dismissImmediately();
 
     freqLabel.onTextChange = nullptr;
     freqLabel.onEditorShow = nullptr;
     freqLabel.onEditorHide = nullptr;
     frequencyEditCallback = nullptr;
-
-    // It's good practice to stop the timer in the destructor to prevent leaks
-    // if the component is deleted while an animation is running.
-    stopTimer();
 
     // Unregister the look and feel if one was set.
     setLookAndFeel(nullptr);
@@ -113,42 +141,84 @@ FreqTextLabel::~FreqTextLabel()
 
 void FreqTextLabel::paint(juce::Graphics& g)
 {
-    if (currentAlpha <= 0.001f)
+    const auto reveal = juce::jlimit(0.0f, 1.0f, revealAnimation.current);
+    if (reveal <= 0.001f)
         return;
 
-    g.setOpacity(currentAlpha);
-    auto rect = getLocalBounds().toFloat().reduced(0.5f);
-    fire::ui::drawGlassPill(g, rect, fire::ui::colours::ember, true, false, false);
+    const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
+    const juce::Graphics::ScopedSaveState state(g);
+    g.setOpacity(reveal);
 
-    auto energyRail = rect.reduced(fire::ui::Metrics::space8, 0.0f).removeFromBottom(1.0f);
-    g.setColour(fire::ui::colours::flame.withAlpha(0.72f));
-    g.fillRect(energyRail);
+    auto pill = getLocalBounds().toFloat().reduced(0.75f);
+    pill = pill.reduced((1.0f - reveal) * 2.5f,
+                        (1.0f - reveal) * 0.75f)
+               .translated(0.0f, (1.0f - reveal) * 1.5f);
+    const auto radius = juce::jmin(pill.getHeight() * 0.5f,
+                                   fire::ui::Metrics::radiusSmall + 1.0f);
+
+    g.setColour(juce::Colours::black.withAlpha(0.24f));
+    g.fillRoundedRectangle(pill.translated(0.0f, 1.0f), radius);
+
+    auto top = fire::ui::colours::surface2.brighter(0.02f + hover * 0.025f);
+    auto bottom = fire::ui::colours::surface0.darker(0.04f);
+    juce::ColourGradient fill(top, pill.getX(), pill.getY(),
+                              bottom, pill.getX(), pill.getBottom(), false);
+    g.setGradientFill(fill);
+    g.fillRoundedRectangle(pill, radius);
+
+    const auto edge = fire::ui::colours::hairline.interpolatedWith(
+        fire::ui::colours::flame, hover * 0.62f);
+    g.setColour(edge.withAlpha(0.58f + hover * 0.30f));
+    g.drawRoundedRectangle(pill.reduced(0.5f), radius, 1.0f);
+
+    const auto railWidth = juce::jmin(pill.getWidth() * 0.32f,
+                                      (11.0f + hover * 9.0f) * mScale);
+    const auto railHeight = juce::jmax(1.0f, 1.15f * mScale);
+    g.setColour(fire::ui::colours::flame.withAlpha(0.58f + hover * 0.36f));
+    g.fillRoundedRectangle(pill.getCentreX() - railWidth * 0.5f,
+                           pill.getBottom() - railHeight,
+                           railWidth,
+                           railHeight,
+                           railHeight * 0.5f);
 
 }
 
 void FreqTextLabel::resized()
 {
     // The resized() method is the correct place to set the bounds of child components.
-    freqLabel.setBounds(getLocalBounds());
+    freqLabel.setBounds(getLocalBounds().reduced(1, 0));
 
     // It's also a good place to update anything that depends on size, like font height.
-    freqLabel.setFont(fire::ui::displayFont(juce::jlimit(9.0f, 14.0f, 11.0f * mScale)));
+    freqLabel.setFont(fire::ui::labelFont(
+        juce::jlimit(9.0f, 13.5f, 10.75f * mScale)));
 }
 
-void FreqTextLabel::timerCallback()
+bool FreqTextLabel::advanceAnimation(float deltaSeconds)
 {
-    currentAlpha += (targetAlpha - currentAlpha) * 0.42f;
-    if (std::abs(targetAlpha - currentAlpha) < 0.01f)
-    {
-        currentAlpha = targetAlpha;
-        stopTimer();
+    hoverAnimation.setTarget(isMouseOverCustom() ? 1.0f : 0.0f);
 
-        if (currentAlpha <= 0.0f)
-            setVisible(false);
-    }
+    const auto previousReveal = revealAnimation.current;
+    const auto previousHover = hoverAnimation.current;
+    const bool revealIsMoving = revealAnimation.advance(deltaSeconds, 0.14f);
+    const bool hoverIsMoving = hoverAnimation.advance(deltaSeconds, 0.11f);
+    const auto alpha = juce::jlimit(0.0f, 1.0f, revealAnimation.current);
 
-    freqLabel.setAlpha(currentAlpha);
-    repaint();
+    if (! juce::approximatelyEqual(freqLabel.getAlpha(), alpha))
+        freqLabel.setAlpha(alpha);
+
+    const bool visualChanged = revealIsMoving || hoverIsMoving
+                               || ! juce::approximatelyEqual(previousReveal,
+                                                             revealAnimation.current)
+                               || ! juce::approximatelyEqual(previousHover,
+                                                             hoverAnimation.current);
+    if (visualChanged)
+        repaint();
+
+    if (revealAnimation.target <= 0.0f && revealAnimation.isSettled()
+        && isVisible())
+        setVisible(false);
+
+    return visualChanged;
 }
 
 void FreqTextLabel::setFade(bool update, bool isFadeIn)
@@ -157,15 +227,34 @@ void FreqTextLabel::setFade(bool update, bool isFadeIn)
         return;
 
     const float newTarget = isFadeIn ? 1.0f : 0.0f;
-    if (juce::approximatelyEqual(targetAlpha, newTarget) && ! isTimerRunning())
+    if (juce::approximatelyEqual(revealAnimation.target, newTarget)
+        && (isFadeIn || ! isVisible()))
         return;
 
-    targetAlpha = newTarget;
-    if (targetAlpha > 0.0f)
+    revealAnimation.setTarget(newTarget);
+    if (newTarget > 0.0f)
         setVisible(true);
+}
 
-    if (! isTimerRunning())
-        startTimerHz(60);
+void FreqTextLabel::dismissImmediately()
+{
+    // hideEditor(true) discards the TextEditor contents and invokes our
+    // onEditorHide callback while the VerticalLine is still alive.  Keep the
+    // explicit guard as a defensive balance for a host tearing down the view
+    // between Label callbacks.
+    if (freqLabel.isBeingEdited())
+        freqLabel.hideEditor(true);
+
+    if (editorGestureOpen)
+    {
+        editorGestureOpen = false;
+        verticalLine.endParameterGesture();
+    }
+
+    revealAnimation.snapTo(0.0f);
+    hoverAnimation.snapTo(0.0f);
+    freqLabel.setAlpha(0.0f);
+    setVisible(false);
 }
 
 void FreqTextLabel::setFreq(int freq)
@@ -188,7 +277,7 @@ void FreqTextLabel::applyEditedText()
     if (juce::approximatelyEqual(constrainedFrequency, verticalLine.getValue()))
         return;
 
-    frequencyEditCallback(static_cast<float>(transformToLog(*requestedFrequency)));
+    frequencyEditCallback(static_cast<float>(transformToLog(constrainedFrequency)));
     mFrequency = juce::roundToInt(verticalLine.getValue());
 }
 
@@ -202,13 +291,29 @@ void FreqTextLabel::updateLabelText()
     if (freqLabel.isBeingEdited())
         return;
 
-    const auto freqText = mFrequency >= 1000
-                            ? juce::String(mFrequency / 1000.0f, 2) + " kHz"
-                            : juce::String(mFrequency) + " Hz";
+    if (mFrequency < 0)
+    {
+        freqLabel.setText({}, juce::dontSendNotification);
+        return;
+    }
+
+    juce::String freqText;
+    if (mFrequency >= 1000)
+    {
+        auto compactKilohertz = juce::String(mFrequency / 1000.0f, 2)
+                                    .trimCharactersAtEnd("0")
+                                    .trimCharactersAtEnd(".");
+        freqText = compactKilohertz + " kHz";
+    }
+    else
+    {
+        freqText = juce::String(mFrequency) + " Hz";
+    }
+
     freqLabel.setText(freqText, juce::dontSendNotification);
 }
 
-int FreqTextLabel::getFreq()
+int FreqTextLabel::getFreq() const noexcept
 {
     return mFrequency;
 }
@@ -219,7 +324,7 @@ void FreqTextLabel::setScale(float scale)
     resized(); // Call resized() to update font size based on the new scale.
 }
 
-bool FreqTextLabel::isMouseOverCustom()
+bool FreqTextLabel::isMouseOverCustom() const
 {
     // Checks if the mouse is over this component OR its child label.
     return isMouseOver() || freqLabel.isMouseOverOrDragging() || freqLabel.isBeingEdited();

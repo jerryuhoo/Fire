@@ -33,6 +33,8 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void animationTick(float deltaSeconds);
+    void dismissTransientUi();
     void mouseEnter(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;

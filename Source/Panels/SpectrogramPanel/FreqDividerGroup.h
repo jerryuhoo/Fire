@@ -29,6 +29,8 @@ public:
     
     void setDeleteState (bool deleteState);
     void setFrequencyEditCallback(FreqTextLabel::FrequencyEditCallback callback);
+    bool advanceAnimation(float deltaSeconds);
+    void dismissImmediately();
 
     VerticalLine& getVerticalLine();
     

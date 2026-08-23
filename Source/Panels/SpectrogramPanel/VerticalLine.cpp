@@ -14,7 +14,8 @@
 //==============================================================================
 VerticalLine::VerticalLine()
 {
-    //    boundsConstrainer.setMinimumHeight(0);
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
 }
 
 VerticalLine::~VerticalLine()
@@ -30,26 +31,45 @@ VerticalLine::~VerticalLine()
 void VerticalLine::paint(juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
-    const bool engaged = isMouseOverOrDragging() || isEntered;
+    const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
+    const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
+    const auto emphasis = juce::jlimit(0.0f, 1.0f, hover + press * 0.35f);
     const float physicalScale = juce::jmax(1.0f,
         g.getInternalContext().getPhysicalPixelScaleFactor());
     const float centreX = fire::ui::pixelAligned(bounds.getCentreX(), physicalScale);
-    const float lineWidth = (engaged ? 2.0f : 1.0f) / physicalScale;
+    const float lineWidth = (1.0f + emphasis * 1.25f + press * 0.35f) / physicalScale;
 
-    g.setColour(fire::ui::colours::flame.withAlpha(engaged ? 0.92f : 0.58f));
+    if (emphasis > 0.001f)
+    {
+        const auto glowWidth = (5.0f + press * 3.0f) / physicalScale;
+        g.setColour(fire::ui::colours::flame.withAlpha(0.10f * emphasis));
+        g.fillRoundedRectangle(centreX - glowWidth * 0.5f,
+                               bounds.getY(),
+                               glowWidth,
+                               bounds.getHeight(),
+                               glowWidth * 0.5f);
+    }
+
+    g.setColour(fire::ui::colours::flame.withAlpha(0.46f + 0.50f * emphasis));
     g.fillRect(centreX - lineWidth * 0.5f,
                bounds.getY(),
                lineWidth,
                bounds.getHeight());
 
-    const float handleRadius = engaged ? 3.5f : 2.75f;
+    const float handleRadius = 2.6f + 1.1f * hover + 0.55f * press;
     const juce::Rectangle<float> handle(centreX - handleRadius,
                                          bounds.getY() + 3.0f,
                                          handleRadius * 2.0f,
                                          handleRadius * 2.0f);
+    if (emphasis > 0.001f)
+    {
+        const auto halo = handle.expanded((1.5f + press) / physicalScale);
+        g.setColour(fire::ui::colours::flame.withAlpha(0.12f * emphasis));
+        g.fillEllipse(halo);
+    }
     g.setColour(fire::ui::colours::surface1.withAlpha(0.96f));
     g.fillEllipse(handle);
-    g.setColour(fire::ui::colours::flame.withAlpha(engaged ? 1.0f : 0.78f));
+    g.setColour(fire::ui::colours::flame.withAlpha(0.72f + 0.28f * emphasis));
     g.drawEllipse(handle.reduced(0.5f / physicalScale), lineWidth);
 }
 
@@ -61,6 +81,7 @@ void VerticalLine::mouseUp (const juce::MouseEvent& e)
 {
     juce::ignoreUnused(e);
     endParameterGesture();
+    updateAnimationTargets();
 }
 
 void VerticalLine::mouseDoubleClick (const juce::MouseEvent& e)
@@ -72,6 +93,7 @@ void VerticalLine::mouseEnter(const juce::MouseEvent& e)
 {
     juce::Slider::mouseEnter(e);
     isEntered = true;
+    updateAnimationTargets();
     repaint();
 }
 
@@ -79,6 +101,7 @@ void VerticalLine::mouseExit(const juce::MouseEvent& e)
 {
     juce::Slider::mouseExit(e);
     isEntered = false;
+    updateAnimationTargets();
     repaint();
 }
 
@@ -91,6 +114,39 @@ void VerticalLine::mouseDown (const juce::MouseEvent& e)
 {
     if (e.mods.isLeftButtonDown())
         beginParameterGesture();
+    updateAnimationTargets();
+}
+
+bool VerticalLine::advanceAnimation(float deltaSeconds) noexcept
+{
+    const auto hoverChanged = hoverAnimation.advance(deltaSeconds, 0.10f);
+    const auto pressChanged = pressAnimation.advance(deltaSeconds, 0.065f);
+    return hoverChanged || pressChanged;
+}
+
+void VerticalLine::dismissTransientInteraction()
+{
+    isEntered = false;
+
+    // Hosts may keep an editor object alive after hiding its window. If that
+    // happens during a drag, no later mouseUp is guaranteed, so close the
+    // parameter gesture here just as the destructor would.
+    if (parameterGestureDepth > 0)
+    {
+        parameterGestureDepth = 0;
+        if (parameterGestureEnd)
+            parameterGestureEnd();
+    }
+
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+}
+
+void VerticalLine::updateAnimationTargets() noexcept
+{
+    const bool isPressed = parameterGestureDepth > 0;
+    hoverAnimation.setTarget(isEntered || isPressed ? 1.0f : 0.0f);
+    pressAnimation.setTarget(isPressed ? 1.0f : 0.0f);
 }
 
 void VerticalLine::setParameterGestureCallbacks(ParameterGestureCallback gestureBegin,

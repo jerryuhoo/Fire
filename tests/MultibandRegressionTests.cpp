@@ -492,7 +492,7 @@ CloseButton* getVisibleCloseButton(const std::vector<CloseButton*>& closeButtons
 {
     CloseButton* result = nullptr;
     for (auto* closeButton : closeButtons)
-        if (closeButton != nullptr && closeButton->isVisible())
+        if (closeButton != nullptr && closeButton->isPresented())
         {
             CHECK(result == nullptr);
             result = closeButton;
@@ -818,7 +818,7 @@ TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
         label->onEditorHide();
 
         checkThreeParameterCascade();
-        CHECK(label->getText() == "2.50 kHz");
+        CHECK(label->getText() == "2.5 kHz");
     }
 
     SECTION("invalid text restores the old display without publication")
@@ -867,6 +867,94 @@ TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
 
     CHECK(processor.getMultibandTopologyGenerationForTesting()
           == topologyGeneration);
+}
+
+TEST_CASE("Frequency labels animate on the shared UI clock and stay edge-safe",
+          "[multiband][ui][animation][frequency-label]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1500.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    auto* dividerGroup = findDescendant<FreqDividerGroup>(*multiband);
+    REQUIRE(dividerGroup != nullptr);
+    auto* frequencyText = findDescendant<FreqTextLabel>(*dividerGroup);
+    REQUIRE(frequencyText != nullptr);
+    auto* label = findDescendant<juce::Label>(*frequencyText);
+    REQUIRE(label != nullptr);
+
+    frequencyText->setFreq(1000);
+    CHECK(label->getText() == "1 kHz");
+    frequencyText->setFreq(1250);
+    CHECK(label->getText() == "1.25 kHz");
+    frequencyText->setFreq(1500);
+    CHECK(label->getText() == "1.5 kHz");
+
+    frequencyText->setFade(true, false);
+    for (int frame = 0; frame < 120; ++frame)
+        dividerGroup->advanceAnimation(1.0f / 60.0f);
+    REQUIRE_FALSE(frequencyText->isVisible());
+
+    frequencyText->setFade(true, true);
+    REQUIRE(frequencyText->isVisible());
+    const auto initialAlpha = label->getAlpha();
+    CHECK(initialAlpha == Catch::Approx(0.0f));
+    CHECK(dividerGroup->advanceAnimation(1.0f / 60.0f));
+    CHECK(label->getAlpha() > initialAlpha);
+    CHECK(label->getAlpha() < 1.0f);
+
+    for (int frame = 0; frame < 120; ++frame)
+        dividerGroup->advanceAnimation(1.0f / 60.0f);
+    CHECK(label->getAlpha() == Catch::Approx(1.0f).margin(0.002f));
+
+    // Divider groups overlap neighbouring bands but JUCE clips their children.
+    // Exercise the supported scale range and keep the compact value bubble
+    // wholly inside its parent at every size.
+    for (const auto width : { 75, 100, 200 })
+    {
+        dividerGroup->setBounds(0, 0, width, width * 2);
+        CAPTURE(width, frequencyText->getBounds().toString());
+        CHECK(frequencyText->getWidth() > 0);
+        CHECK(frequencyText->getHeight() > 0);
+        CHECK(dividerGroup->getLocalBounds().contains(frequencyText->getBounds()));
+    }
+
+    // Hiding the top-level editor must synchronously clear presentation state;
+    // otherwise a fully revealed value bubble can flash on the next reopen.
+    multiband->dismissTransientUi();
+    CHECK(label->getAlpha() == Catch::Approx(0.0f));
+    CHECK_FALSE(frequencyText->isVisible());
+
+    // Exercise the defensive gesture-balancing path without creating a native
+    // test window. JUCE's real TextEditor owns the discarded-text behaviour;
+    // the component is responsible for closing the surrounding host gesture.
+    VerticalLine lifecycleDivider;
+    FreqTextLabel lifecycleLabel(lifecycleDivider);
+    int gestureBegins = 0;
+    int gestureEnds = 0;
+    lifecycleDivider.setParameterGestureCallbacks(
+        [&gestureBegins] { ++gestureBegins; },
+        [] {},
+        [&gestureEnds] { ++gestureEnds; });
+    auto* lifecycleChild = findDescendant<juce::Label>(lifecycleLabel);
+    REQUIRE(lifecycleChild != nullptr);
+    REQUIRE(static_cast<bool>(lifecycleChild->onEditorShow));
+
+    lifecycleChild->onEditorShow();
+    REQUIRE(gestureBegins == 1);
+    lifecycleLabel.dismissImmediately();
+
+    CHECK(gestureBegins == 1);
+    CHECK(gestureEnds == 1);
+    CHECK(lifecycleChild->getAlpha() == Catch::Approx(0.0f));
+    CHECK_FALSE(lifecycleLabel.isVisible());
 }
 
 TEST_CASE("Band move/reset parameter contract covers every per-band processor parameter",
@@ -1636,6 +1724,73 @@ TEST_CASE("BandPanel keeps a modulation handle drag on its original band",
     REQUIRE(firstRouting != nullptr);
     CHECK(firstRouting->depth == Catch::Approx(0.60f));
     CHECK(findRouting(routings, secondDriveID) == nullptr);
+}
+
+TEST_CASE("Crossover divider hover and press feedback fades on the shared clock",
+          "[multiband][ui][divider][animation]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    VerticalLine divider;
+    divider.setBounds(0, 0, 24, 160);
+    const auto centre = divider.getLocalBounds().toFloat().getCentre();
+
+    CHECK(divider.getHoverAnimation() == 0.0f);
+    CHECK(divider.getPressAnimation() == 0.0f);
+
+    static_cast<juce::Component&>(divider).mouseEnter(
+        makeMouseEvent(divider, centre));
+    REQUIRE(divider.advanceAnimation(1.0f / 60.0f));
+    CHECK(divider.getHoverAnimation() > 0.0f);
+    CHECK(divider.getHoverAnimation() < 1.0f);
+    CHECK(divider.getPressAnimation() == 0.0f);
+
+    static_cast<juce::Component&>(divider).mouseDown(makeMouseEvent(
+        divider,
+        centre,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    REQUIRE(divider.advanceAnimation(1.0f / 60.0f));
+    CHECK(divider.getPressAnimation() > 0.0f);
+
+    static_cast<juce::Component&>(divider).mouseUp(
+        makeMouseEvent(divider, centre));
+    const auto pressedAmount = divider.getPressAnimation();
+    for (int frame = 0; frame < 12; ++frame)
+        divider.advanceAnimation(1.0f / 60.0f);
+    CHECK(divider.getPressAnimation() < pressedAmount);
+    CHECK(divider.getHoverAnimation() > 0.0f);
+
+    static_cast<juce::Component&>(divider).mouseExit(
+        makeMouseEvent(divider, { -1.0f, -1.0f }));
+    const auto hoveredAmount = divider.getHoverAnimation();
+    for (int frame = 0; frame < 12; ++frame)
+        divider.advanceAnimation(1.0f / 60.0f);
+    CHECK(divider.getHoverAnimation() < hoveredAmount);
+
+    for (int frame = 0; frame < 90; ++frame)
+        divider.advanceAnimation(1.0f / 60.0f);
+    CHECK(divider.getHoverAnimation() == Catch::Approx(0.0f).margin(0.001f));
+    CHECK(divider.getPressAnimation() == Catch::Approx(0.0f).margin(0.001f));
+
+    int gestureBegins = 0;
+    int gestureEnds = 0;
+    divider.setParameterGestureCallbacks([&gestureBegins] { ++gestureBegins; },
+                                         [] {},
+                                         [&gestureEnds] { ++gestureEnds; });
+    static_cast<juce::Component&>(divider).mouseEnter(
+        makeMouseEvent(divider, centre));
+    static_cast<juce::Component&>(divider).mouseDown(makeMouseEvent(
+        divider,
+        centre,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    divider.advanceAnimation(1.0f / 60.0f);
+    REQUIRE(divider.getHoverAnimation() > 0.0f);
+    REQUIRE(divider.getPressAnimation() > 0.0f);
+
+    divider.dismissTransientInteraction();
+    CHECK(gestureBegins == 1);
+    CHECK(gestureEnds == 1);
+    CHECK(divider.getHoverAnimation() == 0.0f);
+    CHECK(divider.getPressAnimation() == 0.0f);
 }
 
 #if JUCE_MAC

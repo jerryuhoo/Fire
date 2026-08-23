@@ -30,6 +30,7 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
 
         bandUIs[i].closeButton = std::make_unique<CloseButton>();
         addAndMakeVisible(*bandUIs[i].closeButton);
+        bandUIs[i].closeButton->setPresented(false, false);
         bandUIs[i].closeButton->addListener(this);
         bandUIs[i].closeButton->addMouseListener(this, false);
     }
@@ -186,6 +187,43 @@ void Multiband::resized()
     size = juce::jmax(15.0f, getWidth() / 1000.0f * 15.0f);
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
+}
+
+void Multiband::animationTick(float deltaSeconds)
+{
+    if (! isShowing())
+        return;
+
+    for (const auto& dividerGroup : freqDividerGroup)
+    {
+        if (dividerGroup == nullptr)
+            continue;
+
+        auto& divider = dividerGroup->getVerticalLine();
+        if (divider.advanceAnimation(deltaSeconds))
+            divider.repaint();
+
+        dividerGroup->advanceAnimation(deltaSeconds);
+    }
+
+    for (auto& bandUI : bandUIs)
+        if (bandUI.closeButton != nullptr
+            && bandUI.closeButton->advanceAnimation(deltaSeconds))
+            bandUI.closeButton->repaint();
+}
+
+void Multiband::dismissTransientUi()
+{
+    isDragging = false;
+    hoveredBandIndex = -1;
+
+    for (const auto& dividerGroup : freqDividerGroup)
+        if (dividerGroup != nullptr)
+            dividerGroup->dismissImmediately();
+
+    for (auto& bandUI : bandUIs)
+        if (bandUI.closeButton != nullptr)
+            bandUI.closeButton->setPresented(false, false);
 }
 
 bool Multiband::shouldSetBlackMask(int index)
@@ -795,7 +833,8 @@ void Multiband::setLineRelatedBoundsByX()
 
 void Multiband::setSoloRelatedBounds()
 {
-    const float closeHitSize = juce::jmax(size, 24.0f);
+    const float closeHitSize = juce::jmax(
+        size, static_cast<float>(CloseButton::minimumHitTargetSize));
     const auto placeBandButtons = [this, closeHitSize](int bandIndex, float centreX)
     {
         bandUIs[static_cast<size_t>(bandIndex)].enableButton->setBounds(
@@ -821,13 +860,12 @@ void Multiband::setSoloRelatedBounds()
         {
             bandUIs[i].soloButton->setVisible(true); // <--- MODIFIED
             bandUIs[i].enableButton->setVisible(true); // <--- MODIFIED
-            bandUIs[i].closeButton->setVisible(false);
         }
         else
         {
             bandUIs[i].soloButton->setVisible(false); // <--- MODIFIED
             bandUIs[i].enableButton->setVisible(false); // <--- MODIFIED
-            bandUIs[i].closeButton->setVisible(false); // <--- MODIFIED
+            bandUIs[i].closeButton->setPresented(false, false);
         }
     }
     // setBounds of soloButtons and enableButtons
@@ -841,7 +879,6 @@ void Multiband::setSoloRelatedBounds()
     else if (lineNum == 0)
     {
         placeBandButtons(0, static_cast<float>(getWidth()) * 0.5f);
-        bandUIs[0].closeButton->setVisible(false); // <--- MODIFIED
     }
 
     for (int i = 0; i <= lineNum; ++i)
@@ -1229,7 +1266,7 @@ void Multiband::updateCloseButtonVisibility()
                              && i == hoveredBandIndex
                              && ! isDragging;
         auto& closeButton = *bandUIs[static_cast<size_t>(i)].closeButton;
-        closeButton.setVisible(shouldShow);
+        closeButton.setPresented(shouldShow);
         if (shouldShow)
             closeButton.toFront(false);
     }

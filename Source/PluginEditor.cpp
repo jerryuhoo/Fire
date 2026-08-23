@@ -806,7 +806,10 @@ void FireAudioProcessorEditor::timerCallback()
     // Keep the timer itself cheap in that state and resume from a fresh clock
     // when the peer becomes visible again.
     if (! isShowing())
+    {
+        multiband.dismissTransientUi();
         return;
+    }
 
     if (hasCachedMeterValues)
     {
@@ -898,6 +901,7 @@ void FireAudioProcessorEditor::timerCallback()
 
     if ((animationFrame & 1) == 0)
         filterControl.animationTick();
+    multiband.animationTick(deltaSeconds);
     bandPanel.animationTick(deltaSeconds);
     globalPanel.animationTick(deltaSeconds);
     lfoPanel.animationTick(deltaSeconds);

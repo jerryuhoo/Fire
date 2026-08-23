@@ -88,7 +88,8 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
     // Listen directly to the parameters that affect the transfer graph.
     constexpr std::array<const char*, distortionGraphParameterCount> graphParameterBases {
-        REC_ID, MIX_ID, SHAPE_MIX_ID, BIAS_ID, MODE_ID, SAFE_ID, DRIVE_BYPASS_ID, EXTREME_ID
+        REC_ID, MIX_ID, SHAPE_MIX_ID, BIAS_ID, MODE_ID, SAFE_ID,
+        DRIVE_BYPASS_ID, SHAPE_BYPASS_ID, EXTREME_ID
     };
 
     for (int i = 0; i < 4; ++i)

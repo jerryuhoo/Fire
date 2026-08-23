@@ -21,6 +21,8 @@
 #include <atomic>
 #include <vector>
 
+struct BandPanelGraphTestAccess;
+
 //==============================================================================
 class BandPanel : public PanelBase,
                   public juce::AudioProcessorValueTreeState::Listener,
@@ -66,6 +68,8 @@ public:
     void setGraphVisibilityForDriveDrag(bool isDragging);
 
 private:
+    friend struct BandPanelGraphTestAccess;
+
     void updateAttachments();
     bool canEnableSubKnob(juce::Component& component);
     void buttonClicked(juce::Button* clickedButton) override;
@@ -90,7 +94,7 @@ private:
     void updateDistortionGraphFromParameters();
     void timerCallback() override;
     std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
-    static constexpr size_t distortionGraphParameterCount = 8;
+    static constexpr size_t distortionGraphParameterCount = 9;
     std::array<juce::String, 4> driveParameterIds;
     std::array<std::array<juce::String, 4>, distortionGraphParameterCount> distortionGraphParameterIds;
 

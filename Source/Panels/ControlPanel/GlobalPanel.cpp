@@ -82,9 +82,6 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     setVisibility(downsampleComponents, false);
     setVisibility(graphComponents, false);
 
-    // Set the default filter type to Low Cut before the panel is shown
-    filterLowCutButton.setToggleState(true, juce::dontSendNotification);
-
     // Set initial switch state and trigger visibility update using buttonClicked
     filterSwitch.setToggleState(true, juce::dontSendNotification);
     buttonClicked(&filterSwitch);

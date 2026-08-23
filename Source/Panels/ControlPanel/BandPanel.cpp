@@ -86,7 +86,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     // Group components for visibility management after they've been created
     setupComponentGroups();
 
-    // We listen directly to the parameters that affect our "link" logic.
+    // Listen directly to the parameters that affect the transfer graph.
     constexpr std::array<const char*, distortionGraphParameterCount> graphParameterBases {
         REC_ID, MIX_ID, SHAPE_MIX_ID, BIAS_ID, MODE_ID, SAFE_ID, DRIVE_BYPASS_ID, EXTREME_ID
     };
@@ -94,10 +94,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     for (int i = 0; i < 4; ++i)
     {
         driveParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(DRIVE_ID, i);
-        linkedParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LINKED_ID, i);
-        outputParameterIds[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(OUTPUT_ID, i);
         processor.treeState.addParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
-        processor.treeState.addParameterListener(linkedParameterIds[static_cast<size_t>(i)], this);
 
         for (size_t parameterIndex = 0; parameterIndex < graphParameterBases.size(); ++parameterIndex)
         {
@@ -123,7 +120,6 @@ BandPanel::~BandPanel()
     for (int i = 0; i < 4; ++i)
     {
         processor.treeState.removeParameterListener(driveParameterIds[static_cast<size_t>(i)], this);
-        processor.treeState.removeParameterListener(linkedParameterIds[static_cast<size_t>(i)], this);
 
         for (const auto& parameterIds : distortionGraphParameterIds)
             processor.treeState.removeParameterListener(parameterIds[static_cast<size_t>(i)], this);
@@ -810,25 +806,6 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     invalidateChromeCache();
 }
 
-void BandPanel::updateLinkedValue(int bandIndex)
-{
-    if (! juce::isPositiveAndBelow(bandIndex, 4))
-        return;
-
-    const auto index = static_cast<size_t>(bandIndex);
-    const auto* linked = processor.treeState.getRawParameterValue(linkedParameterIds[index]);
-    const auto* drive = processor.treeState.getRawParameterValue(driveParameterIds[index]);
-    auto* output = processor.treeState.getParameter(outputParameterIds[index]);
-
-    if (linked == nullptr || drive == nullptr || output == nullptr || linked->load() <= 0.5f)
-        return;
-
-    const float newOutputValue = -drive->load() * 0.1f;
-    const float normalisedValue = output->convertTo0to1(newOutputValue);
-    if (! juce::approximatelyEqual(output->getValue(), normalisedValue))
-        output->setValueNotifyingHost(normalisedValue);
-}
-
 void BandPanel::updateDistortionGraphFromParameters()
 {
     const auto readBandParameter = [this](const juce::String& baseId, float fallback)
@@ -981,8 +958,6 @@ void BandPanel::parameterChanged(const juce::String& parameterID, float newValue
         const auto index = static_cast<size_t>(bandIndex);
         const auto bandMask = 1u << static_cast<unsigned int>(bandIndex);
         const bool isDriveParameter = parameterID == driveParameterIds[index];
-        if (isDriveParameter || parameterID == linkedParameterIds[index])
-            linkedValueDirtyMask.fetch_or(bandMask, std::memory_order_release);
 
         bool affectsGraph = isDriveParameter;
         for (const auto& parameterIds : distortionGraphParameterIds)
@@ -993,22 +968,11 @@ void BandPanel::parameterChanged(const juce::String& parameterID, float newValue
             distortionGraphDirtyMask.fetch_or(bandMask, std::memory_order_release);
             return;
         }
-
-        if (parameterID == linkedParameterIds[index])
-            return;
     }
 }
 
 void BandPanel::timerCallback()
 {
-    // Link is an audio/control semantic, so it must remain live even while the
-    // page is hidden. The work below is coalesced by band and only writes when
-    // the derived output value actually changed.
-    const auto dirtyMask = linkedValueDirtyMask.exchange(0, std::memory_order_acq_rel);
-    for (int bandIndex = 0; bandIndex < 4; ++bandIndex)
-        if ((dirtyMask & (1u << static_cast<unsigned int>(bandIndex))) != 0)
-            updateLinkedValue(bandIndex);
-
     // The transfer curve is presentation-only. Keep its dirty bits pending
     // while hidden and rebuild just that graph once it can actually be seen.
     if (! isShowing() || ! distortionGraph.isShowing())

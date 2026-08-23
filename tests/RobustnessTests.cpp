@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+#include <memory>
 
 namespace
 {
@@ -1207,6 +1208,37 @@ TEST_CASE("Linked output compensation works without an editor", "[processor][lin
     const auto* linkedOutput = linkedProcessor.treeState.getRawParameterValue(outputID);
     REQUIRE(linkedOutput != nullptr);
     CHECK(linkedOutput->load() == Catch::Approx(6.0f));
+}
+
+TEST_CASE("Opening an editor does not overwrite stored output while Linked is active",
+          "[processor][link][ui]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto outputID = ParameterIDAndName::getIDString(OUTPUT_ID, 0);
+    const auto linkedID = ParameterIDAndName::getIDString(LINKED_ID, 0);
+
+    setParameterValue(processor, driveID, 30.0f);
+    setParameterValue(processor, outputID, 6.0f);
+    setParameterValue(processor, linkedID, 1.0f);
+
+    const auto* storedOutput = processor.treeState.getRawParameterValue(outputID);
+    REQUIRE(storedOutput != nullptr);
+    REQUIRE(storedOutput->load() == Catch::Approx(6.0f));
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor { processor.createEditor() };
+    REQUIRE(editor != nullptr);
+
+    setParameterValue(processor, driveID, 40.0f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CHECK(storedOutput->load() == Catch::Approx(6.0f));
+
+    setParameterValue(processor, linkedID, 0.0f);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    CHECK(storedOutput->load() == Catch::Approx(6.0f));
 }
 
 TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state", "[state][lfo]")

@@ -87,15 +87,11 @@ private:
     void setupComponentGroups();
 
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
-    void updateLinkedValue(int bandIndex);
     void updateDistortionGraphFromParameters();
     void timerCallback() override;
-    std::atomic<unsigned int> linkedValueDirtyMask { 0 };
     std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
     static constexpr size_t distortionGraphParameterCount = 8;
     std::array<juce::String, 4> driveParameterIds;
-    std::array<juce::String, 4> linkedParameterIds;
-    std::array<juce::String, 4> outputParameterIds;
     std::array<std::array<juce::String, 4>, distortionGraphParameterCount> distortionGraphParameterIds;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

@@ -1,5 +1,6 @@
 #include <PluginProcessor.h>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -15,6 +16,7 @@ constexpr int transitionSamples = 480;
 constexpr int warmupSamples = 4096;
 constexpr int endpointWindowSamples = 64;
 constexpr int capturedSamples = transitionSamples + endpointWindowSamples;
+constexpr int baseAutomationSamples = 1536;
 constexpr float transitionTolerance = 2.0e-4f;
 constexpr std::array<float, 2> inputValues { 0.63f, 0.47f };
 
@@ -392,6 +394,133 @@ float dynamicReferenceError(const DynamicRender& result)
     return error;
 }
 
+struct BaseAutomationRender
+{
+    float maximumReferenceError = 0.0f;
+    float expectedGainRange = 0.0f;
+    bool finite = true;
+};
+
+float automatedBaseTarget(int eventSample, int callbackSamples)
+{
+    const float progress = juce::jlimit(
+        0.0f,
+        1.0f,
+        static_cast<float>(eventSample + callbackSamples)
+            / static_cast<float>(baseAutomationSamples));
+    return -24.0f + progress * 18.0f;
+}
+
+BaseAutomationRender renderRoutedBaseAutomation(
+    bool useHq,
+    const std::vector<int>& hostBlockPattern)
+{
+    REQUIRE_FALSE(hostBlockPattern.empty());
+    for (const int blockSize : hostBlockPattern)
+        REQUIRE(blockSize > 0);
+
+    BandProcessor subject;
+    BandProcessor carrier;
+    const auto preparedBlockSize = *std::max_element(hostBlockPattern.begin(),
+                                                      hostBlockPattern.end());
+    const juce::dsp::ProcessSpec spec {
+        sampleRate,
+        static_cast<juce::uint32>(preparedBlockSize),
+        2
+    };
+    subject.prepare(spec);
+    carrier.prepare(spec);
+
+    auto routedParams = makeTransparentParameters(useHq);
+    routedParams.outputVal.baseValue = -24.0f;
+    routedParams.outputVal.modulationDepth = 0.6f;
+    routedParams.outputVal.isBipolar = true;
+    routedParams.outputLfoSourceIndex = 0;
+    auto carrierParams = makeTransparentParameters(useHq);
+    carrierParams.outputVal.baseValue = 0.0f;
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        expectedBaseGain;
+    expectedBaseGain.reset(sampleRate, 0.05);
+    expectedBaseGain.setCurrentAndTargetValue(
+        juce::Decibels::decibelsToGain(-24.0f));
+
+    BaseAutomationRender result;
+    float minimumExpectedGain = std::numeric_limits<float>::max();
+    float maximumExpectedGain = 0.0f;
+    constexpr int totalSamples = warmupSamples + baseAutomationSamples;
+    int streamPosition = 0;
+    size_t callbackIndex = 0;
+    while (streamPosition < totalSamples)
+    {
+        int samplesThisCallback = hostBlockPattern[
+            callbackIndex++ % hostBlockPattern.size()];
+        samplesThisCallback = std::min(samplesThisCallback,
+                                       totalSamples - streamPosition);
+        if (streamPosition < warmupSamples)
+            samplesThisCallback = std::min(samplesThisCallback,
+                                           warmupSamples - streamPosition);
+
+        const bool automating = streamPosition >= warmupSamples;
+        if (automating)
+        {
+            const int eventSample = streamPosition - warmupSamples;
+            routedParams.outputVal.baseValue = automatedBaseTarget(
+                eventSample,
+                samplesThisCallback);
+            expectedBaseGain.setTargetValue(
+                juce::Decibels::decibelsToGain(
+                    routedParams.outputVal.baseValue));
+        }
+
+        auto subjectBuffer = makeInput(samplesThisCallback);
+        auto carrierBuffer = makeInput(samplesThisCallback);
+        juce::AudioBuffer<float> lfoOutputs(2, samplesThisCallback);
+        fillConstantLfos(lfoOutputs);
+        subject.process(subjectBuffer, routedParams, lfoOutputs);
+        carrier.process(carrierBuffer, carrierParams, lfoOutputs);
+
+        if (automating)
+        {
+            auto provider = routedParams.outputVal;
+            provider.lfoSignal = lfoOutputs.getReadPointer(0);
+            for (int sample = 0; sample < samplesThisCallback; ++sample)
+            {
+                // Output's legacy automation ramp is linear in gain. A stable
+                // route must use that smoothed base as an override while the
+                // LFO itself remains a direct, per-sample dB modulation.
+                const float smoothedBaseDb = juce::Decibels::gainToDecibels(
+                    expectedBaseGain.getNextValue());
+                const float expectedGain = juce::Decibels::decibelsToGain(
+                    provider.get(sample, smoothedBaseDb));
+                minimumExpectedGain = std::min(minimumExpectedGain,
+                                               expectedGain);
+                maximumExpectedGain = std::max(maximumExpectedGain,
+                                               expectedGain);
+
+                for (int channel = 0; channel < 2; ++channel)
+                {
+                    const float actual = subjectBuffer.getSample(channel,
+                                                                  sample);
+                    const float expected = carrierBuffer.getSample(channel,
+                                                                    sample)
+                                         * expectedGain;
+                    result.finite = result.finite && std::isfinite(actual)
+                                    && std::isfinite(expected);
+                    result.maximumReferenceError = std::max(
+                        result.maximumReferenceError,
+                        std::abs(actual - expected));
+                }
+            }
+        }
+
+        streamPosition += samplesThisCallback;
+    }
+
+    result.expectedGainRange = maximumExpectedGain - minimumExpectedGain;
+    return result;
+}
+
 BandProcessingParameters makeRoutedRecipe(float baseDb,
                                           float depth,
                                           bool bipolar,
@@ -537,6 +666,142 @@ TEST_CASE("Stable Band Output LFO remains sample accurate",
         CHECK(partitionError <= transitionTolerance);
         CHECK(chunkError <= transitionTolerance);
     }
+}
+
+TEST_CASE("Band Output continuous routed-base automation does not restart the route bridge",
+          "[band][output-gain][lfo][base-automation][block-size]")
+{
+    const std::array<std::vector<int>, 3> callbackPatterns {
+        fixedCallbacks,
+        std::vector<int> { 1 },
+        irregularCallbacks
+    };
+
+    for (const bool useHq : { false, true })
+        for (const auto& pattern : callbackPatterns)
+        {
+            const auto result = renderRoutedBaseAutomation(useHq, pattern);
+            CAPTURE(useHq,
+                    pattern.front(),
+                    pattern.size(),
+                    result.maximumReferenceError,
+                    result.expectedGainRange);
+            REQUIRE(result.finite);
+            REQUIRE(result.expectedGainRange >= 0.015f);
+            CHECK(result.maximumReferenceError <= 2.0e-5f);
+        }
+}
+
+TEST_CASE("Band Output Linked toggles bridge only when the effective routed base changes",
+          "[band][output-gain][lfo][transition][linked]")
+{
+    BandProcessor subject;
+    subject.prepare({ sampleRate, 257, 2 });
+
+    auto unlinked = makeRoutedRecipe(-18.0f, 0.4f, true, 0);
+    auto linked = unlinked;
+    linked.isOutputLinked = true;
+    linked.outputVal.baseValue = -6.0f; // Linked Drive=60 -> -0.1 * 60 dB.
+
+    processConstant(subject, unlinked, warmupSamples);
+    const auto transition = processConstant(subject,
+                                            linked,
+                                            transitionSamples
+                                                + endpointWindowSamples);
+    REQUIRE(bufferIsFinite(transition));
+
+    const float oldGain = recipeLinearGain(unlinked);
+    const float newGain = recipeLinearGain(linked);
+    REQUIRE(std::abs(newGain - oldGain) >= 0.05f);
+    for (const int sample : { 0, transitionSamples / 2, transitionSamples })
+    {
+        const float mix = static_cast<float>(sample)
+                          / static_cast<float>(transitionSamples);
+        const float expectedGain = oldGain + mix * (newGain - oldGain);
+        for (int channel = 0; channel < 2; ++channel)
+        {
+            CAPTURE(sample, channel, oldGain, newGain, expectedGain);
+            CHECK(transition.getSample(channel, sample)
+                  == Catch::Approx(inputValues[static_cast<size_t>(channel)]
+                                   * expectedGain)
+                         .margin(transitionTolerance));
+        }
+    }
+
+    // If Output already equals the Linked effective base, toggling the mode is
+    // audibly a no-op and must not freeze a moving LFO behind a needless bridge.
+    auto sameEffectiveBase = linked;
+    sameEffectiveBase.isOutputLinked = false;
+    const auto noOp = processConstant(subject,
+                                      sameEffectiveBase,
+                                      endpointWindowSamples);
+    REQUIRE(bufferIsFinite(noOp));
+    CHECK_FALSE(subject.outputGainTransition.routeTransitionMix.isSmoothing());
+    for (int channel = 0; channel < 2; ++channel)
+        for (int sample = 0; sample < noOp.getNumSamples(); ++sample)
+            CHECK(noOp.getSample(channel, sample)
+                  == Catch::Approx(inputValues[static_cast<size_t>(channel)]
+                                   * newGain)
+                         .margin(transitionTolerance));
+
+    // APVTS range reconstruction and Linked arithmetic can produce values
+    // that differ by a few ULPs while representing the same user-visible base.
+    // Treat them as one parameter value so this toggle cannot unnecessarily
+    // hold a moving LFO behind a 10 ms bridge.
+    constexpr float apvtsEquivalentBase = -48.0f + 0.1f * 386.0f;
+    constexpr float linkedEquivalentBase = -0.1f * 94.0f;
+    const float apvtsEquivalentGain = juce::Decibels::decibelsToGain(
+        apvtsEquivalentBase);
+    const float linkedEquivalentGain = juce::Decibels::decibelsToGain(
+        linkedEquivalentBase);
+    REQUIRE_FALSE(juce::exactlyEqual(apvtsEquivalentGain,
+                                     linkedEquivalentGain));
+    REQUIRE(std::abs(apvtsEquivalentBase - linkedEquivalentBase) <= 1.0e-5f);
+
+    BandProcessor ulpSubject;
+    ulpSubject.prepare({ sampleRate, 257, 2 });
+    auto linkedEquivalent = makeRoutedRecipe(linkedEquivalentBase,
+                                             0.4f,
+                                             true,
+                                             0);
+    linkedEquivalent.isOutputLinked = true;
+    processConstant(ulpSubject, linkedEquivalent, warmupSamples);
+    auto unlinkedEquivalent = linkedEquivalent;
+    unlinkedEquivalent.isOutputLinked = false;
+    unlinkedEquivalent.outputVal.baseValue = apvtsEquivalentBase;
+
+    constexpr int movingSamples = 257;
+    auto movingOutput = makeInput(movingSamples);
+    juce::AudioBuffer<float> movingLfos(2, movingSamples);
+    for (int sample = 0; sample < movingSamples; ++sample)
+    {
+        movingLfos.setSample(0, sample, triangleSample(sample));
+        movingLfos.setSample(1, sample, 0.75f);
+    }
+    ulpSubject.process(movingOutput, unlinkedEquivalent, movingLfos);
+    REQUIRE(bufferIsFinite(movingOutput));
+    CHECK_FALSE(ulpSubject.outputGainTransition.routeTransitionMix.isSmoothing());
+
+    auto expectedProvider = unlinkedEquivalent.outputVal;
+    expectedProvider.lfoSignal = movingLfos.getReadPointer(0);
+    float movingReferenceError = 0.0f;
+    for (int channel = 0; channel < 2; ++channel)
+        for (int sample = 0; sample < movingSamples; ++sample)
+        {
+            const float expectedGain = juce::Decibels::decibelsToGain(
+                expectedProvider.get(sample));
+            movingReferenceError = std::max(
+                movingReferenceError,
+                std::abs(movingOutput.getSample(channel, sample)
+                         - inputValues[static_cast<size_t>(channel)]
+                               * expectedGain));
+        }
+    CAPTURE(apvtsEquivalentBase,
+            linkedEquivalentBase,
+            apvtsEquivalentGain,
+            linkedEquivalentGain,
+            movingReferenceError);
+    CHECK(movingReferenceError <= 2.0e-5f);
 }
 
 TEST_CASE("Attaching Band Output LFO anchors to an in-flight legacy gain ramp",

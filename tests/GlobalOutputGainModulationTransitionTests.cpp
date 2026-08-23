@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -15,6 +16,7 @@ constexpr int routeTransitionSamples = 480;
 constexpr int legacyDetachSamples = 2400;
 constexpr int warmupSamples = 8192;
 constexpr int endpointWindowSamples = 64;
+constexpr int baseAutomationSamples = 1536;
 constexpr float tolerance = 2.0e-4f;
 constexpr std::array<float, 2> inputValues { 0.63f, 0.47f };
 const std::vector<int> fixedCallbacks { 257 };
@@ -327,6 +329,149 @@ void checkGlobalTransition(const TransitionRender& render,
     CHECK(settledError <= tolerance);
 }
 
+struct GlobalBaseAutomationRender
+{
+    float maximumReferenceError = 0.0f;
+    float expectedGainRange = 0.0f;
+    bool finite = true;
+};
+
+float globalAutomatedBaseTarget(int eventSample, int callbackSamples)
+{
+    const float progress = juce::jlimit(
+        0.0f,
+        1.0f,
+        static_cast<float>(eventSample + callbackSamples)
+            / static_cast<float>(baseAutomationSamples));
+    return -24.0f + progress * 18.0f;
+}
+
+float routedGainForBase(float baseDb)
+{
+    ModulatedValueProvider provider;
+    provider.baseValue = baseDb;
+    provider.range = { -48.0f, 6.0f };
+    provider.modulationDepth = 0.6f;
+    provider.isBipolar = true;
+    constexpr float lfoValue = 0.25f;
+    provider.lfoSignal = &lfoValue;
+    return juce::Decibels::decibelsToGain(provider.get(0));
+}
+
+GlobalBaseAutomationRender renderGlobalRoutedBaseAutomation(
+    bool useHq,
+    const std::vector<int>& callbackPattern)
+{
+    REQUIRE_FALSE(callbackPattern.empty());
+    for (const int blockSize : callbackPattern)
+        REQUIRE(blockSize > 0);
+
+    const OutputRecipe initialRecipe { true, -24.0f, 0, 0.6f, true };
+    const OutputRecipe carrierRecipe { false, 0.0f, -1, 0.0f, true };
+    FireAudioProcessor subject;
+    FireAudioProcessor carrier;
+    const int preparedBlockSize = std::max(
+        512,
+        *std::max_element(callbackPattern.begin(), callbackPattern.end()));
+    configureGlobalProcessor(subject,
+                             preparedBlockSize,
+                             useHq,
+                             initialRecipe);
+    configureGlobalProcessor(carrier,
+                             preparedBlockSize,
+                             useHq,
+                             carrierRecipe);
+    REQUIRE(subject.getLatencySamples() == carrier.getLatencySamples());
+    const auto* subjectOutputValue = subject.treeState.getRawParameterValue(
+        OUTPUT_ID);
+    REQUIRE(subjectOutputValue != nullptr);
+    const int audibleControlDelay = useHq ? 0 : subject.getLatencySamples();
+
+    juce::MidiBuffer midi;
+    for (int processed = 0; processed < warmupSamples; processed += 512)
+    {
+        const int blockSize = std::min(512, warmupSamples - processed);
+        auto subjectBuffer = makeInput(blockSize);
+        auto carrierBuffer = makeInput(blockSize);
+        subject.processBlock(subjectBuffer, midi);
+        carrier.processBlock(carrierBuffer, midi);
+    }
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        expectedBaseGain;
+    expectedBaseGain.reset(sampleRate, 0.05);
+    expectedBaseGain.setCurrentAndTargetValue(
+        juce::Decibels::decibelsToGain(initialRecipe.baseDb));
+
+    GlobalBaseAutomationRender result;
+    std::vector<float> expectedControlGains;
+    const int eventSamples = baseAutomationSamples + audibleControlDelay;
+    expectedControlGains.reserve(static_cast<size_t>(eventSamples));
+    float minimumExpectedGain = std::numeric_limits<float>::max();
+    float maximumExpectedGain = 0.0f;
+    int eventPosition = 0;
+    size_t callbackIndex = 0;
+    while (eventPosition < eventSamples)
+    {
+        int blockSize = callbackPattern[
+            callbackIndex++ % callbackPattern.size()];
+        blockSize = std::min(blockSize, eventSamples - eventPosition);
+        const int automationPosition = std::min(eventPosition,
+                                                baseAutomationSamples);
+        const int automatedSamplesThisCallback = std::min(
+            blockSize,
+            baseAutomationSamples - automationPosition);
+        const float targetDb = automationPosition < baseAutomationSamples
+                                   ? globalAutomatedBaseTarget(
+                                         automationPosition,
+                                         automatedSamplesThisCallback)
+                                   : -6.0f;
+        setPlainParameter(subject, OUTPUT_ID, targetDb);
+        expectedBaseGain.setTargetValue(
+            juce::Decibels::decibelsToGain(
+                subjectOutputValue->load(std::memory_order_relaxed)));
+
+        auto subjectBuffer = makeInput(blockSize);
+        auto carrierBuffer = makeInput(blockSize);
+        subject.processBlock(subjectBuffer, midi);
+        carrier.processBlock(carrierBuffer, midi);
+
+        for (int sample = 0; sample < blockSize; ++sample)
+        {
+            const float smoothedBaseDb = juce::Decibels::gainToDecibels(
+                expectedBaseGain.getNextValue());
+            const float controlGain = routedGainForBase(smoothedBaseDb);
+            expectedControlGains.push_back(controlGain);
+            minimumExpectedGain = std::min(minimumExpectedGain, controlGain);
+            maximumExpectedGain = std::max(maximumExpectedGain, controlGain);
+
+            const int outputSample = eventPosition + sample;
+            const int controlSample = outputSample - audibleControlDelay;
+            const float audibleGain = controlSample >= 0
+                                          ? expectedControlGains[
+                                                static_cast<size_t>(controlSample)]
+                                          : routedGainForBase(
+                                                initialRecipe.baseDb);
+            for (int channel = 0; channel < 2; ++channel)
+            {
+                const float actual = subjectBuffer.getSample(channel, sample);
+                const float expected = carrierBuffer.getSample(channel, sample)
+                                     * audibleGain;
+                result.finite = result.finite && std::isfinite(actual)
+                                && std::isfinite(expected);
+                result.maximumReferenceError = std::max(
+                    result.maximumReferenceError,
+                    std::abs(actual - expected));
+            }
+        }
+
+        eventPosition += blockSize;
+    }
+
+    result.expectedGainRange = maximumExpectedGain - minimumExpectedGain;
+    return result;
+}
+
 BandProcessingParameters makeDetachParameters(bool routed)
 {
     BandProcessingParameters params;
@@ -370,6 +515,31 @@ TEST_CASE("Global Output LFO recipe transitions are continuous",
                 CAPTURE(partitionError);
                 CHECK(partitionError <= tolerance);
             }
+        }
+}
+
+TEST_CASE("Global Output continuous routed-base automation does not restart the route bridge",
+          "[processor][global-output][lfo][base-automation][block-size]")
+{
+    const std::array<std::vector<int>, 3> callbackPatterns {
+        fixedCallbacks,
+        std::vector<int> { 1 },
+        irregularCallbacks
+    };
+
+    for (const bool useHq : { false, true })
+        for (const auto& pattern : callbackPatterns)
+        {
+            const auto result = renderGlobalRoutedBaseAutomation(useHq,
+                                                                 pattern);
+            CAPTURE(useHq,
+                    pattern.front(),
+                    pattern.size(),
+                    result.maximumReferenceError,
+                    result.expectedGainRange);
+            REQUIRE(result.finite);
+            REQUIRE(result.expectedGainRange >= 0.015f);
+            CHECK(result.maximumReferenceError <= tolerance);
         }
 }
 

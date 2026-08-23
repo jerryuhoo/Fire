@@ -37,6 +37,7 @@ struct BandProcessingParameters
     bool isHQ { false };
 
     ModulatedValueProvider outputVal;
+    bool isOutputLinked { false };
     float mixVal { 1.0f };
     ModulatedValueProvider mixValProvider;
     float compThreshold { 0.0f };
@@ -89,7 +90,8 @@ struct BandProcessingParameters
 };
 
 // Keeps LFO-routed output recipe changes continuous without low-pass filtering
-// the LFO waveform itself. The legacy tracker mirrors juce::dsp::Gain only so
+// the LFO waveform itself. Ordinary routed-base automation owns a separate
+// linear-gain dezipper, while the legacy tracker mirrors juce::dsp::Gain only so
 // attaching a route can start from the gain that was actually audible.
 struct OutputGainTransitionState
 {
@@ -97,18 +99,22 @@ struct OutputGainTransitionState
     {
         bool routed = false;
         int sourceIndex = -1;
-        float baseValue = 0.0f;
         float modulationDepth = 0.0f;
         bool isBipolar = true;
+        bool isLinked = false;
     };
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         routeTransitionMix;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        routedBaseGainSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
         legacyGainTracker;
     RecipeSignature lastRecipe;
     float anchorLinearGain = 1.0f;
     float lastAppliedLinearGain = 1.0f;
+    float routedBaseTargetDb = 0.0f;
+    bool routedBaseGainPrimed = false;
     bool initialised = false;
 
     void prepare(double sampleRate) noexcept;

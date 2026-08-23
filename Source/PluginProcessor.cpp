@@ -360,6 +360,7 @@ void OutputGainTransitionState::prepare(double sampleRate) noexcept
                                       ? sampleRate
                                       : 48000.0;
     routeTransitionMix.reset(safeSampleRate, 0.01);
+    routedBaseGainSmoother.reset(safeSampleRate, 0.05);
     legacyGainTracker.reset(safeSampleRate, 0.05);
     reset();
 }
@@ -367,10 +368,13 @@ void OutputGainTransitionState::prepare(double sampleRate) noexcept
 void OutputGainTransitionState::reset() noexcept
 {
     routeTransitionMix.setCurrentAndTargetValue(1.0f);
+    routedBaseGainSmoother.setCurrentAndTargetValue(1.0f);
     legacyGainTracker.setCurrentAndTargetValue(0.0f);
     lastRecipe = {};
     anchorLinearGain = 1.0f;
     lastAppliedLinearGain = 1.0f;
+    routedBaseTargetDb = 0.0f;
+    routedBaseGainPrimed = false;
     initialised = false;
 }
 
@@ -805,20 +809,19 @@ static float getDriveRouteTargetGain(
 
 static OutputGainTransitionState::RecipeSignature makeOutputGainRecipe(
     const ModulatedValueProvider& provider,
-    int sourceIndex) noexcept
+    int sourceIndex,
+    bool isLinked) noexcept
 {
     OutputGainTransitionState::RecipeSignature recipe;
     recipe.routed = provider.lfoSignal != nullptr;
     recipe.sourceIndex = recipe.routed ? sourceIndex : -1;
-    recipe.baseValue = std::isfinite(provider.baseValue)
-                           ? provider.baseValue
-                           : 0.0f;
     recipe.modulationDepth = std::isfinite(provider.modulationDepth)
                                  ? juce::jlimit(-1.0f,
                                                 1.0f,
                                                 provider.modulationDepth)
                                  : 0.0f;
     recipe.isBipolar = provider.isBipolar;
+    recipe.isLinked = recipe.routed && isLinked;
     return recipe;
 }
 
@@ -832,7 +835,6 @@ static bool sameOutputGainRecipe(
         return true;
 
     return lhs.sourceIndex == rhs.sourceIndex
-           && juce::exactlyEqual(lhs.baseValue, rhs.baseValue)
            && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
            && lhs.isBipolar == rhs.isBipolar;
 }
@@ -852,14 +854,18 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
                       const ModulatedValueProvider& gainProvider,
                       juce::dsp::Gain<float>& gain,
                       OutputGainTransitionState& transition,
-                      int sourceIndex)
+                      int sourceIndex,
+                      bool isLinked)
 {
     if (buffer.getNumChannels() == 0 || buffer.getNumSamples() == 0)
         return;
 
-    const auto recipe = makeOutputGainRecipe(gainProvider, sourceIndex);
+    const auto recipe = makeOutputGainRecipe(gainProvider,
+                                             sourceIndex,
+                                             isLinked);
     if (gainProvider.lfoSignal == nullptr)
     {
+        transition.routedBaseGainPrimed = false;
         if (! transition.initialised)
         {
             // Gain exposes its target rather than its current smoothed value.
@@ -890,13 +896,56 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
         return;
     }
 
+    const float safeBaseDb = std::isfinite(gainProvider.baseValue)
+                                 ? gainProvider.baseValue
+                                 : 0.0f;
+    const float routedBaseTargetGain = juce::Decibels::decibelsToGain(
+        safeBaseDb);
+    // Output's smallest effective base step is 0.001 dB (Linked Drive at its
+    // 0.01 step). APVTS range reconstruction and -0.1 * Drive can differ by a
+    // few float ULPs for the same displayed value, so compare in the parameter
+    // domain with a tolerance far below any real automation step.
+    constexpr float baseTargetEqualityToleranceDb = 1.0e-5f;
+    const bool routedBaseTargetChanged =
+        ! transition.routedBaseGainPrimed
+        || std::abs(safeBaseDb - transition.routedBaseTargetDb)
+               > baseTargetEqualityToleranceDb;
+    const bool linkedModeChanged = transition.initialised
+                                   && recipe.isLinked
+                                          != transition.lastRecipe.isLinked;
+    const bool recipeChanged = transition.initialised
+                               && (! sameOutputGainRecipe(
+                                       recipe,
+                                       transition.lastRecipe)
+                                   || (linkedModeChanged
+                                       && routedBaseTargetChanged));
+
+    // A newly attached route starts from its complete current recipe. A true
+    // discrete recipe edit also snaps a simultaneously changed base so the
+    // existing 10 ms held-anchor bridge remains its only transition. When just
+    // source/depth/polarity changes during an in-flight base ramp, retain that
+    // independent 50 ms trajectory instead of fast-forwarding it.
+    if (! transition.routedBaseGainPrimed
+        || (recipeChanged && routedBaseTargetChanged))
+    {
+        transition.routedBaseGainSmoother.setCurrentAndTargetValue(
+            routedBaseTargetGain);
+    }
+    else if (routedBaseTargetChanged)
+    {
+        transition.routedBaseGainSmoother.setTargetValue(
+            routedBaseTargetGain);
+    }
+    transition.routedBaseTargetDb = safeBaseDb;
+    transition.routedBaseGainPrimed = true;
+
     if (! transition.initialised)
     {
         transition.initialised = true;
         transition.lastRecipe = recipe;
         transition.routeTransitionMix.setCurrentAndTargetValue(1.0f);
     }
-    else if (! sameOutputGainRecipe(recipe, transition.lastRecipe))
+    else if (recipeChanged)
     {
         // Keep the target LFO fully sample-accurate. Only the discrete recipe
         // boundary is bridged from the gain that was actually audible.
@@ -905,8 +954,16 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
         transition.routeTransitionMix.setTargetValue(1.0f);
         transition.lastRecipe = recipe;
     }
+    else if (linkedModeChanged)
+    {
+        // A Linked toggle that produces the same effective base is audibly a
+        // no-op. Record the mode without restarting the route bridge; a later
+        // Linked toggle with a different effective base is handled above.
+        transition.lastRecipe = recipe;
+    }
 
-    if (! transition.routeTransitionMix.isSmoothing())
+    if (! transition.routeTransitionMix.isSmoothing()
+        && ! transition.routedBaseGainSmoother.isSmoothing())
     {
         // Preserve the historical steady routed path exactly: no smoother is
         // placed in front of the LFO, and each channel follows the same direct
@@ -933,8 +990,15 @@ static void applyGain(juce::AudioBuffer<float>& buffer,
     auto* const* channelData = buffer.getArrayOfWritePointers();
     for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
     {
+        const float gainDb = transition.routedBaseGainSmoother.isSmoothing()
+                                 ? gainProvider.get(
+                                     sample,
+                                     juce::Decibels::gainToDecibels(
+                                         transition.routedBaseGainSmoother
+                                             .getNextValue()))
+                                 : gainProvider.get(sample);
         const float targetLinearGain = juce::Decibels::decibelsToGain(
-            gainProvider.get(sample));
+            gainDb);
         const float mix = transition.routeTransitionMix.getCurrentValue();
         const float effectiveLinearGain = mix <= 0.0f
                                               ? transition.anchorLinearGain
@@ -1751,7 +1815,8 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
               paramsForProcessing.outputVal,
               gain,
               outputGainTransition,
-              params.outputLfoSourceIndex);
+              params.outputLfoSourceIndex,
+              params.isOutputLinked);
 
     // 5. Final Dry/Wet Mix. The dry samples supplied above already contain
     // JUCE's original HQ Thiran latency compensation. Keep the coefficient
@@ -4701,6 +4766,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
         BandProcessingParameters params;
         params.isBandEnabled = loadCachedParameter(parameters.enabled) > 0.5f;
         params.mode = juce::roundToInt(loadCachedParameter(parameters.mode));
+        params.isOutputLinked = loadCachedParameter(parameters.linked) > 0.5f;
         params.isDriveEnabled = loadCachedParameter(parameters.driveEnabled) > 0.5f;
         params.isShapeEnabled = loadCachedParameter(parameters.shapeEnabled) > 0.5f;
         params.isCompEnabled = loadCachedParameter(parameters.compressorEnabled) > 0.5f;
@@ -4765,7 +4831,7 @@ void FireAudioProcessor::prepareHqCallbackContext(
                       params.compMixLfoSourceIndex,
                       parameters.compressorMix);
 
-        if (loadCachedParameter(parameters.linked) > 0.5f)
+        if (params.isOutputLinked)
             params.outputVal.baseValue = -0.1f
                                        * loadCachedParameter(parameters.drive);
 
@@ -5340,7 +5406,8 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
               globalGainProvider,
               gainProcessorGlobal,
               globalOutputGainTransition,
-              globalGainLfoSourceIndex);
+              globalGainLfoSourceIndex,
+              false);
 }
 
 void FireAudioProcessor::applyDownsamplingEffect(

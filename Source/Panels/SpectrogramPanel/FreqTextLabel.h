@@ -14,12 +14,15 @@
 #include "../../GUI/FireTheme.h"
 #include "VerticalLine.h"
 #include "SpectrumComponent.h"
+#include <functional>
 //==============================================================================
 /*
 */
 class FreqTextLabel : public juce::Component, juce::Timer
 {
 public:
+    using FrequencyEditCallback = std::function<void(float)>;
+
     FreqTextLabel (VerticalLine& v);
     ~FreqTextLabel() override;
 
@@ -31,6 +34,7 @@ public:
     bool isMouseOverCustom();
     void timerCallback() override;
     void setFade (bool update, bool isFadeIn);
+    void setFrequencyEditCallback(FrequencyEditCallback callback);
 
 private:
     void applyEditedText();
@@ -43,5 +47,6 @@ private:
     float targetAlpha = 0.0f;
 
     juce::Label freqLabel;
+    FrequencyEditCallback frequencyEditCallback;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqTextLabel)
 };

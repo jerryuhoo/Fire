@@ -44,6 +44,10 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
             [this] { beginCrossoverGesture(); },
             [this, i] { touchCrossoverParameter(i); },
             [this] { endCrossoverGesture(); });
+        freqDividerGroup[i]->setFrequencyEditCallback([this, i](float xPercent)
+        {
+            dragLines(xPercent, i);
+        });
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         // Listen recursively so moving between the divider, its value label and
@@ -710,8 +714,23 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
 void Multiband::dragLines(float xPercent, int index)
 {
     // moving lines by dragging mouse
-    if (juce::isPositiveAndBelow(index, lineNum))
+    if (! juce::isPositiveAndBelow(index, lineNum))
+        return;
+
+    {
+        // SliderAttachment notifications are synchronous. Suppress the normal
+        // slider canonicalisation callback until this ordered recursive
+        // publication is complete, otherwise integer-Hz quantisation can
+        // re-enter moveToX and publish an outer divider prematurely.
+        const juce::ScopedValueSetter<bool> cascadeGuard(
+            isPublishingCrossoverCascade, true);
         freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
+    }
+
+    setLineRelatedBoundsByX();
+    setSoloRelatedBounds();
+    refreshHoveredBandFromMouse();
+    repaint();
 }
 
 void Multiband::beginCrossoverGesture()
@@ -876,7 +895,7 @@ void Multiband::notifyFocusChanged()
 
 void Multiband::sliderValueChanged(juce::Slider* slider)
 {
-    if (isCanonicalisingLines)
+    if (isCanonicalisingLines || isPublishingCrossoverCascade)
         return;
 
     lineNum = countLines();

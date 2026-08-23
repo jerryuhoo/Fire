@@ -67,6 +67,12 @@ void FreqDividerGroup::setDeleteState(bool deleteState)
     verticalLine.setDeleteState(deleteState);
 }
 
+void FreqDividerGroup::setFrequencyEditCallback(
+    FreqTextLabel::FrequencyEditCallback callback)
+{
+    freqTextLabel.setFrequencyEditCallback(std::move(callback));
+}
+
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
 {
     const int index = verticalLine.getIndex();
@@ -88,13 +94,10 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
         newXPercent = rightLimit;
     }
 
+    // Reserve the final local position before moving constrained neighbours.
+    // The neighbours publish first, so every synchronous host notification
+    // observes an already strictly ordered active crossover tuple.
     verticalLine.setXPercent(newXPercent);
-    // Keep the APVTS frequency authoritative in the same message-thread turn.
-    // Publishing a larger NUM_BANDS value before SliderAttachment had consumed
-    // an async notification allowed the audio thread to process the new band
-    // with an old hidden crossover frequency.
-    verticalLine.setValueAsPartOfGesture(transformFromLog(newXPercent),
-                                         juce::sendNotificationSync);
 
     if (verticalLine.getLeft() >= 0 && freqDividerGroup[verticalLine.getLeft()]->getToggleState() && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
@@ -104,6 +107,11 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     {
         freqDividerGroup[verticalLine.getRight()]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup);
     }
+
+    // Keep the APVTS frequency authoritative in the same message-thread turn,
+    // after any pushed neighbours have published their ordered positions.
+    verticalLine.setValueAsPartOfGesture(transformFromLog(newXPercent),
+                                         juce::sendNotificationSync);
 }
 
 VerticalLine& FreqDividerGroup::getVerticalLine()

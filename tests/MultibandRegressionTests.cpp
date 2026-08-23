@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <set>
 #include <vector>
@@ -204,6 +205,151 @@ public:
     std::vector<char> events;
 };
 
+class CrossoverTupleCapture final : public juce::AudioProcessorListener
+{
+public:
+    explicit CrossoverTupleCapture(FireAudioProcessor& processorToObserve)
+        : processor(processorToObserve)
+    {
+        for (int divider = 0; divider < 3; ++divider)
+        {
+            const auto frequencyID = ParameterIDAndName::getIDString(FREQ_ID, divider);
+            auto* parameter = processor.treeState.getParameter(frequencyID);
+            REQUIRE(parameter != nullptr);
+            parameterIndices[static_cast<size_t>(divider)] = parameter->getParameterIndex();
+            values[static_cast<size_t>(divider)] =
+                processor.treeState.getRawParameterValue(frequencyID);
+            REQUIRE(values[static_cast<size_t>(divider)] != nullptr);
+        }
+
+        processor.addListener(this);
+    }
+
+    ~CrossoverTupleCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (captureInProgress)
+            return;
+
+        int changedDivider = -1;
+        for (int divider = 0; divider < 3; ++divider)
+            if (changedParameterIndex == parameterIndices[static_cast<size_t>(divider)])
+                changedDivider = divider;
+
+        if (changedDivider < 0)
+            return;
+
+        changedDividers.push_back(changedDivider);
+        ++valueNotifications[static_cast<size_t>(changedDivider)];
+        snapshots.push_back({
+            values[0]->load(std::memory_order_relaxed),
+            values[1]->load(std::memory_order_relaxed),
+            values[2]->load(std::memory_order_relaxed)
+        });
+
+        const auto& tuple = snapshots.back();
+        allSnapshotsStrict = allSnapshotsStrict
+                             && tuple[0] < tuple[1]
+                             && tuple[1] < tuple[2];
+
+        const juce::ScopedValueSetter<bool> captureGuard(captureInProgress, true);
+        juce::MemoryBlock state;
+        processor.getStateInformation(state);
+        ++savedStateCaptureCount;
+
+        auto stateXml = juce::AudioProcessor::getXmlFromBinary(
+            state.getData(), static_cast<int>(state.getSize()));
+        if (stateXml == nullptr)
+        {
+            savedStateParseFailed = true;
+            return;
+        }
+
+        auto* parameterState = stateXml->getChildByName(
+            processor.treeState.state.getType().toString());
+        if (parameterState == nullptr)
+        {
+            savedStateParseFailed = true;
+            return;
+        }
+
+        int savedBandCount = -1;
+        std::array<double, 3> savedFrequencies {};
+        std::array<bool, 3> foundFrequencies {};
+        for (auto* child : parameterState->getChildIterator())
+        {
+            const auto parameterID = child->getStringAttribute("id");
+            if (parameterID == NUM_BANDS_ID)
+                savedBandCount = juce::roundToInt(child->getDoubleAttribute("value"));
+
+            for (int divider = 0; divider < 3; ++divider)
+                if (parameterID == ParameterIDAndName::getIDString(FREQ_ID, divider))
+                {
+                    savedFrequencies[static_cast<size_t>(divider)] =
+                        child->getDoubleAttribute("value");
+                    foundFrequencies[static_cast<size_t>(divider)] = true;
+                }
+        }
+
+        const int activeDividerCount = juce::jlimit(0, 3, savedBandCount - 1);
+        if (activeDividerCount != 3)
+        {
+            savedStateParseFailed = true;
+            return;
+        }
+
+        for (int divider = 0; divider < activeDividerCount; ++divider)
+            if (! foundFrequencies[static_cast<size_t>(divider)])
+            {
+                savedStateParseFailed = true;
+                return;
+            }
+
+        for (int divider = 1; divider < activeDividerCount; ++divider)
+            allSavedStateTuplesStrict = allSavedStateTuplesStrict
+                                        && savedFrequencies[static_cast<size_t>(divider - 1)]
+                                               < savedFrequencies[static_cast<size_t>(divider)];
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    FireAudioProcessor& processor;
+    std::array<int, 3> parameterIndices { -1, -1, -1 };
+    std::array<std::atomic<float>*, 3> values {};
+    std::array<int, 3> valueNotifications {};
+    std::vector<int> changedDividers;
+    std::vector<std::array<float, 3>> snapshots;
+    bool allSnapshotsStrict = true;
+    int savedStateCaptureCount = 0;
+    bool allSavedStateTuplesStrict = true;
+    bool savedStateParseFailed = false;
+    bool captureInProgress = false;
+};
+
+void checkBalancedGesture(const ParameterGestureCapture& capture)
+{
+    CHECK(capture.beginCount == 1);
+    CHECK(capture.endCount == 1);
+    CHECK(capture.valueChangeCount >= 1);
+    CHECK(capture.gestureDepth == 0);
+    CHECK(capture.maximumGestureDepth == 1);
+    CHECK(capture.minimumGestureDepth == 0);
+    CHECK_FALSE(capture.valueChangedOutsideGesture);
+    REQUIRE_FALSE(capture.events.empty());
+    CHECK(capture.events.front() == 'B');
+    CHECK(capture.events.back() == 'E');
+}
+
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::Point<float> position,
                                 juce::ModifierKeys modifiers = {})
@@ -349,6 +495,21 @@ int getVisibleDividerCount(const Multiband& multiband)
     return visibleCount;
 }
 
+std::array<FreqDividerGroup*, 3> getDividerGroupsByIndex(Multiband& multiband)
+{
+    std::array<FreqDividerGroup*, 3> result {};
+    for (int childIndex = 0; childIndex < multiband.getNumChildComponents(); ++childIndex)
+        if (auto* group = dynamic_cast<FreqDividerGroup*>(
+                multiband.getChildComponent(childIndex)))
+        {
+            const int dividerIndex = group->getVerticalLine().getIndex();
+            if (juce::isPositiveAndBelow(dividerIndex, 3))
+                result[static_cast<size_t>(dividerIndex)] = group;
+        }
+
+    return result;
+}
+
 template<typename ComponentType>
 ComponentType* findDescendant(juce::Component& root)
 {
@@ -483,19 +644,6 @@ TEST_CASE("Crossover mouse and text edits bracket host automation gestures",
 
         dividerComponent.mouseUp(makeMouseEvent(divider, eventPosition));
 
-        const auto checkBalancedGesture = [](const ParameterGestureCapture& capture)
-        {
-            CHECK(capture.beginCount == 1);
-            CHECK(capture.endCount == 1);
-            CHECK(capture.valueChangeCount >= 1);
-            CHECK(capture.gestureDepth == 0);
-            CHECK(capture.maximumGestureDepth == 1);
-            CHECK(capture.minimumGestureDepth == 0);
-            CHECK_FALSE(capture.valueChangedOutsideGesture);
-            REQUIRE_FALSE(capture.events.empty());
-            CHECK(capture.events.front() == 'B');
-            CHECK(capture.events.back() == 'E');
-        };
         checkBalancedGesture(host);
         checkBalancedGesture(adjacentHost);
         CHECK(untouchedHost.beginCount == 0);
@@ -538,6 +686,157 @@ TEST_CASE("Crossover mouse and text edits bracket host automation gestures",
         CHECK(host.events.front() == 'B');
         CHECK(host.events.back() == 'E');
     }
+}
+
+TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
+          "[multiband][ui][automation][crossover][tuple]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 4, { 320.0f, 640.0f, 1280.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    REQUIRE(dividerGroups[1] != nullptr);
+    REQUIRE(dividerGroups[2] != nullptr);
+
+    std::array<juce::RangedAudioParameter*, 3> frequencyParameters {};
+    for (int divider = 0; divider < 3; ++divider)
+    {
+        frequencyParameters[static_cast<size_t>(divider)] = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(FREQ_ID, divider));
+        REQUIRE(frequencyParameters[static_cast<size_t>(divider)] != nullptr);
+    }
+
+    ParameterGestureCapture firstGesture(
+        processor, frequencyParameters[0]->getParameterIndex());
+    ParameterGestureCapture secondGesture(
+        processor, frequencyParameters[1]->getParameterIndex());
+    ParameterGestureCapture thirdGesture(
+        processor, frequencyParameters[2]->getParameterIndex());
+    CrossoverTupleCapture tupleCapture(processor);
+    const auto topologyGeneration =
+        processor.getMultibandTopologyGenerationForTesting();
+    REQUIRE((topologyGeneration & 1u) == 0u);
+
+    const auto checkThreeParameterCascade = [&]
+    {
+        CAPTURE(tupleCapture.changedDividers);
+        for (const auto& tuple : tupleCapture.snapshots)
+            UNSCOPED_INFO("tuple: " << tuple[0] << ", " << tuple[1] << ", " << tuple[2]);
+        CHECK(tupleCapture.snapshots.size() == 3);
+        CHECK(tupleCapture.allSnapshotsStrict);
+        CHECK(tupleCapture.valueNotifications[0] == 1);
+        CHECK(tupleCapture.valueNotifications[1] == 1);
+        CHECK(tupleCapture.valueNotifications[2] == 1);
+        CHECK(tupleCapture.savedStateCaptureCount == 3);
+        CHECK(tupleCapture.allSavedStateTuplesStrict);
+        CHECK_FALSE(tupleCapture.savedStateParseFailed);
+        checkBalancedGesture(firstGesture);
+        checkBalancedGesture(secondGesture);
+        checkBalancedGesture(thirdGesture);
+    };
+
+    SECTION("rightward drag cascades across all three dividers")
+    {
+        auto& source = dividerGroups[0]->getVerticalLine();
+        auto& sourceComponent = static_cast<juce::Component&>(source);
+        const auto eventPosition = source.getLocalBounds().toFloat().getCentre();
+        sourceComponent.mouseDown(
+            makeMouseEvent(source,
+                           eventPosition,
+                           juce::ModifierKeys::leftButtonModifier));
+        multiband->dragLines(0.70f, 0);
+        sourceComponent.mouseUp(makeMouseEvent(source, eventPosition));
+
+        checkThreeParameterCascade();
+    }
+
+    SECTION("leftward drag cascades across all three dividers")
+    {
+        auto& source = dividerGroups[2]->getVerticalLine();
+        auto& sourceComponent = static_cast<juce::Component&>(source);
+        const auto eventPosition = source.getLocalBounds().toFloat().getCentre();
+        sourceComponent.mouseDown(
+            makeMouseEvent(source,
+                           eventPosition,
+                           juce::ModifierKeys::leftButtonModifier));
+        multiband->dragLines(0.30f, 2);
+        sourceComponent.mouseUp(makeMouseEvent(source, eventPosition));
+
+        checkThreeParameterCascade();
+    }
+
+    SECTION("frequency text entry uses the same cross-divider cascade")
+    {
+        auto* frequencyText = findDescendant<FreqTextLabel>(*dividerGroups[0]);
+        REQUIRE(frequencyText != nullptr);
+        auto* label = findDescendant<juce::Label>(*frequencyText);
+        REQUIRE(label != nullptr);
+        REQUIRE(static_cast<bool>(label->onEditorShow));
+        REQUIRE(static_cast<bool>(label->onEditorHide));
+
+        label->onEditorShow();
+        label->setText("2.50 kHz", juce::dontSendNotification);
+        label->onEditorHide();
+
+        checkThreeParameterCascade();
+        CHECK(label->getText() == "2.50 kHz");
+    }
+
+    SECTION("invalid text restores the old display without publication")
+    {
+        auto* frequencyText = findDescendant<FreqTextLabel>(*dividerGroups[0]);
+        REQUIRE(frequencyText != nullptr);
+        auto* label = findDescendant<juce::Label>(*frequencyText);
+        REQUIRE(label != nullptr);
+        REQUIRE(static_cast<bool>(label->onEditorShow));
+        REQUIRE(static_cast<bool>(label->onEditorHide));
+        const auto originalText = label->getText();
+        const std::array<float, 3> originalFrequencies {
+            processor.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(FREQ_ID, 0))->load(),
+            processor.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(FREQ_ID, 1))->load(),
+            processor.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(FREQ_ID, 2))->load()
+        };
+
+        for (const auto& invalidText : std::array<juce::String, 3> {
+                 "-100 Hz", "", "nan kHz" })
+        {
+            label->onEditorShow();
+            label->setText(invalidText, juce::dontSendNotification);
+            label->onEditorHide();
+            CHECK(label->getText() == originalText);
+        }
+
+        CHECK(tupleCapture.snapshots.empty());
+        CHECK(tupleCapture.savedStateCaptureCount == 0);
+        CHECK(firstGesture.beginCount == 0);
+        CHECK(firstGesture.endCount == 0);
+        CHECK(firstGesture.valueChangeCount == 0);
+        CHECK(secondGesture.beginCount == 0);
+        CHECK(secondGesture.endCount == 0);
+        CHECK(secondGesture.valueChangeCount == 0);
+        CHECK(thirdGesture.beginCount == 0);
+        CHECK(thirdGesture.endCount == 0);
+        CHECK(thirdGesture.valueChangeCount == 0);
+        for (int divider = 0; divider < 3; ++divider)
+            CHECK(processor.treeState.getRawParameterValue(
+                      ParameterIDAndName::getIDString(FREQ_ID, divider))->load()
+                  == Catch::Approx(originalFrequencies[static_cast<size_t>(divider)]));
+    }
+
+    CHECK(processor.getMultibandTopologyGenerationForTesting()
+          == topologyGeneration);
 }
 
 TEST_CASE("Band move/reset parameter contract covers every per-band processor parameter",

@@ -10,6 +10,50 @@
 
 #include "FreqTextLabel.h"
 #include "../../Utility/AudioHelpers.h"
+#include <cerrno>
+#include <cstdlib>
+#include <optional>
+
+namespace
+{
+std::optional<double> parseFrequencyText(juce::String text)
+{
+    text = text.trim().toLowerCase();
+    double multiplier = 1.0;
+
+    if (text.endsWithIgnoreCase("khz"))
+    {
+        multiplier = 1000.0;
+        text = text.dropLastCharacters(3).trim();
+    }
+    else if (text.endsWithChar('k'))
+    {
+        multiplier = 1000.0;
+        text = text.dropLastCharacters(1).trim();
+    }
+    else if (text.endsWithIgnoreCase("hz"))
+    {
+        text = text.dropLastCharacters(2).trim();
+    }
+
+    if (text.isEmpty())
+        return std::nullopt;
+
+    const char* parseBegin = text.toRawUTF8();
+    char* parseEnd = nullptr;
+    errno = 0;
+    const double parsedValue = std::strtod(parseBegin, &parseEnd);
+    if (parseEnd == parseBegin || *parseEnd != '\0' || errno == ERANGE
+        || ! std::isfinite(parsedValue))
+        return std::nullopt;
+
+    const double frequency = parsedValue * multiplier;
+    if (! std::isfinite(frequency))
+        return std::nullopt;
+
+    return frequency;
+}
+} // namespace
 
 //==============================================================================
 FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
@@ -57,6 +101,7 @@ FreqTextLabel::~FreqTextLabel()
     freqLabel.onTextChange = nullptr;
     freqLabel.onEditorShow = nullptr;
     freqLabel.onEditorHide = nullptr;
+    frequencyEditCallback = nullptr;
 
     // It's good practice to stop the timer in the destructor to prevent leaks
     // if the component is deleted while an animation is running.
@@ -131,20 +176,25 @@ void FreqTextLabel::setFreq(int freq)
 
 void FreqTextLabel::applyEditedText()
 {
-    auto text = freqLabel.getText().trim().toLowerCase();
-    const bool isKilohertz = text.containsChar('k');
-    text = text.retainCharacters("0123456789.-");
-    const double requestedValue = text.getDoubleValue() * (isKilohertz ? 1000.0 : 1.0);
-    const int requestedFrequency = juce::roundToInt(requestedValue);
+    const auto requestedFrequency = parseFrequencyText(freqLabel.getText());
+    if (! requestedFrequency.has_value() || ! frequencyEditCallback)
+        return;
 
-    verticalLine.setValueAsPartOfGesture(requestedFrequency,
-                                         juce::sendNotificationSync);
+    const auto range = verticalLine.getNormalisableRange();
+    if (*requestedFrequency < range.start || *requestedFrequency > range.end)
+        return;
+
+    const double constrainedFrequency = range.snapToLegalValue(*requestedFrequency);
+    if (juce::approximatelyEqual(constrainedFrequency, verticalLine.getValue()))
+        return;
+
+    frequencyEditCallback(static_cast<float>(transformToLog(*requestedFrequency)));
     mFrequency = juce::roundToInt(verticalLine.getValue());
+}
 
-    // Use the slider's clamped value. Invalid/empty text otherwise feeds zero
-    // or a negative value into the logarithmic mapping.
-    if (mFrequency > 0)
-        verticalLine.setXPercent(static_cast<float>(transformToLog(mFrequency)));
+void FreqTextLabel::setFrequencyEditCallback(FrequencyEditCallback callback)
+{
+    frequencyEditCallback = std::move(callback);
 }
 
 void FreqTextLabel::updateLabelText()

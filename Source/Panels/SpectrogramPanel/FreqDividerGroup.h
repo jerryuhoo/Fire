@@ -28,6 +28,7 @@ public:
     void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[]);
     
     void setDeleteState (bool deleteState);
+    void setFrequencyEditCallback(FreqTextLabel::FrequencyEditCallback callback);
 
     VerticalLine& getVerticalLine();
     

@@ -79,6 +79,7 @@ private:
     int focusIndex = 0;
     bool isDragging = false;
     bool isCanonicalisingLines = false;
+    bool isPublishingCrossoverCascade = false;
     int hoveredBandIndex = -1;
     FocusChangedCallback focusChangedCallback;
 

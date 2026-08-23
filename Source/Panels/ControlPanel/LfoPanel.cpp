@@ -1127,6 +1127,13 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 
     activeLfoData.curvatures.swap(newCurvatures);
 
+    // Brush replacement can add up to three points to a sparse grid cell even
+    // when the editor was already at its handle limit. Canonicalise the
+    // completed topology before it can be displayed or published so the UI
+    // and LfoManager never independently reduce different copies of it.
+    if (activeLfoData.points.size() > LfoData::maximumNumberOfPoints)
+        activeLfoData.sanitise();
+
     repaint();
 }
 

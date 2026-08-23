@@ -150,6 +150,32 @@ LfoData makeLfoData(std::initializer_list<juce::Point<float>> points)
     return data;
 }
 
+LfoData makeClusteredLfoData(size_t pointCount)
+{
+    REQUIRE(pointCount >= 2);
+
+    LfoData data;
+    data.points.clear();
+    data.points.reserve(pointCount);
+    data.points.push_back({ 0.0f, 0.15f });
+
+    const auto interiorPointCount = pointCount - 2;
+    for (size_t i = 0; i < interiorPointCount; ++i)
+    {
+        const auto t = static_cast<float>(i + 1)
+                     / static_cast<float>(interiorPointCount + 1);
+        data.points.push_back({ 0.02f + 0.18f * t,
+                                0.1f + 0.8f * static_cast<float>(i % 9) / 8.0f });
+    }
+
+    data.points.push_back({ 1.0f, 0.85f });
+    data.curvatures.resize(pointCount - 1);
+    for (size_t i = 0; i < data.curvatures.size(); ++i)
+        data.curvatures[i] = 0.25f * static_cast<float>(static_cast<int>(i % 9) - 4);
+
+    return data;
+}
+
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::Point<float> position,
                                 juce::ModifierKeys modifiers = {},
@@ -232,6 +258,55 @@ void checkSameLfoData(const LfoData& actual, const LfoData& expected)
         CHECK(juce::approximatelyEqual(actual.curvatures[i], expected.curvatures[i]));
 
     CHECK(juce::approximatelyEqual(actual.smoothness, expected.smoothness));
+}
+
+void checkBrushPointLimit(size_t initialPointCount)
+{
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.setDataToDisplay(makeClusteredLfoData(initialPointCount));
+    editor.setGridDivisions(4, 4);
+    editor.setCurrentBrush(LfoPresetShape::SineConvex);
+    editor.setEditMode(LfoEditMode::BrushPaint);
+
+    LfoData lastPublished;
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData& data)
+    {
+        lastPublished = data;
+        ++publicationCount;
+    };
+
+    const juce::Point<float> mouseDownPosition { 150.0f, 25.0f };
+    editor.mouseDown(makeMouseEvent(editor, mouseDownPosition, leftButton));
+
+    REQUIRE(LfoEditorTestAccess::pointCount(editor) <= LfoData::maximumNumberOfPoints);
+    REQUIRE(hasValidLfoTopology(LfoEditorTestAccess::data(editor)));
+
+    editor.mouseDrag(makeMouseEvent(editor,
+                                    { 250.0f, 25.0f },
+                                    leftButton,
+                                    mouseDownPosition));
+
+    REQUIRE(publicationCount == 1);
+    REQUIRE(LfoEditorTestAccess::pointCount(editor) <= LfoData::maximumNumberOfPoints);
+    REQUIRE(lastPublished.points.size() <= LfoData::maximumNumberOfPoints);
+    REQUIRE(hasValidLfoTopology(lastPublished));
+    checkSameLfoData(lastPublished, LfoEditorTestAccess::data(editor));
+
+    auto managerAcceptedData = lastPublished;
+    managerAcceptedData.sanitise();
+    checkSameLfoData(managerAcceptedData, lastPublished);
+
+    editor.mouseUp(makeMouseEvent(editor,
+                                  { 250.0f, 25.0f },
+                                  {},
+                                  mouseDownPosition));
+
+    REQUIRE(publicationCount == 2);
+    REQUIRE(LfoEditorTestAccess::pointCount(editor) <= LfoData::maximumNumberOfPoints);
+    REQUIRE(hasValidLfoTopology(lastPublished));
+    checkSameLfoData(lastPublished, LfoEditorTestAccess::data(editor));
 }
 } // namespace
 
@@ -332,6 +407,20 @@ TEST_CASE("LFO brush replacement cancels stale point selection",
     REQUIRE(publicationCount >= 2);
     CHECK(hasValidLfoTopology(lastPublished));
     CHECK(LfoEditorTestAccess::interactionStateIsValid(editor));
+}
+
+TEST_CASE("LFO brush painting never publishes more points than the DSP accepts",
+          "[lfo][editor][brush][regression]")
+{
+    SECTION("near the point limit")
+    {
+        checkBrushPointLimit(LfoData::maximumNumberOfPoints - 1);
+    }
+
+    SECTION("at the point limit")
+    {
+        checkBrushPointLimit(LfoData::maximumNumberOfPoints);
+    }
 }
 
 TEST_CASE("LFO point removal clears indices from the previous topology",

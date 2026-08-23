@@ -52,6 +52,10 @@ public:
         setColour(juce::PopupMenu::highlightedTextColourId, colours::whiteHot);
         setColour(juce::PopupMenu::headerTextColourId, colours::flame);
 
+        setColour(juce::TooltipWindow::backgroundColourId, colours::surface1);
+        setColour(juce::TooltipWindow::textColourId, colours::textPrimary);
+        setColour(juce::TooltipWindow::outlineColourId, colours::flame.withAlpha(0.62f));
+
         setColour(juce::TextEditor::backgroundColourId, colours::surface0);
         setColour(juce::TextEditor::textColourId, colours::textPrimary);
         setColour(juce::TextEditor::outlineColourId, colours::hairline);

@@ -177,6 +177,7 @@ private:
 
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
+    juce::TooltipWindow tooltipWindow { this, 550 };
 
     bool isLfoAssignMode = false;
     int lfoSourceForAssignment = 0;

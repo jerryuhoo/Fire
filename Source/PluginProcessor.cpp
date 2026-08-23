@@ -577,6 +577,232 @@ static float applyShapeControlRecipeTransition(
            + mix * (safeTarget - transition.anchorValue);
 }
 
+void DriveControlTransitionState::prepare(double sampleRate) noexcept
+{
+    const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
+                                      ? sampleRate
+                                      : 48000.0;
+    routeTransitionMix.reset(safeSampleRate, 0.01);
+    enableTransitionMix.reset(safeSampleRate, 0.05);
+    safeRecoveryMix.reset(safeSampleRate, 0.05);
+    reset();
+}
+
+void DriveControlTransitionState::reset() noexcept
+{
+    routeTransitionMix.setCurrentAndTargetValue(1.0f);
+    enableTransitionMix.setCurrentAndTargetValue(1.0f);
+    safeRecoveryMix.setCurrentAndTargetValue(1.0f);
+    lastRecipe = {};
+    routeAnchorGain = 1.0f;
+    lastAppliedRouteGain = 1.0f;
+    enableAnchorGain = 1.0f;
+    lastAppliedFinalGain = 1.0f;
+    safeRecoveryAnchorGain = 1.0f;
+    recipeInitialised = false;
+    enableInitialised = false;
+    lastDriveEnabled = true;
+}
+
+static DriveControlTransitionState::RecipeSignature makeDriveRecipe(
+    const ModulatedValueProvider& provider,
+    int sourceIndex,
+    bool isExtremeModeOn) noexcept
+{
+    DriveControlTransitionState::RecipeSignature recipe;
+    recipe.routed = provider.lfoSignal != nullptr;
+    recipe.sourceIndex = recipe.routed ? sourceIndex : -1;
+    recipe.modulationDepth = recipe.routed
+                                 && std::isfinite(provider.modulationDepth)
+                                 ? juce::jlimit(-1.0f,
+                                                1.0f,
+                                                provider.modulationDepth)
+                                 : 0.0f;
+    recipe.isBipolar = recipe.routed ? provider.isBipolar : true;
+    recipe.isExtremeModeOn = recipe.routed && isExtremeModeOn;
+    return recipe;
+}
+
+static bool sameDriveRecipe(
+    const DriveControlTransitionState::RecipeSignature& lhs,
+    const DriveControlTransitionState::RecipeSignature& rhs) noexcept
+{
+    if (lhs.routed != rhs.routed)
+        return false;
+    if (! lhs.routed)
+        return true;
+
+    return lhs.sourceIndex == rhs.sourceIndex
+           && juce::exactlyEqual(lhs.modulationDepth, rhs.modulationDepth)
+           && lhs.isBipolar == rhs.isBipolar
+           && lhs.isExtremeModeOn == rhs.isExtremeModeOn;
+}
+
+static void serviceDriveRecipeTransition(
+    DriveControlTransitionState& transition,
+    const DriveControlTransitionState::RecipeSignature& recipe,
+    float currentTargetGain) noexcept
+{
+    const float safeTargetGain = std::isfinite(currentTargetGain)
+                                     ? juce::jmax(0.0f, currentTargetGain)
+                                     : 1.0f;
+    if (! transition.recipeInitialised)
+    {
+        transition.recipeInitialised = true;
+        transition.lastRecipe = recipe;
+        transition.routeTransitionMix.setCurrentAndTargetValue(1.0f);
+        transition.routeAnchorGain = safeTargetGain;
+        transition.lastAppliedRouteGain = safeTargetGain;
+        return;
+    }
+
+    if (! sameDriveRecipe(recipe, transition.lastRecipe))
+    {
+        // Hold the gain that was actually requested on the preceding base-rate
+        // frame. Rapid recipe edits therefore retarget without an endpoint jump.
+        transition.routeAnchorGain = transition.lastAppliedRouteGain;
+        transition.routeTransitionMix.setCurrentAndTargetValue(0.0f);
+        transition.routeTransitionMix.setTargetValue(1.0f);
+        transition.lastRecipe = recipe;
+    }
+}
+
+static float applyDriveRecipeTransition(
+    const DriveControlTransitionState& transition,
+    float targetGain) noexcept
+{
+    const float safeTargetGain = std::isfinite(targetGain)
+                                     ? juce::jmax(0.0f, targetGain)
+                                     : transition.routeAnchorGain;
+    const float mix = transition.routeTransitionMix.getCurrentValue();
+    if (mix <= 0.0f)
+        return transition.routeAnchorGain;
+    if (mix >= 1.0f)
+        return safeTargetGain;
+
+    return transition.routeAnchorGain
+           + mix * (safeTargetGain - transition.routeAnchorGain);
+}
+
+static void resetSafeDriveRecovery(
+    DriveControlTransitionState& transition) noexcept
+{
+    transition.safeRecoveryMix.setCurrentAndTargetValue(1.0f);
+    transition.safeRecoveryAnchorGain = 1.0f;
+}
+
+static void serviceDriveEnableTransition(
+    DriveControlTransitionState& transition,
+    bool isDriveEnabled) noexcept
+{
+    if (! transition.enableInitialised)
+    {
+        transition.enableInitialised = true;
+        transition.lastDriveEnabled = isDriveEnabled;
+        transition.enableTransitionMix.setCurrentAndTargetValue(1.0f);
+        return;
+    }
+
+    if (transition.lastDriveEnabled != isDriveEnabled)
+    {
+        // Safe may have pulled the last audible gain below the routed request.
+        // Anchor the power transition after Safe, then clear the old recovery
+        // bridge so the two 50 ms ramps cannot multiply into a gain rebound.
+        transition.enableAnchorGain = transition.lastAppliedFinalGain;
+        transition.enableTransitionMix.setCurrentAndTargetValue(0.0f);
+        transition.enableTransitionMix.setTargetValue(1.0f);
+        resetSafeDriveRecovery(transition);
+        transition.lastDriveEnabled = isDriveEnabled;
+    }
+}
+
+static float applyDriveEnableTransition(
+    DriveControlTransitionState& transition,
+    float targetGain) noexcept
+{
+    const float safeTargetGain = std::isfinite(targetGain)
+                                     ? juce::jmax(0.0f, targetGain)
+                                     : transition.enableAnchorGain;
+    const float mix = transition.enableTransitionMix.getNextValue();
+    if (mix <= 0.0f)
+        return transition.enableAnchorGain;
+    if (mix >= 1.0f)
+        return safeTargetGain;
+
+    return transition.enableAnchorGain
+           + mix * (safeTargetGain - transition.enableAnchorGain);
+}
+
+static float applySafeDriveRecovery(
+    DriveControlTransitionState& transition,
+    float requestedGain) noexcept
+{
+    const float safeRequestedGain = std::isfinite(requestedGain)
+                                        ? juce::jmax(0.0f, requestedGain)
+                                        : transition.safeRecoveryAnchorGain;
+    const float mix = transition.safeRecoveryMix.getNextValue();
+    if (mix >= 1.0f)
+        return safeRequestedGain;
+
+    const float recoveryCap = transition.safeRecoveryAnchorGain
+                              + mix
+                                    * (safeRequestedGain
+                                       - transition.safeRecoveryAnchorGain);
+    return juce::jmin(safeRequestedGain, recoveryCap);
+}
+
+static float driveGainScale(bool isExtremeModeOn) noexcept
+{
+    const float extremeScale = isExtremeModeOn ? std::log2(10.0f) : 1.0f;
+    return extremeScale * 6.5f / 100.0f;
+}
+
+static float driveValueToExponent(float driveValue,
+                                  bool isExtremeModeOn) noexcept
+{
+    float driveForCalculation = std::isfinite(driveValue) ? driveValue : 0.0f;
+    if (isExtremeModeOn)
+        driveForCalculation = log2f(10.0f) * driveForCalculation;
+    return driveForCalculation * 6.5f / 100.0f;
+}
+
+static float driveValueToGain(float driveValue,
+                              bool isExtremeModeOn) noexcept
+{
+    return std::pow(2.0f,
+                    driveValueToExponent(driveValue, isExtremeModeOn));
+}
+
+static float driveGainToValue(float driveGain,
+                              bool isExtremeModeOn) noexcept
+{
+    const float safeDriveGain = std::isfinite(driveGain)
+                                    ? juce::jmax(1.0e-12f, driveGain)
+                                    : 1.0f;
+    return std::log2(safeDriveGain) / driveGainScale(isExtremeModeOn);
+}
+
+static float getDriveRouteTargetGain(
+    const ModulatedValueProvider& provider,
+    int sample,
+    float smoothedBaseGain,
+    bool isExtremeModeOn) noexcept
+{
+    const float safeBaseGain = std::isfinite(smoothedBaseGain)
+                                   ? juce::jmax(0.0f, smoothedBaseGain)
+                                   : 1.0f;
+
+    // Preserve the established static/no-route trajectory exactly. In
+    // particular, avoid an unnecessary log2/exp2 round trip in Golden paths.
+    if (provider.lfoSignal == nullptr)
+        return safeBaseGain;
+
+    const float smoothedBaseValue = driveGainToValue(safeBaseGain,
+                                                     isExtremeModeOn);
+    return driveValueToGain(provider.get(sample, smoothedBaseValue),
+                            isExtremeModeOn);
+}
+
 static OutputGainTransitionState::RecipeSignature makeOutputGainRecipe(
     const ModulatedValueProvider& provider,
     int sourceIndex) noexcept
@@ -809,6 +1035,7 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 
     // Reset all smoothed values with the current sample rate and a ramp time.
     driveSmoother.reset(spec.sampleRate, 0.05);
+    driveControlTransition.prepare(spec.sampleRate);
     biasSmoother.reset(spec.sampleRate, 0.05);
     recSmoother.reset(spec.sampleRate, 0.05);
     biasRecipeTransition.prepare(spec.sampleRate);
@@ -873,6 +1100,7 @@ void BandProcessor::reset()
     compressorRatioRecipeTransition.reset(1.0f);
     compressorAttackRecipeTransition.reset(10.0f);
     compressorReleaseRecipeTransition.reset(100.0f);
+    driveControlTransition.reset();
     biasRecipeTransition.reset();
     recRecipeTransition.reset();
     shapeMixSmoother.setCurrentAndTargetValue(1.0f);
@@ -1697,6 +1925,9 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
     {
         return std::isfinite(value) ? value : 0.0f;
     };
+    const float driveBaseTargetGain = driveValueToGain(
+        safeBaseValue(driveProvider.baseValue),
+        params.isExtremeModeOn);
     const float biasBaseTarget = safeBaseValue(biasProvider.baseValue);
     const float recBaseTarget = safeBaseValue(recProvider.baseValue);
 
@@ -1705,27 +1936,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
 
     if (isFirstBlock)
     {
-        // Prime the ordinary Drive dezipper from the requested first-sample
-        // gain. The causal Safe ceiling is applied below on that same sample,
-        // so startup has neither a fade from unity nor callback lookahead.
-        float initialRequestedDriveGain;
-
-        if (! params.isDriveEnabled)
-        {
-            // If bypassed at startup, initialize the smoother to a gain of 1.0.
-            initialRequestedDriveGain = 1.0f;
-        }
-        else
-        {
-            float initialDrive = driveProvider.get(0); // Get LFO-modulated value for sample 0
-            if (params.isExtremeModeOn)
-                initialDrive = log2f(10.0f) * initialDrive;
-            const float initialDriveForCalc = initialDrive * 6.5f / 100.0f;
-            initialRequestedDriveGain = std::pow(2.0f,
-                                                  initialDriveForCalc);
-        }
-
-        driveSmoother.setCurrentAndTargetValue(initialRequestedDriveGain);
+        // Drive's legacy 50 ms dezipper now owns only the ordinary base gain.
+        // Route, power and Safe transitions are independent below, so a stable
+        // LFO can retain its per-sample trajectory.
+        driveSmoother.setCurrentAndTargetValue(driveBaseTargetGain);
 
         // Static automation retains its established 50 ms dezipper, but the
         // routed LFO trajectory is applied after that base-only smoother.
@@ -1735,8 +1949,33 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         isFirstBlock = false;
     }
 
+    driveSmoother.setTargetValue(driveBaseTargetGain);
     biasSmoother.setTargetValue(biasBaseTarget);
     recSmoother.setTargetValue(recBaseTarget);
+
+    // The legacy disabled path held its only Drive smoother at unity. If the
+    // base was edited shortly before re-enabling, playback therefore began a
+    // single 50 ms unity-to-current ramp rather than cascading two ramps. Keep
+    // hidden route state warm, but snap its base to the latest target at that
+    // same enable edge so the independent power bridge retains that contract.
+    if (driveControlTransition.enableInitialised
+        && ! driveControlTransition.lastDriveEnabled
+        && params.isDriveEnabled)
+    {
+        driveSmoother.setCurrentAndTargetValue(driveBaseTargetGain);
+    }
+
+    serviceDriveRecipeTransition(
+        driveControlTransition,
+        makeDriveRecipe(driveProvider,
+                        params.driveLfoSourceIndex,
+                        params.isExtremeModeOn),
+        getDriveRouteTargetGain(driveProvider,
+                                0,
+                                driveSmoother.getCurrentValue(),
+                                params.isExtremeModeOn));
+    serviceDriveEnableTransition(driveControlTransition,
+                                 params.isDriveEnabled);
 
     serviceShapeControlRecipeTransition(
         biasRecipeTransition,
@@ -1748,6 +1987,11 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         recProvider.get(0, recSmoother.getCurrentValue()));
 
     float currentShapeMix = shapeMixSmoother.getCurrentValue();
+    float currentRouteDriveGain = driveControlTransition.lastAppliedRouteGain;
+    const float legacyDriveForCalc = driveValueToExponent(
+        safeBaseValue(driveProvider.baseValue),
+        params.isExtremeModeOn);
+    float currentDriveForCalc = legacyDriveForCalc;
     float finalReductionDriveForCalc = 0.0f;
     float finalReductionDriveGain = 1.0f;
     bool hasReductionForRange = false;
@@ -1765,33 +2009,49 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
             currentShapeMix = shapeMixSmoother.getNextValue();
         }
 
-        // 1. Get the requested Drive value for the current sample. Bias and
-        // Rectification apply their routed trajectories below after advancing
-        // only the ordinary base-value smoothers.
-        float currentDrive = driveProvider.get(sample);
-
-        // 2. Calculate the requested Drive gain. User/LFO changes retain the
-        // established 50 ms dezipper; Safe applies an independent causal
-        // ceiling after that smoother.
-        if (params.isExtremeModeOn)
-            currentDrive = log2f(10.0f) * currentDrive;
-
-        const float driveForCalc = currentDrive * 6.5f / 100.0f;
-        const float requestedDriveGain = params.isDriveEnabled
-                                             ? std::pow(2.0f, driveForCalc)
-                                             : 1.0f;
-
-        // 3. Smooth the requested controls. A Safe reduction is allowed to
-        // move down immediately, but releasing that reduction still returns
-        // through this same 50 ms Drive ramp.
-        driveSmoother.setTargetValue(requestedDriveGain);
-
         // In HQ mode the block contains 4x as many samples, while these
         // smoothers were prepared at the base sample rate. Advance them once
         // per base-rate sample so their time constants do not become 4x faster.
         if ((sample % smoothingStride) == 0)
         {
-            currentState.drive = driveSmoother.getNextValue();
+            // 1. Advance only the ordinary base gain through the established
+            // 50 ms linear-gain dezipper. Apply a stable routed LFO after it.
+            const float smoothedBaseDriveGain = driveSmoother.getNextValue();
+            const float routeTargetGain = getDriveRouteTargetGain(
+                driveProvider,
+                sample,
+                smoothedBaseDriveGain,
+                params.isExtremeModeOn);
+            currentRouteDriveGain = applyDriveRecipeTransition(
+                driveControlTransition,
+                routeTargetGain);
+            const bool useLegacyDriveForCalc =
+                ! driveControlTransition.lastRecipe.routed
+                && ! driveControlTransition.routeTransitionMix.isSmoothing();
+            currentDriveForCalc = useLegacyDriveForCalc
+                                      ? legacyDriveForCalc
+                                      : std::log2(juce::jmax(
+                                            1.0e-12f,
+                                            currentRouteDriveGain));
+
+            // 2. Power changes retain a 50 ms transition, anchored to the
+            // preceding post-Safe audible gain. Its target remains live so a
+            // hidden routed LFO is ready when Drive is enabled again.
+            const float enabledTargetGain = params.isDriveEnabled
+                                                ? currentRouteDriveGain
+                                                : 1.0f;
+            const float enabledDriveGain = applyDriveEnableTransition(
+                driveControlTransition,
+                enabledTargetGain);
+
+            // 3. Safe recovery is a held-anchor gain-domain bridge, not a
+            // multiplier. If the live request falls below its recovering cap,
+            // min() passes that request exactly instead of over-attenuating a
+            // downward LFO excursion.
+            currentState.drive = applySafeDriveRecovery(
+                driveControlTransition,
+                enabledDriveGain);
+
             const float biasBase = biasSmoother.getNextValue();
             const float recBase = recSmoother.getNextValue();
             currentState.bias = applyShapeControlRecipeTransition(
@@ -1807,19 +2067,20 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
                 if (causalPeak > 0.0001f)
                 {
                     const float safeCeiling = 2.0f / causalPeak
-                                              + 0.1f * driveForCalc;
+                                              + 0.1f * currentDriveForCalc;
                     if (std::isfinite(safeCeiling)
                         && safeCeiling < currentState.drive)
                     {
                         currentState.drive = safeCeiling;
-                        driveSmoother.setCurrentAndTargetValue(safeCeiling);
+                        driveControlTransition.safeRecoveryAnchorGain =
+                            safeCeiling;
+                        driveControlTransition.safeRecoveryMix
+                            .setCurrentAndTargetValue(0.0f);
+                        driveControlTransition.safeRecoveryMix
+                            .setTargetValue(1.0f);
                     }
                 }
             }
-        }
-        else
-        {
-            currentState.drive = driveSmoother.getCurrentValue();
         }
 
         // Publish the causal Safe result at base rate. Internal oversized
@@ -1827,7 +2088,7 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
         // absolute timeline rather than whichever callback peak arrived first.
         if ((sample % smoothingStride) == 0 && updateReductionMeter)
         {
-            finalReductionDriveForCalc = driveForCalc;
+            finalReductionDriveForCalc = currentDriveForCalc;
             finalReductionDriveGain = currentState.drive;
             hasReductionForRange = true;
         }
@@ -1887,6 +2148,10 @@ void BandProcessor::processDistortion(juce::dsp::AudioBlock<float>& blockToProce
                                         || sample + 1 == numSamples;
         if (completesBaseFrame)
         {
+            driveControlTransition.lastAppliedRouteGain =
+                currentRouteDriveGain;
+            driveControlTransition.lastAppliedFinalGain = currentState.drive;
+            driveControlTransition.routeTransitionMix.getNextValue();
             biasRecipeTransition.lastAppliedValue = currentState.bias;
             recRecipeTransition.lastAppliedValue = currentState.rec;
             biasRecipeTransition.routeTransitionMix.getNextValue();

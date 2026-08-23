@@ -164,6 +164,41 @@ struct ShapeControlRecipeTransitionState
     void reset() noexcept;
 };
 
+// Drive needs three independent transitions so a stable routed LFO is not
+// low-pass filtered by either ordinary parameter smoothing or Safe recovery.
+// All stored values are linear gains, matching the multiplier consumed by the
+// waveshaper and the domain of Drive's established 50 ms dezipper.
+struct DriveControlTransitionState
+{
+    struct RecipeSignature
+    {
+        bool routed = false;
+        int sourceIndex = -1;
+        float modulationDepth = 0.0f;
+        bool isBipolar = true;
+        bool isExtremeModeOn = false;
+    };
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        routeTransitionMix;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        enableTransitionMix;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>
+        safeRecoveryMix;
+    RecipeSignature lastRecipe;
+    float routeAnchorGain = 1.0f;
+    float lastAppliedRouteGain = 1.0f;
+    float enableAnchorGain = 1.0f;
+    float lastAppliedFinalGain = 1.0f;
+    float safeRecoveryAnchorGain = 1.0f;
+    bool recipeInitialised = false;
+    bool enableInitialised = false;
+    bool lastDriveEnabled = true;
+
+    void prepare(double sampleRate) noexcept;
+    void reset() noexcept;
+};
+
 //==============================================================================
 // A struct to encapsulate all DSP modules for a single band.
 //==============================================================================
@@ -183,6 +218,7 @@ struct BandProcessor
     ZeroLatencyModulatedDryWetMixer widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     OutputGainTransitionState outputGainTransition;
+    DriveControlTransitionState driveControlTransition;
     ShapeControlRecipeTransitionState biasRecipeTransition;
     ShapeControlRecipeTransitionState recRecipeTransition;
     CompressorRecipeTransitionState compressorThresholdRecipeTransition;

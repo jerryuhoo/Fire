@@ -154,7 +154,7 @@ struct BandProcessor
     WidthProcessor widthProcessor;
     DCFilter dcFilter;
     GainProcessor gain;
-    juce::dsp::DryWetMixer<float> dryWetMixer;
+    ZeroLatencyModulatedDryWetMixer bandMixer;
     ZeroLatencyModulatedDryWetMixer compressorMixer;
     ZeroLatencyModulatedDryWetMixer widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
@@ -163,8 +163,6 @@ struct BandProcessor
     CompressorRecipeTransitionState compressorRatioRecipeTransition;
     CompressorRecipeTransitionState compressorAttackRecipeTransition;
     CompressorRecipeTransitionState compressorReleaseRecipeTransition;
-
-    BandProcessor() : dryWetMixer(2048) {}
 
     // And its own set of smoothed parameter values.
     juce::SmoothedValue<float> driveSmoother;
@@ -191,7 +189,6 @@ struct BandProcessor
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> bandEnableMixSmoother;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> dcFilterMixSmoother;
     bool isFirstBlock = true;
-    bool dryWetMixerPrimed = false;
     bool shapeMixSmootherPrimed = false;
     bool compressorBaseSmoothersPrimed = false;
     bool bandEnableMixPrimed = false;
@@ -250,7 +247,7 @@ private:
     juce::AudioBuffer<float> upsampledLfoOutputs;
     juce::AudioBuffer<float> safePeakEnvelopeBuffer;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Thiran>
-        bandEnableDryDelay { 2048 };
+        sharedBandDryDelay { 2048 };
     float safePeakEnvelope = 0.0f;
     float safePeakReleaseCoefficient = 0.0f;
     int safePeakHoldSamples = 1;

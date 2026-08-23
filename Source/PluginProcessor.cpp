@@ -653,10 +653,10 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     outputGainTransition.prepare(spec.sampleRate);
     juce::dsp::ProcessSpec mixerSpec = spec;
     mixerSpec.maximumBlockSize = spec.maximumBlockSize * 4 + 64;
-    dryWetMixer.prepare(mixerSpec);
+    bandMixer.prepare(mixerSpec);
     compressorMixer.prepare(mixerSpec);
     widthMixer.prepare(mixerSpec);
-    bandEnableDryDelay.prepare(spec);
+    sharedBandDryDelay.prepare(spec);
 
     // The DC filter needs its coefficients to be calculated.
     dcFilter.prepare(spec);
@@ -713,13 +713,10 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     waveshaperModeMixSmoother.reset(spec.sampleRate, 0.01);
     waveshaperModeMixSmoother.setCurrentAndTargetValue(0.0f);
 
-    // prepare() may be called again on an existing processor.  JUCE's mixer
-    // prepare resets its FIFO and delay line, but preserves the previously
-    // requested wet proportion.  Force every first post-prepare callback to
-    // snap its mixer to the newly supplied parameters instead of ramping from
-    // stale state left by the previous playback configuration.
+    // prepare() may be called again on an existing processor. Force the first
+    // post-prepare callback to snap each primed control to the newly supplied
+    // parameters instead of ramping from the previous playback configuration.
     isFirstBlock = true;
-    dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -735,7 +732,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
 void BandProcessor::reset()
 {
     isFirstBlock = true;
-    dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
     waveshaperModeMixPrimed = false;
@@ -745,10 +741,10 @@ void BandProcessor::reset()
     widthProcessor.reset();
     gain.reset();
     outputGainTransition.reset();
-    dryWetMixer.reset();
+    bandMixer.reset();
     compressorMixer.reset();
     widthMixer.reset();
-    bandEnableDryDelay.reset();
+    sharedBandDryDelay.reset();
     dcFilter.reset();
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
     dcFilterMixSmoother.setCurrentAndTargetValue(0.0f);
@@ -990,26 +986,15 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
     bindCompressorProvider(paramsForProcessing.compMixValProvider,
                            params.compMixLfoSourceIndex);
 
-    dryWetMixer.setWetLatency(useHQ ? oversampling->getLatencyInSamples() : 0.0f);
-    const bool hasSampleAccurateBandMix = paramsForProcessing.mixValProvider.lfoSignal
-                                          != nullptr;
-    const float initialBandMix = hasSampleAccurateBandMix
-                                     ? paramsForProcessing.mixValProvider.get(0)
-                                     : params.mixVal;
-    dryWetMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f, initialBandMix));
-    if (! dryWetMixerPrimed)
-        dryWetMixer.reset();
-    dryWetMixerPrimed = true;
-    dryWetMixer.pushDrySamples(juce::dsp::AudioBlock<float>(dryBuffer));
-
     // Band Enable bypasses the complete processed band, including the user's
-    // own Band Mix. Keep an independent raw path aligned to the oversampled
-    // wet path so the outer enable crossfade never changes latency or phase.
-    bandEnableDryDelay.setDelay(useHQ ? oversampling->getLatencyInSamples()
+    // own Band Mix. Align the shared dry path to the oversampled wet path once
+    // so both coefficient stages retain the established Thiran phase response.
+    sharedBandDryDelay.setDelay(useHQ ? oversampling->getLatencyInSamples()
                                       : 0.0f);
     auto bandEnableDryBlock = juce::dsp::AudioBlock<float>(dryBuffer);
-    bandEnableDryDelay.process(
+    sharedBandDryDelay.process(
         juce::dsp::ProcessContextReplacing<float>(bandEnableDryBlock));
+    bandMixer.pushDrySamples(bandEnableDryBlock);
 
     // 2. Core Distortion Processing
     if (useHQ)
@@ -1421,22 +1406,15 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
               outputGainTransition,
               params.outputLfoSourceIndex);
 
-    // 5. Final Dry/Wet Mix. Always run the mixer so its dry delay remains
-    // primed and HQ mix=0 stays aligned with wet/other-band paths.
-    if (! hasSampleAccurateBandMix)
-    {
-        dryWetMixer.mixWetSamples(block);
-    }
-    else
-    {
-        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-        {
-            dryWetMixer.setWetMixProportion(juce::jlimit(
-                0.0f, 1.0f, paramsForProcessing.mixValProvider.get(sample)));
-            dryWetMixer.mixWetSamples(
-                block.getSubBlock(static_cast<size_t>(sample), 1));
-        }
-    }
+    // 5. Final Dry/Wet Mix. The dry samples supplied above already contain
+    // JUCE's original HQ Thiran latency compensation. Keep the coefficient
+    // stage zero-latency so stable routed modulation follows every LFO sample;
+    // scalar automation still uses the legacy 50 ms ramp.
+    bandMixer.mixWetSamples(block,
+                            paramsForProcessing.mixValProvider,
+                            params.mixVal,
+                            params.mixLfoSourceIndex,
+                            true);
 
     processBandEnable(buffer, params.isBandEnabled);
 }

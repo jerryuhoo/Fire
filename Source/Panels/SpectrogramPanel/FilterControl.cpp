@@ -9,6 +9,7 @@
 
 #include "FilterControl.h"
 #include "../../GUI/InterfaceDefines.h"
+#include <algorithm>
 
 namespace
 {
@@ -86,7 +87,13 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
                 const auto newValue = juce::jlimit(0.0f, 1.0f,
                                                    parameter->getValue() + delta * 0.5f);
                 if (! juce::approximatelyEqual(newValue, parameter->getValue()))
+                {
+                    parameter->beginChangeGesture();
+                    const juce::ScopeGuard finishGesture {
+                        [parameter] { parameter->endChangeGesture(); }
+                    };
                     parameter->setValueNotifyingHost(newValue);
+                }
             }
         };
     };
@@ -103,6 +110,7 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
 
 FilterControl::~FilterControl()
 {
+    finishDragParameterGestures();
     processor.removeChangeListener(this);
 
     for (auto* parameter : observedParameters)
@@ -293,6 +301,7 @@ void FilterControl::visibilityChanged()
     }
     else
     {
+        finishDragParameterGestures();
         dragTooltipVisible = false;
     }
 }
@@ -327,8 +336,7 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
                          .toNearestInt());
 
     if (auto* selection = processor.treeState.getParameter(selectionParameter))
-        if (! juce::approximatelyEqual(selection->getValue(), 1.0f))
-            selection->setValueNotifyingHost(1.0f);
+        setDragParameterValue(*selection, 1.0f);
 
     dragFrequency = juce::mapToLog10(static_cast<double>(point.x) / getWidth(),
                                      minimumDisplayFrequency,
@@ -344,8 +352,7 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
         if (auto* parameter = processor.treeState.getParameter(parameterID))
         {
             const auto normalisedValue = parameter->convertTo0to1(static_cast<float>(plainValue));
-            if (! juce::approximatelyEqual(parameter->getValue(), normalisedValue))
-                parameter->setValueNotifyingHost(normalisedValue);
+            setDragParameterValue(*parameter, normalisedValue);
         }
     };
 
@@ -357,8 +364,43 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
     repaint();
 }
 
+void FilterControl::setDragParameterValue(juce::RangedAudioParameter& parameter,
+                                          float normalisedValue)
+{
+    normalisedValue = juce::jlimit(0.0f, 1.0f, normalisedValue);
+    if (juce::approximatelyEqual(parameter.getValue(), normalisedValue))
+        return;
+
+    const auto activeEnd = activeDragParameters.begin() + numActiveDragParameters;
+    if (std::find(activeDragParameters.begin(), activeEnd, &parameter) == activeEnd)
+    {
+        if (numActiveDragParameters >= static_cast<int>(activeDragParameters.size()))
+        {
+            jassertfalse;
+            return;
+        }
+
+        activeDragParameters[static_cast<size_t>(numActiveDragParameters++)] = &parameter;
+        parameter.beginChangeGesture();
+    }
+
+    parameter.setValueNotifyingHost(normalisedValue);
+}
+
+void FilterControl::finishDragParameterGestures() noexcept
+{
+    for (int index = 0; index < numActiveDragParameters; ++index)
+        if (auto* parameter = activeDragParameters[static_cast<size_t>(index)])
+            parameter->endChangeGesture();
+
+    activeDragParameters.fill(nullptr);
+    numActiveDragParameters = 0;
+}
+
 void FilterControl::finishFilterDrag()
 {
+    finishDragParameterGestures();
+
     if (! dragTooltipVisible)
         return;
 

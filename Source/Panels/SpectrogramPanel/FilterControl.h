@@ -14,8 +14,12 @@
 #include "../../GUI/FireTheme.h"
 #include "../../Utility/Parameters.h"
 #include "DraggableButton.h"
+#include <array>
 
 class GlobalPanel;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct FilterControlTestAccess;
+#endif
 //==============================================================================
 /*
  */
@@ -36,6 +40,10 @@ public:
     void visibilityChanged() override;
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct FilterControlTestAccess;
+#endif
+
     FireAudioProcessor& processor;
     juce::Path responseCurve;
     juce::Path responseFillCurve;
@@ -59,6 +67,9 @@ private:
                           const juce::String& selectionParameter,
                           const juce::String& frequencyParameter,
                           const juce::String& gainParameter);
+    void setDragParameterValue(juce::RangedAudioParameter& parameter,
+                               float normalisedValue);
+    void finishDragParameterGestures() noexcept;
     void finishFilterDrag();
     void updateDraggableButtonStates();
     int getCurvePointCount() const;
@@ -74,6 +85,8 @@ private:
     double dragFrequency = 0.0;
     double dragGain = 0.0;
     juce::Point<int> dragTooltipAnchor;
+    std::array<juce::RangedAudioParameter*, 3> activeDragParameters {};
+    int numActiveDragParameters = 0;
 
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 

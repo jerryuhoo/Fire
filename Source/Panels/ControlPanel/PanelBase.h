@@ -28,7 +28,7 @@ public:
 protected: // Use protected so derived classes can access these members
     // Make constructor protected so only derived classes can call it.
     explicit PanelBase(FireAudioProcessor& p);
-    ~PanelBase() override = default;
+    ~PanelBase() override;
 
     // This helper function, promoted from BandPanel, will be shared by all panels.
     void createAndConfigureSlider(const juce::String& paramName,

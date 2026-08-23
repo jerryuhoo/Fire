@@ -447,6 +447,15 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
+    // End SliderAttachment gestures before the panels (and their attachment
+    // maps) begin member teardown. This also removes any hover/value popup
+    // state owned by a slider that never received mouseUp from the host.
+    for (auto* slider : allModulatableSliders)
+        if (slider != nullptr)
+            slider->dismissTransientInteraction();
+    hideValuePopup();
+    valueEntryPopup.dismissSession();
+
     stopTimer();
     cancelPendingUpdate();
     updateCheckThread.stop();
@@ -599,6 +608,10 @@ void FireAudioProcessorEditor::visibilityChanged()
 
     if (! isShowing())
     {
+        for (auto* slider : allModulatableSliders)
+            if (slider != nullptr)
+                slider->dismissTransientInteraction();
+        hideValuePopup();
         hqButton.dismissPointerGesture();
         windowLeftButton.dismissPointerGesture();
         windowRightButton.dismissPointerGesture();
@@ -835,6 +848,10 @@ void FireAudioProcessorEditor::timerCallback()
     // when the peer becomes visible again.
     if (! isShowing())
     {
+        for (auto* slider : allModulatableSliders)
+            if (slider != nullptr)
+                slider->dismissTransientInteraction();
+        hideValuePopup();
         valueEntryPopup.dismissSession();
         multiband.dismissTransientUi();
         return;
@@ -950,6 +967,25 @@ void FireAudioProcessorEditor::updateMainPanelVisibility()
 void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animateSelection)
 {
     targetWorkspace = juce::jlimit(0, 2, targetWorkspace);
+
+    const bool willHideBandPanel = targetWorkspace != 0 && bandPanel.isVisible();
+    const bool willHideGlobalPanel = targetWorkspace != 2 && globalPanel.isVisible();
+    if (willHideBandPanel || willHideGlobalPanel)
+    {
+        if (willHideBandPanel)
+            for (auto* slider : bandPanel.getModulatableSliders())
+                if (slider != nullptr)
+                    slider->dismissTransientInteraction();
+
+        if (willHideGlobalPanel)
+            for (auto* slider : globalPanel.getModulatableSliders())
+                if (slider != nullptr)
+                    slider->dismissTransientInteraction();
+
+        hideValuePopup();
+        valueEntryPopup.dismissSession();
+    }
+
     activeWorkspace = targetWorkspace;
     if (animateSelection && isShowing() && ! navigationArea.isEmpty())
         workspaceSelection.setTarget(static_cast<float>(activeWorkspace));
@@ -1008,6 +1044,12 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
 
         if (isNowZoomed)
         {
+            for (auto* slider : allModulatableSliders)
+                if (slider != nullptr)
+                    slider->dismissTransientInteraction();
+            hideValuePopup();
+            valueEntryPopup.dismissSession();
+
             // When entering zoom, hide all main panels.
             bandPanel.setVisible(false);
             globalPanel.setVisible(false);

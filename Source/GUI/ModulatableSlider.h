@@ -12,8 +12,10 @@
 
 #include "InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <optional>
 
 struct ModulatableSliderTestAccess;
+struct ModulatableSliderInteractionTestAccess;
 
 //==============================================================================
 /**
@@ -33,6 +35,7 @@ public:
     };
 
     ModulatableSlider();
+    ~ModulatableSlider() override;
 
     // void paint(juce::Graphics& g) override;
     bool hitTest(int x, int y) override;
@@ -52,8 +55,10 @@ public:
     bool isMouseOverMainSlider() const;
     bool hasActiveInteraction() const noexcept
     {
-        return isDraggingMainSlider || isModHandleMouseDown;
+        return activePointerGesture == PointerGesture::mainSlider
+            || activePointerGesture == PointerGesture::modulationHandle;
     }
+    void dismissTransientInteraction();
     bool advanceAnimation(float deltaSeconds) noexcept;
     float getHoverAnimation() const noexcept { return hoverAnimation; }
     float getPressAnimation() const noexcept { return pressAnimation; }
@@ -108,21 +113,64 @@ public:
     // Override component methods for layout and mouse events.
     void resized() override;
     void timerCallback() override;
+    void visibilityChanged() override;
+    void enablementChanged() override;
 
 private:
     friend struct ModulatableSliderTestAccess;
+    friend struct ModulatableSliderInteractionTestAccess;
 
-    std::function<void(int)> createModulationMenuResultHandler();
-    std::function<void(int)> createLfoAssignmentMenuResultHandler();
+    enum class PointerGesture
+    {
+        none,
+        rejected,
+        popupMenu,
+        assignment,
+        mainSlider,
+        modulationHandle
+    };
+
+    enum class PopupMenuTarget
+    {
+        none,
+        mainSlider,
+        modulationHandle
+    };
+
+    std::function<void(int)> createModulationMenuResultHandler(
+        juce::String targetParameterIDAtOpen = {});
+    std::function<void(int)> createLfoAssignmentMenuResultHandler(
+        juce::String targetParameterIDAtOpen = {});
     void executeModulationMenuCommand(ModulationMenuCommand command,
                                       const juce::String& targetParameterID);
 
     float getUiScale() const noexcept;
     juce::Rectangle<float> getRotarySliderBounds() const;
     juce::Rectangle<int> getHeaderBounds() const;
+    bool isCompletePrimaryDown(const juce::MouseEvent& event) const noexcept;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    bool shouldSuppressAssignmentDoubleClick(
+        const juce::MouseEvent& event) const noexcept;
+    void clearAssignmentDoubleClickSuppression() noexcept;
+    bool finishActivePointerGesture(const juce::MouseEvent& releaseEvent);
+    void beginPointerGesture(PointerGesture gesture,
+                             const juce::MouseEvent& event);
+    void resetTransientPresentation();
 
     juce::Label label;
     bool isDraggingMainSlider;
+    PointerGesture activePointerGesture = PointerGesture::none;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+    std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
+    PopupMenuTarget popupMenuTarget = PopupMenuTarget::none;
+    juce::String popupTargetParameterID;
+    bool suppressAssignmentDoubleClick = false;
+    juce::MouseInputSource::InputSourceType assignmentSourceType =
+        juce::MouseInputSource::mouse;
+    int assignmentSourceIndex = -1;
+    juce::int64 assignmentDoubleClickDeadlineMs = 0;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;
 

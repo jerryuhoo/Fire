@@ -33,6 +33,14 @@ ModulatableSlider::ModulatableSlider()
     setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
 }
 
+ModulatableSlider::~ModulatableSlider()
+{
+    // SliderParameterAttachment does not close an outstanding host gesture in
+    // its destructor. Finish our accepted pointer gesture while Slider's
+    // implementation and all listeners are still alive.
+    dismissTransientInteraction();
+}
+
 bool ModulatableSlider::hitTest(int x, int y)
 {
     const auto point = juce::Point<float>(static_cast<float>(x), static_cast<float>(y));
@@ -127,33 +135,37 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
 // New/updated mouse handlers
 void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
 {
-    bool isOverHandleNow = isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat());
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+    juce::Slider::mouseMove(event);
+    if (! safeThis)
+        return;
+
+    const bool isOverHandleNow = isModulated
+        && getModulationHandleBounds().contains(event.getPosition().toFloat());
 
     if (isOverHandleNow != isModHandleMouseOver)
     {
         isModHandleMouseOver = isOverHandleNow;
-        if (isModHandleMouseOver)
-        {
-            if (onHoverStart)
-                onHoverStart(this);
-        }
-        else
-        {
-            if (onHoverEnd)
-                onHoverEnd(this);
-        }
         repaint();
-    }
 
-    // We still call the base class for its own internal state management
-    juce::Slider::mouseMove(event);
+        auto callback = isModHandleMouseOver ? onHoverStart : onHoverEnd;
+        if (callback)
+            callback(this);
+    }
 }
 
 void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
 {
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
     stopTimer();
     juce::Slider::mouseEnter(event);
+    if (! safeThis)
+        return;
+
     mouseMove(event);
+    if (! safeThis)
+        return;
+
     label.setVisible(false);
     const auto uiScale = getUiScale();
     setTextBoxStyle(juce::Slider::TextBoxAbove, false,
@@ -163,29 +175,57 @@ void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
 {
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
     juce::Slider::mouseExit(event);
+    if (! safeThis)
+        return;
+
+    const bool endedHandleHover = isModHandleMouseOver;
     if (isModHandleMouseOver)
     {
         isModHandleMouseOver = false;
-        if (onHoverEnd)
-            onHoverEnd(this);
         repaint();
     }
 
     startTimer(100);
+
+    if (endedHandleHover)
+    {
+        auto callback = onHoverEnd;
+        if (callback)
+            callback(this);
+    }
 }
 
 void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
 {
+    // Slider's base implementation rejects double-clicks after a component is
+    // disabled. Preserve that guarantee for the custom modulation-handle path
+    // too: a mouseUp callback may disable the control before JUCE dispatches
+    // the trailing mouseDoubleClick event.
+    if (! isEnabled())
+        return;
+
+    if (shouldSuppressAssignmentDoubleClick(event))
+    {
+        clearAssignmentDoubleClickSuppression();
+        return;
+    }
+
+    if (! isCompletePrimaryDown(event)
+        || (activePointerGesture != PointerGesture::none
+            && (! isPointerSource(event)
+                || (activePointerGesture != PointerGesture::mainSlider
+                    && activePointerGesture != PointerGesture::modulationHandle))))
+        return;
+
     // Check if the double-click is on the modulation handle
     if (isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
     {
-        if (onModulationReset)
-        {
-            onModulationReset();
-        }
-
         repaint();
+        auto callback = onModulationReset;
+        if (callback)
+            callback();
     }
     else
     {
@@ -196,26 +236,85 @@ void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
 
 void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 {
-    if (onClickInAssignMode && event.mods.isLeftButtonDown()
-        && ! event.mods.isPopupMenu())
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+
+    if (activePointerGesture != PointerGesture::none)
+    {
+        // A second input source cannot steal a gesture. A fresh down from the
+        // owning source is a reliable lifecycle boundary when a host omitted
+        // the previous mouseUp.
+        if (! isPointerSource(event))
+            return;
+
+        if (activePointerGesture == PointerGesture::assignment
+            && event.getNumberOfClicks() > 1)
+        {
+            // The first click may synchronously clear assign mode. Keep the
+            // remainder of that physical double-click owned by the assignment
+            // sequence so its second down cannot start a parameter drag.
+            lastAcceptedPointerEvent.emplace(event);
+            return;
+        }
+
+        finishActivePointerGesture(event);
+        if (! safeThis)
+            return;
+    }
+
+    if (suppressAssignmentDoubleClick)
+    {
+        const bool suppressThisDown = shouldSuppressAssignmentDoubleClick(event);
+        if (suppressThisDown)
+        {
+            // JUCE delivers the second mouseUp before mouseDoubleClick. Keep
+            // this suppression alive while the rejected down/up pair closes,
+            // then let mouseDoubleClick consume it.
+            beginPointerGesture(PointerGesture::rejected, event);
+            return;
+        }
+
+        clearAssignmentDoubleClickSuppression();
+    }
+
+    if (! isEnabled())
+        return;
+
+    if (! isCompletePrimaryDown(event))
+    {
+        const bool isStandalonePopupDown = event.mods.isPopupMenu()
+                                           && ! event.mods.isMiddleButtonDown()
+                                           && ! (event.mods.isLeftButtonDown()
+                                                 && event.mods.isRightButtonDown());
+        beginPointerGesture(isStandalonePopupDown ? PointerGesture::popupMenu
+                                                  : PointerGesture::rejected,
+                            event);
+        if (isStandalonePopupDown)
+        {
+            popupMenuTarget = isModulated
+                                      && getModulationHandleBounds().contains(
+                                          event.getPosition().toFloat())
+                                  ? PopupMenuTarget::modulationHandle
+                                  : PopupMenuTarget::mainSlider;
+            popupTargetParameterID = parameterID;
+        }
+        return;
+    }
+
+    if (onClickInAssignMode)
     {
         // Assigning a target exits assign mode, which clears the callback on
         // every slider (including this one).  Keep the callable alive until
         // it returns instead of destroying the std::function target while it
         // is still executing.
+        beginPointerGesture(PointerGesture::assignment, event);
         auto assignCallback = onClickInAssignMode;
-        assignCallback(parameterID);
+        const auto targetParameterID = parameterID;
+        assignCallback(targetParameterID);
         return;
     }
 
     const bool isOnModulationHandle = isModulated
         && getModulationHandleBounds().contains(event.getPosition().toFloat());
-
-    // On macOS a Ctrl-left-click is a popup-menu click. Handle it before the
-    // polarity shortcut or Slider's drag state so it behaves like a physical
-    // right click on every platform.
-    if (event.mods.isPopupMenu())
-        return;
 
     // Test the actual mouse-down position rather than relying on the last
     // mouseMove event. A fast click can otherwise start a main-slider drag
@@ -224,47 +323,54 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     {
         if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
-            if (onBipolarModeToggled)
-                onBipolarModeToggled(parameterID);
+            auto callback = onBipolarModeToggled;
+            const auto targetParameterID = parameterID;
+            if (callback)
+                callback(targetParameterID);
 
             return;
         }
 
-        if (event.mods.isLeftButtonDown())
-        {
-            isModHandleMouseDown = true;
-            initialLfoAmount = lfoAmount;
+        beginPointerGesture(PointerGesture::modulationHandle, event);
+        initialLfoAmount = lfoAmount;
+        repaint();
 
-            if (onModDragStart)
-                onModDragStart(this);
-
-            repaint();
-        }
+        auto callback = onModDragStart;
+        if (callback)
+            callback(this);
 
         return;
     }
 
-    if (! event.mods.isLeftButtonDown())
+    beginPointerGesture(PointerGesture::mainSlider, event);
+    juce::Slider::mouseDown(event);
+    if (! safeThis)
         return;
 
-    isDraggingMainSlider = true;
-
-    if (onMainDragStart)
-        onMainDragStart(this);
-
-    juce::Slider::mouseDown(event);
+    auto callback = onMainDragStart;
+    if (callback)
+        callback(this);
 }
 
 void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
 {
-    // CRITICAL: Only forward the drag event to the base class if our flag is set
-    if (isDraggingMainSlider)
+    if (! hasActiveInteraction() || ! isPointerSource(event))
+        return;
+
+    lastAcceptedPointerEvent.emplace(event);
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+
+    if (activePointerGesture == PointerGesture::mainSlider)
     {
-        if (onMainDragMove)
-            onMainDragMove(this);
         juce::Slider::mouseDrag(event);
+        if (! safeThis)
+            return;
+
+        auto callback = onMainDragMove;
+        if (callback)
+            callback(this);
     }
-    else if (isModHandleMouseDown)
+    else if (activePointerGesture == PointerGesture::modulationHandle)
     {
         auto diff = event.getPosition() - event.getMouseDownPosition();
 
@@ -273,29 +379,56 @@ void ModulatableSlider::mouseDrag(const juce::MouseEvent& event)
 
         // Allow amount to be from -1.0 to 1.0
         lfoAmount = juce::jlimit(-1.0, 1.0, newAmount);
+        repaint();
 
         // If the callback is set, call it to notify the processor
-        if (onModAmountChanged)
+        auto amountChangedCallback = onModAmountChanged;
+        if (amountChangedCallback)
         {
-            onModAmountChanged(lfoAmount);
+            amountChangedCallback(lfoAmount);
+            if (! safeThis)
+                return;
         }
 
-        if (onModDragMove)
-            onModDragMove(this);
-
-        // This will update the UI
-        repaint();
+        auto dragCallback = onModDragMove;
+        if (dragCallback)
+            dragCallback(this);
     }
 }
 
 void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 {
-    if (event.mods.isPopupMenu())
+    if (activePointerGesture != PointerGesture::none)
     {
-        const bool isOnModulationHandle = isModulated
-            && getModulationHandleBounds().contains(event.getPosition().toFloat());
+        // Once a primary gesture has been accepted, only its source can close
+        // it. Modifier flags on the release are intentionally ignored: macOS
+        // can report a popup modifier if Control is pressed before mouseUp.
+        if (! isPointerSource(event))
+            return;
+
+        const auto completedGesture = activePointerGesture;
+        const auto completedPopupTarget = popupMenuTarget;
+        const auto completedPopupParameterID = popupTargetParameterID;
+        const auto completedSourceType = pointerSourceType;
+        const auto completedSourceIndex = pointerSourceIndex;
+        if (! finishActivePointerGesture(event))
+            return;
+
+        if (completedGesture == PointerGesture::assignment)
+        {
+            suppressAssignmentDoubleClick = true;
+            assignmentSourceType = completedSourceType;
+            assignmentSourceIndex = completedSourceIndex;
+            assignmentDoubleClickDeadlineMs = event.eventTime.toMilliseconds()
+                                              + juce::MouseEvent::getDoubleClickTimeout();
+            return;
+        }
+
+        if (completedGesture != PointerGesture::popupMenu)
+            return;
+
         juce::PopupMenu menu;
-        if (isOnModulationHandle)
+        if (completedPopupTarget == PopupMenuTarget::modulationHandle)
         {
             menu.addItem(1, "Set Value");
             menu.addItem(2, "Clear LFO");
@@ -309,9 +442,11 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 
             menu.showMenuAsync(fire::ui::prepareContextMenu(
                                    menu, *this, event.getScreenPosition()),
-                               createModulationMenuResultHandler());
+                               createModulationMenuResultHandler(
+                                   completedPopupParameterID));
         }
-        else if (parameterID.isNotEmpty())
+        else if (completedPopupTarget == PopupMenuTarget::mainSlider
+                 && completedPopupParameterID.isNotEmpty())
         {
             menu.addSectionHeader("Assign modulation");
             for (int lfoIndex = 0; lfoIndex < 4; ++lfoIndex)
@@ -322,66 +457,211 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 
             menu.showMenuAsync(fire::ui::prepareContextMenu(
                                    menu, *this, event.getScreenPosition()),
-                               createLfoAssignmentMenuResultHandler());
+                               createLfoAssignmentMenuResultHandler(
+                                   completedPopupParameterID));
         }
 
         return;
     }
-
-    bool interactionEnded = false;
-    if (isDraggingMainSlider)
-    {
-        // Pair the base-class mouseUp only with a mouseDown that was actually
-        // forwarded to it. Handle clicks never enter Slider's drag state.
-        juce::Slider::mouseUp(event);
-
-        if (onMainDragEnd)
-            onMainDragEnd(this);
-        isDraggingMainSlider = false;
-        interactionEnded = true;
-        repaint();
-    }
-
-    if (isModHandleMouseDown)
-    {
-        if (onModDragEnd)
-            onModDragEnd(this);
-
-        isModHandleMouseDown = false;
-        interactionEnded = true;
-        repaint();
-    }
-
-    if (interactionEnded && onInteractionEnded)
-        onInteractionEnded();
 }
 
-std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler()
+bool ModulatableSlider::isCompletePrimaryDown(
+    const juce::MouseEvent& event) const noexcept
 {
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown()
+        && ! event.mods.isPopupMenu();
+}
+
+bool ModulatableSlider::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+bool ModulatableSlider::shouldSuppressAssignmentDoubleClick(
+    const juce::MouseEvent& event) const noexcept
+{
+    return suppressAssignmentDoubleClick
+        && event.getNumberOfClicks() > 1
+        && event.source.getType() == assignmentSourceType
+        && event.source.getIndex() == assignmentSourceIndex
+        && event.eventTime.toMilliseconds() <= assignmentDoubleClickDeadlineMs;
+}
+
+void ModulatableSlider::clearAssignmentDoubleClickSuppression() noexcept
+{
+    suppressAssignmentDoubleClick = false;
+    assignmentSourceIndex = -1;
+    assignmentDoubleClickDeadlineMs = 0;
+}
+
+void ModulatableSlider::beginPointerGesture(
+    PointerGesture gesture,
+    const juce::MouseEvent& event)
+{
+    activePointerGesture = gesture;
+    isDraggingMainSlider = gesture == PointerGesture::mainSlider;
+    isModHandleMouseDown = gesture == PointerGesture::modulationHandle;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+    lastAcceptedPointerEvent.emplace(event);
+}
+
+bool ModulatableSlider::finishActivePointerGesture(
+    const juce::MouseEvent& releaseEvent)
+{
+    const auto completedGesture = activePointerGesture;
+    if (completedGesture == PointerGesture::none)
+        return true;
+
+    // Reset ownership before invoking JUCE or user callbacks. Any re-entrant
+    // cleanup is therefore idempotent and cannot emit a second drag end.
+    activePointerGesture = PointerGesture::none;
+    isDraggingMainSlider = false;
+    isModHandleMouseDown = false;
+    pointerSourceIndex = -1;
+    lastAcceptedPointerEvent.reset();
+    popupMenuTarget = PopupMenuTarget::none;
+    popupTargetParameterID.clear();
+    repaint();
+
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+    if (completedGesture == PointerGesture::mainSlider)
+    {
+        // This must precede onMainDragEnd: SliderAttachment closes the host
+        // beginGesture from mouseDown in Slider::mouseUp.
+        juce::Slider::mouseUp(releaseEvent);
+        if (! safeThis)
+            return false;
+
+        auto callback = onMainDragEnd;
+        if (callback)
+        {
+            callback(this);
+            if (! safeThis)
+                return false;
+        }
+    }
+    else if (completedGesture == PointerGesture::modulationHandle)
+    {
+        auto callback = onModDragEnd;
+        if (callback)
+        {
+            callback(this);
+            if (! safeThis)
+                return false;
+        }
+    }
+
+    if (completedGesture == PointerGesture::mainSlider
+        || completedGesture == PointerGesture::modulationHandle)
+    {
+        auto interactionCallback = onInteractionEnded;
+        if (interactionCallback)
+        {
+            interactionCallback();
+            if (! safeThis)
+                return false;
+        }
+    }
+
+    return true;
+}
+
+void ModulatableSlider::resetTransientPresentation()
+{
+    const bool timerWasRunning = isTimerRunning();
+    const bool presentationChanged = timerWasRunning
+                                     || isModHandleMouseOver
+                                     || hoverAnimation != 0.0f
+                                     || pressAnimation != 0.0f
+                                     || ! label.isVisible()
+                                     || getTextBoxPosition() != juce::Slider::NoTextBox;
+    if (timerWasRunning)
+        stopTimer();
+    isModHandleMouseOver = false;
+    hoverAnimation = 0.0f;
+    pressAnimation = 0.0f;
+    if (! label.isVisible())
+        label.setVisible(true);
+    if (getTextBoxPosition() != juce::Slider::NoTextBox)
+    {
+        hideTextBox(true);
+        setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    }
+    if (presentationChanged)
+        repaint();
+}
+
+void ModulatableSlider::dismissTransientInteraction()
+{
+    const bool shouldNotifyHoverEnd = isModHandleMouseOver;
+    std::optional<juce::MouseEvent> releaseEvent;
+    if (lastAcceptedPointerEvent.has_value())
+        releaseEvent.emplace(*lastAcceptedPointerEvent);
+
+    resetTransientPresentation();
+    clearAssignmentDoubleClickSuppression();
+
+    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+    if (activePointerGesture != PointerGesture::none)
+    {
+        // Every accepted gesture stores its most recent event. Keeping a copy
+        // here lets finishActivePointerGesture clear its state before calling
+        // the base Slider::mouseUp.
+        jassert(releaseEvent.has_value());
+        if (releaseEvent.has_value())
+            finishActivePointerGesture(*releaseEvent);
+
+        if (! safeThis)
+            return;
+    }
+
+    if (shouldNotifyHoverEnd)
+    {
+        auto callback = onHoverEnd;
+        if (callback)
+            callback(this);
+    }
+}
+
+std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler(
+    juce::String targetParameterIDAtOpen)
+{
+    if (targetParameterIDAtOpen.isEmpty())
+        targetParameterIDAtOpen = parameterID;
+
     return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
-            targetParameterIDAtOpen = parameterID](int result)
+            frozenTargetParameterID = std::move(targetParameterIDAtOpen)](int result)
     {
         if (! safeThis || result <= 0)
             return;
 
         safeThis->executeModulationMenuCommand(
             static_cast<ModulationMenuCommand>(result),
-            targetParameterIDAtOpen);
+            frozenTargetParameterID);
     };
 }
 
-std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler()
+std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler(
+    juce::String targetParameterIDAtOpen)
 {
+    if (targetParameterIDAtOpen.isEmpty())
+        targetParameterIDAtOpen = parameterID;
+
     return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
-            targetParameterIDAtOpen = parameterID](int result)
+            frozenTargetParameterID = std::move(targetParameterIDAtOpen)](int result)
     {
         if (! safeThis || ! juce::isPositiveAndBelow(result - 1, 4)
-            || targetParameterIDAtOpen.isEmpty())
+            || frozenTargetParameterID.isEmpty())
             return;
 
         auto callback = safeThis->onLfoAssignmentRequested;
         if (callback)
-            callback(result - 1, targetParameterIDAtOpen);
+            callback(result - 1, frozenTargetParameterID);
     };
 }
 
@@ -395,25 +675,40 @@ void ModulatableSlider::executeModulationMenuCommand(
     switch (command)
     {
         case ModulationMenuCommand::setValue:
-            if (onSetValueRequested)
-                onSetValueRequested(this, targetParameterID);
+        {
+            auto callback = onSetValueRequested;
+            if (callback)
+                callback(this, targetParameterID);
             break;
+        }
         case ModulationMenuCommand::clearModulation:
-            if (onModulationCleared)
-                onModulationCleared(targetParameterID);
+        {
+            auto callback = onModulationCleared;
+            if (callback)
+                callback(targetParameterID);
             break;
+        }
         case ModulationMenuCommand::invertDepth:
-            if (onModulationInverted)
-                onModulationInverted(targetParameterID);
+        {
+            auto callback = onModulationInverted;
+            if (callback)
+                callback(targetParameterID);
             break;
+        }
         case ModulationMenuCommand::togglePolarity:
-            if (onBipolarModeToggled)
-                onBipolarModeToggled(targetParameterID);
+        {
+            auto callback = onBipolarModeToggled;
+            if (callback)
+                callback(targetParameterID);
             break;
+        }
         case ModulationMenuCommand::toggleBypass:
-            if (onBypassToggled)
-                onBypassToggled(targetParameterID);
+        {
+            auto callback = onBypassToggled;
+            if (callback)
+                callback(targetParameterID);
             break;
+        }
         default:
             break;
     }
@@ -454,4 +749,21 @@ void ModulatableSlider::timerCallback()
         label.setVisible(true);
         setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     }
+}
+
+void ModulatableSlider::visibilityChanged()
+{
+    juce::Slider::visibilityChanged();
+
+    if (! isShowing())
+        dismissTransientInteraction();
+}
+
+void ModulatableSlider::enablementChanged()
+{
+    juce::Slider::enablementChanged();
+
+    // Enabling is also a lifecycle boundary. A physical button may still be
+    // held after the control was disabled, and must not revive that gesture.
+    dismissTransientInteraction();
 }

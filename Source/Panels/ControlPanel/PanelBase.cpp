@@ -19,6 +19,16 @@ PanelBase::PanelBase(FireAudioProcessor& p) : processor(p)
     setOpaque(true);
 }
 
+PanelBase::~PanelBase()
+{
+    // sliderAttachments are declared after the owned sliders and are therefore
+    // destroyed first. Explicitly close any Slider mouse gesture while those
+    // attachments can still forward the matching endGesture to the host.
+    for (auto* slider : modulatableSliders)
+        if (slider != nullptr)
+            slider->dismissTransientInteraction();
+}
+
 void PanelBase::createAndConfigureSlider(const juce::String& paramName,
                                          const juce::String& labelText,
                                          juce::Colour sliderColour,

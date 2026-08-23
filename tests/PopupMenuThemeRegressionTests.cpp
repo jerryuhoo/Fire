@@ -7,8 +7,8 @@
 
 namespace
 {
-juce::MouseEvent makePopupMouseUp(juce::Component& component,
-                                  juce::Point<float> position)
+juce::MouseEvent makePopupMouseEvent(juce::Component& component,
+                                     juce::Point<float> position)
 {
     const auto time = juce::Time::getCurrentTime();
     return { juce::Desktop::getInstance().getMainMouseSource(),
@@ -97,8 +97,9 @@ TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
         root.addAndMakeVisible(slider);
         slider.setBounds(120, 70, 100, 120);
 
-        slider.mouseUp(makePopupMouseUp(
-            slider, slider.getLocalBounds().toFloat().getCentre()));
+        const auto menuPosition = slider.getLocalBounds().toFloat().getCentre();
+        slider.mouseDown(makePopupMouseEvent(slider, menuPosition));
+        slider.mouseUp(makePopupMouseEvent(slider, menuPosition));
         const juce::ScopeGuard cleanup { [] { dismissMenus(); } };
 
         auto* popup = findPopupMenu(root);
@@ -122,7 +123,7 @@ TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
         root.addAndMakeVisible(editor);
         editor.setBounds(260, 70, 500, 300);
 
-        editor.mouseUp(makePopupMouseUp(
+        editor.mouseUp(makePopupMouseEvent(
             editor, editor.getLocalBounds().toFloat().getCentre()));
         const juce::ScopeGuard cleanup { [] { dismissMenus(); } };
 

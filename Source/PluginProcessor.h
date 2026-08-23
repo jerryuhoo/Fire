@@ -803,8 +803,7 @@ private:
     int topologyTransitionWarmupSamples = 1;
     int topologyTransitionWarmupRemaining = 0;
 
-    juce::dsp::DryWetMixer<float> lofiMixer { 2048 };
-    bool lofiMixerPrimed = false;
+    ZeroLatencyModulatedDryWetMixer lofiMixer;
     juce::Random random;
     static constexpr size_t downsamplingStateChannels = 64;
     std::array<int, downsamplingStateChannels> downsampleSamplesRemaining {};

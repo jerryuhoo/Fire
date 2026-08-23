@@ -2472,9 +2472,6 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     bypassDelayMixer.setWetMixProportion(0.0f);
     bypassDelayMixer.prepare(globalMixerSpec);
 
-    lofiMixer.setMixingRule(juce::dsp::DryWetMixingRule::linear);
-    lofiMixer.setWetMixProportion(juce::jlimit(0.0f, 1.0f,
-                                               loadCachedParameter(downsampleMixParameter)));
     lofiMixer.prepare(globalMixerSpec);
     publishLatencyToHost();
     reset();
@@ -2877,7 +2874,6 @@ void FireAudioProcessor::performReset()
     bypassDelayMixer.reset();
     nonHqOutputDelay.reset();
     lofiMixer.reset();
-    lofiMixerPrimed = false;
     resetDownsamplingState();
     gainProcessorGlobal.reset();
     globalOutputGainTransition.reset();
@@ -4989,8 +4985,12 @@ void FireAudioProcessor::applyDownsamplingEffect(
 
     const auto configureProvider = [this, &buffer, &lfoOutputs](
                                        const CachedParameter& parameter,
-                                       ModulatedValueProvider& provider)
+                                       ModulatedValueProvider& provider,
+                                       int* sourceIndex)
     {
+        if (sourceIndex != nullptr)
+            *sourceIndex = -1;
+
         const float defaultValue = parameter.ranged != nullptr
                                        ? parameter.ranged->convertFrom0to1(
                                              parameter.ranged->getDefaultValue())
@@ -5017,6 +5017,8 @@ void FireAudioProcessor::applyDownsamplingEffect(
             routingInfo.sourceLfoIndex);
         provider.modulationDepth = routingInfo.depth;
         provider.isBipolar = routingInfo.isBipolar;
+        if (sourceIndex != nullptr)
+            *sourceIndex = routingInfo.sourceLfoIndex;
         return true;
     };
 
@@ -5025,27 +5027,22 @@ void FireAudioProcessor::applyDownsamplingEffect(
     ModulatedValueProvider jitterProvider;
     ModulatedValueProvider mixProvider;
     const bool hasRateModulation = configureProvider(downsampleRateParameter,
-                                                      rateProvider);
+                                                      rateProvider,
+                                                      nullptr);
     const bool hasBitsModulation = configureProvider(bitDepthParameter,
-                                                      bitsProvider);
+                                                      bitsProvider,
+                                                      nullptr);
     const bool hasJitterModulation = configureProvider(jitterParameter,
-                                                        jitterProvider);
-    const bool hasMixModulation = configureProvider(downsampleMixParameter,
-                                                     mixProvider);
+                                                        jitterProvider,
+                                                        nullptr);
+    int mixLfoSourceIndex = -1;
+    configureProvider(downsampleMixParameter,
+                      mixProvider,
+                      &mixLfoSourceIndex);
 
-    // Keep the sample-and-hold path advancing while bypassed and crossfade the
-    // mixer's wet proportion to zero. Resetting/returning here hard-switched at
-    // the callback boundary and restarted the hold counter when re-enabled.
-    const float requestedMix = hasMixModulation
-                                   ? mixProvider.get(0)
-                                   : mixProvider.baseValue;
-    const float effectiveMix = isActive
-                                   ? juce::jlimit(0.0f, 1.0f, requestedMix)
-                                   : 0.0f;
-    lofiMixer.setWetMixProportion(effectiveMix);
-    if (! lofiMixerPrimed)
-        lofiMixer.reset();
-    lofiMixerPrimed = true;
+    // Keep the sample-and-hold path and all mixer control state advancing while
+    // bypassed. Static mix/enable changes retain the legacy 50 ms ramp, while a
+    // routed LFO follows its trajectory without being low-pass filtered.
     lofiMixer.pushDrySamples(juce::dsp::AudioBlock<float>(lofiDryBuffer));
 
     // --- 2. Process Audio ---
@@ -5157,19 +5154,11 @@ void FireAudioProcessor::applyDownsamplingEffect(
     // --- 3. Mix with Dry Signal ---
     // Finally, mix the processed (wet) buffer with the original (dry) buffer.
     auto wetBlock = juce::dsp::AudioBlock<float>(buffer);
-    if (! isActive || ! hasMixModulation)
-    {
-        lofiMixer.mixWetSamples(wetBlock);
-        return;
-    }
-
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-    {
-        lofiMixer.setWetMixProportion(juce::jlimit(
-            0.0f, 1.0f, mixProvider.get(sample)));
-        lofiMixer.mixWetSamples(
-            wetBlock.getSubBlock(static_cast<size_t>(sample), 1));
-    }
+    lofiMixer.mixWetSamples(wetBlock,
+                            mixProvider,
+                            mixProvider.baseValue,
+                            mixLfoSourceIndex,
+                            isActive);
 }
 
 void FireAudioProcessor::resetDownsamplingState() noexcept
@@ -5177,7 +5166,6 @@ void FireAudioProcessor::resetDownsamplingState() noexcept
     downsampleSamplesRemaining.fill(0);
     downsampleHeldSamples.fill(0.0f);
     downsamplingWasActive = false;
-    lofiMixerPrimed = false;
 }
 
 void FireAudioProcessor::primeLatencyMatchedBypass(

@@ -5,6 +5,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <stdexcept>
+#include <thread>
 
 namespace
 {
@@ -69,6 +71,172 @@ const ModulationRouting* findRouting(const juce::Array<ModulationRouting>& routi
                         { return routing.targetParameterID == target; });
 }
 
+class ParameterTriggeredStateCapture final : public juce::AudioProcessorListener
+{
+public:
+    ParameterTriggeredStateCapture(FireAudioProcessor& processorToObserve,
+                                   int parameterIndexToCapture)
+        : processor(processorToObserve),
+          parameterIndex(parameterIndexToCapture)
+    {
+        processor.addListener(this);
+    }
+
+    ~ParameterTriggeredStateCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (captured || changedParameterIndex != parameterIndex)
+            return;
+
+        captured = true;
+        processor.getStateInformation(state);
+    }
+
+    void audioProcessorChanged(juce::AudioProcessor*,
+                               const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    FireAudioProcessor& processor;
+    juce::MemoryBlock state;
+    int parameterIndex = -1;
+    bool captured = false;
+};
+
+class NonParameterStateCapture final : public juce::AudioProcessorListener
+{
+public:
+    explicit NonParameterStateCapture(FireAudioProcessor& processorToObserve)
+        : processor(processorToObserve)
+    {
+        processor.addListener(this);
+    }
+
+    ~NonParameterStateCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int,
+                                        float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (! details.nonParameterStateChanged || captureInProgress)
+            return;
+
+        const juce::ScopedValueSetter<bool> captureGuard(captureInProgress, true);
+        states.emplace_back();
+        processor.getStateInformation(states.back());
+    }
+
+    FireAudioProcessor& processor;
+    std::vector<juce::MemoryBlock> states;
+    bool captureInProgress = false;
+};
+
+class ParameterTriggeredStateHistory final : public juce::AudioProcessorListener
+{
+public:
+    ParameterTriggeredStateHistory(FireAudioProcessor& processorToObserve,
+                                   int parameterIndexToCapture)
+        : processor(processorToObserve),
+          parameterIndex(parameterIndexToCapture)
+    {
+        processor.addListener(this);
+    }
+
+    ~ParameterTriggeredStateHistory() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (captureInProgress || changedParameterIndex != parameterIndex)
+            return;
+
+        const juce::ScopedValueSetter<bool> captureGuard(captureInProgress, true);
+        states.emplace_back();
+        processor.getStateInformation(states.back());
+    }
+
+    void audioProcessorChanged(juce::AudioProcessor*,
+                               const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    FireAudioProcessor& processor;
+    std::vector<juce::MemoryBlock> states;
+    int parameterIndex = -1;
+    bool captureInProgress = false;
+};
+
+class ThrowingParameterListener final : public juce::AudioProcessorListener
+{
+public:
+    ThrowingParameterListener(FireAudioProcessor& processorToObserve,
+                              int parameterIndexToThrow)
+        : processor(processorToObserve),
+          parameterIndex(parameterIndexToThrow)
+    {
+        processor.addListener(this);
+    }
+
+    ~ThrowingParameterListener() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (throwOnNextChange && changedParameterIndex == parameterIndex)
+        {
+            throwOnNextChange = false;
+            throw std::runtime_error("test listener failure");
+        }
+    }
+
+    void audioProcessorChanged(juce::AudioProcessor*,
+                               const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    FireAudioProcessor& processor;
+    int parameterIndex = -1;
+    bool throwOnNextChange = true;
+};
+
+int getParameterIndex(const FireAudioProcessor& processor,
+                      const juce::String& parameterID)
+{
+    const auto& parameters = processor.getParameters();
+    for (int index = 0; index < parameters.size(); ++index)
+    {
+        const auto* parameter = dynamic_cast<const juce::AudioProcessorParameterWithID*>(
+            parameters[index]);
+        if (parameter != nullptr && parameter->getParameterID() == parameterID)
+            return index;
+    }
+
+    return -1;
+}
+
 int countRoutingsForTarget(const juce::Array<ModulationRouting>& routings,
                            const juce::String& target)
 {
@@ -109,6 +277,18 @@ juce::XmlElement* findHostParameter(juce::XmlElement& stateXml,
 
     for (auto* child : parameterState->getChildIterator())
         if (child->getStringAttribute("id") == parameterID)
+            return child;
+
+    return nullptr;
+}
+
+juce::XmlElement* findHostLfo(juce::XmlElement& stateXml, int lfoIndex)
+{
+    auto* lfoState = stateXml.getChildByName("LFO_STATE");
+    REQUIRE(lfoState != nullptr);
+    for (auto* child : lfoState->getChildIterator())
+        if (child->hasTagName("LFO")
+            && child->getIntAttribute("index", -1) == lfoIndex)
             return child;
 
     return nullptr;
@@ -159,6 +339,9 @@ TEST_CASE("Preset files round-trip parameters, multiband state, LFOs and routing
     setPlainParameter(processor, driveID, 24.0f);
 
     const auto savedShape = makeLfoShape(0.42f, 0.91f, 0.67f);
+    setPlainParameter(processor,
+                      ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 2),
+                      savedShape.smoothness);
     processor.getLfoManager().setLfoData(2, savedShape);
     processor.assignLfoToTarget(2, driveID);
     processor.setModulationDepth(driveID, -0.37f);
@@ -178,7 +361,18 @@ TEST_CASE("Preset files round-trip parameters, multiband state, LFOs and routing
     REQUIRE(presetID > 0);
     const auto presetTag = presets.comboBoxIdToTagNameMap[presetID];
     REQUIRE(presetTag.isNotEmpty());
-    presets.loadPreset(presetTag);
+    NonParameterStateCapture hostNotification(processor);
+    REQUIRE(presets.loadPreset(presetTag));
+    REQUIRE(hostNotification.states.size() == 1);
+
+    FireAudioProcessor stateObservedByHost;
+    stateObservedByHost.setStateInformation(
+        hostNotification.states.front().getData(),
+        static_cast<int>(hostNotification.states.front().getSize()));
+    CHECK(getPlainParameter(stateObservedByHost, NUM_BANDS_ID)
+          == Catch::Approx(2.0f));
+    CHECK(getPlainParameter(stateObservedByHost, driveID)
+          == Catch::Approx(24.0f));
 
     CHECK(getPlainParameter(processor, NUM_BANDS_ID) == Catch::Approx(2.0f));
     CHECK(getPlainParameter(processor, frequencyID) == Catch::Approx(1375.0f));
@@ -317,6 +511,96 @@ TEST_CASE("Preset UI synchronisation reflects restored identity without reloadin
     CHECK(getPlainParameter(processor, driveID) == Catch::Approx(61.0f));
 }
 
+TEST_CASE("Preset selection publishes identity and sound as one host generation",
+          "[preset][state][host][identity][topology][transaction][headless]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    const auto firstDrive = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto secondDrive = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+
+    FireAudioProcessor oldPreset;
+    setPlainParameter(oldPreset, NUM_BANDS_ID, 2.0f);
+    setPlainParameter(oldPreset, firstDrive, 11.0f);
+    setPlainParameter(oldPreset, secondDrive, 77.0f);
+    oldPreset.assignLfoToTarget(0, secondDrive);
+    oldPreset.setModulationDepth(secondDrive, 0.37f);
+    writePresetFile(oldPreset,
+                    temporaryDirectory.directory.getChildFile("Old.fire"),
+                    "Old");
+
+    FireAudioProcessor newPreset;
+    setPlainParameter(newPreset, NUM_BANDS_ID, 1.0f);
+    setPlainParameter(newPreset, firstDrive, 77.0f);
+    newPreset.assignLfoToTarget(0, firstDrive);
+    newPreset.setModulationDepth(firstDrive, 0.37f);
+    writePresetFile(newPreset,
+                    temporaryDirectory.directory.getChildFile("New.fire"),
+                    "New");
+
+    FireAudioProcessor subject;
+    juce::MemoryBlock oldHostState;
+    oldPreset.getStateInformation(oldHostState);
+    subject.setStateInformation(oldHostState.getData(),
+                                static_cast<int>(oldHostState.getSize()));
+    subject.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+    subject.statePresets.setCurrentPresetKey("Old.fire");
+
+    state::StateComponent component {
+        subject.stateAB, subject.statePresets, subject.treeState
+    };
+    component.synchronisePresetSelectionFromManager();
+    auto* presetBox = component.getPresetBox();
+    REQUIRE(presetBox != nullptr);
+
+    int newPresetID = 0;
+    for (int id = 1; id <= subject.statePresets.getNumPresets(); ++id)
+        if (presetBox->getItemText(presetBox->indexOfItemId(id)) == "New")
+            newPresetID = id;
+    REQUIRE(newPresetID > 0);
+    REQUIRE(subject.statePresets.getCurrentPresetKey() == "Old.fire");
+
+    const int bandCountIndex = getParameterIndex(subject, NUM_BANDS_ID);
+    REQUIRE(bandCountIndex >= 0);
+    ParameterTriggeredStateCapture parameterHost(subject, bandCountIndex);
+    NonParameterStateCapture committedHost(subject);
+    component.updatePresetBox(newPresetID);
+    REQUIRE(parameterHost.captured);
+    REQUIRE(parameterHost.state.getSize() > 0);
+    REQUIRE(committedHost.states.size() == 1);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(
+        parameterHost.state.getData(),
+        static_cast<int>(parameterHost.state.getSize()));
+    const auto savedRoutings =
+        restored.getLfoManager().getModulationRoutingsCopy();
+    CHECK(getPlainParameter(restored, NUM_BANDS_ID) == Catch::Approx(2.0f));
+    CHECK(getPlainParameter(restored, firstDrive) == Catch::Approx(11.0f));
+    CHECK(countRoutingsForTarget(savedRoutings, secondDrive) == 1);
+    CHECK(countRoutingsForTarget(savedRoutings, firstDrive) == 0);
+    CHECK(restored.statePresets.getCurrentPresetKey() == "Old.fire");
+
+    FireAudioProcessor committed;
+    const auto& committedState = committedHost.states.front();
+    committed.setStateInformation(committedState.getData(),
+                                  static_cast<int>(committedState.getSize()));
+    const auto committedRoutings =
+        committed.getLfoManager().getModulationRoutingsCopy();
+    CHECK(getPlainParameter(committed, NUM_BANDS_ID) == Catch::Approx(1.0f));
+    CHECK(getPlainParameter(committed, firstDrive) == Catch::Approx(77.0f));
+    CHECK(countRoutingsForTarget(committedRoutings, firstDrive) == 1);
+    CHECK(countRoutingsForTarget(committedRoutings, secondDrive) == 0);
+    CHECK(committed.statePresets.getCurrentPresetKey() == "New.fire");
+
+    CHECK(getPlainParameter(subject, NUM_BANDS_ID) == Catch::Approx(1.0f));
+    CHECK(subject.statePresets.getCurrentPresetKey() == "New.fire");
+}
+
 TEST_CASE("Preset scan rejects malformed and foreign XML without exposing reset traps",
           "[preset][scan][corrupt]")
 {
@@ -386,6 +670,9 @@ TEST_CASE("Corrupt host state without a valid APVTS tree is rejected atomically"
     processor.statePresets.setCurrentPresetId(7);
 
     const auto shape = makeLfoShape(0.38f, 0.88f, 0.57f);
+    setPlainParameter(processor,
+                      ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 1),
+                      shape.smoothness);
     processor.getLfoManager().setLfoData(1, shape);
     processor.assignLfoToTarget(1, driveID);
     processor.setModulationDepth(driveID, 0.42f);
@@ -435,6 +722,607 @@ TEST_CASE("Corrupt host state without a valid APVTS tree is rejected atomically"
     processor.stateAB.toggleAB();
     CHECK_FALSE(processor.stateAB.isCurrentA());
     CHECK(getPlainParameter(processor, driveID) == Catch::Approx(22.0f));
+}
+
+TEST_CASE("Reentrant host saves never mix multiband topology generations",
+          "[state][host][topology][transaction][reentrant]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    FireAudioProcessor incoming;
+
+    const auto oldTarget = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    const auto newTarget = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    REQUIRE(oldTarget != newTarget);
+
+    setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
+    setPlainParameter(subject, newTarget, 11.0f);
+    setPlainParameter(subject, oldTarget, 77.0f);
+    subject.assignLfoToTarget(0, oldTarget);
+    subject.setModulationDepth(oldTarget, 0.37f);
+
+    // Model the completed result of deleting band zero: the surviving logical
+    // band and its modulation route both move from slot one to slot zero.
+    setPlainParameter(incoming, NUM_BANDS_ID, 1.0f);
+    setPlainParameter(incoming, newTarget, 77.0f);
+    incoming.assignLfoToTarget(0, newTarget);
+    incoming.setModulationDepth(newTarget, 0.37f);
+    juce::MemoryBlock incomingState;
+    incoming.getStateInformation(incomingState);
+
+    const int bandCountIndex = getParameterIndex(subject, NUM_BANDS_ID);
+    REQUIRE(bandCountIndex >= 0);
+    ParameterTriggeredStateCapture host(subject, bandCountIndex);
+
+    // APVTS parameter listeners are synchronous. During the old commit path,
+    // NUM_BANDS already came from the incoming state while the routing still
+    // belonged to the previous generation, so a host save here was torn.
+    subject.setStateInformation(incomingState.getData(),
+                                static_cast<int>(incomingState.getSize()));
+    REQUIRE(host.captured);
+    REQUIRE(host.state.getSize() > 0);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(host.state.getData(),
+                                 static_cast<int>(host.state.getSize()));
+
+    const auto savedBandCount = getPlainParameter(restored, NUM_BANDS_ID);
+    const auto savedFirstDrive = getPlainParameter(restored, newTarget);
+    const auto savedRoutings = restored.getLfoManager().getModulationRoutingsCopy();
+    const bool savedOldTarget = countRoutingsForTarget(savedRoutings, oldTarget) > 0;
+    const bool savedNewTarget = countRoutingsForTarget(savedRoutings, newTarget) > 0;
+    const bool coherentOldGeneration = savedBandCount == Catch::Approx(2.0f)
+                                    && savedFirstDrive == Catch::Approx(11.0f)
+                                    && savedOldTarget
+                                    && ! savedNewTarget;
+    const bool coherentNewGeneration = savedBandCount == Catch::Approx(1.0f)
+                                    && savedFirstDrive == Catch::Approx(77.0f)
+                                    && ! savedOldTarget
+                                    && savedNewTarget;
+
+    CAPTURE(savedBandCount, savedFirstDrive, savedOldTarget, savedNewTarget);
+    CHECK((coherentOldGeneration || coherentNewGeneration));
+    CHECK_FALSE((savedBandCount == Catch::Approx(1.0f) && savedOldTarget));
+}
+
+TEST_CASE("LFO shape writes preserve APVTS smoothness authority",
+          "[state][host][lfo][authority]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
+    constexpr float automatedSmoothness = 0.43f;
+    setPlainParameter(processor, smoothnessID, automatedSmoothness);
+
+    const int smoothnessIndex = getParameterIndex(processor, smoothnessID);
+    REQUIRE(smoothnessIndex >= 0);
+    ParameterTriggeredStateHistory host(processor, smoothnessIndex);
+
+    const auto incomingShape = makeLfoShape(0.39f, 0.87f, 0.9f);
+    processor.getLfoManager().setLfoData(0, incomingShape);
+
+    CHECK(host.states.empty());
+    CHECK(getPlainParameter(processor, smoothnessID)
+          == Catch::Approx(automatedSmoothness));
+    const auto lfoData = processor.getLfoManager().getLfoDataCopy();
+    REQUIRE(lfoData.size() == 4);
+    CHECK(lfoData[0].points == incomingShape.points);
+    CHECK(lfoData[0].curvatures == incomingShape.curvatures);
+    CHECK(lfoData[0].smoothness == Catch::Approx(automatedSmoothness));
+}
+
+TEST_CASE("Host saves pair LFO shapes with authoritative smoothness",
+          "[state][host][lfo][authority][snapshot]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    const auto publishedShape = makeLfoShape(0.39f, 0.87f, 0.73f);
+    constexpr float automatedSmoothness = 0.37f;
+    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
+    setPlainParameter(subject, smoothnessID, automatedSmoothness);
+    juce::MemoryBlock savedState;
+
+    auto& manager = subject.getLfoManager();
+    manager.setLfoData(0, publishedShape);
+    subject.getStateInformation(savedState);
+    REQUIRE(savedState.getSize() > 0);
+
+    auto savedXml = juce::AudioProcessor::getXmlFromBinary(
+        savedState.getData(),
+        static_cast<int>(savedState.getSize()));
+    REQUIRE(savedXml != nullptr);
+    auto* savedParameter = findHostParameter(*savedXml, subject, smoothnessID);
+    auto* savedLfo = findHostLfo(*savedXml, 0);
+    REQUIRE(savedParameter != nullptr);
+    REQUIRE(savedLfo != nullptr);
+    CHECK(savedParameter->getDoubleAttribute("value")
+          == Catch::Approx(automatedSmoothness));
+    CHECK(savedLfo->getDoubleAttribute("smoothness")
+          == Catch::Approx(automatedSmoothness));
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(savedState.getData(),
+                                 static_cast<int>(savedState.getSize()));
+    const auto restoredData = restored.getLfoManager().getLfoDataCopy();
+    REQUIRE(restoredData.size() == 4);
+    CHECK(restoredData[0].points == publishedShape.points);
+    CHECK(restoredData[0].curvatures == publishedShape.curvatures);
+    CHECK(restoredData[0].smoothness
+          == Catch::Approx(automatedSmoothness));
+}
+
+TEST_CASE("Host loading promotes legacy LFO-only smoothness into APVTS",
+          "[state][host][lfo][authority][legacy][migration]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor source;
+    const auto smoothnessID = ParameterIDAndName::getIDString(
+        LFO_SMOOTH_ID, 0);
+    const auto shape = makeLfoShape(0.46f, 0.89f, 0.11f);
+    constexpr float legacySmoothness = 0.37f;
+    source.getLfoManager().setLfoData(0, shape);
+
+    juce::MemoryBlock legacyState;
+    source.getStateInformation(legacyState);
+    auto legacyXml = juce::AudioProcessor::getXmlFromBinary(
+        legacyState.getData(), static_cast<int>(legacyState.getSize()));
+    REQUIRE(legacyXml != nullptr);
+    auto* parameterState = legacyXml->getChildByName(
+        source.treeState.state.getType().toString());
+    auto* smoothnessParameter = findHostParameter(
+        *legacyXml, source, smoothnessID);
+    auto* lfo = findHostLfo(*legacyXml, 0);
+    REQUIRE(parameterState != nullptr);
+    REQUIRE(smoothnessParameter != nullptr);
+    REQUIRE(lfo != nullptr);
+
+    parameterState->removeChildElement(smoothnessParameter, true);
+    lfo->setAttribute("smoothness", legacySmoothness);
+    juce::AudioProcessor::copyXmlToBinary(*legacyXml, legacyState);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(legacyState.getData(),
+                                 static_cast<int>(legacyState.getSize()));
+    CHECK(getPlainParameter(restored, smoothnessID)
+          == Catch::Approx(legacySmoothness));
+    const auto restoredData = restored.getLfoManager().getLfoDataCopy();
+    REQUIRE(restoredData.size() == 4);
+    CHECK(restoredData[0].points == shape.points);
+    CHECK(restoredData[0].curvatures == shape.curvatures);
+    CHECK(restoredData[0].smoothness == Catch::Approx(legacySmoothness));
+
+    juce::MemoryBlock upgradedState;
+    restored.getStateInformation(upgradedState);
+    auto upgradedXml = juce::AudioProcessor::getXmlFromBinary(
+        upgradedState.getData(),
+        static_cast<int>(upgradedState.getSize()));
+    REQUIRE(upgradedXml != nullptr);
+    auto* upgradedParameter = findHostParameter(
+        *upgradedXml, restored, smoothnessID);
+    auto* upgradedLfo = findHostLfo(*upgradedXml, 0);
+    REQUIRE(upgradedParameter != nullptr);
+    REQUIRE(upgradedLfo != nullptr);
+    CHECK(upgradedParameter->getDoubleAttribute("value")
+          == Catch::Approx(legacySmoothness));
+    CHECK(upgradedLfo->getDoubleAttribute("smoothness")
+          == Catch::Approx(legacySmoothness));
+}
+
+TEST_CASE("Completed LFO automation remains authoritative after shape edits",
+          "[state][host][lfo][authority][automation][snapshot]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    auto& manager = subject.getLfoManager();
+    const auto baselineShape = makeLfoShape(0.28f, 0.76f, 0.2f);
+    const auto publishedShape = makeLfoShape(0.64f, 0.31f, 0.8f);
+    constexpr float automatedSmoothness = 0.43f;
+    manager.setLfoData(0, baselineShape);
+
+    juce::MemoryBlock savedAfterAutomation;
+    manager.setLfoData(0, publishedShape);
+    setPlainParameter(subject,
+                      ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0),
+                      automatedSmoothness);
+    subject.getStateInformation(savedAfterAutomation);
+    REQUIRE(savedAfterAutomation.getSize() > 0);
+
+    auto savedXml = juce::AudioProcessor::getXmlFromBinary(
+        savedAfterAutomation.getData(),
+        static_cast<int>(savedAfterAutomation.getSize()));
+    REQUIRE(savedXml != nullptr);
+    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
+    auto* savedParameter = findHostParameter(*savedXml, subject, smoothnessID);
+    auto* savedLfo = findHostLfo(*savedXml, 0);
+    REQUIRE(savedParameter != nullptr);
+    REQUIRE(savedLfo != nullptr);
+    CHECK(savedParameter->getDoubleAttribute("value")
+          == Catch::Approx(automatedSmoothness));
+    CHECK(savedLfo->getDoubleAttribute("smoothness")
+          == Catch::Approx(automatedSmoothness));
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(savedAfterAutomation.getData(),
+                                 static_cast<int>(savedAfterAutomation.getSize()));
+    const auto restoredData = restored.getLfoManager().getLfoDataCopy();
+    REQUIRE(restoredData.size() == 4);
+    CHECK(restoredData[0].points == publishedShape.points);
+    CHECK(restoredData[0].curvatures == publishedShape.curvatures);
+    CHECK(restoredData[0].smoothness
+          == Catch::Approx(automatedSmoothness));
+
+    const auto finalData = manager.getLfoDataCopy();
+    REQUIRE(finalData.size() == 4);
+    CHECK(finalData[0].points == publishedShape.points);
+    CHECK(finalData[0].curvatures == publishedShape.curvatures);
+    CHECK(finalData[0].smoothness
+          == Catch::Approx(automatedSmoothness));
+}
+
+TEST_CASE("LFO snapshots use the parameter-quantised smoothness",
+          "[state][host][lfo][authority][quantisation][snapshot]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
+    auto* smoothnessParameter = subject.treeState.getParameter(smoothnessID);
+    REQUIRE(smoothnessParameter != nullptr);
+    const int smoothnessIndex = getParameterIndex(subject, smoothnessID);
+    REQUIRE(smoothnessIndex >= 0);
+
+    auto publishedShape = makeLfoShape(0.58f, 0.82f, 0.735f);
+    publishedShape.smoothness = 0.735f;
+    const float expectedSmoothness = smoothnessParameter->getNormalisableRange()
+                                         .snapToLegalValue(
+                                             publishedShape.smoothness);
+    CHECK(expectedSmoothness == Catch::Approx(0.74f));
+
+    subject.getLfoManager().setLfoData(0, publishedShape);
+    ParameterTriggeredStateCapture host(subject, smoothnessIndex);
+    setPlainParameter(subject, smoothnessID, publishedShape.smoothness);
+    REQUIRE(host.captured);
+    REQUIRE(host.state.getSize() > 0);
+
+    auto savedXml = juce::AudioProcessor::getXmlFromBinary(
+        host.state.getData(), static_cast<int>(host.state.getSize()));
+    REQUIRE(savedXml != nullptr);
+    auto* savedParameter = findHostParameter(*savedXml, subject, smoothnessID);
+    auto* savedLfo = findHostLfo(*savedXml, 0);
+    REQUIRE(savedParameter != nullptr);
+    REQUIRE(savedLfo != nullptr);
+    CHECK(savedParameter->getDoubleAttribute("value")
+          == Catch::Approx(expectedSmoothness));
+    CHECK(savedLfo->getDoubleAttribute("smoothness")
+          == Catch::Approx(expectedSmoothness));
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(host.state.getData(),
+                                 static_cast<int>(host.state.getSize()));
+    const auto restoredData = restored.getLfoManager().getLfoDataCopy();
+    REQUIRE(restoredData.size() == 4);
+    CHECK(restoredData[0].points == publishedShape.points);
+    CHECK(restoredData[0].curvatures == publishedShape.curvatures);
+    CHECK(restoredData[0].smoothness
+          == Catch::Approx(expectedSmoothness));
+}
+
+TEST_CASE("Shape edits cannot overwrite later smoothness automation",
+          "[state][host][lfo][authority][automation]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto earlierShape = makeLfoShape(0.31f, 0.84f, 0.2f);
+    const auto laterShape = makeLfoShape(0.67f, 0.18f, 0.8f);
+    constexpr float automatedSmoothness = 0.55f;
+    const auto smoothnessID = ParameterIDAndName::getIDString(
+        LFO_SMOOTH_ID, 0);
+
+    auto& manager = processor.getLfoManager();
+    manager.setLfoData(0, earlierShape);
+    setPlainParameter(processor, smoothnessID, automatedSmoothness);
+    manager.setLfoData(0, laterShape);
+
+    const auto finalData = manager.getLfoDataCopy();
+    REQUIRE(finalData.size() == 4);
+    const auto* finalSmoothness = processor.treeState.getRawParameterValue(smoothnessID);
+    REQUIRE(finalSmoothness != nullptr);
+    CHECK(finalData[0].points == laterShape.points);
+    CHECK(finalData[0].curvatures == laterShape.curvatures);
+    CHECK(finalData[0].smoothness == Catch::Approx(automatedSmoothness));
+    CHECK(finalSmoothness->load(std::memory_order_relaxed)
+          == Catch::Approx(automatedSmoothness));
+}
+
+TEST_CASE("Host and preset snapshots take LFO smoothness from APVTS authority",
+          "[state][host][preset][lfo][authority][snapshot]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto& manager = processor.getLfoManager();
+    const auto smoothnessID = ParameterIDAndName::getIDString(
+        LFO_SMOOTH_ID, 0);
+    constexpr float authoritativeSmoothness = 0.2f;
+    const auto shapeWithStaleSmoothness = makeLfoShape(0.71f, 0.16f, 0.8f);
+
+    setPlainParameter(processor, smoothnessID, authoritativeSmoothness);
+    manager.setLfoData(0, shapeWithStaleSmoothness);
+
+    const auto liveData = manager.getLfoDataCopy();
+    REQUIRE(liveData.size() == 4);
+    CHECK(liveData[0].points == shapeWithStaleSmoothness.points);
+    CHECK(liveData[0].curvatures == shapeWithStaleSmoothness.curvatures);
+    CHECK(liveData[0].smoothness == Catch::Approx(authoritativeSmoothness));
+    CHECK(getPlainParameter(processor, smoothnessID)
+          == Catch::Approx(authoritativeSmoothness));
+
+    juce::MemoryBlock hostState;
+    processor.getStateInformation(hostState);
+    REQUIRE(hostState.getSize() > 0);
+
+    auto hostXml = juce::AudioProcessor::getXmlFromBinary(
+        hostState.getData(), static_cast<int>(hostState.getSize()));
+    REQUIRE(hostXml != nullptr);
+    auto* hostParameter = findHostParameter(*hostXml, processor, smoothnessID);
+    auto* hostLfo = findHostLfo(*hostXml, 0);
+    REQUIRE(hostParameter != nullptr);
+    REQUIRE(hostLfo != nullptr);
+    CHECK(hostParameter->getDoubleAttribute("value")
+          == Catch::Approx(authoritativeSmoothness));
+    CHECK(hostLfo->getDoubleAttribute("smoothness")
+          == Catch::Approx(authoritativeSmoothness));
+
+    juce::XmlElement presetState { "WINGSFIRE" };
+    state::saveStateToXml(processor, presetState);
+    auto* presetLfo = findHostLfo(presetState, 0);
+    REQUIRE(presetLfo != nullptr);
+    CHECK(presetState.getDoubleAttribute(smoothnessID)
+          == Catch::Approx(authoritativeSmoothness));
+    CHECK(presetLfo->getDoubleAttribute("smoothness")
+          == Catch::Approx(authoritativeSmoothness));
+    const auto presetShape = LfoData::readFromXml(*presetLfo);
+    CHECK(presetShape.points == shapeWithStaleSmoothness.points);
+    CHECK(presetShape.curvatures == shapeWithStaleSmoothness.curvatures);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(hostState.getData(),
+                                 static_cast<int>(hostState.getSize()));
+    const auto restoredData = restored.getLfoManager().getLfoDataCopy();
+    REQUIRE(restoredData.size() == 4);
+    CHECK(restoredData[0].points == shapeWithStaleSmoothness.points);
+    CHECK(restoredData[0].curvatures == shapeWithStaleSmoothness.curvatures);
+    CHECK(restoredData[0].smoothness
+          == Catch::Approx(authoritativeSmoothness));
+    CHECK(getPlainParameter(restored, smoothnessID)
+          == Catch::Approx(authoritativeSmoothness));
+}
+
+TEST_CASE("Cross-thread host saves do not wait for an active topology writer",
+          "[state][host][topology][transaction][locking]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    const auto oldTarget = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    const auto stagedTarget = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
+    subject.assignLfoToTarget(0, oldTarget);
+    subject.statePresets.setCurrentPresetKey("Factory/Old.fire");
+    subject.setSavedWidth(1210);
+    subject.setSavedHeight(710);
+
+    subject.beginMultibandTopologyEdit();
+    setPlainParameter(subject, NUM_BANDS_ID, 1.0f);
+    subject.clearModulationForParameter(oldTarget);
+    subject.assignLfoToTarget(1, stagedTarget);
+    subject.statePresets.setCurrentPresetKey("Factory/Staged.fire");
+    subject.setSavedWidth(1510);
+    subject.setSavedHeight(810);
+
+    juce::WaitableEvent workerStarted;
+    juce::WaitableEvent saveCompleted;
+    juce::MemoryBlock savedState;
+    std::thread hostSave([&]
+    {
+        workerStarted.signal();
+        subject.getStateInformation(savedState);
+        saveCompleted.signal();
+    });
+
+    const bool didStart = workerStarted.wait(2000);
+    const bool completedWhileEditWasActive = didStart && saveCompleted.wait(2000);
+    subject.requestMultibandTopologyReset();
+    hostSave.join();
+
+    REQUIRE(didStart);
+    REQUIRE(completedWhileEditWasActive);
+    REQUIRE(savedState.getSize() > 0);
+    FireAudioProcessor restored;
+    restored.setStateInformation(savedState.getData(),
+                                 static_cast<int>(savedState.getSize()));
+    const auto routings = restored.getLfoManager().getModulationRoutingsCopy();
+    CHECK(getPlainParameter(restored, NUM_BANDS_ID) == Catch::Approx(2.0f));
+    CHECK(countRoutingsForTarget(routings, oldTarget) == 1);
+    CHECK(countRoutingsForTarget(routings, stagedTarget) == 0);
+    CHECK(restored.statePresets.getCurrentPresetKey() == "Factory/Old.fire");
+    CHECK(restored.getSavedWidth() == 1210);
+    CHECK(restored.getSavedHeight() == 710);
+}
+
+TEST_CASE("Topology writers drain readers which observed the prior generation",
+          "[state][host][topology][transaction][reader-handshake]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
+
+    juce::WaitableEvent writerReturnedFromBegin;
+    juce::WaitableEvent allowWriterToFinish;
+    std::thread writer;
+    bool writerPublishedOdd = false;
+    bool writerReturnedWhileReaderWasRegistered = false;
+    unsigned int readersSeenByHook = 0;
+
+    subject.setSerializableStateReaderHookForTesting([&]
+    {
+        writer = std::thread([&]
+        {
+            subject.beginMultibandTopologyEdit();
+            writerReturnedFromBegin.signal();
+            allowWriterToFinish.wait(2000);
+            subject.requestMultibandTopologyReset();
+        });
+
+        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 2000.0;
+        while ((subject.getMultibandTopologyGenerationForTesting() & 1u) == 0u
+               && juce::Time::getMillisecondCounterHiRes() < deadline)
+            juce::Thread::yield();
+
+        writerPublishedOdd =
+            (subject.getMultibandTopologyGenerationForTesting() & 1u) != 0u;
+        readersSeenByHook =
+            subject.getActiveSerializableStateReadersForTesting();
+        writerReturnedWhileReaderWasRegistered =
+            writerReturnedFromBegin.wait(75);
+    });
+
+    juce::MemoryBlock savedState;
+    subject.getStateInformation(savedState);
+    const bool writerReturnedAfterReaderUnregistered =
+        writerReturnedFromBegin.wait(2000);
+    allowWriterToFinish.signal();
+    if (writer.joinable())
+        writer.join();
+
+    REQUIRE(writerPublishedOdd);
+    CHECK(readersSeenByHook == 1u);
+    CHECK_FALSE(writerReturnedWhileReaderWasRegistered);
+    REQUIRE(writerReturnedAfterReaderUnregistered);
+    REQUIRE(savedState.getSize() > 0);
+    CHECK(subject.getActiveSerializableStateReadersForTesting() == 0u);
+    CHECK((subject.getMultibandTopologyGenerationForTesting() & 1u) == 0u);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(savedState.getData(),
+                                 static_cast<int>(savedState.getSize()));
+    CHECK(getPlainParameter(restored, NUM_BANDS_ID) == Catch::Approx(2.0f));
+}
+
+TEST_CASE("Listener exceptions cannot strand a topology transaction",
+          "[state][host][topology][transaction][exception]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    FireAudioProcessor incoming;
+    setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
+    setPlainParameter(incoming, NUM_BANDS_ID, 1.0f);
+    juce::MemoryBlock incomingState;
+    incoming.getStateInformation(incomingState);
+
+    const int bandCountIndex = getParameterIndex(subject, NUM_BANDS_ID);
+    REQUIRE(bandCountIndex >= 0);
+    bool listenerExceptionEscaped = false;
+    {
+        ThrowingParameterListener listener(subject, bandCountIndex);
+        try
+        {
+            subject.setStateInformation(
+                incomingState.getData(),
+                static_cast<int>(incomingState.getSize()));
+        }
+        catch (const std::runtime_error&)
+        {
+            listenerExceptionEscaped = true;
+        }
+    }
+
+    juce::WaitableEvent probeEntered;
+    std::thread topologyProbe([&]
+    {
+        subject.beginMultibandTopologyEdit();
+        probeEntered.signal();
+        subject.requestMultibandTopologyReset();
+    });
+
+    const bool transactionWasBalanced = probeEntered.wait(2000);
+    if (! transactionWasBalanced)
+    {
+        // Cleanup for the deliberately old-red implementation, which retained
+        // this thread's recursive writer-lock level after the exception.
+        subject.requestMultibandTopologyReset();
+    }
+    topologyProbe.join();
+
+    REQUIRE(listenerExceptionEscaped);
+    CHECK(transactionWasBalanced);
+    CHECK((subject.getMultibandTopologyGenerationForTesting() & 1u) == 0u);
+    juce::MemoryBlock recoveredState;
+    subject.getStateInformation(recoveredState);
+    CHECK(recoveredState.getSize() > 0);
+}
+
+TEST_CASE("Nested topology edits retain one complete host snapshot",
+          "[state][host][topology][transaction][nested]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    const auto oldTarget = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    const auto intermediateTarget = ParameterIDAndName::getIDString(DRIVE_ID, 2);
+    const auto finalTarget = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+
+    setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
+    subject.assignLfoToTarget(0, oldTarget);
+
+    struct SavedSignature
+    {
+        float bandCount = 0.0f;
+        bool hasOldTarget = false;
+        bool hasIntermediateTarget = false;
+        bool hasFinalTarget = false;
+    };
+
+    const auto captureSignature = [&] ()
+    {
+        juce::MemoryBlock state;
+        subject.getStateInformation(state);
+        FireAudioProcessor restored;
+        restored.setStateInformation(state.getData(),
+                                     static_cast<int>(state.getSize()));
+        const auto routings = restored.getLfoManager().getModulationRoutingsCopy();
+        return SavedSignature {
+            getPlainParameter(restored, NUM_BANDS_ID),
+            countRoutingsForTarget(routings, oldTarget) > 0,
+            countRoutingsForTarget(routings, intermediateTarget) > 0,
+            countRoutingsForTarget(routings, finalTarget) > 0
+        };
+    };
+
+    subject.beginMultibandTopologyEdit();
+    setPlainParameter(subject, NUM_BANDS_ID, 3.0f);
+    subject.clearModulationForParameter(oldTarget);
+    subject.assignLfoToTarget(1, intermediateTarget);
+
+    subject.beginMultibandTopologyEdit();
+    setPlainParameter(subject, NUM_BANDS_ID, 1.0f);
+    subject.clearModulationForParameter(intermediateTarget);
+    subject.assignLfoToTarget(2, finalTarget);
+
+    const auto duringInnerEdit = captureSignature();
+    subject.requestMultibandTopologyReset();
+    const auto afterInnerPublish = captureSignature();
+    subject.requestMultibandTopologyReset();
+    const auto afterOuterPublish = captureSignature();
+
+    for (const auto& staged : { duringInnerEdit, afterInnerPublish })
+    {
+        CHECK(staged.bandCount == Catch::Approx(2.0f));
+        CHECK(staged.hasOldTarget);
+        CHECK_FALSE(staged.hasIntermediateTarget);
+        CHECK_FALSE(staged.hasFinalTarget);
+    }
+
+    CHECK(afterOuterPublish.bandCount == Catch::Approx(1.0f));
+    CHECK_FALSE(afterOuterPublish.hasOldTarget);
+    CHECK_FALSE(afterOuterPublish.hasIntermediateTarget);
+    CHECK(afterOuterPublish.hasFinalTarget);
 }
 
 TEST_CASE("Invalid known host parameters reject the complete state transaction",

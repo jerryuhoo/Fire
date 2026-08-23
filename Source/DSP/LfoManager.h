@@ -78,12 +78,26 @@ public:
     const juce::Array<ModulationRouting>& getModulationRoutings() const { return modulationRoutings; }
     juce::Array<ModulationRouting> getModulationRoutingsCopy() const;
 
+    struct SerializableStateSnapshot
+    {
+        juce::ValueTree parameterState;
+        std::vector<LfoData> lfoData;
+        juce::Array<ModulationRouting> routings;
+    };
+
+    SerializableStateSnapshot captureSerializableStateSnapshot() const;
+
     // Allow access to LFO data for the UI/saving state
     // The reference accessor has the same external-lock requirement as above.
     const std::vector<LfoData>& getLfoData() const { return lfoData; }
     std::vector<LfoData> getLfoDataCopy() const;
+    // APVTS is the only writable Smoothness authority. These shape APIs keep
+    // the incoming points/curvatures but replace LfoData::smoothness with the
+    // corresponding APVTS value before committing.
     void setLfoData(int index, const LfoData& newData);
-    void clearAllLfoData();
+    void replaceLfoDataAndRoutings(
+        const std::array<LfoData, 4>& newLfoData,
+        juce::Array<ModulationRouting> newRoutings);
 
     // Allow access to LFO engines for UI phase display
     const std::array<LfoEngine, 4>& getLfoEngines() const { return lfoEngines; }
@@ -107,7 +121,6 @@ private:
         std::atomic<float>* freeRate = nullptr;
         std::atomic<float>* phaseOffset = nullptr;
         std::atomic<float>* smoothness = nullptr;
-        juce::RangedAudioParameter* smoothnessParameter = nullptr;
     };
 
     struct RuntimeRouting
@@ -142,6 +155,7 @@ private:
 
     std::array<LfoEngine, 4> lfoEngines;
     std::array<LfoParameterPointers, 4> lfoParameters;
+    std::array<juce::String, 4> smoothnessParameterIDs;
     std::vector<LfoData> lfoData;
 
     juce::CriticalSection dataAccessLock;

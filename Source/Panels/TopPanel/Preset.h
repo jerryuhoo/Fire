@@ -75,13 +75,20 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::HashMap<int, juce::String> comboBoxIdToTagNameMap;
 
         juce::String savePreset(juce::File savePath, bool overwriteAlreadyConfirmed = false);
-        bool loadPreset(const juce::String& selectedName);
+        bool loadPreset(const juce::String& selectedName,
+                        bool notifyHost = true);
         void deletePreset();
         juce::AudioProcessor& getProcessor() { return pluginProcessor; }
 
         void setPresetAndFolderNames(juce::ComboBox& menu);
         int getNumPresets() const;
         juce::String getNextAvailablePresetId();
+        struct PresetIdentitySnapshot
+        {
+            int id = 0;
+            juce::String key;
+        };
+        PresetIdentitySnapshot getCurrentPresetIdentity() const;
         int getCurrentPresetId() const;
         void setCurrentPresetId(int currentPresetId);
         juce::String getCurrentPresetKey() const;
@@ -97,6 +104,9 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         bool recursivePresetLoad(const juce::XmlElement& parentXml, const juce::String& presetId);
         void recursivePresetNameAdd(const juce::XmlElement& parentXml, juce::ComboBox& menu, int& index);
         const juce::XmlElement& getPresetXml() const;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        void setPresetDirectoryForTesting(juce::File directory);
+#endif
 
     private:
         juce::AudioProcessor& pluginProcessor;

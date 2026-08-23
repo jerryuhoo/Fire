@@ -24,7 +24,6 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
 
     // Initialize LFO data containers for 4 LFOs
     lfoData.resize(4);
-
     // Define the string representations for synced LFO rates
     lfoRateSyncDivisions = {
         "1/64", "1/32T", "1/32", "1/16T", "1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2T", "1/2", "1 Bar", "2 Bars", "4 Bars"
@@ -37,15 +36,22 @@ LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(ap
     {
         const auto lfoIndex = static_cast<size_t>(i);
         const auto smoothnessId = indexedParameterId(LFO_SMOOTH_ID, i);
+        smoothnessParameterIDs[lfoIndex] = smoothnessId;
 
         lfoParameters[lfoIndex] = {
             treeState.getRawParameterValue(indexedParameterId(LFO_SYNC_MODE_ID, i)),
             treeState.getRawParameterValue(indexedParameterId(LFO_RATE_SYNC_ID, i)),
             treeState.getRawParameterValue(indexedParameterId(LFO_RATE_HZ_ID, i)),
             treeState.getRawParameterValue(indexedParameterId(LFO_PHASE_ID, i)),
-            treeState.getRawParameterValue(smoothnessId),
-            treeState.getParameter(smoothnessId)
+            treeState.getRawParameterValue(smoothnessId)
         };
+
+        if (const auto* smoothness = lfoParameters[lfoIndex].smoothness)
+        {
+            const float value = smoothness->load(std::memory_order_relaxed);
+            if (std::isfinite(value))
+                lfoData[lfoIndex].smoothness = juce::jlimit(0.0f, 1.0f, value);
+        }
 
         // Build and publish the default table while the processor is being
         // constructed, before any audio callback can run.
@@ -294,20 +300,7 @@ bool LfoManager::refreshRuntimeStateIfAvailable()
     hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
 
     for (size_t i = 0; i < lfoEngines.size(); ++i)
-    {
         lfoEngines[i].publishStagedShape();
-
-        const auto* smoothnessParameter = lfoParameters[i].smoothness;
-        if (smoothnessParameter != nullptr)
-        {
-            const float rawSmoothness = smoothnessParameter->load(std::memory_order_relaxed);
-            const float smoothness = std::isfinite(rawSmoothness)
-                                         ? juce::jlimit(0.0f, 1.0f, rawSmoothness)
-                                         : 0.0f;
-            if (std::abs(lfoData[i].smoothness - smoothness) > 1.0e-5f)
-                lfoData[i].smoothness = smoothness;
-        }
-    }
 
     return true;
 }
@@ -618,14 +611,48 @@ juce::Array<ModulationRouting> LfoManager::getModulationRoutingsCopy() const
     return modulationRoutings;
 }
 
+LfoManager::SerializableStateSnapshot
+LfoManager::captureSerializableStateSnapshot() const
+{
+    SerializableStateSnapshot snapshot;
+
+    // APVTS is the single writable authority for smoothness. The processor's
+    // outer topology-reader protocol prevents parameter/routing migrations in
+    // public serializers; ordinary shape edits are independent and become
+    // visible atomically under dataAccessLock below.
+    snapshot.parameterState = treeState.copyState();
+    {
+        const juce::ScopedLock lock(dataAccessLock);
+        snapshot.lfoData = lfoData;
+        snapshot.routings = modulationRoutings;
+    }
+
+    for (size_t i = 0; i < snapshot.lfoData.size(); ++i)
+    {
+        for (const auto& child : snapshot.parameterState)
+        {
+            if (child.getProperty("id").toString()
+                != smoothnessParameterIDs[i])
+                continue;
+
+            const float smoothness = static_cast<float>(
+                child.getProperty("value"));
+            if (std::isfinite(smoothness))
+            {
+                snapshot.lfoData[i].smoothness = juce::jlimit(
+                    0.0f, 1.0f, smoothness);
+            }
+            break;
+        }
+    }
+
+    return snapshot;
+}
+
 std::vector<LfoData> LfoManager::getLfoDataCopy() const
 {
     const juce::ScopedLock lock(dataAccessLock);
     auto result = lfoData;
-
-    // Smoothness is an automatable APVTS parameter and may have changed while
-    // the transport/editor was stopped, before the audio thread had a chance
-    // to mirror it into lfoData. Always expose a coherent, authoritative copy.
     for (size_t i = 0; i < result.size() && i < lfoParameters.size(); ++i)
     {
         if (const auto* parameter = lfoParameters[i].smoothness)
@@ -635,7 +662,6 @@ std::vector<LfoData> LfoManager::getLfoDataCopy() const
                 result[i].smoothness = juce::jlimit(0.0f, 1.0f, value);
         }
     }
-
     return result;
 }
 
@@ -760,33 +786,57 @@ void LfoManager::setLfoData(int index, const LfoData& newData)
     auto safeData = newData;
     safeData.sanitise();
 
-    const juce::ScopedLock sl(dataAccessLock);
     const auto lfoIndex = static_cast<size_t>(index);
-    const bool shapeChanged = lfoData[lfoIndex].points != safeData.points
-                              || lfoData[lfoIndex].curvatures != safeData.curvatures;
-
-    // APVTS is the automation/state authority for smoothness. Keep it in sync
-    // whenever a complete shape is restored or edited so the next audio block
-    // cannot overwrite the shape's smoothness with a stale/default parameter.
-    if (auto* parameter = lfoParameters[lfoIndex].smoothnessParameter)
+    if (const auto* parameter = lfoParameters[lfoIndex].smoothness)
     {
-        const float normalisedSmoothness = parameter->convertTo0to1(safeData.smoothness);
-        if (! juce::approximatelyEqual(parameter->getValue(), normalisedSmoothness))
-            parameter->setValueNotifyingHost(normalisedSmoothness);
+        const float smoothness = parameter->load(std::memory_order_relaxed);
+        if (std::isfinite(smoothness))
+            safeData.smoothness = juce::jlimit(0.0f, 1.0f, smoothness);
     }
 
-    if (shapeChanged)
-        lfoEngines[lfoIndex].stageShape(safeData);
+    {
+        const juce::ScopedLock sl(dataAccessLock);
+        const bool shapeChanged = lfoData[lfoIndex].points != safeData.points
+                                  || lfoData[lfoIndex].curvatures != safeData.curvatures;
 
-    lfoData[lfoIndex] = std::move(safeData);
+        if (shapeChanged)
+            lfoEngines[lfoIndex].stageShape(safeData);
+
+        lfoData[lfoIndex] = std::move(safeData);
+    }
 }
 
-void LfoManager::clearAllLfoData()
+void LfoManager::replaceLfoDataAndRoutings(
+    const std::array<LfoData, 4>& newLfoData,
+    juce::Array<ModulationRouting> newRoutings)
 {
-    const juce::ScopedLock sl(dataAccessLock);
-    for (size_t i = 0; i < lfoData.size(); ++i)
+    auto safeLfoData = newLfoData;
+    for (size_t i = 0; i < safeLfoData.size(); ++i)
     {
-        lfoData[i].resetToDefault();
-        lfoEngines[i].stageShape(lfoData[i]);
+        safeLfoData[i].sanitise();
+        if (const auto* parameter = lfoParameters[i].smoothness)
+        {
+            const float smoothness = parameter->load(
+                std::memory_order_relaxed);
+            if (std::isfinite(smoothness))
+                safeLfoData[i].smoothness = juce::jlimit(
+                    0.0f, 1.0f, smoothness);
+        }
+    }
+
+    {
+        const juce::ScopedLock sl(dataAccessLock);
+        for (size_t i = 0; i < safeLfoData.size(); ++i)
+        {
+            const bool shapeChanged = lfoData[i].points != safeLfoData[i].points
+                                      || lfoData[i].curvatures != safeLfoData[i].curvatures;
+            if (shapeChanged)
+                lfoEngines[i].stageShape(safeLfoData[i]);
+
+            lfoData[i] = std::move(safeLfoData[i]);
+        }
+
+        modulationRoutings = std::move(newRoutings);
+        updatePublishedRoutingState();
     }
 }

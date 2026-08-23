@@ -24,6 +24,10 @@
 #include "DSP/ZeroLatencyModulatedDryWetMixer.h"
 #include <array>
 #include <atomic>
+#include <memory>
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+#include <functional>
+#endif
 
 
 //==============================================================================
@@ -378,9 +382,22 @@ public:
 
     LfoManager& getLfoManager() { return *lfoManager; }
     const LfoManager& getLfoManager() const { return *lfoManager; }
+    struct SerializablePresetStateSnapshot
+    {
+        juce::ValueTree parameterState;
+        std::vector<LfoData> lfoData;
+        juce::Array<ModulationRouting> routings;
+    };
+    SerializablePresetStateSnapshot captureSerializablePresetStateSnapshot() const;
     bool isDawPlaying() const;
     float getLfoPhase(int lfoIndex) const;
     std::unique_ptr<LfoManager> lfoManager;
+private:
+    // StateAB snapshots itself while later processor members (notably
+    // StatePresets) are still under construction. Keep that constructor path
+    // on the LFO/APVTS-only snapshot until the full main model is alive.
+    std::atomic<bool> serializableMainStateReady { false };
+public:
     const juce::StringArray& getLfoRateSyncDivisions() const;
 
     std::vector<LfoData> getLfoData() const { return lfoManager->getLfoDataCopy(); }
@@ -504,16 +521,31 @@ public:
     void applyDownsamplingEffect(juce::AudioBuffer<float>& buffer,
                                  const juce::AudioBuffer<float>& lfoOutputs);
 
-    void shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount);
-    void clearLfoModulationForBand(int bandIndex);
+    void shiftLfoModulationTargets(int startIndex,
+                                   int endIndex,
+                                   int shiftAmount,
+                                   bool notifyHost = true);
+    void clearLfoModulationForBand(int bandIndex,
+                                   bool notifyHost = true);
 
     // Parameter migration for an add/remove operation is performed on the
     // message thread. Mark the start before the first slot/routing write, then
     // publish the completed transaction with requestMultibandTopologyReset().
     // While the sequence is odd the audio thread keeps using its last coherent
     // fixed-size snapshot instead of observing a half-migrated layout.
-    void beginMultibandTopologyEdit() noexcept;
+    void beginMultibandTopologyEdit();
     void requestMultibandTopologyReset() noexcept;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    void setSerializableStateReaderHookForTesting(std::function<void()> hook);
+    std::uint32_t getMultibandTopologyGenerationForTesting() const noexcept
+    {
+        return multibandTopologyResetGeneration.load(std::memory_order_seq_cst);
+    }
+    unsigned int getActiveSerializableStateReadersForTesting() const noexcept
+    {
+        return activeSerializableStateReaders.load(std::memory_order_seq_cst);
+    }
+#endif
 
     bool getLatestDistortionGraphValues(DistortionGraphValues& values);
     void setUiFocusBand(int bandIndex);
@@ -580,6 +612,17 @@ private:
         int numBands = 1;
     };
 
+    struct SerializableMainStateSnapshot
+    {
+        juce::ValueTree parameterState;
+        std::vector<LfoData> lfoData;
+        juce::Array<ModulationRouting> routings;
+        int currentPresetID = 0;
+        juce::String currentPresetKey;
+        int editorWidth = static_cast<int>(INIT_WIDTH);
+        int editorHeight = static_cast<int>(INIT_HEIGHT);
+    };
+
     void initialiseParameterCache();
     CachedParameter cacheParameter(const juce::String& parameterID);
     static float loadCachedParameter(const CachedParameter& parameter, float fallback = 0.0f) noexcept;
@@ -626,6 +669,10 @@ private:
         const std::array<bool, 4>& soloState,
         bool anySoloActive) noexcept;
     void synchroniseMultibandTopologyResetState() noexcept;
+    SerializableMainStateSnapshot captureSerializableMainStateSnapshot() const;
+    SerializableMainStateSnapshot captureCoherentSerializableMainStateSnapshot() const;
+    SerializablePresetStateSnapshot
+    captureCurrentSerializablePresetStateSnapshotForABFallback() const;
     bool tryCaptureMultibandTopologySnapshot(
         const juce::AudioBuffer<float>& lfoOutputs,
         std::uint32_t sequenceAtCallbackStart,
@@ -646,9 +693,21 @@ private:
     // outer transaction prematurely.
     juce::CriticalSection multibandTopologyWriterLock;
     int multibandTopologyEditDepth = 0;
+    // Registered host-state readers finish copying APVTS before an outer
+    // topology writer is allowed to mutate it. The seq_cst handshake with the
+    // generation prevents the P->V / V->P listener-lock cycle.
+    mutable std::atomic<unsigned int> activeSerializableStateReaders { 0 };
+    std::shared_ptr<const SerializableMainStateSnapshot>
+        mainStateBeforeTopologyEdit;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    mutable juce::CriticalSection serializableStateReaderHookLock;
+    mutable std::function<void()> serializableStateReaderHookForTesting;
+#endif
     std::uint32_t appliedMultibandTopologyResetGeneration = 0;
     MultibandTopologySnapshot activeMultibandTopologySnapshot;
     bool activeMultibandTopologySnapshotInitialised = false;
+
+    friend class state::StateAB;
 
     std::vector<std::unique_ptr<BandProcessor>> bands;
     std::atomic<float> totalLatency { 0.0f };

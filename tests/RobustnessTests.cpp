@@ -1250,6 +1250,9 @@ TEST_CASE("State round-trip preserves LFO data and upgrades legacy shape state",
     customShape.points = { { 0.0f, 0.2f }, { 0.5f, 0.9f }, { 1.0f, 0.3f } };
     customShape.curvatures = { 0.25f, -0.5f };
     customShape.smoothness = 0.4f;
+    setParameterValue(source,
+                      ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 2),
+                      customShape.smoothness);
     source.getLfoManager().setLfoData(2, customShape);
     source.assignLfoToTarget(2, ParameterIDAndName::getIDString(DRIVE_ID, 0));
 

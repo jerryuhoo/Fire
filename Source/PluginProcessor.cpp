@@ -2553,6 +2553,7 @@ FireAudioProcessor::FireAudioProcessor()
 #endif
 #endif
 {
+    serializableMainStateReady.store(true, std::memory_order_release);
     initialiseParameterCache();
 
     // Initialize the band processors in a loop.
@@ -2944,20 +2945,200 @@ void FireAudioProcessor::reset()
     needsReset = true;
 }
 
-void FireAudioProcessor::beginMultibandTopologyEdit() noexcept
+FireAudioProcessor::SerializableMainStateSnapshot
+FireAudioProcessor::captureSerializableMainStateSnapshot() const
+{
+    auto lfoSnapshot = lfoManager->captureSerializableStateSnapshot();
+    auto presetIdentity = statePresets.getCurrentPresetIdentity();
+    return {
+        std::move(lfoSnapshot.parameterState),
+        std::move(lfoSnapshot.lfoData),
+        std::move(lfoSnapshot.routings),
+        presetIdentity.id,
+        std::move(presetIdentity.key),
+        editorWidth.load(std::memory_order_relaxed),
+        editorHeight.load(std::memory_order_relaxed)
+    };
+}
+
+FireAudioProcessor::SerializableMainStateSnapshot
+FireAudioProcessor::captureCoherentSerializableMainStateSnapshot() const
+{
+    for (;;)
+    {
+        const auto publishedGeneration =
+            multibandTopologyResetGeneration.load(std::memory_order_seq_cst);
+        if ((publishedGeneration & 1u) != 0u)
+        {
+            // Once odd is already visible, no registration is necessary: the
+            // writer published this immutable pre-edit state before the odd
+            // sequence and will never mutate that object.
+            const auto publishedPreEditState = std::atomic_load_explicit(
+                &mainStateBeforeTopologyEdit,
+                std::memory_order_acquire);
+            jassert(publishedPreEditState != nullptr);
+            if (publishedPreEditState != nullptr)
+                return *publishedPreEditState;
+
+            continue;
+        }
+
+        std::shared_ptr<const SerializableMainStateSnapshot> preEditState;
+        SerializableMainStateSnapshot candidate;
+        bool candidateWasAccepted = false;
+
+        {
+            const auto previousReaders = activeSerializableStateReaders.fetch_add(
+                1u, std::memory_order_seq_cst);
+            jassert(previousReaders
+                    != std::numeric_limits<unsigned int>::max());
+            const juce::ScopeGuard unregisterReader { [this]
+            {
+                const auto previous = activeSerializableStateReaders.fetch_sub(
+                    1u, std::memory_order_seq_cst);
+                jassert(previous > 0u);
+            } };
+
+            const auto generationBefore =
+                multibandTopologyResetGeneration.load(
+                    std::memory_order_seq_cst);
+            if ((generationBefore & 1u) != 0u)
+            {
+                // Copy the pointer while registered, then copy its immutable
+                // payload after unregistering below.
+                preEditState = std::atomic_load_explicit(
+                    &mainStateBeforeTopologyEdit,
+                    std::memory_order_acquire);
+                jassert(preEditState != nullptr);
+            }
+            else
+            {
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+                std::function<void()> readerHook;
+                {
+                    const juce::ScopedLock lock(
+                        serializableStateReaderHookLock);
+                    readerHook = std::move(
+                        serializableStateReaderHookForTesting);
+                    serializableStateReaderHookForTesting = {};
+                }
+                if (readerHook)
+                    readerHook();
+#endif
+
+                candidate = captureSerializableMainStateSnapshot();
+                const auto generationAfter =
+                    multibandTopologyResetGeneration.load(
+                        std::memory_order_seq_cst);
+                candidateWasAccepted = generationBefore == generationAfter
+                                       && (generationAfter & 1u) == 0u;
+            }
+        }
+
+        if (preEditState != nullptr)
+            return *preEditState;
+
+        if (candidateWasAccepted)
+            return candidate;
+    }
+}
+
+FireAudioProcessor::SerializablePresetStateSnapshot
+FireAudioProcessor::captureSerializablePresetStateSnapshot() const
+{
+    if (! serializableMainStateReady.load(std::memory_order_acquire))
+    {
+        auto snapshot = lfoManager->captureSerializableStateSnapshot();
+        return {
+            std::move(snapshot.parameterState),
+            std::move(snapshot.lfoData),
+            std::move(snapshot.routings)
+        };
+    }
+
+    auto snapshot = captureCoherentSerializableMainStateSnapshot();
+    return {
+        std::move(snapshot.parameterState),
+        std::move(snapshot.lfoData),
+        std::move(snapshot.routings)
+    };
+}
+
+FireAudioProcessor::SerializablePresetStateSnapshot
+FireAudioProcessor::captureCurrentSerializablePresetStateSnapshotForABFallback()
+    const
+{
+    // StateAB uses this only after a host-state transaction has completely
+    // staged its new APVTS/LFO/routing state, while the public generation is
+    // intentionally still odd. Its damaged/missing alternate must mirror that
+    // new live state rather than the immutable pre-edit snapshot returned to
+    // external serializers during the same transaction.
+    auto snapshot = lfoManager->captureSerializableStateSnapshot();
+    return {
+        std::move(snapshot.parameterState),
+        std::move(snapshot.lfoData),
+        std::move(snapshot.routings)
+    };
+}
+
+void FireAudioProcessor::beginMultibandTopologyEdit()
 {
     // Keep one recursive writer-lock level alive until the matching publish.
     // This serialises editor, preset and host-state writers without ever
     // involving the audio thread. Nested edits on the same thread coalesce
     // into one odd/even publication.
     multibandTopologyWriterLock.enter();
-    if (multibandTopologyEditDepth++ == 0)
+    if (multibandTopologyEditDepth == 0)
     {
+        try
+        {
+            // Audio uses the odd/even generation below. Host state callbacks
+            // can be synchronously re-entered by parameter notifications, so
+            // retain the last complete main state for that owning thread too.
+            std::atomic_store_explicit(
+                &mainStateBeforeTopologyEdit,
+                std::make_shared<const SerializableMainStateSnapshot>(
+                    captureSerializableMainStateSnapshot()),
+                std::memory_order_release);
+        }
+        catch (...)
+        {
+            multibandTopologyWriterLock.exit();
+            throw;
+        }
+
         const auto previous = multibandTopologyResetGeneration.fetch_add(
-            1u, std::memory_order_acq_rel);
+            1u, std::memory_order_seq_cst);
         jassert((previous & 1u) == 0u);
+
+        // A host callback may already hold JUCE's parameter-listener lock and
+        // be copying APVTS. Do not let the caller start a V->P state
+        // replacement until every reader which observed the previous even
+        // generation has unregistered. seq_cst is required because the count
+        // and generation are distinct atomics.
+        auto readers = activeSerializableStateReaders.load(
+            std::memory_order_seq_cst);
+        while (readers != 0u)
+        {
+            // The generated Xcode/Projucer targets still compile as C++17, so
+            // use JUCE's portable yield instead of C++20 atomic::wait().
+            juce::Thread::yield();
+            readers = activeSerializableStateReaders.load(
+                std::memory_order_seq_cst);
+        }
     }
+
+    ++multibandTopologyEditDepth;
 }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+void FireAudioProcessor::setSerializableStateReaderHookForTesting(
+    std::function<void()> hook)
+{
+    const juce::ScopedLock lock(serializableStateReaderHookLock);
+    serializableStateReaderHookForTesting = std::move(hook);
+}
+#endif
 
 void FireAudioProcessor::requestMultibandTopologyReset() noexcept
 {
@@ -2972,7 +3153,7 @@ void FireAudioProcessor::requestMultibandTopologyReset() noexcept
         if (multibandTopologyEditDepth == 0)
         {
             const auto previous = multibandTopologyResetGeneration.fetch_add(
-                1u, std::memory_order_release);
+                1u, std::memory_order_seq_cst);
             jassert((previous & 1u) != 0u);
         }
 
@@ -2983,7 +3164,7 @@ void FireAudioProcessor::requestMultibandTopologyReset() noexcept
 
     // A standalone request represents a complete same-count publication.
     const auto previous = multibandTopologyResetGeneration.fetch_add(
-        2u, std::memory_order_release);
+        2u, std::memory_order_seq_cst);
     jassert((previous & 1u) == 0u);
     multibandTopologyWriterLock.exit();
 }
@@ -3675,37 +3856,39 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     int xmlIndex = 0;
     juce::XmlElement xmlState { "state" };
 
+    // Reader registration covers only the live main-state capture. In
+    // particular it ends before StateAB::writeToXml(), whose own lock has a
+    // separate legacy ordering that must never participate in writer drain.
+    auto mainState = captureCoherentSerializableMainStateSnapshot();
+
     // 1. save treestate (parameters)
-    auto state = treeState.copyState();
-    std::unique_ptr<juce::XmlElement> treeStateXml(state.createXml());
+    std::unique_ptr<juce::XmlElement> treeStateXml(
+        mainState.parameterState.createXml());
     xmlState.insertChildElement(treeStateXml.release(), xmlIndex++);
 
     // 2. save current preset ID, width and height
     auto currentStateXml = std::make_unique<juce::XmlElement>("otherState");
-    currentStateXml->setAttribute("currentPresetID", statePresets.getCurrentPresetId());
-    currentStateXml->setAttribute("currentPresetKey", statePresets.getCurrentPresetKey());
-    currentStateXml->setAttribute("editorWidth", editorWidth.load(std::memory_order_relaxed));
-    currentStateXml->setAttribute("editorHeight", editorHeight.load(std::memory_order_relaxed));
+    currentStateXml->setAttribute("currentPresetID", mainState.currentPresetID);
+    currentStateXml->setAttribute("currentPresetKey", mainState.currentPresetKey);
+    currentStateXml->setAttribute("editorWidth", mainState.editorWidth);
+    currentStateXml->setAttribute("editorHeight", mainState.editorHeight);
 
     xmlState.insertChildElement(currentStateXml.release(), xmlIndex++);
 
-    const auto lfoDataToSave = lfoManager->getLfoDataCopy();
-    const auto routingsToSave = lfoManager->getModulationRoutingsCopy();
-
     // 3. Save LFO Shapes
     auto lfoState = std::make_unique<juce::XmlElement>("LFO_STATE");
-    for (int i = 0; i < static_cast<int>(lfoDataToSave.size()); ++i)
+    for (int i = 0; i < static_cast<int>(mainState.lfoData.size()); ++i)
     {
         auto lfoXml = std::make_unique<juce::XmlElement>("LFO");
         lfoXml->setAttribute("index", i);
-        lfoDataToSave[static_cast<size_t>(i)].writeToXml(*lfoXml);
+        mainState.lfoData[static_cast<size_t>(i)].writeToXml(*lfoXml);
         lfoState->addChildElement(lfoXml.release());
     }
     xmlState.insertChildElement(lfoState.release(), xmlIndex++);
 
     // 4. Save Modulation Matrix Routings
     auto modMatrixState = std::make_unique<juce::XmlElement>("MODULATION_STATE");
-    for (const auto& routing : routingsToSave)
+    for (const auto& routing : mainState.routings)
     {
         auto routingXml = std::make_unique<juce::XmlElement>("ROUTING");
         routing.writeToXml(*routingXml);
@@ -3864,12 +4047,28 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     // while this transaction is being assembled.
     for (size_t i = 0; i < loadedLfoData.size(); ++i)
     {
-        if (! smoothnessPresentInParameterState[i] && loadedLfoSmoothnessFromXml[i])
-            continue;
-
         const auto smoothnessID = ParameterIDAndName::getIDString(
             LFO_SMOOTH_ID, static_cast<int>(i));
-        const auto smoothnessState = findParameterState(treeToLoad, smoothnessID);
+        auto smoothnessState = findParameterState(treeToLoad, smoothnessID);
+        if (! smoothnessState.isValid())
+            continue;
+
+        if (! smoothnessPresentInParameterState[i]
+            && loadedLfoSmoothnessFromXml[i])
+        {
+            if (auto* parameter = treeState.getParameter(smoothnessID))
+            {
+                const auto& range = parameter->getNormalisableRange();
+                const float smoothness = range.snapToLegalValue(juce::jlimit(
+                    range.start,
+                    range.end,
+                    loadedLfoData[i].smoothness));
+                loadedLfoData[i].smoothness = smoothness;
+                smoothnessState.setProperty("value", smoothness, nullptr);
+            }
+            continue;
+        }
+
         if (smoothnessState.isValid())
         {
             const float smoothness = static_cast<float>(smoothnessState.getProperty("value"));
@@ -3926,34 +4125,34 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     // Commit only after the complete chunk has passed validation. Keep the
     // audio thread on its previous coherent multiband snapshot until the APVTS
     // state and modulation routings have both been replaced.
-    beginMultibandTopologyEdit();
-    treeState.replaceState(treeToLoad);
-    if (xmlCurrentState != nullptr)
     {
-        if (presetKey.isNotEmpty())
-            statePresets.setCurrentPresetKey(presetKey);
-        else
-            statePresets.setCurrentPresetId(legacyPresetID);
-        editorWidth.store(restoredEditorWidth, std::memory_order_relaxed);
-        editorHeight.store(restoredEditorHeight, std::memory_order_relaxed);
+        beginMultibandTopologyEdit();
+        const juce::ScopeGuard finishTopologyEdit { [this]
+        {
+            requestMultibandTopologyReset();
+        } };
+        treeState.replaceState(treeToLoad);
+        if (xmlCurrentState != nullptr)
+        {
+            if (presetKey.isNotEmpty())
+                statePresets.setCurrentPresetKey(presetKey);
+            else
+                statePresets.setCurrentPresetId(legacyPresetID);
+            editorWidth.store(restoredEditorWidth, std::memory_order_relaxed);
+            editorHeight.store(restoredEditorHeight, std::memory_order_relaxed);
+        }
+
+        lfoManager->replaceLfoDataAndRoutings(loadedLfoData,
+                                              std::move(loadedRoutings));
+
+        // A/B restoration mutates its internal snapshot, so keep it inside the
+        // commit phase after the complete host chunk has passed validation.
+        stateAB.readFromXml(xmlState->getChildByName("AB_STATE"));
+
+        // The scope guard publishes even if a foreign synchronous listener
+        // throws, so no failed restore can strand the generation odd or retain
+        // the recursive writer lock indefinitely.
     }
-
-    {
-        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
-        lfoManager->clearAllLfoData();
-        for (int i = 0; i < static_cast<int>(loadedLfoData.size()); ++i)
-            lfoManager->setLfoData(i, loadedLfoData[static_cast<size_t>(i)]);
-        lfoManager->getModulationRoutings() = std::move(loadedRoutings);
-    }
-
-    // A/B restoration mutates its internal snapshot, so keep it inside the
-    // commit phase after the complete host chunk has passed validation.
-    stateAB.readFromXml(xmlState->getChildByName("AB_STATE"));
-
-    // State replacement can migrate band parameters while NUM_BANDS stays
-    // unchanged. Publish an explicit topology generation so the next audio
-    // block cannot reuse DSP history from the previous logical band layout.
-    requestMultibandTopologyReset();
     sendChangeMessage();
 }
 
@@ -6879,9 +7078,9 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
         else
         {
             // Before Smoothness became an APVTS parameter it lived only on the
-            // LFO element. loadStateFromXml promotes that legacy value back to
-            // the parameter through setLfoData(), so compare against the same
-            // effective normalised parameter value.
+            // LFO element. loadStateFromXml explicitly promotes that legacy
+            // value to APVTS before replacing the shape, so compare against
+            // the same effective normalised parameter value.
             for (int i = 0; i < static_cast<int>(expectedLfoData.size()); ++i)
                 if (parameterWithID->paramID
                         == ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i)
@@ -6991,7 +7190,10 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
  * @param endIndex The ending band index of the range to affect.
  * @param shiftAmount The amount to add to the band index (can be positive or negative).
  */
-void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex, int shiftAmount)
+void FireAudioProcessor::shiftLfoModulationTargets(int startIndex,
+                                                   int endIndex,
+                                                   int shiftAmount,
+                                                   bool notifyHost)
 {
     if (! juce::isPositiveAndBelow(startIndex, 4)
         || ! juce::isPositiveAndBelow(endIndex, 4)
@@ -7077,7 +7279,7 @@ void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex,
         }
     }
 
-    if (didUpdate)
+    if (didUpdate && notifyHost)
         lfoDataHasChanged();
 }
 
@@ -7089,7 +7291,8 @@ void FireAudioProcessor::shiftLfoModulationTargets(int startIndex, int endIndex,
  *
  * @param bandIndex The 0-based index of the band whose modulation targets should be cleared.
  */
-void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
+void FireAudioProcessor::clearLfoModulationForBand(int bandIndex,
+                                                   bool notifyHost)
 {
     if (! juce::isPositiveAndBelow(bandIndex, 4))
         return;
@@ -7110,7 +7313,7 @@ void FireAudioProcessor::clearLfoModulationForBand(int bandIndex)
         }
     }
 
-    if (didUpdate)
+    if (didUpdate && notifyHost)
         lfoDataHasChanged();
 }
 

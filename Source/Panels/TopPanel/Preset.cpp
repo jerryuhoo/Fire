@@ -224,6 +224,63 @@ bool isSupportedPresetDocument(const juce::XmlElement& xml) noexcept
 {
     return xml.hasTagName("WINGSFIRE");
 }
+
+void writeSerializablePresetSnapshotToXml(
+    const FireAudioProcessor& processor,
+    const FireAudioProcessor::SerializablePresetStateSnapshot& snapshot,
+    juce::XmlElement& xml)
+{
+    xml.deleteAllChildElements();
+    xml.setAttribute("presetFormatVersion", 2);
+    xml.setAttribute("pluginVersion", VERSION);
+
+    for (const auto& param : processor.getParameters())
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+        {
+            float normalisedValue = p->getDefaultValue();
+            for (const auto& child : snapshot.parameterState)
+            {
+                if (child.getProperty("id").toString() != p->paramID
+                    || ! child.hasProperty("value"))
+                    continue;
+
+                if (auto* ranged = processor.treeState.getParameter(p->paramID))
+                {
+                    const float plainValue = static_cast<float>(
+                        child.getProperty("value"));
+                    if (std::isfinite(plainValue))
+                    {
+                        const auto& range = ranged->getNormalisableRange();
+                        normalisedValue = ranged->convertTo0to1(
+                            range.snapToLegalValue(juce::jlimit(
+                                range.start, range.end, plainValue)));
+                    }
+                }
+                break;
+            }
+            xml.setAttribute(p->paramID, normalisedValue);
+        }
+
+    auto* lfoState = xml.createNewChildElement("LFO_STATE");
+    for (int i = 0; i < static_cast<int>(snapshot.lfoData.size()); ++i)
+    {
+        auto lfoXml = std::make_unique<juce::XmlElement>("LFO");
+        lfoXml->setAttribute("index", i);
+        snapshot.lfoData[static_cast<size_t>(i)].writeToXml(*lfoXml);
+        lfoState->addChildElement(lfoXml.release());
+    }
+
+    auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
+    for (const auto& routing : snapshot.routings)
+    {
+        if (! routing.targetParameterID.isEmpty())
+        {
+            auto routingXml = std::make_unique<juce::XmlElement>("ROUTING");
+            routing.writeToXml(*routingXml);
+            modMatrixState->addChildElement(routingXml.release());
+        }
+    }
+}
 } // namespace
 
 namespace state
@@ -232,67 +289,41 @@ namespace state
     void saveStateToXml(const juce::AudioProcessor& proc, juce::XmlElement& xml)
     {
         auto& fireProc = static_cast<const FireAudioProcessor&>(proc);
-        xml.deleteAllChildElements();
-        xml.setAttribute("presetFormatVersion", 2);
-        xml.setAttribute("pluginVersion", VERSION);
-
-        for (const auto& param : fireProc.getParameters())
-            if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-                xml.setAttribute(p->paramID, p->getValue());
-
-        const auto lfoDataToSave = fireProc.getLfoManager().getLfoDataCopy();
-        const auto routingsToSave = fireProc.getLfoManager().getModulationRoutingsCopy();
-
-        // 1. Save LFO Shapes
-        auto* lfoState = xml.createNewChildElement("LFO_STATE");
-
-        for (int i = 0; i < static_cast<int>(lfoDataToSave.size()); ++i)
-        {
-            auto lfoXml = std::make_unique<juce::XmlElement>("LFO");
-            lfoXml->setAttribute("index", i);
-            lfoDataToSave[static_cast<size_t>(i)].writeToXml(*lfoXml);
-            lfoState->addChildElement(lfoXml.release());
-        }
-
-        // 2. Save Modulation Matrix Routings
-        auto* modMatrixState = xml.createNewChildElement("MODULATION_STATE");
-        for (const auto& routing : routingsToSave)
-        {
-            if (! routing.targetParameterID.isEmpty())
-            {
-                auto routingXml = std::make_unique<juce::XmlElement>("ROUTING");
-                routing.writeToXml(*routingXml);
-                modMatrixState->addChildElement(routingXml.release());
-            }
-        }
+        auto snapshot = fireProc.captureSerializablePresetStateSnapshot();
+        writeSerializablePresetSnapshotToXml(fireProc, snapshot, xml);
     }
 
     void loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
     {
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
-        fireProc.beginMultibandTopologyEdit();
-
-        for (const auto& param : proc.getParameters())
         {
-            if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+            fireProc.beginMultibandTopologyEdit();
+            const juce::ScopeGuard finishTopologyEdit { [&fireProc]
             {
-                float valueToLoad = p->getDefaultValue();
-                if (xml.hasAttribute(p->paramID))
-                {
-                    // XmlElement's numeric helpers accept a valid numeric prefix
-                    // (for example "0.5oops"). Presets are an external file
-                    // format, so only a complete, finite normalised number is
-                    // allowed to override the parameter default.
-                    valueToLoad = readNormalisedAttribute(xml, p->paramID, p->getDefaultValue());
-                }
-                else if (p->paramID.startsWith(SHAPE_BYPASS_ID))
-                {
-                    valueToLoad = 1.0f;
-                }
+                fireProc.requestMultibandTopologyReset();
+            } };
 
-                p->setValueNotifyingHost(valueToLoad);
+            for (const auto& param : proc.getParameters())
+            {
+                if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+                {
+                    float valueToLoad = p->getDefaultValue();
+                    if (xml.hasAttribute(p->paramID))
+                    {
+                        // XmlElement's numeric helpers accept a valid numeric prefix
+                        // (for example "0.5oops"). Presets are an external file
+                        // format, so only a complete, finite normalised number is
+                        // allowed to override the parameter default.
+                        valueToLoad = readNormalisedAttribute(xml, p->paramID, p->getDefaultValue());
+                    }
+                    else if (p->paramID.startsWith(SHAPE_BYPASS_ID))
+                    {
+                        valueToLoad = 1.0f;
+                    }
+
+                    p->setValueNotifyingHost(valueToLoad);
+                }
             }
-        }
 
         std::array<LfoData, 4> lfoDataToLoad;
         std::array<bool, 4> loadedLfoSmoothness {};
@@ -329,7 +360,22 @@ namespace state
             // The parameter attribute is authoritative when present. The LFO
             // XML value is retained only for presets old enough to lack it.
             if (! loadedSmoothnessParameter[index] && loadedLfoSmoothness[index])
+            {
+                const auto parameterID = ParameterIDAndName::getIDString(
+                    LFO_SMOOTH_ID, i);
+                if (auto* parameter = fireProc.treeState.getParameter(parameterID))
+                {
+                    const auto& range = parameter->getNormalisableRange();
+                    const float smoothness = range.snapToLegalValue(
+                        juce::jlimit(range.start,
+                                     range.end,
+                                     lfoDataToLoad[index].smoothness));
+                    lfoDataToLoad[index].smoothness = smoothness;
+                    parameter->setValueNotifyingHost(
+                        parameter->convertTo0to1(smoothness));
+                }
                 continue;
+            }
 
             if (const auto* smoothness = fireProc.treeState.getRawParameterValue(
                     ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i)))
@@ -364,19 +410,13 @@ namespace state
             }
         }
 
-        auto& manager = fireProc.getLfoManager();
-        {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            manager.clearAllLfoData();
-            for (int i = 0; i < static_cast<int>(lfoDataToLoad.size()); ++i)
-                manager.setLfoData(i, lfoDataToLoad[static_cast<size_t>(i)]);
-            manager.getModulationRoutings() = std::move(routingsToLoad);
-        }
+            fireProc.getLfoManager().replaceLfoDataAndRoutings(
+                lfoDataToLoad, std::move(routingsToLoad));
 
-        // A preset/A-B swap may replace every logical band while retaining the
-        // same NUM_BANDS value. Publish the completed migration explicitly so
-        // the audio thread cannot reuse DSP history from the previous slots.
-        fireProc.requestMultibandTopologyReset();
+            // A preset/A-B swap may replace every logical band while retaining
+            // the same NUM_BANDS value. The scope guard publishes the complete
+            // migration, including when a foreign listener throws.
+        }
         fireProc.sendChangeMessage();
     }
 
@@ -444,7 +484,11 @@ namespace state
             // state that has just been restored.
             ab.removeAllAttributes();
             ab.deleteAllChildElements();
-            saveStateToXml(pluginProcessor, ab);
+            auto& fireProc = static_cast<const FireAudioProcessor&>(
+                pluginProcessor);
+            auto fallback = fireProc
+                                .captureCurrentSerializablePresetStateSnapshotForABFallback();
+            writeSerializablePresetSnapshotToXml(fireProc, fallback, ab);
             currentSideIsA.store(true, std::memory_order_release);
             return;
         }
@@ -729,14 +773,23 @@ namespace state
         {
             if (child->hasAttribute("presetName") && child->getTagName() == presetId)
             {
-                loadStateFromXml(*child, pluginProcessor);
                 {
-                    const juce::ScopedLock lock(identityLock);
-                    statePresetName = child->getStringAttribute("presetName");
-                    currentPresetKey = normalisePresetKey(child->getStringAttribute("presetKey"));
+                    auto& fireProc = static_cast<FireAudioProcessor&>(
+                        pluginProcessor);
+                    fireProc.beginMultibandTopologyEdit();
+                    const juce::ScopeGuard finishTopologyEdit { [&fireProc]
+                    {
+                        fireProc.requestMultibandTopologyReset();
+                    } };
+
+                    loadStateFromXml(*child, pluginProcessor);
+                    {
+                        const juce::ScopedLock lock(identityLock);
+                        statePresetName = child->getStringAttribute("presetName");
+                        currentPresetKey = normalisePresetKey(
+                            child->getStringAttribute("presetKey"));
+                    }
                 }
-                pluginProcessor.updateHostDisplay(
-                    juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
                 return true;
             }
 
@@ -747,9 +800,20 @@ namespace state
         return false;
     }
 
-    bool StatePresets::loadPreset(const juce::String& presetId)
+    bool StatePresets::loadPreset(const juce::String& presetId,
+                                  bool notifyHost)
     {
-        return recursivePresetLoad(mPresetXml, presetId);
+        const bool presetWasLoaded = recursivePresetLoad(mPresetXml, presetId);
+        if (presetWasLoaded && notifyHost)
+        {
+            // recursivePresetLoad commits its topology transaction before
+            // telling the host to request a new state snapshot.
+            pluginProcessor.updateHostDisplay(
+                juce::AudioProcessorListener::ChangeDetails {}
+                    .withNonParameterStateChanged(true));
+        }
+
+        return presetWasLoaded;
     }
 
     void StatePresets::deletePreset()
@@ -878,6 +942,14 @@ namespace state
         return mCurrentPresetId.load();
     }
 
+    StatePresets::PresetIdentitySnapshot
+    StatePresets::getCurrentPresetIdentity() const
+    {
+        const juce::ScopedLock lock(identityLock);
+        return { mCurrentPresetId.load(std::memory_order_relaxed),
+                 currentPresetKey };
+    }
+
     void StatePresets::setCurrentPresetId(int currentPresetId)
     {
         const juce::ScopedLock lock(identityLock);
@@ -912,29 +984,38 @@ namespace state
         return mPresetXml;
     }
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    void StatePresets::setPresetDirectoryForTesting(juce::File directory)
+    {
+        presetFile = std::move(directory);
+        scanAllPresets();
+    }
+#endif
+
     void StatePresets::initPreset()
     {
         auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
-        fireProc.beginMultibandTopologyEdit();
-        for (const auto& param : pluginProcessor.getParameters())
-            if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
-                // if not in xml set current
-                p->setValueNotifyingHost(p->getDefaultValue());
-        // set preset combobox to 0
         {
-            const juce::ScopedLock lock(identityLock);
-            statePresetName.clear();
-            currentPresetKey.clear();
-            mCurrentPresetId.store(0);
-        }
+            fireProc.beginMultibandTopologyEdit();
+            const juce::ScopeGuard finishTopologyEdit { [&fireProc]
+            {
+                fireProc.requestMultibandTopologyReset();
+            } };
+            for (const auto& param : pluginProcessor.getParameters())
+                if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param))
+                    // if not in xml set current
+                    p->setValueNotifyingHost(p->getDefaultValue());
+            // set preset combobox to 0
+            {
+                const juce::ScopedLock lock(identityLock);
+                statePresetName.clear();
+                currentPresetKey.clear();
+                mCurrentPresetId.store(0);
+            }
 
-        auto& manager = fireProc.getLfoManager();
-        {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            manager.clearAllLfoData();
-            manager.getModulationRoutings().clear();
+            fireProc.getLfoManager().replaceLfoDataAndRoutings(
+                std::array<LfoData, 4> {}, {});
         }
-        fireProc.requestMultibandTopologyReset();
         fireProc.sendChangeMessage();
         pluginProcessor.updateHostDisplay(
             juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
@@ -1299,12 +1380,34 @@ namespace state
                 {
                     endProgrammaticChange();
                 } };
-                presetManager->setCurrentPresetId(selectedId);
-                if (! presetManager->loadPreset(internalIdToLoad))
+                bool presetWasLoaded = false;
                 {
-                    presetManager->setCurrentPresetId(0);
-                    return;
+                    auto& fireProc = static_cast<FireAudioProcessor&>(
+                        presetManager->getProcessor());
+                    fireProc.beginMultibandTopologyEdit();
+                    const juce::ScopeGuard finishTopologyEdit { [&fireProc]
+                    {
+                        fireProc.requestMultibandTopologyReset();
+                    } };
+
+                    // Identity is part of the same serializable generation as
+                    // the preset's parameters, shapes and routings.
+                    presetManager->setCurrentPresetId(selectedId);
+                    presetWasLoaded = presetManager->loadPreset(
+                        internalIdToLoad, false);
+                    if (! presetWasLoaded)
+                        presetManager->setCurrentPresetId(0);
                 }
+
+                if (! presetWasLoaded)
+                    return;
+
+                // The UI owns an outer transaction which also includes the
+                // selected preset ID. Notify only after that transaction has
+                // published the complete sound and identity generation.
+                presetManager->getProcessor().updateHostDisplay(
+                    juce::AudioProcessorListener::ChangeDetails {}
+                        .withNonParameterStateChanged(true));
 
                 const juce::String loadedPresetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
 

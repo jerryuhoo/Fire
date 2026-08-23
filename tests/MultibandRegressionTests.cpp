@@ -98,6 +98,43 @@ void checkRoutingIsReset(const ModulationRouting& routing)
     CHECK_FALSE(routing.isBypassed);
 }
 
+class NonParameterStateCapture final : public juce::AudioProcessorListener
+{
+public:
+    explicit NonParameterStateCapture(FireAudioProcessor& processorToObserve)
+        : processor(processorToObserve)
+    {
+        processor.addListener(this);
+    }
+
+    ~NonParameterStateCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int,
+                                        float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (! details.nonParameterStateChanged || captureInProgress)
+            return;
+
+        const juce::ScopedValueSetter<bool> captureGuard(captureInProgress, true);
+        states.emplace_back();
+        processor.getStateInformation(states.back());
+    }
+
+    FireAudioProcessor& processor;
+    std::vector<juce::MemoryBlock> states;
+    bool captureInProgress = false;
+};
+
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::Point<float> position,
                                 juce::ModifierKeys modifiers = {})
@@ -464,6 +501,97 @@ TEST_CASE("Adding a band clears overwritten modulation destinations",
         activeRoutingCount += routing.targetParameterID.isNotEmpty() ? 1 : 0;
     CHECK(activeRoutingCount == 1);
     checkRoutingIsReset(after.getReference(1));
+}
+
+TEST_CASE("Band add and delete notify the host after topology commit",
+          "[multiband][ui][state][host][topology][transaction]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("add")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        initialiseBandLayout(processor, 1);
+        const auto oldDrive = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        const auto shiftedDrive = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+        processor.assignLfoToTarget(2, oldDrive);
+
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->setBounds(0, 0, 1000, 500);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        auto* multiband = findDescendant<Multiband>(*editor);
+        REQUIRE(multiband != nullptr);
+
+        NonParameterStateCapture host(processor);
+        const auto insertionPoint = juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * 0.35f,
+            static_cast<float>(multiband->getHeight()) * 0.10f
+        };
+        static_cast<juce::Component&>(*multiband).mouseDown(
+            makeMouseEvent(*multiband,
+                           insertionPoint,
+                           juce::ModifierKeys::leftButtonModifier));
+
+        REQUIRE(host.states.size() == 1);
+        FireAudioProcessor restored;
+        restored.setStateInformation(host.states.front().getData(),
+                                     static_cast<int>(host.states.front().getSize()));
+        const auto* restoredBandCount = restored.treeState.getRawParameterValue(
+            NUM_BANDS_ID);
+        REQUIRE(restoredBandCount != nullptr);
+        CHECK(restoredBandCount->load(std::memory_order_relaxed)
+              == Catch::Approx(2.0f));
+        const auto restoredRoutings = restored.getLfoManager()
+                                          .getModulationRoutingsCopy();
+        const auto* movedRouting = findRouting(restoredRoutings, shiftedDrive);
+        REQUIRE(movedRouting != nullptr);
+        CHECK(movedRouting->sourceLfoIndex == 2);
+        CHECK(findRouting(restoredRoutings, oldDrive) == nullptr);
+    }
+
+    SECTION("delete")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        initialiseBandLayout(processor, 2);
+        const auto deletedDrive = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        const auto survivingDrive = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+        processor.assignLfoToTarget(1, survivingDrive);
+
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->setBounds(0, 0, 1000, 500);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        auto* multiband = findDescendant<Multiband>(*editor);
+        REQUIRE(multiband != nullptr);
+        auto closeButtons = getPositionedCloseButtons(*multiband);
+        REQUIRE(closeButtons.size() == 2);
+        auto* firstBandClose = closeButtons.front();
+        REQUIRE(firstBandClose != nullptr);
+        const auto closeCentre = firstBandClose->getBounds().toFloat().getCentre();
+        multiband->mouseMove(makeMouseEvent(*multiband, closeCentre));
+        REQUIRE(firstBandClose->isVisible());
+
+        NonParameterStateCapture host(processor);
+        firstBandClose->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        REQUIRE(host.states.size() == 1);
+        FireAudioProcessor restored;
+        restored.setStateInformation(host.states.front().getData(),
+                                     static_cast<int>(host.states.front().getSize()));
+        const auto* restoredBandCount = restored.treeState.getRawParameterValue(
+            NUM_BANDS_ID);
+        REQUIRE(restoredBandCount != nullptr);
+        CHECK(restoredBandCount->load(std::memory_order_relaxed)
+              == Catch::Approx(1.0f));
+        const auto restoredRoutings = restored.getLfoManager()
+                                          .getModulationRoutingsCopy();
+        const auto* movedRouting = findRouting(restoredRoutings, deletedDrive);
+        REQUIRE(movedRouting != nullptr);
+        CHECK(movedRouting->sourceLfoIndex == 1);
+        CHECK(findRouting(restoredRoutings, survivingDrive) == nullptr);
+    }
 }
 
 TEST_CASE("Deleting the focused last band rebinds Drive to the remaining audible band",
@@ -1173,8 +1301,33 @@ TEST_CASE("Host band-count automation is authoritative over divider presentation
     // Simulate a host changing only the automatable DSP topology parameter.
     // The editor timer must reconcile its presentation without requiring the
     // legacy lineState parameters to arrive in a particular order.
-    setPlainParameter(processor, NUM_BANDS_ID, 3.0f);
-    editor->timerCallback();
+    {
+        NonParameterStateCapture host(processor);
+        setPlainParameter(processor, NUM_BANDS_ID, 3.0f);
+        editor->timerCallback();
+        REQUIRE(host.states.size() == 1);
+
+        FireAudioProcessor restored;
+        restored.setStateInformation(host.states.front().getData(),
+                                     static_cast<int>(host.states.front().getSize()));
+        const auto* restoredBandCount = restored.treeState.getRawParameterValue(
+            NUM_BANDS_ID);
+        REQUIRE(restoredBandCount != nullptr);
+        CHECK(restoredBandCount->load(std::memory_order_relaxed)
+              == Catch::Approx(3.0f));
+        for (int divider = 0; divider < 2; ++divider)
+        {
+            const auto* restoredLineState = restored.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(LINE_STATE_ID, divider));
+            const auto* restoredFrequency = restored.treeState.getRawParameterValue(
+                ParameterIDAndName::getIDString(FREQ_ID, divider));
+            REQUIRE(restoredLineState != nullptr);
+            REQUIRE(restoredFrequency != nullptr);
+            CHECK(restoredLineState->load(std::memory_order_relaxed)
+                  == Catch::Approx(1.0f));
+            CHECK(restoredFrequency->load(std::memory_order_relaxed) > 21.0f);
+        }
+    }
     CHECK(getVisibleBandEnableButtonCount(*multiband) == 3);
     CHECK(getVisibleDividerCount(*multiband) == 2);
     CHECK(multiband->getFocusIndex() == 0);

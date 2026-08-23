@@ -250,7 +250,10 @@ void Multiband::setStatesWhenAdd(int insertionIndex, bool newBandIsOnLeft)
         copyBandSettings(i + 1, i);
 
     // Also shift LFO targets for the same range of bands
-    processor.shiftLfoModulationTargets(insertionIndex, oldLastBandIndex, 1);
+    processor.shiftLfoModulationTargets(insertionIndex,
+                                        oldLastBandIndex,
+                                        1,
+                                        false);
 
     // Preserve the logical identity of the old band.  If the new region is on
     // the left the old settings stay in insertionIndex + 1; otherwise restore
@@ -263,7 +266,7 @@ void Multiband::setStatesWhenAdd(int insertionIndex, bool newBandIsOnLeft)
         // The "Make Space" step has already moved the OLD band's settings to insertionIndex + 1. This is perfect.
         // We just need to reset the band at the original insertionIndex to its default state, creating the NEW band on the LEFT.
         resetBandToDefault(insertionIndex);
-        processor.clearLfoModulationForBand(insertionIndex); // Clear LFOs for the new default band
+        processor.clearLfoModulationForBand(insertionIndex, false); // Clear LFOs for the new default band
     }
     else // Clicked on the RIGHT side
     {
@@ -273,11 +276,14 @@ void Multiband::setStatesWhenAdd(int insertionIndex, bool newBandIsOnLeft)
         // The "Make Space" step moved the OLD settings to insertionIndex + 1. We need them back.
         // So, we copy the temporarily stored settings from (insertionIndex + 1) back to the original position.
         copyBandSettings(insertionIndex, insertionIndex + 1);
-        processor.shiftLfoModulationTargets(insertionIndex + 1, insertionIndex + 1, -1);
+        processor.shiftLfoModulationTargets(insertionIndex + 1,
+                                            insertionIndex + 1,
+                                            -1,
+                                            false);
 
         // Now, we reset the band to the right to be a new, default band.
         resetBandToDefault(insertionIndex + 1);
-        processor.clearLfoModulationForBand(insertionIndex + 1); // Clear LFOs for the new default band
+        processor.clearLfoModulationForBand(insertionIndex + 1, false); // Clear LFOs for the new default band
     }
 }
 
@@ -301,7 +307,7 @@ void Multiband::setStatesWhenDelete(int deletedIndex)
     // Remove routings owned by the deleted logical band before moving later
     // routings into its index.  Otherwise both the deleted band and its
     // successor can target the same newly-visible parameter.
-    processor.clearLfoModulationForBand(deletedIndex);
+    processor.clearLfoModulationForBand(deletedIndex, false);
 
     // Shift all active bands that came after the deleted one forward.
     // e.g., if index 1 is deleted, copy settings from 2 to 1, and from 3 to 2.
@@ -310,13 +316,16 @@ void Multiband::setStatesWhenDelete(int deletedIndex)
         copyBandSettings(i, i + 1);
 
     // Also shift LFO targets for the same range
-    processor.shiftLfoModulationTargets(deletedIndex + 1, oldLastBandIndex, -1);
+    processor.shiftLfoModulationTargets(deletedIndex + 1,
+                                        oldLastBandIndex,
+                                        -1,
+                                        false);
 
     // Clean up the slot that has just become inactive.  Resetting band 3
     // unconditionally left stale state behind when deleting from a two- or
     // three-band layout.
     resetBandToDefault(oldLastBandIndex);
-    processor.clearLfoModulationForBand(oldLastBandIndex);
+    processor.clearLfoModulationForBand(oldLastBandIndex, false);
 
     // NOTE: We no longer need to call setSoloRelatedBounds() manually here,
     // as it will be handled automatically later in the call chain
@@ -529,7 +538,22 @@ void Multiband::synchroniseBandCountFromParameter()
     }
 
     if (! presentationIsCanonical)
-        applyAuthoritativeBandCount(requestedBandCount, true, true);
+    {
+        {
+            processor.beginMultibandTopologyEdit();
+            const juce::ScopeGuard finishTopologyEdit { [this]
+            {
+                processor.requestMultibandTopologyReset();
+            } };
+            applyAuthoritativeBandCount(requestedBandCount, true, true);
+        }
+
+        // Parameter callbacks fired while the generation was odd can only
+        // observe the immutable pre-edit snapshot. Publish one post-commit
+        // notification so hosts persist the canonical NUM_BANDS/FREQ/LINE
+        // tuple instead of the stale presentation generation.
+        processor.lfoDataHasChanged();
+    }
 }
 
 void Multiband::setLineIndex()
@@ -621,12 +645,17 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
 
                 const bool newBandIsOnLeft = localEvent.position.x
                                              < getBandBounds(splitBandIndex).getCentreX();
+                bool bandWasAdded = false;
                 for (; i < 3; i++)
                 {
                     // create lines and close buttons and then set state
                     if (! freqDividerGroup[i]->getToggleState())
                     {
                         processor.beginMultibandTopologyEdit();
+                        const juce::ScopeGuard finishTopologyEdit { [this]
+                        {
+                            processor.requestMultibandTopologyReset();
+                        } };
                         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
                         int freq = static_cast<int>(transformFromLog(xPercent));
                         freqDividerGroup[i]->setFreq(freq);
@@ -650,10 +679,12 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                         // frequency and the final band count are coherent.
                         // This also catches add/delete pairs that happen
                         // between audio blocks and finish on the same count.
-                        processor.requestMultibandTopologyReset();
+                        bandWasAdded = true;
                         break;
                     }
                 }
+                if (bandWasAdded)
+                    processor.lfoDataHasChanged();
                 setLineRelatedBoundsByX(); // TODO: dont use this, only set freq
                 setSoloRelatedBounds();
                 refreshHoveredBandFromMouse();
@@ -827,6 +858,7 @@ void Multiband::sliderValueChanged(juce::Slider* slider)
 void Multiband::buttonClicked(juce::Button* button)
 {
     // click closebutton and delete line.
+    bool bandWasDeleted = false;
     for (int i = 0; i <= lineNum; ++i)
     {
         if (button == bandUIs[i].closeButton.get()) // <--- MODIFIED
@@ -834,6 +866,10 @@ void Multiband::buttonClicked(juce::Button* button)
             const int deletedIndex = i;
             const int oldFocus = focusIndex;
             processor.beginMultibandTopologyEdit();
+            const juce::ScopeGuard finishTopologyEdit { [this]
+            {
+                processor.requestMultibandTopologyReset();
+            } };
             setStatesWhenDelete(i);
             sortLinesInternal(false);
 
@@ -849,11 +885,14 @@ void Multiband::buttonClicked(juce::Button* button)
             {
                 param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(lineNum + 1));
             }
-            processor.requestMultibandTopologyReset();
             refreshHoveredBandFromMouse();
+            bandWasDeleted = true;
             break;
         }
     }
+
+    if (bandWasDeleted)
+        processor.lfoDataHasChanged();
 
     repaint();
 }

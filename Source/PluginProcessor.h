@@ -537,6 +537,7 @@ public:
     void requestMultibandTopologyReset() noexcept;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     void setSerializableStateReaderHookForTesting(std::function<void()> hook);
+    void setHostStateMainCaptureHookForTesting(std::function<void()> hook);
     std::uint32_t getMultibandTopologyGenerationForTesting() const noexcept
     {
         return multibandTopologyResetGeneration.load(std::memory_order_seq_cst);
@@ -544,6 +545,14 @@ public:
     unsigned int getActiveSerializableStateReadersForTesting() const noexcept
     {
         return activeSerializableStateReaders.load(std::memory_order_seq_cst);
+    }
+    bool tryAcquireMultibandTopologyWriterLockForTesting() const noexcept
+    {
+        if (! multibandTopologyWriterLock.tryEnter())
+            return false;
+
+        multibandTopologyWriterLock.exit();
+        return true;
     }
 #endif
 
@@ -621,6 +630,7 @@ private:
         juce::String currentPresetKey;
         int editorWidth = static_cast<int>(INIT_WIDTH);
         int editorHeight = static_cast<int>(INIT_HEIGHT);
+        juce::XmlElement abState { "AB_STATE" };
     };
 
     void initialiseParameterCache();
@@ -700,8 +710,9 @@ private:
     std::shared_ptr<const SerializableMainStateSnapshot>
         mainStateBeforeTopologyEdit;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
-    mutable juce::CriticalSection serializableStateReaderHookLock;
+    mutable juce::CriticalSection serializableStateHookLock;
     mutable std::function<void()> serializableStateReaderHookForTesting;
+    std::function<void()> hostStateMainCaptureHookForTesting;
 #endif
     std::uint32_t appliedMultibandTopologyResetGeneration = 0;
     MultibandTopologySnapshot activeMultibandTopologySnapshot;

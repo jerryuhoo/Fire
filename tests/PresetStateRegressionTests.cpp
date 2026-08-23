@@ -137,12 +137,15 @@ public:
             return;
 
         const juce::ScopedValueSetter<bool> captureGuard(captureInProgress, true);
+        generations.push_back(
+            processor.getMultibandTopologyGenerationForTesting());
         states.emplace_back();
         processor.getStateInformation(states.back());
     }
 
     FireAudioProcessor& processor;
     std::vector<juce::MemoryBlock> states;
+    std::vector<std::uint32_t> generations;
     bool captureInProgress = false;
 };
 
@@ -1729,6 +1732,120 @@ TEST_CASE("Host sessions preserve the inactive A-B snapshot and active side",
         CHECK(restored.stateAB.isCurrentA());
         checkLiveState(restored, 72.0f, 0.68f, 2, -0.61f);
     }
+}
+
+TEST_CASE("A-B state replacement acquires its state lock inside the topology transaction",
+          "[state][host][ab][topology][transaction][locking]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+
+    const auto requireTopologyBeforeStateLock = [&](const auto& operation)
+    {
+        bool hookWasCalled = false;
+        std::uint32_t generationWhenStateLockWasAcquired = 0;
+        processor.stateAB.setMutationLockAcquiredHookForTesting([&]
+        {
+            hookWasCalled = true;
+            generationWhenStateLockWasAcquired =
+                processor.getMultibandTopologyGenerationForTesting();
+        });
+
+        operation();
+
+        REQUIRE(hookWasCalled);
+        CHECK((generationWhenStateLockWasAcquired & 1u) != 0u);
+        CHECK((processor.getMultibandTopologyGenerationForTesting() & 1u)
+              == 0u);
+    };
+
+    SECTION("toggle")
+    {
+        NonParameterStateCapture host(processor);
+        requireTopologyBeforeStateLock([&] { processor.stateAB.toggleAB(); });
+        REQUIRE(host.states.size() == 1);
+        REQUIRE(host.generations.size() == 1);
+        CHECK((host.generations.front() & 1u) == 0u);
+    }
+
+    SECTION("host restore")
+    {
+        juce::MemoryBlock hostState;
+        processor.getStateInformation(hostState);
+        REQUIRE(hostState.getSize() > 0);
+        requireTopologyBeforeStateLock([&]
+        {
+            processor.setStateInformation(hostState.getData(),
+                                          static_cast<int>(hostState.getSize()));
+        });
+    }
+}
+
+TEST_CASE("Copying A-B state serializes without publishing an audio topology change",
+          "[state][ab][topology][copy]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    setPlainParameter(processor, driveID, 63.0f);
+    const auto generationBeforeCopy =
+        processor.getMultibandTopologyGenerationForTesting();
+    bool anotherThreadCouldAcquireWriterLock = true;
+    processor.stateAB.setMutationLockAcquiredHookForTesting([&]
+    {
+        std::thread writerProbe([&]
+        {
+            anotherThreadCouldAcquireWriterLock =
+                processor.tryAcquireMultibandTopologyWriterLockForTesting();
+        });
+        writerProbe.join();
+    });
+
+    processor.stateAB.copyAB(false);
+
+    CHECK_FALSE(anotherThreadCouldAcquireWriterLock);
+    CHECK(processor.getMultibandTopologyGenerationForTesting()
+          == generationBeforeCopy);
+    setPlainParameter(processor, driveID, 17.0f);
+    processor.stateAB.toggleAB();
+    CHECK(getPlainParameter(processor, driveID) == Catch::Approx(63.0f));
+}
+
+TEST_CASE("Host saves keep active and inactive A-B states in one generation",
+          "[state][host][ab][topology][transaction][reentrant]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor source;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+
+    setPlainParameter(source, driveID, 14.0f);
+    source.stateAB.copyAB(false);
+    setPlainParameter(source, driveID, 72.0f);
+    REQUIRE(source.stateAB.isCurrentA());
+
+    bool hookWasCalled = false;
+    source.setHostStateMainCaptureHookForTesting([&]
+    {
+        hookWasCalled = true;
+        source.stateAB.toggleAB();
+    });
+
+    juce::MemoryBlock savedState;
+    source.getStateInformation(savedState);
+    REQUIRE(hookWasCalled);
+    REQUIRE(savedState.getSize() > 0);
+    CHECK_FALSE(source.stateAB.isCurrentA());
+    CHECK(getPlainParameter(source, driveID) == Catch::Approx(14.0f));
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(savedState.getData(),
+                                 static_cast<int>(savedState.getSize()));
+    CHECK(restored.stateAB.isCurrentA());
+    CHECK(getPlainParameter(restored, driveID) == Catch::Approx(72.0f));
+
+    restored.stateAB.toggleAB();
+    CHECK_FALSE(restored.stateAB.isCurrentA());
+    CHECK(getPlainParameter(restored, driveID) == Catch::Approx(14.0f));
 }
 
 TEST_CASE("Truncated A-B snapshots fall back to the restored live state",

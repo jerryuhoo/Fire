@@ -424,17 +424,33 @@ namespace state
     StateAB::StateAB(juce::AudioProcessor& p)
         : pluginProcessor { p }
     {
-        copyAB(false);
+        // The processor constructs StateAB before its complete serializable
+        // main model is ready. No other thread can observe this object yet, so
+        // initialise the alternate directly without entering the topology
+        // transaction used by runtime mutations.
+        saveStateToXml(pluginProcessor, ab);
     }
 
     void StateAB::toggleAB()
     {
+        auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
         {
+            // Every A/B state replacement follows topology-writer ->
+            // stateLock. Host restore uses the same order, eliminating the
+            // former ABBA cycle.
+            fireProc.beginMultibandTopologyEdit();
+            const juce::ScopeGuard finishTopologyEdit { [&fireProc]
+            {
+                fireProc.requestMultibandTopologyReset();
+            } };
             const juce::ScopedLock lock(stateLock);
-            juce::XmlElement temp { "Temp" };
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+            invokeMutationLockAcquiredHookForTesting();
+#endif
+            juce::XmlElement temp { "AB" };
             saveStateToXml(pluginProcessor, temp); // current to temp
             loadStateFromXml(ab, pluginProcessor); // ab to current
-            ab = temp; // temp to ab
+            ab = std::move(temp); // temp to ab
             currentSideIsA.store(! currentSideIsA.load(std::memory_order_relaxed), std::memory_order_release);
         }
 
@@ -444,11 +460,23 @@ namespace state
 
     void StateAB::copyAB(bool notifyHost)
     {
+        auto& fireProc = static_cast<FireAudioProcessor&>(pluginProcessor);
         {
+            // Copy changes only the inactive snapshot. Publishing the audio
+            // topology generation here would unnecessarily fade and reset the
+            // live DSP graph even though its active sound did not change. It
+            // still takes the writer mutex so it cannot overwrite the result
+            // of a toggle/host restore between that transaction's stateLock
+            // release and its final odd-to-even publication.
+            const juce::ScopedLock serializableWriterLock(
+                fireProc.multibandTopologyWriterLock);
             const juce::ScopedLock lock(stateLock);
-            ab.removeAllAttributes();
-            ab.deleteAllChildElements();
-            saveStateToXml(pluginProcessor, ab);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+            invokeMutationLockAcquiredHookForTesting();
+#endif
+            juce::XmlElement replacement { "AB" };
+            saveStateToXml(pluginProcessor, replacement);
+            ab = std::move(replacement);
         }
 
         if (notifyHost)
@@ -463,41 +491,63 @@ namespace state
         pluginProcessor.reset();
     }
 
-    void StateAB::writeToXml(juce::XmlElement& parent) const
+    juce::XmlElement StateAB::captureSerializableStateSnapshot() const
     {
         const juce::ScopedLock lock(stateLock);
-        parent.deleteAllChildElementsWithTagName("AB_STATE");
-        auto snapshot = std::make_unique<juce::XmlElement>(ab);
-        snapshot->setTagName("AB_STATE");
-        snapshot->setAttribute("currentSideIsA", currentSideIsA.load(std::memory_order_relaxed));
-        parent.addChildElement(snapshot.release());
+        juce::XmlElement snapshot { ab };
+        snapshot.setTagName("AB_STATE");
+        snapshot.setAttribute("currentSideIsA",
+                              currentSideIsA.load(std::memory_order_relaxed));
+        return snapshot;
     }
 
     void StateAB::readFromXml(const juce::XmlElement* state)
     {
         const juce::ScopedLock lock(stateLock);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        invokeMutationLockAcquiredHookForTesting();
+#endif
         if (state == nullptr || ! isValidABSnapshot(*state, pluginProcessor))
         {
             // Old host states never persisted A/B, and a damaged alternate
             // must never turn the next toggle into an implicit Init. Preserve
             // the historical default: A is current and B mirrors the live
             // state that has just been restored.
-            ab.removeAllAttributes();
-            ab.deleteAllChildElements();
             auto& fireProc = static_cast<const FireAudioProcessor&>(
                 pluginProcessor);
             auto fallback = fireProc
                                 .captureCurrentSerializablePresetStateSnapshotForABFallback();
-            writeSerializablePresetSnapshotToXml(fireProc, fallback, ab);
+            juce::XmlElement replacement { "AB" };
+            writeSerializablePresetSnapshotToXml(
+                fireProc, fallback, replacement);
+            ab = std::move(replacement);
             currentSideIsA.store(true, std::memory_order_release);
             return;
         }
 
-        ab = *state;
-        ab.setTagName("AB");
-        ab.removeAttribute("currentSideIsA");
+        juce::XmlElement replacement { *state };
+        replacement.setTagName("AB");
+        replacement.removeAttribute("currentSideIsA");
+        ab = std::move(replacement);
         currentSideIsA.store(state->getBoolAttribute("currentSideIsA", true), std::memory_order_release);
     }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    void StateAB::setMutationLockAcquiredHookForTesting(
+        std::function<void()> hook)
+    {
+        const juce::ScopedLock lock(stateLock);
+        mutationLockAcquiredHookForTesting = std::move(hook);
+    }
+
+    void StateAB::invokeMutationLockAcquiredHookForTesting()
+    {
+        auto hook = std::move(mutationLockAcquiredHookForTesting);
+        mutationLockAcquiredHookForTesting = {};
+        if (hook)
+            hook();
+    }
+#endif
 
     //==============================================================================
 

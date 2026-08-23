@@ -18,6 +18,11 @@
 #include "../../Utility/VersionInfo.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+#include <functional>
+#endif
+
+class FireAudioProcessor;
 
 namespace state
 {
@@ -40,14 +45,26 @@ methods from button callback in editor.
         void copyAB(bool notifyHost = true);
         void reset();
         bool isCurrentA() const noexcept { return currentSideIsA.load(std::memory_order_acquire); }
-        void writeToXml(juce::XmlElement& parent) const;
-        void readFromXml(const juce::XmlElement* state);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        void setMutationLockAcquiredHookForTesting(std::function<void()> hook);
+#endif
 
     private:
+        friend class ::FireAudioProcessor;
+
+        juce::XmlElement captureSerializableStateSnapshot() const;
+        // The caller must already own the processor's topology transaction.
+        void readFromXml(const juce::XmlElement* state);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        void invokeMutationLockAcquiredHookForTesting();
+#endif
         juce::AudioProcessor& pluginProcessor;
         juce::XmlElement ab { "AB" };
         mutable juce::CriticalSection stateLock;
         std::atomic<bool> currentSideIsA { true };
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        std::function<void()> mutationLockAcquiredHookForTesting;
+#endif
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StateAB)
     };

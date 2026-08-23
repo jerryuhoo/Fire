@@ -2957,7 +2957,8 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
         presetIdentity.id,
         std::move(presetIdentity.key),
         editorWidth.load(std::memory_order_relaxed),
-        editorHeight.load(std::memory_order_relaxed)
+        editorHeight.load(std::memory_order_relaxed),
+        stateAB.captureSerializableStateSnapshot()
     };
 }
 
@@ -3017,7 +3018,7 @@ FireAudioProcessor::captureCoherentSerializableMainStateSnapshot() const
                 std::function<void()> readerHook;
                 {
                     const juce::ScopedLock lock(
-                        serializableStateReaderHookLock);
+                        serializableStateHookLock);
                     readerHook = std::move(
                         serializableStateReaderHookForTesting);
                     serializableStateReaderHookForTesting = {};
@@ -3135,8 +3136,15 @@ void FireAudioProcessor::beginMultibandTopologyEdit()
 void FireAudioProcessor::setSerializableStateReaderHookForTesting(
     std::function<void()> hook)
 {
-    const juce::ScopedLock lock(serializableStateReaderHookLock);
+    const juce::ScopedLock lock(serializableStateHookLock);
     serializableStateReaderHookForTesting = std::move(hook);
+}
+
+void FireAudioProcessor::setHostStateMainCaptureHookForTesting(
+    std::function<void()> hook)
+{
+    const juce::ScopedLock lock(serializableStateHookLock);
+    hostStateMainCaptureHookForTesting = std::move(hook);
 }
 #endif
 
@@ -3856,10 +3864,22 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     int xmlIndex = 0;
     juce::XmlElement xmlState { "state" };
 
-    // Reader registration covers only the live main-state capture. In
-    // particular it ends before StateAB::writeToXml(), whose own lock has a
-    // separate legacy ordering that must never participate in writer drain.
+    // The immutable main snapshot includes the inactive A/B state. A/B state
+    // replacements use the same topology generation as parameter/LFO
+    // replacements; inactive-only copies are serialised by StateAB's lock.
+    // Therefore every section below belongs to one valid state generation.
     auto mainState = captureCoherentSerializableMainStateSnapshot();
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::function<void()> mainCaptureHook;
+    {
+        const juce::ScopedLock lock(serializableStateHookLock);
+        mainCaptureHook = std::move(hostStateMainCaptureHookForTesting);
+        hostStateMainCaptureHookForTesting = {};
+    }
+    if (mainCaptureHook)
+        mainCaptureHook();
+#endif
 
     // 1. save treestate (parameters)
     std::unique_ptr<juce::XmlElement> treeStateXml(
@@ -3896,8 +3916,8 @@ void FireAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
     }
     xmlState.insertChildElement(modMatrixState.release(), xmlIndex++);
 
-    // Persist the inactive A/B snapshot alongside the currently active state.
-    stateAB.writeToXml(xmlState);
+    // Persist the inactive A/B snapshot alongside the matching active state.
+    xmlState.addChildElement(new juce::XmlElement(mainState.abState));
 
     copyXmlToBinary(xmlState, destData);
 }

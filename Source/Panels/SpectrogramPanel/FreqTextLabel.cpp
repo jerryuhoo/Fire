@@ -30,33 +30,34 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
     freqLabel.setJustificationType(juce::Justification::centred);
     freqLabel.setAlpha(0.0f);
 
-    // Set the text editing callback once in the constructor.
-    freqLabel.onTextChange = [this]
+    freqLabel.onEditorShow = [this]
     {
-        auto text = freqLabel.getText().trim().toLowerCase();
-        const bool isKilohertz = text.containsChar('k');
-        text = text.retainCharacters("0123456789.-");
-        const double requestedValue = text.getDoubleValue() * (isKilohertz ? 1000.0 : 1.0);
-        const int requestedFrequency = juce::roundToInt(requestedValue);
-
-        // Update the associated VerticalLine component when the text changes.
-        verticalLine.setValue(requestedFrequency, juce::sendNotificationSync);
-        mFrequency = juce::roundToInt(verticalLine.getValue());
-
-        // Use the slider's clamped value. Invalid/empty text otherwise feeds
-        // zero or a negative value into the logarithmic mapping.
-        if (mFrequency > 0)
-            verticalLine.setXPercent(static_cast<float>(transformToLog(mFrequency)));
+        verticalLine.beginParameterGesture();
     };
 
     freqLabel.onEditorHide = [this]
     {
+        // JUCE's Return/focus-loss commit has copied the TextEditor value into
+        // the Label before this callback. Apply it now so the host sees the
+        // value change before the matching endChangeGesture notification.
+        applyEditedText();
         updateLabelText();
+        verticalLine.endParameterGesture();
     };
 }
 
 FreqTextLabel::~FreqTextLabel()
 {
+    // Close the editor while our callbacks and the VerticalLine are still alive.
+    // This also balances a gesture if the containing editor is destroyed midway
+    // through frequency text entry.
+    if (freqLabel.isBeingEdited())
+        freqLabel.hideEditor(true);
+
+    freqLabel.onTextChange = nullptr;
+    freqLabel.onEditorShow = nullptr;
+    freqLabel.onEditorHide = nullptr;
+
     // It's good practice to stop the timer in the destructor to prevent leaks
     // if the component is deleted while an animation is running.
     stopTimer();
@@ -126,6 +127,24 @@ void FreqTextLabel::setFreq(int freq)
 {
     mFrequency = freq;
     updateLabelText();
+}
+
+void FreqTextLabel::applyEditedText()
+{
+    auto text = freqLabel.getText().trim().toLowerCase();
+    const bool isKilohertz = text.containsChar('k');
+    text = text.retainCharacters("0123456789.-");
+    const double requestedValue = text.getDoubleValue() * (isKilohertz ? 1000.0 : 1.0);
+    const int requestedFrequency = juce::roundToInt(requestedValue);
+
+    verticalLine.setValueAsPartOfGesture(requestedFrequency,
+                                         juce::sendNotificationSync);
+    mFrequency = juce::roundToInt(verticalLine.getValue());
+
+    // Use the slider's clamped value. Invalid/empty text otherwise feeds zero
+    // or a negative value into the logarithmic mapping.
+    if (mFrequency > 0)
+        verticalLine.setXPercent(static_cast<float>(transformToLog(mFrequency)));
 }
 
 void FreqTextLabel::updateLabelText()

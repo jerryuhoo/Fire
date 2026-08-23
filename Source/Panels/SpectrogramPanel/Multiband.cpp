@@ -38,6 +38,12 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
     for (int i = 0; i < 3; i++)
     {
         freqDividerGroup[i] = std::make_unique<FreqDividerGroup>(processor, i); // set index
+        crossoverParameters[static_cast<size_t>(i)] = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(FREQ_ID, i));
+        freqDividerGroup[i]->getVerticalLine().setParameterGestureCallbacks(
+            [this] { beginCrossoverGesture(); },
+            [this, i] { touchCrossoverParameter(i); },
+            [this] { endCrossoverGesture(); });
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         // Listen recursively so moving between the divider, its value label and
@@ -706,6 +712,43 @@ void Multiband::dragLines(float xPercent, int index)
     // moving lines by dragging mouse
     if (juce::isPositiveAndBelow(index, lineNum))
         freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
+}
+
+void Multiband::beginCrossoverGesture()
+{
+    if (crossoverGestureDepth++ == 0)
+        crossoverParametersTouched.fill(false);
+}
+
+void Multiband::touchCrossoverParameter(int dividerIndex)
+{
+    if (crossoverGestureDepth <= 0 || ! juce::isPositiveAndBelow(dividerIndex, 3))
+        return;
+
+    const auto arrayIndex = static_cast<size_t>(dividerIndex);
+    if (crossoverParametersTouched[arrayIndex])
+        return;
+
+    if (auto* parameter = crossoverParameters[arrayIndex])
+    {
+        parameter->beginChangeGesture();
+        crossoverParametersTouched[arrayIndex] = true;
+    }
+}
+
+void Multiband::endCrossoverGesture()
+{
+    if (crossoverGestureDepth <= 0 || --crossoverGestureDepth > 0)
+        return;
+
+    for (size_t dividerIndex = 0; dividerIndex < crossoverParameters.size(); ++dividerIndex)
+    {
+        if (crossoverParametersTouched[dividerIndex])
+            if (auto* parameter = crossoverParameters[dividerIndex])
+                parameter->endChangeGesture();
+    }
+
+    crossoverParametersTouched.fill(false);
 }
 
 void Multiband::setLineRelatedBoundsByX()

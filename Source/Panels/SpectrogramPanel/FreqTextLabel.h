@@ -33,6 +33,7 @@ public:
     void setFade (bool update, bool isFadeIn);
 
 private:
+    void applyEditedText();
     void updateLabelText();
 
     VerticalLine& verticalLine;

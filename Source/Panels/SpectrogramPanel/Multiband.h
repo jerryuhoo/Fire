@@ -121,6 +121,13 @@ private:
     void refreshHoveredBandFromMouse();
     void updateCloseButtonVisibility();
 
+    void beginCrossoverGesture();
+    void touchCrossoverParameter(int dividerIndex);
+    void endCrossoverGesture();
+    std::array<juce::RangedAudioParameter*, 3> crossoverParameters {};
+    std::array<bool, 3> crossoverParametersTouched {};
+    int crossoverGestureDepth = 0;
+
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
 
     // Use vectors to manage attachments

@@ -93,7 +93,8 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     // Publishing a larger NUM_BANDS value before SliderAttachment had consumed
     // an async notification allowed the audio thread to process the new band
     // with an old hidden crossover frequency.
-    verticalLine.setValue(transformFromLog(newXPercent), juce::sendNotificationSync);
+    verticalLine.setValueAsPartOfGesture(transformFromLog(newXPercent),
+                                         juce::sendNotificationSync);
 
     if (verticalLine.getLeft() >= 0 && freqDividerGroup[verticalLine.getLeft()]->getToggleState() && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {

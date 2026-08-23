@@ -12,6 +12,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/FireTheme.h"
+#include <functional>
 
 //==============================================================================
 /*
@@ -36,6 +37,15 @@ public:
     int getRight();
     void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[]);
 
+    using ParameterGestureCallback = std::function<void()>;
+    void setParameterGestureCallbacks (ParameterGestureCallback gestureBegin,
+                                       ParameterGestureCallback parameterChange,
+                                       ParameterGestureCallback gestureEnd);
+    void beginParameterGesture();
+    void endParameterGesture();
+    void setValueAsPartOfGesture (double newValue,
+                                  juce::NotificationType notification);
+
 private:
     bool isEntered = false;
 
@@ -51,6 +61,10 @@ private:
     int leftIndex = -1; // left index
     int rightIndex = -1; // right index
     int index = -1;
+    ParameterGestureCallback parameterGestureBegin;
+    ParameterGestureCallback parameterChange;
+    ParameterGestureCallback parameterGestureEnd;
+    int parameterGestureDepth = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VerticalLine)
 };

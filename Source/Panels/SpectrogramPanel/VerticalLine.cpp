@@ -19,6 +19,12 @@ VerticalLine::VerticalLine()
 
 VerticalLine::~VerticalLine()
 {
+    if (parameterGestureDepth > 0)
+    {
+        parameterGestureDepth = 0;
+        if (parameterGestureEnd)
+            parameterGestureEnd();
+    }
 }
 
 void VerticalLine::paint(juce::Graphics& g)
@@ -53,7 +59,8 @@ void VerticalLine::resized()
 
 void VerticalLine::mouseUp (const juce::MouseEvent& e)
 {
-    //    move = false;
+    juce::ignoreUnused(e);
+    endParameterGesture();
 }
 
 void VerticalLine::mouseDoubleClick (const juce::MouseEvent& e)
@@ -82,9 +89,49 @@ void VerticalLine::mouseDrag (const juce::MouseEvent& e)
 
 void VerticalLine::mouseDown (const juce::MouseEvent& e)
 {
-    // call parent mousedown(FreqDividerGroup)
-    //    getParentComponent()->mouseDown(e.getEventRelativeTo(getParentComponent()));
-    //    dragger.startDraggingComponent (this, e);
+    if (e.mods.isLeftButtonDown())
+        beginParameterGesture();
+}
+
+void VerticalLine::setParameterGestureCallbacks(ParameterGestureCallback gestureBegin,
+                                                ParameterGestureCallback change,
+                                                ParameterGestureCallback gestureEnd)
+{
+    if (parameterGestureDepth > 0)
+    {
+        parameterGestureDepth = 0;
+        if (parameterGestureEnd)
+            parameterGestureEnd();
+    }
+
+    parameterGestureBegin = std::move(gestureBegin);
+    parameterChange = std::move(change);
+    parameterGestureEnd = std::move(gestureEnd);
+}
+
+void VerticalLine::beginParameterGesture()
+{
+    if (parameterGestureDepth++ == 0 && parameterGestureBegin)
+        parameterGestureBegin();
+}
+
+void VerticalLine::endParameterGesture()
+{
+    if (parameterGestureDepth <= 0)
+        return;
+
+    if (--parameterGestureDepth == 0 && parameterGestureEnd)
+        parameterGestureEnd();
+}
+
+void VerticalLine::setValueAsPartOfGesture(double newValue,
+                                           juce::NotificationType notification)
+{
+    const double constrainedValue = getNormalisableRange().snapToLegalValue(newValue);
+    if (! juce::approximatelyEqual(constrainedValue, getValue()) && parameterChange)
+        parameterChange();
+
+    setValue(newValue, notification);
 }
 
 void VerticalLine::setDeleteState (bool deleteState)

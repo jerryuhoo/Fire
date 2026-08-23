@@ -135,6 +135,75 @@ public:
     bool captureInProgress = false;
 };
 
+class ParameterGestureCapture final : public juce::AudioProcessorListener
+{
+public:
+    ParameterGestureCapture(FireAudioProcessor& processorToObserve,
+                            int parameterIndexToObserve)
+        : processor(processorToObserve), parameterIndex(parameterIndexToObserve)
+    {
+        processor.addListener(this);
+    }
+
+    ~ParameterGestureCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (changedParameterIndex != parameterIndex)
+            return;
+
+        ++valueChangeCount;
+        valueChangedOutsideGesture = valueChangedOutsideGesture || gestureDepth != 1;
+        events.push_back('V');
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    void audioProcessorParameterChangeGestureBegin(juce::AudioProcessor*,
+                                                   int changedParameterIndex) override
+    {
+        if (changedParameterIndex != parameterIndex)
+            return;
+
+        ++beginCount;
+        ++gestureDepth;
+        maximumGestureDepth = juce::jmax(maximumGestureDepth, gestureDepth);
+        events.push_back('B');
+    }
+
+    void audioProcessorParameterChangeGestureEnd(juce::AudioProcessor*,
+                                                 int changedParameterIndex) override
+    {
+        if (changedParameterIndex != parameterIndex)
+            return;
+
+        ++endCount;
+        --gestureDepth;
+        minimumGestureDepth = juce::jmin(minimumGestureDepth, gestureDepth);
+        events.push_back('E');
+    }
+
+    FireAudioProcessor& processor;
+    int parameterIndex = -1;
+    int beginCount = 0;
+    int endCount = 0;
+    int valueChangeCount = 0;
+    int gestureDepth = 0;
+    int maximumGestureDepth = 0;
+    int minimumGestureDepth = 0;
+    bool valueChangedOutsideGesture = false;
+    std::vector<char> events;
+};
+
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::Point<float> position,
                                 juce::ModifierKeys modifiers = {})
@@ -297,6 +366,179 @@ ComponentType* findDescendant(juce::Component& root)
     return nullptr;
 }
 } // namespace
+
+TEST_CASE("Crossover mouse and text edits bracket host automation gestures",
+          "[multiband][ui][automation][gesture]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 3);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    auto* dividerGroup = findDescendant<FreqDividerGroup>(*multiband);
+    REQUIRE(dividerGroup != nullptr);
+
+    auto& divider = dividerGroup->getVerticalLine();
+    const auto frequencyID = ParameterIDAndName::getIDString(FREQ_ID, 0);
+    auto* frequencyParameter = processor.treeState.getParameter(frequencyID);
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor, frequencyParameter->getParameterIndex());
+
+    SECTION("divider drag")
+    {
+        const float initialX = divider.getXPercent();
+        const double initialFrequency = divider.getValue();
+        const auto eventPosition = divider.getLocalBounds().toFloat().getCentre();
+        auto& dividerComponent = static_cast<juce::Component&>(divider);
+
+        dividerComponent.mouseDown(
+            makeMouseEvent(divider,
+                           eventPosition,
+                           juce::ModifierKeys::leftButtonModifier));
+
+        CHECK(host.beginCount == 0);
+        CHECK(host.endCount == 0);
+        CHECK(divider.getXPercent() == Catch::Approx(initialX));
+        CHECK(divider.getValue() == Catch::Approx(initialFrequency));
+
+        const float firstTargetX = juce::jlimit(0.11f, 0.89f, initialX + 0.02f);
+        const float finalTargetX = juce::jlimit(0.11f, 0.89f, initialX + 0.04f);
+        multiband->dragLines(firstTargetX, 0);
+        multiband->dragLines(finalTargetX, 0);
+        const float xBeforeMouseUp = divider.getXPercent();
+
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 0);
+        CHECK(host.valueChangeCount >= 2);
+
+        dividerComponent.mouseUp(makeMouseEvent(divider, eventPosition));
+
+        CHECK(divider.getXPercent() == Catch::Approx(xBeforeMouseUp));
+        // The existing geometry path round-trips through an integer-Hz slider,
+        // so the logarithmic position is expected to be quantised slightly.
+        CHECK(divider.getXPercent() == Catch::Approx(finalTargetX).margin(0.001f));
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.valueChangeCount >= 2);
+        CHECK(host.gestureDepth == 0);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(host.minimumGestureDepth == 0);
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+        REQUIRE_FALSE(host.events.empty());
+        CHECK(host.events.front() == 'B');
+        CHECK(host.events.back() == 'E');
+    }
+
+    SECTION("divider drag that pushes an adjacent crossover")
+    {
+        FreqDividerGroup* adjacentGroup = nullptr;
+        for (int childIndex = 0; childIndex < multiband->getNumChildComponents(); ++childIndex)
+            if (auto* group = dynamic_cast<FreqDividerGroup*>(
+                    multiband->getChildComponent(childIndex));
+                group != nullptr && group->getVerticalLine().getIndex() == 1)
+                adjacentGroup = group;
+
+        REQUIRE(adjacentGroup != nullptr);
+        auto& adjacentDivider = adjacentGroup->getVerticalLine();
+        const float adjacentInitialX = adjacentDivider.getXPercent();
+
+        const auto adjacentFrequencyID = ParameterIDAndName::getIDString(FREQ_ID, 1);
+        auto* adjacentParameter = processor.treeState.getParameter(adjacentFrequencyID);
+        REQUIRE(adjacentParameter != nullptr);
+        ParameterGestureCapture adjacentHost(processor,
+                                             adjacentParameter->getParameterIndex());
+
+        const auto untouchedFrequencyID = ParameterIDAndName::getIDString(FREQ_ID, 2);
+        auto* untouchedParameter = processor.treeState.getParameter(untouchedFrequencyID);
+        REQUIRE(untouchedParameter != nullptr);
+        ParameterGestureCapture untouchedHost(processor,
+                                              untouchedParameter->getParameterIndex());
+
+        const auto eventPosition = divider.getLocalBounds().toFloat().getCentre();
+        auto& dividerComponent = static_cast<juce::Component&>(divider);
+        dividerComponent.mouseDown(
+            makeMouseEvent(divider,
+                           eventPosition,
+                           juce::ModifierKeys::leftButtonModifier));
+
+        const float targetX = juce::jmin(0.79f, adjacentInitialX + 0.02f);
+        multiband->dragLines(targetX, 0);
+
+        CHECK(adjacentDivider.getXPercent() > adjacentInitialX);
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 0);
+        CHECK(host.valueChangeCount >= 1);
+        CHECK(adjacentHost.beginCount == 1);
+        CHECK(adjacentHost.endCount == 0);
+        CHECK(adjacentHost.valueChangeCount >= 1);
+        CHECK(untouchedHost.beginCount == 0);
+        CHECK(untouchedHost.endCount == 0);
+        CHECK(untouchedHost.valueChangeCount == 0);
+
+        dividerComponent.mouseUp(makeMouseEvent(divider, eventPosition));
+
+        const auto checkBalancedGesture = [](const ParameterGestureCapture& capture)
+        {
+            CHECK(capture.beginCount == 1);
+            CHECK(capture.endCount == 1);
+            CHECK(capture.valueChangeCount >= 1);
+            CHECK(capture.gestureDepth == 0);
+            CHECK(capture.maximumGestureDepth == 1);
+            CHECK(capture.minimumGestureDepth == 0);
+            CHECK_FALSE(capture.valueChangedOutsideGesture);
+            REQUIRE_FALSE(capture.events.empty());
+            CHECK(capture.events.front() == 'B');
+            CHECK(capture.events.back() == 'E');
+        };
+        checkBalancedGesture(host);
+        checkBalancedGesture(adjacentHost);
+        CHECK(untouchedHost.beginCount == 0);
+        CHECK(untouchedHost.endCount == 0);
+        CHECK(untouchedHost.valueChangeCount == 0);
+    }
+
+    SECTION("frequency text entry")
+    {
+        auto* frequencyText = findDescendant<FreqTextLabel>(*dividerGroup);
+        REQUIRE(frequencyText != nullptr);
+        auto* label = findDescendant<juce::Label>(*frequencyText);
+        REQUIRE(label != nullptr);
+
+        frequencyText->setVisible(true);
+        REQUIRE(static_cast<bool>(label->onEditorShow));
+        REQUIRE(static_cast<bool>(label->onEditorHide));
+        label->onEditorShow();
+        CHECK(host.beginCount == 0);
+        CHECK(host.endCount == 0);
+
+        // Label::textEditorReturnKeyPressed copies the committed editor text
+        // before invoking onEditorHide. Reproduce that callback precondition
+        // without creating a native peer solely to satisfy keyboard focus.
+        label->setText("1.60 kHz", juce::dontSendNotification);
+        label->onEditorHide();
+
+        auto* publishedFrequency = processor.treeState.getRawParameterValue(frequencyID);
+        REQUIRE(publishedFrequency != nullptr);
+        CHECK(publishedFrequency->load(std::memory_order_relaxed)
+              == Catch::Approx(1600.0f));
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.valueChangeCount >= 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(host.minimumGestureDepth == 0);
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+        REQUIRE_FALSE(host.events.empty());
+        CHECK(host.events.front() == 'B');
+        CHECK(host.events.back() == 'E');
+    }
+}
 
 TEST_CASE("Band move/reset parameter contract covers every per-band processor parameter",
           "[multiband][parameters]")

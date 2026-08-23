@@ -188,6 +188,7 @@ public:
 
     std::function<void()> onDataChanged;
     std::function<void(int lfoIndex)> onAssignButtonClicked;
+    std::function<void(int lfoIndex)> onCurrentLfoChanged;
     juce::TextButton assignButton;
 
     void refreshLfoDisplay();

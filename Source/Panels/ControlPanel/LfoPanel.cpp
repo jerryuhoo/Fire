@@ -1663,6 +1663,8 @@ void LfoPanel::setLfo(int newIndex)
     if (! juce::isPositiveAndBelow(newIndex, static_cast<int>(lfoSelectButtons.size())))
         return;
 
+    const bool selectionChanged = currentLfoIndex != newIndex;
+
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
     lfoSelectionPosition.setTarget(static_cast<float>(currentLfoIndex));
@@ -1691,6 +1693,9 @@ void LfoPanel::setLfo(int newIndex)
         processor.treeState, ParameterIDAndName::getIDString(LFO_PHASE_ID, currentLfoIndex), lfoPhaseSlider);
     // This must be called after attachments are updated.
     updateRateSlider();
+
+    if (selectionChanged && onCurrentLfoChanged)
+        onCurrentLfoChanged(currentLfoIndex);
 }
 
 void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)

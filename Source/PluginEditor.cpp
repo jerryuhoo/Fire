@@ -126,6 +126,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         }
     };
 
+    lfoPanel.onCurrentLfoChanged = [this](int lfoIndex)
+    {
+        if (isLfoAssignMode)
+            lfoSourceForAssignment = lfoIndex;
+    };
+
     lfoPanel.setOnDataChangedCallback([this]
                                       { processor.lfoDataHasChanged(); });
 

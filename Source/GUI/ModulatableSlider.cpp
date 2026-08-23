@@ -322,6 +322,7 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         return;
     }
 
+    bool interactionEnded = false;
     if (isDraggingMainSlider)
     {
         // Pair the base-class mouseUp only with a mouseDown that was actually
@@ -331,6 +332,7 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         if (onMainDragEnd)
             onMainDragEnd(this);
         isDraggingMainSlider = false;
+        interactionEnded = true;
         repaint();
     }
 
@@ -340,8 +342,12 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
             onModDragEnd(this);
 
         isModHandleMouseDown = false;
+        interactionEnded = true;
         repaint();
     }
+
+    if (interactionEnded && onInteractionEnded)
+        onInteractionEnded();
 }
 
 std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler()

@@ -379,6 +379,29 @@ juce::MouseEvent makeMouseEvent(juce::Component& component,
              false };
 }
 
+juce::MouseEvent makeDragMouseEvent(juce::Component& component,
+                                    juce::Point<float> position,
+                                    juce::Point<float> mouseDownPosition,
+                                    juce::ModifierKeys modifiers)
+{
+    const auto time = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             time,
+             mouseDownPosition,
+             time,
+             1,
+             true };
+}
+
 std::vector<CloseButton*> getPositionedCloseButtons(Multiband& multiband)
 {
     std::vector<CloseButton*> buttons;
@@ -1499,6 +1522,120 @@ TEST_CASE("Slider context assignment retains its target while a shared panel kno
     REQUIRE(assigned != nullptr);
     CHECK(assigned->sourceLfoIndex == 3);
     CHECK(findRouting(routings, reboundTarget) == nullptr);
+}
+
+TEST_CASE("BandPanel defers shared knob rebinds until its host gesture ends",
+          "[multiband][ui][focus][gesture][attachment]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    initialiseBandLayout(processor, 2);
+
+    BandPanel panel(processor, {}, {}, {}, {}, {});
+    panel.setBounds(0, 0, 1000, 300);
+    auto* driveKnob = panel.getDriveKnob();
+    REQUIRE(driveKnob != nullptr);
+
+    const auto firstDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto secondDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    auto* firstDrive = processor.treeState.getParameter(firstDriveID);
+    auto* secondDrive = processor.treeState.getParameter(secondDriveID);
+    REQUIRE(firstDrive != nullptr);
+    REQUIRE(secondDrive != nullptr);
+
+    ParameterGestureCapture firstHost(processor, firstDrive->getParameterIndex());
+    ParameterGestureCapture secondHost(processor, secondDrive->getParameterIndex());
+    const auto downPosition = driveKnob->getLocalBounds().toFloat().getCentre();
+    const auto dragPosition = downPosition + juce::Point<float> { 0.0f, -24.0f };
+
+    driveKnob->mouseDown(makeMouseEvent(
+        *driveKnob,
+        downPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    REQUIRE(driveKnob->hasActiveInteraction());
+    REQUIRE(firstHost.beginCount == 1);
+
+    panel.setFocusBandNum(1);
+    CHECK(panel.getFocusBandNum() == 0);
+    CHECK(driveKnob->getParamID() == firstDriveID);
+
+    driveKnob->mouseDrag(makeDragMouseEvent(
+        *driveKnob,
+        dragPosition,
+        downPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    driveKnob->mouseUp(makeDragMouseEvent(
+        *driveKnob,
+        dragPosition,
+        downPosition,
+        juce::ModifierKeys {}));
+
+    CHECK_FALSE(driveKnob->hasActiveInteraction());
+    CHECK(panel.getFocusBandNum() == 1);
+    CHECK(driveKnob->getParamID() == secondDriveID);
+    checkBalancedGesture(firstHost);
+    CHECK(secondHost.beginCount == 0);
+    CHECK(secondHost.endCount == 0);
+    CHECK(secondHost.valueChangeCount == 0);
+}
+
+TEST_CASE("BandPanel keeps a modulation handle drag on its original band",
+          "[multiband][ui][focus][gesture][modulation]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    initialiseBandLayout(processor, 2);
+
+    const auto firstDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto secondDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    processor.assignLfoToTarget(0, firstDriveID);
+    processor.setModulationDepth(firstDriveID, 0.20f);
+
+    BandPanel panel(processor, {}, {}, {}, {}, {});
+    panel.setBounds(0, 0, 1000, 300);
+    auto* driveKnob = panel.getDriveKnob();
+    REQUIRE(driveKnob != nullptr);
+    driveKnob->isModulated = true;
+    driveKnob->lfoAmount = 0.20;
+
+    const auto downPosition = driveKnob->getModulationHandleBounds().getCentre();
+    const auto dragPosition = downPosition + juce::Point<float> { 0.0f, -80.0f };
+    driveKnob->mouseDown(makeMouseEvent(
+        *driveKnob,
+        downPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    REQUIRE(driveKnob->isModHandleMouseDown);
+
+    panel.setFocusBandNum(1);
+    CHECK(panel.getFocusBandNum() == 0);
+    CHECK(driveKnob->getParamID() == firstDriveID);
+
+    driveKnob->mouseDrag(makeDragMouseEvent(
+        *driveKnob,
+        dragPosition,
+        downPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+
+    auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+    const auto* firstRouting = findRouting(routings, firstDriveID);
+    REQUIRE(firstRouting != nullptr);
+    CHECK(firstRouting->depth == Catch::Approx(0.60f));
+    CHECK(findRouting(routings, secondDriveID) == nullptr);
+
+    driveKnob->mouseUp(makeDragMouseEvent(
+        *driveKnob,
+        dragPosition,
+        downPosition,
+        juce::ModifierKeys {}));
+
+    CHECK_FALSE(driveKnob->hasActiveInteraction());
+    CHECK(panel.getFocusBandNum() == 1);
+    CHECK(driveKnob->getParamID() == secondDriveID);
+    routings = processor.getLfoManager().getModulationRoutingsCopy();
+    firstRouting = findRouting(routings, firstDriveID);
+    REQUIRE(firstRouting != nullptr);
+    CHECK(firstRouting->depth == Catch::Approx(0.60f));
+    CHECK(findRouting(routings, secondDriveID) == nullptr);
 }
 
 #if JUCE_MAC

@@ -71,6 +71,8 @@ private:
     friend struct BandPanelGraphTestAccess;
 
     void updateAttachments();
+    bool hasActiveSliderInteraction() const noexcept;
+    void applyPendingFocusChange();
     bool canEnableSubKnob(juce::Component& component);
     void buttonClicked(juce::Button* clickedButton) override;
 
@@ -130,6 +132,8 @@ private:
     juce::Array<juce::Component*> widthSubControls;
 
     int focusBandNum;
+    int pendingFocusBandNum = -1;
+    bool pendingFocusForceUpdate = false;
 
     juce::Rectangle<int> knobsAreaRect;
     juce::Rectangle<int> outputAreaRect;

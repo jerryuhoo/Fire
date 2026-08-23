@@ -75,6 +75,10 @@ BandPanel::BandPanel(FireAudioProcessor& p,
         slider->onModDragEnd = onModDragEnd;
         slider->onHoverStart = onHoverStart;
         slider->onHoverEnd = onHoverEnd;
+        slider->onInteractionEnded = [this]
+        {
+            applyPendingFocusChange();
+        };
     }
 
     // Add graph components and make them visible
@@ -117,6 +121,9 @@ BandPanel::BandPanel(FireAudioProcessor& p,
 
 BandPanel::~BandPanel()
 {
+    for (auto& sliderPair : modulatableSliderComponents)
+        sliderPair.second->onInteractionEnded = nullptr;
+
     // Remove all parameter listeners that were added in the constructor.
     for (int i = 0; i < 4; ++i)
     {
@@ -786,6 +793,29 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
         return;
     }
 
+    // Every shared knob is backed by a SliderAttachment. Rebinding one while
+    // it is down destroys the listener that owns the old begin gesture; the
+    // replacement then receives an unmatched end gesture for another band.
+    // A modulation-handle drag has the same target-switch problem because its
+    // callback reads the knob's current parameter ID on every move.
+    if (hasActiveSliderInteraction())
+    {
+        if (focusBandNum == num && ! forceUpdate)
+        {
+            pendingFocusBandNum = -1;
+            pendingFocusForceUpdate = false;
+        }
+        else
+        {
+            pendingFocusBandNum = num;
+            pendingFocusForceUpdate = pendingFocusForceUpdate || forceUpdate;
+        }
+        return;
+    }
+
+    pendingFocusBandNum = -1;
+    pendingFocusForceUpdate = false;
+
     vuPanel.setFocusBandNum(num);
     if (focusBandNum == num && ! forceUpdate)
         return;
@@ -805,6 +835,28 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     updateDistortionModeVisibility();
     updateDistortionGraphFromParameters();
     invalidateChromeCache();
+}
+
+bool BandPanel::hasActiveSliderInteraction() const noexcept
+{
+    return std::any_of(modulatableSliders.begin(),
+                       modulatableSliders.end(),
+                       [](const auto* slider)
+                       {
+                           return slider != nullptr && slider->hasActiveInteraction();
+                       });
+}
+
+void BandPanel::applyPendingFocusChange()
+{
+    if (pendingFocusBandNum < 0 || hasActiveSliderInteraction())
+        return;
+
+    const auto requestedBand = pendingFocusBandNum;
+    const auto forceUpdate = pendingFocusForceUpdate;
+    pendingFocusBandNum = -1;
+    pendingFocusForceUpdate = false;
+    setFocusBandNum(requestedBand, forceUpdate);
 }
 
 void BandPanel::updateDistortionGraphFromParameters()

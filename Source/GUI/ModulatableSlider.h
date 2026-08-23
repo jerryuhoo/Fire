@@ -50,6 +50,10 @@ public:
 
     // Is the mouse over the main body of the slider, and not the handle?
     bool isMouseOverMainSlider() const;
+    bool hasActiveInteraction() const noexcept
+    {
+        return isDraggingMainSlider || isModHandleMouseDown;
+    }
     bool advanceAnimation(float deltaSeconds) noexcept;
     float getHoverAnimation() const noexcept { return hoverAnimation; }
     float getPressAnimation() const noexcept { return pressAnimation; }
@@ -90,6 +94,10 @@ public:
     std::function<void(ModulatableSlider*)> onMainDragEnd;
     std::function<void(ModulatableSlider*)> onHoverStart;
     std::function<void(ModulatableSlider*)> onHoverEnd;
+
+    // Used by a shared panel to apply a parameter rebind only after Slider's
+    // own drag listeners have closed their current host gesture.
+    std::function<void()> onInteractionEnded;
 
     const juce::String& getParamID() const { return parameterID; }
     double getLfoValue() const { return lfoValue; }

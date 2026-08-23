@@ -1961,4 +1961,14 @@ namespace state
         return &nextButton;
     }
 
+    void StateComponent::dismissPointerGestures() noexcept
+    {
+        toggleABButton.dismissPointerGesture();
+        copyABButton.dismissPointerGesture();
+        previousButton.dismissPointerGesture();
+        nextButton.dismissPointerGesture();
+        savePresetButton.dismissPointerGesture();
+        menuButton.dismissPointerGesture();
+    }
+
 } // namespace state

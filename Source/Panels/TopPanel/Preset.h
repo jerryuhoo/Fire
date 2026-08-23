@@ -14,6 +14,7 @@
 
 #include "../../GUI/InterfaceDefines.h"
 #include "../../GUI/LookAndFeel.h"
+#include "../../GUI/PrimaryButton.h"
 #include "../../GUI/SettingsComponent.h"
 #include "../../Utility/VersionInfo.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -181,6 +182,7 @@ PluginProcessor).
         juce::TextButton* getCopyABButton();
         juce::TextButton* getPreviousButton();
         juce::TextButton* getNextButton();
+        void dismissPointerGestures() noexcept;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         juce::PopupMenu::Options getPresetMenuOptionsForTesting();
 #endif
@@ -216,14 +218,14 @@ PluginProcessor).
         std::atomic<bool> versionCheckReady { false };
         juce::Component::SafePointer<juce::DialogWindow> settingsDialog;
 
-        juce::TextButton toggleABButton;
-        juce::TextButton copyABButton;
+        PrimaryTextButton toggleABButton;
+        PrimaryTextButton copyABButton;
         juce::ComboBox presetBox;
-        juce::TextButton previousButton;
-        juce::TextButton nextButton;
-        juce::TextButton savePresetButton;
+        PrimaryTextButton previousButton;
+        PrimaryTextButton nextButton;
+        PrimaryTextButton savePresetButton;
         //TextButton deletePresetButton;
-        juce::TextButton menuButton;
+        PrimaryTextButton menuButton;
         juce::PopupMenu presetMenu;
 
         bool isChanged = false;

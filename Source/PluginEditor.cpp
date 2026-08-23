@@ -428,6 +428,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     zoomButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::whiteHot);
     zoomButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textSecondary);
     zoomButton.setComponentID("zoom");
+    zoomButton.setTitle("Toggle spectrum zoom");
+    zoomButton.setTooltip("Toggle spectrum zoom");
 
     initialiseHeaderEmbers();
     lastAnimationTimeSeconds = juce::Time::getMillisecondCounterHiRes() * 0.001;
@@ -597,6 +599,12 @@ void FireAudioProcessorEditor::visibilityChanged()
 
     if (! isShowing())
     {
+        hqButton.dismissPointerGesture();
+        windowLeftButton.dismissPointerGesture();
+        windowRightButton.dismissPointerGesture();
+        windowLfoButton.dismissPointerGesture();
+        zoomButton.dismissPointerGesture();
+        stateComponent.dismissPointerGestures();
         valueEntryPopup.dismissSession();
         multiband.dismissTransientUi();
     }

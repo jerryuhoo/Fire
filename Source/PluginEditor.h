@@ -12,6 +12,7 @@
 
 #include "GUI/InterfaceDefines.h"
 #include "GUI/LookAndFeel.h"
+#include "GUI/PrimaryButton.h"
 #include "GUI/ValueEntryPopup.h"
 #include "GUI/ValuePopup.h"
 #include "Panels/ControlPanel/BandPanel.h"
@@ -226,7 +227,7 @@ private:
     juce::Label hqLabel;
 
     // Buttons
-    juce::TextButton
+    PrimaryTextButton
         hqButton,
         windowLeftButton,
         windowRightButton,

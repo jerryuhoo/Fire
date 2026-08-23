@@ -2365,6 +2365,55 @@ float FireAudioProcessor::getModulatedValueAtSample(const CachedParameter& param
     return std::isfinite(value) ? value : baseValue;
 }
 
+float FireAudioProcessor::getSnapshotModulatedValueAtSample(
+    const ModulatedParameterSnapshot& parameter,
+    const juce::AudioBuffer<float>& lfoOutputs,
+    int sampleIndex) const noexcept
+{
+    const auto& provider = parameter.provider;
+    const float baseValue = std::isfinite(provider.baseValue)
+                                ? provider.baseValue
+                                : 0.0f;
+    if (! juce::isPositiveAndBelow(parameter.lfoSourceIndex,
+                                    lfoOutputs.getNumChannels())
+        || ! juce::isPositiveAndBelow(sampleIndex,
+                                      lfoOutputs.getNumSamples()))
+        return baseValue;
+
+    const float rawLfoValue = lfoOutputs.getSample(parameter.lfoSourceIndex,
+                                                    sampleIndex);
+    if (! std::isfinite(rawLfoValue)
+        || ! std::isfinite(provider.range.start)
+        || ! std::isfinite(provider.range.end)
+        || provider.range.end <= provider.range.start)
+        return baseValue;
+
+    const float lfoValue = juce::jlimit(0.0f, 1.0f, rawLfoValue);
+    const float mappedLfo = provider.isBipolar
+                                ? lfoValue * 2.0f - 1.0f
+                                : lfoValue;
+    const float safeDepth = std::isfinite(provider.modulationDepth)
+                                ? juce::jlimit(-1.0f,
+                                              1.0f,
+                                              provider.modulationDepth)
+                                : 0.0f;
+    const float effectiveDepth = provider.isBipolar
+                                     ? safeDepth * 0.5f
+                                     : safeDepth;
+    const float rawNormalisedBase = provider.range.convertTo0to1(baseValue);
+    const float normalisedBase = std::isfinite(rawNormalisedBase)
+                                     ? juce::jlimit(0.0f,
+                                                   1.0f,
+                                                   rawNormalisedBase)
+                                     : 0.0f;
+    const float normalisedValue = juce::jlimit(
+        0.0f,
+        1.0f,
+        normalisedBase + mappedLfo * effectiveDepth);
+    const float value = provider.range.convertFrom0to1(normalisedValue);
+    return std::isfinite(value) ? value : baseValue;
+}
+
 ChainSettings FireAudioProcessor::getCachedChainSettings(const juce::AudioBuffer<float>* lfoOutputs) const noexcept
 {
     const auto getValue = [this, lfoOutputs](const CachedParameter& parameter)
@@ -2421,32 +2470,58 @@ ChainSettings FireAudioProcessor::getCachedChainSettingsAtSample(
     return settings;
 }
 
+ChainSettings FireAudioProcessor::getSnapshotChainSettingsAtSample(
+    const juce::AudioBuffer<float>& lfoOutputs,
+    int sampleIndex) const noexcept
+{
+    const auto& snapshot = activeAudioCallbackParameterSnapshot.globalFilter;
+    ChainSettings settings = snapshot.baseSettings;
+    settings.lowCutFreq = getSnapshotModulatedValueAtSample(
+        snapshot.lowCutFrequency, lfoOutputs, sampleIndex);
+    settings.lowCutGainInDecibels = getSnapshotModulatedValueAtSample(
+        snapshot.lowCutGain, lfoOutputs, sampleIndex);
+    settings.lowCutQuality = getSnapshotModulatedValueAtSample(
+        snapshot.lowCutQuality, lfoOutputs, sampleIndex);
+    settings.peakFreq = getSnapshotModulatedValueAtSample(
+        snapshot.peakFrequency, lfoOutputs, sampleIndex);
+    settings.peakGainInDecibels = getSnapshotModulatedValueAtSample(
+        snapshot.peakGain, lfoOutputs, sampleIndex);
+    settings.peakQuality = getSnapshotModulatedValueAtSample(
+        snapshot.peakQuality, lfoOutputs, sampleIndex);
+    settings.highCutFreq = getSnapshotModulatedValueAtSample(
+        snapshot.highCutFrequency, lfoOutputs, sampleIndex);
+    settings.highCutGainInDecibels = getSnapshotModulatedValueAtSample(
+        snapshot.highCutGain, lfoOutputs, sampleIndex);
+    settings.highCutQuality = getSnapshotModulatedValueAtSample(
+        snapshot.highCutQuality, lfoOutputs, sampleIndex);
+    return settings;
+}
+
 bool FireAudioProcessor::hasActiveFilterModulation() const noexcept
 {
     if (lfoOutputBuffer.getNumSamples() <= 0)
         return false;
 
-    const std::array<const CachedParameter*, 9> parameters {
-        &filterParameterCache.lowCutFrequency,
-        &filterParameterCache.lowCutGain,
-        &filterParameterCache.lowCutQuality,
-        &filterParameterCache.peakFrequency,
-        &filterParameterCache.peakGain,
-        &filterParameterCache.peakQuality,
-        &filterParameterCache.highCutFrequency,
-        &filterParameterCache.highCutGain,
-        &filterParameterCache.highCutQuality
+    const auto& filter = activeAudioCallbackParameterSnapshot.globalFilter;
+    const std::array<const ModulatedParameterSnapshot*, 9> parameters {
+        &filter.lowCutFrequency,
+        &filter.lowCutGain,
+        &filter.lowCutQuality,
+        &filter.peakFrequency,
+        &filter.peakGain,
+        &filter.peakQuality,
+        &filter.highCutFrequency,
+        &filter.highCutGain,
+        &filter.highCutQuality
     };
 
     for (const auto* parameter : parameters)
     {
-        LfoManager::AudioThreadRoutingInfo routingInfo;
-        if (parameter->ranged != nullptr
-            && lfoManager->getAudioThreadRoutingInfo(parameter->ranged, routingInfo)
-            && juce::isPositiveAndBelow(routingInfo.sourceLfoIndex,
+        if (juce::isPositiveAndBelow(parameter->lfoSourceIndex,
                                         lfoOutputBuffer.getNumChannels())
-            && std::isfinite(routingInfo.depth)
-            && std::abs(routingInfo.depth) > std::numeric_limits<float>::epsilon())
+            && std::isfinite(parameter->provider.modulationDepth)
+            && std::abs(parameter->provider.modulationDepth)
+                   > std::numeric_limits<float>::epsilon())
             return true;
     }
 
@@ -3146,6 +3221,31 @@ void FireAudioProcessor::setHostStateMainCaptureHookForTesting(
     const juce::ScopedLock lock(serializableStateHookLock);
     hostStateMainCaptureHookForTesting = std::move(hook);
 }
+
+void FireAudioProcessor::setAudioCallbackStateCaptureHookForTesting(
+    std::function<void()> hook)
+{
+    const juce::ScopedLock lock(serializableStateHookLock);
+    audioCallbackStateCaptureHookForTesting = std::move(hook);
+}
+
+FireAudioProcessor::AudioCallbackRecipeForTesting
+FireAudioProcessor::getLastAudioCallbackRecipeForTesting() const noexcept
+{
+    const auto& band0 = activeMultibandTopologySnapshot.callbackContext
+                            .bandParameters[0];
+    return {
+        lastAudioCallbackGenerationAtStart,
+        activeMultibandTopologySnapshot.publicationSequence,
+        activeMultibandTopologySnapshot.numBands,
+        band0.outputVal.baseValue,
+        activeAudioCallbackParameterSnapshot.requestedHq,
+        activeAudioCallbackParameterSnapshot.globalOutput.provider.baseValue,
+        activeAudioCallbackParameterSnapshot.downsampleEnabled,
+        activeAudioCallbackParameterSnapshot.downsampleRate.provider.baseValue,
+        activeAudioCallbackParameterSnapshot.lfoParameters.lfos[0].freeRate
+    };
+}
 #endif
 
 void FireAudioProcessor::requestMultibandTopologyReset() noexcept
@@ -3352,13 +3452,25 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
     const juce::AudioBuffer<float>& lfoOutputs,
     std::uint32_t sequenceAtCallbackStart,
     bool routingSnapshotWasRefreshed,
-    MultibandTopologySnapshot& snapshot)
+    MultibandTopologySnapshot& snapshot,
+    AudioCallbackParameterSnapshot& callbackParameters)
 {
     const auto sequenceBefore = multibandTopologyResetGeneration.load(
         std::memory_order_acquire);
     if (sequenceBefore != sequenceAtCallbackStart
         || (sequenceBefore & 1u) != 0u)
         return false;
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::function<void()> captureHook;
+    {
+        const juce::ScopedLock lock(serializableStateHookLock);
+        captureHook = std::move(audioCallbackStateCaptureHookForTesting);
+        audioCallbackStateCaptureHookForTesting = {};
+    }
+    if (captureHook)
+        captureHook();
+#endif
 
     MultibandTopologySnapshot candidate;
     candidate.publicationSequence = sequenceBefore;
@@ -3371,7 +3483,16 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
     prepareHqCallbackContext(lfoOutputs,
                              candidate.numBands,
                              candidate.callbackContext);
+    AudioCallbackParameterSnapshot candidateCallbackParameters;
+    prepareAudioCallbackParameterSnapshot(sequenceBefore,
+                                          candidateCallbackParameters);
 
+    // APVTS publishes its raw parameter atomics with release/seq_cst stores.
+    // If any relaxed payload read above observed a value staged after a writer
+    // made the generation odd, this acquire fence imports that writer before
+    // the final generation check. Atomic coherence then prevents the check
+    // from reading the older even generation and accepting a mixed recipe.
+    std::atomic_thread_fence(std::memory_order_acquire);
     const auto sequenceAfter = multibandTopologyResetGeneration.load(
         std::memory_order_acquire);
     if (sequenceAfter != sequenceBefore || (sequenceAfter & 1u) != 0u)
@@ -3390,6 +3511,7 @@ bool FireAudioProcessor::tryCaptureMultibandTopologySnapshot(
         return false;
 
     snapshot = std::move(candidate);
+    callbackParameters = std::move(candidateCallbackParameters);
     return true;
 }
 
@@ -3418,6 +3540,7 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 {
     juce::AudioBuffer<float> noLfoOutputs;
     MultibandTopologySnapshot requestedSnapshot;
+    AudioCallbackParameterSnapshot requestedCallbackParameters;
     const auto sequenceAtReset = multibandTopologyResetGeneration.load(
         std::memory_order_acquire);
     // A lifecycle reset runs before the callback's non-blocking LFO routing
@@ -3427,10 +3550,14 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
     if (tryCaptureMultibandTopologySnapshot(noLfoOutputs,
                                             sequenceAtReset,
                                             false,
-                                            requestedSnapshot))
+                                            requestedSnapshot,
+                                            requestedCallbackParameters))
     {
         activeMultibandTopologySnapshot = std::move(requestedSnapshot);
         activeMultibandTopologySnapshotInitialised = true;
+        activeAudioCallbackParameterSnapshot =
+            std::move(requestedCallbackParameters);
+        activeAudioCallbackParameterSnapshotInitialised = true;
     }
     else if (! activeMultibandTopologySnapshotInitialised)
     {
@@ -3452,6 +3579,14 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
             multibandTopologyResetGeneration.load(std::memory_order_relaxed)
             & ~std::uint32_t { 1 };
         activeMultibandTopologySnapshotInitialised = true;
+    }
+
+    if (! activeAudioCallbackParameterSnapshotInitialised)
+    {
+        prepareAudioCallbackParameterSnapshot(
+            activeMultibandTopologySnapshot.publicationSequence,
+            activeAudioCallbackParameterSnapshot);
+        activeAudioCallbackParameterSnapshotInitialised = true;
     }
 
     numBands = activeMultibandTopologySnapshot.numBands;
@@ -3503,18 +3638,22 @@ void FireAudioProcessor::performReset()
     snapCutSlopeTransition(lowCutSlopeTransition,
                            leftChain.get<ChainPositions::LowCut>(),
                            rightChain.get<ChainPositions::LowCut>(),
-                           getSlopeParameterValue(filterParameterCache.lowCutSlope.raw));
+                           activeAudioCallbackParameterSnapshot
+                               .globalFilter.baseSettings.lowCutSlope);
     snapCutSlopeTransition(highCutSlopeTransition,
                            leftChain.get<ChainPositions::HighCut>(),
                            rightChain.get<ChainPositions::HighCut>(),
-                           getSlopeParameterValue(filterParameterCache.highCutSlope.raw));
+                           activeAudioCallbackParameterSnapshot
+                               .globalFilter.baseSettings.highCutSlope);
     globalFilterCacheValid = false;
+    const auto& filterSettings =
+        activeAudioCallbackParameterSnapshot.globalFilter.baseSettings;
     const std::array<float, numGlobalFilterStages> initialStageMix {
-        loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f ? 0.0f : 1.0f,
-        loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f ? 0.0f : 1.0f,
-        loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f ? 0.0f : 1.0f,
-        loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f ? 0.0f : 1.0f,
-        loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f ? 0.0f : 1.0f
+        filterSettings.lowCutBypassed ? 0.0f : 1.0f,
+        filterSettings.peakBypassed ? 0.0f : 1.0f,
+        filterSettings.highCutBypassed ? 0.0f : 1.0f,
+        filterSettings.lowCutBypassed ? 0.0f : 1.0f,
+        filterSettings.highCutBypassed ? 0.0f : 1.0f
     };
     for (size_t stage = 0; stage < globalFilterStageMix.size(); ++stage)
         globalFilterStageMix[stage].setCurrentAndTargetValue(initialStageMix[stage]);
@@ -3673,24 +3812,52 @@ void FireAudioProcessor::processWetBlock(
         return;
     }
 
-    // Read the requested quality once. A live transition may deliberately use
-    // two internally consistent quality ranges in this callback, but a
-    // concurrent automation write cannot change the plan halfway through it.
-    const bool requestedHq = loadCachedParameter(hqParameter) > 0.5f;
     const auto topologySequenceAtCallbackStart =
         multibandTopologyResetGeneration.load(std::memory_order_acquire);
+    lastAudioCallbackGenerationAtStart = topologySequenceAtCallbackStart;
 
     lfoOutputBuffer.setSize(4, numSamples, false, false, true);
     lfoOutputBuffer.clear();
-    lfoManager->processBlock(lfoOutputBuffer, static_cast<float>(sampleRate), getPlayHead(), numSamples);
+
+    // Routes, staged shapes and every scalar DSP recipe are selected under
+    // one odd/even handshake before the LFO or any audio state is advanced.
+    // A failed/odd capture leaves both sides on their last completed frame.
     const bool routingSnapshotWasRefreshed =
-        lfoManager->wasRoutingSnapshotRefreshedThisBlock();
+        lfoManager->beginAudioThreadStateCapture(
+            topologySequenceAtCallbackStart,
+            multibandTopologyResetGeneration);
+    bool lfoCaptureNeedsAbort = routingSnapshotWasRefreshed;
+    const juce::ScopeGuard abortIncompleteLfoCapture { [this,
+                                                        &lfoCaptureNeedsAbort]
+    {
+        if (lfoCaptureNeedsAbort)
+            lfoManager->abortAudioThreadStateCapture();
+    } };
 
     HqCallbackContext callbackContext;
-    updateParameters(lfoOutputBuffer,
-                     topologySequenceAtCallbackStart,
-                     routingSnapshotWasRefreshed,
-                     callbackContext);
+    const bool capturedStableCallbackState = updateParameters(
+        lfoOutputBuffer,
+        topologySequenceAtCallbackStart,
+        routingSnapshotWasRefreshed,
+        callbackContext);
+    lfoManager->finishAudioThreadStateCapture(capturedStableCallbackState);
+    lfoCaptureNeedsAbort = false;
+
+    lfoManager->processBlock(
+        lfoOutputBuffer,
+        static_cast<float>(sampleRate),
+        getPlayHead(),
+        numSamples,
+        activeAudioCallbackParameterSnapshot.lfoParameters);
+    publishMultibandTelemetry(callbackContext,
+                              numBands,
+                              lfoOutputBuffer);
+
+    // A live transition may deliberately use two internally consistent
+    // quality ranges in this callback, but the requested mode itself belongs
+    // to the one accepted callback frame above.
+    const bool requestedHq =
+        activeAudioCallbackParameterSnapshot.requestedHq;
 
     mBuffer1.setSize(numBufferChannels, numSamples, false, false, true);
     mBuffer2.setSize(numBufferChannels, numSamples, false, false, true);
@@ -4891,7 +5058,7 @@ float FireAudioProcessor::getLfoPhase(int lfoIndex) const
     return lfoManager->getLfoPhase(lfoIndex);
 }
 
-void FireAudioProcessor::updateParameters(
+bool FireAudioProcessor::updateParameters(
     const juce::AudioBuffer<float>& lfoOutputs,
     std::uint32_t topologySequenceAtCallbackStart,
     bool routingSnapshotWasRefreshed,
@@ -4902,11 +5069,13 @@ void FireAudioProcessor::updateParameters(
     //==============================================================================
 
     MultibandTopologySnapshot requestedSnapshot;
+    AudioCallbackParameterSnapshot requestedCallbackParameters;
     const bool hasStablePublication = tryCaptureMultibandTopologySnapshot(
         lfoOutputs,
         topologySequenceAtCallbackStart,
         routingSnapshotWasRefreshed,
-        requestedSnapshot);
+        requestedSnapshot,
+        requestedCallbackParameters);
     topologyPendingChangedThisCallback = false;
 
     if (! activeMultibandTopologySnapshotInitialised)
@@ -4920,6 +5089,13 @@ void FireAudioProcessor::updateParameters(
 
     if (hasStablePublication)
     {
+        // Once the generation is even this is a complete publication. Preserve
+        // the established automation semantics: non-structural controls and
+        // LFO state become active at this callback boundary, while a destructive
+        // band-count change alone waits for the topology fade-to-zero reset.
+        activeAudioCallbackParameterSnapshot =
+            std::move(requestedCallbackParameters);
+        activeAudioCallbackParameterSnapshotInitialised = true;
         topologyPendingChangedThisCallback =
             ! sameTopologyIdentity(requestedSnapshot,
                                     pendingMultibandTopologySnapshot);
@@ -4956,9 +5132,7 @@ void FireAudioProcessor::updateParameters(
     }
 
     callbackContext = activeMultibandTopologySnapshot.callbackContext;
-    publishMultibandTelemetry(callbackContext,
-                              numBands,
-                              lfoOutputs);
+    return hasStablePublication;
 }
 
 void FireAudioProcessor::prepareHqCallbackContext(
@@ -5067,6 +5241,102 @@ void FireAudioProcessor::prepareHqCallbackContext(
 
         callbackContext.bandParameters[index] = params;
     }
+}
+
+void FireAudioProcessor::prepareAudioCallbackParameterSnapshot(
+    std::uint32_t publicationSequence,
+    AudioCallbackParameterSnapshot& snapshot) const
+{
+    snapshot = AudioCallbackParameterSnapshot {};
+    snapshot.publicationSequence = publicationSequence;
+    snapshot.requestedHq = loadCachedParameter(hqParameter) > 0.5f;
+    snapshot.downsampleEnabled =
+        loadCachedParameter(downsampleEnabledParameter) > 0.5f;
+    snapshot.lfoParameters =
+        lfoManager->captureAudioThreadParameterSnapshot();
+
+    const auto prepareModulatedParameter =
+        [this] (const CachedParameter& parameter,
+                ModulatedParameterSnapshot& destination)
+    {
+        destination = ModulatedParameterSnapshot {};
+        const float defaultValue = parameter.ranged != nullptr
+                                       ? parameter.ranged->convertFrom0to1(
+                                             parameter.ranged->getDefaultValue())
+                                       : 0.0f;
+        destination.provider.baseValue = loadCachedParameter(parameter,
+                                                              defaultValue);
+        if (parameter.ranged == nullptr)
+            return;
+
+        destination.provider.range =
+            parameter.ranged->getNormalisableRange();
+        LfoManager::AudioThreadRoutingInfo routingInfo;
+        if (lfoManager->getAudioThreadRoutingInfo(parameter.ranged,
+                                                  routingInfo))
+        {
+            destination.provider.modulationDepth = routingInfo.depth;
+            destination.provider.isBipolar = routingInfo.isBipolar;
+            destination.lfoSourceIndex = routingInfo.sourceLfoIndex;
+        }
+    };
+
+    auto& filter = snapshot.globalFilter;
+    filter.enabled = loadCachedParameter(filterEnabledParameter) > 0.5f;
+    prepareModulatedParameter(filterParameterCache.lowCutFrequency,
+                              filter.lowCutFrequency);
+    prepareModulatedParameter(filterParameterCache.lowCutGain,
+                              filter.lowCutGain);
+    prepareModulatedParameter(filterParameterCache.lowCutQuality,
+                              filter.lowCutQuality);
+    prepareModulatedParameter(filterParameterCache.peakFrequency,
+                              filter.peakFrequency);
+    prepareModulatedParameter(filterParameterCache.peakGain,
+                              filter.peakGain);
+    prepareModulatedParameter(filterParameterCache.peakQuality,
+                              filter.peakQuality);
+    prepareModulatedParameter(filterParameterCache.highCutFrequency,
+                              filter.highCutFrequency);
+    prepareModulatedParameter(filterParameterCache.highCutGain,
+                              filter.highCutGain);
+    prepareModulatedParameter(filterParameterCache.highCutQuality,
+                              filter.highCutQuality);
+
+    filter.baseSettings.lowCutFreq =
+        filter.lowCutFrequency.provider.baseValue;
+    filter.baseSettings.lowCutGainInDecibels =
+        filter.lowCutGain.provider.baseValue;
+    filter.baseSettings.lowCutQuality =
+        filter.lowCutQuality.provider.baseValue;
+    filter.baseSettings.lowCutSlope =
+        getSlopeParameterValue(filterParameterCache.lowCutSlope.raw);
+    filter.baseSettings.lowCutBypassed =
+        loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f;
+    filter.baseSettings.peakFreq = filter.peakFrequency.provider.baseValue;
+    filter.baseSettings.peakGainInDecibels =
+        filter.peakGain.provider.baseValue;
+    filter.baseSettings.peakQuality = filter.peakQuality.provider.baseValue;
+    filter.baseSettings.peakBypassed =
+        loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f;
+    filter.baseSettings.highCutFreq =
+        filter.highCutFrequency.provider.baseValue;
+    filter.baseSettings.highCutGainInDecibels =
+        filter.highCutGain.provider.baseValue;
+    filter.baseSettings.highCutQuality =
+        filter.highCutQuality.provider.baseValue;
+    filter.baseSettings.highCutSlope =
+        getSlopeParameterValue(filterParameterCache.highCutSlope.raw);
+    filter.baseSettings.highCutBypassed =
+        loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f;
+
+    prepareModulatedParameter(globalOutputParameter, snapshot.globalOutput);
+    prepareModulatedParameter(globalMixParameter, snapshot.globalMix);
+    prepareModulatedParameter(downsampleRateParameter,
+                              snapshot.downsampleRate);
+    prepareModulatedParameter(bitDepthParameter, snapshot.bitDepth);
+    prepareModulatedParameter(jitterParameter, snapshot.jitter);
+    prepareModulatedParameter(downsampleMixParameter,
+                              snapshot.downsampleMix);
 }
 
 void FireAudioProcessor::sumBands(juce::AudioBuffer<float>& outputBuffer,
@@ -5349,8 +5619,8 @@ bool FireAudioProcessor::updateGlobalFilters(
     int lfoSampleIndex)
 {
     // Get the final, modulated settings for the entire filter chain.
-    auto chainSettings = getCachedChainSettingsAtSample(lfoOutputs,
-                                                         lfoSampleIndex);
+    auto chainSettings = getSnapshotChainSettingsAtSample(lfoOutputs,
+                                                           lfoSampleIndex);
 
     // It's good practice to ensure frequencies are within a valid range.
     if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
@@ -5489,7 +5759,9 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     // 1. Global Filter Processing (Block-based)
     // ==============================================================================
     {
-        const bool filterEnabled = loadCachedParameter(filterEnabledParameter) > 0.5f;
+        const auto& filterSnapshot =
+            activeAudioCallbackParameterSnapshot.globalFilter;
+        const bool filterEnabled = filterSnapshot.enabled;
         globalFilterMixer.setWetMixProportion(filterEnabled ? 1.0f : 0.0f);
         if (! globalFilterMixerPrimed)
             globalFilterMixer.reset();
@@ -5498,13 +5770,13 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
 
         auto block = juce::dsp::AudioBlock<float>(buffer);
 
-        const float lowCutMix = loadCachedParameter(filterParameterCache.lowCutBypassed) > 0.5f
+        const float lowCutMix = filterSnapshot.baseSettings.lowCutBypassed
                                     ? 0.0f
                                     : 1.0f;
-        const float peakMix = loadCachedParameter(filterParameterCache.peakBypassed) > 0.5f
+        const float peakMix = filterSnapshot.baseSettings.peakBypassed
                                   ? 0.0f
                                   : 1.0f;
-        const float highCutMix = loadCachedParameter(filterParameterCache.highCutBypassed) > 0.5f
+        const float highCutMix = filterSnapshot.baseSettings.highCutBypassed
                                      ? 0.0f
                                      : 1.0f;
         globalFilterStageMix[lowCutStage].setTargetValue(lowCutMix);
@@ -5603,22 +5875,19 @@ void FireAudioProcessor::applyGlobalEffects(juce::AudioBuffer<float>& buffer, co
     if (globalOutputParameter.ranged == nullptr)
         return;
 
-    globalGainProvider.baseValue = loadCachedParameter(globalOutputParameter);
-    globalGainProvider.range = globalOutputParameter.ranged->getNormalisableRange();
+    const auto& globalOutputSnapshot =
+        activeAudioCallbackParameterSnapshot.globalOutput;
+    globalGainProvider = globalOutputSnapshot.provider;
 
-    int globalGainLfoSourceIndex = -1;
-    LfoManager::AudioThreadRoutingInfo routingInfo;
-    if (lfoManager->getAudioThreadRoutingInfo(globalOutputParameter.ranged, routingInfo))
+    int globalGainLfoSourceIndex = globalOutputSnapshot.lfoSourceIndex;
+    if (juce::isPositiveAndBelow(globalGainLfoSourceIndex,
+                                  lfoOutputs.getNumChannels()))
     {
-        const int sourceIndex = routingInfo.sourceLfoIndex;
-        if (juce::isPositiveAndBelow(sourceIndex, lfoOutputs.getNumChannels()))
-        {
-            globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(sourceIndex);
-            globalGainProvider.modulationDepth = routingInfo.depth;
-            globalGainProvider.isBipolar = routingInfo.isBipolar;
-            globalGainLfoSourceIndex = sourceIndex;
-        }
+        globalGainProvider.lfoSignal = lfoOutputs.getReadPointer(
+            globalGainLfoSourceIndex);
     }
+    else
+        globalGainLfoSourceIndex = -1;
 
     // b. Apply the gain using our new, clean helper function.
     applyGain(buffer,
@@ -5633,7 +5902,8 @@ void FireAudioProcessor::applyDownsamplingEffect(
     juce::AudioBuffer<float>& buffer,
     const juce::AudioBuffer<float>& lfoOutputs)
 {
-    const bool isActive = loadCachedParameter(downsampleEnabledParameter) > 0.5f;
+    const bool isActive =
+        activeAudioCallbackParameterSnapshot.downsampleEnabled;
     if (! downsamplingWasActive)
     {
         downsampleSamplesRemaining.fill(0);
@@ -5646,42 +5916,29 @@ void FireAudioProcessor::applyDownsamplingEffect(
     // A copy of the original signal is needed for the dry/wet mix.
     lofiDryBuffer.makeCopyOf(buffer, true);
 
-    const auto configureProvider = [this, &buffer, &lfoOutputs](
-                                       const CachedParameter& parameter,
+    const auto configureProvider = [&buffer, &lfoOutputs](
+                                       const ModulatedParameterSnapshot& parameter,
                                        ModulatedValueProvider& provider,
                                        int* sourceIndex)
     {
         if (sourceIndex != nullptr)
             *sourceIndex = -1;
 
-        const float defaultValue = parameter.ranged != nullptr
-                                       ? parameter.ranged->convertFrom0to1(
-                                             parameter.ranged->getDefaultValue())
-                                       : 0.0f;
-        provider.baseValue = loadCachedParameter(parameter, defaultValue);
-        if (parameter.ranged == nullptr)
-            return false;
-
-        provider.range = parameter.ranged->getNormalisableRange();
-        LfoManager::AudioThreadRoutingInfo routingInfo;
+        provider = parameter.provider;
         const bool hasCompleteLfoBlock = lfoOutputs.getNumSamples()
                                          >= buffer.getNumSamples();
         if (! hasCompleteLfoBlock
-            || ! lfoManager->getAudioThreadRoutingInfo(parameter.ranged,
-                                                        routingInfo)
-            || std::abs(routingInfo.depth) <= 1.0e-6f
-            || ! juce::isPositiveAndBelow(routingInfo.sourceLfoIndex,
+            || std::abs(provider.modulationDepth) <= 1.0e-6f
+            || ! juce::isPositiveAndBelow(parameter.lfoSourceIndex,
                                            lfoOutputs.getNumChannels()))
         {
             return false;
         }
 
         provider.lfoSignal = lfoOutputs.getReadPointer(
-            routingInfo.sourceLfoIndex);
-        provider.modulationDepth = routingInfo.depth;
-        provider.isBipolar = routingInfo.isBipolar;
+            parameter.lfoSourceIndex);
         if (sourceIndex != nullptr)
-            *sourceIndex = routingInfo.sourceLfoIndex;
+            *sourceIndex = parameter.lfoSourceIndex;
         return true;
     };
 
@@ -5689,17 +5946,18 @@ void FireAudioProcessor::applyDownsamplingEffect(
     ModulatedValueProvider bitsProvider;
     ModulatedValueProvider jitterProvider;
     ModulatedValueProvider mixProvider;
-    const bool hasRateModulation = configureProvider(downsampleRateParameter,
+    const auto& callbackParameters = activeAudioCallbackParameterSnapshot;
+    const bool hasRateModulation = configureProvider(callbackParameters.downsampleRate,
                                                       rateProvider,
                                                       nullptr);
-    const bool hasBitsModulation = configureProvider(bitDepthParameter,
+    const bool hasBitsModulation = configureProvider(callbackParameters.bitDepth,
                                                       bitsProvider,
                                                       nullptr);
-    const bool hasJitterModulation = configureProvider(jitterParameter,
+    const bool hasJitterModulation = configureProvider(callbackParameters.jitter,
                                                         jitterProvider,
                                                         nullptr);
     int mixLfoSourceIndex = -1;
-    configureProvider(downsampleMixParameter,
+    configureProvider(callbackParameters.downsampleMix,
                       mixProvider,
                       &mixLfoSourceIndex);
 
@@ -6079,7 +6337,9 @@ bool FireAudioProcessor::commitPendingTopologySnapshot() noexcept
 
 void FireAudioProcessor::snapHqTransitionToParameter() noexcept
 {
-    activeHqMode = loadCachedParameter(hqParameter) > 0.5f;
+    activeHqMode = activeAudioCallbackParameterSnapshotInitialised
+                       ? activeAudioCallbackParameterSnapshot.requestedHq
+                       : loadCachedParameter(hqParameter) > 0.5f;
     pendingHqMode = activeHqMode;
     hqTransitionInitialised = true;
     hqTransitionPhase = HqTransitionPhase::steady;
@@ -6591,27 +6851,20 @@ void FireAudioProcessor::applyGlobalMix(
         dryWetMixerGlobal.setWetLatency(0);
     }
 
-    ModulatedValueProvider mixProvider;
-    mixProvider.baseValue = loadCachedParameter(globalMixParameter, 1.0f);
-    if (globalMixParameter.ranged != nullptr)
-        mixProvider.range = globalMixParameter.ranged->getNormalisableRange();
-
-    LfoManager::AudioThreadRoutingInfo routingInfo;
-    const bool hasSampleAccurateModulation = globalMixParameter.ranged != nullptr
-                                          && lfoManager->getAudioThreadRoutingInfo(
-                                              globalMixParameter.ranged, routingInfo)
-                                          && std::abs(routingInfo.depth) > 1.0e-6f
+    const auto& mixSnapshot =
+        activeAudioCallbackParameterSnapshot.globalMix;
+    ModulatedValueProvider mixProvider = mixSnapshot.provider;
+    const bool hasSampleAccurateModulation =
+                                             std::abs(mixProvider.modulationDepth) > 1.0e-6f
                                           && juce::isPositiveAndBelow(
-                                              routingInfo.sourceLfoIndex,
+                                              mixSnapshot.lfoSourceIndex,
                                               lfoOutputs.getNumChannels())
                                           && lfoOutputs.getNumSamples()
                                                  >= buffer.getNumSamples();
     if (hasSampleAccurateModulation)
     {
         mixProvider.lfoSignal = lfoOutputs.getReadPointer(
-            routingInfo.sourceLfoIndex);
-        mixProvider.modulationDepth = routingInfo.depth;
-        mixProvider.isBipolar = routingInfo.isBipolar;
+            mixSnapshot.lfoSourceIndex);
     }
 
     auto wetBlock = juce::dsp::AudioBlock<float>(buffer);
@@ -6636,7 +6889,7 @@ void FireAudioProcessor::applyGlobalMix(
         wetBlock,
         mixProvider,
         mixProvider.baseValue,
-        hasSampleAccurateModulation ? routingInfo.sourceLfoIndex : -1,
+        hasSampleAccurateModulation ? mixSnapshot.lfoSourceIndex : -1,
         true);
 }
 

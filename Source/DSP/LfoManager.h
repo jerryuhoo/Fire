@@ -20,6 +20,7 @@
 #include "juce_audio_processors/juce_audio_processors.h"
 #include <array>
 #include <atomic>
+#include <cstdint>
 
 class LfoManager
 {
@@ -42,6 +43,68 @@ public:
      */
     void processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples);
 
+    struct AudioThreadParameterSnapshot
+    {
+        struct Parameters
+        {
+            float syncMode = 1.0f;
+            float syncedRate = 8.0f;
+            float freeRate = 1.0f;
+            float phaseOffset = 0.0f;
+            float smoothness = 0.0f;
+        };
+
+        std::array<Parameters, 4> lfos {};
+    };
+
+    /** Captures the fixed LFO timing/smoothness controls from APVTS atomics.
+
+        The returned object owns only scalar values and is safe to retain as an
+        audio-thread callback snapshot. An outer state-publication sequence is
+        still required when several APVTS values must belong to one generation.
+    */
+    AudioThreadParameterSnapshot
+    captureAudioThreadParameterSnapshot() const noexcept;
+
+    /** Renders from a caller-owned parameter snapshot.
+
+        This overload neither refreshes UI-owned routing/shape data nor reads
+        APVTS parameters. Call beginAudioThreadStateCapture() followed by
+        finishAudioThreadStateCapture() (or abort) before rendering when
+        a new routing/shape generation may be published.
+    */
+    void processBlock(juce::AudioBuffer<float>& outputBuffer,
+                      float sampleRate,
+                      juce::AudioPlayHead* playHead,
+                      int numSamples,
+                      const AudioThreadParameterSnapshot& parameterSnapshot);
+
+    /** Starts a non-blocking candidate capture of routes and staged shapes.
+
+        On success the LFO data lock remains held until finish or abort. During
+        that interval getAudioThreadRoutingInfo() reads the candidate routes,
+        while the active audio-thread routes and wavetable banks remain intact.
+        The caller must pair every successful begin with finish or abort; a
+        ScopeGuard is recommended.
+    */
+    bool beginAudioThreadStateCapture(
+        std::uint32_t expectedGeneration,
+        const std::atomic<std::uint32_t>& generation) noexcept;
+
+    /** Commits or discards the current candidate at the caller's linearization point.
+
+        Pass true only after the caller's final generation check accepted all
+        scalar state captured while this object retained the LFO data lock.
+        Commit then unconditionally copies the candidate fixed route array and
+        publishes the matching staged shape banks before releasing that lock.
+        A writer which turns the outer generation odd after the caller's check
+        is ordered after this complete callback publication.
+    */
+    bool finishAudioThreadStateCapture(bool commitCandidate) noexcept;
+
+    /** Discards the current candidate and releases the LFO data lock. */
+    void abortAudioThreadStateCapture() noexcept;
+
     /**
      * @brief Gets the final, possibly modulated, value for a given parameter.
      * If the parameter is being modulated, this returns the calculated value.
@@ -58,7 +121,9 @@ public:
         bool isBipolar = true;
     };
 
-    /** Looks up the already-published routing snapshot. Audio thread only. */
+    /** Looks up the active route, or the candidate during a two-phase capture.
+        Audio thread only.
+    */
     bool getAudioThreadRoutingInfo(const juce::RangedAudioParameter* parameter,
                                    AudioThreadRoutingInfo& result) const noexcept;
 
@@ -129,6 +194,7 @@ private:
         int sourceLfoIndex = 0;
         float depth = 0.0f;
         bool isBipolar = true;
+        float normalisedBaseValue = 0.0f;
     };
 
     struct RuntimeModulatedValue
@@ -140,7 +206,20 @@ private:
     /**
      * @brief Internal helper to generate raw LFO signals into the internal buffer.
      */
-    void generateLfoOutput(double sampleRate, juce::AudioPlayHead* playHead, int numSamples);
+    void generateLfoOutput(
+        double sampleRate,
+        juce::AudioPlayHead* playHead,
+        int numSamples,
+        const AudioThreadParameterSnapshot& parameterSnapshot);
+    void renderBlock(juce::AudioBuffer<float>& outputBuffer,
+                     float sampleRate,
+                     juce::AudioPlayHead* playHead,
+                     int numSamples,
+                     const AudioThreadParameterSnapshot& parameterSnapshot,
+                     bool readLiveRoutingBaseValues);
+    bool captureRuntimeRoutings(
+        std::array<RuntimeRouting, maxRuntimeRoutings>& destination,
+        size_t& destinationCount) const;
     bool refreshRuntimeStateIfAvailable();
     void updatePublishedRoutingState() noexcept;
 
@@ -165,9 +244,13 @@ private:
 
     // Fixed-capacity, audio-thread-owned snapshots avoid per-block allocation and UI lock waits.
     std::array<RuntimeRouting, maxRuntimeRoutings> runtimeRoutings {};
+    std::array<RuntimeRouting, maxRuntimeRoutings> candidateRuntimeRoutings {};
     std::array<RuntimeModulatedValue, maxRuntimeRoutings> modulatedValues {};
     size_t runtimeRoutingCount = 0;
+    size_t candidateRuntimeRoutingCount = 0;
     size_t modulatedValueCount = 0;
+    bool candidateHasPublishedRouting = false;
+    bool runtimeStateCaptureInProgress = false;
     std::atomic<bool> hasPublishedRouting { false };
     bool routingSnapshotRefreshedThisBlock = false;
 

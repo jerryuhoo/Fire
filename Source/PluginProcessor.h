@@ -536,8 +536,25 @@ public:
     void beginMultibandTopologyEdit();
     void requestMultibandTopologyReset() noexcept;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    struct AudioCallbackRecipeForTesting
+    {
+        std::uint32_t generationAtCallbackStart = 0;
+        std::uint32_t topologyPublicationSequence = 0;
+        int numBands = 1;
+        float band0OutputDb = 0.0f;
+        bool requestedHq = false;
+        float globalOutputDb = 0.0f;
+        bool lofiEnabled = false;
+        float lofiRate = 1.0f;
+        float lfo1FreeRateHz = 1.0f;
+    };
+
     void setSerializableStateReaderHookForTesting(std::function<void()> hook);
     void setHostStateMainCaptureHookForTesting(std::function<void()> hook);
+    void setAudioCallbackStateCaptureHookForTesting(
+        std::function<void()> hook);
+    AudioCallbackRecipeForTesting
+    getLastAudioCallbackRecipeForTesting() const noexcept;
     std::uint32_t getMultibandTopologyGenerationForTesting() const noexcept
     {
         return multibandTopologyResetGeneration.load(std::memory_order_seq_cst);
@@ -613,6 +630,42 @@ private:
         CachedParameter highCutBypassed;
     };
 
+    struct ModulatedParameterSnapshot
+    {
+        ModulatedValueProvider provider;
+        int lfoSourceIndex = -1;
+    };
+
+    struct GlobalFilterCallbackSnapshot
+    {
+        ChainSettings baseSettings;
+        ModulatedParameterSnapshot lowCutFrequency;
+        ModulatedParameterSnapshot lowCutGain;
+        ModulatedParameterSnapshot lowCutQuality;
+        ModulatedParameterSnapshot peakFrequency;
+        ModulatedParameterSnapshot peakGain;
+        ModulatedParameterSnapshot peakQuality;
+        ModulatedParameterSnapshot highCutFrequency;
+        ModulatedParameterSnapshot highCutGain;
+        ModulatedParameterSnapshot highCutQuality;
+        bool enabled = false;
+    };
+
+    struct AudioCallbackParameterSnapshot
+    {
+        LfoManager::AudioThreadParameterSnapshot lfoParameters;
+        GlobalFilterCallbackSnapshot globalFilter;
+        ModulatedParameterSnapshot globalOutput;
+        ModulatedParameterSnapshot globalMix;
+        ModulatedParameterSnapshot downsampleRate;
+        ModulatedParameterSnapshot bitDepth;
+        ModulatedParameterSnapshot jitter;
+        ModulatedParameterSnapshot downsampleMix;
+        std::uint32_t publicationSequence = 0;
+        bool requestedHq = false;
+        bool downsampleEnabled = false;
+    };
+
     struct MultibandTopologySnapshot
     {
         HqCallbackContext callbackContext;
@@ -641,10 +694,20 @@ private:
     float getModulatedValueAtSample(const CachedParameter& parameter,
                                     const juce::AudioBuffer<float>& lfoOutputs,
                                     int sampleIndex) const noexcept;
+    float getSnapshotModulatedValueAtSample(
+        const ModulatedParameterSnapshot& parameter,
+        const juce::AudioBuffer<float>& lfoOutputs,
+        int sampleIndex) const noexcept;
     ChainSettings getCachedChainSettings(const juce::AudioBuffer<float>* lfoOutputs) const noexcept;
     ChainSettings getCachedChainSettingsAtSample(const juce::AudioBuffer<float>& lfoOutputs,
                                                  int sampleIndex) const noexcept;
+    ChainSettings getSnapshotChainSettingsAtSample(
+        const juce::AudioBuffer<float>& lfoOutputs,
+        int sampleIndex) const noexcept;
     bool hasActiveFilterModulation() const noexcept;
+    void prepareAudioCallbackParameterSnapshot(
+        std::uint32_t publicationSequence,
+        AudioCallbackParameterSnapshot& snapshot) const;
 
     std::array<BandParameterCache, 4> bandParameterCache;
     std::array<CachedParameter, 3> crossoverFrequencyParameters;
@@ -687,7 +750,8 @@ private:
         const juce::AudioBuffer<float>& lfoOutputs,
         std::uint32_t sequenceAtCallbackStart,
         bool routingSnapshotWasRefreshed,
-        MultibandTopologySnapshot& snapshot);
+        MultibandTopologySnapshot& snapshot,
+        AudioCallbackParameterSnapshot& callbackParameters);
     void publishMultibandTelemetry(
         const HqCallbackContext& callbackContext,
         int snapshotNumBands,
@@ -713,10 +777,14 @@ private:
     mutable juce::CriticalSection serializableStateHookLock;
     mutable std::function<void()> serializableStateReaderHookForTesting;
     std::function<void()> hostStateMainCaptureHookForTesting;
+    std::function<void()> audioCallbackStateCaptureHookForTesting;
 #endif
     std::uint32_t appliedMultibandTopologyResetGeneration = 0;
     MultibandTopologySnapshot activeMultibandTopologySnapshot;
     bool activeMultibandTopologySnapshotInitialised = false;
+    AudioCallbackParameterSnapshot activeAudioCallbackParameterSnapshot;
+    bool activeAudioCallbackParameterSnapshotInitialised = false;
+    std::uint32_t lastAudioCallbackGenerationAtStart = 0;
 
     friend class state::StateAB;
 
@@ -730,7 +798,7 @@ private:
     void processWetBlock(juce::AudioBuffer<float>& buffer,
                          juce::MidiBuffer& midiMessages,
                          bool hostBypassShadow);
-    void updateParameters(const juce::AudioBuffer<float>& lfoOutputs,
+    bool updateParameters(const juce::AudioBuffer<float>& lfoOutputs,
                           std::uint32_t topologySequenceAtCallbackStart,
                           bool routingSnapshotWasRefreshed,
                           HqCallbackContext& callbackContext);

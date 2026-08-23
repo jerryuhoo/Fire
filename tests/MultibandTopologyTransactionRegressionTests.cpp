@@ -1,5 +1,6 @@
 #include <PluginProcessor.h>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -374,6 +375,533 @@ TEST_CASE("A multiband topology edit is published as one atomic generation",
     CHECK(stagedSinglePublicationError < 1.0e-6f);
     CHECK(postPublicationError < publicationTolerance);
     REQUIRE(finalOldSeparation > 0.02f);
+}
+
+TEST_CASE("An odd topology transaction retains one complete audio callback recipe",
+          "[processor][multiband][topology][transaction][audio-state]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    configureProcessor(subject);
+
+    constexpr int callbackSamples = 16;
+    constexpr int lfoIndex = 0;
+
+    // Give every callback subsystem a distinct old value. The topology
+    // transaction below models a host/preset state replacement which stages
+    // the matching new values while its public generation remains odd.
+    setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
+    setPlainParameter(subject, bandParameter(OUTPUT_ID, 0), 0.0f);
+    setPlainParameter(subject, HQ_ID, 0.0f);
+    setPlainParameter(subject, OUTPUT_ID, 0.0f);
+    setPlainParameter(subject, DOWNSAMPLE_BYPASS_ID, 0.0f);
+    setPlainParameter(subject, DOWNSAMPLE_ID, 1.0f);
+    setPlainParameter(subject,
+                      bandParameter(LFO_SYNC_MODE_ID, lfoIndex),
+                      0.0f);
+    setPlainParameter(subject,
+                      bandParameter(LFO_RATE_HZ_ID, lfoIndex),
+                      3.0f);
+
+    juce::AudioBuffer<float> initialBuffer(2, callbackSamples);
+    initialBuffer.clear();
+    juce::MidiBuffer initialMidi;
+    subject.processBlock(initialBuffer, initialMidi);
+
+    const auto evenGeneration =
+        subject.getMultibandTopologyGenerationForTesting();
+    REQUIRE((evenGeneration & 1u) == 0u);
+
+    bool stagedParametersValid = true;
+    bool callbackStartedDuringOddGeneration = false;
+    subject.beginMultibandTopologyEdit();
+    try
+    {
+        const auto stage = [&] (const juce::String& parameterID,
+                                float plainValue)
+        {
+            stagedParametersValid = setPlainParameterFromWriter(
+                                        subject,
+                                        parameterID,
+                                        plainValue)
+                                  && stagedParametersValid;
+        };
+
+        stage(bandParameter(FREQ_ID, 0), 1100.0f);
+        stage(bandParameter(FREQ_ID, 1), 5200.0f);
+        stage(bandParameter(LINE_STATE_ID, 0), 1.0f);
+        stage(bandParameter(LINE_STATE_ID, 1), 1.0f);
+        stage(bandParameter(LINE_STATE_ID, 2), 0.0f);
+        stage(bandParameter(OUTPUT_ID, 0), -12.0f);
+        stage(bandParameter(OUTPUT_ID, 1), 5.0f);
+        stage(bandParameter(OUTPUT_ID, 2), 6.0f);
+        stage(NUM_BANDS_ID, 3.0f);
+
+        stage(HQ_ID, 1.0f);
+        stage(OUTPUT_ID, -18.0f);
+        stage(DOWNSAMPLE_BYPASS_ID, 1.0f);
+        stage(DOWNSAMPLE_ID, 17.0f);
+        stage(bandParameter(LFO_RATE_HZ_ID, lfoIndex), 37.0f);
+
+        callbackStartedDuringOddGeneration =
+            (subject.getMultibandTopologyGenerationForTesting() & 1u) != 0u;
+
+        juce::AudioBuffer<float> oddCallbackBuffer(2, callbackSamples);
+        oddCallbackBuffer.clear();
+        juce::MidiBuffer oddCallbackMidi;
+        subject.processBlock(oddCallbackBuffer, oddCallbackMidi);
+    }
+    catch (...)
+    {
+        subject.requestMultibandTopologyReset();
+        throw;
+    }
+    subject.requestMultibandTopologyReset();
+
+    // Retrieve and check the recipe only after balancing the writer lock, so
+    // a Catch assertion cannot strand the processor in an odd transaction.
+    const auto recipe = subject.getLastAudioCallbackRecipeForTesting();
+    const auto publishedGeneration =
+        subject.getMultibandTopologyGenerationForTesting();
+
+    CAPTURE(evenGeneration,
+            recipe.generationAtCallbackStart,
+            recipe.topologyPublicationSequence,
+            recipe.numBands,
+            recipe.band0OutputDb,
+            recipe.requestedHq,
+            recipe.globalOutputDb,
+            recipe.lofiEnabled,
+            recipe.lofiRate,
+            recipe.lfo1FreeRateHz,
+            publishedGeneration);
+    CHECK(stagedParametersValid);
+    CHECK(callbackStartedDuringOddGeneration);
+    CHECK(recipe.generationAtCallbackStart == evenGeneration + 1u);
+    CHECK((recipe.generationAtCallbackStart & 1u) != 0u);
+    CHECK(recipe.topologyPublicationSequence == evenGeneration);
+    CHECK(recipe.numBands == 2);
+    CHECK(recipe.band0OutputDb == Catch::Approx(0.0f).margin(1.0e-5f));
+    CHECK_FALSE(recipe.requestedHq);
+    CHECK(recipe.globalOutputDb == Catch::Approx(0.0f).margin(1.0e-5f));
+    CHECK_FALSE(recipe.lofiEnabled);
+    CHECK(recipe.lofiRate == Catch::Approx(1.0f));
+    CHECK(recipe.lfo1FreeRateHz == Catch::Approx(3.0f));
+    CHECK(publishedGeneration == evenGeneration + 2u);
+    CHECK((publishedGeneration & 1u) == 0u);
+}
+
+TEST_CASE("An odd topology transaction cannot publish staged LFO timing, shape, or routing",
+          "[processor][multiband][topology][transaction][audio-state][lfo]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    FireAudioProcessor oldReference;
+    configureProcessor(subject);
+    configureProcessor(oldReference);
+    configureTopologyLfo(subject);
+    configureTopologyLfo(oldReference);
+    assignTopologyLfoRoute(subject);
+    assignTopologyLfoRoute(oldReference);
+
+    LfoData oldShape;
+    oldShape.points = {
+        { 0.0f, 0.0f },
+        { 0.5f, 1.0f },
+        { 1.0f, 0.0f }
+    };
+    oldShape.curvatures = { 0.0f, 0.0f };
+    subject.getLfoManager().setLfoData(0, oldShape);
+    oldReference.getLfoManager().setLfoData(0, oldShape);
+
+    int streamPosition = 0;
+    float warmupError = 0.0f;
+    while (streamPosition < warmupSamples)
+    {
+        const int numSamples = std::min(preparedBlockSize,
+                                        warmupSamples - streamPosition);
+        auto subjectOutput = makeTimelineInput(streamPosition, numSamples);
+        auto referenceOutput = makeTimelineInput(streamPosition, numSamples);
+        juce::MidiBuffer subjectMidi;
+        juce::MidiBuffer referenceMidi;
+        subject.processBlock(subjectOutput, subjectMidi);
+        oldReference.processBlock(referenceOutput, referenceMidi);
+        warmupError = std::max(warmupError,
+                               maximumBufferDifference(subjectOutput,
+                                                       referenceOutput));
+        streamPosition += numSamples;
+    }
+
+    bool stagedRateWasValid = false;
+    bool callbackRanDuringOdd = false;
+    float oddSnapshotError = 0.0f;
+    subject.beginMultibandTopologyEdit();
+    try
+    {
+        stagedRateWasValid = setPlainParameterFromWriter(
+            subject,
+            bandParameter(LFO_RATE_HZ_ID, 0),
+            3.0f);
+
+        LfoData stagedShape;
+        stagedShape.points = {
+            { 0.0f, 1.0f },
+            { 1.0f, 1.0f }
+        };
+        stagedShape.curvatures = { 0.0f };
+        subject.getLfoManager().setLfoData(0, stagedShape);
+        subject.getLfoManager().clearModulationForTarget(
+            bandParameter(OUTPUT_ID, 0));
+
+        callbackRanDuringOdd =
+            (subject.getMultibandTopologyGenerationForTesting() & 1u) != 0u;
+        const int blocksToExposeFixedLatency =
+            subject.getLatencySamples() / preparedBlockSize + 8;
+        for (int block = 0; block < blocksToExposeFixedLatency; ++block)
+        {
+            auto subjectOutput = makeTimelineInput(streamPosition,
+                                                   preparedBlockSize);
+            auto referenceOutput = makeTimelineInput(streamPosition,
+                                                     preparedBlockSize);
+            juce::MidiBuffer subjectMidi;
+            juce::MidiBuffer referenceMidi;
+            subject.processBlock(subjectOutput, subjectMidi);
+            oldReference.processBlock(referenceOutput, referenceMidi);
+            for (int channel = 0; channel < subjectOutput.getNumChannels();
+                 ++channel)
+            {
+                for (int sample = 0; sample < subjectOutput.getNumSamples();
+                     ++sample)
+                {
+                    oddSnapshotError = std::max(
+                        oddSnapshotError,
+                        std::abs(subjectOutput.getSample(channel, sample)
+                                 - referenceOutput.getSample(channel,
+                                                             sample)));
+                }
+            }
+            streamPosition += preparedBlockSize;
+        }
+    }
+    catch (...)
+    {
+        subject.requestMultibandTopologyReset();
+        throw;
+    }
+    subject.requestMultibandTopologyReset();
+
+    const auto stagedRoutings =
+        subject.getLfoManager().getModulationRoutingsCopy();
+    const auto oldTarget = bandParameter(OUTPUT_ID, 0);
+    const bool stagedRouteWasRemoved = std::none_of(
+        stagedRoutings.begin(),
+        stagedRoutings.end(),
+        [&oldTarget] (const ModulationRouting& routing)
+        {
+            return routing.targetParameterID == oldTarget;
+        });
+
+    CAPTURE(warmupError, oddSnapshotError);
+    CHECK(stagedRateWasValid);
+    CHECK(stagedRouteWasRemoved);
+    CHECK(callbackRanDuringOdd);
+    CHECK(warmupError < 1.0e-6f);
+    CHECK(oddSnapshotError < 1.0e-6f);
+}
+
+TEST_CASE("A callback capture that becomes odd discards its complete candidate",
+          "[processor][multiband][topology][transaction][audio-state][lfo][race]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    FireAudioProcessor oldReference;
+    configureProcessor(subject);
+    configureProcessor(oldReference);
+    configureTopologyLfo(subject);
+    configureTopologyLfo(oldReference);
+    assignTopologyLfoRoute(subject);
+    assignTopologyLfoRoute(oldReference);
+
+    LfoData oldShape;
+    oldShape.points = {
+        { 0.0f, 0.0f },
+        { 0.5f, 1.0f },
+        { 1.0f, 0.0f }
+    };
+    oldShape.curvatures = { 0.0f, 0.0f };
+    subject.getLfoManager().setLfoData(0, oldShape);
+    oldReference.getLfoManager().setLfoData(0, oldShape);
+
+    int streamPosition = 0;
+    float warmupError = 0.0f;
+    while (streamPosition < warmupSamples)
+    {
+        const int numSamples = std::min(preparedBlockSize,
+                                        warmupSamples - streamPosition);
+        auto subjectOutput = makeTimelineInput(streamPosition, numSamples);
+        auto referenceOutput = makeTimelineInput(streamPosition, numSamples);
+        juce::MidiBuffer subjectMidi;
+        juce::MidiBuffer referenceMidi;
+        subject.processBlock(subjectOutput, subjectMidi);
+        oldReference.processBlock(referenceOutput, referenceMidi);
+        warmupError = std::max(warmupError,
+                               maximumBufferDifference(subjectOutput,
+                                                       referenceOutput));
+        streamPosition += numSamples;
+    }
+
+    const auto generationBeforeCapture =
+        subject.getMultibandTopologyGenerationForTesting();
+    bool hookRan = false;
+    bool hookObservedEvenGeneration = false;
+    bool writerStarted = false;
+    bool stagedParametersValid = true;
+    subject.setAudioCallbackStateCaptureHookForTesting([&]
+    {
+        hookRan = true;
+        hookObservedEvenGeneration =
+            (subject.getMultibandTopologyGenerationForTesting() & 1u) == 0u;
+        subject.beginMultibandTopologyEdit();
+        writerStarted = true;
+
+        const auto stage = [&] (const juce::String& parameterID,
+                                float plainValue)
+        {
+            stagedParametersValid = setPlainParameterFromWriter(
+                                        subject,
+                                        parameterID,
+                                        plainValue)
+                                  && stagedParametersValid;
+        };
+        stage(bandParameter(OUTPUT_ID, 0), -12.0f);
+        stage(HQ_ID, 1.0f);
+        stage(OUTPUT_ID, -18.0f);
+        stage(DOWNSAMPLE_BYPASS_ID, 1.0f);
+        stage(DOWNSAMPLE_ID, 17.0f);
+        stage(bandParameter(LFO_RATE_HZ_ID, 0), 3.0f);
+
+        LfoData stagedShape;
+        stagedShape.points = {
+            { 0.0f, 1.0f },
+            { 1.0f, 1.0f }
+        };
+        stagedShape.curvatures = { 0.0f };
+        subject.getLfoManager().setLfoData(0, stagedShape);
+
+        const auto oldTarget = bandParameter(OUTPUT_ID, 0);
+        subject.getLfoManager().clearModulationForTarget(oldTarget);
+        subject.assignLfoToTarget(0, OUTPUT_ID);
+        subject.setModulationDepth(OUTPUT_ID, 0.8f);
+    });
+
+    FireAudioProcessor::AudioCallbackRecipeForTesting rejectedRecipe;
+    bool activeOldRouteRetained = false;
+    bool activeNewRouteRejected = false;
+    float rejectedCandidateError = 0.0f;
+    try
+    {
+        const int blocksToExposeFixedLatency =
+            subject.getLatencySamples() / preparedBlockSize + 8;
+        for (int block = 0; block < blocksToExposeFixedLatency; ++block)
+        {
+            auto subjectOutput = makeTimelineInput(streamPosition,
+                                                   preparedBlockSize);
+            auto referenceOutput = makeTimelineInput(streamPosition,
+                                                     preparedBlockSize);
+            juce::MidiBuffer subjectMidi;
+            juce::MidiBuffer referenceMidi;
+            subject.processBlock(subjectOutput, subjectMidi);
+            oldReference.processBlock(referenceOutput, referenceMidi);
+            rejectedCandidateError = std::max(
+                rejectedCandidateError,
+                maximumBufferDifference(subjectOutput, referenceOutput));
+
+            if (block == 0)
+            {
+                rejectedRecipe =
+                    subject.getLastAudioCallbackRecipeForTesting();
+                auto* oldParameter = subject.treeState.getParameter(
+                    bandParameter(OUTPUT_ID, 0));
+                auto* newParameter = subject.treeState.getParameter(OUTPUT_ID);
+                LfoManager::AudioThreadRoutingInfo routingInfo;
+                activeOldRouteRetained =
+                    subject.getLfoManager().getAudioThreadRoutingInfo(
+                        oldParameter,
+                        routingInfo);
+                activeNewRouteRejected =
+                    ! subject.getLfoManager().getAudioThreadRoutingInfo(
+                        newParameter,
+                        routingInfo);
+            }
+
+            streamPosition += preparedBlockSize;
+        }
+    }
+    catch (...)
+    {
+        if (writerStarted)
+            subject.requestMultibandTopologyReset();
+        throw;
+    }
+    if (writerStarted)
+        subject.requestMultibandTopologyReset();
+
+    const auto stagedRoutings =
+        subject.getLfoManager().getModulationRoutingsCopy();
+    const auto oldTarget = bandParameter(OUTPUT_ID, 0);
+    const bool liveOldRouteRemoved = std::none_of(
+        stagedRoutings.begin(),
+        stagedRoutings.end(),
+        [&oldTarget] (const ModulationRouting& routing)
+        {
+            return routing.targetParameterID == oldTarget;
+        });
+    const bool liveNewRoutePresent = std::any_of(
+        stagedRoutings.begin(),
+        stagedRoutings.end(),
+        [] (const ModulationRouting& routing)
+        {
+            return routing.targetParameterID == OUTPUT_ID;
+        });
+    const auto publishedGeneration =
+        subject.getMultibandTopologyGenerationForTesting();
+
+    CAPTURE(generationBeforeCapture,
+            rejectedRecipe.generationAtCallbackStart,
+            rejectedRecipe.topologyPublicationSequence,
+            rejectedRecipe.band0OutputDb,
+            rejectedRecipe.requestedHq,
+            rejectedRecipe.globalOutputDb,
+            rejectedRecipe.lofiEnabled,
+            rejectedRecipe.lofiRate,
+            rejectedRecipe.lfo1FreeRateHz,
+            warmupError,
+            rejectedCandidateError,
+            publishedGeneration);
+    CHECK((generationBeforeCapture & 1u) == 0u);
+    CHECK(hookRan);
+    CHECK(hookObservedEvenGeneration);
+    CHECK(writerStarted);
+    CHECK(stagedParametersValid);
+    CHECK(rejectedRecipe.generationAtCallbackStart == generationBeforeCapture);
+    CHECK(rejectedRecipe.topologyPublicationSequence == generationBeforeCapture);
+    CHECK(rejectedRecipe.band0OutputDb
+          == Catch::Approx(0.0f).margin(1.0e-5f));
+    CHECK_FALSE(rejectedRecipe.requestedHq);
+    CHECK(rejectedRecipe.globalOutputDb
+          == Catch::Approx(0.0f).margin(1.0e-5f));
+    CHECK_FALSE(rejectedRecipe.lofiEnabled);
+    CHECK(rejectedRecipe.lofiRate == Catch::Approx(1.0f));
+    CHECK(rejectedRecipe.lfo1FreeRateHz == Catch::Approx(37.0f));
+    CHECK(activeOldRouteRetained);
+    CHECK(activeNewRouteRejected);
+    CHECK(liveOldRouteRemoved);
+    CHECK(liveNewRoutePresent);
+    CHECK(warmupError < 1.0e-6f);
+    CHECK(rejectedCandidateError < 1.0e-6f);
+    CHECK(publishedGeneration == generationBeforeCapture + 2u);
+    CHECK((publishedGeneration & 1u) == 0u);
+}
+
+TEST_CASE("An odd topology transaction cannot enter global DSP state",
+          "[processor][multiband][topology][transaction][audio-state][global]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    FireAudioProcessor oldReference;
+    configureProcessor(subject);
+    configureProcessor(oldReference);
+
+    int streamPosition = 0;
+    float warmupError = 0.0f;
+    while (streamPosition < warmupSamples)
+    {
+        const int numSamples = std::min(preparedBlockSize,
+                                        warmupSamples - streamPosition);
+        auto subjectOutput = makeTimelineInput(streamPosition, numSamples);
+        auto referenceOutput = makeTimelineInput(streamPosition, numSamples);
+        juce::MidiBuffer subjectMidi;
+        juce::MidiBuffer referenceMidi;
+        subject.processBlock(subjectOutput, subjectMidi);
+        oldReference.processBlock(referenceOutput, referenceMidi);
+        warmupError = std::max(warmupError,
+                               maximumBufferDifference(subjectOutput,
+                                                       referenceOutput));
+        streamPosition += numSamples;
+    }
+
+    bool stagedParametersValid = true;
+    bool callbackRanDuringOdd = false;
+    float oddSnapshotError = 0.0f;
+    subject.beginMultibandTopologyEdit();
+    try
+    {
+        const auto stage = [&] (const juce::String& parameterID,
+                                float plainValue)
+        {
+            stagedParametersValid = setPlainParameterFromWriter(
+                                        subject,
+                                        parameterID,
+                                        plainValue)
+                                  && stagedParametersValid;
+        };
+
+        stage(HQ_ID, 1.0f);
+        stage(OUTPUT_ID, -18.0f);
+        stage(MIX_ID, 0.15f);
+        stage(FILTER_BYPASS_ID, 1.0f);
+        stage(PEAK_FREQ_ID, 1400.0f);
+        stage(PEAK_GAIN_ID, 24.0f);
+        stage(PEAK_Q_ID, 4.0f);
+        stage(PEAK_BYPASSED_ID, 0.0f);
+        stage(DOWNSAMPLE_BYPASS_ID, 1.0f);
+        stage(DOWNSAMPLE_ID, 17.0f);
+        stage(BIT_DEPTH_ID, 4.0f);
+        stage(JITTER_ID, 0.0f);
+        stage(DOWNSAMPLE_MIX_ID, 1.0f);
+
+        callbackRanDuringOdd =
+            (subject.getMultibandTopologyGenerationForTesting() & 1u) != 0u;
+        const int blocksToExposeFixedLatency =
+            subject.getLatencySamples() / preparedBlockSize + 12;
+        for (int block = 0; block < blocksToExposeFixedLatency; ++block)
+        {
+            auto subjectOutput = makeTimelineInput(streamPosition,
+                                                   preparedBlockSize);
+            auto referenceOutput = makeTimelineInput(streamPosition,
+                                                     preparedBlockSize);
+            juce::MidiBuffer subjectMidi;
+            juce::MidiBuffer referenceMidi;
+            subject.processBlock(subjectOutput, subjectMidi);
+            oldReference.processBlock(referenceOutput, referenceMidi);
+            for (int channel = 0; channel < subjectOutput.getNumChannels();
+                 ++channel)
+            {
+                for (int sample = 0; sample < subjectOutput.getNumSamples();
+                     ++sample)
+                {
+                    oddSnapshotError = std::max(
+                        oddSnapshotError,
+                        std::abs(subjectOutput.getSample(channel, sample)
+                                 - referenceOutput.getSample(channel,
+                                                             sample)));
+                }
+            }
+            streamPosition += preparedBlockSize;
+        }
+    }
+    catch (...)
+    {
+        subject.requestMultibandTopologyReset();
+        throw;
+    }
+    subject.requestMultibandTopologyReset();
+
+    CAPTURE(warmupError, oddSnapshotError);
+    CHECK(stagedParametersValid);
+    CHECK(callbackRanDuringOdd);
+    CHECK(warmupError < 1.0e-6f);
+    CHECK(oddSnapshotError < 1.0e-6f);
 }
 
 TEST_CASE("A same-count topology generation is consumed only once",

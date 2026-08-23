@@ -112,22 +112,82 @@ bool LfoManager::isModulationActive() const
 // Main Processing Logic
 // =============================================================================
 
+LfoManager::AudioThreadParameterSnapshot
+LfoManager::captureAudioThreadParameterSnapshot() const noexcept
+{
+    AudioThreadParameterSnapshot snapshot;
+    const auto loadParameter = [](const std::atomic<float>* parameter,
+                                  float fallback) noexcept
+    {
+        if (parameter != nullptr)
+        {
+            const float value = parameter->load(std::memory_order_relaxed);
+            if (std::isfinite(value))
+                return value;
+        }
+
+        return fallback;
+    };
+
+    for (size_t index = 0; index < snapshot.lfos.size(); ++index)
+    {
+        const auto& source = lfoParameters[index];
+        auto& destination = snapshot.lfos[index];
+        destination.syncMode = loadParameter(source.syncMode, 1.0f);
+        destination.syncedRate = loadParameter(source.syncedRate, 8.0f);
+        destination.freeRate = loadParameter(source.freeRate, 1.0f);
+        destination.phaseOffset = loadParameter(source.phaseOffset, 0.0f);
+        destination.smoothness = loadParameter(source.smoothness, 0.0f);
+    }
+
+    return snapshot;
+}
+
 void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float sampleRate, juce::AudioPlayHead* playHead, int numSamples)
 {
     routingSnapshotRefreshedThisBlock = refreshRuntimeStateIfAvailable();
+    renderBlock(outputBuffer,
+                sampleRate,
+                playHead,
+                numSamples,
+                captureAudioThreadParameterSnapshot(),
+                true);
+}
+
+void LfoManager::processBlock(
+    juce::AudioBuffer<float>& outputBuffer,
+    float sampleRate,
+    juce::AudioPlayHead* playHead,
+    int numSamples,
+    const AudioThreadParameterSnapshot& parameterSnapshot)
+{
+    // A successful candidate capture deliberately owns dataAccessLock until
+    // finish or abort. Rendering while that transaction is open would make a
+    // forgotten finish silently block every subsequent producer.
+    jassert(! runtimeStateCaptureInProgress);
+    renderBlock(outputBuffer,
+                sampleRate,
+                playHead,
+                numSamples,
+                parameterSnapshot,
+                false);
+}
+
+void LfoManager::renderBlock(
+    juce::AudioBuffer<float>& outputBuffer,
+    float sampleRate,
+    juce::AudioPlayHead* playHead,
+    int numSamples,
+    const AudioThreadParameterSnapshot& parameterSnapshot,
+    bool readLiveRoutingBaseValues)
+{
     modulatedValueCount = 0;
 
-    // Smoothness is a 0.01-stepped APVTS parameter. Selecting a prebuilt row is
-    // audio-thread safe and remains responsive even if the UI currently holds
-    // the shape/routing lock.
+    // Smoothness is a 0.01-stepped parameter. Selecting a prebuilt row is
+    // audio-thread safe; the snapshot overload deliberately does not revisit
+    // APVTS while an outer state transaction may be in progress.
     for (size_t i = 0; i < lfoEngines.size(); ++i)
-    {
-        const auto* parameter = lfoParameters[i].smoothness;
-        const float smoothness = parameter != nullptr
-                                     ? parameter->load(std::memory_order_relaxed)
-                                     : 0.0f;
-        lfoEngines[i].setSmoothness(smoothness);
-    }
+        lfoEngines[i].setSmoothness(parameterSnapshot.lfos[i].smoothness);
 
     const int samplesToProcess = juce::jlimit(0, outputBuffer.getNumSamples(), numSamples);
     if (samplesToProcess <= 0)
@@ -139,7 +199,10 @@ void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float samp
 
     // 1. Generate all raw LFO signals for the current block.
     // This fills the internal 'lfoOutputBuffer'.
-    generateLfoOutput(sampleRate, playHead, samplesToProcess);
+    generateLfoOutput(sampleRate,
+                      playHead,
+                      samplesToProcess,
+                      parameterSnapshot);
 
     // 2. Copy the generated LFO signals to the output buffer.
     const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(), lfoOutputBuffer.getNumChannels());
@@ -160,8 +223,11 @@ void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float samp
         if (! std::isfinite(lfoValue))
             continue;
 
-        // Get the parameter's original NORMALIZED value (from the GUI knob)
-        const float rawBaseValue = routing.parameter->getValue();
+        // The snapshot overload must not revisit APVTS. The legacy overload
+        // retains its live-base behaviour for standalone callers and tests.
+        const float rawBaseValue = readLiveRoutingBaseValues
+                                       ? routing.parameter->getValue()
+                                       : routing.normalisedBaseValue;
         const float normalizedBaseValue = std::isfinite(rawBaseValue)
                                               ? juce::jlimit(0.0f, 1.0f, rawBaseValue)
                                               : routing.parameter->getDefaultValue();
@@ -242,11 +308,19 @@ bool LfoManager::getAudioThreadRoutingInfo(const juce::RangedAudioParameter* par
     if (parameter == nullptr)
         return false;
 
-    // refreshRuntimeStateIfAvailable() publishes this fixed snapshot at the
-    // start of the same audio callback. No UI-owned storage or lock is touched.
-    for (size_t i = 0; i < runtimeRoutingCount; ++i)
+    // While a two-phase capture is open the processor must be able to build a
+    // complete callback candidate without changing the currently audible
+    // routes. Both arrays are fixed audio-thread storage; no UI container or
+    // lock is touched by this lookup.
+    const auto& routings = runtimeStateCaptureInProgress
+                               ? candidateRuntimeRoutings
+                               : runtimeRoutings;
+    const auto routingCount = runtimeStateCaptureInProgress
+                                  ? candidateRuntimeRoutingCount
+                                  : runtimeRoutingCount;
+    for (size_t i = 0; i < routingCount; ++i)
     {
-        const auto& routing = runtimeRoutings[i];
+        const auto& routing = routings[i];
         if (routing.parameter == parameter)
         {
             result = { routing.sourceLfoIndex, routing.depth, routing.isBipolar };
@@ -257,17 +331,83 @@ bool LfoManager::getAudioThreadRoutingInfo(const juce::RangedAudioParameter* par
     return false;
 }
 
+bool LfoManager::beginAudioThreadStateCapture(
+    std::uint32_t expectedGeneration,
+    const std::atomic<std::uint32_t>& generation) noexcept
+{
+    routingSnapshotRefreshedThisBlock = false;
+    if (runtimeStateCaptureInProgress)
+    {
+        jassertfalse;
+        return false;
+    }
+
+    if ((expectedGeneration & 1u) != 0u
+        || generation.load(std::memory_order_acquire) != expectedGeneration
+        || ! dataAccessLock.tryEnter())
+    {
+        return false;
+    }
+
+    // The outer writer publishes odd before touching APVTS/LFO state. Check
+    // again after acquiring the LFO lock so a writer that won the race cannot
+    // leak a partially staged route set into this candidate.
+    if (generation.load(std::memory_order_acquire) != expectedGeneration)
+    {
+        dataAccessLock.exit();
+        return false;
+    }
+
+    candidateHasPublishedRouting = captureRuntimeRoutings(
+        candidateRuntimeRoutings,
+        candidateRuntimeRoutingCount);
+    runtimeStateCaptureInProgress = true;
+    return true;
+}
+
+bool LfoManager::finishAudioThreadStateCapture(bool commitCandidate) noexcept
+{
+    if (! runtimeStateCaptureInProgress)
+    {
+        routingSnapshotRefreshedThisBlock = false;
+        return false;
+    }
+
+    if (commitCandidate)
+    {
+        runtimeRoutings = candidateRuntimeRoutings;
+        runtimeRoutingCount = candidateRuntimeRoutingCount;
+        hasPublishedRouting.store(candidateHasPublishedRouting,
+                                  std::memory_order_relaxed);
+        for (auto& engine : lfoEngines)
+            engine.publishStagedShape();
+    }
+
+    runtimeStateCaptureInProgress = false;
+    dataAccessLock.exit();
+    routingSnapshotRefreshedThisBlock = commitCandidate;
+    return commitCandidate;
+}
+
+void LfoManager::abortAudioThreadStateCapture() noexcept
+{
+    if (! runtimeStateCaptureInProgress)
+        return;
+
+    runtimeStateCaptureInProgress = false;
+    dataAccessLock.exit();
+    routingSnapshotRefreshedThisBlock = false;
+}
+
 // =============================================================================
 // Private Helper Functions
 // =============================================================================
 
-bool LfoManager::refreshRuntimeStateIfAvailable()
+bool LfoManager::captureRuntimeRoutings(
+    std::array<RuntimeRouting, maxRuntimeRoutings>& destination,
+    size_t& destinationCount) const
 {
-    const juce::ScopedTryLock lock(dataAccessLock);
-    if (! lock.isLocked())
-        return false;
-
-    runtimeRoutingCount = 0;
+    destinationCount = 0;
     bool hasAnyRouting = false;
 
     for (const auto& routing : modulationRoutings)
@@ -276,10 +416,12 @@ bool LfoManager::refreshRuntimeStateIfAvailable()
             continue;
 
         hasAnyRouting = true;
-
-        if (routing.isBypassed || ! juce::isPositiveAndBelow(routing.sourceLfoIndex, 4)
-            || runtimeRoutingCount >= runtimeRoutings.size())
+        if (routing.isBypassed
+            || ! juce::isPositiveAndBelow(routing.sourceLfoIndex, 4)
+            || destinationCount >= destination.size())
+        {
             continue;
+        }
 
         auto* parameter = treeState.getParameter(routing.targetParameterID);
         if (parameter == nullptr)
@@ -288,15 +430,33 @@ bool LfoManager::refreshRuntimeStateIfAvailable()
         const float depth = std::isfinite(routing.depth)
                                 ? juce::jlimit(-1.0f, 1.0f, routing.depth)
                                 : 0.0f;
+        const float rawBaseValue = parameter->getValue();
+        const float normalisedBaseValue = std::isfinite(rawBaseValue)
+                                              ? juce::jlimit(0.0f,
+                                                             1.0f,
+                                                             rawBaseValue)
+                                              : parameter->getDefaultValue();
 
-        runtimeRoutings[runtimeRoutingCount++] = {
+        destination[destinationCount++] = {
             parameter,
             routing.sourceLfoIndex,
             depth,
-            routing.isBipolar
+            routing.isBipolar,
+            normalisedBaseValue
         };
     }
 
+    return hasAnyRouting;
+}
+
+bool LfoManager::refreshRuntimeStateIfAvailable()
+{
+    const juce::ScopedTryLock lock(dataAccessLock);
+    if (! lock.isLocked())
+        return false;
+
+    const bool hasAnyRouting = captureRuntimeRoutings(runtimeRoutings,
+                                                       runtimeRoutingCount);
     hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
 
     for (size_t i = 0; i < lfoEngines.size(); ++i)
@@ -320,7 +480,11 @@ void LfoManager::updatePublishedRoutingState() noexcept
     hasPublishedRouting.store(hasAnyRouting, std::memory_order_relaxed);
 }
 
-void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playHead, int numSamples)
+void LfoManager::generateLfoOutput(
+    double sampleRate,
+    juce::AudioPlayHead* playHead,
+    int numSamples,
+    const AudioThreadParameterSnapshot& parameterSnapshot)
 {
     const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
                                       ? sampleRate
@@ -354,17 +518,6 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
 
     isPlaying.store(transportIsPlaying, std::memory_order_relaxed);
 
-    const auto loadParameter = [](const std::atomic<float>* parameter, float fallback) noexcept
-    {
-        if (parameter != nullptr)
-        {
-            const float value = parameter->load(std::memory_order_relaxed);
-            if (std::isfinite(value))
-                return value;
-        }
-        return fallback;
-    };
-
     const auto wrapPhase = [](double value) noexcept
     {
         if (! std::isfinite(value))
@@ -387,11 +540,27 @@ void LfoManager::generateLfoOutput(double sampleRate, juce::AudioPlayHead* playH
     for (int i = 0; i < 4; ++i)
     {
         const auto lfoIndex = static_cast<size_t>(i);
-        const auto& parameters = lfoParameters[lfoIndex];
-        const bool isInSyncMode = loadParameter(parameters.syncMode, 1.0f) > 0.5f;
-        const int rateIndex = static_cast<int>(loadParameter(parameters.syncedRate, 8.0f));
-        const float freqInHz = juce::jmax(0.0f, loadParameter(parameters.freeRate, 1.0f));
-        const float phaseOffset = juce::jlimit(0.0f, 1.0f, loadParameter(parameters.phaseOffset, 0.0f));
+        const auto& parameters = parameterSnapshot.lfos[lfoIndex];
+        const float syncMode = std::isfinite(parameters.syncMode)
+                                   ? parameters.syncMode
+                                   : 1.0f;
+        const float syncedRate = std::isfinite(parameters.syncedRate)
+                                     ? juce::jlimit(0.0f,
+                                                    13.0f,
+                                                    parameters.syncedRate)
+                                     : 8.0f;
+        const float freeRate = std::isfinite(parameters.freeRate)
+                                   ? parameters.freeRate
+                                   : 1.0f;
+        const float rawPhaseOffset = std::isfinite(parameters.phaseOffset)
+                                         ? parameters.phaseOffset
+                                         : 0.0f;
+        const bool isInSyncMode = syncMode > 0.5f;
+        const int rateIndex = static_cast<int>(syncedRate);
+        const float freqInHz = juce::jmax(0.0f, freeRate);
+        const float phaseOffset = juce::jlimit(0.0f,
+                                               1.0f,
+                                               rawPhaseOffset);
         float phaseDelta = 0.0f;
         float activeRateKey = freqInHz;
         float syncCycleLengthInBeats = 0.0f;

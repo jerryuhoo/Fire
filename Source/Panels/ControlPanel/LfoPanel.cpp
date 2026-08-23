@@ -701,7 +701,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
         m.addItem(CommandIDs::clear, "Clear");
         m.addSeparator();
         m.addItem(CommandIDs::copy, "Copy", dataIsActive && activeLfoData.points.size() > 2);
-        m.addItem(CommandIDs::paste, "Paste", lfoClipboard.points.size() > 0);
+        m.addItem(CommandIDs::paste, "Paste", canPasteShape());
         m.addSeparator();
         m.addItem(CommandIDs::invertX, "Invert Horizontally", dataIsActive && activeLfoData.points.size() > 2);
         m.addItem(CommandIDs::invertY, "Invert Vertically", dataIsActive && activeLfoData.points.size() > 2);
@@ -725,8 +725,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
                     safeThis->copyShape();
                     break;
                 case CommandIDs::paste:
-                    safeThis->pasteShape();
-                    if (safeThis->onDataChanged)
+                    if (safeThis->pasteShape() && safeThis->onDataChanged)
                         safeThis->onDataChanged(safeThis->activeLfoData);
                     break;
                 case CommandIDs::invertX:
@@ -1183,8 +1182,7 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
 
         if (key.getTextCharacter() == 'v' || key.getTextCharacter() == 'V')
         {
-            pasteShape();
-            if (onDataChanged)
+            if (pasteShape() && onDataChanged)
                 onDataChanged(activeLfoData);
             return true;
         }
@@ -1922,12 +1920,18 @@ void LfoEditor::copyShape()
     lfoClipboard = activeLfoData;
 }
 
-void LfoEditor::pasteShape()
+bool LfoEditor::canPasteShape() const noexcept
 {
-    if (! dataIsActive || lfoClipboard.points.empty())
-        return;
+    return dataIsActive && lfoClipboard.has_value();
+}
 
-    setDataToDisplay(lfoClipboard);
+bool LfoEditor::pasteShape()
+{
+    if (! canPasteShape())
+        return false;
+
+    setDataToDisplay(*lfoClipboard);
+    return true;
 }
 
 void LfoEditor::invertShape(bool invertX, bool invertY)

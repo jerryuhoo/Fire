@@ -60,6 +60,11 @@ struct LfoEditorTestAccess
         editor.clearAllPoints();
     }
 
+    static bool canPasteShape(const LfoEditor& editor)
+    {
+        return editor.canPasteShape();
+    }
+
     static size_t pointCount(const LfoEditor& editor)
     {
         return editor.activeLfoData.points.size();
@@ -198,7 +203,81 @@ bool hasValidLfoTopology(const LfoData& data)
 }
 
 const auto leftButton = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+
+struct ScopedLfoClipboardReset
+{
+    ScopedLfoClipboardReset() { lfoClipboard.reset(); }
+    ~ScopedLfoClipboardReset() { lfoClipboard.reset(); }
+};
+
+juce::KeyPress commandKey(juce::juce_wchar character)
+{
+    return { static_cast<int>(character),
+             juce::ModifierKeys(juce::ModifierKeys::commandModifier),
+             character };
+}
+
+void checkSameLfoData(const LfoData& actual, const LfoData& expected)
+{
+    REQUIRE(actual.points.size() == expected.points.size());
+    REQUIRE(actual.curvatures.size() == expected.curvatures.size());
+
+    for (size_t i = 0; i < actual.points.size(); ++i)
+    {
+        CHECK(juce::approximatelyEqual(actual.points[i].x, expected.points[i].x));
+        CHECK(juce::approximatelyEqual(actual.points[i].y, expected.points[i].y));
+    }
+
+    for (size_t i = 0; i < actual.curvatures.size(); ++i)
+        CHECK(juce::approximatelyEqual(actual.curvatures[i], expected.curvatures[i]));
+
+    CHECK(juce::approximatelyEqual(actual.smoothness, expected.smoothness));
+}
 } // namespace
+
+TEST_CASE("LFO paste remains unavailable until a shape has been copied",
+          "[lfo][editor][clipboard][regression]")
+{
+    ScopedLfoClipboardReset resetClipboard;
+    LfoEditor editor;
+    prepareEditor(editor);
+
+    auto target = makeLfoData({
+        { 0.0f, 0.15f }, { 0.40f, 0.80f }, { 1.0f, 0.25f }
+    });
+    target.curvatures = { -0.25f, 0.50f };
+    target.smoothness = 0.20f;
+    editor.setDataToDisplay(target);
+
+    LfoData lastPublished;
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData& data)
+    {
+        lastPublished = data;
+        ++publicationCount;
+    };
+
+    REQUIRE_FALSE(LfoEditorTestAccess::canPasteShape(editor));
+    CHECK(editor.keyPressed(commandKey('v')));
+    CHECK(publicationCount == 0);
+    checkSameLfoData(LfoEditorTestAccess::data(editor), target);
+
+    auto source = makeLfoData({
+        { 0.0f, 0.90f }, { 0.25f, 0.20f }, { 0.70f, 0.75f }, { 1.0f, 0.10f }
+    });
+    source.curvatures = { -1.25f, 0.35f, 1.75f };
+    source.smoothness = 0.65f;
+    editor.setDataToDisplay(source);
+
+    CHECK(editor.keyPressed(commandKey('c')));
+    REQUIRE(LfoEditorTestAccess::canPasteShape(editor));
+
+    editor.setDataToDisplay(target);
+    CHECK(editor.keyPressed(commandKey('v')));
+    REQUIRE(publicationCount == 1);
+    checkSameLfoData(LfoEditorTestAccess::data(editor), source);
+    checkSameLfoData(lastPublished, source);
+}
 
 TEST_CASE("LFO brush replacement cancels stale point selection",
           "[lfo][editor][interaction][regression]")

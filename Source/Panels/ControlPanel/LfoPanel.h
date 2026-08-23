@@ -15,13 +15,14 @@
 #include "ModulationMatrixPanel.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <optional>
 
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct LfoEditorTestAccess;
 #endif
 
-inline LfoData lfoClipboard;
+inline std::optional<LfoData> lfoClipboard;
 
 //
 //  The LfoEditor is now a pure "View" component.
@@ -156,7 +157,8 @@ private:
     void selectAllPoints();
     void clearAllPoints();
     void copyShape();
-    void pasteShape();
+    bool canPasteShape() const noexcept;
+    bool pasteShape();
     void invertShape(bool invertX, bool invertY);
 };
 

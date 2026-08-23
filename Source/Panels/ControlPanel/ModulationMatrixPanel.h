@@ -53,6 +53,17 @@ public:
     void resized() override;
 
 private:
+    class PrimaryButtonSlider final : public juce::Slider
+    {
+    public:
+        void mouseDown(const juce::MouseEvent& event) override;
+        void mouseDrag(const juce::MouseEvent& event) override;
+        void mouseUp(const juce::MouseEvent& event) override;
+
+    private:
+        bool primaryGestureInProgress = false;
+    };
+
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
     void comboBoxChanged(juce::ComboBox* comboBox) override;
@@ -66,7 +77,7 @@ private:
     std::function<void()> onDeleteCallback; // The function to call when the delete button is pressed.
 
     juce::ComboBox sourceMenu;
-    juce::Slider amountSlider;
+    PrimaryButtonSlider amountSlider;
     juce::TextButton bipolarButton;
     juce::TextButton bypassButton;
     juce::ComboBox destinationMenu;

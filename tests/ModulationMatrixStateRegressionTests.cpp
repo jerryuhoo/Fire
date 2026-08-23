@@ -50,6 +50,30 @@ juce::Slider* findAmountSlider(juce::Component& component)
     return nullptr;
 }
 
+juce::MouseEvent makeMouseEvent(juce::Component& component,
+                                juce::Point<float> position,
+                                juce::ModifierKeys modifiers,
+                                juce::Point<float> mouseDownPosition,
+                                bool mouseWasDragged)
+{
+    const auto time = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             time,
+             mouseDownPosition,
+             time,
+             1,
+             mouseWasDragged };
+}
+
 bool containsComboBoxText(juce::Component& component,
                           const juce::String& expectedText)
 {
@@ -109,7 +133,133 @@ public:
     FireAudioProcessor& processor;
     int notificationCount = 0;
 };
+
+class SliderInteractionCapture final : public juce::Slider::Listener
+{
+public:
+    void sliderValueChanged(juce::Slider*) override { ++valueChangeCount; }
+    void sliderDragStarted(juce::Slider*) override { ++dragStartCount; }
+    void sliderDragEnded(juce::Slider*) override { ++dragEndCount; }
+
+    int valueChangeCount = 0;
+    int dragStartCount = 0;
+    int dragEndCount = 0;
+};
 } // namespace
+
+TEST_CASE("Modulation matrix amount accepts only primary-button drags",
+          "[ui][modulation-matrix][input][amount-slider]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    constexpr float initialDepth = 0.25f;
+    const ModulationRouting routing {
+        0, targets.front().parameterID, initialDepth, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        REQUIRE_FALSE(routings.isEmpty());
+        routings.set(0, routing);
+    }
+
+    ModulationMatrixRow row(processor, 0, routing, [] {});
+    row.setBounds(0, 0, 760, 40);
+    auto* amountSlider = findAmountSlider(row);
+    REQUIRE(amountSlider != nullptr);
+    REQUIRE(amountSlider->getWidth() > 80);
+
+    SliderInteractionCapture sliderCapture;
+    NonParameterChangeCapture hostCapture(processor);
+    amountSlider->addListener(&sliderCapture);
+
+    const auto downPosition = juce::Point<float> {
+        4.0f, amountSlider->getLocalBounds().toFloat().getCentreY()
+    };
+    const auto dragPosition = juce::Point<float> {
+        static_cast<float>(amountSlider->getWidth() - 70), downPosition.y
+    };
+
+    const auto exercisePointerGesture = [&](juce::ModifierKeys modifiers)
+    {
+        amountSlider->mouseDown(makeMouseEvent(*amountSlider,
+                                               downPosition,
+                                               modifiers,
+                                               downPosition,
+                                               false));
+        amountSlider->mouseDrag(makeMouseEvent(*amountSlider,
+                                               dragPosition,
+                                               modifiers,
+                                               downPosition,
+                                               true));
+        amountSlider->mouseUp(makeMouseEvent(*amountSlider,
+                                             dragPosition,
+                                             modifiers,
+                                             downPosition,
+                                             true));
+    };
+
+    const auto checkRejectedGesture = [&](juce::ModifierKeys modifiers)
+    {
+        exercisePointerGesture(modifiers);
+
+        CHECK(amountSlider->getValue() == Catch::Approx(initialDepth));
+        CHECK(amountSlider->getThumbBeingDragged() == -1);
+        CHECK(sliderCapture.valueChangeCount == 0);
+        CHECK(sliderCapture.dragStartCount == 0);
+        CHECK(sliderCapture.dragEndCount == 0);
+        CHECK(hostCapture.notificationCount == 0);
+
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE_FALSE(routings.isEmpty());
+        CHECK(routings[0].depth == Catch::Approx(initialDepth));
+    };
+
+    SECTION("physical right click")
+    {
+        checkRejectedGesture(juce::ModifierKeys {
+            juce::ModifierKeys::rightButtonModifier });
+    }
+
+    SECTION("physical middle click")
+    {
+        checkRejectedGesture(juce::ModifierKeys {
+            juce::ModifierKeys::middleButtonModifier });
+    }
+
+#if JUCE_MAC
+    SECTION("macOS Control-click")
+    {
+        checkRejectedGesture(juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier
+            | juce::ModifierKeys::ctrlModifier });
+    }
+#endif
+
+    SECTION("left-button drag")
+    {
+        exercisePointerGesture(juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(amountSlider->getValue() != Catch::Approx(initialDepth));
+        CHECK(amountSlider->getThumbBeingDragged() == -1);
+        CHECK(sliderCapture.valueChangeCount > 0);
+        CHECK(sliderCapture.dragStartCount == 1);
+        CHECK(sliderCapture.dragEndCount == 1);
+        CHECK(hostCapture.notificationCount > 0);
+
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE_FALSE(routings.isEmpty());
+        CHECK(routings[0].depth
+              == Catch::Approx(static_cast<float>(amountSlider->getValue())));
+    }
+
+    amountSlider->removeListener(&sliderCapture);
+}
 
 TEST_CASE("Modulation matrix toggle buttons publish only real model changes",
           "[ui][modulation-matrix][state][button]")

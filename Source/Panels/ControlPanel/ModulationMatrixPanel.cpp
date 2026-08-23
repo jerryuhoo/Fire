@@ -69,6 +69,36 @@ void ModulationMatrixHeader::resized()
 //==============================================================================
 // ModulationMatrixRow Implementation
 //==============================================================================
+void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
+    const juce::MouseEvent& event)
+{
+    if (primaryGestureInProgress
+        || ! event.mods.isLeftButtonDown()
+        || event.mods.isMiddleButtonDown()
+        || event.mods.isPopupMenu())
+        return;
+
+    primaryGestureInProgress = true;
+    juce::Slider::mouseDown(event);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::mouseDrag(
+    const juce::MouseEvent& event)
+{
+    if (primaryGestureInProgress)
+        juce::Slider::mouseDrag(event);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::mouseUp(
+    const juce::MouseEvent& event)
+{
+    if (! primaryGestureInProgress)
+        return;
+
+    primaryGestureInProgress = false;
+    juce::Slider::mouseUp(event);
+}
+
 ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
                                          int routingIndex,
                                          const ModulationRouting& routing,

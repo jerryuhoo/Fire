@@ -15,6 +15,14 @@
 #include <set>
 #include <vector>
 
+struct ModulatableSliderTestAccess
+{
+    static std::function<void(int)> createMenuResultHandler(ModulatableSlider& slider)
+    {
+        return slider.createModulationMenuResultHandler();
+    }
+};
+
 namespace
 {
 void setPlainParameter(FireAudioProcessor& processor,
@@ -561,7 +569,9 @@ TEST_CASE("Set Value popup keeps the modulation target that opened it",
     REQUIRE(reusedDriveKnob != nullptr);
     REQUIRE(reusedDriveKnob->getParamID() == firstDriveID);
     REQUIRE(static_cast<bool>(reusedDriveKnob->onSetValueRequested));
-    reusedDriveKnob->onSetValueRequested(reusedDriveKnob);
+    auto deliverMenuResult = ModulatableSliderTestAccess::createMenuResultHandler(
+        *reusedDriveKnob);
+    deliverMenuResult(static_cast<int>(ModulatableSlider::ModulationMenuCommand::setValue));
     REQUIRE(valueEntryPopup->isVisible());
 
     // The non-modal popup remains open while the one shared BandPanel slider
@@ -600,6 +610,137 @@ TEST_CASE("Set Value popup keeps the modulation target that opened it",
     REQUIRE(secondBase != nullptr);
     CHECK(firstBase->load() == Catch::Approx(firstBaseValue));
     CHECK(secondBase->load() == Catch::Approx(secondBaseValue));
+}
+
+TEST_CASE("Delayed modulation menu actions retain the target present when the menu opened",
+          "[multiband][ui][modulation][popup-menu][target]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    const auto firstDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto secondDriveID = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+    constexpr float firstBaseValue = 10.0f;
+    constexpr float secondBaseValue = 70.0f;
+    constexpr float firstInitialDepth = 0.20f;
+    constexpr float secondInitialDepth = -0.35f;
+    setPlainParameter(processor, firstDriveID, firstBaseValue);
+    setPlainParameter(processor, secondDriveID, secondBaseValue);
+    processor.assignLfoToTarget(0, firstDriveID);
+    processor.assignLfoToTarget(1, secondDriveID);
+    processor.setModulationDepth(firstDriveID, firstInitialDepth);
+    processor.setModulationDepth(secondDriveID, secondInitialDepth);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    auto* bandPanel = findDescendant<BandPanel>(*editor);
+    auto* valueEntryPopup = findDescendant<ValueEntryPopup>(*editor);
+    REQUIRE(multiband != nullptr);
+    REQUIRE(bandPanel != nullptr);
+    REQUIRE(valueEntryPopup != nullptr);
+
+    multiband->setFocusIndex(0);
+    auto* reusedDriveKnob = bandPanel->getDriveKnob();
+    REQUIRE(reusedDriveKnob != nullptr);
+    const auto targetWhenMenuOpened = reusedDriveKnob->getParamID();
+    REQUIRE(targetWhenMenuOpened == firstDriveID);
+    auto deliverMenuResult = ModulatableSliderTestAccess::createMenuResultHandler(
+        *reusedDriveKnob);
+
+    // PopupMenu completion is asynchronous. Model that delay without relying
+    // on a platform popup window: the shared BandPanel knob is rebound before
+    // the selected command is delivered to its existing callback.
+    multiband->setFocusIndex(1);
+    REQUIRE(bandPanel->getDriveKnob() == reusedDriveKnob);
+    REQUIRE(reusedDriveKnob->getParamID() == secondDriveID);
+
+    SECTION("Set Value")
+    {
+        constexpr float enteredValue = 40.0f;
+        REQUIRE(static_cast<bool>(reusedDriveKnob->onSetValueRequested));
+        deliverMenuResult(static_cast<int>(ModulatableSlider::ModulationMenuCommand::setValue));
+        REQUIRE(valueEntryPopup->isVisible());
+        REQUIRE(static_cast<bool>(valueEntryPopup->onOk));
+        valueEntryPopup->onOk(enteredValue);
+
+        const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+        const auto* firstRouting = findRouting(routings, targetWhenMenuOpened);
+        const auto* secondRouting = findRouting(routings, secondDriveID);
+        REQUIRE(firstRouting != nullptr);
+        REQUIRE(secondRouting != nullptr);
+
+        auto* firstParameter = processor.treeState.getParameter(firstDriveID);
+        REQUIRE(firstParameter != nullptr);
+        const auto range = firstParameter->getNormalisableRange();
+        const auto expectedFirstDepth = juce::jlimit(
+            -1.0f,
+            1.0f,
+            2.0f * (range.convertTo0to1(enteredValue)
+                    - range.convertTo0to1(firstBaseValue)));
+        CHECK(firstRouting->depth == Catch::Approx(expectedFirstDepth));
+        CHECK(secondRouting->depth == Catch::Approx(secondInitialDepth));
+    }
+
+    SECTION("Clear")
+    {
+        REQUIRE(static_cast<bool>(reusedDriveKnob->onModulationCleared));
+        deliverMenuResult(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+
+        const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+        CHECK(findRouting(routings, targetWhenMenuOpened) == nullptr);
+        const auto* secondRouting = findRouting(routings, secondDriveID);
+        REQUIRE(secondRouting != nullptr);
+        CHECK(secondRouting->depth == Catch::Approx(secondInitialDepth));
+    }
+
+    SECTION("Invert Depth")
+    {
+        REQUIRE(static_cast<bool>(reusedDriveKnob->onModulationInverted));
+        deliverMenuResult(static_cast<int>(ModulatableSlider::ModulationMenuCommand::invertDepth));
+
+        const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+        const auto* firstRouting = findRouting(routings, targetWhenMenuOpened);
+        const auto* secondRouting = findRouting(routings, secondDriveID);
+        REQUIRE(firstRouting != nullptr);
+        REQUIRE(secondRouting != nullptr);
+        CHECK(firstRouting->depth == Catch::Approx(-firstInitialDepth));
+        CHECK(secondRouting->depth == Catch::Approx(secondInitialDepth));
+    }
+
+    SECTION("Bipolar mode")
+    {
+        REQUIRE(static_cast<bool>(reusedDriveKnob->onBipolarModeToggled));
+        deliverMenuResult(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::togglePolarity));
+
+        const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+        const auto* firstRouting = findRouting(routings, targetWhenMenuOpened);
+        const auto* secondRouting = findRouting(routings, secondDriveID);
+        REQUIRE(firstRouting != nullptr);
+        REQUIRE(secondRouting != nullptr);
+        CHECK_FALSE(firstRouting->isBipolar);
+        CHECK(secondRouting->isBipolar);
+    }
+
+    SECTION("Bypass")
+    {
+        REQUIRE(static_cast<bool>(reusedDriveKnob->onBypassToggled));
+        deliverMenuResult(static_cast<int>(ModulatableSlider::ModulationMenuCommand::toggleBypass));
+
+        const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+        const auto* firstRouting = findRouting(routings, targetWhenMenuOpened);
+        const auto* secondRouting = findRouting(routings, secondDriveID);
+        REQUIRE(firstRouting != nullptr);
+        REQUIRE(secondRouting != nullptr);
+        CHECK(firstRouting->isBypassed);
+        CHECK_FALSE(secondRouting->isBypassed);
+    }
 }
 
 TEST_CASE("Deleting a middle band moves every survivor setting and resets the inactive slot",

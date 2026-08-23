@@ -13,6 +13,8 @@
 #include "InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
+struct ModulatableSliderTestAccess;
+
 //==============================================================================
 /**
     A custom slider that can be modulated by an LFO.
@@ -21,6 +23,15 @@ class ModulatableSlider : public juce::Slider,
                           public juce::Timer
 {
 public:
+    enum class ModulationMenuCommand
+    {
+        setValue = 1,
+        clearModulation,
+        invertDepth,
+        togglePolarity,
+        toggleBypass
+    };
+
     ModulatableSlider();
 
     // void paint(juce::Graphics& g) override;
@@ -51,14 +62,14 @@ public:
 
     // Callback to notify when the modulation amount changes via UI drag
     std::function<void(double)> onModAmountSetValue;
-    std::function<void(ModulatableSlider*)> onSetValueRequested;
+    std::function<void(ModulatableSlider*, const juce::String&)> onSetValueRequested;
     std::function<void(double)> onModAmountChanged;
-    std::function<void()> onBipolarModeToggled;
+    std::function<void(const juce::String&)> onBipolarModeToggled;
     std::function<void()> onModulationReset;
     std::function<void(const juce::String&)> onClickInAssignMode;
-    std::function<void()> onModulationCleared;
-    std::function<void()> onModulationInverted;
-    std::function<void()> onBypassToggled;
+    std::function<void(const juce::String&)> onModulationCleared;
+    std::function<void(const juce::String&)> onModulationInverted;
+    std::function<void(const juce::String&)> onBypassToggled;
 
     // Override mouse events to update handle states and control dragging
     void mouseMove(const juce::MouseEvent& event) override;
@@ -90,6 +101,12 @@ public:
     void timerCallback() override;
 
 private:
+    friend struct ModulatableSliderTestAccess;
+
+    std::function<void(int)> createModulationMenuResultHandler();
+    void executeModulationMenuCommand(ModulationMenuCommand command,
+                                      const juce::String& targetParameterID);
+
     float getUiScale() const noexcept;
     juce::Rectangle<float> getRotarySliderBounds() const;
     juce::Rectangle<int> getHeaderBounds() const;

@@ -202,21 +202,17 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             modulationSnapshotFramesRemaining = 0;
         };
 
-        slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit)
+        slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit,
+                                             const juce::String& targetParameterID)
         {
-            if (sliderToEdit == nullptr)
+            if (sliderToEdit == nullptr || targetParameterID.isEmpty())
             {
                 valueEntryTargetParameterID.clear();
                 valueEntryPopup.setVisible(false);
                 return;
             }
 
-            valueEntryTargetParameterID = sliderToEdit->getParamID();
-            if (valueEntryTargetParameterID.isEmpty())
-            {
-                valueEntryPopup.setVisible(false);
-                return;
-            }
+            valueEntryTargetParameterID = targetParameterID;
 
             auto sliderBounds = sliderToEdit->getScreenBounds();
 
@@ -233,26 +229,26 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 valueEntryPopup.grabKeyboardFocus();
         };
 
-        slider->onBypassToggled = [slider, bypassCallback]()
+        slider->onBypassToggled = [bypassCallback](const juce::String& targetParameterID)
         {
-            bypassCallback(slider->getParamID());
+            bypassCallback(targetParameterID);
         };
 
-        slider->onModulationCleared = [this, slider]()
+        slider->onModulationCleared = [this](const juce::String& targetParameterID)
         {
-            processor.clearModulationForParameter(slider->getParamID());
+            processor.clearModulationForParameter(targetParameterID);
             modulationSnapshotFramesRemaining = 0;
         };
 
-        slider->onModulationInverted = [this, slider]()
+        slider->onModulationInverted = [this](const juce::String& targetParameterID)
         {
-            processor.invertModulationDepthForParameter(slider->getParamID());
+            processor.invertModulationDepthForParameter(targetParameterID);
             modulationSnapshotFramesRemaining = 0;
         };
 
-        slider->onBipolarModeToggled = [this, slider]()
+        slider->onBipolarModeToggled = [this](const juce::String& targetParameterID)
         {
-            processor.toggleBipolarMode(slider->getParamID());
+            processor.toggleBipolarMode(targetParameterID);
             modulationSnapshotFramesRemaining = 0;
         };
 

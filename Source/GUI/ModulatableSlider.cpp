@@ -212,7 +212,7 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
         if (event.mods.isCommandDown() || event.mods.isCtrlDown())
         {
             if (onBipolarModeToggled)
-                onBipolarModeToggled();
+                onBipolarModeToggled(parameterID);
 
             return;
         }
@@ -291,39 +291,7 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
         menu.addItem(5, bypassToggleText);
 
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this),
-                           [safeThis = juce::Component::SafePointer<ModulatableSlider>(this)](int result)
-                           {
-                               if (! safeThis)
-                                   return;
-
-                               switch (result)
-                               {
-                                   case 1: // Set Value
-                                   {
-                                       if (safeThis->onSetValueRequested)
-                                           safeThis->onSetValueRequested(safeThis);
-                                       break;
-                                   }
-                                   case 2: // Clear LFO
-                                       if (safeThis->onModulationCleared)
-                                           safeThis->onModulationCleared();
-                                       break;
-                                   case 3: // Invert Depth
-                                       if (safeThis->onModulationInverted)
-                                           safeThis->onModulationInverted();
-                                       break;
-                                   case 4: // Switch Bi/Uni Mode
-                                       if (safeThis->onBipolarModeToggled)
-                                           safeThis->onBipolarModeToggled();
-                                       break;
-                                   case 5: // Toggle Bypass
-                                       if (safeThis->onBypassToggled)
-                                           safeThis->onBypassToggled();
-                                       break;
-                                   default:
-                                       break;
-                               }
-                           });
+                           createModulationMenuResultHandler());
     }
 
     if (isDraggingMainSlider)
@@ -345,6 +313,54 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 
         isModHandleMouseDown = false;
         repaint();
+    }
+}
+
+std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler()
+{
+    return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
+            targetParameterIDAtOpen = parameterID](int result)
+    {
+        if (! safeThis || result <= 0)
+            return;
+
+        safeThis->executeModulationMenuCommand(
+            static_cast<ModulationMenuCommand>(result),
+            targetParameterIDAtOpen);
+    };
+}
+
+void ModulatableSlider::executeModulationMenuCommand(
+    ModulationMenuCommand command,
+    const juce::String& targetParameterID)
+{
+    if (targetParameterID.isEmpty())
+        return;
+
+    switch (command)
+    {
+        case ModulationMenuCommand::setValue:
+            if (onSetValueRequested)
+                onSetValueRequested(this, targetParameterID);
+            break;
+        case ModulationMenuCommand::clearModulation:
+            if (onModulationCleared)
+                onModulationCleared(targetParameterID);
+            break;
+        case ModulationMenuCommand::invertDepth:
+            if (onModulationInverted)
+                onModulationInverted(targetParameterID);
+            break;
+        case ModulationMenuCommand::togglePolarity:
+            if (onBipolarModeToggled)
+                onBipolarModeToggled(targetParameterID);
+            break;
+        case ModulationMenuCommand::toggleBypass:
+            if (onBypassToggled)
+                onBypassToggled(targetParameterID);
+            break;
+        default:
+            break;
     }
 }
 

@@ -75,10 +75,10 @@ void PanelBase::setupModulationCallbacks(ModulatableSlider& slider)
             processor.setModulationDepth(safeSlider->parameterID, (float) newAmount);
     };
 
-    safeSlider->onBipolarModeToggled = [this, safeSlider]()
+    safeSlider->onBipolarModeToggled = [this, safeSlider](const juce::String& targetParameterID)
     {
         if (safeSlider)
-            processor.toggleBipolarMode(safeSlider->parameterID);
+            processor.toggleBipolarMode(targetParameterID);
     };
 
     safeSlider->onModulationReset = [this, safeSlider]()
@@ -87,15 +87,15 @@ void PanelBase::setupModulationCallbacks(ModulatableSlider& slider)
             processor.resetModulation(safeSlider->parameterID);
     };
 
-    safeSlider->onModulationCleared = [this, safeSlider]()
+    safeSlider->onModulationCleared = [this, safeSlider](const juce::String& targetParameterID)
     {
         if (safeSlider)
-            processor.clearModulationForParameter(safeSlider->parameterID);
+            processor.clearModulationForParameter(targetParameterID);
     };
 
-    safeSlider->onModulationInverted = [this, safeSlider]()
+    safeSlider->onModulationInverted = [this, safeSlider](const juce::String& targetParameterID)
     {
         if (safeSlider)
-            processor.invertModulationDepthForParameter(safeSlider->parameterID);
+            processor.invertModulationDepthForParameter(targetParameterID);
     };
 }

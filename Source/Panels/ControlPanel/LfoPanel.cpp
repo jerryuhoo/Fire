@@ -1595,12 +1595,16 @@ void LfoPanel::updateRateSlider()
 
     bool isInSyncMode = param->getValue() > 0.5f;
 
+    if (isInSyncMode)
+        rateSlider.hideTextBox(true);
+
     // First, always destroy the old attachment before creating a new one.
     rateSliderAttachment.reset();
 
     if (isInSyncMode)
     {
         // --- BPM SYNC MODE (Discrete Choices) ---
+        rateSlider.setTextBoxIsEditable(false);
 
         // We only provide the text conversion lambda.
         rateSlider.textFromValueFunction = [this](double value)
@@ -1623,6 +1627,7 @@ void LfoPanel::updateRateSlider()
     else // HZ (FREE) MODE
     {
         // Revert to default behavior.
+        rateSlider.setTextBoxIsEditable(true);
         rateSlider.textFromValueFunction = nullptr;
         rateSlider.valueFromTextFunction = nullptr;
 

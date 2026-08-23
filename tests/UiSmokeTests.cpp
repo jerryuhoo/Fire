@@ -34,6 +34,20 @@ juce::Button* findButtonWithText(juce::Component& root, const juce::String& text
     return nullptr;
 }
 
+juce::Slider* findSliderAttachedToLabel(juce::Component& root, const juce::String& labelText)
+{
+    if (auto* label = dynamic_cast<juce::Label*>(&root);
+        label != nullptr && label->getText() == labelText)
+        return dynamic_cast<juce::Slider*>(label->getAttachedComponent());
+
+    for (int childIndex = 0; childIndex < root.getNumChildComponents(); ++childIndex)
+        if (auto* child = root.getChildComponent(childIndex))
+            if (auto* slider = findSliderAttachedToLabel(*child, labelText))
+                return slider;
+
+    return nullptr;
+}
+
 void setParameterValue(FireAudioProcessor& processor,
                        const juce::String& parameterID,
                        float plainValue)
@@ -195,6 +209,51 @@ TEST_CASE("Fire multiband selection renders after adding dividers", "[ui][smoke]
     const auto image = renderEditorAtSize(*editor, 1000, 500);
     checkRenderedEditor(image, 1000, 500);
     writeSnapshotIfRequested(image, "fire-editor-multiband.png");
+}
+
+TEST_CASE("LFO Rate text entry is available only in Free Hz mode",
+          "[ui][lfo][rate][sync]")
+{
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    const auto syncModeID = ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0);
+    setParameterValue(processor, syncModeID, 1.0f);
+
+    LfoPanel lfoPanel(processor);
+    lfoPanel.setBounds(0, 0, 1000, 500);
+
+    auto* rateSlider = findSliderAttachedToLabel(lfoPanel, "Rate");
+    REQUIRE(rateSlider != nullptr);
+    REQUIRE(rateSlider->getTextBoxPosition() == juce::Slider::TextBoxBelow);
+    CHECK_FALSE(rateSlider->isTextBoxEditable());
+    CHECK(rateSlider->getValue() == Catch::Approx(8.0));
+    CHECK(rateSlider->getTextFromValue(8.0) == "1/4");
+
+    const auto syncRateID = ParameterIDAndName::getIDString(LFO_RATE_SYNC_ID, 0);
+    const auto* syncRate = processor.treeState.getRawParameterValue(syncRateID);
+    REQUIRE(syncRate != nullptr);
+    rateSlider->setValue(6.0, juce::sendNotificationSync);
+    CHECK(syncRate->load() == Catch::Approx(6.0f));
+    CHECK(rateSlider->getTextFromValue(rateSlider->getValue()) == "1/8");
+
+    setParameterValue(processor, syncModeID, 0.0f);
+    lfoPanel.animationTick();
+
+    CHECK(rateSlider->isTextBoxEditable());
+
+    const auto freeRateID = ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, 0);
+    const auto* freeRate = processor.treeState.getRawParameterValue(freeRateID);
+    REQUIRE(freeRate != nullptr);
+    rateSlider->setValue(2.75, juce::sendNotificationSync);
+    CHECK(freeRate->load() == Catch::Approx(2.75f));
+
+    setParameterValue(processor, syncModeID, 1.0f);
+    lfoPanel.animationTick();
+
+    CHECK_FALSE(rateSlider->isTextBoxEditable());
+    CHECK(rateSlider->getValue() == Catch::Approx(6.0));
+    CHECK(rateSlider->getTextFromValue(rateSlider->getValue()) == "1/8");
 }
 
 TEST_CASE("Fire settings dialog uses the shared visual language", "[ui][smoke]")

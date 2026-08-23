@@ -111,33 +111,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bipolarButton.setClickingTogglesState(true);
     bipolarButton.setToggleState(routing.isBipolar, juce::dontSendNotification);
     bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
-    bipolarButton.onStateChange = [this]
-    {
-        bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
-        if (isParentRebuildPending())
-        {
-            requestParentRebuild();
-            return;
-        }
-
-        auto& manager = processor.getLfoManager();
-        bool didUpdate = false;
-        {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size())
-                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
-            {
-                routings.getReference(index).isBipolar = bipolarButton.getToggleState();
-                didUpdate = true;
-            }
-        }
-
-        if (didUpdate)
-            processor.lfoDataHasChanged();
-        else
-            requestParentRebuild();
-    };
+    bipolarButton.addListener(this);
 
     // BYPASS BUTTON
     addAndMakeVisible(bypassButton);
@@ -150,33 +124,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bypassButton.setClickingTogglesState(true);
     bypassButton.setToggleState(routing.isBypassed, juce::dontSendNotification);
     bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
-    bypassButton.onStateChange = [this]
-    {
-        bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
-        if (isParentRebuildPending())
-        {
-            requestParentRebuild();
-            return;
-        }
-
-        auto& manager = processor.getLfoManager();
-        bool didUpdate = false;
-        {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size())
-                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
-            {
-                routings.getReference(index).isBypassed = bypassButton.getToggleState();
-                didUpdate = true;
-            }
-        }
-
-        if (didUpdate)
-            processor.lfoDataHasChanged();
-        else
-            requestParentRebuild();
-    };
+    bypassButton.addListener(this);
 
     // === DESTINATION MENU ===
     addAndMakeVisible(destinationMenu);
@@ -236,6 +184,8 @@ ModulationMatrixRow::~ModulationMatrixRow()
 {
     sourceMenu.removeListener(this);
     amountSlider.removeListener(this);
+    bipolarButton.removeListener(this);
+    bypassButton.removeListener(this);
     destinationMenu.removeListener(this);
     removeButton.removeListener(this);
     setLookAndFeel(nullptr);
@@ -256,6 +206,51 @@ void ModulationMatrixRow::resized()
 
 void ModulationMatrixRow::buttonClicked(juce::Button* button)
 {
+    if (button == &bipolarButton || button == &bypassButton)
+    {
+        bipolarButton.setButtonText(bipolarButton.getToggleState() ? "Bi" : "Uni");
+        bypassButton.setButtonText(bypassButton.getToggleState() ? "On" : "Off");
+
+        if (isParentRebuildPending())
+        {
+            requestParentRebuild();
+            return;
+        }
+
+        auto& manager = processor.getLfoManager();
+        bool routingStillMatches = false;
+        bool didUpdate = false;
+        {
+            const juce::ScopedLock lock(manager.getLfoDataLock());
+            auto& routings = manager.getModulationRoutings();
+            if (juce::isPositiveAndBelow(index, routings.size())
+                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
+            {
+                routingStillMatches = true;
+                auto& routing = routings.getReference(index);
+                if (button == &bipolarButton
+                    && routing.isBipolar != bipolarButton.getToggleState())
+                {
+                    routing.isBipolar = bipolarButton.getToggleState();
+                    didUpdate = true;
+                }
+                else if (button == &bypassButton
+                         && routing.isBypassed != bypassButton.getToggleState())
+                {
+                    routing.isBypassed = bypassButton.getToggleState();
+                    didUpdate = true;
+                }
+            }
+        }
+
+        if (didUpdate)
+            processor.lfoDataHasChanged();
+        else if (! routingStillMatches)
+            requestParentRebuild();
+
+        return;
+    }
+
     if (button == &removeButton)
     {
         if (isParentRebuildPending())

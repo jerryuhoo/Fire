@@ -64,7 +64,124 @@ bool containsComboBoxText(juce::Component& component,
 
     return false;
 }
+
+juce::TextButton* findTextButton(juce::Component& component,
+                                 const juce::String& buttonText)
+{
+    if (auto* button = dynamic_cast<juce::TextButton*>(&component);
+        button != nullptr && button->getButtonText() == buttonText)
+        return button;
+
+    for (int childIndex = 0; childIndex < component.getNumChildComponents(); ++childIndex)
+        if (auto* child = component.getChildComponent(childIndex))
+            if (auto* button = findTextButton(*child, buttonText))
+                return button;
+
+    return nullptr;
+}
+
+class NonParameterChangeCapture final : public juce::AudioProcessorListener
+{
+public:
+    explicit NonParameterChangeCapture(FireAudioProcessor& processorToObserve)
+        : processor(processorToObserve)
+    {
+        processor.addListener(this);
+    }
+
+    ~NonParameterChangeCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (details.nonParameterStateChanged)
+            ++notificationCount;
+    }
+
+    FireAudioProcessor& processor;
+    int notificationCount = 0;
+};
 } // namespace
+
+TEST_CASE("Modulation matrix toggle buttons publish only real model changes",
+          "[ui][modulation-matrix][state][button]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.5f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        REQUIRE_FALSE(routings.isEmpty());
+        routings.set(0, routing);
+    }
+
+    ModulationMatrixRow row(processor, 0, routing, [] {});
+    row.setBounds(0, 0, 760, 40);
+    auto* polarityButton = findTextButton(row, "Bi");
+    auto* bypassButton = findTextButton(row, "Off");
+    REQUIRE(polarityButton != nullptr);
+    REQUIRE(bypassButton != nullptr);
+    NonParameterChangeCapture host(processor);
+
+    SECTION("polarity")
+    {
+        polarityButton->setState(juce::Button::buttonOver);
+        polarityButton->setState(juce::Button::buttonDown);
+        polarityButton->setState(juce::Button::buttonOver);
+        polarityButton->setState(juce::Button::buttonNormal);
+
+        auto liveRoutings = manager.getModulationRoutingsCopy();
+        REQUIRE_FALSE(liveRoutings.isEmpty());
+        CHECK(liveRoutings[0].isBipolar);
+        CHECK(host.notificationCount == 0);
+
+        polarityButton->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+
+        liveRoutings = manager.getModulationRoutingsCopy();
+        REQUIRE_FALSE(liveRoutings.isEmpty());
+        CHECK_FALSE(liveRoutings[0].isBipolar);
+        CHECK(polarityButton->getButtonText() == "Uni");
+        CHECK(host.notificationCount == 1);
+    }
+
+    SECTION("bypass")
+    {
+        bypassButton->setState(juce::Button::buttonOver);
+        bypassButton->setState(juce::Button::buttonDown);
+        bypassButton->setState(juce::Button::buttonOver);
+        bypassButton->setState(juce::Button::buttonNormal);
+
+        auto liveRoutings = manager.getModulationRoutingsCopy();
+        REQUIRE_FALSE(liveRoutings.isEmpty());
+        CHECK_FALSE(liveRoutings[0].isBypassed);
+        CHECK(host.notificationCount == 0);
+
+        bypassButton->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+
+        liveRoutings = manager.getModulationRoutingsCopy();
+        REQUIRE_FALSE(liveRoutings.isEmpty());
+        CHECK(liveRoutings[0].isBypassed);
+        CHECK(bypassButton->getButtonText() == "On");
+        CHECK(host.notificationCount == 1);
+    }
+}
 
 TEST_CASE("Modulation matrix follows externally recalled routings without stale-row writes",
           "[ui][modulation-matrix][state][recall]")

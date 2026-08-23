@@ -220,6 +220,66 @@ bool isValidABSnapshot(const juce::XmlElement& snapshot,
     return hasLfoState && hasRoutingState;
 }
 
+bool isLoadablePresetState(const juce::XmlElement& xml,
+                           const juce::AudioProcessor& processor) noexcept
+{
+    // Unversioned and v1 files predate complete model snapshots. Preserve
+    // their historical default/migration behaviour. A v2 document is an
+    // explicit complete snapshot, so accepting a sparse or truncated one
+    // would silently reset every omitted parameter, LFO, and routing.
+    if (! xml.hasAttribute("presetFormatVersion"))
+        return true;
+
+    int formatVersion = -1;
+    if (! readStrictIntegerAttribute(xml, "presetFormatVersion", formatVersion)
+        || formatVersion < 0)
+        return false;
+
+    if (formatVersion < 2)
+        return true;
+    if (formatVersion != 2)
+        return false;
+
+    int parameterCount = 0;
+    for (const auto* parameter : processor.getParameters())
+    {
+        const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
+        if (parameterWithID == nullptr)
+            continue;
+
+        ++parameterCount;
+        if (! isStrictNumberInRange(xml, parameterWithID->paramID, 0.0, 1.0))
+            return false;
+    }
+
+    if (parameterCount == 0 || xml.getNumChildElements() != 2)
+        return false;
+
+    bool hasLfoState = false;
+    bool hasRoutingState = false;
+    for (auto* child : xml.getChildIterator())
+    {
+        if (child->hasTagName("LFO_STATE") && ! hasLfoState)
+        {
+            hasLfoState = true;
+            if (! isValidLfoState(*child))
+                return false;
+        }
+        else if (child->hasTagName("MODULATION_STATE") && ! hasRoutingState)
+        {
+            hasRoutingState = true;
+            if (! isValidRoutingState(*child, processor))
+                return false;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    return hasLfoState && hasRoutingState;
+}
+
 bool isSupportedPresetDocument(const juce::XmlElement& xml) noexcept
 {
     return xml.hasTagName("WINGSFIRE");
@@ -293,8 +353,11 @@ namespace state
         writeSerializablePresetSnapshotToXml(fireProc, snapshot, xml);
     }
 
-    void loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
+    bool loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& proc)
     {
+        if (! isLoadablePresetState(xml, proc))
+            return false;
+
         auto& fireProc = static_cast<FireAudioProcessor&>(proc);
         {
             fireProc.beginMultibandTopologyEdit();
@@ -418,6 +481,7 @@ namespace state
             // migration, including when a foreign listener throws.
         }
         fireProc.sendChangeMessage();
+        return true;
     }
 
     //==============================================================================
@@ -695,6 +759,9 @@ namespace state
                 if (! parseFileToXmlElement(file.getFile(), *currentState))
                     continue;
 
+                if (! isLoadablePresetState(*currentState, pluginProcessor))
+                    continue;
+
                 bool hasKnownParameter = false;
                 for (const auto* parameter : pluginProcessor.getParameters())
                     if (const auto* parameterWithID = dynamic_cast<const juce::AudioProcessorParameterWithID*>(parameter);
@@ -823,6 +890,9 @@ namespace state
         {
             if (child->hasAttribute("presetName") && child->getTagName() == presetId)
             {
+                if (! isLoadablePresetState(*child, pluginProcessor))
+                    return false;
+
                 {
                     auto& fireProc = static_cast<FireAudioProcessor&>(
                         pluginProcessor);
@@ -832,7 +902,8 @@ namespace state
                         fireProc.requestMultibandTopologyReset();
                     } };
 
-                    loadStateFromXml(*child, pluginProcessor);
+                    if (! loadStateFromXml(*child, pluginProcessor))
+                        return false;
                     {
                         const juce::ScopedLock lock(identityLock);
                         statePresetName = child->getStringAttribute("presetName");

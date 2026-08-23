@@ -29,7 +29,7 @@ namespace state
 
     //==============================================================================
     void saveStateToXml(const juce::AudioProcessor& processor, juce::XmlElement& xml);
-    void loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& processor);
+    bool loadStateFromXml(const juce::XmlElement& xml, juce::AudioProcessor& processor);
 
     //==============================================================================
     /** Handler for AB state toggling and copying in plugin.                        // improve descriptions

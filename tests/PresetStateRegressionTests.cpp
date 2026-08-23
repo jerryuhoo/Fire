@@ -625,6 +625,13 @@ TEST_CASE("Preset scan rejects malformed and foreign XML without exposing reset 
     juce::XmlElement emptyFirePreset { "WINGSFIRE" };
     REQUIRE(emptyFirePreset.writeTo(
         temporaryDirectory.directory.getChildFile("EmptyFire.fire")));
+    juce::XmlElement sparseVersionedPreset { "WINGSFIRE" };
+    sparseVersionedPreset.setAttribute("presetName", "SparseV2");
+    state::saveStateToXml(validPresetProcessor, sparseVersionedPreset);
+    sparseVersionedPreset.removeAttribute(
+        ParameterIDAndName::getIDString(DRIVE_ID, 0));
+    REQUIRE(sparseVersionedPreset.writeTo(
+        temporaryDirectory.directory.getChildFile("SparseV2.fire")));
     REQUIRE(temporaryDirectory.directory.getChildFile("Malformed.fire")
                 .replaceWithText("<WINGSFIRE><broken></WINGSFIRE>"));
 
@@ -659,6 +666,78 @@ TEST_CASE("Invalid numeric preset attributes fall back safely",
     state::loadStateFromXml(malformedPreset, processor);
 
     CHECK(mix->getValue() == Catch::Approx(expectedDefault));
+}
+
+TEST_CASE("Versioned presets reject incomplete snapshots atomically",
+          "[preset][state][corrupt][versioned][transaction]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    setPlainParameter(processor, driveID, 27.0f);
+
+    const auto expectedShape = makeLfoShape(0.41f, 0.87f, 0.58f);
+    setPlainParameter(processor,
+                      ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 2),
+                      expectedShape.smoothness);
+    processor.getLfoManager().setLfoData(2, expectedShape);
+    processor.assignLfoToTarget(2, driveID);
+    processor.setModulationDepth(driveID, -0.36f);
+
+    juce::XmlElement completePreset { "WINGSFIRE" };
+    state::saveStateToXml(processor, completePreset);
+    REQUIRE(completePreset.getIntAttribute("presetFormatVersion") == 2);
+
+    std::vector<std::unique_ptr<juce::XmlElement>> invalidPresets;
+
+    auto missingParameter = std::make_unique<juce::XmlElement>(completePreset);
+    missingParameter->removeAttribute(driveID);
+    invalidPresets.push_back(std::move(missingParameter));
+
+    auto missingLfoState = std::make_unique<juce::XmlElement>(completePreset);
+    if (auto* lfoState = missingLfoState->getChildByName("LFO_STATE"))
+        missingLfoState->removeChildElement(lfoState, true);
+    invalidPresets.push_back(std::move(missingLfoState));
+
+    auto truncatedLfoState = std::make_unique<juce::XmlElement>(completePreset);
+    if (auto* lfoState = truncatedLfoState->getChildByName("LFO_STATE"))
+        lfoState->removeChildElement(
+            lfoState->getChildElement(lfoState->getNumChildElements() - 1), true);
+    invalidPresets.push_back(std::move(truncatedLfoState));
+
+    auto missingRoutingState = std::make_unique<juce::XmlElement>(completePreset);
+    if (auto* routingState = missingRoutingState->getChildByName("MODULATION_STATE"))
+        missingRoutingState->removeChildElement(routingState, true);
+    invalidPresets.push_back(std::move(missingRoutingState));
+
+    auto duplicateRouting = std::make_unique<juce::XmlElement>(completePreset);
+    if (auto* routingState = duplicateRouting->getChildByName("MODULATION_STATE"))
+        appendRouting(*routingState, 0, driveID, 0.25f);
+    invalidPresets.push_back(std::move(duplicateRouting));
+
+    auto unsupportedFutureVersion = std::make_unique<juce::XmlElement>(completePreset);
+    unsupportedFutureVersion->setAttribute("presetFormatVersion", 3);
+    invalidPresets.push_back(std::move(unsupportedFutureVersion));
+
+    for (const auto& invalidPreset : invalidPresets)
+    {
+        REQUIRE(invalidPreset != nullptr);
+        CHECK_FALSE(state::loadStateFromXml(*invalidPreset, processor));
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(27.0f));
+
+        const auto shapes = processor.getLfoManager().getLfoDataCopy();
+        REQUIRE(shapes.size() == 4);
+        REQUIRE(shapes[2].points.size() == expectedShape.points.size());
+        CHECK(shapes[2].points[1].x == Catch::Approx(expectedShape.points[1].x));
+        CHECK(shapes[2].points[1].y == Catch::Approx(expectedShape.points[1].y));
+        CHECK(shapes[2].smoothness == Catch::Approx(expectedShape.smoothness));
+
+        const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
+        const auto* routing = findRouting(routings, driveID);
+        REQUIRE(routing != nullptr);
+        CHECK(routing->sourceLfoIndex == 2);
+        CHECK(routing->depth == Catch::Approx(-0.36f));
+    }
 }
 
 TEST_CASE("Corrupt host state without a valid APVTS tree is rejected atomically",
@@ -1626,6 +1705,7 @@ TEST_CASE("Legacy preset equivalence compares effective LFO and routing defaults
     setPlainParameter(processor, driveID, 34.0f);
     juce::XmlElement legacyPreset { "WINGSFIRE" };
     state::saveStateToXml(processor, legacyPreset);
+    legacyPreset.removeAttribute("presetFormatVersion");
     if (auto* lfoState = legacyPreset.getChildByName("LFO_STATE"))
         legacyPreset.removeChildElement(lfoState, true);
     if (auto* routingState = legacyPreset.getChildByName("MODULATION_STATE"))
@@ -1656,6 +1736,7 @@ TEST_CASE("Legacy preset equivalence compares effective LFO and routing defaults
     // clean against the promoted value.
     juce::XmlElement legacySmoothnessPreset { "WINGSFIRE" };
     state::saveStateToXml(processor, legacySmoothnessPreset);
+    legacySmoothnessPreset.removeAttribute("presetFormatVersion");
     const auto smoothnessID = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
     legacySmoothnessPreset.removeAttribute(smoothnessID);
     auto* legacyLfoState = legacySmoothnessPreset.getChildByName("LFO_STATE");
@@ -1829,6 +1910,7 @@ TEST_CASE("State loaders enforce one modulation routing per target",
         FireAudioProcessor processor;
         juce::XmlElement preset { "WINGSFIRE" };
         state::saveStateToXml(processor, preset);
+        preset.removeAttribute("presetFormatVersion");
         auto* routingState = preset.getChildByName("MODULATION_STATE");
         REQUIRE(routingState != nullptr);
         appendRouting(*routingState, 1, targetID, 0.25f);

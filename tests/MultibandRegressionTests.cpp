@@ -1504,8 +1504,11 @@ TEST_CASE("Set Value popup keeps the modulation target that opened it",
     REQUIRE(bandPanel->getDriveKnob() == reusedDriveKnob);
     REQUIRE(reusedDriveKnob->getParamID() == secondDriveID);
     REQUIRE(valueEntryPopup->isVisible());
-    REQUIRE(static_cast<bool>(valueEntryPopup->onOk));
-    valueEntryPopup->onOk(enteredValue);
+    auto* entryEditor = findDescendant<juce::TextEditor>(*valueEntryPopup);
+    REQUIRE(entryEditor != nullptr);
+    entryEditor->setText(juce::String(enteredValue), juce::dontSendNotification);
+    REQUIRE(static_cast<juce::Component&>(*entryEditor).keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
     CHECK_FALSE(valueEntryPopup->isVisible());
 
     const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
@@ -1627,8 +1630,11 @@ TEST_CASE("Delayed modulation menu actions retain the target present when the me
         REQUIRE(static_cast<bool>(reusedDriveKnob->onSetValueRequested));
         deliverMenuResult(static_cast<int>(ModulatableSlider::ModulationMenuCommand::setValue));
         REQUIRE(valueEntryPopup->isVisible());
-        REQUIRE(static_cast<bool>(valueEntryPopup->onOk));
-        valueEntryPopup->onOk(enteredValue);
+        auto* entryEditor = findDescendant<juce::TextEditor>(*valueEntryPopup);
+        REQUIRE(entryEditor != nullptr);
+        entryEditor->setText(juce::String(enteredValue), juce::dontSendNotification);
+        REQUIRE(static_cast<juce::Component&>(*entryEditor).keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
 
         const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
         const auto* firstRouting = findRouting(routings, targetWhenMenuOpened);

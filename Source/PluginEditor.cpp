@@ -66,15 +66,13 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     valuePopup.setAlwaysOnTop(true);
     valuePopup.setVisible(false);
 
-    addAndMakeVisible(valueEntryPopup);
+    addChildComponent(valueEntryPopup);
     valueEntryPopup.setAlwaysOnTop(true);
-    valueEntryPopup.setVisible(false);
 
     valueEntryPopup.onOk = [this](double value)
     {
         const auto targetParameterID = valueEntryTargetParameterID;
         valueEntryTargetParameterID.clear();
-        valueEntryPopup.setVisible(false);
 
         if (targetParameterID.isNotEmpty())
         {
@@ -86,7 +84,6 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     valueEntryPopup.onCancel = [this]()
     {
         valueEntryTargetParameterID.clear();
-        valueEntryPopup.setVisible(false);
     };
 
     processor.addChangeListener(this);
@@ -225,6 +222,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 return;
             }
 
+            // A programmatic request can replace an already-open editor even
+            // without an intervening outside click. End the old session before
+            // binding the shared popup to its new immutable target.
+            valueEntryPopup.dismissSession();
             valueEntryTargetParameterID = targetParameterID;
 
             auto sliderBounds = sliderToEdit->getScreenBounds();
@@ -590,6 +591,17 @@ void FireAudioProcessorEditor::resized()
     rebuildBackgroundCache();
 }
 
+void FireAudioProcessorEditor::visibilityChanged()
+{
+    juce::AudioProcessorEditor::visibilityChanged();
+
+    if (! isShowing())
+    {
+        valueEntryPopup.dismissSession();
+        multiband.dismissTransientUi();
+    }
+}
+
 void FireAudioProcessorEditor::rebuildBackgroundCache()
 {
     if (getWidth() <= 0 || getHeight() <= 0)
@@ -815,6 +827,7 @@ void FireAudioProcessorEditor::timerCallback()
     // when the peer becomes visible again.
     if (! isShowing())
     {
+        valueEntryPopup.dismissSession();
         multiband.dismissTransientUi();
         return;
     }

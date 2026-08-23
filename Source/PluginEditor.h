@@ -106,6 +106,7 @@ public:
     //==============================================================================
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void visibilityChanged() override;
     void timerCallback() override;
     void handleAsyncUpdate() override;
     void markPresetAsDirty();

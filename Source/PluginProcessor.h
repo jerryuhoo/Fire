@@ -156,7 +156,7 @@ struct BandProcessor
     GainProcessor gain;
     juce::dsp::DryWetMixer<float> dryWetMixer;
     ZeroLatencyModulatedDryWetMixer compressorMixer;
-    juce::dsp::DryWetMixer<float> widthMixer;
+    ZeroLatencyModulatedDryWetMixer widthMixer;
     std::unique_ptr<juce::dsp::Oversampling<float>> oversampling;
     OutputGainTransitionState outputGainTransition;
     CompressorRecipeTransitionState compressorThresholdRecipeTransition;
@@ -164,7 +164,7 @@ struct BandProcessor
     CompressorRecipeTransitionState compressorAttackRecipeTransition;
     CompressorRecipeTransitionState compressorReleaseRecipeTransition;
 
-    BandProcessor() : dryWetMixer(2048), widthMixer(2048) {}
+    BandProcessor() : dryWetMixer(2048) {}
 
     // And its own set of smoothed parameter values.
     juce::SmoothedValue<float> driveSmoother;
@@ -194,7 +194,6 @@ struct BandProcessor
     bool dryWetMixerPrimed = false;
     bool shapeMixSmootherPrimed = false;
     bool compressorBaseSmoothersPrimed = false;
-    bool widthMixerPrimed = false;
     bool bandEnableMixPrimed = false;
     bool dcFilterMixPrimed = false;
 

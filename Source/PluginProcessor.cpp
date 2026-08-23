@@ -722,7 +722,6 @@ void BandProcessor::prepare(const juce::dsp::ProcessSpec& spec)
     dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
-    widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
     bandEnableMixSmoother.reset(spec.sampleRate, 0.01);
     bandEnableMixSmoother.setCurrentAndTargetValue(1.0f);
@@ -739,7 +738,6 @@ void BandProcessor::reset()
     dryWetMixerPrimed = false;
     shapeMixSmootherPrimed = false;
     compressorBaseSmoothersPrimed = false;
-    widthMixerPrimed = false;
     waveshaperModeMixPrimed = false;
     bandEnableMixPrimed = false;
     dcFilterMixPrimed = false;
@@ -1381,18 +1379,6 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
         // settings.
         const bool hasSampleAccurateWidth = paramsForProcessing.widthValProvider.lfoSignal != nullptr
                                             || paramsForProcessing.panValProvider.lfoSignal != nullptr;
-        const bool hasSampleAccurateWidthMix = params.isWidthEnabled
-                                               && paramsForProcessing.widthMixValProvider.lfoSignal != nullptr;
-        const float initialWidthMix = hasSampleAccurateWidthMix
-                                          ? paramsForProcessing.widthMixValProvider.get(0)
-                                          : params.widthMixVal;
-        const float effectiveWidthMix = params.isWidthEnabled
-                                            ? juce::jlimit(0.0f, 1.0f, initialWidthMix)
-                                            : 0.0f;
-        widthMixer.setWetMixProportion(effectiveWidthMix);
-        if (! widthMixerPrimed)
-            widthMixer.reset();
-        widthMixerPrimed = true;
         widthMixer.pushDrySamples(postDistortionContext.getOutputBlock());
         if (hasSampleAccurateWidth)
         {
@@ -1419,21 +1405,12 @@ void BandProcessor::processChunk(juce::AudioBuffer<float>& buffer,
                                          buffer.getNumSamples());
         }
 
-        if (! hasSampleAccurateWidthMix)
-        {
-            widthMixer.mixWetSamples(postDistortionContext.getOutputBlock());
-        }
-        else
-        {
-            auto widthBlock = postDistortionContext.getOutputBlock();
-            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
-            {
-                widthMixer.setWetMixProportion(juce::jlimit(
-                    0.0f, 1.0f, paramsForProcessing.widthMixValProvider.get(sample)));
-                widthMixer.mixWetSamples(
-                    widthBlock.getSubBlock(static_cast<size_t>(sample), 1));
-            }
-        }
+        widthMixer.mixWetSamples(
+            postDistortionContext.getOutputBlock(),
+            paramsForProcessing.widthMixValProvider,
+            params.widthMixVal,
+            params.widthMixLfoSourceIndex,
+            params.isWidthEnabled);
     }
 
     // 4. Post-Distortion Effects

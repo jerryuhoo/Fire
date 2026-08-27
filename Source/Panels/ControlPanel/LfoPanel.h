@@ -21,6 +21,7 @@
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct LfoEditorTestAccess;
+struct LfoPanelDialogTestAccess;
 #endif
 
 inline std::optional<LfoData> lfoClipboard;
@@ -195,9 +196,14 @@ public:
     void refreshLfoDisplay();
     void handleAsyncUpdate() override;
     void dismissTransientInteraction();
+    void dismissModulationMatrixDialog();
     void visibilityChanged() override;
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct LfoPanelDialogTestAccess;
+#endif
+
     void buttonClicked(juce::Button* button) override;
     void sliderValueChanged(juce::Slider* slider) override;
     void sliderDragStarted(juce::Slider* slider) override;

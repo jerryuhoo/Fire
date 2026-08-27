@@ -454,6 +454,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
         if (slider != nullptr)
             slider->dismissTransientInteraction();
     lfoPanel.dismissTransientInteraction();
+    lfoPanel.dismissModulationMatrixDialog();
     hideValuePopup();
     valueEntryPopup.dismissSession();
 
@@ -613,6 +614,7 @@ void FireAudioProcessorEditor::visibilityChanged()
             if (slider != nullptr)
                 slider->dismissTransientInteraction();
         lfoPanel.dismissTransientInteraction();
+        lfoPanel.dismissModulationMatrixDialog();
         hideValuePopup();
         hqButton.dismissPointerGesture();
         windowLeftButton.dismissPointerGesture();
@@ -854,6 +856,7 @@ void FireAudioProcessorEditor::timerCallback()
             if (slider != nullptr)
                 slider->dismissTransientInteraction();
         lfoPanel.dismissTransientInteraction();
+        lfoPanel.dismissModulationMatrixDialog();
         hideValuePopup();
         valueEntryPopup.dismissSession();
         multiband.dismissTransientUi();

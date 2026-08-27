@@ -10,6 +10,14 @@
 #include <set>
 #include <vector>
 
+struct LfoPanelDialogTestAccess final
+{
+    static void setDialog(LfoPanel& panel, juce::DialogWindow* dialog)
+    {
+        panel.modulationMatrixDialog = dialog;
+    }
+};
+
 namespace
 {
 struct ParameterGestureRecorder final : juce::AudioProcessorParameter::Listener
@@ -83,6 +91,31 @@ juce::Slider* findSliderAttachedToLabel(juce::Component& root, const juce::Strin
                 return slider;
 
     return nullptr;
+}
+
+template <typename ComponentType>
+ComponentType* findComponentOfType(juce::Component& root)
+{
+    if (auto* match = dynamic_cast<ComponentType*>(&root))
+        return match;
+
+    for (auto* child : root.getChildren())
+        if (child != nullptr)
+            if (auto* match = findComponentOfType<ComponentType>(*child))
+                return match;
+
+    return nullptr;
+}
+
+juce::DialogWindow* installModulationMatrixDialog(LfoPanel& panel,
+                                                   FireAudioProcessor& processor)
+{
+    auto* dialog = new juce::DialogWindow(
+        "Modulation Matrix", fire::ui::colours::canvas, true, false);
+    dialog->setContentOwned(new ModulationMatrixPanel(processor), false);
+    dialog->enterModalState(false, nullptr, true);
+    LfoPanelDialogTestAccess::setDialog(panel, dialog);
+    return dialog;
 }
 
 void setParameterValue(FireAudioProcessor& processor,
@@ -599,6 +632,77 @@ TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
         CHECK_FALSE(slider->hasActivePointerGesture());
         CHECK(recorder.gestures == std::vector<bool> { true, false });
         editor->removeFromDesktop();
+    }
+}
+
+TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
+          "[ui][lfo][matrix][dialog][lifecycle]")
+{
+    SECTION("direct panel hide")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        LfoPanel panel(processor);
+        panel.setVisible(true);
+
+        auto* dialog = installModulationMatrixDialog(panel, processor);
+        REQUIRE(dialog != nullptr);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        panel.setVisible(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("panel destruction")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto panel = std::make_unique<LfoPanel>(processor);
+
+        auto* dialog = installModulationMatrixDialog(*panel, processor);
+        REQUIRE(dialog != nullptr);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        panel.reset();
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("host editor hide")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+        selectWorkspace(*editor, "MOD FORGE");
+
+        auto* lfoPanel = findComponentOfType<LfoPanel>(*editor);
+        REQUIRE(lfoPanel != nullptr);
+        auto* dialog = installModulationMatrixDialog(*lfoPanel, processor);
+        REQUIRE(dialog != nullptr);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        editor->setVisible(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        editor->removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 }
 

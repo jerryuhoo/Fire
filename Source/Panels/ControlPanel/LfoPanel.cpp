@@ -1402,13 +1402,7 @@ LfoPanel::~LfoPanel()
     // first. Close every active Slider gesture while the old attachment can
     // still send its matching endGesture to the host.
     dismissTransientInteraction();
-
-    if (modulationMatrixDialog != nullptr)
-    {
-        modulationMatrixDialog->setVisible(false);
-        modulationMatrixDialog->exitModalState(0);
-        modulationMatrixDialog = nullptr;
-    }
+    dismissModulationMatrixDialog();
 
     // Remove listeners from all buttons styled with styleButton()
     for (auto& button : lfoSelectButtons)
@@ -1730,12 +1724,30 @@ void LfoPanel::dismissTransientInteraction()
     lfoPhaseSlider.dismissTransientInteraction();
 }
 
+void LfoPanel::dismissModulationMatrixDialog()
+{
+    // launchAsync() normally defers deletion until the modal manager's next
+    // async update. The dialog content holds a reference to the processor, so
+    // an editor/processor teardown must not leave that deletion queued.
+    auto dialog = modulationMatrixDialog;
+    modulationMatrixDialog = nullptr;
+
+    if (dialog != nullptr)
+    {
+        dialog->exitModalState(0);
+        dialog.deleteAndZero();
+    }
+}
+
 void LfoPanel::visibilityChanged()
 {
     juce::Component::visibilityChanged();
 
     if (! isShowing())
+    {
         dismissTransientInteraction();
+        dismissModulationMatrixDialog();
+    }
 }
 
 void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)

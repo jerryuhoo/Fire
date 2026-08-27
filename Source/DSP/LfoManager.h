@@ -156,10 +156,23 @@ public:
     // The reference accessor has the same external-lock requirement as above.
     const std::vector<LfoData>& getLfoData() const { return lfoData; }
     std::vector<LfoData> getLfoDataCopy() const;
+    struct LfoDataSnapshot
+    {
+        LfoData data;
+        std::uint64_t revision = 0;
+    };
+    LfoDataSnapshot getLfoDataSnapshot(int index) const;
+    bool isLfoDataRevisionCurrent(int index,
+                                  std::uint64_t revision) const;
     // APVTS is the only writable Smoothness authority. These shape APIs keep
     // the incoming points/curvatures but replace LfoData::smoothness with the
     // corresponding APVTS value before committing.
-    void setLfoData(int index, const LfoData& newData);
+    std::uint64_t setLfoData(int index, const LfoData& newData);
+    bool setLfoDataIfRevisionMatches(
+        int index,
+        const LfoData& newData,
+        std::uint64_t expectedRevision,
+        std::uint64_t& resultingRevision);
     void replaceLfoDataAndRoutings(
         const std::array<LfoData, 4>& newLfoData,
         juce::Array<ModulationRouting> newRoutings);
@@ -236,6 +249,7 @@ private:
     std::array<LfoParameterPointers, 4> lfoParameters;
     std::array<juce::String, 4> smoothnessParameterIDs;
     std::vector<LfoData> lfoData;
+    std::array<std::uint64_t, 4> lfoDataRevisions {};
 
     juce::CriticalSection dataAccessLock;
 

@@ -16,6 +16,7 @@
 #include "ModulationMatrixPanel.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <cstdint>
 #include <optional>
 
 class FireAudioProcessor;
@@ -34,11 +35,24 @@ inline std::optional<LfoData> lfoClipboard;
 class LfoEditor : public juce::Component
 {
 public:
+    struct DataContext
+    {
+        int lfoIndex = -1;
+        std::uint64_t revision = 0;
+    };
+
     LfoEditor();
     ~LfoEditor() override;
 
     // Sets the data model for the editor to point to. This is the safe way to switch LFOs.
     void setDataToDisplay(const LfoData& dataToDisplay);
+    void setDataToDisplay(const LfoData& dataToDisplay,
+                          DataContext dataContext);
+    DataContext getDataContext() const noexcept { return activeDataContext; }
+    bool updateDataContextRevision(DataContext expectedContext,
+                                   std::uint64_t newRevision) noexcept;
+    void setDataContextValidator(
+        std::function<bool(const DataContext&)> validator);
 
     // Called by LfoPanel to set the current interaction mode.
     void setCurrentBrush(LfoPresetShape newBrush);
@@ -60,6 +74,11 @@ public:
     void setPlayheadPosition(float position);
     void setPhaseOffsetLinePosition(float position);
     void setSmoothness(float smoothness);
+    /** Invalidates this editor's async menu result without using JUCE's
+        process-wide dismissAllActiveMenus(). The visual popup may remain until
+        JUCE dismisses it, but its eventual result is guaranteed to be inert.
+    */
+    void invalidateContextMenuSession();
 
     std::function<void(const LfoData&)> onDataChanged;
 
@@ -81,6 +100,8 @@ private:
     // This pointer holds the currently active LFO data. It does not own the data.
     LfoData activeLfoData;
     bool dataIsActive = false;
+    DataContext activeDataContext;
+    std::function<bool(const DataContext&)> dataContextValidator;
 
     // Internal helper methods that now operate on the activeLfoData pointer.
     void addPoint(juce::Point<float> newPoint);
@@ -95,6 +116,19 @@ private:
     bool validatePointDragInteractionOrCancel() noexcept;
     void cancelPointAndCurveInteraction() noexcept;
     void cancelAllInteraction() noexcept;
+    struct ContextMenuCommandContext
+    {
+        DataContext dataContext;
+        LfoData sourceData;
+        std::optional<LfoData> clipboardData;
+        bool dataWasActive = false;
+        bool copyWasEnabled = false;
+        bool pasteWasEnabled = false;
+        bool invertWasEnabled = false;
+    };
+    std::function<void(int)> createContextMenuResultHandler();
+    void handleContextMenuResult(int result,
+                                 const ContextMenuCommandContext& context);
 
     // Helper methods for brush mode
     int getOrCreatePointAtX(float targetX);
@@ -155,6 +189,8 @@ private:
 
     bool isBrushing = false;
     juce::Point<int> lastBrushCell { -1, -1 };
+    std::uint64_t contextMenuGeneration = 0;
+    bool contextMenuSessionActive = false;
 
     void selectAllPoints();
     void clearAllPoints();
@@ -215,7 +251,7 @@ private:
         juce::DialogWindow::LaunchOptions& launchOptions);
     void showModulationMatrixDialog();
     void setLfo(int newIndex);
-    LfoData getLfoDataCopy(int index);
+    void displayLfoData(int index);
 
     FireAudioProcessor& processor;
 

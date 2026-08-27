@@ -22,7 +22,10 @@ LfoEditor::LfoEditor()
     setOpaque(true);
 }
 
-LfoEditor::~LfoEditor() {}
+LfoEditor::~LfoEditor()
+{
+    invalidateContextMenuSession();
+}
 
 bool LfoEditor::isValidPointIndex(int index) const noexcept
 {
@@ -93,9 +96,134 @@ void LfoEditor::cancelAllInteraction() noexcept
     lastBrushCell = { -1, -1 };
 }
 
+void LfoEditor::invalidateContextMenuSession()
+{
+    ++contextMenuGeneration;
+    contextMenuSessionActive = false;
+}
+
+std::function<void(int)> LfoEditor::createContextMenuResultHandler()
+{
+    // A newer menu supersedes any older asynchronous callback. Invalidate the
+    // previous session before capturing this one because JUCE may deliver its
+    // cancellation callback later.
+    invalidateContextMenuSession();
+    const auto sessionGeneration = contextMenuGeneration;
+    const ContextMenuCommandContext commandContext {
+        activeDataContext,
+        activeLfoData,
+        lfoClipboard,
+        dataIsActive,
+        dataIsActive && activeLfoData.points.size() > 2,
+        canPasteShape(),
+        dataIsActive && activeLfoData.points.size() > 2
+    };
+    contextMenuSessionActive = true;
+
+    return [safeThis = juce::Component::SafePointer<LfoEditor>(this),
+            sessionGeneration,
+            commandContext](int result)
+    {
+        if (safeThis == nullptr
+            || ! safeThis->contextMenuSessionActive
+            || safeThis->contextMenuGeneration != sessionGeneration)
+            return;
+
+        // Consume the session before running a command. The callback may
+        // delete this editor or replace its data, and must remain one-shot.
+        safeThis->contextMenuSessionActive = false;
+        ++safeThis->contextMenuGeneration;
+
+        auto contextValidator = safeThis->dataContextValidator;
+        if (contextValidator
+            && ! contextValidator(commandContext.dataContext))
+            return;
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->handleContextMenuResult(result, commandContext);
+    };
+}
+
+void LfoEditor::handleContextMenuResult(
+    int result,
+    const ContextMenuCommandContext& context)
+{
+    const auto publishCurrentData = [this]
+    {
+        auto callback = onDataChanged;
+        if (! callback)
+            return;
+
+        auto dataToPublish = activeLfoData;
+        callback(dataToPublish);
+    };
+
+    switch (result)
+    {
+        case CommandIDs::selectAll:
+            if (! context.dataWasActive
+                || activeLfoData.points != context.sourceData.points
+                || activeLfoData.curvatures != context.sourceData.curvatures)
+                return;
+            cancelAllInteraction();
+            for (int i = 0;
+                 i < static_cast<int>(context.sourceData.points.size());
+                 ++i)
+                selectedPointIndices.push_back(i);
+            repaint();
+            return;
+        case CommandIDs::clear:
+            if (! context.dataWasActive)
+                return;
+            activeLfoData = context.sourceData;
+            activeDataContext = context.dataContext;
+            clearAllPoints();
+            publishCurrentData();
+            return;
+        case CommandIDs::copy:
+            if (context.copyWasEnabled)
+                lfoClipboard = context.sourceData;
+            return;
+        case CommandIDs::paste:
+            if (! context.pasteWasEnabled
+                || ! context.clipboardData.has_value())
+                return;
+            setDataToDisplay(*context.clipboardData, context.dataContext);
+            publishCurrentData();
+            return;
+        case CommandIDs::invertX:
+            if (! context.invertWasEnabled)
+                return;
+            activeLfoData = context.sourceData;
+            activeDataContext = context.dataContext;
+            invertShape(true, false);
+            publishCurrentData();
+            return;
+        case CommandIDs::invertY:
+            if (! context.invertWasEnabled)
+                return;
+            activeLfoData = context.sourceData;
+            activeDataContext = context.dataContext;
+            invertShape(false, true);
+            publishCurrentData();
+            return;
+        default:
+            return;
+    }
+}
+
 void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
 {
+    setDataToDisplay(dataToDisplay, {});
+}
+
+void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay,
+                                 DataContext dataContext)
+{
+    invalidateContextMenuSession();
     cancelAllInteraction();
+    activeDataContext = dataContext;
 
     // Safely switch the data source by copying and normalising malformed
     // preset data before any paint or interaction code indexes it.
@@ -136,6 +264,24 @@ void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay)
 
     dataIsActive = true;
     repaint();
+}
+
+bool LfoEditor::updateDataContextRevision(
+    DataContext expectedContext,
+    std::uint64_t newRevision) noexcept
+{
+    if (activeDataContext.lfoIndex != expectedContext.lfoIndex
+        || activeDataContext.revision != expectedContext.revision)
+        return false;
+
+    activeDataContext.revision = newRevision;
+    return true;
+}
+
+void LfoEditor::setDataContextValidator(
+    std::function<bool(const DataContext&)> validator)
+{
+    dataContextValidator = std::move(validator);
 }
 
 void LfoEditor::paint(juce::Graphics& g)
@@ -708,42 +854,7 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
         m.addItem(CommandIDs::invertX, "Invert Horizontally", dataIsActive && activeLfoData.points.size() > 2);
         m.addItem(CommandIDs::invertY, "Invert Vertically", dataIsActive && activeLfoData.points.size() > 2);
 
-        auto callback = [safeThis = juce::Component::SafePointer<LfoEditor>(this)](int result)
-        {
-            if (safeThis == nullptr)
-                return;
-
-            switch (result)
-            {
-                case CommandIDs::selectAll:
-                    safeThis->selectAllPoints();
-                    break;
-                case CommandIDs::clear:
-                    safeThis->clearAllPoints();
-                    if (safeThis->onDataChanged)
-                        safeThis->onDataChanged(safeThis->activeLfoData);
-                    break;
-                case CommandIDs::copy:
-                    safeThis->copyShape();
-                    break;
-                case CommandIDs::paste:
-                    if (safeThis->pasteShape() && safeThis->onDataChanged)
-                        safeThis->onDataChanged(safeThis->activeLfoData);
-                    break;
-                case CommandIDs::invertX:
-                    safeThis->invertShape(true, false);
-                    if (safeThis->onDataChanged)
-                        safeThis->onDataChanged(safeThis->activeLfoData);
-                    break;
-                case CommandIDs::invertY:
-                    safeThis->invertShape(false, true);
-                    if (safeThis->onDataChanged)
-                        safeThis->onDataChanged(safeThis->activeLfoData);
-                    break;
-                default:
-                    break;
-            }
-        };
+        auto callback = createContextMenuResultHandler();
 
         m.showMenuAsync(fire::ui::prepareContextMenu(
                             m, *this, event.getScreenPosition()),
@@ -1245,18 +1356,54 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         smoothParameterIDs[static_cast<size_t>(i)] = ParameterIDAndName::getIDString(LFO_SMOOTH_ID, i);
     }
 
-    lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
+    lfoEditor.setDataContextValidator(
+        [this](const LfoEditor::DataContext& context)
+        {
+            return context.lfoIndex == currentLfoIndex
+                && processor.getLfoManager().isLfoDataRevisionCurrent(
+                    context.lfoIndex, context.revision);
+        });
+    displayLfoData(currentLfoIndex);
     addAndMakeVisible(lfoEditor);
 
     // FIX: Set up the callback to send updated data back to the manager
     lfoEditor.onDataChanged = [this](const LfoData& newData)
     {
-        // Use the thread-safe setter to update the authoritative data
-        processor.getLfoManager().setLfoData(currentLfoIndex, newData);
+        const auto context = lfoEditor.getDataContext();
+        std::uint64_t resultingRevision = 0;
+        if (context.lfoIndex != currentLfoIndex
+            || ! processor.getLfoManager().setLfoDataIfRevisionMatches(
+                context.lfoIndex,
+                newData,
+                context.revision,
+                resultingRevision))
+        {
+            // A preset/host replacement won the race after this editor data
+            // was displayed. Restore the new authority instead of writing the
+            // stale UI copy back over it.
+            displayLfoData(currentLfoIndex);
+            return;
+        }
+
+        if (! lfoEditor.updateDataContextRevision(context,
+                                                   resultingRevision))
+        {
+            displayLfoData(currentLfoIndex);
+            return;
+        }
+
+        // Shape commands carry an LfoData copy, but Smoothness is an APVTS
+        // parameter. Keep the editor copy aligned with that authority after
+        // Clear/Paste/Invert instead of retaining a frozen menu value.
+        if (const auto* smoothness = processor.treeState.getRawParameterValue(
+                smoothParameterIDs[static_cast<size_t>(context.lfoIndex)]))
+            lfoEditor.setSmoothness(
+                smoothness->load(std::memory_order_relaxed));
 
         // Notify the main editor that a change has occurred (e.g., to mark preset as dirty)
-        if (onDataChanged)
-            onDataChanged();
+        auto callback = onDataChanged;
+        if (callback)
+            callback();
     };
 
     // Create UI Components
@@ -1675,7 +1822,7 @@ void LfoPanel::setLfo(int newIndex)
     currentLfoIndex = newIndex;
     lfoSelectionPosition.setTarget(static_cast<float>(currentLfoIndex));
     repaint(leftColumnArea);
-    lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
+    displayLfoData(currentLfoIndex);
 
     // Explicitly set the toggle state for all buttons in the group.
     for (int i = 0; i < lfoSelectButtons.size(); ++i)
@@ -1720,6 +1867,7 @@ void LfoPanel::dismissTransientInteraction()
     gridYSlider.dismissTransientInteraction();
     lfoSmoothSlider.dismissTransientInteraction();
     lfoPhaseSlider.dismissTransientInteraction();
+    lfoEditor.invalidateContextMenuSession();
 }
 
 void LfoPanel::configureModulationMatrixDialog(
@@ -1800,15 +1948,18 @@ void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)
     onDataChanged = callback;
 }
 
-LfoData LfoPanel::getLfoDataCopy(int index)
+void LfoPanel::displayLfoData(int index)
 {
-    const auto data = processor.getLfoManager().getLfoDataCopy();
+    if (! juce::isPositiveAndBelow(index, 4))
+    {
+        jassertfalse;
+        return;
+    }
 
-    if (juce::isPositiveAndBelow(index, static_cast<int>(data.size())))
-        return data[static_cast<size_t>(index)];
-
-    jassertfalse;
-    return {};
+    auto snapshot = processor.getLfoManager().getLfoDataSnapshot(index);
+    lfoEditor.setDataToDisplay(
+        snapshot.data,
+        LfoEditor::DataContext { index, snapshot.revision });
 }
 
 void LfoPanel::updateRateSlider()
@@ -1901,8 +2052,7 @@ void LfoPanel::parameterChanged(const juce::String& parameterID, float /*newValu
         if (parameterID == smoothParameterIDs[static_cast<size_t>(i)])
         {
             // APVTS listeners may run on the audio thread. Record a bit only;
-            // copying vectors, taking the LFO-data lock, and notifying UI/state
-            // are all deferred to handleAsyncUpdate on the message thread.
+            // touching the editor is deferred to the message thread.
             pendingSmoothnessUpdates.fetch_or(1u << static_cast<unsigned int>(i),
                                               std::memory_order_release);
 
@@ -2014,7 +2164,7 @@ void LfoPanel::styleButton(juce::Button& button, bool isToggle)
 
 void LfoPanel::refreshLfoDisplay()
 {
-    lfoEditor.setDataToDisplay(getLfoDataCopy(currentLfoIndex));
+    displayLfoData(currentLfoIndex);
 }
 
 void LfoEditor::selectAllPoints()
@@ -2057,7 +2207,8 @@ bool LfoEditor::pasteShape()
     if (! canPasteShape())
         return false;
 
-    setDataToDisplay(*lfoClipboard);
+    const auto context = activeDataContext;
+    setDataToDisplay(*lfoClipboard, context);
     return true;
 }
 
@@ -2121,11 +2272,9 @@ void LfoPanel::handleAsyncUpdate()
         const auto& parameterID = smoothParameterIDs[static_cast<size_t>(i)];
         if (auto* value = processor.treeState.getRawParameterValue(parameterID))
         {
-            auto lfoData = getLfoDataCopy(i);
-            lfoData.smoothness = value->load(std::memory_order_relaxed);
-            processor.getLfoManager().setLfoData(i, lfoData);
             if (i == currentLfoIndex)
-                lfoEditor.setSmoothness(lfoData.smoothness);
+                lfoEditor.setSmoothness(
+                    value->load(std::memory_order_relaxed));
         }
     }
 }

@@ -834,6 +834,44 @@ std::vector<LfoData> LfoManager::getLfoDataCopy() const
     return result;
 }
 
+LfoManager::LfoDataSnapshot LfoManager::getLfoDataSnapshot(int index) const
+{
+    if (! juce::isPositiveAndBelow(index, static_cast<int>(lfoData.size())))
+    {
+        jassertfalse;
+        return {};
+    }
+
+    const auto lfoIndex = static_cast<size_t>(index);
+    LfoDataSnapshot snapshot;
+    {
+        const juce::ScopedLock lock(dataAccessLock);
+        snapshot.data = lfoData[lfoIndex];
+        snapshot.revision = lfoDataRevisions[lfoIndex];
+    }
+
+    if (const auto* parameter = lfoParameters[lfoIndex].smoothness)
+    {
+        const float smoothness = parameter->load(std::memory_order_relaxed);
+        if (std::isfinite(smoothness))
+            snapshot.data.smoothness = juce::jlimit(0.0f, 1.0f, smoothness);
+    }
+
+    return snapshot;
+}
+
+bool LfoManager::isLfoDataRevisionCurrent(
+    int index,
+    std::uint64_t revision) const
+{
+    if (! juce::isPositiveAndBelow(index,
+                                   static_cast<int>(lfoDataRevisions.size())))
+        return false;
+
+    const juce::ScopedLock lock(dataAccessLock);
+    return lfoDataRevisions[static_cast<size_t>(index)] == revision;
+}
+
 float LfoManager::getLfoOutput(int lfoIndex) const
 {
     if (juce::isPositiveAndBelow(lfoIndex, (int) lfoEngines.size()))
@@ -944,12 +982,12 @@ void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
     }
 }
 
-void LfoManager::setLfoData(int index, const LfoData& newData)
+std::uint64_t LfoManager::setLfoData(int index, const LfoData& newData)
 {
     if (! juce::isPositiveAndBelow(index, static_cast<int>(lfoData.size())))
     {
         jassertfalse;
-        return;
+        return 0;
     }
 
     auto safeData = newData;
@@ -963,16 +1001,58 @@ void LfoManager::setLfoData(int index, const LfoData& newData)
             safeData.smoothness = juce::jlimit(0.0f, 1.0f, smoothness);
     }
 
+    const juce::ScopedLock sl(dataAccessLock);
+    const bool shapeChanged = lfoData[lfoIndex].points != safeData.points
+                              || lfoData[lfoIndex].curvatures != safeData.curvatures;
+
+    if (shapeChanged)
     {
-        const juce::ScopedLock sl(dataAccessLock);
-        const bool shapeChanged = lfoData[lfoIndex].points != safeData.points
-                                  || lfoData[lfoIndex].curvatures != safeData.curvatures;
-
-        if (shapeChanged)
-            lfoEngines[lfoIndex].stageShape(safeData);
-
-        lfoData[lfoIndex] = std::move(safeData);
+        lfoEngines[lfoIndex].stageShape(safeData);
+        ++lfoDataRevisions[lfoIndex];
     }
+
+    lfoData[lfoIndex] = std::move(safeData);
+    return lfoDataRevisions[lfoIndex];
+}
+
+bool LfoManager::setLfoDataIfRevisionMatches(
+    int index,
+    const LfoData& newData,
+    std::uint64_t expectedRevision,
+    std::uint64_t& resultingRevision)
+{
+    if (! juce::isPositiveAndBelow(index, static_cast<int>(lfoData.size())))
+    {
+        jassertfalse;
+        return false;
+    }
+
+    auto safeData = newData;
+    safeData.sanitise();
+
+    const auto lfoIndex = static_cast<size_t>(index);
+    if (const auto* parameter = lfoParameters[lfoIndex].smoothness)
+    {
+        const float smoothness = parameter->load(std::memory_order_relaxed);
+        if (std::isfinite(smoothness))
+            safeData.smoothness = juce::jlimit(0.0f, 1.0f, smoothness);
+    }
+
+    const juce::ScopedLock sl(dataAccessLock);
+    if (lfoDataRevisions[lfoIndex] != expectedRevision)
+        return false;
+
+    const bool shapeChanged = lfoData[lfoIndex].points != safeData.points
+                              || lfoData[lfoIndex].curvatures != safeData.curvatures;
+    if (shapeChanged)
+    {
+        lfoEngines[lfoIndex].stageShape(safeData);
+        ++lfoDataRevisions[lfoIndex];
+    }
+
+    lfoData[lfoIndex] = std::move(safeData);
+    resultingRevision = lfoDataRevisions[lfoIndex];
+    return true;
 }
 
 void LfoManager::replaceLfoDataAndRoutings(
@@ -1003,6 +1083,11 @@ void LfoManager::replaceLfoDataAndRoutings(
                 lfoEngines[i].stageShape(safeLfoData[i]);
 
             lfoData[i] = std::move(safeLfoData[i]);
+            // Even an identical shape belongs to a new preset/host-state
+            // identity. Invalidate every editor context atomically with the
+            // replacement so a delayed menu cannot write the previous state
+            // back over it.
+            ++lfoDataRevisions[i];
         }
 
         modulationRoutings = std::move(newRoutings);

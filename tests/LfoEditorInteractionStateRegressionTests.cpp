@@ -1,10 +1,12 @@
 #include <Panels/ControlPanel/LfoPanel.h>
+#include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <memory>
 
 struct LfoEditorTestAccess
 {
@@ -133,6 +135,17 @@ struct LfoEditorTestAccess
     {
         return editor.validatePointDragInteractionOrCancel();
     }
+
+    static std::function<void(int)> createContextMenuResultHandler(
+        LfoEditor& editor)
+    {
+        return editor.createContextMenuResultHandler();
+    }
+
+    static bool hasActiveContextMenuSession(const LfoEditor& editor)
+    {
+        return editor.contextMenuSessionActive;
+    }
 };
 
 namespace
@@ -140,6 +153,19 @@ namespace
 void prepareEditor(LfoEditor& editor)
 {
     editor.setBounds(0, 0, 400, 200);
+}
+
+LfoEditor* findLfoEditor(juce::Component& root)
+{
+    if (auto* editor = dynamic_cast<LfoEditor*>(&root))
+        return editor;
+
+    for (auto* child : root.getChildren())
+        if (child != nullptr)
+            if (auto* editor = findLfoEditor(*child))
+                return editor;
+
+    return nullptr;
 }
 
 LfoData makeLfoData(std::initializer_list<juce::Point<float>> points)
@@ -200,6 +226,28 @@ juce::MouseEvent makeMouseEvent(juce::Component& component,
              time,
              1,
              false };
+}
+
+PrimaryTextButton* findDirectButton(LfoPanel& panel,
+                                    const juce::String& text)
+{
+    for (auto* child : panel.getChildren())
+        if (auto* button = dynamic_cast<PrimaryTextButton*>(child);
+            button != nullptr && button->getButtonText() == text)
+            return button;
+
+    return nullptr;
+}
+
+void performPrimaryClick(juce::Button& button)
+{
+    const auto position = button.getLocalBounds().toFloat().getCentre();
+    auto& component = static_cast<juce::Component&>(button);
+    component.mouseDown(makeMouseEvent(
+        component,
+        position,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    component.mouseUp(makeMouseEvent(component, position));
 }
 
 bool hasValidLfoTopology(const LfoData& data)
@@ -352,6 +400,395 @@ TEST_CASE("LFO paste remains unavailable until a shape has been copied",
     REQUIRE(publicationCount == 1);
     checkSameLfoData(LfoEditorTestAccess::data(editor), source);
     checkSameLfoData(lastPublished, source);
+}
+
+TEST_CASE("Stale LFO context menu commands cannot edit replacement data",
+          "[lfo][editor][popup-menu][context][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedLfoClipboardReset resetClipboard;
+    const auto oldData = makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+    });
+    const auto replacementData = makeLfoData({
+        { 0.0f, 0.85f }, { 0.25f, 0.30f }, { 0.60f, 0.75f }, { 1.0f, 0.20f }
+    });
+    const auto clipboardData = makeLfoData({
+        { 0.0f, 0.40f }, { 0.50f, 0.90f }, { 1.0f, 0.10f }
+    });
+
+    for (const auto command : {
+             LfoEditor::CommandIDs::selectAll,
+             LfoEditor::CommandIDs::clear,
+             LfoEditor::CommandIDs::copy,
+             LfoEditor::CommandIDs::paste,
+             LfoEditor::CommandIDs::invertX,
+             LfoEditor::CommandIDs::invertY })
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(oldData);
+        lfoClipboard = clipboardData;
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        auto staleHandler =
+            LfoEditorTestAccess::createContextMenuResultHandler(editor);
+        REQUIRE(LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        editor.setDataToDisplay(replacementData);
+        REQUIRE_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+
+        staleHandler(command);
+
+        CHECK(publicationCount == 0);
+        CHECK(LfoEditorTestAccess::selectedPointCount(editor) == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), replacementData);
+        REQUIRE(lfoClipboard.has_value());
+        checkSameLfoData(*lfoClipboard, clipboardData);
+    }
+}
+
+TEST_CASE("Old LFO menu callbacks cannot consume a newer menu session",
+          "[lfo][editor][popup-menu][generation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.setDataToDisplay(makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+    }));
+
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+    auto oldHandler =
+        LfoEditorTestAccess::createContextMenuResultHandler(editor);
+    editor.invalidateContextMenuSession();
+    auto newHandler =
+        LfoEditorTestAccess::createContextMenuResultHandler(editor);
+    REQUIRE(LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+
+    oldHandler(LfoEditor::CommandIDs::clear);
+    CHECK(publicationCount == 0);
+    REQUIRE(LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+
+    newHandler(LfoEditor::CommandIDs::clear);
+    CHECK(publicationCount == 1);
+    CHECK_FALSE(LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+    CHECK(LfoEditorTestAccess::pointCount(editor) == 2);
+
+    newHandler(LfoEditor::CommandIDs::invertY);
+    CHECK(publicationCount == 1);
+}
+
+TEST_CASE("LFO panel invalidates menu sessions on dismissal and slot rebinding",
+          "[lfo][editor][popup-menu][panel][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedLfoClipboardReset resetClipboard;
+    FireAudioProcessor processor;
+    const auto initialShapes = std::array<LfoData, 4> {
+        makeLfoData({
+            { 0.0f, 0.10f }, { 0.30f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+        }),
+        makeLfoData({
+            { 0.0f, 0.20f }, { 0.40f, 0.70f }, { 0.75f, 0.35f }, { 1.0f, 0.60f }
+        }),
+        makeLfoData({ { 0.0f, 0.30f }, { 1.0f, 0.50f } }),
+        makeLfoData({ { 0.0f, 0.40f }, { 1.0f, 0.45f } })
+    };
+    processor.getLfoManager().replaceLfoDataAndRoutings(initialShapes, {});
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&] { ++dirtyCount; });
+    const auto clipboardSentinel = makeLfoData({
+        { 0.0f, 0.95f }, { 0.45f, 0.15f }, { 1.0f, 0.75f }
+    });
+    constexpr auto commands = std::array {
+        LfoEditor::CommandIDs::selectAll,
+        LfoEditor::CommandIDs::clear,
+        LfoEditor::CommandIDs::copy,
+        LfoEditor::CommandIDs::paste,
+        LfoEditor::CommandIDs::invertX,
+        LfoEditor::CommandIDs::invertY
+    };
+
+    SECTION("Panel dismissal makes all delayed results inert")
+    {
+        for (const auto command : commands)
+        {
+            panel.refreshLfoDisplay();
+            lfoClipboard = clipboardSentinel;
+            auto staleHandler =
+                LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+
+            panel.dismissTransientInteraction();
+            staleHandler(command);
+
+            checkSameLfoData(
+                processor.getLfoManager().getLfoDataSnapshot(0).data,
+                initialShapes[0]);
+            REQUIRE(lfoClipboard.has_value());
+            checkSameLfoData(*lfoClipboard, clipboardSentinel);
+            CHECK(dirtyCount == 0);
+        }
+    }
+
+    SECTION("LFO zero-to-one-to-zero rebinding defeats local ABA")
+    {
+        auto* lfoOneButton = findDirectButton(panel, "LFO 1");
+        auto* lfoTwoButton = findDirectButton(panel, "LFO 2");
+        REQUIRE(lfoOneButton != nullptr);
+        REQUIRE(lfoTwoButton != nullptr);
+
+        for (const auto command : commands)
+        {
+            panel.refreshLfoDisplay();
+            lfoClipboard = clipboardSentinel;
+            auto staleHandler =
+                LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+
+            performPrimaryClick(*lfoTwoButton);
+            REQUIRE(editor->getDataContext().lfoIndex == 1);
+            performPrimaryClick(*lfoOneButton);
+            REQUIRE(editor->getDataContext().lfoIndex == 0);
+            staleHandler(command);
+
+            checkSameLfoData(
+                processor.getLfoManager().getLfoDataSnapshot(0).data,
+                initialShapes[0]);
+            checkSameLfoData(
+                processor.getLfoManager().getLfoDataSnapshot(1).data,
+                initialShapes[1]);
+            REQUIRE(lfoClipboard.has_value());
+            checkSameLfoData(*lfoClipboard, clipboardSentinel);
+            CHECK(dirtyCount == 0);
+        }
+
+        auto currentHandler =
+            LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+        currentHandler(LfoEditor::CommandIDs::clear);
+        CHECK(processor.getLfoManager()
+                  .getLfoDataSnapshot(0)
+                  .data.points.size()
+              == 2);
+        CHECK(dirtyCount == 1);
+    }
+}
+
+TEST_CASE("LFO context menus reject authoritative replacement before UI refresh",
+          "[lfo][editor][popup-menu][context][revision][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedLfoClipboardReset resetClipboard;
+    FireAudioProcessor processor;
+    auto initialShapes = std::array<LfoData, 4> {
+        makeLfoData({
+            { 0.0f, 0.10f }, { 0.30f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+        }),
+        makeLfoData({ { 0.0f, 0.20f }, { 1.0f, 0.70f } }),
+        makeLfoData({ { 0.0f, 0.30f }, { 1.0f, 0.60f } }),
+        makeLfoData({ { 0.0f, 0.40f }, { 1.0f, 0.50f } })
+    };
+    processor.getLfoManager().replaceLfoDataAndRoutings(initialShapes, {});
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&] { ++dirtyCount; });
+    const auto clipboardSentinel = makeLfoData({
+        { 0.0f, 0.95f }, { 0.45f, 0.15f }, { 1.0f, 0.75f }
+    });
+
+    for (const auto command : {
+             LfoEditor::CommandIDs::selectAll,
+             LfoEditor::CommandIDs::clear,
+             LfoEditor::CommandIDs::copy,
+             LfoEditor::CommandIDs::paste,
+             LfoEditor::CommandIDs::invertX,
+             LfoEditor::CommandIDs::invertY })
+    {
+        processor.getLfoManager().replaceLfoDataAndRoutings(initialShapes, {});
+        panel.refreshLfoDisplay();
+        lfoClipboard = clipboardSentinel;
+        auto staleHandler =
+            LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+
+        auto replacementShapes = initialShapes;
+        replacementShapes[0] = makeLfoData({
+            { 0.0f, 0.85f }, { 0.20f, 0.35f }, { 0.55f, 0.90f }, { 1.0f, 0.15f }
+        });
+        // Deliberately do not refresh the panel. This is the real preset/host
+        // window between synchronous model replacement and async UI delivery.
+        processor.getLfoManager().replaceLfoDataAndRoutings(
+            replacementShapes, {});
+
+        staleHandler(command);
+
+        checkSameLfoData(
+            processor.getLfoManager().getLfoDataSnapshot(0).data,
+            replacementShapes[0]);
+        checkSameLfoData(LfoEditorTestAccess::data(*editor),
+                         initialShapes[0]);
+        CHECK(LfoEditorTestAccess::selectedPointCount(*editor) == 0);
+        REQUIRE(lfoClipboard.has_value());
+        checkSameLfoData(*lfoClipboard, clipboardSentinel);
+        CHECK(dirtyCount == 0);
+    }
+}
+
+TEST_CASE("Current LFO context menu commands commit once through the panel",
+          "[lfo][editor][popup-menu][panel][transaction][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto smoothnessID =
+        ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
+    auto* smoothnessParameter =
+        processor.treeState.getParameter(smoothnessID);
+    REQUIRE(smoothnessParameter != nullptr);
+    constexpr float authoritativeSmoothness = 0.63f;
+    smoothnessParameter->setValueNotifyingHost(
+        smoothnessParameter->convertTo0to1(authoritativeSmoothness));
+
+    const auto initialShape = makeLfoData({
+        { 0.0f, 0.10f }, { 0.30f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+    });
+    processor.getLfoManager().setLfoData(0, initialShape);
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&] { ++dirtyCount; });
+    const auto contextBefore = editor->getDataContext();
+    auto handler =
+        LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+
+    handler(LfoEditor::CommandIDs::clear);
+
+    const auto committed =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    CHECK(committed.data.points.size() == 2);
+    CHECK(committed.revision != contextBefore.revision);
+    CHECK(editor->getDataContext().lfoIndex == 0);
+    CHECK(editor->getDataContext().revision == committed.revision);
+    CHECK(juce::approximatelyEqual(committed.data.smoothness,
+                                   authoritativeSmoothness));
+    CHECK(dirtyCount == 1);
+    checkSameLfoData(LfoEditorTestAccess::data(*editor), committed.data);
+
+    // JUCE callbacks can occasionally be delivered more than once while a
+    // modal component is being dismissed. A consumed menu must stay inert.
+    handler(LfoEditor::CommandIDs::invertY);
+    CHECK(processor.getLfoManager().getLfoDataSnapshot(0).revision
+          == committed.revision);
+    CHECK(dirtyCount == 1);
+}
+
+TEST_CASE("LFO revision compare-and-commit rejects stale and ABA writes",
+          "[lfo][manager][revision][transaction][regression]")
+{
+    FireAudioProcessor processor;
+    auto oldShape = makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 1.0f, 0.25f }
+    });
+    processor.getLfoManager().setLfoData(0, oldShape);
+    const auto oldSnapshot =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+
+    auto replacementShapes = std::array<LfoData, 4> {
+        oldShape, LfoData {}, LfoData {}, LfoData {}
+    };
+    // Identical content is still a new preset identity and must defeat ABA.
+    processor.getLfoManager().replaceLfoDataAndRoutings(
+        replacementShapes, {});
+    const auto replacementSnapshot =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    REQUIRE(replacementSnapshot.revision != oldSnapshot.revision);
+
+    LfoData staleCandidate;
+    staleCandidate.resetToDefault();
+    std::uint64_t resultingRevision = 0;
+    CHECK_FALSE(processor.getLfoManager().setLfoDataIfRevisionMatches(
+        0,
+        staleCandidate,
+        oldSnapshot.revision,
+        resultingRevision));
+    checkSameLfoData(
+        processor.getLfoManager().getLfoDataSnapshot(0).data,
+        replacementShapes[0]);
+}
+
+TEST_CASE("LFO menu sessions freeze clipboard data and tolerate deletion",
+          "[lfo][editor][popup-menu][snapshot][lifetime][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedLfoClipboardReset resetClipboard;
+    const auto target = makeLfoData({
+        { 0.0f, 0.15f }, { 0.40f, 0.80f }, { 1.0f, 0.25f }
+    });
+    const auto clipboardAtOpen = makeLfoData({
+        { 0.0f, 0.90f }, { 0.25f, 0.20f }, { 0.70f, 0.75f }, { 1.0f, 0.10f }
+    });
+    const auto laterClipboard = makeLfoData({
+        { 0.0f, 0.05f }, { 0.50f, 0.95f }, { 1.0f, 0.40f }
+    });
+
+    SECTION("Paste uses the clipboard snapshot from menu open")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(target);
+        lfoClipboard = clipboardAtOpen;
+        auto handler =
+            LfoEditorTestAccess::createContextMenuResultHandler(editor);
+        lfoClipboard = laterClipboard;
+
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+        handler(LfoEditor::CommandIDs::paste);
+
+        CHECK(publicationCount == 1);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), clipboardAtOpen);
+    }
+
+    SECTION("Callback may delete its editor")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(target);
+        auto handler =
+            LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+        editor->onDataChanged = [&editor](const LfoData&) { editor.reset(); };
+
+        handler(LfoEditor::CommandIDs::clear);
+        CHECK(editor == nullptr);
+        handler(LfoEditor::CommandIDs::clear);
+    }
+
+    SECTION("Callback after editor destruction is inert")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(target);
+        auto handler =
+            LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+        editor.reset();
+
+        handler(LfoEditor::CommandIDs::clear);
+        CHECK(editor == nullptr);
+    }
 }
 
 TEST_CASE("LFO brush replacement cancels stale point selection",

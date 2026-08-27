@@ -148,6 +148,8 @@ private:
     juce::Rectangle<float> getRotarySliderBounds() const;
     juce::Rectangle<int> getHeaderBounds() const;
     bool isCompletePrimaryDown(const juce::MouseEvent& event) const noexcept;
+    static bool isStandalonePopupDown(
+        const juce::MouseEvent& event) noexcept;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
     bool shouldSuppressAssignmentDoubleClick(
         const juce::MouseEvent& event) const noexcept;
@@ -156,8 +158,30 @@ private:
     void beginPointerGesture(PointerGesture gesture,
                              const juce::MouseEvent& event);
     void resetTransientPresentation();
+    void lookAndFeelChanged() override;
+    void attachValueLabelPopupForwarder();
+    void detachValueLabelPopupForwarder();
+
+    class ValueLabelPopupForwarder final : public juce::MouseListener
+    {
+    public:
+        explicit ValueLabelPopupForwarder(ModulatableSlider& ownerToUse)
+            : owner(ownerToUse)
+        {
+        }
+
+        void mouseDown(const juce::MouseEvent& event) override;
+        void mouseUp(const juce::MouseEvent& event) override;
+        void cancelGesture();
+
+    private:
+        ModulatableSlider& owner;
+        bool ownsPopupGesture = false;
+    };
 
     juce::Label label;
+    ValueLabelPopupForwarder valueLabelPopupForwarder { *this };
+    juce::Component::SafePointer<juce::Label> forwardedValueLabel;
     bool isDraggingMainSlider;
     PointerGesture activePointerGesture = PointerGesture::none;
     juce::MouseInputSource::InputSourceType pointerSourceType =

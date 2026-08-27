@@ -75,6 +75,34 @@ struct ModulatableSliderInteractionTestAccess
         slider.hoverAnimation = 0.75f;
         slider.pressAnimation = 0.65f;
     }
+
+    static juce::Label* getForwardedValueLabel(
+        ModulatableSlider& slider) noexcept
+    {
+        return slider.forwardedValueLabel.getComponent();
+    }
+
+    static const juce::MouseEvent* getLastAcceptedPointerEvent(
+        const ModulatableSlider& slider) noexcept
+    {
+        return slider.lastAcceptedPointerEvent.has_value()
+                   ? &*slider.lastAcceptedPointerEvent
+                   : nullptr;
+    }
+
+    static void forwardValueLabelMouseDown(
+        ModulatableSlider& slider,
+        const juce::MouseEvent& event)
+    {
+        slider.valueLabelPopupForwarder.mouseDown(event);
+    }
+
+    static void forwardValueLabelMouseUp(
+        ModulatableSlider& slider,
+        const juce::MouseEvent& event)
+    {
+        slider.valueLabelPopupForwarder.mouseUp(event);
+    }
 };
 
 namespace
@@ -255,6 +283,118 @@ TEST_CASE("Modulatable slider titles preserve the advertised header hit target",
     CHECK(slider.getComponentAt(titleCentre) == &slider);
 
     slider.setLookAndFeel(nullptr);
+}
+
+TEST_CASE("Hover value labels forward only popup gestures to modulatable sliders",
+          "[modulatable-slider][ui][input][popup][value-label][hit-test]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    juce::Component root;
+    root.setBounds(0, 0, 320, 220);
+    root.setLookAndFeel(&lookAndFeel);
+    root.setVisible(true);
+
+    ModulatableSlider slider;
+    root.addAndMakeVisible(slider);
+    slider.setBounds(80, 50, 120, 120);
+    slider.mouseEnter(makeMouseEvent(
+        slider, slider.getLocalBounds().toFloat().getCentre()));
+    REQUIRE(slider.getTextBoxPosition() == juce::Slider::TextBoxAbove);
+
+    juce::Label* valueLabel = nullptr;
+    for (auto* child : slider.getChildren())
+        if (auto* candidate = dynamic_cast<juce::Label*>(child);
+            candidate != nullptr
+            && candidate->hitTest(candidate->getWidth() / 2,
+                                  candidate->getHeight() / 2))
+            valueLabel = candidate;
+
+    REQUIRE(valueLabel != nullptr);
+    REQUIRE(valueLabel->isEditable());
+    const auto peerPosition = root.getLocalPoint(
+        valueLabel, valueLabel->getLocalBounds().toFloat().getCentre());
+    REQUIRE(root.getComponentAt(peerPosition.toInt()) == valueLabel);
+    REQUIRE(ModulatableSliderInteractionTestAccess::getForwardedValueLabel(
+                slider)
+            == valueLabel);
+
+    const juce::ModifierKeys popupButton {
+        juce::ModifierKeys::rightButtonModifier
+    };
+    const auto labelCentre =
+        valueLabel->getLocalBounds().toFloat().getCentre();
+    const auto popupDownEvent =
+        makeMouseEvent(*valueLabel, labelCentre, popupButton);
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseDown(
+        slider, popupDownEvent);
+    CHECK(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+    const auto* acceptedEvent =
+        ModulatableSliderInteractionTestAccess::getLastAcceptedPointerEvent(
+            slider);
+    REQUIRE(acceptedEvent != nullptr);
+    CHECK(acceptedEvent->eventComponent == &slider);
+    CHECK(acceptedEvent->originalComponent == valueLabel);
+    CHECK(acceptedEvent->position
+          == slider.getLocalPoint(valueLabel, labelCentre));
+    CHECK(acceptedEvent->mouseDownPosition
+          == slider.getLocalPoint(valueLabel, labelCentre));
+    CHECK(acceptedEvent->getScreenPosition()
+          == popupDownEvent.getScreenPosition());
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseUp(
+        slider, makeMouseEvent(*valueLabel, labelCentre));
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+
+    int mainDragStarts = 0;
+    slider.onMainDragStart =
+        [&](ModulatableSlider*) { ++mainDragStarts; };
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseDown(
+        slider, makeMouseEvent(*valueLabel, labelCentre, primaryButton));
+    CHECK_FALSE(slider.hasActiveInteraction());
+    CHECK(mainDragStarts == 0);
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseUp(
+        slider, makeMouseEvent(*valueLabel, labelCentre));
+    CHECK(valueLabel->isEditableOnSingleClick());
+
+    const auto oldValueLabel =
+        juce::Component::SafePointer<juce::Label>(valueLabel);
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseDown(
+        slider, makeMouseEvent(*valueLabel, labelCentre, popupButton));
+    REQUIRE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+    slider.setColour(juce::Slider::textBoxTextColourId,
+                     juce::Colours::magenta);
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+    CHECK(oldValueLabel == nullptr);
+
+    valueLabel =
+        ModulatableSliderInteractionTestAccess::getForwardedValueLabel(slider);
+    REQUIRE(valueLabel != nullptr);
+    REQUIRE(valueLabel->isEditable());
+    const auto rebuiltLabelCentre =
+        valueLabel->getLocalBounds().toFloat().getCentre();
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseDown(
+        slider,
+        makeMouseEvent(*valueLabel, rebuiltLabelCentre, popupButton));
+    REQUIRE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseUp(
+        slider, makeMouseEvent(*valueLabel, rebuiltLabelCentre));
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+
+#if JUCE_MAC
+    const juce::ModifierKeys controlClick {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::ctrlModifier
+    };
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseDown(
+        slider,
+        makeMouseEvent(*valueLabel, rebuiltLabelCentre, controlClick));
+    REQUIRE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+    ModulatableSliderInteractionTestAccess::forwardValueLabelMouseUp(
+        slider, makeMouseEvent(*valueLabel, rebuiltLabelCentre));
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+#endif
+
+    root.setLookAndFeel(nullptr);
 }
 
 TEST_CASE("Modulatable sliders reject auxiliary input and auxiliary double-clicks",
@@ -741,6 +881,38 @@ TEST_CASE("Slider lifecycle boundaries finish gestures and tolerate synchronous 
             *rawSlider, dragPosition, primaryButton, downPosition, true));
         CHECK(! safeSlider);
         CHECK(modEnds == 1);
+    }
+
+    SECTION("value label popup restart may synchronously destroy its slider")
+    {
+        auto slider = std::make_unique<ModulatableSlider>();
+        slider->setBounds(0, 0, 120, 120);
+        slider->mouseEnter(makeMouseEvent(
+            *slider, slider->getLocalBounds().toFloat().getCentre()));
+        auto* valueLabel =
+            ModulatableSliderInteractionTestAccess::getForwardedValueLabel(
+                *slider);
+        REQUIRE(valueLabel != nullptr);
+
+        const auto mainPosition =
+            slider->getLocalBounds().toFloat().getCentre();
+        slider->mouseDown(makeMouseEvent(
+            *slider, mainPosition, primaryButton));
+        REQUIRE(slider->hasActiveInteraction());
+        slider->onMainDragEnd =
+            [&](ModulatableSlider*) { slider.reset(); };
+
+        auto* const rawSlider = slider.get();
+        const auto labelCentre =
+            valueLabel->getLocalBounds().toFloat().getCentre();
+        ModulatableSliderInteractionTestAccess::forwardValueLabelMouseDown(
+            *rawSlider,
+            makeMouseEvent(
+                *valueLabel,
+                labelCentre,
+                juce::ModifierKeys {
+                    juce::ModifierKeys::rightButtonModifier }));
+        CHECK(slider == nullptr);
     }
 }
 

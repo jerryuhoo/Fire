@@ -39,6 +39,84 @@ ModulatableSlider::~ModulatableSlider()
     // its destructor. Finish our accepted pointer gesture while Slider's
     // implementation and all listeners are still alive.
     dismissTransientInteraction();
+    detachValueLabelPopupForwarder();
+}
+
+void ModulatableSlider::ValueLabelPopupForwarder::mouseDown(
+    const juce::MouseEvent& event)
+{
+    if (! owner.isStandalonePopupDown(event))
+        return;
+
+    const auto sliderEvent = event.getEventRelativeTo(&owner);
+    const auto safeOwner =
+        juce::Component::SafePointer<ModulatableSlider>(&owner);
+    owner.mouseDown(sliderEvent);
+    if (! safeOwner)
+        return;
+
+    ownsPopupGesture = owner.activePointerGesture == PointerGesture::popupMenu
+                       && owner.isPointerSource(sliderEvent);
+}
+
+void ModulatableSlider::ValueLabelPopupForwarder::mouseUp(
+    const juce::MouseEvent& event)
+{
+    if (! ownsPopupGesture)
+        return;
+
+    const auto sliderEvent = event.getEventRelativeTo(&owner);
+    if (owner.activePointerGesture != PointerGesture::popupMenu)
+    {
+        ownsPopupGesture = false;
+        return;
+    }
+
+    if (! owner.isPointerSource(sliderEvent))
+        return;
+
+    ownsPopupGesture = false;
+    owner.mouseUp(sliderEvent);
+}
+
+void ModulatableSlider::ValueLabelPopupForwarder::cancelGesture()
+{
+    if (! ownsPopupGesture)
+        return;
+
+    ownsPopupGesture = false;
+    if (owner.activePointerGesture == PointerGesture::popupMenu
+        && owner.lastAcceptedPointerEvent.has_value())
+        owner.finishActivePointerGesture(*owner.lastAcceptedPointerEvent);
+}
+
+void ModulatableSlider::lookAndFeelChanged()
+{
+    detachValueLabelPopupForwarder();
+    juce::Slider::lookAndFeelChanged();
+    attachValueLabelPopupForwarder();
+}
+
+void ModulatableSlider::attachValueLabelPopupForwarder()
+{
+    for (auto* child : getChildren())
+    {
+        auto* candidate = dynamic_cast<juce::Label*>(child);
+        if (candidate == nullptr || candidate == &label)
+            continue;
+
+        forwardedValueLabel = candidate;
+        candidate->addMouseListener(&valueLabelPopupForwarder, false);
+        break;
+    }
+}
+
+void ModulatableSlider::detachValueLabelPopupForwarder()
+{
+    valueLabelPopupForwarder.cancelGesture();
+    if (auto* valueLabel = forwardedValueLabel.getComponent())
+        valueLabel->removeMouseListener(&valueLabelPopupForwarder);
+    forwardedValueLabel = nullptr;
 }
 
 bool ModulatableSlider::hitTest(int x, int y)
@@ -281,14 +359,11 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 
     if (! isCompletePrimaryDown(event))
     {
-        const bool isStandalonePopupDown = event.mods.isPopupMenu()
-                                           && ! event.mods.isMiddleButtonDown()
-                                           && ! (event.mods.isLeftButtonDown()
-                                                 && event.mods.isRightButtonDown());
-        beginPointerGesture(isStandalonePopupDown ? PointerGesture::popupMenu
-                                                  : PointerGesture::rejected,
+        const bool isPopupDown = isStandalonePopupDown(event);
+        beginPointerGesture(isPopupDown ? PointerGesture::popupMenu
+                                        : PointerGesture::rejected,
                             event);
-        if (isStandalonePopupDown)
+        if (isPopupDown)
         {
             popupMenuTarget = isModulated
                                       && getModulationHandleBounds().contains(
@@ -472,6 +547,15 @@ bool ModulatableSlider::isCompletePrimaryDown(
         && ! event.mods.isRightButtonDown()
         && ! event.mods.isMiddleButtonDown()
         && ! event.mods.isPopupMenu();
+}
+
+bool ModulatableSlider::isStandalonePopupDown(
+    const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isPopupMenu()
+        && ! event.mods.isMiddleButtonDown()
+        && ! (event.mods.isLeftButtonDown()
+              && event.mods.isRightButtonDown());
 }
 
 bool ModulatableSlider::isPointerSource(

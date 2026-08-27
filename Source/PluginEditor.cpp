@@ -1239,21 +1239,21 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
     auto modInfo = processor.getModulationInfoForParameter(paramID);
     float extremeValue = baseValue; // Start with the base value
 
-    // 3. If it's being modulated, calculate the extreme value in real-world units
+    // 3. Preview the LFO=1 endpoint through the same normalised-domain recipe
+    // used by the audio thread. Adding a physical-unit offset is only correct
+    // for linear ranges and gives misleading values for frequency and other
+    // skewed parameters. This is the configured handle endpoint even while a
+    // route is bypassed, so dragging its grey handle still has useful feedback.
     if (modInfo.isModulated)
     {
-        auto range = param->getNormalisableRange();
-        float parameterRange = range.end - range.start;
-        float maxOffset = 0.0f;
-
-        // We use 1.0f as the LFO value to calculate the maximum possible offset
-        if (modInfo.isBipolar)
-            maxOffset = 1.0f * modInfo.depth * parameterRange * 0.5f;
-        else
-            maxOffset = 1.0f * modInfo.depth * parameterRange;
-
-        extremeValue += maxOffset;
-        extremeValue = juce::jlimit(range.start, range.end, extremeValue);
+        const float endpointLfoSample = 1.0f;
+        ModulatedValueProvider endpointProvider;
+        endpointProvider.lfoSignal = &endpointLfoSample;
+        endpointProvider.baseValue = baseValue;
+        endpointProvider.modulationDepth = modInfo.depth;
+        endpointProvider.isBipolar = modInfo.isBipolar;
+        endpointProvider.range = param->getNormalisableRange();
+        extremeValue = endpointProvider.get(0);
     }
 
     // 4. Convert the final extreme value back to a normalized value [0, 1] that getText() expects

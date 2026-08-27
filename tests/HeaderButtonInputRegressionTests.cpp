@@ -113,9 +113,14 @@ void collectHeaderButtons(juce::Component& component,
     if (dynamic_cast<juce::Slider*>(&component) != nullptr)
         return;
 
-    if (auto* button = dynamic_cast<PrimaryTextButton*>(&component);
-        button != nullptr && button->getComponentID().isNotEmpty())
-        result.push_back(button);
+    if (auto* button = dynamic_cast<PrimaryTextButton*>(&component))
+    {
+        const auto componentId = button->getComponentID();
+        if (componentId.startsWith("header_")
+            || componentId == "workspace_tab"
+            || componentId == "zoom")
+            result.push_back(button);
+    }
 
     for (int childIndex = 0; childIndex < component.getNumChildComponents(); ++childIndex)
         if (auto* child = component.getChildComponent(childIndex))

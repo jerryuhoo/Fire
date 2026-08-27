@@ -172,12 +172,12 @@ void GlobalPanel::createButtons()
     setupSwitch(downsampleSwitch, "Lo-Fi", fire::ui::colours::loFi);
     setupSwitch(graphSwitch, "Analysis", fire::ui::colours::signalCool);
 
-    filterBypassButton = std::make_unique<juce::ToggleButton>();
+    filterBypassButton = std::make_unique<PrimaryToggleButton>();
     initBypassButton(*filterBypassButton, fire::ui::colours::filter);
     filterBypassButton->onClick = [this]
     { setBypassState(0, filterBypassButton->getToggleState()); };
 
-    downsampleBypassButton = std::make_unique<juce::ToggleButton>();
+    downsampleBypassButton = std::make_unique<PrimaryToggleButton>();
     initBypassButton(*downsampleBypassButton, fire::ui::colours::loFi);
     downsampleBypassButton->onClick = [this]
     { setBypassState(1, downsampleBypassButton->getToggleState()); };

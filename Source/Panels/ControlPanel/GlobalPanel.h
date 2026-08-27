@@ -99,10 +99,11 @@ private:
     juce::Rectangle<int> outputAreaRect;
 
     // --- Buttons ---
-    juce::TextButton filterLowCutButton, filterPeakButton, filterHighCutButton;
+    PrimaryTextButton filterLowCutButton, filterPeakButton, filterHighCutButton;
     // Changed ToggleButton to TextButton for tab-like functionality
-    juce::TextButton filterSwitch, downsampleSwitch, graphSwitch;
-    std::unique_ptr<juce::ToggleButton> filterBypassButton, downsampleBypassButton;
+    PrimaryTextButton filterSwitch, downsampleSwitch, graphSwitch;
+    std::unique_ptr<PrimaryToggleButton> filterBypassButton,
+        downsampleBypassButton;
 
     std::unique_ptr<ButtonAttachment> filterLowAttachment, filterBandAttachment, filterHighAttachment,
         filterBypassAttachment, downsampleBypassAttachment;

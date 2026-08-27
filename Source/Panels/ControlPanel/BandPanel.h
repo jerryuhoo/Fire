@@ -50,8 +50,9 @@ public:
 
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
 
-    juce::ToggleButton shapeBypassButton, compressorBypassButton, widthBypassButton, driveBypassButton;
-    juce::ToggleButton dcFilterButton;
+    PrimaryToggleButton shapeBypassButton, compressorBypassButton,
+        widthBypassButton, driveBypassButton;
+    PrimaryToggleButton dcFilterButton;
 
     int getFocusBandNum() const { return focusBandNum; }
     void setSwitch(const int index, bool state);
@@ -110,12 +111,12 @@ private:
     juce::Label shapePanelLabel, compressorPanelLabel, widthPanelLabel;
     juce::Label dcFilterLabel;
 
-    juce::TextButton linkedButton, safeButton, extremeButton;
+    PrimaryTextButton linkedButton, safeButton, extremeButton;
 
     std::unique_ptr<ButtonAttachment> linkedAttachment, safeAttachment, extremeAttachment,
         shapeBypassAttachment, compressorBypassAttachment, widthBypassAttachment, dcFilterAttachment, driveBypassAttachment;
 
-    juce::TextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
+    PrimaryTextButton oscSwitch, shapeSwitch, widthSwitch, compressorSwitch;
     enum RadioButtonIds
     {
         switchButtons = 1004

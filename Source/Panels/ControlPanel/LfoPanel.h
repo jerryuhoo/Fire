@@ -194,6 +194,8 @@ public:
 
     void refreshLfoDisplay();
     void handleAsyncUpdate() override;
+    void dismissTransientInteraction();
+    void visibilityChanged() override;
 
 private:
     void buttonClicked(juce::Button* button) override;

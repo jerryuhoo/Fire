@@ -1398,6 +1398,11 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
 LfoPanel::~LfoPanel()
 {
+    // Attachments are declared after their Sliders, so they are destroyed
+    // first. Close every active Slider gesture while the old attachment can
+    // still send its matching endGesture to the host.
+    dismissTransientInteraction();
+
     if (modulationMatrixDialog != nullptr)
     {
         modulationMatrixDialog->setVisible(false);
@@ -1676,6 +1681,11 @@ void LfoPanel::setLfo(int newIndex)
     if (! juce::isPositiveAndBelow(newIndex, static_cast<int>(lfoSelectButtons.size())))
         return;
 
+    // This must precede changing currentLfoIndex, editor data, or resetting an
+    // attachment. A stale drag/text editor belongs exclusively to the LFO that
+    // was visible when the interaction began.
+    dismissTransientInteraction();
+
     const bool selectionChanged = currentLfoIndex != newIndex;
 
     // Update the current LFO index and tell the editor to display the new data.
@@ -1709,6 +1719,23 @@ void LfoPanel::setLfo(int newIndex)
 
     if (selectionChanged && onCurrentLfoChanged)
         onCurrentLfoChanged(currentLfoIndex);
+}
+
+void LfoPanel::dismissTransientInteraction()
+{
+    rateSlider.dismissTransientInteraction();
+    gridXSlider.dismissTransientInteraction();
+    gridYSlider.dismissTransientInteraction();
+    lfoSmoothSlider.dismissTransientInteraction();
+    lfoPhaseSlider.dismissTransientInteraction();
+}
+
+void LfoPanel::visibilityChanged()
+{
+    juce::Component::visibilityChanged();
+
+    if (! isShowing())
+        dismissTransientInteraction();
 }
 
 void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)

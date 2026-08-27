@@ -94,6 +94,77 @@ void setParameterValue(FireAudioProcessor& processor,
     parameter->setValueNotifyingHost(parameter->convertTo0to1(plainValue));
 }
 
+void checkLfoSelectionClosesSliderGesture(const juce::String& labelText,
+                                          const juce::String& parameterBase)
+{
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    for (int lfoIndex = 0; lfoIndex < 2; ++lfoIndex)
+        setParameterValue(
+            processor,
+            ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, lfoIndex),
+            0.0f);
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    panel.setVisible(true);
+    auto* slider = dynamic_cast<PrimarySlider*>(
+        findSliderAttachedToLabel(panel, labelText));
+    auto* lfoTwoButton = findButtonWithText(panel, "LFO 2");
+    const auto oldParameterID =
+        ParameterIDAndName::getIDString(parameterBase, 0);
+    const auto newParameterID =
+        ParameterIDAndName::getIDString(parameterBase, 1);
+    auto* oldParameter = processor.treeState.getParameter(oldParameterID);
+    auto* newParameter = processor.treeState.getParameter(newParameterID);
+    REQUIRE(slider != nullptr);
+    REQUIRE(lfoTwoButton != nullptr);
+    REQUIRE(oldParameter != nullptr);
+    REQUIRE(newParameter != nullptr);
+
+    ParameterGestureRecorder oldRecorder;
+    ParameterGestureRecorder newRecorder;
+    oldParameter->addListener(&oldRecorder);
+    newParameter->addListener(&newRecorder);
+    const juce::ScopeGuard removeListeners {
+        [&]
+        {
+            oldParameter->removeListener(&oldRecorder);
+            newParameter->removeListener(&newRecorder);
+        }
+    };
+
+    const auto position = slider->getLocalBounds().toFloat().getCentre();
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    slider->mouseDown(makeMouseEvent(
+        *slider, position, primary, position, false));
+    REQUIRE(oldRecorder.gestures == std::vector<bool> { true });
+    REQUIRE(newRecorder.gestures.empty());
+
+    lfoTwoButton->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    CHECK_FALSE(slider->hasActivePointerGesture());
+    CHECK(oldRecorder.gestures == std::vector<bool> { true, false });
+    CHECK(newRecorder.gestures.empty());
+
+    // The physical release from the old interaction must not be delivered to
+    // the newly attached LFO parameter.
+    slider->mouseUp(makeMouseEvent(
+        *slider, position, {}, position, false));
+    CHECK(oldRecorder.gestures == std::vector<bool> { true, false });
+    CHECK(newRecorder.gestures.empty());
+
+    slider->mouseDown(makeMouseEvent(
+        *slider, position, primary, position, false));
+    slider->mouseUp(makeMouseEvent(
+        *slider, position, {}, position, false));
+    CHECK(oldRecorder.gestures == std::vector<bool> { true, false });
+    CHECK(newRecorder.gestures == std::vector<bool> { true, false });
+}
+
 void selectWorkspace(juce::Component& editor, const juce::String& buttonText)
 {
     auto* button = findButtonWithText(editor, buttonText);
@@ -356,6 +427,179 @@ TEST_CASE("LFO Rate defers Sync attachment changes until the active host gesture
 
     freeRate->removeListener(&freeRecorder);
     syncRate->removeListener(&syncRecorder);
+}
+
+TEST_CASE("LFO selection closes old Slider gestures before rebinding attachments",
+          "[ui][lfo][gesture][attachment][lifecycle]")
+{
+    checkLfoSelectionClosesSliderGesture("Rate", LFO_RATE_HZ_ID);
+    checkLfoSelectionClosesSliderGesture("Smooth", LFO_SMOOTH_ID);
+    checkLfoSelectionClosesSliderGesture("Phase", LFO_PHASE_ID);
+}
+
+TEST_CASE("LFO selection discards text that belongs to the old attachment",
+          "[ui][lfo][text-entry][attachment][lifecycle]")
+{
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    for (int lfoIndex = 0; lfoIndex < 2; ++lfoIndex)
+        setParameterValue(
+            processor,
+            ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, lfoIndex),
+            0.0f);
+
+    const auto oldRateID =
+        ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, 0);
+    const auto newRateID =
+        ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, 1);
+    setParameterValue(processor, oldRateID, 2.0f);
+    setParameterValue(processor, newRateID, 7.0f);
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+    const juce::ScopeGuard removePanelPeer {
+        [&] { panel.removeFromDesktop(); }
+    };
+    auto* rateSlider = dynamic_cast<PrimarySlider*>(
+        findSliderAttachedToLabel(panel, "Rate"));
+    auto* lfoTwoButton = findButtonWithText(panel, "LFO 2");
+    REQUIRE(rateSlider != nullptr);
+    REQUIRE(lfoTwoButton != nullptr);
+    REQUIRE(rateSlider->isTextBoxEditable());
+
+    rateSlider->showTextBox();
+    juce::Label* valueLabel = nullptr;
+    for (auto* child : rateSlider->getChildren())
+        if (auto* candidate = dynamic_cast<juce::Label*>(child);
+            candidate != nullptr && candidate->getCurrentTextEditor() != nullptr)
+        {
+            valueLabel = candidate;
+            break;
+        }
+
+    REQUIRE(valueLabel != nullptr);
+    REQUIRE(valueLabel->isBeingEdited());
+    valueLabel->getCurrentTextEditor()->setText("19.0", false);
+
+    lfoTwoButton->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    CHECK_FALSE(valueLabel->isBeingEdited());
+    CHECK(processor.treeState.getRawParameterValue(oldRateID)->load()
+          == Catch::Approx(2.0f));
+    CHECK(processor.treeState.getRawParameterValue(newRateID)->load()
+          == Catch::Approx(7.0f));
+    CHECK(rateSlider->getValue() == Catch::Approx(7.0));
+}
+
+TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
+          "[ui][lfo][gesture][attachment][lifecycle]")
+{
+    SECTION("direct panel hide")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto panel = std::make_unique<LfoPanel>(processor);
+        panel->setBounds(0, 0, 1000, 500);
+        panel->setVisible(true);
+        auto* slider = dynamic_cast<PrimarySlider*>(
+            findSliderAttachedToLabel(*panel, "Smooth"));
+        auto* parameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0));
+        REQUIRE(slider != nullptr);
+        REQUIRE(parameter != nullptr);
+        ParameterGestureRecorder recorder;
+        parameter->addListener(&recorder);
+        const juce::ScopeGuard removeListener {
+            [&] { parameter->removeListener(&recorder); }
+        };
+
+        const auto position = slider->getLocalBounds().toFloat().getCentre();
+        slider->mouseDown(makeMouseEvent(
+            *slider,
+            position,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+            position,
+            false));
+        REQUIRE(recorder.gestures == std::vector<bool> { true });
+
+        panel->setVisible(false);
+        CHECK_FALSE(slider->hasActivePointerGesture());
+        CHECK(recorder.gestures == std::vector<bool> { true, false });
+    }
+
+    SECTION("panel destruction")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto panel = std::make_unique<LfoPanel>(processor);
+        panel->setBounds(0, 0, 1000, 500);
+        auto* slider = dynamic_cast<PrimarySlider*>(
+            findSliderAttachedToLabel(*panel, "Phase"));
+        auto* parameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(LFO_PHASE_ID, 0));
+        REQUIRE(slider != nullptr);
+        REQUIRE(parameter != nullptr);
+        ParameterGestureRecorder recorder;
+        parameter->addListener(&recorder);
+        const juce::ScopeGuard removeListener {
+            [&] { parameter->removeListener(&recorder); }
+        };
+
+        const auto position = slider->getLocalBounds().toFloat().getCentre();
+        slider->mouseDown(makeMouseEvent(
+            *slider,
+            position,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+            position,
+            false));
+        REQUIRE(recorder.gestures == std::vector<bool> { true });
+
+        panel.reset();
+        CHECK(recorder.gestures == std::vector<bool> { true, false });
+    }
+
+    SECTION("host editor hide")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        setParameterValue(
+            processor,
+            ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0),
+            0.0f);
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+        selectWorkspace(*editor, "MOD FORGE");
+
+        auto* slider = dynamic_cast<PrimarySlider*>(
+            findSliderAttachedToLabel(*editor, "Rate"));
+        auto* parameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(LFO_RATE_HZ_ID, 0));
+        REQUIRE(slider != nullptr);
+        REQUIRE(parameter != nullptr);
+        ParameterGestureRecorder recorder;
+        parameter->addListener(&recorder);
+        const juce::ScopeGuard removeListener {
+            [&] { parameter->removeListener(&recorder); }
+        };
+
+        const auto position = slider->getLocalBounds().toFloat().getCentre();
+        slider->mouseDown(makeMouseEvent(
+            *slider,
+            position,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+            position,
+            false));
+        REQUIRE(recorder.gestures == std::vector<bool> { true });
+
+        editor->setVisible(false);
+        CHECK_FALSE(slider->hasActivePointerGesture());
+        CHECK(recorder.gestures == std::vector<bool> { true, false });
+        editor->removeFromDesktop();
+    }
 }
 
 TEST_CASE("Fire settings dialog uses the shared visual language", "[ui][smoke]")

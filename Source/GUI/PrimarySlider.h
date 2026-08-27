@@ -125,6 +125,22 @@ public:
     void dismissTransientInteraction()
     {
         auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
+
+        // Text entered for one attached parameter must never be committed
+        // after the Slider has been rebound to another parameter. Avoid an
+        // unconditional hideTextBox() here because it refreshes display text
+        // even during member destruction, when a conversion lambda may refer
+        // to parent state that has already been torn down.
+        for (auto* child : getChildren())
+            if (auto* valueLabel = dynamic_cast<juce::Label*>(child);
+                valueLabel != nullptr && valueLabel->isBeingEdited())
+            {
+                hideTextBox(true);
+                if (! safeThis)
+                    return;
+                break;
+            }
+
         for (auto* child : getChildren())
         {
             if (auto* button = dynamic_cast<PrimaryTextButton*>(child))

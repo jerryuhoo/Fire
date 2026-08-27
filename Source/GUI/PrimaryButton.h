@@ -16,9 +16,11 @@ struct PrimaryButtonTestAccess;
 
 /** A JUCE button that accepts pointer clicks only from an owned primary gesture.
 
-    Keyboard activation and Button::triggerClick are deliberately left unchanged.
-    The template is shared by text and toggle buttons so controls with different
-    drawing implementations use the same pointer ownership rules.
+    Return-key activation is synchronous so an event cannot be replayed after a
+    shared control has been rebound. Explicit Button::triggerClick calls retain
+    JUCE's asynchronous behaviour. The template is shared by text and toggle
+    buttons so controls with different drawing implementations use the same
+    pointer ownership rules.
 */
 template <typename ButtonType>
 class PrimaryPointerButton : public ButtonType
@@ -74,6 +76,21 @@ public:
             ButtonType::mouseUp(event);
         else
             dismissPointerGesture();
+    }
+
+    bool keyPressed(const juce::KeyPress& key) override
+    {
+        if (this->isEnabled()
+            && key.isKeyCode(juce::KeyPress::returnKey))
+        {
+            // Button::keyPressed queues triggerClick(). Invoke the normal
+            // callback now so it cannot land on a later attachment target.
+            // Return immediately because the callback may delete this button.
+            this->internalClickCallback(key.getModifiers());
+            return true;
+        }
+
+        return ButtonType::keyPressed(key);
     }
 
     void visibilityChanged() override

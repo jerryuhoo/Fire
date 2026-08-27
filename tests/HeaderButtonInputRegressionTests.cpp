@@ -315,6 +315,8 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
             button.setClickingTogglesState(true);
             button.onClick = [&clickCount] { ++clickCount; };
             button.triggerClick();
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 0);
             juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 
             CHECK(button.getToggleState());
@@ -332,11 +334,25 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
 
             REQUIRE(static_cast<juce::Component&>(button).keyPressed(
                 juce::KeyPress { juce::KeyPress::returnKey }));
-            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
 
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
             CHECK(button.getToggleState());
             CHECK(clickCount == 1);
         });
+    }
+
+    SECTION("Return callback may synchronously delete the button")
+    {
+        auto button = std::make_unique<PrimaryTextButton>("Delete");
+        button->onClick = [&button] { button.reset(); };
+        auto* rawButton = button.get();
+
+        CHECK(rawButton->keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK(button == nullptr);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 }
 

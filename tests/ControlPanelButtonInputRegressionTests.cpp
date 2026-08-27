@@ -217,6 +217,52 @@ TEST_CASE("Band button releases cannot cross attachment targets",
           == std::vector<bool> { true, false });
 }
 
+TEST_CASE("Band button Return activates its current attachment synchronously",
+          "[control-panel][band][ui][input][keyboard][attachment]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto band0ID =
+        ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, 0);
+    const auto band1ID =
+        ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, 1);
+    setParameterValue(processor, band0ID, 0.0f);
+    setParameterValue(processor, band1ID, 0.0f);
+    BandPanel panel(processor, {}, {}, {}, {}, {});
+    panel.setBounds(0, 0, 1000, 500);
+    auto* band0Parameter = processor.treeState.getParameter(band0ID);
+    auto* band1Parameter = processor.treeState.getParameter(band1ID);
+    REQUIRE(band0Parameter != nullptr);
+    REQUIRE(band1Parameter != nullptr);
+    ParameterGestureRecorder band0Gestures;
+    ParameterGestureRecorder band1Gestures;
+    band0Parameter->addListener(&band0Gestures);
+    band1Parameter->addListener(&band1Gestures);
+    const juce::ScopeGuard removeListeners { [&]
+    {
+        band0Parameter->removeListener(&band0Gestures);
+        band1Parameter->removeListener(&band1Gestures);
+    } };
+
+    REQUIRE(panel.driveBypassButton.keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    CHECK(band0Parameter->getValue() == 1.0f);
+    CHECK(band1Parameter->getValue() == 0.0f);
+    CHECK(band0Gestures.gestures
+          == std::vector<bool> { true, false });
+    CHECK(band1Gestures.gestures.empty());
+
+    panel.setFocusBandNum(1);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    CHECK(panel.getFocusBandNum() == 1);
+    CHECK(band0Parameter->getValue() == 1.0f);
+    CHECK(band1Parameter->getValue() == 0.0f);
+    CHECK(band0Gestures.gestures
+          == std::vector<bool> { true, false });
+    CHECK(band1Gestures.gestures.empty());
+}
+
 TEST_CASE("Control-panel buttons discard gestures at panel and host boundaries",
           "[control-panel][ui][input][host-visibility][lifecycle]")
 {

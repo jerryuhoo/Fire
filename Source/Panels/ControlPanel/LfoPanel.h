@@ -211,6 +211,8 @@ private:
     void setEditMode(LfoEditMode newMode);
     void styleButton(juce::Button& button, bool isToggle);
     void styleLfoSelectButton(juce::TextButton& button, juce::Colour colour);
+    void configureModulationMatrixDialog(
+        juce::DialogWindow::LaunchOptions& launchOptions);
     void showModulationMatrixDialog();
     void setLfo(int newIndex);
     LfoData getLfoDataCopy(int index);

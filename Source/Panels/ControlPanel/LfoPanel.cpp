@@ -1722,6 +1722,15 @@ void LfoPanel::dismissTransientInteraction()
     lfoPhaseSlider.dismissTransientInteraction();
 }
 
+void LfoPanel::configureModulationMatrixDialog(
+    juce::DialogWindow::LaunchOptions& launchOptions)
+{
+    launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
+    launchOptions.content->setSize(800, 400);
+    launchOptions.dialogTitle = "Modulation Matrix";
+    launchOptions.componentToCentreAround = this;
+}
+
 void LfoPanel::showModulationMatrixDialog()
 {
     if (! isShowing())
@@ -1754,9 +1763,7 @@ void LfoPanel::showModulationMatrixDialog()
     // LaunchOptions owns and automatically deletes the modal dialog and its
     // content when the modal state ends.
     juce::DialogWindow::LaunchOptions launchOptions;
-    launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
-    launchOptions.content->setSize(800, 400);
-    launchOptions.componentToCentreAround = this;
+    configureModulationMatrixDialog(launchOptions);
     modulationMatrixDialog = launchOptions.launchAsync();
 }
 

@@ -32,6 +32,13 @@ struct LfoPanelDialogTestAccess final
     {
         panel.modulationMatrixDialogFactoryForTesting = std::move(factory);
     }
+
+    static juce::String getConfiguredDialogTitle(LfoPanel& panel)
+    {
+        juce::DialogWindow::LaunchOptions launchOptions;
+        panel.configureModulationMatrixDialog(launchOptions);
+        return launchOptions.dialogTitle;
+    }
 };
 
 struct StateComponentDialogTestAccess final
@@ -720,6 +727,16 @@ TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
 TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
           "[ui][lfo][matrix][dialog][lifecycle]")
 {
+    SECTION("production dialog has a descriptive title")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        LfoPanel panel(processor);
+
+        CHECK(LfoPanelDialogTestAccess::getConfiguredDialogTitle(panel)
+              == "Modulation Matrix");
+    }
+
     SECTION("direct panel hide")
     {
         FireAudioProcessor processor;

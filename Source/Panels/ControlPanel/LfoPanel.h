@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../DSP/LfoData.h"
+#include "../../GUI/PrimarySlider.h"
 #include "../../Utility/Parameters.h" // Include for LfoEditMode and LfoPresetShape
 #include "ModulationMatrixPanel.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -226,18 +227,18 @@ private:
     juce::TextButton matrixButton { "Matrix" };
     juce::TextButton syncButton;
 
-    juce::Slider rateSlider;
+    PrimarySlider rateSlider;
     juce::Label rateLabel;
 
-    juce::Slider gridXSlider;
+    PrimarySlider gridXSlider;
     juce::Label gridXLabel;
-    juce::Slider gridYSlider;
+    PrimarySlider gridYSlider;
     juce::Label gridYLabel;
 
-    juce::Slider lfoSmoothSlider;
+    PrimarySlider lfoSmoothSlider;
     juce::Label lfoSmoothLabel;
 
-    juce::Slider lfoPhaseSlider;
+    PrimarySlider lfoPhaseSlider;
     juce::Label lfoPhaseLabel;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> rateSliderAttachment;

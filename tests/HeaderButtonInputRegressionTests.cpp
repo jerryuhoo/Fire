@@ -108,6 +108,11 @@ std::vector<juce::ModifierKeys> rejectedPointerModifiers()
 void collectHeaderButtons(juce::Component& component,
                           std::vector<PrimaryTextButton*>& result)
 {
+    // Inc/Dec Sliders also use PrimaryTextButton children, but this helper is
+    // intentionally scoped to editor header and preset actions.
+    if (dynamic_cast<juce::Slider*>(&component) != nullptr)
+        return;
+
     if (auto* button = dynamic_cast<PrimaryTextButton*>(&component))
         result.push_back(button);
 

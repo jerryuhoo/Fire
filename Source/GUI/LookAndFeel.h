@@ -12,6 +12,7 @@
 #include "FireTheme.h"
 #include "InterfaceDefines.h"
 #include "ModulatableSlider.h"
+#include "PrimaryButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
 
@@ -281,7 +282,7 @@ public:
 
     juce::Button* createSliderButton(juce::Slider& slider, bool isIncrement) override
     {
-        auto* button = new juce::TextButton();
+        auto* button = new PrimaryTextButton();
         button->setComponentID(isIncrement ? "slider_up_arrow" : "slider_down_arrow");
         button->setColour(juce::TextButton::buttonColourId,
                           slider.findColour(juce::Slider::textBoxBackgroundColourId));

@@ -1,0 +1,250 @@
+#include <GUI/LookAndFeel.h>
+#include <GUI/PrimarySlider.h>
+
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
+
+#include <vector>
+
+struct PrimarySliderTestAccess
+{
+    static void setTrackedPointerSource(
+        PrimarySlider& slider,
+        juce::MouseInputSource::InputSourceType type,
+        int index) noexcept
+    {
+        slider.pointerSourceType = type;
+        slider.pointerSourceIndex = index;
+    }
+};
+
+namespace
+{
+juce::MouseEvent makeMouseEvent(juce::Component& component,
+                                juce::Point<float> position,
+                                juce::ModifierKeys modifiers = {},
+                                juce::Point<float> mouseDownPosition = {},
+                                bool wasDragged = false,
+                                int clickCount = 1)
+{
+    const auto now = juce::Time::getCurrentTime();
+    if (mouseDownPosition == juce::Point<float>())
+        mouseDownPosition = position;
+
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             now,
+             mouseDownPosition,
+             now,
+             clickCount,
+             wasDragged };
+}
+
+std::vector<juce::ModifierKeys> rejectedPointerModifiers()
+{
+    std::vector<juce::ModifierKeys> result {
+        juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                             | juce::ModifierKeys::rightButtonModifier }
+    };
+
+#if JUCE_MAC
+    result.emplace_back(juce::ModifierKeys::leftButtonModifier
+                        | juce::ModifierKeys::ctrlModifier);
+#endif
+
+    return result;
+}
+
+class SliderInteractionCapture final : public juce::Slider::Listener
+{
+public:
+    void sliderValueChanged(juce::Slider*) override { ++valueChanges; }
+    void sliderDragStarted(juce::Slider*) override { ++dragStarts; }
+    void sliderDragEnded(juce::Slider*) override { ++dragEnds; }
+
+    int valueChanges = 0;
+    int dragStarts = 0;
+    int dragEnds = 0;
+};
+
+juce::Button* findSliderButton(juce::Slider& slider,
+                               const juce::String& componentID)
+{
+    for (auto* child : slider.getChildren())
+        if (auto* button = dynamic_cast<juce::Button*>(child);
+            button != nullptr && button->getComponentID() == componentID)
+            return button;
+
+    return nullptr;
+}
+} // namespace
+
+TEST_CASE("PrimarySlider rejects auxiliary drags and double-clicks",
+          "[primary-slider][ui][input]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimarySlider slider;
+    slider.setBounds(0, 0, 120, 120);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0);
+    slider.setValue(0.8, juce::dontSendNotification);
+    slider.setDoubleClickReturnValue(true, 0.25);
+    SliderInteractionCapture capture;
+    slider.addListener(&capture);
+
+    const auto downPosition = slider.getLocalBounds().toFloat().getCentre();
+    const auto dragPosition = downPosition + juce::Point<float> { 20.0f, -25.0f };
+    for (const auto modifiers : rejectedPointerModifiers())
+    {
+        CAPTURE(modifiers.getRawFlags());
+        slider.mouseDown(makeMouseEvent(slider, downPosition, modifiers));
+        slider.mouseDrag(makeMouseEvent(
+            slider, dragPosition, modifiers, downPosition, true));
+        slider.mouseUp(makeMouseEvent(
+            slider, dragPosition, {}, downPosition, true));
+        slider.mouseDoubleClick(makeMouseEvent(
+            slider, downPosition, modifiers, downPosition, false, 2));
+
+        CHECK_FALSE(slider.hasActivePointerGesture());
+        CHECK(slider.getValue() == Catch::Approx(0.8));
+    }
+
+    CHECK(capture.dragStarts == 0);
+    CHECK(capture.dragEnds == 0);
+    CHECK(capture.valueChanges == 0);
+
+    const juce::ModifierKeys primary {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    slider.mouseDown(makeMouseEvent(slider, downPosition, primary));
+    REQUIRE(slider.hasActivePointerGesture());
+    REQUIRE(capture.dragStarts == 1);
+    slider.mouseUp(makeMouseEvent(slider, downPosition));
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 1);
+
+    slider.setValue(0.8, juce::dontSendNotification);
+    slider.mouseDown(makeMouseEvent(
+        slider, downPosition, primary, downPosition, false, 2));
+    slider.mouseUp(makeMouseEvent(
+        slider, downPosition, {}, downPosition, false, 2));
+    slider.mouseDoubleClick(makeMouseEvent(
+        slider, downPosition, primary, downPosition, false, 2));
+    CHECK(slider.getValue() == Catch::Approx(0.25));
+}
+
+TEST_CASE("PrimarySlider freezes source ownership and closes a stale gesture once",
+          "[primary-slider][ui][input][source][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimarySlider slider;
+    slider.setBounds(0, 0, 120, 120);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0);
+    slider.setValue(0.5, juce::dontSendNotification);
+    SliderInteractionCapture capture;
+    slider.addListener(&capture);
+
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto downPosition = slider.getLocalBounds().toFloat().getCentre();
+    const auto dragPosition = downPosition + juce::Point<float> { 30.0f, -20.0f };
+    const juce::ModifierKeys primary {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    slider.mouseDown(makeMouseEvent(slider, downPosition, primary));
+    REQUIRE(slider.hasActivePointerGesture());
+    REQUIRE(capture.dragStarts == 1);
+
+    PrimarySliderTestAccess::setTrackedPointerSource(
+        slider,
+        source.getType() == juce::MouseInputSource::mouse
+            ? juce::MouseInputSource::touch
+            : juce::MouseInputSource::mouse,
+        source.getIndex() + 1);
+    slider.mouseDrag(makeMouseEvent(
+        slider, dragPosition, primary, downPosition, true));
+    slider.mouseUp(makeMouseEvent(
+        slider, dragPosition, {}, downPosition, true));
+    CHECK(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 0);
+    CHECK(slider.getValue() == Catch::Approx(0.5));
+
+    PrimarySliderTestAccess::setTrackedPointerSource(
+        slider, source.getType(), source.getIndex());
+    slider.mouseDown(makeMouseEvent(slider, downPosition, primary));
+    CHECK(capture.dragStarts == 2);
+    CHECK(capture.dragEnds == 1);
+    CHECK(slider.hasActivePointerGesture());
+
+    slider.mouseUp(makeMouseEvent(
+        slider,
+        downPosition,
+        juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier }));
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 2);
+}
+
+TEST_CASE("Fire IncDec slider arrows accept only primary clicks",
+          "[primary-slider][ui][input][incdec]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    PrimarySlider slider;
+    slider.setLookAndFeel(&lookAndFeel);
+    slider.setSliderStyle(juce::Slider::IncDecButtons);
+    slider.setRange(2.0, 16.0, 1.0);
+    slider.setValue(5.0, juce::dontSendNotification);
+    slider.setBounds(0, 0, 160, 30);
+    slider.resized();
+
+    auto* increment = findSliderButton(slider, "slider_up_arrow");
+    auto* decrement = findSliderButton(slider, "slider_down_arrow");
+    REQUIRE(increment != nullptr);
+    REQUIRE(decrement != nullptr);
+    REQUIRE(dynamic_cast<PrimaryTextButton*>(increment) != nullptr);
+    REQUIRE(dynamic_cast<PrimaryTextButton*>(decrement) != nullptr);
+    const auto position = increment->getLocalBounds().toFloat().getCentre();
+    const auto decrementPosition = decrement->getLocalBounds().toFloat().getCentre();
+
+    for (const auto modifiers : rejectedPointerModifiers())
+    {
+        CAPTURE(modifiers.getRawFlags());
+        static_cast<juce::Component&>(*increment).mouseDown(
+            makeMouseEvent(*increment, position, modifiers));
+        static_cast<juce::Component&>(*increment).mouseUp(
+            makeMouseEvent(*increment, position));
+        static_cast<juce::Component&>(*decrement).mouseDown(
+            makeMouseEvent(*decrement, decrementPosition, modifiers));
+        static_cast<juce::Component&>(*decrement).mouseUp(
+            makeMouseEvent(*decrement, decrementPosition));
+        CHECK(slider.getValue() == Catch::Approx(5.0));
+    }
+
+    static_cast<juce::Component&>(*increment).mouseDown(makeMouseEvent(
+        *increment,
+        position,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    static_cast<juce::Component&>(*increment).mouseUp(
+        makeMouseEvent(*increment, position));
+    CHECK(slider.getValue() == Catch::Approx(6.0));
+
+    static_cast<juce::Component&>(*decrement).mouseDown(makeMouseEvent(
+        *decrement,
+        decrementPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    static_cast<juce::Component&>(*decrement).mouseUp(
+        makeMouseEvent(*decrement, decrementPosition));
+    CHECK(slider.getValue() == Catch::Approx(5.0));
+
+    slider.setLookAndFeel(nullptr);
+}

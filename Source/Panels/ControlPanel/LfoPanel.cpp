@@ -1632,19 +1632,8 @@ void LfoPanel::buttonClicked(juce::Button* button)
 
     if (button == &matrixButton)
     {
-        if (modulationMatrixDialog != nullptr)
-        {
-            modulationMatrixDialog->toFront(true);
-            return;
-        }
-
-        // LaunchOptions owns and automatically deletes the modal dialog and its
-        // content when the modal state ends.
-        juce::DialogWindow::LaunchOptions launchOptions;
-        launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
-        launchOptions.content->setSize(800, 400);
-        launchOptions.componentToCentreAround = this;
-        modulationMatrixDialog = launchOptions.launchAsync();
+        showModulationMatrixDialog();
+        return;
     }
     else if (button == &syncButton)
     {
@@ -1731,6 +1720,44 @@ void LfoPanel::dismissTransientInteraction()
     gridYSlider.dismissTransientInteraction();
     lfoSmoothSlider.dismissTransientInteraction();
     lfoPhaseSlider.dismissTransientInteraction();
+}
+
+void LfoPanel::showModulationMatrixDialog()
+{
+    if (! isShowing())
+        return;
+
+    if (auto* existingDialog = modulationMatrixDialog.getComponent())
+    {
+        if (existingDialog->isShowing()
+            && existingDialog->isCurrentlyModal(false))
+        {
+            existingDialog->toFront(true);
+            return;
+        }
+
+        // DefaultDialogWindow::closeButtonPressed() hides the window and leaves
+        // auto-deletion queued for ModalComponentManager's next async update.
+        // Remove that stale window synchronously before reopening.
+        dismissModulationMatrixDialog();
+    }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (modulationMatrixDialogFactoryForTesting)
+    {
+        modulationMatrixDialog =
+            modulationMatrixDialogFactoryForTesting();
+        return;
+    }
+#endif
+
+    // LaunchOptions owns and automatically deletes the modal dialog and its
+    // content when the modal state ends.
+    juce::DialogWindow::LaunchOptions launchOptions;
+    launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
+    launchOptions.content->setSize(800, 400);
+    launchOptions.componentToCentreAround = this;
+    modulationMatrixDialog = launchOptions.launchAsync();
 }
 
 void LfoPanel::dismissModulationMatrixDialog()

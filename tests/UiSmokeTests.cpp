@@ -16,6 +16,22 @@ struct LfoPanelDialogTestAccess final
     {
         panel.modulationMatrixDialog = dialog;
     }
+
+    static void showDialog(LfoPanel& panel)
+    {
+        panel.showModulationMatrixDialog();
+    }
+
+    static juce::DialogWindow* getDialog(LfoPanel& panel)
+    {
+        return panel.modulationMatrixDialog.getComponent();
+    }
+
+    static void setDialogFactory(LfoPanel& panel,
+                                 std::function<juce::DialogWindow*()> factory)
+    {
+        panel.modulationMatrixDialogFactoryForTesting = std::move(factory);
+    }
 };
 
 struct StateComponentDialogTestAccess final
@@ -137,13 +153,26 @@ ComponentType* findComponentOfType(juce::Component& root)
     return nullptr;
 }
 
-juce::DialogWindow* installModulationMatrixDialog(LfoPanel& panel,
-                                                   FireAudioProcessor& processor)
+juce::DialogWindow* createModulationMatrixDialog(
+    FireAudioProcessor& processor,
+    juce::Component* parent = nullptr)
 {
     auto* dialog = new juce::DialogWindow(
         "Modulation Matrix", fire::ui::colours::canvas, true, false);
     dialog->setContentOwned(new ModulationMatrixPanel(processor), false);
+    dialog->setBounds(0, 0, 800, 400);
+    if (parent != nullptr)
+        parent->addAndMakeVisible(dialog);
     dialog->enterModalState(false, nullptr, true);
+    return dialog;
+}
+
+juce::DialogWindow* installModulationMatrixDialog(
+    LfoPanel& panel,
+    FireAudioProcessor& processor,
+    juce::Component* parent = nullptr)
+{
+    auto* dialog = createModulationMatrixDialog(processor, parent);
     LfoPanelDialogTestAccess::setDialog(panel, dialog);
     return dialog;
 }
@@ -754,6 +783,68 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         CHECK(safeDialog == nullptr);
         CHECK(safeContent == nullptr);
         CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        editor->removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("title-bar close can reopen before deferred deletion")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+        selectWorkspace(*editor, "MOD FORGE");
+
+        auto* lfoPanel = findComponentOfType<LfoPanel>(*editor);
+        REQUIRE(lfoPanel != nullptr);
+        auto* oldDialog = installModulationMatrixDialog(
+            *lfoPanel, processor, editor.get());
+        REQUIRE(oldDialog != nullptr);
+        REQUIRE(oldDialog->isShowing());
+        REQUIRE(oldDialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeOldDialog(
+            oldDialog);
+        juce::Component::SafePointer<juce::Component> safeOldContent(
+            oldDialog->getContentComponent());
+        int factoryCalls = 0;
+        LfoPanelDialogTestAccess::setDialogFactory(
+            *lfoPanel,
+            [&processor, &factoryCalls, parent = editor.get()]
+            {
+                ++factoryCalls;
+                return createModulationMatrixDialog(processor, parent);
+            });
+
+        LfoPanelDialogTestAccess::showDialog(*lfoPanel);
+        CHECK(LfoPanelDialogTestAccess::getDialog(*lfoPanel) == oldDialog);
+        CHECK(factoryCalls == 0);
+
+        // JUCE's LaunchOptions default close button hides the modal window;
+        // ModalComponentManager deletes it on a later async update.
+        oldDialog->setVisible(false);
+        REQUIRE(safeOldDialog != nullptr);
+        REQUIRE_FALSE(oldDialog->isCurrentlyModal(false));
+        LfoPanelDialogTestAccess::showDialog(*lfoPanel);
+
+        CHECK(safeOldDialog == nullptr);
+        CHECK(safeOldContent == nullptr);
+        auto* newDialog = LfoPanelDialogTestAccess::getDialog(*lfoPanel);
+        REQUIRE(newDialog != nullptr);
+        CHECK(factoryCalls == 1);
+        REQUIRE(newDialog->isShowing());
+        REQUIRE(newDialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeNewDialog(
+            newDialog);
+        juce::Component::SafePointer<juce::Component> safeNewContent(
+            newDialog->getContentComponent());
+
+        lfoPanel->dismissModulationMatrixDialog();
+        CHECK(safeNewDialog == nullptr);
+        CHECK(safeNewContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()
+                  ->getNumModalComponents()
+              == 0);
         editor->removeFromDesktop();
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }

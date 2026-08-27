@@ -211,6 +211,7 @@ private:
     void setEditMode(LfoEditMode newMode);
     void styleButton(juce::Button& button, bool isToggle);
     void styleLfoSelectButton(juce::TextButton& button, juce::Colour colour);
+    void showModulationMatrixDialog();
     void setLfo(int newIndex);
     LfoData getLfoDataCopy(int index);
 
@@ -263,6 +264,10 @@ private:
     std::array<juce::String, 4> smoothParameterIDs;
 
     juce::Component::SafePointer<juce::DialogWindow> modulationMatrixDialog;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::function<juce::DialogWindow*()>
+        modulationMatrixDialogFactoryForTesting;
+#endif
 
     void updateRateSlider();
 

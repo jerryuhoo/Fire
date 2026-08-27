@@ -1257,14 +1257,8 @@ namespace state
     StateComponent::~StateComponent()
     {
         stopTimer();
+        dismissSettingsDialog();
         presetMenu.setLookAndFeel(nullptr);
-
-        if (settingsDialog != nullptr)
-        {
-            settingsDialog->setVisible(false);
-            settingsDialog->exitModalState(0);
-            settingsDialog = nullptr;
-        }
 
         manualUpdateCheckThread.stop();
         cancelPendingUpdate();
@@ -1409,6 +1403,14 @@ namespace state
         placeRight(nextButton, compactWidth);
         placeRight(previousButton, compactWidth);
         presetBox.setBounds(r.reduced(0, juce::jmax(1, getHeight() / 12)));
+    }
+
+    void StateComponent::visibilityChanged()
+    {
+        juce::Component::visibilityChanged();
+
+        if (! isShowing())
+            dismissSettingsDialog();
     }
 
     void StateComponent::buttonClicked(juce::Button* clickedButton)
@@ -1888,27 +1890,53 @@ namespace state
                                      }
                                      else if (result == 6)
                                      {
-                                         if (safeThis->settingsDialog != nullptr)
-                                         {
-                                             safeThis->settingsDialog->toFront(true);
-                                             return;
-                                         }
-
-                                         auto& processor = static_cast<FireAudioProcessor&>(safeThis->procStatePresets.getProcessor());
-                                         auto settingsPanel = std::make_unique<SettingsComponent>(processor.getAppSettings());
-
-                                         juce::DialogWindow::LaunchOptions options;
-                                         options.content.setOwned(settingsPanel.release());
-                                         options.content->setSize(400, 300);
-                                         options.dialogTitle = "Settings";
-                                         options.dialogBackgroundColour = COLOUR6;
-                                         options.escapeKeyTriggersCloseButton = true;
-                                         options.useNativeTitleBar = true;
-                                         options.resizable = true;
-                                         options.componentToCentreAround = safeThis.getComponent();
-                                         safeThis->settingsDialog = options.launchAsync();
+                                         safeThis->showSettingsDialog();
                                      }
                                  });
+    }
+
+    void StateComponent::showSettingsDialog()
+    {
+        // PopupMenu results are delivered asynchronously. A host may hide the
+        // editor after the click but before this callback reaches us.
+        if (! isShowing())
+            return;
+
+        if (auto* existingDialog = settingsDialog.getComponent())
+        {
+            if (existingDialog->isShowing()
+                && existingDialog->isCurrentlyModal(false))
+            {
+                existingDialog->toFront(true);
+                return;
+            }
+
+            // A title-bar close leaves the auto-delete queued until the modal
+            // manager's next update. Remove that stale window before reopening.
+            dismissSettingsDialog();
+        }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (settingsDialogFactoryForTesting)
+        {
+            settingsDialog = settingsDialogFactoryForTesting();
+            return;
+        }
+#endif
+
+        auto& processor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
+        auto settingsPanel = std::make_unique<SettingsComponent>(processor.getAppSettings());
+
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned(settingsPanel.release());
+        options.content->setSize(400, 300);
+        options.dialogTitle = "Settings";
+        options.dialogBackgroundColour = COLOUR6;
+        options.escapeKeyTriggersCloseButton = true;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.componentToCentreAround = this;
+        settingsDialog = options.launchAsync();
     }
 
     void StateComponent::resetMultiband()
@@ -1969,6 +1997,21 @@ namespace state
         nextButton.dismissPointerGesture();
         savePresetButton.dismissPointerGesture();
         menuButton.dismissPointerGesture();
+    }
+
+    void StateComponent::dismissSettingsDialog() noexcept
+    {
+        // launchAsync() otherwise leaves owned SettingsComponent deletion to a
+        // later modal-manager update. Its PropertiesFile reference must not
+        // survive the processor that owns the application settings.
+        auto dialog = settingsDialog;
+        settingsDialog = nullptr;
+
+        if (dialog != nullptr)
+        {
+            dialog->exitModalState(0);
+            dialog.deleteAndZero();
+        }
     }
 
 } // namespace state

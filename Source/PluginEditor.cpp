@@ -455,6 +455,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
             slider->dismissTransientInteraction();
     lfoPanel.dismissTransientInteraction();
     lfoPanel.dismissModulationMatrixDialog();
+    stateComponent.dismissSettingsDialog();
     hideValuePopup();
     valueEntryPopup.dismissSession();
 
@@ -615,6 +616,7 @@ void FireAudioProcessorEditor::visibilityChanged()
                 slider->dismissTransientInteraction();
         lfoPanel.dismissTransientInteraction();
         lfoPanel.dismissModulationMatrixDialog();
+        stateComponent.dismissSettingsDialog();
         hideValuePopup();
         hqButton.dismissPointerGesture();
         windowLeftButton.dismissPointerGesture();
@@ -857,6 +859,7 @@ void FireAudioProcessorEditor::timerCallback()
                 slider->dismissTransientInteraction();
         lfoPanel.dismissTransientInteraction();
         lfoPanel.dismissModulationMatrixDialog();
+        stateComponent.dismissSettingsDialog();
         hideValuePopup();
         valueEntryPopup.dismissSession();
         multiband.dismissTransientUi();

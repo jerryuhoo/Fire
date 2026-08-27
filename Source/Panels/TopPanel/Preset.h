@@ -24,6 +24,9 @@
 #endif
 
 class FireAudioProcessor;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct StateComponentDialogTestAccess;
+#endif
 
 namespace state
 {
@@ -163,6 +166,7 @@ PluginProcessor).
 
         void paint(juce::Graphics&) override;
         void resized() override;
+        void visibilityChanged() override;
         void markAsDirty();
         void parameterChanged(const juce::String& parameterID, float newValue) override;
 
@@ -183,11 +187,16 @@ PluginProcessor).
         juce::TextButton* getPreviousButton();
         juce::TextButton* getNextButton();
         void dismissPointerGestures() noexcept;
+        void dismissSettingsDialog() noexcept;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         juce::PopupMenu::Options getPresetMenuOptionsForTesting();
 #endif
 
     private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        friend struct ::StateComponentDialogTestAccess;
+#endif
+
         class ManualUpdateCheckThread final : public juce::Thread
         {
         public:
@@ -217,6 +226,9 @@ PluginProcessor).
         std::atomic<bool> dirtyUpdatePending { false };
         std::atomic<bool> versionCheckReady { false };
         juce::Component::SafePointer<juce::DialogWindow> settingsDialog;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        std::function<juce::DialogWindow*()> settingsDialogFactoryForTesting;
+#endif
 
         PrimaryTextButton toggleABButton;
         PrimaryTextButton copyABButton;
@@ -242,6 +254,7 @@ PluginProcessor).
         void rescanPresetFolder();
         void creatFolderIfNotExist(juce::File userFile);
         void popPresetMenu();
+        void showSettingsDialog();
         float getPresetMenuScale() const noexcept;
         juce::PopupMenu::Options createPresetMenuOptions(float menuScale);
         void setPreviousPreset();

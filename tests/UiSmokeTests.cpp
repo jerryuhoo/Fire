@@ -18,6 +18,36 @@ struct LfoPanelDialogTestAccess final
     }
 };
 
+struct StateComponentDialogTestAccess final
+{
+    static void setDialog(state::StateComponent& component,
+                          juce::DialogWindow* dialog)
+    {
+        component.settingsDialog = dialog;
+    }
+
+    static void showDialog(state::StateComponent& component)
+    {
+        component.showSettingsDialog();
+    }
+
+    static bool hasDialog(const state::StateComponent& component)
+    {
+        return component.settingsDialog != nullptr;
+    }
+
+    static juce::DialogWindow* getDialog(state::StateComponent& component)
+    {
+        return component.settingsDialog.getComponent();
+    }
+
+    static void setDialogFactory(state::StateComponent& component,
+                                 std::function<juce::DialogWindow*()> factory)
+    {
+        component.settingsDialogFactoryForTesting = std::move(factory);
+    }
+};
+
 namespace
 {
 struct ParameterGestureRecorder final : juce::AudioProcessorParameter::Listener
@@ -115,6 +145,29 @@ juce::DialogWindow* installModulationMatrixDialog(LfoPanel& panel,
     dialog->setContentOwned(new ModulationMatrixPanel(processor), false);
     dialog->enterModalState(false, nullptr, true);
     LfoPanelDialogTestAccess::setDialog(panel, dialog);
+    return dialog;
+}
+
+juce::DialogWindow* createSettingsDialog(FireAudioProcessor& processor,
+                                          juce::Component* parent = nullptr)
+{
+    auto* dialog = new juce::DialogWindow(
+        "Settings", fire::ui::colours::canvas, true, false);
+    dialog->setContentOwned(
+        new SettingsComponent(processor.getAppSettings()), false);
+    dialog->setBounds(0, 0, 400, 300);
+    if (parent != nullptr)
+        parent->addAndMakeVisible(dialog);
+    dialog->enterModalState(false, nullptr, true);
+    return dialog;
+}
+
+juce::DialogWindow* installSettingsDialog(state::StateComponent& component,
+                                           FireAudioProcessor& processor,
+                                           juce::Component* parent = nullptr)
+{
+    auto* dialog = createSettingsDialog(processor, parent);
+    StateComponentDialogTestAccess::setDialog(component, dialog);
     return dialog;
 }
 
@@ -703,6 +756,214 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
         editor->removeFromDesktop();
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+}
+
+TEST_CASE("Settings dialog closes synchronously with its owning UI",
+          "[ui][settings][dialog][lifecycle]")
+{
+    SECTION("direct StateComponent hide")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        state::StateComponent component(
+            processor.stateAB, processor.statePresets, processor.treeState);
+        component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        component.setVisible(true);
+
+        auto* dialog = installSettingsDialog(component, processor, &component);
+        REQUIRE(dialog != nullptr);
+        REQUIRE(dialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        component.setVisible(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        component.removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("StateComponent destruction")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto component = std::make_unique<state::StateComponent>(
+            processor.stateAB, processor.statePresets, processor.treeState);
+        component->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        component->setVisible(true);
+
+        auto* dialog = installSettingsDialog(*component, processor, component.get());
+        REQUIRE(dialog != nullptr);
+        REQUIRE(dialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        component.reset();
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("editor destruction cancels queued content callbacks")
+    {
+        auto processor = std::make_unique<FireAudioProcessor>();
+        processor->hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(*processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+        auto* stateComponent = findComponentOfType<state::StateComponent>(*editor);
+        REQUIRE(stateComponent != nullptr);
+
+        auto* dialog = installSettingsDialog(
+            *stateComponent, *processor, editor.get());
+        REQUIRE(dialog != nullptr);
+        REQUIRE(dialog->isCurrentlyModal(false));
+        auto* autoUpdateToggle = findButtonWithText(
+            *dialog->getContentComponent(), "Auto-check for updates on startup");
+        REQUIRE(autoUpdateToggle != nullptr);
+        int queuedClicks = 0;
+        autoUpdateToggle->onClick = [&queuedClicks] { ++queuedClicks; };
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+        juce::Component::SafePointer<juce::Button> safeToggle(autoUpdateToggle);
+
+        // The posted Button command must become a no-op when synchronous
+        // teardown destroys the dialog's controls.
+        autoUpdateToggle->triggerClick();
+        CHECK(queuedClicks == 0);
+        editor.reset();
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(safeToggle == nullptr);
+
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK(queuedClicks == 0);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        processor.reset();
+    }
+
+    SECTION("host editor hide")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+
+        auto* stateComponent = findComponentOfType<state::StateComponent>(*editor);
+        REQUIRE(stateComponent != nullptr);
+        auto* dialog = installSettingsDialog(
+            *stateComponent, processor, editor.get());
+        REQUIRE(dialog != nullptr);
+        REQUIRE(dialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        editor->setVisible(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        editor->removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("hidden editor timer fallback")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->setVisible(false);
+        auto* stateComponent = findComponentOfType<state::StateComponent>(*editor);
+        REQUIRE(stateComponent != nullptr);
+
+        auto* dialog = installSettingsDialog(*stateComponent, processor);
+        REQUIRE(dialog != nullptr);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        editor->timerCallback();
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("title-bar close can reopen before deferred deletion")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+        auto* stateComponent = findComponentOfType<state::StateComponent>(*editor);
+        REQUIRE(stateComponent != nullptr);
+
+        auto* oldDialog = installSettingsDialog(
+            *stateComponent, processor, editor.get());
+        REQUIRE(oldDialog != nullptr);
+        REQUIRE(oldDialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeOldDialog(oldDialog);
+        juce::Component::SafePointer<juce::Component> safeOldContent(
+            oldDialog->getContentComponent());
+        StateComponentDialogTestAccess::setDialogFactory(
+            *stateComponent,
+            [&processor, parent = editor.get()]
+            {
+                return createSettingsDialog(processor, parent);
+            });
+
+        oldDialog->setVisible(false);
+        REQUIRE(safeOldDialog != nullptr);
+        StateComponentDialogTestAccess::showDialog(*stateComponent);
+
+        CHECK(safeOldDialog == nullptr);
+        CHECK(safeOldContent == nullptr);
+        auto* newDialog = StateComponentDialogTestAccess::getDialog(*stateComponent);
+        REQUIRE(newDialog != nullptr);
+        REQUIRE(newDialog->isCurrentlyModal(false));
+        juce::Component::SafePointer<juce::DialogWindow> safeNewDialog(newDialog);
+        juce::Component::SafePointer<juce::Component> safeNewContent(
+            newDialog->getContentComponent());
+
+        stateComponent->dismissSettingsDialog();
+        CHECK(safeNewDialog == nullptr);
+        CHECK(safeNewContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        editor->removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("hidden delayed menu result cannot create a dialog")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        int factoryCalls = 0;
+        state::StateComponent component(
+            processor.stateAB, processor.statePresets, processor.treeState);
+        StateComponentDialogTestAccess::setDialogFactory(
+            component,
+            [&factoryCalls]
+            {
+                ++factoryCalls;
+                return static_cast<juce::DialogWindow*>(nullptr);
+            });
+
+        REQUIRE_FALSE(component.isShowing());
+        StateComponentDialogTestAccess::showDialog(component);
+        CHECK_FALSE(StateComponentDialogTestAccess::hasDialog(component));
+        CHECK(factoryCalls == 0);
     }
 }
 

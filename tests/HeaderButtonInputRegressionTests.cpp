@@ -113,7 +113,8 @@ void collectHeaderButtons(juce::Component& component,
     if (dynamic_cast<juce::Slider*>(&component) != nullptr)
         return;
 
-    if (auto* button = dynamic_cast<PrimaryTextButton*>(&component))
+    if (auto* button = dynamic_cast<PrimaryTextButton*>(&component);
+        button != nullptr && button->getComponentID().isNotEmpty())
         result.push_back(button);
 
     for (int childIndex = 0; childIndex < component.getNumChildComponents(); ++childIndex)

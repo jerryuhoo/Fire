@@ -1262,7 +1262,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     // Create UI Components
     for (int i = 0; i < 4; ++i)
     {
-        lfoSelectButtons[i] = std::make_unique<juce::TextButton>("LFO " + juce::String(i + 1));
+        lfoSelectButtons[i] = std::make_unique<PrimaryTextButton>("LFO " + juce::String(i + 1));
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
         lfoSelectButtons[i]->getProperties().set("fireAnimatedSelection", true);
@@ -1717,6 +1717,15 @@ void LfoPanel::setLfo(int newIndex)
 
 void LfoPanel::dismissTransientInteraction()
 {
+    for (auto& button : lfoSelectButtons)
+        if (button != nullptr)
+            button->dismissPointerGesture();
+    editModeButton.dismissPointerGesture();
+    brushModeButton.dismissPointerGesture();
+    assignButton.dismissPointerGesture();
+    matrixButton.dismissPointerGesture();
+    syncButton.dismissPointerGesture();
+
     rateSlider.dismissTransientInteraction();
     gridXSlider.dismissTransientInteraction();
     gridYSlider.dismissTransientInteraction();

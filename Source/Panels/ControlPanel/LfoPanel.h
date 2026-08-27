@@ -191,7 +191,7 @@ public:
     std::function<void()> onDataChanged;
     std::function<void(int lfoIndex)> onAssignButtonClicked;
     std::function<void(int lfoIndex)> onCurrentLfoChanged;
-    juce::TextButton assignButton;
+    PrimaryTextButton assignButton;
 
     void refreshLfoDisplay();
     void handleAsyncUpdate() override;
@@ -225,15 +225,15 @@ private:
     // --- UI Components ---
     LfoEditor lfoEditor;
 
-    std::array<std::unique_ptr<juce::TextButton>, 4> lfoSelectButtons;
+    std::array<std::unique_ptr<PrimaryTextButton>, 4> lfoSelectButtons;
 
     // --- UI Components for mode selection ---
-    juce::TextButton editModeButton { "Edit Mode" };
-    juce::TextButton brushModeButton { "Brush Mode" };
+    PrimaryTextButton editModeButton { "Edit Mode" };
+    PrimaryTextButton brushModeButton { "Brush Mode" };
     juce::ComboBox brushSelector;
 
-    juce::TextButton matrixButton { "Matrix" };
-    juce::TextButton syncButton;
+    PrimaryTextButton matrixButton { "Matrix" };
+    PrimaryTextButton syncButton;
 
     PrimarySlider rateSlider;
     juce::Label rateLabel;

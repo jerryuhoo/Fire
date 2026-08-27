@@ -44,6 +44,7 @@ public:
     void resized() override;
     void animationTick(float deltaSeconds);
     void setFocusBandNum(int num, bool forceUpdate = false);
+    void dismissTransientInteraction() noexcept;
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
     void comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged) override;
@@ -74,6 +75,7 @@ private:
     friend struct BandPanelGraphTestAccess;
 
     void updateAttachments();
+    void dismissButtonInteractions() noexcept;
     bool hasActiveSliderInteraction() const noexcept;
     void applyPendingFocusChange();
     bool canEnableSubKnob(juce::Component& component);
@@ -98,6 +100,7 @@ private:
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
     void updateDistortionGraphFromParameters();
     void timerCallback() override;
+    void visibilityChanged() override;
     std::atomic<unsigned int> distortionGraphDirtyMask { 0 };
     static constexpr size_t distortionGraphParameterCount = 9;
     std::array<juce::String, 4> driveParameterIds;

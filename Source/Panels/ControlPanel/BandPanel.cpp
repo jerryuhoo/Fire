@@ -124,6 +124,8 @@ BandPanel::~BandPanel()
     for (auto& sliderPair : modulatableSliderComponents)
         sliderPair.second->onInteractionEnded = nullptr;
 
+    dismissTransientInteraction();
+
     // Remove all parameter listeners that were added in the constructor.
     for (int i = 0; i < 4; ++i)
     {
@@ -641,6 +643,39 @@ void BandPanel::animationTick(float deltaSeconds)
                 .getSmallestIntegerContainer());
 }
 
+void BandPanel::dismissButtonInteractions() noexcept
+{
+    linkedButton.dismissPointerGesture();
+    safeButton.dismissPointerGesture();
+    extremeButton.dismissPointerGesture();
+    oscSwitch.dismissPointerGesture();
+    shapeSwitch.dismissPointerGesture();
+    compressorSwitch.dismissPointerGesture();
+    widthSwitch.dismissPointerGesture();
+    driveBypassButton.dismissPointerGesture();
+    shapeBypassButton.dismissPointerGesture();
+    compressorBypassButton.dismissPointerGesture();
+    widthBypassButton.dismissPointerGesture();
+    dcFilterButton.dismissPointerGesture();
+}
+
+void BandPanel::dismissTransientInteraction() noexcept
+{
+    for (auto* slider : modulatableSliders)
+        if (slider != nullptr)
+            slider->dismissTransientInteraction();
+
+    dismissButtonInteractions();
+}
+
+void BandPanel::visibilityChanged()
+{
+    juce::Component::visibilityChanged();
+
+    if (! isShowing())
+        dismissTransientInteraction();
+}
+
 void BandPanel::updateAttachments()
 {
     for (const auto& paramInfo : ParameterIDAndName::getModulatableParameterInfo())
@@ -819,6 +854,11 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     vuPanel.setFocusBandNum(num);
     if (focusBandNum == num && ! forceUpdate)
         return;
+
+    // Shared controls must not carry a pointer, text-entry, or hover session
+    // across attachment targets. A late release or value-editor commit would
+    // otherwise reach the replacement attachment for the newly focused band.
+    dismissTransientInteraction();
 
     processor.setUiFocusBand(num);
 

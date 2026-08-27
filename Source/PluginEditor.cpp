@@ -453,6 +453,8 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     for (auto* slider : allModulatableSliders)
         if (slider != nullptr)
             slider->dismissTransientInteraction();
+    bandPanel.dismissTransientInteraction();
+    globalPanel.dismissTransientInteraction();
     lfoPanel.dismissTransientInteraction();
     lfoPanel.dismissModulationMatrixDialog();
     stateComponent.dismissSettingsDialog();
@@ -614,6 +616,8 @@ void FireAudioProcessorEditor::visibilityChanged()
         for (auto* slider : allModulatableSliders)
             if (slider != nullptr)
                 slider->dismissTransientInteraction();
+        bandPanel.dismissTransientInteraction();
+        globalPanel.dismissTransientInteraction();
         lfoPanel.dismissTransientInteraction();
         lfoPanel.dismissModulationMatrixDialog();
         stateComponent.dismissSettingsDialog();
@@ -857,6 +861,8 @@ void FireAudioProcessorEditor::timerCallback()
         for (auto* slider : allModulatableSliders)
             if (slider != nullptr)
                 slider->dismissTransientInteraction();
+        bandPanel.dismissTransientInteraction();
+        globalPanel.dismissTransientInteraction();
         lfoPanel.dismissTransientInteraction();
         lfoPanel.dismissModulationMatrixDialog();
         stateComponent.dismissSettingsDialog();
@@ -982,14 +988,10 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     if (willHideBandPanel || willHideGlobalPanel)
     {
         if (willHideBandPanel)
-            for (auto* slider : bandPanel.getModulatableSliders())
-                if (slider != nullptr)
-                    slider->dismissTransientInteraction();
+            bandPanel.dismissTransientInteraction();
 
         if (willHideGlobalPanel)
-            for (auto* slider : globalPanel.getModulatableSliders())
-                if (slider != nullptr)
-                    slider->dismissTransientInteraction();
+            globalPanel.dismissTransientInteraction();
 
         hideValuePopup();
         valueEntryPopup.dismissSession();

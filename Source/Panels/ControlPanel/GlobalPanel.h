@@ -38,6 +38,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void animationTick(float deltaSeconds);
+    void dismissTransientInteraction() noexcept;
 
     ModulatableSlider& getLowcutFreqKnob();
     ModulatableSlider& getPeakFreqKnob();
@@ -79,6 +80,7 @@ private:
 
     void buttonClicked(juce::Button* clickedButton) override;
     void comboBoxChanged(juce::ComboBox*) override {}
+    void visibilityChanged() override;
 
     void setBypassState(int index, bool state);
     void setVisibility(juce::Array<juce::Component*>& array, bool isVisible);

@@ -969,6 +969,49 @@ TEST_CASE("Slider cleanup balances APVTS gestures and releases deferred band foc
         checkBalanced(host);
     }
 
+    SECTION("BandPanel discards uncommitted text before rebinding")
+    {
+        FireLookAndFeel lookAndFeel;
+        BandPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setLookAndFeel(&lookAndFeel);
+        panel.setBounds(0, 0, 1000, 300);
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+        auto* drive = panel.getDriveKnob();
+        auto* band0Parameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(DRIVE_ID, 0));
+        auto* band1Parameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(DRIVE_ID, 1));
+        REQUIRE(drive != nullptr);
+        REQUIRE(band0Parameter != nullptr);
+        REQUIRE(band1Parameter != nullptr);
+        band0Parameter->setValueNotifyingHost(0.0f);
+        band1Parameter->setValueNotifyingHost(0.0f);
+
+        const auto position = drive->getLocalBounds().toFloat().getCentre();
+        drive->mouseEnter(makeMouseEvent(*drive, position));
+        auto* valueLabel =
+            ModulatableSliderInteractionTestAccess::getForwardedValueLabel(
+                *drive);
+        REQUIRE(valueLabel != nullptr);
+        valueLabel->showEditor();
+        auto* textEditor = valueLabel->getCurrentTextEditor();
+        REQUIRE(textEditor != nullptr);
+        textEditor->setText("50", false);
+        juce::Component::SafePointer<juce::TextEditor> safeEditor(textEditor);
+
+        panel.setFocusBandNum(1);
+
+        CHECK(panel.getFocusBandNum() == 1);
+        CHECK(drive->getParamID()
+              == ParameterIDAndName::getIDString(DRIVE_ID, 1));
+        CHECK(safeEditor == nullptr);
+        CHECK(band0Parameter->getValue() == 0.0f);
+        CHECK(band1Parameter->getValue() == 0.0f);
+        panel.removeFromDesktop();
+        panel.setLookAndFeel(nullptr);
+    }
+
     SECTION("PanelBase teardown runs before its SliderAttachments")
     {
         auto panel = std::make_unique<GlobalPanel>(

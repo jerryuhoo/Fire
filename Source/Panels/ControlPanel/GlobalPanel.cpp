@@ -89,12 +89,40 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
 
 GlobalPanel::~GlobalPanel()
 {
+    dismissTransientInteraction();
+
     filterSwitch.removeListener(this);
     downsampleSwitch.removeListener(this);
     graphSwitch.removeListener(this);
     filterLowCutButton.removeListener(this);
     filterPeakButton.removeListener(this);
     filterHighCutButton.removeListener(this);
+}
+
+void GlobalPanel::dismissTransientInteraction() noexcept
+{
+    for (auto* slider : modulatableSliders)
+        if (slider != nullptr)
+            slider->dismissTransientInteraction();
+
+    filterLowCutButton.dismissPointerGesture();
+    filterPeakButton.dismissPointerGesture();
+    filterHighCutButton.dismissPointerGesture();
+    filterSwitch.dismissPointerGesture();
+    downsampleSwitch.dismissPointerGesture();
+    graphSwitch.dismissPointerGesture();
+    if (filterBypassButton != nullptr)
+        filterBypassButton->dismissPointerGesture();
+    if (downsampleBypassButton != nullptr)
+        downsampleBypassButton->dismissPointerGesture();
+}
+
+void GlobalPanel::visibilityChanged()
+{
+    juce::Component::visibilityChanged();
+
+    if (! isShowing())
+        dismissTransientInteraction();
 }
 
 void GlobalPanel::presentMeterValues(const MeterValues& values,

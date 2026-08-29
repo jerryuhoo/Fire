@@ -2315,9 +2315,9 @@ TEST_CASE("Frequency labels animate on the shared UI clock and stay edge-safe",
     CHECK(label->getAlpha() == Catch::Approx(0.0f));
     CHECK_FALSE(frequencyText->isVisible());
 
-    // Exercise the defensive gesture-balancing path without creating a native
-    // test window. JUCE's real TextEditor owns the discarded-text behaviour;
-    // the component is responsible for closing the surrounding host gesture.
+    // Showing and dismissing an editor without a valid changed value must not
+    // create an empty host gesture. JUCE's real TextEditor owns discarded-text
+    // behaviour; the component opens a gesture only at a valid commit.
     VerticalLine lifecycleDivider;
     FreqTextLabel lifecycleLabel(lifecycleDivider);
     int gestureBegins = 0;
@@ -2331,11 +2331,11 @@ TEST_CASE("Frequency labels animate on the shared UI clock and stay edge-safe",
     REQUIRE(static_cast<bool>(lifecycleChild->onEditorShow));
 
     lifecycleChild->onEditorShow();
-    REQUIRE(gestureBegins == 1);
+    REQUIRE(gestureBegins == 0);
     lifecycleLabel.dismissImmediately();
 
-    CHECK(gestureBegins == 1);
-    CHECK(gestureEnds == 1);
+    CHECK(gestureBegins == 0);
+    CHECK(gestureEnds == 0);
     CHECK(lifecycleChild->getAlpha() == Catch::Approx(0.0f));
     CHECK_FALSE(lifecycleLabel.isVisible());
 }

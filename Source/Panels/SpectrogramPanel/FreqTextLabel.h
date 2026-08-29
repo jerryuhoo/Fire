@@ -12,6 +12,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/FireTheme.h"
+#include "../../GUI/PrimaryEditableLabel.h"
 #include "VerticalLine.h"
 #include "SpectrumComponent.h"
 #include <functional>
@@ -28,6 +29,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void visibilityChanged() override;
     void setFreq (int freq);
     int getFreq() const noexcept;
     void setScale (float scale);
@@ -49,7 +51,7 @@ private:
     fire::ui::DampedValue hoverAnimation;
     bool editorGestureOpen = false;
 
-    juce::Label freqLabel;
+    PrimaryEditableLabel freqLabel;
     FrequencyEditCallback frequencyEditCallback;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FreqTextLabel)
 };

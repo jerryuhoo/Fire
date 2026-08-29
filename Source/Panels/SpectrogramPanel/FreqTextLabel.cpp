@@ -83,7 +83,11 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
 
     freqLabel.onEditorShow = [this]
     {
-        setFade(true, true);
+        // A legitimate pointer, keyboard, or accessibility entry is already
+        // showing this component. Keep this callback free of Component
+        // visibility notifications because Label::showEditor continues to
+        // access itself after onEditorShow returns.
+        revealAnimation.setTarget(1.0f);
 
         if (auto* editor = freqLabel.getCurrentTextEditor())
         {
@@ -99,12 +103,6 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
             editor->setColour(juce::TextEditor::highlightedTextColourId,
                               fire::ui::colours::whiteHot);
             editor->selectAll();
-        }
-
-        if (! editorGestureOpen)
-        {
-            editorGestureOpen = true;
-            verticalLine.beginParameterGesture();
         }
     };
 
@@ -197,6 +195,23 @@ void FreqTextLabel::resized()
         juce::jlimit(9.0f, 13.5f, 10.75f * mScale)));
 }
 
+void FreqTextLabel::visibilityChanged()
+{
+    if (isShowing())
+        return;
+
+    // Component visibility notifications are not propagated to children, so
+    // the editable Label cannot observe its owning bubble being hidden. Treat
+    // the outer boundary as cancellation too, otherwise a delayed mouseUp can
+    // reopen the editor after the bubble is shown again.
+    freqLabel.dismissPointerGesture();
+
+    // Discard text typed for the previous visible UI context. onEditorHide can
+    // synchronously delete the owning FreqTextLabel, so this must stay last.
+    if (freqLabel.isBeingEdited())
+        freqLabel.hideEditor(true);
+}
+
 bool FreqTextLabel::advanceAnimation(float deltaSeconds)
 {
     hoverAnimation.setTarget(isMouseOverCustom() ? 1.0f : 0.0f);
@@ -242,6 +257,10 @@ void FreqTextLabel::setFade(bool update, bool isFadeIn)
 
 void FreqTextLabel::dismissImmediately()
 {
+    // A release delayed across a host hide or divider removal must not open a
+    // new TextEditor when this bubble is shown again.
+    freqLabel.dismissPointerGesture();
+
     // hideEditor(true) discards the TextEditor contents and invokes our
     // onEditorHide callback while the VerticalLine is still alive.  Keep the
     // explicit guard as a defensive balance for a host tearing down the view
@@ -259,6 +278,9 @@ void FreqTextLabel::dismissImmediately()
     hoverAnimation.snapTo(0.0f);
     freqLabel.setAlpha(0.0f);
     setVisible(false);
+
+    if (safeThis == nullptr)
+        return;
 
     // Keep the potentially destructive host notification last.
     finishEditorGesture();
@@ -286,6 +308,21 @@ void FreqTextLabel::applyEditedText()
 
     auto editCallback = frequencyEditCallback;
     juce::Component::SafePointer<FreqTextLabel> safeThis(this);
+
+    if (! editorGestureOpen)
+    {
+        // Open the gesture only after a valid changed value is known. This
+        // keeps Label::onEditorShow presentation-only: JUCE's showEditor keeps
+        // accessing the Label after that callback and cannot survive its
+        // synchronous deletion. Mark first so destructor cleanup can balance
+        // a begin callback that removes the owning editor.
+        editorGestureOpen = true;
+        verticalLine.beginParameterGesture();
+
+        if (safeThis == nullptr || ! editorGestureOpen)
+            return;
+    }
+
     editCallback(static_cast<float>(transformToLog(constrainedFrequency)));
 
     if (safeThis == nullptr)

@@ -62,6 +62,24 @@ public:
             ButtonType::mouseDrag(event);
     }
 
+    void mouseEnter(const juce::MouseEvent& event) override
+    {
+        ButtonType::mouseEnter(event);
+        recoverMissingPointerUp(event);
+    }
+
+    void mouseMove(const juce::MouseEvent& event) override
+    {
+        ButtonType::mouseMove(event);
+        recoverMissingPointerUp(event);
+    }
+
+    void mouseExit(const juce::MouseEvent& event) override
+    {
+        ButtonType::mouseExit(event);
+        recoverMissingPointerUp(event);
+    }
+
     void mouseUp(const juce::MouseEvent& event) override
     {
         if (pointerGesture == PointerGesture::primary
@@ -137,6 +155,14 @@ private:
     {
         return event.source.getType() == pointerSourceType
             && event.source.getIndex() == pointerSourceIndex;
+    }
+
+    void recoverMissingPointerUp(const juce::MouseEvent& event)
+    {
+        if (pointerGesture == PointerGesture::primary
+            && isPointerSource(event)
+            && ! event.mods.isLeftButtonDown())
+            dismissPointerGesture();
     }
 
     PointerGesture pointerGesture = PointerGesture::none;

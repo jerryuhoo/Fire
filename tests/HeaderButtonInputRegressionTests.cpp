@@ -302,6 +302,33 @@ TEST_CASE("Primary buttons discard gestures at visibility and enablement boundar
     }
 }
 
+TEST_CASE("Primary buttons recover when a pointer release is lost",
+          "[header-button][ui][input][primary-button][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    forEachPrimaryButtonType([leftButton](auto& button)
+    {
+        int clickCount = 0;
+        button.setClickingTogglesState(true);
+        button.onClick = [&clickCount] { ++clickCount; };
+        auto& component = static_cast<juce::Component&>(button);
+
+        beginPointerGesture(button, leftButton);
+        REQUIRE(button.isDown());
+
+        component.mouseMove(makeMouseEvent(component, {}));
+        CHECK_FALSE(button.isDown());
+
+        endPointerGesture(button);
+        CHECK_FALSE(button.getToggleState());
+        CHECK(clickCount == 0);
+    });
+}
+
 TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
           "[header-button][ui][input][primary-button][keyboard]")
 {

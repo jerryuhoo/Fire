@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <initializer_list>
+#include <memory>
 #include <vector>
 
 namespace
@@ -134,6 +135,58 @@ public:
     int notificationCount = 0;
 };
 
+class DeleteMatrixPanelOnHostNotification final
+    : public juce::AudioProcessorListener
+{
+public:
+    DeleteMatrixPanelOnHostNotification(
+        FireAudioProcessor& processorToObserve,
+        std::unique_ptr<ModulationMatrixPanel>& panelToDelete)
+        : processor(processorToObserve), panel(panelToDelete)
+    {
+        processor.addListener(this);
+    }
+
+    ~DeleteMatrixPanelOnHostNotification() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (! details.nonParameterStateChanged || notificationCount != 0)
+            return;
+
+        ++notificationCount;
+        panel.reset();
+        callbackCompleted = true;
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<ModulationMatrixPanel>& panel;
+    int notificationCount = 0;
+    bool callbackCompleted = false;
+};
+
+void collectComboBoxes(juce::Component& component,
+                       std::vector<juce::ComboBox*>& comboBoxes)
+{
+    if (auto* comboBox = dynamic_cast<juce::ComboBox*>(&component))
+        comboBoxes.push_back(comboBox);
+
+    for (int childIndex = 0;
+         childIndex < component.getNumChildComponents();
+         ++childIndex)
+        if (auto* child = component.getChildComponent(childIndex))
+            collectComboBoxes(*child, comboBoxes);
+}
+
 class SliderInteractionCapture final : public juce::Slider::Listener
 {
 public:
@@ -220,6 +273,90 @@ void beginButtonPointerGesture(juce::Button& button,
                        false));
 }
 } // namespace
+
+TEST_CASE("Modulation matrix host notifications may synchronously delete the panel",
+          "[ui][modulation-matrix][lifetime][reentrancy][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    auto panel = std::make_unique<ModulationMatrixPanel>(processor);
+    panel->setBounds(0, 0, 760, 420);
+
+    SECTION("add route")
+    {
+        auto* addButton = findTextButton(*panel, "+ ADD ROUTE");
+        REQUIRE(addButton != nullptr);
+        DeleteMatrixPanelOnHostNotification host(processor, panel);
+
+        exerciseButtonPointerGesture(
+            *addButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(host.callbackCompleted);
+        CHECK(host.notificationCount == 1);
+        CHECK(panel == nullptr);
+        CHECK(manager.getModulationRoutingsCopy().size() == 2);
+    }
+
+    SECTION("change source")
+    {
+        std::vector<ModulationMatrixRow*> rows;
+        collectMatrixRows(*panel, rows);
+        REQUIRE(rows.size() == 1);
+        std::vector<juce::ComboBox*> comboBoxes;
+        collectComboBoxes(*rows.front(), comboBoxes);
+        const auto sourceMenu = std::find_if(
+            comboBoxes.begin(), comboBoxes.end(), [](const auto* comboBox)
+            {
+                return comboBox->getNumItems() == 4;
+            });
+        REQUIRE(sourceMenu != comboBoxes.end());
+        DeleteMatrixPanelOnHostNotification host(processor, panel);
+
+        (*sourceMenu)->setSelectedId(2, juce::sendNotificationSync);
+
+        CHECK(host.callbackCompleted);
+        CHECK(host.notificationCount == 1);
+        CHECK(panel == nullptr);
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].sourceLfoIndex == 1);
+    }
+
+    SECTION("remove route")
+    {
+        std::vector<ModulationMatrixRow*> rows;
+        collectMatrixRows(*panel, rows);
+        REQUIRE(rows.size() == 1);
+        auto* removeButton = dynamic_cast<juce::TextButton*>(
+            rows.front()->findChildWithID("remove_button"));
+        REQUIRE(removeButton != nullptr);
+        DeleteMatrixPanelOnHostNotification host(processor, panel);
+
+        exerciseButtonPointerGesture(
+            *removeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+        CHECK(host.callbackCompleted);
+        CHECK(host.notificationCount == 1);
+        CHECK(panel == nullptr);
+        CHECK(manager.getModulationRoutingsCopy().isEmpty());
+    }
+}
 
 TEST_CASE("Modulation matrix amount accepts only primary-button drags",
           "[ui][modulation-matrix][input][amount-slider]")

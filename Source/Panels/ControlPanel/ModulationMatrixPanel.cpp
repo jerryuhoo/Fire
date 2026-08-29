@@ -374,8 +374,10 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
             return;
         }
 
-        if (onDeleteCallback)
-            onDeleteCallback();
+        auto callback = onDeleteCallback;
+        if (callback)
+            callback();
+        return;
     }
 }
 
@@ -435,14 +437,21 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
         }
 
         // 2. Call the new, safe method in the processor to apply the changes.
-        processor.assignModulation(index,
-                                   selectedSourceIndex,
-                                   selectedTargetID,
-                                   targetParameterIDAtBuild);
+        const auto expectedTargetParameterID = targetParameterIDAtBuild;
+        juce::Component::SafePointer<ModulationMatrixRow> safeThis(this);
+        auto& processorToNotify = processor;
+        processorToNotify.assignModulation(index,
+                                           selectedSourceIndex,
+                                           selectedTargetID,
+                                           expectedTargetParameterID);
+
+        if (safeThis == nullptr)
+            return;
 
         // 3. IMPORTANT: Tell the parent panel to rebuild its UI.
         // This ensures that if another row was cleared, it will visually update to "None".
-        requestParentRebuild();
+        safeThis->requestParentRebuild();
+        return;
     }
 }
 
@@ -546,8 +555,14 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
             const juce::ScopedLock lock(manager.getLfoDataLock());
             manager.getModulationRoutings().add({});
         }
-        processor.lfoDataHasChanged();
-        requestUiRebuild();
+        juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
+        auto& processorToNotify = processor;
+        processorToNotify.lfoDataHasChanged();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->requestUiRebuild();
+        return;
     }
 
     if (button == &closeButton)
@@ -573,8 +588,11 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
                          index = i,
                          expectedTargetParameterID = routings.getReference(i).targetParameterID]()
         {
+            juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
+            auto& processorToNotify = processor;
+
             // Remove the routing from the processor's data model.
-            auto& manager = processor.getLfoManager();
+            auto& manager = processorToNotify.getLfoManager();
             bool didRemove = false;
             {
                 const juce::ScopedLock lock(manager.getLfoDataLock());
@@ -589,12 +607,16 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
             }
 
             if (didRemove)
-                processor.lfoDataHasChanged();
+            {
+                processorToNotify.lfoDataHasChanged();
+                if (safeThis == nullptr)
+                    return;
+            }
 
             // Defer rebuilding until the current button callback has returned.
             // Clearing rows synchronously here would destroy the row that is
             // currently executing this callback.
-            requestUiRebuild();
+            safeThis->requestUiRebuild();
         };
 
         rows.push_back(std::make_unique<ModulationMatrixRow>(processor, i, routings.getReference(i), onDelete));

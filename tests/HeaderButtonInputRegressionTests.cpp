@@ -500,16 +500,41 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
             button.setClickingTogglesState(true);
             button.onClick = [&clickCount] { ++clickCount; };
             button.triggerClick();
-            CHECK_FALSE(button.getToggleState());
-            CHECK(clickCount == 0);
-            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
 
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
             CHECK(button.getToggleState());
             CHECK(clickCount == 1);
         });
     }
 
-    SECTION("Return key")
+    SECTION("accessibility press")
+    {
+        forEachPrimaryButtonType([](auto& button)
+        {
+            int clickCount = 0;
+            button.setClickingTogglesState(true);
+            button.onClick = [&clickCount] { ++clickCount; };
+            button.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            const juce::ScopeGuard removeFromDesktop {
+                [&button] { button.removeFromDesktop(); }
+            };
+            auto* accessibility = button.getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+
+            REQUIRE(accessibility->getActions().invoke(
+                juce::AccessibilityActionType::press));
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+        });
+    }
+
+    SECTION("Return and Space keys")
     {
         forEachPrimaryButtonType([](auto& button)
         {
@@ -522,22 +547,76 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
             CHECK(button.getToggleState());
             CHECK(clickCount == 1);
 
+            REQUIRE(static_cast<juce::Component&>(button).keyPressed(
+                juce::KeyPress { juce::KeyPress::spaceKey }));
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 2);
+
             juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-            CHECK(button.getToggleState());
-            CHECK(clickCount == 1);
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 2);
         });
     }
 
-    SECTION("Return callback may synchronously delete the button")
+    SECTION("disabled commands are inert")
+    {
+        forEachPrimaryButtonType([](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            button.setEnabled(false);
+
+            button.triggerClick();
+            CHECK_FALSE(static_cast<juce::Component&>(button).keyPressed(
+                juce::KeyPress { juce::KeyPress::returnKey }));
+            CHECK_FALSE(static_cast<juce::Component&>(button).keyPressed(
+                juce::KeyPress { juce::KeyPress::spaceKey }));
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+            CHECK(clickCount == 0);
+        });
+    }
+}
+
+TEST_CASE("Primary button commands may synchronously delete their control",
+          "[header-button][ui][input][primary-button][keyboard][lifecycle][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    const auto invokeDeletingCommand = [](const auto& invoke)
     {
         auto button = std::make_unique<PrimaryTextButton>("Delete");
         button->onClick = [&button] { button.reset(); };
         auto* rawButton = button.get();
 
-        CHECK(rawButton->keyPressed(
-            juce::KeyPress { juce::KeyPress::returnKey }));
+        invoke(*rawButton);
         CHECK(button == nullptr);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    };
+
+    SECTION("triggerClick")
+    {
+        invokeDeletingCommand([](PrimaryTextButton& button)
+        {
+            button.triggerClick();
+        });
+    }
+
+    SECTION("Return")
+    {
+        invokeDeletingCommand([](PrimaryTextButton& button)
+        {
+            CHECK(button.keyPressed(
+                juce::KeyPress { juce::KeyPress::returnKey }));
+        });
+    }
+
+    SECTION("Space")
+    {
+        invokeDeletingCommand([](PrimaryTextButton& button)
+        {
+            CHECK(button.keyPressed(
+                juce::KeyPress { juce::KeyPress::spaceKey }));
+        });
     }
 }
 

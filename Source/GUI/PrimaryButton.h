@@ -16,11 +16,11 @@ struct PrimaryButtonTestAccess;
 
 /** A JUCE button that accepts pointer clicks only from an owned primary gesture.
 
-    Return-key activation is synchronous so an event cannot be replayed after a
-    shared control has been rebound. Explicit Button::triggerClick calls retain
-    JUCE's asynchronous behaviour. The template is shared by text, toggle, and
-    hyperlink buttons so controls with different drawing implementations use
-    the same pointer ownership rules.
+    Keyboard and accessibility/programmatic activation are synchronous so a
+    command cannot be replayed after a shared control has been rebound or
+    hidden. The template is shared by text, toggle, and hyperlink buttons so
+    controls with different drawing implementations use the same ownership
+    rules.
 */
 template <typename ButtonType>
 class PrimaryPointerButton : public ButtonType
@@ -29,6 +29,18 @@ class PrimaryPointerButton : public ButtonType
 
 public:
     using ButtonType::ButtonType;
+
+    void triggerClick() override
+    {
+        if (this->isEnabled())
+        {
+            // Accessibility press actions route through triggerClick(). Submit
+            // now so the command cannot land on a later band/LFO binding. This
+            // must remain the final operation because it may delete the button.
+            this->internalClickCallback(
+                juce::ModifierKeys::currentModifiers);
+        }
+    }
 
     void mouseDown(const juce::MouseEvent& event) override
     {
@@ -123,12 +135,17 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override
     {
+        const bool isActivationKey =
+            key.isKeyCode(juce::KeyPress::returnKey)
+            || key.isKeyCode(juce::KeyPress::spaceKey);
+
         if (this->isEnabled()
-            && key.isKeyCode(juce::KeyPress::returnKey))
+            && isActivationKey)
         {
             // Button::keyPressed queues triggerClick(). Invoke the normal
             // callback now so it cannot land on a later attachment target.
-            // Return immediately because the callback may delete this button.
+            // This must remain the final operation because it may delete this
+            // button.
             this->internalClickCallback(key.getModifiers());
             return true;
         }

@@ -69,6 +69,8 @@ public:
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
     bool keyPressed(const juce::KeyPress& key) override;
+    void visibilityChanged() override;
+    void enablementChanged() override;
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
@@ -79,6 +81,7 @@ public:
         JUCE dismisses it, but its eventual result is guaranteed to be inert.
     */
     void invalidateContextMenuSession();
+    void dismissTransientInteraction();
 
     std::function<void(const LfoData&)> onDataChanged;
 
@@ -96,6 +99,14 @@ private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct LfoEditorTestAccess;
 #endif
+
+    enum class PointerGesture
+    {
+        none,
+        rejected,
+        popupMenu,
+        primary
+    };
 
     // This pointer holds the currently active LFO data. It does not own the data.
     LfoData activeLfoData;
@@ -116,6 +127,17 @@ private:
     bool validatePointDragInteractionOrCancel() noexcept;
     void cancelPointAndCurveInteraction() noexcept;
     void cancelAllInteraction() noexcept;
+    static bool isCompletePrimaryDown(
+        const juce::MouseEvent& event) noexcept;
+    static bool isStandalonePopupDown(
+        const juce::MouseEvent& event) noexcept;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    void beginPointerGesture(PointerGesture gesture,
+                             const juce::MouseEvent& event) noexcept;
+    void clearPointerGesture() noexcept;
+    void clearPrimaryDoubleClickAuthorization() noexcept;
+    bool hasPrimaryDoubleClickAuthorization(
+        const juce::MouseEvent& event) const noexcept;
     struct ContextMenuCommandContext
     {
         DataContext dataContext;
@@ -127,6 +149,7 @@ private:
         bool invertWasEnabled = false;
     };
     std::function<void(int)> createContextMenuResultHandler();
+    void showContextMenu(const juce::MouseEvent& event);
     void handleContextMenuResult(int result,
                                  const ContextMenuCommandContext& context);
 
@@ -190,8 +213,21 @@ private:
 
     bool isBrushing = false;
     juce::Point<int> lastBrushCell { -1, -1 };
+    PointerGesture activePointerGesture = PointerGesture::none;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+    bool primaryDoubleClickAuthorized = false;
+    juce::MouseInputSource::InputSourceType doubleClickSourceType =
+        juce::MouseInputSource::mouse;
+    int doubleClickSourceIndex = -1;
+    juce::int64 doubleClickAuthorizationStartMs = 0;
+    juce::int64 doubleClickAuthorizationDeadlineMs = 0;
     std::uint64_t contextMenuGeneration = 0;
     bool contextMenuSessionActive = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::function<void()> contextMenuLaunchHook;
+#endif
 
     void selectAllPoints();
     void clearAllPoints();

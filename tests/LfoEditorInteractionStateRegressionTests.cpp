@@ -10,8 +10,96 @@
 
 struct LfoEditorTestAccess
 {
+    static void setTrackedPointerSource(
+        LfoEditor& editor,
+        juce::MouseInputSource::InputSourceType type,
+        int index) noexcept
+    {
+        editor.pointerSourceType = type;
+        editor.pointerSourceIndex = index;
+    }
+
+    static bool hasNoPointerGesture(const LfoEditor& editor) noexcept
+    {
+        return editor.activePointerGesture
+               == LfoEditor::PointerGesture::none;
+    }
+
+    static bool isPrimaryPointerGesture(const LfoEditor& editor) noexcept
+    {
+        return editor.activePointerGesture
+               == LfoEditor::PointerGesture::primary;
+    }
+
+    static bool isPopupPointerGesture(const LfoEditor& editor) noexcept
+    {
+        return editor.activePointerGesture
+               == LfoEditor::PointerGesture::popupMenu;
+    }
+
+    static bool isRejectedPointerGesture(const LfoEditor& editor) noexcept
+    {
+        return editor.activePointerGesture
+               == LfoEditor::PointerGesture::rejected;
+    }
+
+    static bool hasPrimaryDoubleClickAuthorization(
+        const LfoEditor& editor) noexcept
+    {
+        return editor.primaryDoubleClickAuthorized;
+    }
+
+    static void setTrackedDoubleClickSource(
+        LfoEditor& editor,
+        juce::MouseInputSource::InputSourceType type,
+        int index) noexcept
+    {
+        editor.doubleClickSourceType = type;
+        editor.doubleClickSourceIndex = index;
+    }
+
+    static bool isMarqueeInteraction(const LfoEditor& editor) noexcept
+    {
+        return editor.draggingState == LfoEditor::DraggingState::Marquee;
+    }
+
+    static bool isPointInteraction(const LfoEditor& editor) noexcept
+    {
+        return editor.draggingState == LfoEditor::DraggingState::Point
+            || editor.draggingState == LfoEditor::DraggingState::Selection;
+    }
+
+    static bool isCurveInteraction(const LfoEditor& editor) noexcept
+    {
+        return editor.editingCurveIndex != -1;
+    }
+
+    static bool hasSelectionRectangle(const LfoEditor& editor) noexcept
+    {
+        return ! editor.selectionRectangle.isEmpty();
+    }
+
     static bool interactionStateIsValid(const LfoEditor& editor)
     {
+        const bool hasNoPointerGesture =
+            editor.activePointerGesture == LfoEditor::PointerGesture::none;
+        if (hasNoPointerGesture != (editor.pointerSourceIndex == -1))
+            return false;
+
+        if (editor.primaryDoubleClickAuthorized
+            != (editor.doubleClickSourceIndex != -1))
+            return false;
+
+        if (editor.primaryDoubleClickAuthorized
+            && ! hasNoPointerGesture)
+            return false;
+
+        if (editor.activePointerGesture != LfoEditor::PointerGesture::primary
+            && (editor.isBrushing
+                || editor.draggingState != LfoEditor::DraggingState::None
+                || editor.editingCurveIndex != -1))
+            return false;
+
         if (editor.draggingPointIndex != -1)
             return false;
 
@@ -146,6 +234,12 @@ struct LfoEditorTestAccess
     {
         return editor.contextMenuSessionActive;
     }
+
+    static void setContextMenuLaunchHook(LfoEditor& editor,
+                                         std::function<void()> hook)
+    {
+        editor.contextMenuLaunchHook = std::move(hook);
+    }
 };
 
 namespace
@@ -205,7 +299,9 @@ LfoData makeClusteredLfoData(size_t pointCount)
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::Point<float> position,
                                 juce::ModifierKeys modifiers = {},
-                                juce::Point<float> mouseDownPosition = {})
+                                juce::Point<float> mouseDownPosition = {},
+                                bool wasDragged = false,
+                                int clickCount = 1)
 {
     if (mouseDownPosition == juce::Point<float>())
         mouseDownPosition = position;
@@ -224,8 +320,48 @@ juce::MouseEvent makeMouseEvent(juce::Component& component,
              time,
              mouseDownPosition,
              time,
-             1,
-             false };
+             clickCount,
+             wasDragged };
+}
+
+void makeTrackedPointerIndexForeign(LfoEditor& editor,
+                                    const juce::MouseInputSource& source)
+{
+    LfoEditorTestAccess::setTrackedPointerSource(
+        editor, source.getType(),
+        source.getIndex() + 1);
+}
+
+void makeTrackedPointerTypeForeign(LfoEditor& editor,
+                                   const juce::MouseInputSource& source)
+{
+    LfoEditorTestAccess::setTrackedPointerSource(
+        editor,
+        source.getType() == juce::MouseInputSource::mouse
+            ? juce::MouseInputSource::touch
+            : juce::MouseInputSource::mouse,
+        source.getIndex());
+}
+
+void restoreTrackedPointerSource(LfoEditor& editor,
+                                 const juce::MouseInputSource& source)
+{
+    LfoEditorTestAccess::setTrackedPointerSource(
+        editor, source.getType(), source.getIndex());
+}
+
+void performOwnedPrimaryDoubleClick(LfoEditor& editor,
+                                    juce::Point<float> position)
+{
+    const auto primaryButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    editor.mouseDown(makeMouseEvent(
+        editor, position, primaryButton, position, false, 2));
+    const auto completedRelease = makeMouseEvent(
+        editor, position, primaryButton, position, false, 2);
+    editor.mouseUp(completedRelease);
+    editor.mouseDoubleClick(completedRelease);
 }
 
 PrimaryTextButton* findDirectButton(LfoPanel& panel,
@@ -1000,6 +1136,8 @@ TEST_CASE("Stale LFO brush publication restores manager authority",
     CHECK_FALSE(LfoEditorTestAccess::isBrushing(*editor));
     CHECK(LfoEditorTestAccess::lastBrushCell(*editor)
           == juce::Point<int>(-1, -1));
+    CHECK(LfoEditorTestAccess::hasNoPointerGesture(*editor));
+    CHECK(LfoEditorTestAccess::interactionStateIsValid(*editor));
 
     editor->mouseDrag(makeMouseEvent(*editor,
                                      { 250.0f, 25.0f },
@@ -1090,6 +1228,596 @@ TEST_CASE("macOS Control-click never paints the active LFO brush",
 }
 #endif
 
+TEST_CASE("LFO pointer sequences require an owned down and exact button kind",
+          "[lfo][editor][input][gesture][popup][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto popupButton = juce::ModifierKeys {
+        juce::ModifierKeys::rightButtonModifier
+    };
+    const auto mixedPrimaryPopup = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::rightButtonModifier
+    };
+    const auto mixedPrimaryMiddle = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::middleButtonModifier
+    };
+    const auto position = juce::Point<float> { 200.0f, 100.0f };
+
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.setDataToDisplay(makeLfoData({
+        { 0.0f, 0.20f }, { 0.45f, 0.75f }, { 1.0f, 0.30f }
+    }));
+    int menuLaunchCount = 0;
+    LfoEditorTestAccess::setContextMenuLaunchHook(
+        editor, [&] { ++menuLaunchCount; });
+
+    SECTION("a popup release without its popup down is inert")
+    {
+        editor.mouseUp(makeMouseEvent(editor, position, popupButton));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(menuLaunchCount == 0);
+
+        editor.dismissTransientInteraction();
+        juce::PopupMenu::dismissAllActiveMenus();
+    }
+
+    SECTION("mixed buttons are rejected as one owned sequence")
+    {
+        editor.mouseDown(makeMouseEvent(
+            editor, position, mixedPrimaryPopup));
+        CHECK(LfoEditorTestAccess::isRejectedPointerGesture(editor));
+
+        editor.mouseUp(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(menuLaunchCount == 0);
+
+        editor.mouseUp(makeMouseEvent(editor, position, popupButton));
+        CHECK(menuLaunchCount == 0);
+
+        editor.mouseDown(makeMouseEvent(
+            editor, position, mixedPrimaryMiddle));
+        CHECK(LfoEditorTestAccess::isRejectedPointerGesture(editor));
+        editor.mouseUp(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(menuLaunchCount == 0);
+    }
+
+    SECTION("only the popup-down source can open its menu")
+    {
+        editor.mouseDown(makeMouseEvent(editor, position, popupButton));
+        CHECK(LfoEditorTestAccess::isPopupPointerGesture(editor));
+
+        makeTrackedPointerIndexForeign(editor, source);
+        editor.mouseUp(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::isPopupPointerGesture(editor));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(menuLaunchCount == 0);
+
+        makeTrackedPointerTypeForeign(editor, source);
+        editor.mouseUp(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::isPopupPointerGesture(editor));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(menuLaunchCount == 0);
+
+        restoreTrackedPointerSource(editor, source);
+        editor.mouseUp(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(menuLaunchCount == 1);
+
+        editor.mouseUp(makeMouseEvent(editor, position, popupButton));
+        CHECK(menuLaunchCount == 1);
+        CHECK(LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+
+        editor.dismissTransientInteraction();
+        juce::PopupMenu::dismissAllActiveMenus();
+    }
+
+    SECTION("popup modifiers on primary release cannot steal a brush")
+    {
+        editor.setGridDivisions(4, 4);
+        editor.setCurrentBrush(LfoPresetShape::SawUp);
+        editor.setEditMode(LfoEditMode::BrushPaint);
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        editor.mouseDown(makeMouseEvent(
+            editor, position, leftButton));
+        REQUIRE(publicationCount == 1);
+        REQUIRE(LfoEditorTestAccess::isBrushing(editor));
+
+        editor.mouseUp(makeMouseEvent(
+            editor, position, popupButton, position));
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(publicationCount == 1);
+        CHECK(menuLaunchCount == 0);
+
+        editor.dismissTransientInteraction();
+        juce::PopupMenu::dismissAllActiveMenus();
+    }
+}
+
+TEST_CASE("LFO edit gestures ignore foreign pointer drag and release events",
+          "[lfo][editor][input][gesture][ownership][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto data = makeLfoData({
+        { 0.0f, 0.20f }, { 0.35f, 0.70f },
+        { 0.70f, 0.35f }, { 1.0f, 0.80f }
+    });
+
+    SECTION("brush")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        editor.setGridDivisions(4, 4);
+        editor.setCurrentBrush(LfoPresetShape::SineConvex);
+        editor.setEditMode(LfoEditMode::BrushPaint);
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        const juce::Point<float> downPosition { 150.0f, 25.0f };
+        const juce::Point<float> dragPosition { 250.0f, 25.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, downPosition, leftButton));
+        REQUIRE(publicationCount == 1);
+        const auto afterMouseDown = LfoEditorTestAccess::data(editor);
+
+        makeTrackedPointerIndexForeign(editor, source);
+        editor.mouseDown(makeMouseEvent(
+            editor, dragPosition, leftButton));
+        CHECK(publicationCount == 1);
+        CHECK(LfoEditorTestAccess::lastBrushCell(editor)
+              == juce::Point<int>(1, 0));
+        checkSameLfoData(
+            LfoEditorTestAccess::data(editor), afterMouseDown);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        CHECK(publicationCount == 1);
+        checkSameLfoData(
+            LfoEditorTestAccess::data(editor), afterMouseDown);
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::isPrimaryPointerGesture(editor));
+
+        makeTrackedPointerTypeForeign(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(publicationCount == 1);
+        CHECK(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::isPrimaryPointerGesture(editor));
+
+        restoreTrackedPointerSource(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        CHECK(publicationCount == 2);
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+    }
+
+    SECTION("point")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        const auto downPosition =
+            LfoEditorTestAccess::pointScreenPosition(editor, 1);
+        const auto dragPosition =
+            downPosition + juce::Point<float> { 24.0f, -18.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, downPosition, leftButton));
+        REQUIRE(LfoEditorTestAccess::isPointInteraction(editor));
+
+        makeTrackedPointerIndexForeign(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), data);
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(LfoEditorTestAccess::isPointInteraction(editor));
+
+        restoreTrackedPointerSource(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        CHECK(publicationCount == 1);
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(publicationCount == 2);
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+    }
+
+    SECTION("curve")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        const juce::Point<float> downPosition { 200.0f, 175.0f };
+        const juce::Point<float> dragPosition { 200.0f, 135.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, downPosition, leftButton));
+        REQUIRE(LfoEditorTestAccess::isCurveInteraction(editor));
+
+        makeTrackedPointerTypeForeign(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), data);
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(LfoEditorTestAccess::isCurveInteraction(editor));
+
+        restoreTrackedPointerSource(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        CHECK(publicationCount == 1);
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+    }
+
+    SECTION("marquee")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        const auto shiftPrimary = juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier
+            | juce::ModifierKeys::shiftModifier
+        };
+        const juce::Point<float> downPosition { 10.0f, 10.0f };
+        const juce::Point<float> dragPosition { 260.0f, 170.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, downPosition, shiftPrimary));
+        REQUIRE(LfoEditorTestAccess::isMarqueeInteraction(editor));
+
+        makeTrackedPointerIndexForeign(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, shiftPrimary, downPosition, true));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasSelectionRectangle(editor));
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(LfoEditorTestAccess::isMarqueeInteraction(editor));
+        CHECK(LfoEditorTestAccess::selectedPointCount(editor) == 0);
+
+        restoreTrackedPointerSource(editor, source);
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, shiftPrimary, downPosition, true));
+        CHECK(LfoEditorTestAccess::hasSelectionRectangle(editor));
+        editor.mouseUp(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+    }
+}
+
+TEST_CASE("LFO editor lifecycle boundaries cancel pointer state without publishing",
+          "[lfo][editor][input][gesture][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto data = makeLfoData({
+        { 0.0f, 0.20f }, { 0.35f, 0.70f },
+        { 0.70f, 0.35f }, { 1.0f, 0.80f }
+    });
+
+    const auto configureBrush = [&](LfoEditor& editor,
+                                    int& publicationCount)
+    {
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        editor.setGridDivisions(4, 4);
+        editor.setCurrentBrush(LfoPresetShape::SineConvex);
+        editor.setEditMode(LfoEditMode::BrushPaint);
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+        editor.mouseDown(makeMouseEvent(
+            editor, { 150.0f, 25.0f }, leftButton));
+        REQUIRE(publicationCount == 1);
+        REQUIRE(LfoEditorTestAccess::isBrushing(editor));
+    };
+
+    SECTION("explicit dismissal")
+    {
+        LfoEditor editor;
+        int publicationCount = 0;
+        configureBrush(editor, publicationCount);
+        editor.dismissTransientInteraction();
+
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        editor.mouseDrag(makeMouseEvent(
+            editor, { 250.0f, 25.0f }, leftButton,
+            { 150.0f, 25.0f }));
+        editor.mouseUp(makeMouseEvent(
+            editor, { 250.0f, 25.0f }, {},
+            { 150.0f, 25.0f }));
+        CHECK(publicationCount == 1);
+    }
+
+    SECTION("hiding")
+    {
+        LfoEditor editor;
+        int publicationCount = 0;
+        editor.setVisible(true);
+        configureBrush(editor, publicationCount);
+        editor.setVisible(false);
+
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(publicationCount == 1);
+    }
+
+    SECTION("disabling")
+    {
+        LfoEditor editor;
+        int publicationCount = 0;
+        configureBrush(editor, publicationCount);
+        editor.setEnabled(false);
+
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(publicationCount == 1);
+    }
+
+    SECTION("data and mode replacement")
+    {
+        LfoEditor editor;
+        int publicationCount = 0;
+        configureBrush(editor, publicationCount);
+        editor.setEditMode(LfoEditMode::PointEdit);
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+
+        editor.setEditMode(LfoEditMode::BrushPaint);
+        editor.mouseDown(makeMouseEvent(
+            editor, { 250.0f, 25.0f }, leftButton));
+        REQUIRE(LfoEditorTestAccess::isBrushing(editor));
+        editor.setDataToDisplay(data);
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+    }
+
+    SECTION("a fresh owned down replaces a stale marquee")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        const auto shiftPrimary = juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier
+            | juce::ModifierKeys::shiftModifier
+        };
+        const juce::Point<float> marqueeStart { 10.0f, 10.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, marqueeStart, shiftPrimary));
+        editor.mouseDrag(makeMouseEvent(
+            editor, { 100.0f, 100.0f }, shiftPrimary, marqueeStart));
+        REQUIRE(LfoEditorTestAccess::hasSelectionRectangle(editor));
+
+        const auto pointPosition =
+            LfoEditorTestAccess::pointScreenPosition(editor, 1);
+        editor.mouseDown(makeMouseEvent(
+            editor, pointPosition, leftButton));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasSelectionRectangle(editor));
+        CHECK(LfoEditorTestAccess::isPointInteraction(editor));
+        CHECK(LfoEditorTestAccess::isPrimaryPointerGesture(editor));
+    }
+}
+
+TEST_CASE("LFO panel dismissal cancels its editor gesture without another commit",
+          "[lfo][panel][editor][input][gesture][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.getLfoManager().setLfoData(0, makeLfoData({
+        { 0.0f, 0.20f }, { 0.35f, 0.70f }, { 1.0f, 0.30f }
+    }));
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+    prepareEditor(*editor);
+    editor->setGridDivisions(4, 4);
+    editor->setCurrentBrush(LfoPresetShape::SineConvex);
+    editor->setEditMode(LfoEditMode::BrushPaint);
+
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&] { ++dirtyCount; });
+    editor->mouseDown(makeMouseEvent(
+        *editor, { 150.0f, 25.0f }, leftButton));
+    REQUIRE(dirtyCount == 1);
+    REQUIRE(LfoEditorTestAccess::isBrushing(*editor));
+
+    panel.dismissTransientInteraction();
+    CHECK_FALSE(LfoEditorTestAccess::isBrushing(*editor));
+    CHECK(LfoEditorTestAccess::hasNoPointerGesture(*editor));
+    CHECK(dirtyCount == 1);
+}
+
+TEST_CASE("LFO double-click edits require an enabled pure-primary sequence",
+          "[lfo][editor][input][double-click][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto original = makeLfoData({
+        { 0.0f, 0.20f }, { 0.50f, 0.50f }, { 1.0f, 0.80f }
+    });
+    const auto replacement = makeLfoData({
+        { 0.0f, 0.85f }, { 0.30f, 0.25f },
+        { 0.75f, 0.70f }, { 1.0f, 0.15f }
+    });
+    const juce::Point<float> interiorPoint { 200.0f, 100.0f };
+    const auto mixedPrimaryMiddle = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::middleButtonModifier
+    };
+    const auto popupButton = juce::ModifierKeys {
+        juce::ModifierKeys::rightButtonModifier
+    };
+
+    LfoEditor editor;
+    prepareEditor(editor);
+
+    SECTION("a double-click without its completed primary sequence is inert")
+    {
+        editor.setDataToDisplay(original);
+        editor.mouseDoubleClick(makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2));
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("mixed buttons")
+    {
+        editor.setDataToDisplay(original);
+        editor.mouseDown(makeMouseEvent(
+            editor, interiorPoint, mixedPrimaryMiddle,
+            interiorPoint, false, 2));
+        const auto mixedRelease = makeMouseEvent(
+            editor, interiorPoint, mixedPrimaryMiddle,
+            interiorPoint, false, 2);
+        editor.mouseUp(mixedRelease);
+        editor.mouseDoubleClick(mixedRelease);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("disabled editor")
+    {
+        editor.setDataToDisplay(original);
+        editor.setEnabled(false);
+        performOwnedPrimaryDoubleClick(editor, interiorPoint);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("a popup sequence cannot be reclassified as a primary double-click")
+    {
+        editor.setDataToDisplay(original);
+        editor.mouseDown(makeMouseEvent(
+            editor, interiorPoint, popupButton,
+            interiorPoint, false, 2));
+        editor.mouseDoubleClick(makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2));
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+        editor.dismissTransientInteraction();
+    }
+
+    SECTION("the completed primary authorization freezes both source dimensions")
+    {
+        editor.setDataToDisplay(original);
+        editor.mouseDown(makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2));
+        const auto completedRelease = makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2);
+        editor.mouseUp(completedRelease);
+        REQUIRE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+
+        LfoEditorTestAccess::setTrackedDoubleClickSource(
+            editor, source.getType(), source.getIndex() + 1);
+        editor.mouseDoubleClick(completedRelease);
+        CHECK(LfoEditorTestAccess::pointCount(editor) == 3);
+        CHECK(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+
+        LfoEditorTestAccess::setTrackedDoubleClickSource(
+            editor,
+            source.getType() == juce::MouseInputSource::mouse
+                ? juce::MouseInputSource::touch
+                : juce::MouseInputSource::mouse,
+            source.getIndex());
+        editor.mouseDoubleClick(completedRelease);
+        CHECK(LfoEditorTestAccess::pointCount(editor) == 3);
+        CHECK(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+
+        LfoEditorTestAccess::setTrackedDoubleClickSource(
+            editor, source.getType(), source.getIndex());
+        editor.mouseDoubleClick(completedRelease);
+        CHECK(LfoEditorTestAccess::pointCount(editor) == 2);
+        CHECK_FALSE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+    }
+
+    SECTION("dismissal consumes a completed primary authorization")
+    {
+        editor.setDataToDisplay(original);
+        editor.mouseDown(makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2));
+        const auto completedRelease = makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2);
+        editor.mouseUp(completedRelease);
+        REQUIRE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+
+        editor.dismissTransientInteraction();
+        CHECK_FALSE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+        editor.mouseDoubleClick(completedRelease);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("data replacement consumes a completed primary authorization")
+    {
+        editor.setDataToDisplay(original);
+        editor.mouseDown(makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2));
+        const auto completedRelease = makeMouseEvent(
+            editor, interiorPoint, leftButton,
+            interiorPoint, false, 2);
+        editor.mouseUp(completedRelease);
+        REQUIRE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+
+        editor.setDataToDisplay(replacement);
+        CHECK_FALSE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+        editor.mouseDoubleClick(completedRelease);
+        checkSameLfoData(
+            LfoEditorTestAccess::data(editor), replacement);
+    }
+
+    SECTION("pure primary")
+    {
+        editor.setDataToDisplay(original);
+        performOwnedPrimaryDoubleClick(editor, interiorPoint);
+        CHECK(LfoEditorTestAccess::pointCount(editor) == 2);
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK_FALSE(LfoEditorTestAccess::hasPrimaryDoubleClickAuthorization(
+            editor));
+    }
+}
+
 TEST_CASE("LFO point removal clears indices from the previous topology",
           "[lfo][editor][interaction][regression]")
 {
@@ -1101,7 +1829,7 @@ TEST_CASE("LFO point removal clears indices from the previous topology",
 
     LfoEditorTestAccess::selectAllPoints(editor);
     const auto pointToRemove = LfoEditorTestAccess::pointScreenPosition(editor, 1);
-    editor.mouseDoubleClick(makeMouseEvent(editor, pointToRemove, leftButton));
+    performOwnedPrimaryDoubleClick(editor, pointToRemove);
 
     REQUIRE(LfoEditorTestAccess::pointCount(editor) == 3);
     REQUIRE(LfoEditorTestAccess::selectedPointCount(editor) == 0);

@@ -122,9 +122,12 @@ TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
         LfoEditor editor;
         root.addAndMakeVisible(editor);
         editor.setBounds(260, 70, 500, 300);
+        editor.setDataToDisplay(LfoData {});
 
-        editor.mouseUp(makePopupMouseEvent(
-            editor, editor.getLocalBounds().toFloat().getCentre()));
+        const auto menuPosition =
+            editor.getLocalBounds().toFloat().getCentre();
+        editor.mouseDown(makePopupMouseEvent(editor, menuPosition));
+        editor.mouseUp(makePopupMouseEvent(editor, menuPosition));
         const juce::ScopeGuard cleanup { [] { dismissMenus(); } };
 
         auto* popup = findPopupMenu(root);

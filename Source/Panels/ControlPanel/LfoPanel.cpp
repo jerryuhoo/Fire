@@ -24,7 +24,7 @@ LfoEditor::LfoEditor()
 
 LfoEditor::~LfoEditor()
 {
-    invalidateContextMenuSession();
+    dismissTransientInteraction();
 }
 
 bool LfoEditor::isValidPointIndex(int index) const noexcept
@@ -94,12 +94,82 @@ void LfoEditor::cancelAllInteraction() noexcept
     cancelPointAndCurveInteraction();
     isBrushing = false;
     lastBrushCell = { -1, -1 };
+    clearPointerGesture();
+    clearPrimaryDoubleClickAuthorization();
+}
+
+bool LfoEditor::isCompletePrimaryDown(
+    const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown()
+        && ! event.mods.isPopupMenu();
+}
+
+bool LfoEditor::isStandalonePopupDown(
+    const juce::MouseEvent& event) noexcept
+{
+    const bool hasLeftButton = event.mods.isLeftButtonDown();
+    const bool hasRightButton = event.mods.isRightButtonDown();
+    return event.mods.isPopupMenu()
+        && ! event.mods.isMiddleButtonDown()
+        && (hasLeftButton != hasRightButton);
+}
+
+bool LfoEditor::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void LfoEditor::beginPointerGesture(
+    PointerGesture gesture,
+    const juce::MouseEvent& event) noexcept
+{
+    activePointerGesture = gesture;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+}
+
+void LfoEditor::clearPointerGesture() noexcept
+{
+    activePointerGesture = PointerGesture::none;
+    pointerSourceIndex = -1;
+}
+
+void LfoEditor::clearPrimaryDoubleClickAuthorization() noexcept
+{
+    primaryDoubleClickAuthorized = false;
+    doubleClickSourceIndex = -1;
+    doubleClickAuthorizationStartMs = 0;
+    doubleClickAuthorizationDeadlineMs = 0;
+}
+
+bool LfoEditor::hasPrimaryDoubleClickAuthorization(
+    const juce::MouseEvent& event) const noexcept
+{
+    const auto eventTimeMs = event.eventTime.toMilliseconds();
+    return primaryDoubleClickAuthorized
+        && event.getNumberOfClicks() >= 2
+        && event.source.getType() == doubleClickSourceType
+        && event.source.getIndex() == doubleClickSourceIndex
+        && eventTimeMs >= doubleClickAuthorizationStartMs
+        && eventTimeMs <= doubleClickAuthorizationDeadlineMs;
 }
 
 void LfoEditor::invalidateContextMenuSession()
 {
     ++contextMenuGeneration;
     contextMenuSessionActive = false;
+}
+
+void LfoEditor::dismissTransientInteraction()
+{
+    invalidateContextMenuSession();
+    cancelAllInteraction();
+    repaint();
 }
 
 std::function<void(int)> LfoEditor::createContextMenuResultHandler()
@@ -143,6 +213,40 @@ std::function<void(int)> LfoEditor::createContextMenuResultHandler()
 
         safeThis->handleContextMenuResult(result, commandContext);
     };
+}
+
+void LfoEditor::showContextMenu(const juce::MouseEvent& event)
+{
+    juce::PopupMenu menu;
+    menu.addItem(CommandIDs::selectAll, "Select All");
+    menu.addItem(CommandIDs::clear, "Clear");
+    menu.addSeparator();
+    menu.addItem(CommandIDs::copy,
+                 "Copy",
+                 dataIsActive && activeLfoData.points.size() > 2);
+    menu.addItem(CommandIDs::paste, "Paste", canPasteShape());
+    menu.addSeparator();
+    menu.addItem(CommandIDs::invertX,
+                 "Invert Horizontally",
+                 dataIsActive && activeLfoData.points.size() > 2);
+    menu.addItem(CommandIDs::invertY,
+                 "Invert Vertically",
+                 dataIsActive && activeLfoData.points.size() > 2);
+
+    auto callback = createContextMenuResultHandler();
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    auto launchHook = contextMenuLaunchHook;
+    if (launchHook)
+    {
+        launchHook();
+        return;
+    }
+#endif
+
+    menu.showMenuAsync(fire::ui::prepareContextMenu(
+                           menu, *this, event.getScreenPosition()),
+                       callback);
 }
 
 void LfoEditor::handleContextMenuResult(
@@ -542,37 +646,64 @@ void LfoEditor::setSmoothness(float smoothness)
 
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
-    if (! dataIsActive)
+    auto safeThis = juce::Component::SafePointer<LfoEditor>(this);
+
+    if (activePointerGesture != PointerGesture::none)
+    {
+        // Another device cannot steal an active edit. A fresh down from the
+        // owner is the lifecycle boundary for a host that omitted mouseUp.
+        if (! isPointerSource(event))
+            return;
+
+        cancelAllInteraction();
+    }
+
+    clearPrimaryDoubleClickAuthorization();
+
+    if (! isEnabled() || ! dataIsActive)
         return;
 
-    // Treat macOS Ctrl-click exactly like a physical right-click. The former
-    // mouseUp-only check allowed a popup gesture to paint a brush cell or
-    // begin a point edit before the context menu opened.
-    if (event.mods.isPopupMenu() || ! event.mods.isLeftButtonDown())
+    invalidateContextMenuSession();
+
+    if (! isCompletePrimaryDown(event))
+    {
+        beginPointerGesture(isStandalonePopupDown(event)
+                                ? PointerGesture::popupMenu
+                                : PointerGesture::rejected,
+                            event);
         return;
+    }
+
+    beginPointerGesture(PointerGesture::primary, event);
 
     if (isShowing() || isOnDesktop())
+    {
         grabKeyboardFocus();
+
+        if (safeThis == nullptr
+            || activePointerGesture != PointerGesture::primary
+            || ! isPointerSource(event)
+            || ! isEnabled()
+            || ! dataIsActive)
+            return;
+    }
 
     if (currentMode == LfoEditMode::BrushPaint)
     {
-        if (event.mods.isLeftButtonDown())
-        {
-            isBrushing = true;
-            const bool shapeChanged =
-                applyBrushShape(event.getPosition());
+        isBrushing = true;
+        const bool shapeChanged =
+            applyBrushShape(event.getPosition());
 
-            const float gridW = 1.0f / (float) hGridDivs;
-            const float gridH = 1.0f / (float) vGridDivs;
-            const int gridX = juce::jlimit(0, hGridDivs - 1, (int) ((float) event.x / (float) juce::jmax(1, getWidth()) / gridW));
-            const int gridY = juce::jlimit(0, vGridDivs - 1, (int) ((float) event.y / (float) juce::jmax(1, getHeight()) / gridH));
-            lastBrushCell = { gridX, gridY };
+        const float gridW = 1.0f / (float) hGridDivs;
+        const float gridH = 1.0f / (float) vGridDivs;
+        const int gridX = juce::jlimit(0, hGridDivs - 1, (int) ((float) event.x / (float) juce::jmax(1, getWidth()) / gridW));
+        const int gridY = juce::jlimit(0, vGridDivs - 1, (int) ((float) event.y / (float) juce::jmax(1, getHeight()) / gridH));
+        lastBrushCell = { gridX, gridY };
 
-            // The first painted cell is already visible, so publish it now.
-            // Do this last because the callback may rebind or delete us.
-            if (shapeChanged)
-                publishActiveData();
-        }
+        // The first painted cell is already visible, so publish it now. Do
+        // this last because the callback may rebind or delete us.
+        if (shapeChanged)
+            publishActiveData();
         return;
     }
 
@@ -670,8 +801,12 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (activePointerGesture != PointerGesture::primary
+        || ! isPointerSource(event))
+        return;
+
     // First, handle the brush drag if it's active.
-    if (isBrushing && event.mods.isLeftButtonDown())
+    if (isBrushing)
     {
         const float gridW = 1.0f / (float) hGridDivs;
         const float gridH = 1.0f / (float) vGridDivs;
@@ -852,25 +987,35 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
 void LfoEditor::mouseUp(const juce::MouseEvent& event)
 {
-    if (event.mods.isPopupMenu())
+    if (activePointerGesture == PointerGesture::none
+        || ! isPointerSource(event))
+        return;
+
+    const auto completedGesture = activePointerGesture;
+    if (completedGesture == PointerGesture::primary
+        && event.getNumberOfClicks() >= 2)
     {
-        juce::PopupMenu m;
-        m.addItem(CommandIDs::selectAll, "Select All");
-        m.addItem(CommandIDs::clear, "Clear");
-        m.addSeparator();
-        m.addItem(CommandIDs::copy, "Copy", dataIsActive && activeLfoData.points.size() > 2);
-        m.addItem(CommandIDs::paste, "Paste", canPasteShape());
-        m.addSeparator();
-        m.addItem(CommandIDs::invertX, "Invert Horizontally", dataIsActive && activeLfoData.points.size() > 2);
-        m.addItem(CommandIDs::invertY, "Invert Vertically", dataIsActive && activeLfoData.points.size() > 2);
+        primaryDoubleClickAuthorized = true;
+        doubleClickSourceType = event.source.getType();
+        doubleClickSourceIndex = event.source.getIndex();
+        doubleClickAuthorizationStartMs = event.eventTime.toMilliseconds();
+        doubleClickAuthorizationDeadlineMs =
+            doubleClickAuthorizationStartMs
+            + juce::MouseEvent::getDoubleClickTimeout();
+    }
+    else
+    {
+        clearPrimaryDoubleClickAuthorization();
+    }
+    clearPointerGesture();
 
-        auto callback = createContextMenuResultHandler();
+    if (completedGesture == PointerGesture::rejected)
+        return;
 
-        m.showMenuAsync(fire::ui::prepareContextMenu(
-                            m, *this, event.getScreenPosition()),
-                        callback);
-
-        return; // We've handled the right-click, so we exit here.
+    if (completedGesture == PointerGesture::popupMenu)
+    {
+        showContextMenu(event);
+        return;
     }
 
     if (! dataIsActive)
@@ -932,8 +1077,18 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    if (! dataIsActive || currentMode != LfoEditMode::PointEdit
-        || event.mods.isPopupMenu() || ! event.mods.isLeftButtonDown())
+    if (! isCompletePrimaryDown(event)
+        || activePointerGesture != PointerGesture::none
+        || ! hasPrimaryDoubleClickAuthorization(event))
+        return;
+
+    // JUCE delivers mouseDoubleClick immediately after the second mouseUp.
+    // Consume that one release authorization before any edit or callback.
+    clearPrimaryDoubleClickAuthorization();
+
+    if (! isEnabled()
+        || ! dataIsActive
+        || currentMode != LfoEditMode::PointEdit)
         return;
 
     // First, check if double-clicking on an existing point to delete it.
@@ -995,6 +1150,24 @@ void LfoEditor::mouseExit(const juce::MouseEvent& event)
         hoveredPointIndex = -1;
         repaint(); // Force a repaint to remove the highlight/size change
     }
+}
+
+void LfoEditor::visibilityChanged()
+{
+    auto safeThis = juce::Component::SafePointer<LfoEditor>(this);
+    juce::Component::visibilityChanged();
+
+    if (safeThis != nullptr && ! isShowing())
+        dismissTransientInteraction();
+}
+
+void LfoEditor::enablementChanged()
+{
+    auto safeThis = juce::Component::SafePointer<LfoEditor>(this);
+    juce::Component::enablementChanged();
+
+    if (safeThis != nullptr && ! isEnabled())
+        dismissTransientInteraction();
 }
 
 void LfoEditor::addPoint(juce::Point<float> newPoint)
@@ -1873,6 +2046,10 @@ void LfoPanel::setLfo(int newIndex)
 
 void LfoPanel::dismissTransientInteraction()
 {
+    // Cancel the editor first. Slider dismissal may synchronously notify
+    // listeners, while LFO editing cancellation is deliberately callback-free.
+    lfoEditor.dismissTransientInteraction();
+
     for (auto& button : lfoSelectButtons)
         if (button != nullptr)
             button->dismissPointerGesture();
@@ -1887,7 +2064,6 @@ void LfoPanel::dismissTransientInteraction()
     gridYSlider.dismissTransientInteraction();
     lfoSmoothSlider.dismissTransientInteraction();
     lfoPhaseSlider.dismissTransientInteraction();
-    lfoEditor.invalidateContextMenuSession();
 }
 
 void LfoPanel::configureModulationMatrixDialog(

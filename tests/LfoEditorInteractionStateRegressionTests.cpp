@@ -629,6 +629,45 @@ TEST_CASE("LFO paste remains unavailable until a shape has been copied",
     checkSameLfoData(lastPublished, source);
 }
 
+TEST_CASE("LFO deletion shortcuts use the delivered key event",
+          "[lfo][editor][keyboard][regression]")
+{
+    const auto original = makeLfoData({
+        { 0.0f, 0.15f }, { 0.30f, 0.80f },
+        { 0.65f, 0.25f }, { 1.0f, 0.70f }
+    });
+
+    const auto checkDeletionKey = [&](int keyCode)
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(original);
+        LfoEditorTestAccess::selectAllPoints(editor);
+
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&)
+        {
+            ++publicationCount;
+        };
+
+        CHECK(editor.keyPressed(juce::KeyPress { keyCode }));
+        CHECK(LfoEditorTestAccess::pointCount(editor) == 2);
+        CHECK(LfoEditorTestAccess::selectedPointCount(editor) == 0);
+        CHECK(publicationCount == 1);
+        CHECK(hasValidLfoTopology(LfoEditorTestAccess::data(editor)));
+    };
+
+    SECTION("Delete")
+    {
+        checkDeletionKey(juce::KeyPress::deleteKey);
+    }
+
+    SECTION("Backspace")
+    {
+        checkDeletionKey(juce::KeyPress::backspaceKey);
+    }
+}
+
 TEST_CASE("Stale LFO context menu commands cannot edit replacement data",
           "[lfo][editor][popup-menu][context][regression]")
 {

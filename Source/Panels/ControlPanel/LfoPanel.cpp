@@ -1503,7 +1503,9 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
         }
     }
 
-    if (! selectedPointIndices.empty() && (key.isKeyCurrentlyDown(juce::KeyPress::deleteKey) || key.isKeyCurrentlyDown(juce::KeyPress::backspaceKey)))
+    if (! selectedPointIndices.empty()
+        && (key.isKeyCode(juce::KeyPress::deleteKey)
+            || key.isKeyCode(juce::KeyPress::backspaceKey)))
     {
         deleteSelectedPoints();
         publishActiveData();

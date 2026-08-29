@@ -1881,47 +1881,70 @@ namespace state
                                  [safeThis, menuLookAndFeel](int result)
                                  {
                                      juce::ignoreUnused(menuLookAndFeel);
-                                     if (safeThis == nullptr)
-                                         return;
-
-                                     if (result == 1)
-                                     {
-                                         safeThis->isChanged = true;
-                                         safeThis->beginProgrammaticChange();
-                                         const juce::ScopeGuard finishInit { [component = safeThis.getComponent()]
-                                         {
-                                             if (component != nullptr)
-                                                 component->endProgrammaticChange();
-                                         } };
-                                         safeThis->procStatePresets.initPreset();
-                                         safeThis->resetMultiband();
-                                         safeThis->presetBox.setSelectedId(0, juce::dontSendNotification);
-                                     }
-                                     else if (result == 2)
-                                     {
-                                         safeThis->openPresetFolder();
-                                     }
-                                     else if (result == 3)
-                                     {
-                                         safeThis->rescanPresetFolder();
-                                     }
-                                     else if (result == 4)
-                                     {
-                                         juce::URL(GITHUB_LINK).launchInDefaultBrowser();
-                                     }
-                                     else if (result == 5)
-                                     {
-                                         if (! safeThis->manualUpdateCheckThread.isThreadRunning())
-                                         {
-                                             safeThis->manualUpdateCheckThread.prepareForStart();
-                                             safeThis->manualUpdateCheckThread.startThread();
-                                         }
-                                     }
-                                     else if (result == 6)
-                                     {
-                                         safeThis->showSettingsDialog();
-                                     }
+                                     if (safeThis != nullptr)
+                                         safeThis->handlePresetMenuResult(result);
                                  });
+    }
+
+    void StateComponent::handlePresetMenuResult(int result)
+    {
+        if (result == 1)
+        {
+            const juce::Component::SafePointer<StateComponent> safeThis(this);
+            auto* presetManager = &procStatePresets;
+            auto* abState = &procStateAB;
+            isChanged = true;
+            beginProgrammaticChange();
+            const juce::ScopeGuard finishInit { [safeThis]
+            {
+                if (safeThis != nullptr)
+                    safeThis->endProgrammaticChange();
+            } };
+
+            // Init and the DSP reset are processor-owned operations. Complete
+            // both even if a synchronous host notification closes the UI.
+            presetManager->initPreset();
+            abState->reset();
+
+            if (safeThis != nullptr)
+                safeThis->presetBox.setSelectedId(
+                    0, juce::dontSendNotification);
+            return;
+        }
+
+        if (result == 2)
+        {
+            openPresetFolder();
+            return;
+        }
+
+        if (result == 3)
+        {
+            rescanPresetFolder();
+            return;
+        }
+
+        if (result == 4)
+        {
+            juce::URL(GITHUB_LINK).launchInDefaultBrowser();
+            return;
+        }
+
+        if (result == 5)
+        {
+            if (! manualUpdateCheckThread.isThreadRunning())
+            {
+                manualUpdateCheckThread.prepareForStart();
+                manualUpdateCheckThread.startThread();
+            }
+            return;
+        }
+
+        if (result == 6)
+        {
+            showSettingsDialog();
+            return;
+        }
     }
 
     void StateComponent::showSettingsDialog()
@@ -1966,11 +1989,6 @@ namespace state
         options.resizable = true;
         options.componentToCentreAround = this;
         settingsDialog = options.launchAsync();
-    }
-
-    void StateComponent::resetMultiband()
-    {
-        procStateAB.reset();
     }
 
     void StateComponent::setChangedState(bool state)

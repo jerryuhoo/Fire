@@ -10,6 +10,14 @@
 #include <stdexcept>
 #include <thread>
 
+struct StateComponentMenuTestAccess
+{
+    static void handleResult(state::StateComponent& component, int result)
+    {
+        component.handlePresetMenuResult(result);
+    }
+};
+
 namespace
 {
 class ScopedTemporaryDirectory
@@ -742,6 +750,62 @@ TEST_CASE("Preset selection survives synchronous editor deletion by the host",
         REQUIRE(committedHost.states.size() == 1);
         CHECK(committedHost.generations.front() % 2u == 0u);
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
+}
+
+TEST_CASE("Preset Init survives synchronous component deletion by the host",
+          "[preset][ui][menu][init][host][lifetime][self-delete][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    auto* driveParameter = processor.treeState.getParameter(driveID);
+    REQUIRE(driveParameter != nullptr);
+    const auto defaultDrive = driveParameter->getNormalisableRange()
+                                  .convertFrom0to1(
+                                      driveParameter->getDefaultValue());
+    setPlainParameter(processor, driveID, 73.0f);
+
+    auto component = std::make_unique<state::StateComponent>(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    auto* rawComponent = component.get();
+
+    SECTION("parameter notification during Init")
+    {
+        NonParameterStateCapture committedHost(processor);
+        DeleteUiOnHostNotification<state::StateComponent> deleteOnChange(
+            processor, component, HostDeletionTrigger::parameterChange);
+        StateComponentMenuTestAccess::handleResult(*rawComponent, 1);
+
+        CHECK(deleteOnChange.callbackCount == 1);
+        CHECK(deleteOnChange.callbackCompleted);
+        CHECK(component == nullptr);
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
+        CHECK((processor.getMultibandTopologyGenerationForTesting() & 1u)
+              == 0u);
+        REQUIRE(committedHost.states.size() == 1);
+        CHECK(committedHost.generations.front() % 2u == 0u);
+        CHECK(getPlainParameter(processor, driveID)
+              == Catch::Approx(defaultDrive));
+    }
+
+    SECTION("final non-parameter state notification")
+    {
+        NonParameterStateCapture committedHost(processor);
+        DeleteUiOnHostNotification<state::StateComponent> deleteOnChange(
+            processor, component, HostDeletionTrigger::nonParameterChange);
+        StateComponentMenuTestAccess::handleResult(*rawComponent, 1);
+
+        CHECK(deleteOnChange.callbackCount == 1);
+        CHECK(deleteOnChange.callbackCompleted);
+        CHECK(component == nullptr);
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
+        CHECK((processor.getMultibandTopologyGenerationForTesting() & 1u)
+              == 0u);
+        REQUIRE(committedHost.states.size() == 1);
+        CHECK(committedHost.generations.front() % 2u == 0u);
+        CHECK(getPlainParameter(processor, driveID)
+              == Catch::Approx(defaultDrive));
     }
 }
 

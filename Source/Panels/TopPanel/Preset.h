@@ -26,6 +26,7 @@
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct StateComponentDialogTestAccess;
+struct StateComponentMenuTestAccess;
 #endif
 
 namespace state
@@ -195,6 +196,7 @@ PluginProcessor).
     private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         friend struct ::StateComponentDialogTestAccess;
+        friend struct ::StateComponentMenuTestAccess;
 #endif
 
         class ManualUpdateCheckThread final : public juce::Thread
@@ -254,6 +256,7 @@ PluginProcessor).
         void rescanPresetFolder();
         void creatFolderIfNotExist(juce::File userFile);
         void popPresetMenu();
+        void handlePresetMenuResult(int result);
         void showSettingsDialog();
         float getPresetMenuScale() const noexcept;
         juce::PopupMenu::Options createPresetMenuOptions(float menuScale);
@@ -262,7 +265,6 @@ PluginProcessor).
         void beginProgrammaticChange();
         void endProgrammaticChange();
 
-        void resetMultiband();
         void publishManualUpdateResult(std::unique_ptr<VersionInfo> result);
         void showManualUpdateResult();
 

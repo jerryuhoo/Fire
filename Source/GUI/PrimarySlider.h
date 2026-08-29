@@ -71,6 +71,24 @@ public:
         juce::Slider::mouseDrag(event);
     }
 
+    void mouseEnter(const juce::MouseEvent& event) override
+    {
+        juce::Slider::mouseEnter(event);
+        recoverMissingPointerUp(event);
+    }
+
+    void mouseMove(const juce::MouseEvent& event) override
+    {
+        juce::Slider::mouseMove(event);
+        recoverMissingPointerUp(event);
+    }
+
+    void mouseExit(const juce::MouseEvent& event) override
+    {
+        juce::Slider::mouseExit(event);
+        recoverMissingPointerUp(event);
+    }
+
     void mouseUp(const juce::MouseEvent& event) override
     {
         if (pointerGesture == PointerGesture::none
@@ -176,6 +194,18 @@ private:
     {
         return event.source.getType() == pointerSourceType
             && event.source.getIndex() == pointerSourceIndex;
+    }
+
+    void recoverMissingPointerUp(const juce::MouseEvent& event)
+    {
+        if (pointerGesture == PointerGesture::primary
+            && isPointerSource(event)
+            && ! event.mods.isLeftButtonDown())
+        {
+            // Slider::mouseUp notifies listeners and may synchronously delete
+            // this control, so gesture completion is the final operation.
+            finishActivePointerGesture();
+        }
     }
 
     void clearPointerState() noexcept

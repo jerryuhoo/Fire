@@ -194,6 +194,43 @@ TEST_CASE("PrimarySlider freezes source ownership and closes a stale gesture onc
     CHECK(capture.dragEnds == 2);
 }
 
+TEST_CASE("PrimarySlider closes a gesture when pointer release is lost",
+          "[primary-slider][ui][input][gesture][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimarySlider slider;
+    slider.setBounds(0, 0, 120, 120);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0);
+    slider.setValue(0.5, juce::dontSendNotification);
+    SliderInteractionCapture capture;
+    slider.addListener(&capture);
+
+    const auto downPosition = slider.getLocalBounds().toFloat().getCentre();
+    const auto dragPosition = downPosition
+                            + juce::Point<float> { 30.0f, -20.0f };
+    const juce::ModifierKeys primary {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    slider.mouseDown(makeMouseEvent(slider, downPosition, primary));
+    slider.mouseDrag(makeMouseEvent(
+        slider, dragPosition, primary, downPosition, true));
+    REQUIRE(slider.hasActivePointerGesture());
+    REQUIRE(capture.dragStarts == 1);
+    REQUIRE(capture.dragEnds == 0);
+
+    slider.mouseMove(makeMouseEvent(slider, dragPosition, {}, downPosition, true));
+
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 1);
+    const auto recoveredValue = slider.getValue();
+
+    slider.mouseUp(makeMouseEvent(
+        slider, dragPosition, {}, downPosition, true));
+    CHECK(capture.dragEnds == 1);
+    CHECK(slider.getValue() == Catch::Approx(recoveredValue));
+}
+
 TEST_CASE("Fire IncDec slider arrows accept only primary clicks",
           "[primary-slider][ui][input][incdec]")
 {

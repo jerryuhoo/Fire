@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "../../GUI/ContextAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
 #include "Graph Components/Oscilloscope.h"
 #include "Graph Components/VUPanel.h"
@@ -19,11 +20,12 @@
 #include <cstdint>
 #include <vector>
 
+struct GlobalPanelSlopeTestAccess;
+
 //==============================================================================
 /*
 */
 class GlobalPanel : public PanelBase,
-                    public juce::ComboBox::Listener,
                     public juce::Button::Listener
 {
 public:
@@ -52,6 +54,8 @@ public:
     float scale = 1.0f;
 
 private:
+    friend struct GlobalPanelSlopeTestAccess;
+
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
     using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
@@ -77,10 +81,12 @@ private:
     void invalidateChromeCache();
     void updateSelectionTarget(bool snap);
     juce::TextButton* getSelectedSwitch() noexcept;
+    void invalidateSlopeInteractions() noexcept;
+    bool canOpenSlopePopup(bool lowCut) const noexcept;
 
     void buttonClicked(juce::Button* clickedButton) override;
-    void comboBoxChanged(juce::ComboBox*) override {}
     void visibilityChanged() override;
+    void enablementChanged() override;
 
     void setBypassState(int index, bool state);
     void setVisibility(juce::Array<juce::Component*>& array, bool isVisible);
@@ -111,8 +117,9 @@ private:
         filterBypassAttachment, downsampleBypassAttachment;
 
     // --- ComboBoxes ---
-    juce::ComboBox lowcutSlopeMode, highcutSlopeMode;
+    ContextAwareComboBox lowcutSlopeMode, highcutSlopeMode;
     std::unique_ptr<ComboBoxAttachment> lowcutModeAttachment, highcutModeAttachment;
+    std::uint64_t slopeInteractionGeneration = 0;
 
     // --- Labels ---
     // Removed panel labels, as the switches now serve as titles.

@@ -115,6 +115,36 @@ void GlobalPanel::dismissTransientInteraction() noexcept
         filterBypassButton->dismissPointerGesture();
     if (downsampleBypassButton != nullptr)
         downsampleBypassButton->dismissPointerGesture();
+
+    invalidateSlopeInteractions();
+}
+
+void GlobalPanel::invalidateSlopeInteractions() noexcept
+{
+    ++slopeInteractionGeneration;
+    lowcutSlopeMode.dismissTransientInteraction();
+    highcutSlopeMode.dismissTransientInteraction();
+}
+
+bool GlobalPanel::canOpenSlopePopup(bool lowCut) const noexcept
+{
+    const auto& slopeMode = lowCut ? lowcutSlopeMode : highcutSlopeMode;
+    const bool correctFilterType = lowCut
+                                       ? filterLowCutButton.getToggleState()
+                                             && ! filterPeakButton.getToggleState()
+                                             && ! filterHighCutButton.getToggleState()
+                                       : filterHighCutButton.getToggleState()
+                                             && ! filterLowCutButton.getToggleState()
+                                             && ! filterPeakButton.getToggleState();
+
+    return filterBypassButton != nullptr
+           && filterBypassButton->getToggleState()
+           && filterSwitch.getToggleState()
+           && ! downsampleSwitch.getToggleState()
+           && ! graphSwitch.getToggleState()
+           && correctFilterType
+           && slopeMode.isShowing()
+           && slopeMode.isEnabled();
 }
 
 void GlobalPanel::visibilityChanged()
@@ -123,6 +153,14 @@ void GlobalPanel::visibilityChanged()
 
     if (! isShowing())
         dismissTransientInteraction();
+}
+
+void GlobalPanel::enablementChanged()
+{
+    juce::Component::enablementChanged();
+
+    if (! isEnabled())
+        invalidateSlopeInteractions();
 }
 
 void GlobalPanel::presentMeterValues(const MeterValues& values,
@@ -244,6 +282,34 @@ void GlobalPanel::createComboBoxes()
         menu->setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
         menu->setColour(juce::ComboBox::arrowColourId, fire::ui::colours::filter);
     }
+
+    auto* const lowcutSlopeParameter =
+        processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+    auto* const highcutSlopeParameter =
+        processor.treeState.getParameter(HIGHCUT_SLOPE_ID);
+    jassert(lowcutSlopeParameter != nullptr);
+    jassert(highcutSlopeParameter != nullptr);
+
+    lowcutSlopeMode.configurePopupSession(
+        [this]
+        {
+            return slopeInteractionGeneration;
+        },
+        [this]
+        {
+            return canOpenSlopePopup(true);
+        },
+        lowcutSlopeParameter);
+    highcutSlopeMode.configurePopupSession(
+        [this]
+        {
+            return slopeInteractionGeneration;
+        },
+        [this]
+        {
+            return canOpenSlopePopup(false);
+        },
+        highcutSlopeParameter);
 }
 
 void GlobalPanel::setupComponentGroups()
@@ -694,6 +760,16 @@ void GlobalPanel::invalidateChromeCache()
 
 void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 {
+    const bool changesSlopeContext = clickedButton == &filterSwitch
+                                     || clickedButton == &downsampleSwitch
+                                     || clickedButton == &graphSwitch
+                                     || clickedButton == &filterLowCutButton
+                                     || clickedButton == &filterPeakButton
+                                     || clickedButton == &filterHighCutButton;
+
+    if (changesSlopeContext)
+        invalidateSlopeInteractions();
+
     bool isSwitch = false;
     if (clickedButton == &filterSwitch && filterSwitch.getToggleState())
     {
@@ -771,6 +847,8 @@ void GlobalPanel::setBypassState(int index, bool state)
     // Simplified logic as the bypass buttons are now separate from the main component groups
     if (index == 0) // Filter
     {
+        invalidateSlopeInteractions();
+
         for (auto* component : filterComponents)
             component->setEnabled(state);
     }

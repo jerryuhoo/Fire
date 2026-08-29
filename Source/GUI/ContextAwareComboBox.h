@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <functional>
 
-struct BandPanelModeTestAccess;
+struct ContextAwareComboBoxTestAccess;
 
 //==============================================================================
 class ContextAwareComboBox final : public juce::ComboBox
@@ -31,7 +31,7 @@ public:
     void showPopup() override;
 
 private:
-    friend struct BandPanelModeTestAccess;
+    friend struct ContextAwareComboBoxTestAccess;
 
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;

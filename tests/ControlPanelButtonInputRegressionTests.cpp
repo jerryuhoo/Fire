@@ -8,14 +8,25 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
 
+struct ContextAwareComboBoxTestAccess
+{
+    static std::function<void(int)> createPopupResultHandler(
+        ContextAwareComboBox& comboBox)
+    {
+        return comboBox.createPopupResultHandler();
+    }
+};
+
 struct BandPanelModeTestAccess
 {
-    static juce::ComboBox& getModeBox(BandPanel& panel, size_t modeIndex)
+    static ContextAwareComboBox& getModeBox(BandPanel& panel,
+                                             size_t modeIndex)
     {
         return panel.distortionModes.at(modeIndex);
     }
@@ -24,8 +35,39 @@ struct BandPanelModeTestAccess
         BandPanel& panel,
         size_t modeIndex)
     {
-        return panel.distortionModes.at(modeIndex)
-            .createPopupResultHandler();
+        return ContextAwareComboBoxTestAccess::createPopupResultHandler(
+            panel.distortionModes.at(modeIndex));
+    }
+};
+
+struct GlobalPanelSlopeTestAccess
+{
+    static ContextAwareComboBox& getSlopeBox(GlobalPanel& panel, bool lowCut)
+    {
+        return lowCut ? panel.lowcutSlopeMode : panel.highcutSlopeMode;
+    }
+
+    static std::function<void(int)> createPopupResultHandler(
+        GlobalPanel& panel,
+        bool lowCut)
+    {
+        return ContextAwareComboBoxTestAccess::createPopupResultHandler(
+            getSlopeBox(panel, lowCut));
+    }
+
+    static void setFilterEnabled(GlobalPanel& panel, bool enabled)
+    {
+        REQUIRE(panel.filterBypassButton != nullptr);
+        panel.filterBypassButton->setToggleState(
+            enabled, juce::sendNotificationSync);
+    }
+
+    static void selectModule(GlobalPanel& panel, int moduleIndex)
+    {
+        auto* button = moduleIndex == 0 ? &panel.filterSwitch
+                     : moduleIndex == 1 ? &panel.downsampleSwitch
+                                        : &panel.graphSwitch;
+        button->setToggleState(true, juce::sendNotificationSync);
     }
 };
 
@@ -148,6 +190,26 @@ std::vector<juce::ComboBox*> collectDirectComboBoxes(juce::Component& panel)
             comboBoxes.push_back(comboBox);
 
     return comboBoxes;
+}
+
+void selectGlobalSlopeType(GlobalPanel& panel, bool lowCut)
+{
+    panel.setToggleButtonState(lowCut ? "lowcut" : "highcut");
+}
+
+void prepareGlobalSlopePanel(GlobalPanel& panel, bool lowCut)
+{
+    panel.setBounds(0, 0, 1000, 500);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+    selectGlobalSlopeType(panel, lowCut);
+}
+
+void dismissGlobalSlopePopups(GlobalPanel& panel)
+{
+    GlobalPanelSlopeTestAccess::getSlopeBox(panel, true).hidePopup();
+    GlobalPanelSlopeTestAccess::getSlopeBox(panel, false).hidePopup();
+    juce::PopupMenu::dismissAllActiveMenus();
 }
 
 std::vector<juce::ModifierKeys> rejectedPointerModifiers()
@@ -652,4 +714,378 @@ TEST_CASE("BandPanel shape mode commit survives synchronous panel destruction",
           == Catch::Approx(parameter->convertTo0to1(5.0f)));
     CHECK(gestures.gestures
           == std::vector<bool> { true, false });
+}
+
+TEST_CASE("GlobalPanel closes queued slope popups across context ABA",
+          "[control-panel][global][filter][slope][popup][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const bool lowCut : { true, false })
+    {
+        DYNAMIC_SECTION((lowCut ? "low-cut" : "high-cut")
+                        << " queued popup")
+        {
+            FireAudioProcessor processor;
+            setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+            GlobalPanel panel(processor, {}, {}, {}, {}, {});
+            prepareGlobalSlopePanel(panel, lowCut);
+
+            auto* lowParameter =
+                processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+            auto* highParameter =
+                processor.treeState.getParameter(HIGHCUT_SLOPE_ID);
+            REQUIRE(lowParameter != nullptr);
+            REQUIRE(highParameter != nullptr);
+            const auto initialLowValue = lowParameter->getValue();
+            const auto initialHighValue = highParameter->getValue();
+            ParameterGestureRecorder lowGestures;
+            ParameterGestureRecorder highGestures;
+            lowParameter->addListener(&lowGestures);
+            highParameter->addListener(&highGestures);
+            const juce::ScopeGuard cleanup { [&]
+            {
+                dismissGlobalSlopePopups(panel);
+                panel.removeFromDesktop();
+                lowParameter->removeListener(&lowGestures);
+                highParameter->removeListener(&highGestures);
+            } };
+
+            auto exerciseBoundary = [&](const char* boundaryName,
+                                        const std::function<void()>& boundary)
+            {
+                INFO("boundary: " << boundaryName);
+                auto& targetContext =
+                    GlobalPanelSlopeTestAccess::getSlopeBox(panel, lowCut);
+                auto& target = static_cast<juce::ComboBox&>(targetContext);
+                REQUIRE(target.keyPressed(
+                    juce::KeyPress { juce::KeyPress::returnKey }));
+                REQUIRE(target.isPopupActive());
+
+                boundary();
+
+                CHECK_FALSE(target.isPopupActive());
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+                CHECK_FALSE(GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, true).isPopupActive());
+                CHECK_FALSE(GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, false).isPopupActive());
+                CHECK(lowParameter->getValue()
+                      == Catch::Approx(initialLowValue));
+                CHECK(highParameter->getValue()
+                      == Catch::Approx(initialHighValue));
+                CHECK(lowGestures.gestures.empty());
+                CHECK(highGestures.gestures.empty());
+            };
+
+            exerciseBoundary("filter type", [&]
+            {
+                selectGlobalSlopeType(panel, ! lowCut);
+                selectGlobalSlopeType(panel, lowCut);
+            });
+            exerciseBoundary("panel visibility", [&]
+            {
+                panel.setVisible(false);
+                panel.setVisible(true);
+            });
+            exerciseBoundary("filter enabled", [&]
+            {
+                GlobalPanelSlopeTestAccess::setFilterEnabled(panel, false);
+                GlobalPanelSlopeTestAccess::setFilterEnabled(panel, true);
+            });
+            exerciseBoundary("module", [&]
+            {
+                GlobalPanelSlopeTestAccess::selectModule(panel, 1);
+                GlobalPanelSlopeTestAccess::selectModule(panel, 0);
+            });
+            exerciseBoundary("ancestor enabled", [&]
+            {
+                panel.setEnabled(false);
+                panel.setEnabled(true);
+            });
+        }
+    }
+}
+
+TEST_CASE("GlobalPanel late slope label release cannot reopen a popup",
+          "[control-panel][global][filter][slope][popup][mouse][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const bool lowCut : { true, false })
+    {
+        for (const bool dragged : { false, true })
+        {
+            DYNAMIC_SECTION((lowCut ? "low-cut" : "high-cut")
+                            << (dragged ? " late drag/release" : " late release"))
+            {
+                FireAudioProcessor processor;
+                setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+                GlobalPanel panel(processor, {}, {}, {}, {}, {});
+                prepareGlobalSlopePanel(panel, lowCut);
+
+                auto* lowParameter =
+                    processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+                auto* highParameter =
+                    processor.treeState.getParameter(HIGHCUT_SLOPE_ID);
+                REQUIRE(lowParameter != nullptr);
+                REQUIRE(highParameter != nullptr);
+                const auto initialLowValue = lowParameter->getValue();
+                const auto initialHighValue = highParameter->getValue();
+                ParameterGestureRecorder lowGestures;
+                ParameterGestureRecorder highGestures;
+                lowParameter->addListener(&lowGestures);
+                highParameter->addListener(&highGestures);
+                const juce::ScopeGuard cleanup { [&]
+                {
+                    dismissGlobalSlopePopups(panel);
+                    panel.removeFromDesktop();
+                    lowParameter->removeListener(&lowGestures);
+                    highParameter->removeListener(&highGestures);
+                } };
+
+                auto& targetContext =
+                    GlobalPanelSlopeTestAccess::getSlopeBox(panel, lowCut);
+                auto& target = static_cast<juce::ComboBox&>(targetContext);
+                auto& other = GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, ! lowCut);
+                const auto initialSelectedId = target.getSelectedId();
+                const auto initialOtherSelectedId = other.getSelectedId();
+                auto* label = findDescendant<juce::Label>(target);
+                REQUIRE(label != nullptr);
+                auto& component = static_cast<juce::Component&>(target);
+
+                component.mouseDown(makeMouseEvent(
+                    *label,
+                    juce::ModifierKeys {
+                        juce::ModifierKeys::leftButtonModifier }));
+                REQUIRE(target.isPopupActive());
+
+                selectGlobalSlopeType(panel, ! lowCut);
+                CHECK_FALSE(target.isPopupActive());
+                selectGlobalSlopeType(panel, lowCut);
+
+                if (dragged)
+                    component.mouseDrag(makeMouseEvent(
+                        *label,
+                        juce::ModifierKeys {
+                            juce::ModifierKeys::leftButtonModifier },
+                        true));
+
+                component.mouseUp(makeMouseEvent(*label, {}, dragged));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+                CHECK_FALSE(target.isPopupActive());
+                CHECK_FALSE(other.isPopupActive());
+                CHECK(target.getSelectedId() == initialSelectedId);
+                CHECK(other.getSelectedId() == initialOtherSelectedId);
+                CHECK(lowParameter->getValue()
+                      == Catch::Approx(initialLowValue));
+                CHECK(highParameter->getValue()
+                      == Catch::Approx(initialHighValue));
+                CHECK(lowGestures.gestures.empty());
+                CHECK(highGestures.gestures.empty());
+
+                REQUIRE(target.keyPressed(
+                    juce::KeyPress { juce::KeyPress::returnKey }));
+                CHECK(target.isPopupActive());
+                target.hidePopup();
+            }
+        }
+    }
+}
+
+TEST_CASE("GlobalPanel rejects stale slope results without invalidating a replacement session",
+          "[control-panel][global][filter][slope][popup][attachment][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    constexpr std::array<const char*, 5> boundaries {
+        "filter type", "panel visibility", "filter enabled", "module", "ancestor enabled"
+    };
+
+    for (const bool lowCut : { true, false })
+    {
+        for (size_t boundaryIndex = 0;
+             boundaryIndex < boundaries.size();
+             ++boundaryIndex)
+        {
+            DYNAMIC_SECTION((lowCut ? "low-cut " : "high-cut ")
+                            << boundaries[boundaryIndex])
+            {
+                FireAudioProcessor processor;
+                setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+                GlobalPanel panel(processor, {}, {}, {}, {}, {});
+                prepareGlobalSlopePanel(panel, lowCut);
+
+                auto* lowParameter =
+                    processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+                auto* highParameter =
+                    processor.treeState.getParameter(HIGHCUT_SLOPE_ID);
+                REQUIRE(lowParameter != nullptr);
+                REQUIRE(highParameter != nullptr);
+                const auto initialLowValue = lowParameter->getValue();
+                const auto initialHighValue = highParameter->getValue();
+                auto& lowBox = GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, true);
+                auto& highBox = GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, false);
+                const auto initialLowId = lowBox.getSelectedId();
+                const auto initialHighId = highBox.getSelectedId();
+                ParameterGestureRecorder lowGestures;
+                ParameterGestureRecorder highGestures;
+                int lowChangeCount = 0;
+                int highChangeCount = 0;
+                lowBox.onChange = [&] { ++lowChangeCount; };
+                highBox.onChange = [&] { ++highChangeCount; };
+                lowParameter->addListener(&lowGestures);
+                highParameter->addListener(&highGestures);
+                const juce::ScopeGuard cleanup { [&]
+                {
+                    dismissGlobalSlopePopups(panel);
+                    panel.removeFromDesktop();
+                    lowParameter->removeListener(&lowGestures);
+                    highParameter->removeListener(&highGestures);
+                } };
+
+                auto staleResult =
+                    GlobalPanelSlopeTestAccess::createPopupResultHandler(
+                        panel, lowCut);
+
+                switch (boundaryIndex)
+                {
+                    case 0:
+                        selectGlobalSlopeType(panel, ! lowCut);
+                        selectGlobalSlopeType(panel, lowCut);
+                        break;
+                    case 1:
+                        panel.setVisible(false);
+                        panel.setVisible(true);
+                        break;
+                    case 2:
+                        GlobalPanelSlopeTestAccess::setFilterEnabled(
+                            panel, false);
+                        GlobalPanelSlopeTestAccess::setFilterEnabled(
+                            panel, true);
+                        break;
+                    case 3:
+                        GlobalPanelSlopeTestAccess::selectModule(panel, 1);
+                        GlobalPanelSlopeTestAccess::selectModule(panel, 0);
+                        break;
+                    case 4:
+                        panel.setEnabled(false);
+                        panel.setEnabled(true);
+                        break;
+                    default:
+                        FAIL("Unexpected slope boundary index");
+                }
+
+                auto currentResult =
+                    GlobalPanelSlopeTestAccess::createPopupResultHandler(
+                        panel, lowCut);
+                staleResult(4);
+
+                CHECK(lowParameter->getValue()
+                      == Catch::Approx(initialLowValue));
+                CHECK(highParameter->getValue()
+                      == Catch::Approx(initialHighValue));
+                CHECK(lowBox.getSelectedId() == initialLowId);
+                CHECK(highBox.getSelectedId() == initialHighId);
+                CHECK(lowGestures.gestures.empty());
+                CHECK(highGestures.gestures.empty());
+                CHECK(lowChangeCount == 0);
+                CHECK(highChangeCount == 0);
+
+                currentResult(4);
+
+                auto* const targetParameter =
+                    lowCut ? lowParameter : highParameter;
+                auto* const otherParameter =
+                    lowCut ? highParameter : lowParameter;
+                const auto otherInitialValue =
+                    lowCut ? initialHighValue : initialLowValue;
+                CHECK(targetParameter->getValue()
+                      == Catch::Approx(
+                          targetParameter->convertTo0to1(3.0f)));
+                CHECK(otherParameter->getValue()
+                      == Catch::Approx(otherInitialValue));
+                CHECK((lowCut ? lowBox : highBox).getSelectedId() == 4);
+                CHECK((lowCut ? highBox : lowBox).getSelectedId()
+                      == (lowCut ? initialHighId : initialLowId));
+                CHECK((lowCut ? lowGestures.gestures
+                              : highGestures.gestures)
+                      == std::vector<bool> { true, false });
+                CHECK((lowCut ? highGestures.gestures
+                              : lowGestures.gestures).empty());
+                CHECK((lowCut ? lowChangeCount : highChangeCount) == 1);
+                CHECK((lowCut ? highChangeCount : lowChangeCount) == 0);
+            }
+        }
+    }
+}
+
+TEST_CASE("GlobalPanel slope commit survives synchronous panel destruction",
+          "[control-panel][global][filter][slope][popup][attachment][reentrancy][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const bool lowCut : { true, false })
+    {
+        DYNAMIC_SECTION((lowCut ? "low-cut" : "high-cut")
+                        << " synchronous destruction")
+        {
+            FireAudioProcessor processor;
+            setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+            auto panel = std::make_unique<GlobalPanel>(
+                processor,
+                std::function<void(ModulatableSlider*)> {},
+                std::function<void(ModulatableSlider*)> {},
+                std::function<void(ModulatableSlider*)> {},
+                std::function<void(ModulatableSlider*)> {},
+                std::function<void(ModulatableSlider*)> {});
+            prepareGlobalSlopePanel(*panel, lowCut);
+
+            auto* lowParameter =
+                processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+            auto* highParameter =
+                processor.treeState.getParameter(HIGHCUT_SLOPE_ID);
+            REQUIRE(lowParameter != nullptr);
+            REQUIRE(highParameter != nullptr);
+            auto* const targetParameter =
+                lowCut ? lowParameter : highParameter;
+            auto* const otherParameter =
+                lowCut ? highParameter : lowParameter;
+            const auto otherInitialValue = otherParameter->getValue();
+            ParameterGestureRecorder targetGestures;
+            ParameterGestureRecorder otherGestures;
+            OneShotParameterValueCallback destroyPanel { [&]
+            {
+                panel.reset();
+            } };
+            targetParameter->addListener(&targetGestures);
+            targetParameter->addListener(&destroyPanel);
+            otherParameter->addListener(&otherGestures);
+            const juce::ScopeGuard removeListeners { [&]
+            {
+                targetParameter->removeListener(&targetGestures);
+                targetParameter->removeListener(&destroyPanel);
+                otherParameter->removeListener(&otherGestures);
+            } };
+
+            auto result =
+                GlobalPanelSlopeTestAccess::createPopupResultHandler(
+                    *panel, lowCut);
+            result(4);
+
+            CHECK(panel == nullptr);
+            CHECK(targetParameter->getValue()
+                  == Catch::Approx(
+                      targetParameter->convertTo0to1(3.0f)));
+            CHECK(otherParameter->getValue()
+                  == Catch::Approx(otherInitialValue));
+            CHECK(targetGestures.gestures
+                  == std::vector<bool> { true, false });
+            CHECK(otherGestures.gestures.empty());
+        }
+    }
 }

@@ -59,6 +59,26 @@ juce::Button* findButtonByComponentID(juce::Component& root,
 
     return nullptr;
 }
+
+juce::Button* findButtonByText(juce::Component& root,
+                               const juce::String& buttonText)
+{
+    for (int childIndex = 0; childIndex < root.getNumChildComponents(); ++childIndex)
+    {
+        auto* child = root.getChildComponent(childIndex);
+        if (child == nullptr)
+            continue;
+
+        if (auto* button = dynamic_cast<juce::Button*>(child);
+            button != nullptr && button->getButtonText() == buttonText)
+            return button;
+
+        if (auto* nested = findButtonByText(*child, buttonText))
+            return nested;
+    }
+
+    return nullptr;
+}
 } // namespace
 
 TEST_CASE("Global filter mode UI restores every saved APVTS state without changing parameters",
@@ -100,6 +120,61 @@ TEST_CASE("Global filter mode UI restores every saved APVTS state without changi
                   == filterMode.enabled[1]);
             CHECK(panel.getHighcutFreqKnob().isVisible()
                   == filterMode.enabled[2]);
+        }
+    }
+}
+
+TEST_CASE("Global filter automation cannot reveal controls outside the Filter module",
+          "[global-panel][filter][visibility][automation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    constexpr std::array<const char*, 2> nonFilterModules { "Lo-Fi", "Analysis" };
+
+    for (const auto* moduleName : nonFilterModules)
+    {
+        for (size_t selectedMode = 0; selectedMode < filterModes.size(); ++selectedMode)
+        {
+            DYNAMIC_SECTION(moduleName << " / " << filterModes[selectedMode].name)
+            {
+                FireAudioProcessor processor;
+                GlobalPanel panel(processor, {}, {}, {}, {}, {});
+
+                auto* moduleButton = findButtonByText(panel, moduleName);
+                auto* filterButton = findButtonByText(panel, "Filter");
+                REQUIRE(moduleButton != nullptr);
+                REQUIRE(filterButton != nullptr);
+
+                moduleButton->setToggleState(true,
+                                             juce::sendNotificationSync);
+
+                // Force an actual host-driven type transition even when the
+                // requested type equals the processor's default.
+                for (const auto* parameterID : parameterIDs)
+                    setBooleanParameter(processor, parameterID, false);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+                setBooleanParameter(processor,
+                                    parameterIDs[selectedMode],
+                                    true);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+                CHECK_FALSE(panel.getLowcutFreqKnob().isVisible());
+                CHECK_FALSE(panel.getLowcutGainKnob().isVisible());
+                CHECK_FALSE(panel.getPeakFreqKnob().isVisible());
+                CHECK_FALSE(panel.getPeakGainKnob().isVisible());
+                CHECK_FALSE(panel.getHighcutFreqKnob().isVisible());
+                CHECK_FALSE(panel.getHighcutGainKnob().isVisible());
+
+                filterButton->setToggleState(true,
+                                             juce::sendNotificationSync);
+
+                CHECK(panel.getLowcutFreqKnob().isVisible()
+                      == (selectedMode == 0));
+                CHECK(panel.getPeakFreqKnob().isVisible()
+                      == (selectedMode == 1));
+                CHECK(panel.getHighcutFreqKnob().isVisible()
+                      == (selectedMode == 2));
+            }
         }
     }
 }

@@ -807,10 +807,19 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 
 void GlobalPanel::updateFilterKnobVisibility()
 {
-    // This function assumes the main filter panel is already visible.
-    bool peakVisible = filterPeakButton.getToggleState();
-    bool lowcutVisible = filterLowCutButton.getToggleState();
-    bool highcutVisible = filterHighCutButton.getToggleState();
+    // Filter type attachments may update from automation or state restore
+    // while another global module is selected. Child visibility is independent
+    // of its siblings, so never let such an update reveal a filter group over
+    // Lo-Fi or Analysis.
+    const bool filterModuleVisible = filterSwitch.getToggleState()
+                                     && ! downsampleSwitch.getToggleState()
+                                     && ! graphSwitch.getToggleState();
+    const bool peakVisible = filterModuleVisible
+                             && filterPeakButton.getToggleState();
+    const bool lowcutVisible = filterModuleVisible
+                               && filterLowCutButton.getToggleState();
+    const bool highcutVisible = filterModuleVisible
+                                && filterHighCutButton.getToggleState();
 
     setVisibility(peakKnobs, peakVisible);
     setVisibility(lowcutKnobs, lowcutVisible);

@@ -322,13 +322,35 @@ bool VUPanel::refreshReadoutText()
         return true;
     };
 
+    const auto loudestVisibleChannel = [](float left,
+                                          float right,
+                                          int channelCount)
+    {
+        return channelCount > 1 ? juce::jmax(left, right) : left;
+    };
+
+    const auto inputChannelCount = processor.getTotalNumInputChannels();
+    const auto outputChannelCount = processor.getTotalNumOutputChannels();
+
     bool changed = updateText(inputPeakText, inputPeakTenths,
-                              vuMeterIn.getPeakLeftChannelLevel());
+                              loudestVisibleChannel(
+                                  vuMeterIn.getPeakLeftChannelLevel(),
+                                  vuMeterIn.getPeakRightChannelLevel(),
+                                  inputChannelCount));
     changed = updateText(inputRmsText, inputRmsTenths,
-                         vuMeterIn.getRmsLeftChannelLevel()) || changed;
+                         loudestVisibleChannel(
+                             vuMeterIn.getRmsLeftChannelLevel(),
+                             vuMeterIn.getRmsRightChannelLevel(),
+                             inputChannelCount)) || changed;
     changed = updateText(outputPeakText, outputPeakTenths,
-                         vuMeterOut.getPeakLeftChannelLevel()) || changed;
+                         loudestVisibleChannel(
+                             vuMeterOut.getPeakLeftChannelLevel(),
+                             vuMeterOut.getPeakRightChannelLevel(),
+                             outputChannelCount)) || changed;
     changed = updateText(outputRmsText, outputRmsTenths,
-                         vuMeterOut.getRmsLeftChannelLevel()) || changed;
+                         loudestVisibleChannel(
+                             vuMeterOut.getRmsLeftChannelLevel(),
+                             vuMeterOut.getRmsRightChannelLevel(),
+                             outputChannelCount)) || changed;
     return changed;
 }

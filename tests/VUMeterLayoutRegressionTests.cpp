@@ -48,6 +48,11 @@ struct VUPanelTestAccess
         return panel.vuMeterIn.getPeakLeftChannelLevel();
     }
 
+    static float inputPeakRight(const VUPanel& panel)
+    {
+        return panel.vuMeterIn.getPeakRightChannelLevel();
+    }
+
     static float outputRms(const VUPanel& panel)
     {
         return panel.vuMeterOut.getRmsLeftChannelLevel();
@@ -56,6 +61,11 @@ struct VUPanelTestAccess
     static float outputPeak(const VUPanel& panel)
     {
         return panel.vuMeterOut.getPeakLeftChannelLevel();
+    }
+
+    static float outputPeakRight(const VUPanel& panel)
+    {
+        return panel.vuMeterOut.getPeakRightChannelLevel();
     }
 
     static const juce::String& inputPeakText(const VUPanel& panel)
@@ -181,6 +191,54 @@ TEST_CASE("VU meter updates bar bounds when the host channel layout changes",
           == juce::Rectangle<int>(0, 0, 10, 120));
     CHECK(VUMeterTestAccess::rightBounds(meter)
           == juce::Rectangle<int>(20, 0, 10, 120));
+}
+
+TEST_CASE("VU readouts report the loudest visible channel and remain mono-safe",
+          "[ui][meter][readout][channels][regression]")
+{
+    SECTION("right-only stereo signal")
+    {
+        FireAudioProcessor processor;
+        setChannelLayout(processor, 2);
+        VUPanel panel(processor);
+
+        MeterValues values;
+        values.bandInputRMS_R[0] = 0.5f;
+        values.bandInputPeak_R[0] = 1.0f;
+        values.bandOutputRMS_R[0] = 0.125f;
+        values.bandOutputPeak_R[0] = 0.25f;
+        VUPanelTestAccess::applyLevels(panel, values);
+
+        REQUIRE(VUPanelTestAccess::inputPeakRight(panel) > 0.99f);
+        REQUIRE(VUPanelTestAccess::outputPeakRight(panel) > 0.87f);
+        CHECK(VUPanelTestAccess::inputPeakText(panel) == "0.0");
+        CHECK(VUPanelTestAccess::inputRmsText(panel) == "-6.0");
+        CHECK(VUPanelTestAccess::outputPeakText(panel) == "-12.0");
+        CHECK(VUPanelTestAccess::outputRmsText(panel) == "-18.1");
+    }
+
+    SECTION("mono ignores an unused right-channel payload")
+    {
+        FireAudioProcessor processor;
+        setChannelLayout(processor, 1);
+        VUPanel panel(processor);
+
+        MeterValues values;
+        values.bandInputRMS_L[0] = 0.25f;
+        values.bandInputPeak_L[0] = 0.5f;
+        values.bandInputRMS_R[0] = 1.0f;
+        values.bandInputPeak_R[0] = 1.0f;
+        values.bandOutputRMS_L[0] = 0.125f;
+        values.bandOutputPeak_L[0] = 0.25f;
+        values.bandOutputRMS_R[0] = 1.0f;
+        values.bandOutputPeak_R[0] = 1.0f;
+        VUPanelTestAccess::applyLevels(panel, values);
+
+        CHECK(VUPanelTestAccess::inputPeakText(panel) == "-6.0");
+        CHECK(VUPanelTestAccess::inputRmsText(panel) == "-12.0");
+        CHECK(VUPanelTestAccess::outputPeakText(panel) == "-12.0");
+        CHECK(VUPanelTestAccess::outputRmsText(panel) == "-18.1");
+    }
 }
 
 TEST_CASE("VU panel clears ballistics and readouts when its focus band changes",

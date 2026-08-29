@@ -12,11 +12,22 @@
 #include "../GUI/InterfaceDefines.h"
 #include "juce_dsp/juce_dsp.h"
 
+#include <cmath>
+
 static inline float dBToNormalizedGain(float inValue)
 {
-    float inValuedB = juce::Decibels::gainToDecibels(inValue + 0.00001f);
-    inValuedB = (inValuedB + 96.0f) / 96.0f;
-    return inValuedB;
+    if (! std::isfinite(inValue) || inValue <= 0.0f)
+        return 0.0f;
+
+    constexpr float meterFloorDb = -96.0f;
+    const auto valueDb = juce::Decibels::gainToDecibels(inValue,
+                                                        meterFloorDb);
+    if (! std::isfinite(valueDb))
+        return 0.0f;
+
+    return juce::jlimit(0.0f,
+                        1.0f,
+                        (valueDb - meterFloorDb) / -meterFloorDb);
 }
 
 inline float helper_denormalize(float inValue)

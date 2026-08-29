@@ -6,6 +6,10 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cmath>
+#include <limits>
+
 struct VUMeterTestAccess
 {
     static juce::Rectangle<int> leftBounds(const VUMeter& meter)
@@ -55,6 +59,18 @@ struct VUMeterTestAccess
     static void reset(VUMeter& meter)
     {
         meter.resetLevels();
+    }
+
+    static std::array<float, 6> levels(const VUMeter& meter)
+    {
+        return {
+            meter.mRmsCh0Level,
+            meter.mRmsCh1Level,
+            meter.mPeakCh0Level,
+            meter.mPeakCh1Level,
+            meter.mPeakHoldCh0Level,
+            meter.mPeakHoldCh1Level
+        };
     }
 };
 
@@ -339,6 +355,73 @@ TEST_CASE("VU meter peak holds decay independently per channel",
         silenceTicks(VUMeterTestAccess::peakHoldFrameCount() + 2);
         CHECK(VUMeterTestAccess::peakHoldLeft(meter) == 0.0f);
         CHECK(VUMeterTestAccess::peakHoldRight(meter) == 0.0f);
+    }
+}
+
+TEST_CASE("VU meter contains invalid telemetry and recovers its ballistics",
+          "[ui][meter][ballistics][robustness][regression]")
+{
+    FireAudioProcessor processor;
+    VUMeter meter(&processor);
+
+    const auto requireBoundedLevels = [&meter]
+    {
+        for (const auto level : VUMeterTestAccess::levels(meter))
+        {
+            REQUIRE(std::isfinite(level));
+            REQUIRE(level >= 0.0f);
+            REQUIRE(level <= 1.0f);
+        }
+    };
+
+    struct Probe
+    {
+        const char* name;
+        float value;
+    };
+    const std::array probes {
+        Probe { "+Inf", std::numeric_limits<float>::infinity() },
+        Probe { "NaN", std::numeric_limits<float>::quiet_NaN() },
+        Probe { "-Inf", -std::numeric_limits<float>::infinity() },
+        Probe { "negative", -1.0f },
+        Probe { "huge finite", std::numeric_limits<float>::max() }
+    };
+
+    for (const auto& probe : probes)
+    {
+        DYNAMIC_SECTION(probe.name)
+        {
+            VUMeterTestAccess::reset(meter);
+
+            MeterValues invalidValues;
+            invalidValues.inputRMS_L = probe.value;
+            invalidValues.inputRMS_R = probe.value;
+            invalidValues.inputPeak_L = probe.value;
+            invalidValues.inputPeak_R = probe.value;
+            meter.updateLevels(invalidValues);
+            requireBoundedLevels();
+
+            MeterValues normalValues;
+            normalValues.inputRMS_L = 0.25f;
+            normalValues.inputRMS_R = 0.5f;
+            normalValues.inputPeak_L = 0.5f;
+            normalValues.inputPeak_R = 1.0f;
+            meter.updateLevels(normalValues);
+            requireBoundedLevels();
+            REQUIRE(VUMeterTestAccess::peakHoldLeft(meter) > 0.0f);
+            REQUIRE(VUMeterTestAccess::peakHoldRight(meter) > 0.0f);
+
+            for (int frame = 0;
+                 frame < VUMeterTestAccess::peakHoldFrameCount() + 200;
+                 ++frame)
+            {
+                meter.decayToSilence();
+                requireBoundedLevels();
+            }
+
+            for (const auto level : VUMeterTestAccess::levels(meter))
+                CHECK(level == Catch::Approx(0.0f).margin(1.0e-6f));
+        }
     }
 }
 

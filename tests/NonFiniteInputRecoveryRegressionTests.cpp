@@ -407,3 +407,37 @@ TEST_CASE("Host bypass sanitises non-finite input before its delayed tap and hid
         }
     }
 }
+
+TEST_CASE("Host bypass keeps huge finite meter telemetry finite",
+          "[processor][robustness][finite-overflow][host-bypass][meter]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const int numChannels : std::array { 1, 2 })
+    {
+        DYNAMIC_SECTION("channels=" << numChannels)
+        {
+            FireAudioProcessor processor;
+            configureProcessor(processor, false, numChannels, 1);
+
+            juce::AudioBuffer<float> buffer(numChannels, hostBlockSize);
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                const auto amplitude = channel == 0 ? 1.0e20f : 5.0e19f;
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+                    buffer.setSample(channel, sample, amplitude);
+            }
+
+            juce::MidiBuffer midi;
+            processor.processBlockBypassed(buffer, midi);
+
+            MeterValues values;
+            REQUIRE(processor.getLatestMeterValues(values));
+            REQUIRE(meterValuesAreFinite(values));
+            CHECK(values.inputRMS_L > 0.0f);
+            CHECK(values.inputPeak_L > 0.0f);
+            CHECK(values.inputRMS_R > 0.0f);
+            CHECK(values.inputPeak_R > 0.0f);
+        }
+    }
+}

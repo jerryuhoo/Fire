@@ -11,8 +11,10 @@
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
 #include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <utility>
 
 namespace
 {
@@ -8322,23 +8324,38 @@ void FireAudioProcessor::calculateAndStoreLevels(const juce::AudioBuffer<float>&
         return;
     }
 
-    // Use JUCE's built-in functions for efficient calculation.
-    // getRMSLevel() returns linear RMS amplitude.
-    // getMagnitude() with arguments (0, numSamples) finds the peak absolute value.
+    const auto calculateChannelLevels = [&buffer, numSamples](int channel)
+    {
+        const auto rawPeak = buffer.getMagnitude(channel, 0, numSamples);
+        const auto finitePeak = std::isfinite(rawPeak) && rawPeak >= 0.0f
+                                    ? rawPeak
+                                    : 0.0f;
 
-    // Calculate for Left Channel (or Mono)
-    rmsLeft.store(buffer.getRMSLevel(0, 0, numSamples));
-    peakLeft.store(buffer.getMagnitude(0, 0, numSamples));
+        // JUCE's float RMS accumulator can overflow while squaring a very
+        // large but still finite host sample. The peak remains a conservative
+        // finite fallback and prevents one telemetry packet from poisoning the
+        // UI's smoothing state.
+        const auto rawRms = buffer.getRMSLevel(channel, 0, numSamples);
+        const auto finiteRms = std::isfinite(rawRms) && rawRms >= 0.0f
+                                   ? rawRms
+                                   : finitePeak;
+        return std::pair { finiteRms, finitePeak };
+    };
+
+    const auto [leftRms, leftPeak] = calculateChannelLevels(0);
+    rmsLeft.store(leftRms);
+    peakLeft.store(leftPeak);
 
     // Calculate for Right Channel if it exists, otherwise mirror the left channel.
     if (numChannels > 1)
     {
-        rmsRight.store(buffer.getRMSLevel(1, 0, numSamples));
-        peakRight.store(buffer.getMagnitude(1, 0, numSamples));
+        const auto [rightRms, rightPeak] = calculateChannelLevels(1);
+        rmsRight.store(rightRms);
+        peakRight.store(rightPeak);
     }
     else
     {
-        rmsRight.store(rmsLeft.load());
-        peakRight.store(peakLeft.load());
+        rmsRight.store(leftRms);
+        peakRight.store(leftPeak);
     }
 }

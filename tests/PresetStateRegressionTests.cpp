@@ -10,6 +10,7 @@
 #include <memory>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 struct StateComponentMenuTestAccess
 {
@@ -22,6 +23,99 @@ struct StateComponentMenuTestAccess
     static void handleResult(state::StateComponent& component, int result)
     {
         component.handlePresetMenuResult(result);
+    }
+};
+
+struct StateComponentManualUpdateTestAccess
+{
+    struct PresentedAlert
+    {
+        juce::String title;
+        juce::String message;
+        juce::StringArray buttons;
+        juce::Component* associatedComponent = nullptr;
+        juce::Component* parentComponent = nullptr;
+        std::function<void(int)> complete;
+        int closeCount = 0;
+    };
+
+    using AlertPtr = std::shared_ptr<PresentedAlert>;
+
+    static void installDialogSeam(
+        state::StateComponent& component,
+        std::vector<AlertPtr>& presentedAlerts,
+        std::vector<juce::String>& launchedUrls)
+    {
+        component.manualUpdateDialogPresenterForTesting =
+            [&presentedAlerts](const juce::MessageBoxOptions& options,
+                               std::function<void(int)> complete)
+        {
+            auto alert = std::make_shared<PresentedAlert>();
+            alert->title = options.getTitle();
+            alert->message = options.getMessage();
+            for (int i = 0; i < options.getNumButtons(); ++i)
+                alert->buttons.add(options.getButtonText(i));
+            alert->associatedComponent = options.getAssociatedComponent();
+            alert->parentComponent = options.getParentComponent();
+            alert->complete = std::move(complete);
+            presentedAlerts.push_back(alert);
+            return std::function<void()> { [alert]
+            {
+                ++alert->closeCount;
+            } };
+        };
+        component.manualUpdateUrlLauncherForTesting =
+            [&launchedUrls](const juce::URL& url)
+        {
+            launchedUrls.push_back(url.toString(false));
+        };
+    }
+
+    static std::uint64_t beginRequest(state::StateComponent& component)
+    {
+        return component.beginManualUpdateRequest();
+    }
+
+    static void publishNetworkFailure(state::StateComponent& component,
+                                      std::uint64_t generation)
+    {
+        component.publishManualUpdateResult(nullptr, generation);
+    }
+
+    static void flushPendingResult(state::StateComponent& component)
+    {
+        component.handleUpdateNowIfNeeded();
+    }
+
+    static void showDownloadPrompt(state::StateComponent& component,
+                                   const juce::String& version)
+    {
+        component.showManualUpdateAlert(
+            juce::MessageBoxOptions()
+                .withIconType(juce::MessageBoxIconType::InfoIcon)
+                .withTitle("New Version")
+                .withMessage("New version " + version + " available")
+                .withButton("OK")
+                .withButton("Cancel"),
+            version);
+    }
+
+    static bool hasActiveRequest(state::StateComponent& component)
+    {
+        const juce::ScopedLock lock(component.updateResultLock);
+        return component.manualUpdateRequestActive;
+    }
+
+    static bool hasPendingResult(state::StateComponent& component)
+    {
+        const juce::ScopedLock lock(component.updateResultLock);
+        return component.pendingManualUpdateRequestGeneration != 0
+               || component.versionCheckReady.load(std::memory_order_acquire);
+    }
+
+    static bool hasActiveAlert(const state::StateComponent& component)
+    {
+        return component.manualUpdateAlertActive;
     }
 };
 
@@ -992,6 +1086,275 @@ TEST_CASE("Preset menu rejects hidden and superseded asynchronous results",
 
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
     }
+}
+
+TEST_CASE("Manual update results stay inside one visible request session",
+          "[preset][ui][update-check][session][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+    REQUIRE(component.isShowing());
+
+    std::vector<StateComponentManualUpdateTestAccess::AlertPtr> alerts;
+    std::vector<juce::String> launchedUrls;
+    StateComponentManualUpdateTestAccess::installDialogSeam(
+        component, alerts, launchedUrls);
+
+    SECTION("a replacement request rejects the older worker result")
+    {
+        const auto staleGeneration =
+            StateComponentManualUpdateTestAccess::beginRequest(component);
+        const auto currentGeneration =
+            StateComponentManualUpdateTestAccess::beginRequest(component);
+
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, staleGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        CHECK(alerts.empty());
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveRequest(
+            component));
+
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, currentGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        REQUIRE(alerts.size() == 1);
+        CHECK(alerts.front()->title == "Error");
+        CHECK(alerts.front()->buttons.size() == 1);
+        CHECK(alerts.front()->associatedComponent == &component);
+        CHECK(alerts.front()->parentComponent == &component);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveRequest(
+            component));
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveAlert(component));
+
+        alerts.front()->complete(0);
+        CHECK(alerts.front()->closeCount == 1);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, currentGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        CHECK(alerts.size() == 1);
+        CHECK(launchedUrls.empty());
+    }
+
+    SECTION("hiding clears a result which was already queued")
+    {
+        const auto staleGeneration =
+            StateComponentManualUpdateTestAccess::beginRequest(component);
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, staleGeneration);
+        REQUIRE(StateComponentManualUpdateTestAccess::hasPendingResult(
+            component));
+
+        component.setVisible(false);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveRequest(
+            component));
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasPendingResult(
+            component));
+        component.setVisible(true);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        CHECK(alerts.empty());
+
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, staleGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        CHECK(alerts.empty());
+    }
+
+    SECTION("an ancestor hide boundary rejects a late worker result")
+    {
+        const auto staleGeneration =
+            StateComponentManualUpdateTestAccess::beginRequest(component);
+        component.dismissPointerGestures();
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, staleGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+
+        CHECK(alerts.empty());
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveRequest(
+            component));
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasPendingResult(
+            component));
+    }
+
+    SECTION("disable-enable cannot revive an old worker request")
+    {
+        const auto staleGeneration =
+            StateComponentManualUpdateTestAccess::beginRequest(component);
+
+        component.setEnabled(false);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveRequest(
+            component));
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasPendingResult(
+            component));
+        component.setEnabled(true);
+
+        const auto replacementGeneration =
+            StateComponentManualUpdateTestAccess::beginRequest(component);
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, staleGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        CHECK(alerts.empty());
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveRequest(
+            component));
+
+        StateComponentManualUpdateTestAccess::publishNetworkFailure(
+            component, replacementGeneration);
+        StateComponentManualUpdateTestAccess::flushPendingResult(component);
+        REQUIRE(alerts.size() == 1);
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveAlert(component));
+        alerts.front()->complete(0);
+    }
+}
+
+TEST_CASE("Manual update alerts close and reject stale completion callbacks",
+          "[preset][ui][update-check][alert][session][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+    REQUIRE(component.isShowing());
+
+    std::vector<StateComponentManualUpdateTestAccess::AlertPtr> alerts;
+    std::vector<juce::String> launchedUrls;
+    StateComponentManualUpdateTestAccess::installDialogSeam(
+        component, alerts, launchedUrls);
+
+    SECTION("hide closes the alert and its old OK cannot affect a replacement")
+    {
+        StateComponentManualUpdateTestAccess::showDownloadPrompt(
+            component, "v99.0.0");
+        REQUIRE(alerts.size() == 1);
+        auto staleAlert = alerts.front();
+        CHECK(staleAlert->buttons.size() == 2);
+        CHECK(staleAlert->associatedComponent == &component);
+        CHECK(staleAlert->parentComponent == &component);
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveAlert(component));
+
+        component.setVisible(false);
+        CHECK(staleAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+
+        component.setVisible(true);
+        StateComponentManualUpdateTestAccess::showDownloadPrompt(
+            component, "v100.0.0");
+        REQUIRE(alerts.size() == 2);
+        auto replacementAlert = alerts.back();
+        REQUIRE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+
+        staleAlert->complete(1);
+        CHECK(launchedUrls.empty());
+        CHECK(replacementAlert->closeCount == 0);
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveAlert(component));
+
+        replacementAlert->complete(1);
+        REQUIRE(launchedUrls.size() == 1);
+        CHECK(launchedUrls.front().contains("v100.0.0"));
+        CHECK(replacementAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+    }
+
+    SECTION("ancestor dismissal closes the alert and rejects its OK")
+    {
+        StateComponentManualUpdateTestAccess::showDownloadPrompt(
+            component, "v99.0.0");
+        REQUIRE(alerts.size() == 1);
+        auto staleAlert = alerts.front();
+
+        component.dismissPointerGestures();
+        CHECK(staleAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+
+        staleAlert->complete(1);
+        CHECK(launchedUrls.empty());
+        CHECK(staleAlert->closeCount == 1);
+    }
+
+    SECTION("disable-enable closes the old alert without harming its replacement")
+    {
+        StateComponentManualUpdateTestAccess::showDownloadPrompt(
+            component, "v99.0.0");
+        REQUIRE(alerts.size() == 1);
+        auto staleAlert = alerts.front();
+
+        component.setEnabled(false);
+        CHECK(staleAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+        component.setEnabled(true);
+
+        StateComponentManualUpdateTestAccess::showDownloadPrompt(
+            component, "v100.0.0");
+        REQUIRE(alerts.size() == 2);
+        auto replacementAlert = alerts.back();
+        REQUIRE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+
+        staleAlert->complete(1);
+        CHECK(launchedUrls.empty());
+        CHECK(replacementAlert->closeCount == 0);
+        CHECK(StateComponentManualUpdateTestAccess::hasActiveAlert(component));
+
+        replacementAlert->complete(1);
+        REQUIRE(launchedUrls.size() == 1);
+        CHECK(launchedUrls.front().contains("v100.0.0"));
+        CHECK(replacementAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentManualUpdateTestAccess::hasActiveAlert(
+            component));
+    }
+}
+
+TEST_CASE("Destroying StateComponent synchronously closes its manual update alert",
+          "[preset][ui][update-check][alert][lifetime][destruction][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    std::vector<StateComponentManualUpdateTestAccess::AlertPtr> alerts;
+    std::vector<juce::String> launchedUrls;
+
+    auto component = std::make_unique<state::StateComponent>(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component->setBounds(0, 0, 800, 48);
+    component->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component->setVisible(true);
+    REQUIRE(component->isShowing());
+    StateComponentManualUpdateTestAccess::installDialogSeam(
+        *component, alerts, launchedUrls);
+    StateComponentManualUpdateTestAccess::showDownloadPrompt(
+        *component, "v99.0.0");
+    REQUIRE(alerts.size() == 1);
+    auto staleAlert = alerts.front();
+
+    component.reset();
+    CHECK(staleAlert->closeCount == 1);
+
+    staleAlert->complete(1);
+    CHECK(launchedUrls.empty());
+    CHECK(staleAlert->closeCount == 1);
 }
 
 TEST_CASE("Preset save chooser results stay inside one visible owner session",

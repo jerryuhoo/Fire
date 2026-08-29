@@ -1153,16 +1153,29 @@ namespace state
 
     void StateComponent::ManualUpdateCheckThread::run()
     {
+        const auto generation = requestGeneration;
         auto result = fetchOperation.fetchLatest();
         if (! threadShouldExit())
-            owner.publishManualUpdateResult(std::move(result));
+            owner.publishManualUpdateResult(std::move(result), generation);
+    }
+
+    void StateComponent::ManualUpdateCheckThread::cancel() noexcept
+    {
+        signalThreadShouldExit();
+        fetchOperation.cancel();
     }
 
     void StateComponent::ManualUpdateCheckThread::stop()
     {
-        signalThreadShouldExit();
-        fetchOperation.cancel();
+        cancel();
         stopThread(-1);
+    }
+
+    void StateComponent::ManualUpdateCheckThread::prepareForStart(
+        std::uint64_t generation)
+    {
+        requestGeneration = generation;
+        fetchOperation.reset();
     }
 
     void StateComponent::PresetComboBox::capturePopupRequest() noexcept
@@ -1626,12 +1639,14 @@ namespace state
     StateComponent::~StateComponent()
     {
         stopTimer();
+        invalidateManualUpdateRequest();
+        manualUpdateCheckThread.stop();
+        invalidateManualUpdateAlert();
         presetBox.dismissTransientInteraction();
         invalidatePresetMenuSession();
         dismissSettingsDialog();
         presetMenu.setLookAndFeel(nullptr);
 
-        manualUpdateCheckThread.stop();
         cancelPendingUpdate();
         invalidateSaveChooserSession();
         presetBox.onChange = nullptr;
@@ -1694,13 +1709,51 @@ namespace state
             showManualUpdateResult();
     }
 
-    void StateComponent::publishManualUpdateResult(std::unique_ptr<VersionInfo> result)
+    std::uint64_t StateComponent::beginManualUpdateRequest()
+    {
+        // A fresh check supersedes any result dialog from the previous check.
+        invalidateManualUpdateAlert();
+
+        const juce::ScopedLock lock(updateResultLock);
+        ++manualUpdateRequestGeneration;
+        manualUpdateRequestActive = true;
+        pendingVersionInfo.reset();
+        pendingManualUpdateRequestGeneration = 0;
+        versionCheckReady.store(false, std::memory_order_release);
+        return manualUpdateRequestGeneration;
+    }
+
+    void StateComponent::invalidateManualUpdateRequest() noexcept
     {
         {
             const juce::ScopedLock lock(updateResultLock);
-            pendingVersionInfo = std::move(result);
+            manualUpdateRequestActive = false;
+            ++manualUpdateRequestGeneration;
+            pendingVersionInfo.reset();
+            pendingManualUpdateRequestGeneration = 0;
+            versionCheckReady.store(false, std::memory_order_release);
         }
-        versionCheckReady.store(true, std::memory_order_release);
+
+        // Cancellation is non-blocking here. Destruction additionally joins
+        // the worker before any owner state can be released.
+        manualUpdateCheckThread.cancel();
+    }
+
+    void StateComponent::publishManualUpdateResult(
+        std::unique_ptr<VersionInfo> result,
+        std::uint64_t requestGeneration)
+    {
+        {
+            const juce::ScopedLock lock(updateResultLock);
+            if (! manualUpdateRequestActive
+                || manualUpdateRequestGeneration != requestGeneration)
+                return;
+
+            pendingVersionInfo = std::move(result);
+            pendingManualUpdateRequestGeneration = requestGeneration;
+            versionCheckReady.store(true, std::memory_order_release);
+        }
+
         triggerAsyncUpdate();
     }
 
@@ -1709,36 +1762,180 @@ namespace state
         std::unique_ptr<VersionInfo> result;
         {
             const juce::ScopedLock lock(updateResultLock);
+            if (! manualUpdateRequestActive
+                || pendingManualUpdateRequestGeneration == 0
+                || pendingManualUpdateRequestGeneration
+                       != manualUpdateRequestGeneration)
+            {
+                pendingVersionInfo.reset();
+                pendingManualUpdateRequestGeneration = 0;
+                return;
+            }
+
             result = std::move(pendingVersionInfo);
+            manualUpdateRequestActive = false;
+            ++manualUpdateRequestGeneration;
+            pendingManualUpdateRequestGeneration = 0;
+            versionCheckReady.store(false, std::memory_order_release);
         }
+
+        if (! isShowing() || ! isEnabled())
+            return;
 
         if (result == nullptr)
         {
-            juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-                                                        "Error",
-                                                        "No release found or disconnected from the network!");
+            showManualUpdateAlert(
+                juce::MessageBoxOptions()
+                    .withIconType(juce::MessageBoxIconType::WarningIcon)
+                    .withTitle("Error")
+                    .withMessage(
+                        "No release found or disconnected from the network!")
+                    .withButton("OK"));
             return;
         }
 
         if (result->isNewerVersionThanCurrent())
         {
             const auto versionToDownload = result->versionString;
-            const auto callback = juce::ModalCallbackFunction::create([versionToDownload](int choice)
-                                                                      {
-                                                                          if (choice == 1)
-                                                                              juce::URL(GITHUB_TAG_LINK + versionToDownload).launchInDefaultBrowser();
-                                                                      });
-            juce::NativeMessageBox::showOkCancelBox(juce::AlertWindow::InfoIcon,
-                                                    "New Version",
-                                                    "New version " + versionToDownload + " available, do you want to download it?",
-                                                    nullptr,
-                                                    callback);
+            showManualUpdateAlert(
+                juce::MessageBoxOptions()
+                    .withIconType(juce::MessageBoxIconType::InfoIcon)
+                    .withTitle("New Version")
+                    .withMessage("New version " + versionToDownload
+                                 + " available, do you want to download it?")
+                    .withButton("OK")
+                    .withButton("Cancel"),
+                versionToDownload);
             return;
         }
 
-        juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                    "New Version",
-                                                    "You are up to date!");
+        showManualUpdateAlert(
+            juce::MessageBoxOptions()
+                .withIconType(juce::MessageBoxIconType::InfoIcon)
+                .withTitle("New Version")
+                .withMessage("You are up to date!")
+                .withButton("OK"));
+    }
+
+    void StateComponent::showManualUpdateAlert(
+        const juce::MessageBoxOptions& options,
+        juce::String versionToDownload)
+    {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+        invalidateManualUpdateAlert();
+        if (safeThis == nullptr
+            || ! safeThis->isShowing()
+            || ! safeThis->isEnabled())
+            return;
+
+        safeThis->manualUpdateAlertActive = true;
+        const auto alertGeneration = safeThis->manualUpdateAlertGeneration;
+        const auto ownedOptions = options
+                                      .withAssociatedComponent(safeThis.getComponent())
+                                      .withParentComponent(safeThis.getComponent());
+        const auto callback = [safeThis,
+                               alertGeneration,
+                               versionToDownload = std::move(versionToDownload)](
+                                  int result)
+        {
+            if (safeThis != nullptr)
+                safeThis->handleManualUpdateAlertResult(
+                    result, alertGeneration, versionToDownload);
+        };
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (safeThis->manualUpdateDialogPresenterForTesting)
+        {
+            auto presenter = safeThis->manualUpdateDialogPresenterForTesting;
+            auto closer = presenter(ownedOptions, callback);
+            if (safeThis == nullptr)
+            {
+                if (closer)
+                    closer();
+                return;
+            }
+
+            if (safeThis->manualUpdateAlertActive
+                && safeThis->manualUpdateAlertGeneration == alertGeneration)
+            {
+                safeThis->manualUpdateDialogCloserForTesting =
+                    std::move(closer);
+            }
+            else if (closer)
+            {
+                closer();
+            }
+            return;
+        }
+#endif
+
+        auto alert = juce::NativeMessageBox::showScopedAsync(ownedOptions,
+                                                              callback);
+        if (safeThis != nullptr
+            && safeThis->manualUpdateAlertActive
+            && safeThis->manualUpdateAlertGeneration == alertGeneration)
+        {
+            safeThis->manualUpdateAlert = std::move(alert);
+        }
+        else
+        {
+            alert.close();
+        }
+    }
+
+    void StateComponent::handleManualUpdateAlertResult(
+        int result,
+        std::uint64_t alertGeneration,
+        const juce::String& versionToDownload)
+    {
+        if (! manualUpdateAlertActive
+            || manualUpdateAlertGeneration != alertGeneration)
+            return;
+
+        const bool shouldLaunchDownload = result == 1
+                                          && versionToDownload.isNotEmpty()
+                                          && isShowing()
+                                          && isEnabled();
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        auto launcher = manualUpdateUrlLauncherForTesting;
+        auto closer = std::move(manualUpdateDialogCloserForTesting);
+#endif
+
+        manualUpdateAlertActive = false;
+        ++manualUpdateAlertGeneration;
+        manualUpdateAlert.close();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (closer)
+            closer();
+#endif
+
+        if (! shouldLaunchDownload || safeThis == nullptr)
+            return;
+
+        const juce::URL downloadUrl(GITHUB_TAG_LINK + versionToDownload);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (launcher)
+        {
+            launcher(downloadUrl);
+            return;
+        }
+#endif
+        downloadUrl.launchInDefaultBrowser();
+    }
+
+    void StateComponent::invalidateManualUpdateAlert() noexcept
+    {
+        manualUpdateAlertActive = false;
+        ++manualUpdateAlertGeneration;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        auto closer = std::move(manualUpdateDialogCloserForTesting);
+#endif
+        manualUpdateAlert.close();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (closer)
+            closer();
+#endif
     }
 
     void StateComponent::paint(juce::Graphics& /*g*/)
@@ -1782,11 +1979,27 @@ namespace state
 
         if (! isShowing())
         {
+            invalidateManualUpdateRequest();
+            invalidateManualUpdateAlert();
             presetBox.dismissTransientInteraction();
             invalidatePresetMenuSession();
             invalidateSaveChooserSession();
             dismissSettingsDialog();
         }
+    }
+
+    void StateComponent::enablementChanged()
+    {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+        juce::Component::enablementChanged();
+        if (safeThis == nullptr || safeThis->isEnabled())
+            return;
+
+        safeThis->invalidateManualUpdateRequest();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->invalidateManualUpdateAlert();
     }
 
     void StateComponent::buttonClicked(juce::Button* clickedButton)
@@ -2444,10 +2657,13 @@ namespace state
 
         if (result == 5)
         {
-            if (! manualUpdateCheckThread.isThreadRunning())
+            if (isShowing() && isEnabled()
+                && ! manualUpdateCheckThread.isThreadRunning())
             {
-                manualUpdateCheckThread.prepareForStart();
-                manualUpdateCheckThread.startThread();
+                const auto requestGeneration = beginManualUpdateRequest();
+                manualUpdateCheckThread.prepareForStart(requestGeneration);
+                if (! manualUpdateCheckThread.startThread())
+                    invalidateManualUpdateRequest();
             }
             return;
         }
@@ -2553,6 +2769,8 @@ namespace state
         // The editor calls this when an ancestor is hidden. JUCE does not send
         // visibilityChanged() to every descendant, so invalidate the menu here
         // as well as in StateComponent::visibilityChanged().
+        invalidateManualUpdateRequest();
+        invalidateManualUpdateAlert();
         presetBox.dismissTransientInteraction();
         invalidatePresetMenuSession();
         invalidateSaveChooserSession();

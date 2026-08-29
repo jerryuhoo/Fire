@@ -27,6 +27,7 @@ class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct StateComponentDialogTestAccess;
 struct StateComponentMenuTestAccess;
+struct StateComponentManualUpdateTestAccess;
 struct StateComponentPresetBoxTestAccess;
 struct StateComponentSaveChooserTestAccess;
 #endif
@@ -170,6 +171,7 @@ PluginProcessor).
         void paint(juce::Graphics&) override;
         void resized() override;
         void visibilityChanged() override;
+        void enablementChanged() override;
         void markAsDirty();
         void parameterChanged(const juce::String& parameterID, float newValue) override;
 
@@ -199,6 +201,7 @@ PluginProcessor).
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         friend struct ::StateComponentDialogTestAccess;
         friend struct ::StateComponentMenuTestAccess;
+        friend struct ::StateComponentManualUpdateTestAccess;
         friend struct ::StateComponentPresetBoxTestAccess;
         friend struct ::StateComponentSaveChooserTestAccess;
 #endif
@@ -261,12 +264,14 @@ PluginProcessor).
         public:
             explicit ManualUpdateCheckThread(StateComponent& ownerToUse);
             void run() override;
+            void cancel() noexcept;
             void stop();
-            void prepareForStart() { fetchOperation.reset(); }
+            void prepareForStart(std::uint64_t generation);
 
         private:
             StateComponent& owner;
             VersionInfo::FetchOperation fetchOperation;
+            std::uint64_t requestGeneration = 0;
         };
 
         StateAB& procStateAB;
@@ -284,11 +289,24 @@ PluginProcessor).
         ManualUpdateCheckThread manualUpdateCheckThread;
         juce::CriticalSection updateResultLock;
         std::unique_ptr<VersionInfo> pendingVersionInfo;
+        std::uint64_t manualUpdateRequestGeneration = 0;
+        std::uint64_t pendingManualUpdateRequestGeneration = 0;
+        bool manualUpdateRequestActive = false;
+        juce::ScopedMessageBox manualUpdateAlert;
+        std::uint64_t manualUpdateAlertGeneration = 0;
+        bool manualUpdateAlertActive = false;
         std::atomic<bool> dirtyUpdatePending { false };
         std::atomic<bool> versionCheckReady { false };
         juce::Component::SafePointer<juce::DialogWindow> settingsDialog;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         std::function<juce::DialogWindow*()> settingsDialogFactoryForTesting;
+        std::function<std::function<void()>(
+            const juce::MessageBoxOptions&,
+            std::function<void(int)>)>
+            manualUpdateDialogPresenterForTesting;
+        std::function<void(const juce::URL&)>
+            manualUpdateUrlLauncherForTesting;
+        std::function<void()> manualUpdateDialogCloserForTesting;
 #endif
 
         PrimaryTextButton toggleABButton;
@@ -340,8 +358,17 @@ PluginProcessor).
         void beginProgrammaticChange();
         void endProgrammaticChange();
 
-        void publishManualUpdateResult(std::unique_ptr<VersionInfo> result);
+        std::uint64_t beginManualUpdateRequest();
+        void invalidateManualUpdateRequest() noexcept;
+        void publishManualUpdateResult(std::unique_ptr<VersionInfo> result,
+                                       std::uint64_t requestGeneration);
         void showManualUpdateResult();
+        void showManualUpdateAlert(const juce::MessageBoxOptions& options,
+                                   juce::String versionToDownload = {});
+        void handleManualUpdateAlertResult(int result,
+                                           std::uint64_t alertGeneration,
+                                           const juce::String& versionToDownload);
+        void invalidateManualUpdateAlert() noexcept;
 
         //juce::String presetName;
 

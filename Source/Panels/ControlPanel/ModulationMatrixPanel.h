@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../GUI/LookAndFeel.h"
+#include "../../GUI/PrimaryButton.h"
 #include "../../PluginProcessor.h"
 #include "../../Utility/Parameters.h"
 #include "juce_gui_basics/juce_gui_basics.h"
@@ -104,32 +105,10 @@ private:
         ModulationMatrixRoutingComboBox)
 };
 
-class ModulationMatrixPrimaryButton final : public juce::TextButton
+class ModulationMatrixPrimaryButton final : public PrimaryTextButton
 {
 public:
-    using juce::TextButton::TextButton;
-
-    void mouseDown(const juce::MouseEvent& event) override;
-    void mouseDrag(const juce::MouseEvent& event) override;
-    void mouseUp(const juce::MouseEvent& event) override;
-    void visibilityChanged() override;
-    void enablementChanged() override;
-
-private:
-    enum class PointerGesture
-    {
-        none,
-        rejected,
-        primary
-    };
-
-    void cancelPointerGesture() noexcept;
-    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
-
-    PointerGesture pointerGesture = PointerGesture::none;
-    juce::MouseInputSource::InputSourceType pointerSourceType =
-        juce::MouseInputSource::mouse;
-    int pointerSourceIndex = -1;
+    using PrimaryTextButton::PrimaryTextButton;
 };
 
 //

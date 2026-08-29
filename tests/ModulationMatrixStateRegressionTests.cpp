@@ -1241,9 +1241,13 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
     SECTION("polarity triggerClick")
     {
         polarityButton->triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK_FALSE(routings[0].isBipolar);
 
-        const auto routings = manager.getModulationRoutingsCopy();
+        row.setVisible(false);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        routings = manager.getModulationRoutingsCopy();
         REQUIRE(routings.size() == 1);
         CHECK_FALSE(routings[0].isBipolar);
     }
@@ -1251,9 +1255,13 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
     SECTION("bypass triggerClick")
     {
         bypassButton->triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].isBypassed);
 
-        const auto routings = manager.getModulationRoutingsCopy();
+        row.setVisible(false);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        routings = manager.getModulationRoutingsCopy();
         REQUIRE(routings.size() == 1);
         CHECK(routings[0].isBypassed);
     }
@@ -1261,14 +1269,20 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
     SECTION("remove triggerClick")
     {
         removeButton->triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        CHECK(deleteCount == 1);
+
+        row.setVisible(false);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
         CHECK(deleteCount == 1);
     }
 
     SECTION("add triggerClick")
     {
         addButton->triggerClick();
-        juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        CHECK(manager.getModulationRoutingsCopy().size() == 2);
+
+        panel.setVisible(false);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
         CHECK(manager.getModulationRoutingsCopy().size() == 2);
     }
 
@@ -1278,6 +1292,14 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
         CHECK(static_cast<juce::Component&>(*closeButton).keyPressed(
             juce::KeyPress { juce::KeyPress::returnKey }));
         juce::MessageManager::getInstance()->runDispatchLoopUntil(150);
+        CHECK(clicks.getClickCount() == 1);
+    }
+
+    SECTION("close Space key")
+    {
+        ButtonClickCapture clicks(*closeButton);
+        CHECK(static_cast<juce::Component&>(*closeButton).keyPressed(
+            juce::KeyPress { juce::KeyPress::spaceKey }));
         CHECK(clicks.getClickCount() == 1);
     }
 }

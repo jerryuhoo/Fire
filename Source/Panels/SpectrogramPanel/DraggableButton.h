@@ -13,6 +13,10 @@
 #include "../../GUI/FireTheme.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct DraggableButtonPointerTestAccess;
+#endif
+
 //==============================================================================
 /*
 */
@@ -26,6 +30,7 @@ public:
     void resized() override;
 
     void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
@@ -38,8 +43,17 @@ public:
     std::function<void()> onDragFinished;
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct DraggableButtonPointerTestAccess;
+#endif
+
     bool isEntered = false;
     bool primaryDragActive = false;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    void recoverMissingPointerUp(const juce::MouseEvent& event);
     juce::Colour getColour();
     bool mState = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DraggableButton)

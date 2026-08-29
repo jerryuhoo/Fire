@@ -65,6 +65,16 @@ void DraggableButton::mouseEnter(const juce::MouseEvent& e)
     juce::Component::mouseEnter(e);
     isEntered = true;
     repaint();
+
+    // If the owner re-enters without its primary button, the preceding up was
+    // lost while the host or window manager changed pointer capture.
+    recoverMissingPointerUp(e);
+}
+
+void DraggableButton::mouseMove(const juce::MouseEvent& e)
+{
+    juce::Component::mouseMove(e);
+    recoverMissingPointerUp(e);
 }
 
 void DraggableButton::mouseExit(const juce::MouseEvent& e)
@@ -72,6 +82,8 @@ void DraggableButton::mouseExit(const juce::MouseEvent& e)
     juce::Component::mouseExit(e);
     isEntered = false;
     repaint();
+
+    recoverMissingPointerUp(e);
 }
 
 juce::Colour DraggableButton::getColour()
@@ -102,18 +114,27 @@ void DraggableButton::mouseDown(const juce::MouseEvent& event)
 {
     juce::Component::mouseDown(event);
 
-    // A host can hide the editor before JUCE delivers mouseUp. Close that
-    // stale ownership before deciding whether this new pointer is eligible.
     juce::Component::SafePointer<DraggableButton> safeThis(this);
-    dismissTransientInteraction();
+    if (primaryDragActive)
+    {
+        // Interleaved touch or pen streams cannot steal an active filter drag.
+        if (! isPointerSource(event))
+            return;
 
-    if (safeThis == nullptr)
-        return;
+        // A fresh down from the owner is a lifecycle boundary when a host
+        // omitted the previous mouseUp.
+        dismissTransientInteraction();
+
+        if (safeThis == nullptr)
+            return;
+    }
 
     if (! mState || ! onDrag || ! isPrimaryPointerDown(event))
         return;
 
     primaryDragActive = true;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
     auto dragCallback = onDrag;
 
     // Keep the callable alive if it removes its owning component. No member is
@@ -125,7 +146,7 @@ void DraggableButton::mouseDrag(const juce::MouseEvent& event)
 {
     juce::Component::mouseDrag(event);
 
-    if (primaryDragActive && mState && onDrag)
+    if (primaryDragActive && isPointerSource(event) && mState && onDrag)
     {
         auto dragCallback = onDrag;
         dragCallback(*this, event);
@@ -136,7 +157,7 @@ void DraggableButton::mouseUp(const juce::MouseEvent& event)
 {
     juce::Component::mouseUp(event);
 
-    if (! primaryDragActive)
+    if (! primaryDragActive || ! isPointerSource(event))
         return;
 
     dismissTransientInteraction();
@@ -148,11 +169,32 @@ void DraggableButton::dismissTransientInteraction()
         return;
 
     primaryDragActive = false;
+    pointerSourceIndex = -1;
     if (onDragFinished)
     {
         auto finishedCallback = onDragFinished;
         finishedCallback();
     }
+}
+
+bool DraggableButton::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void DraggableButton::recoverMissingPointerUp(
+    const juce::MouseEvent& event)
+{
+    if (! primaryDragActive
+        || ! isPointerSource(event)
+        || event.mods.isLeftButtonDown())
+        return;
+
+    // The gesture-end callback may synchronously remove this button, so it is
+    // deliberately the final operation in this path.
+    dismissTransientInteraction();
 }
 
 void DraggableButton::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)

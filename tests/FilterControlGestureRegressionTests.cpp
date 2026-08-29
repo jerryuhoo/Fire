@@ -10,6 +10,23 @@
 #include <memory>
 #include <vector>
 
+struct DraggableButtonPointerTestAccess
+{
+    static bool hasPrimaryDrag(const DraggableButton& button)
+    {
+        return button.primaryDragActive;
+    }
+
+    static void setTrackedPointerSource(
+        DraggableButton& button,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex)
+    {
+        button.pointerSourceType = sourceType;
+        button.pointerSourceIndex = sourceIndex;
+    }
+};
+
 struct FilterControlTestAccess
 {
     static DraggableButton& lowButton(FilterControl& control)
@@ -407,6 +424,199 @@ TEST_CASE("Filter graph nodes reject popup and auxiliary pointer drags",
 #endif
 }
 
+TEST_CASE("Filter graph nodes keep a primary drag owned by one pointer source",
+          "[filter-control][ui][automation][gesture][input][source][multitouch]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    setPlainParameter(processor, LOW_ID, 0.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    FilterControl control(processor, panel);
+    control.setBounds(0, 0, 1000, 400);
+    auto& lowButton = FilterControlTestAccess::lowButton(control);
+    REQUIRE_FALSE(lowButton.getBounds().isEmpty());
+
+    const std::array<juce::String, 3> parameterIDs {
+        LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID
+    };
+    GestureCapture capture(processor,
+                           { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID });
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto downPosition = lowButton.getLocalBounds().toFloat().getCentre();
+    lowButton.mouseDown(makeMouseEvent(lowButton,
+                                       downPosition,
+                                       primary,
+                                       downPosition));
+
+    const auto acceptedInControl = juce::Point<float> { 650.0f, 95.0f };
+    const auto acceptedInButton = acceptedInControl
+                                - lowButton.getPosition().toFloat();
+    lowButton.mouseDrag(makeMouseEvent(lowButton,
+                                       acceptedInButton,
+                                       primary,
+                                       downPosition));
+
+    std::array<float, 3> acceptedValues {};
+    for (size_t index = 0; index < parameterIDs.size(); ++index)
+    {
+        const auto* parameter = processor.treeState.getRawParameterValue(
+            parameterIDs[index]);
+        REQUIRE(parameter != nullptr);
+        acceptedValues[index] = parameter->load(std::memory_order_relaxed);
+        REQUIRE(capture.forParameter(index).beginCount == 1);
+        REQUIRE(capture.forParameter(index).endCount == 0);
+        REQUIRE(capture.forParameter(index).depth == 1);
+    }
+
+    const auto mainSource = juce::Desktop::getInstance().getMainMouseSource();
+    constexpr auto ownerType = juce::MouseInputSource::touch;
+    const int ownerIndex = mainSource.getIndex() + 23;
+    DraggableButtonPointerTestAccess::setTrackedPointerSource(lowButton,
+                                                              ownerType,
+                                                              ownerIndex);
+
+    const auto foreignInControl = juce::Point<float> { 270.0f, 305.0f };
+    const auto foreignInButton = foreignInControl
+                               - lowButton.getPosition().toFloat();
+
+    SECTION("foreign drag and release are ignored")
+    {
+        lowButton.mouseDrag(makeMouseEvent(lowButton,
+                                           foreignInButton,
+                                           primary,
+                                           downPosition));
+        lowButton.mouseUp(makeMouseEvent(lowButton,
+                                         foreignInButton,
+                                         {},
+                                         downPosition));
+    }
+
+    SECTION("foreign down cannot replace the owning gesture")
+    {
+        lowButton.mouseDown(makeMouseEvent(lowButton,
+                                           foreignInButton,
+                                           primary,
+                                           foreignInButton));
+    }
+
+    for (size_t index = 0; index < parameterIDs.size(); ++index)
+    {
+        const auto* parameter = processor.treeState.getRawParameterValue(
+            parameterIDs[index]);
+        REQUIRE(parameter != nullptr);
+        INFO("Parameter " << parameterIDs[index]);
+        CHECK(parameter->load(std::memory_order_relaxed)
+              == Catch::Approx(acceptedValues[index]));
+        CHECK(capture.forParameter(index).beginCount == 1);
+        CHECK(capture.forParameter(index).endCount == 0);
+        CHECK(capture.forParameter(index).depth == 1);
+    }
+    CHECK(DraggableButtonPointerTestAccess::hasPrimaryDrag(lowButton));
+
+    DraggableButtonPointerTestAccess::setTrackedPointerSource(
+        lowButton, mainSource.getType(), mainSource.getIndex());
+    lowButton.mouseUp(makeMouseEvent(lowButton,
+                                     acceptedInButton,
+                                     {},
+                                     downPosition));
+
+    for (size_t index = 0; index < parameterIDs.size(); ++index)
+        checkBalanced(capture.forParameter(index));
+}
+
+TEST_CASE("Filter graph nodes recover when a primary pointer release is lost",
+          "[filter-control][ui][automation][gesture][input][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    setPlainParameter(processor, LOW_ID, 0.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    FilterControl control(processor, panel);
+    control.setBounds(0, 0, 1000, 400);
+    auto& lowButton = FilterControlTestAccess::lowButton(control);
+    REQUIRE_FALSE(lowButton.getBounds().isEmpty());
+
+    const std::array<juce::String, 3> parameterIDs {
+        LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID
+    };
+    GestureCapture capture(processor,
+                           { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID });
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto downPosition = lowButton.getLocalBounds().toFloat().getCentre();
+    lowButton.mouseDown(makeMouseEvent(lowButton,
+                                       downPosition,
+                                       primary,
+                                       downPosition));
+
+    const auto acceptedInControl = juce::Point<float> { 650.0f, 95.0f };
+    const auto acceptedInButton = acceptedInControl
+                                - lowButton.getPosition().toFloat();
+    lowButton.mouseDrag(makeMouseEvent(lowButton,
+                                       acceptedInButton,
+                                       primary,
+                                       downPosition));
+
+    std::array<float, 3> acceptedValues {};
+    for (size_t index = 0; index < parameterIDs.size(); ++index)
+    {
+        const auto* parameter = processor.treeState.getRawParameterValue(
+            parameterIDs[index]);
+        REQUIRE(parameter != nullptr);
+        acceptedValues[index] = parameter->load(std::memory_order_relaxed);
+        REQUIRE(capture.forParameter(index).beginCount == 1);
+        REQUIRE(capture.forParameter(index).endCount == 0);
+        REQUIRE(capture.forParameter(index).depth == 1);
+    }
+
+    SECTION("owner movement without the primary button closes the stale drag")
+    {
+        lowButton.mouseMove(makeMouseEvent(lowButton,
+                                           acceptedInButton,
+                                           {},
+                                           downPosition));
+    }
+
+    SECTION("a fresh popup down from the owner closes the stale drag")
+    {
+        lowButton.mouseDown(makeMouseEvent(
+            lowButton,
+            acceptedInButton,
+            juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier },
+            acceptedInButton));
+    }
+
+    CHECK_FALSE(DraggableButtonPointerTestAccess::hasPrimaryDrag(lowButton));
+    for (size_t index = 0; index < parameterIDs.size(); ++index)
+        checkBalanced(capture.forParameter(index));
+
+    const auto rejectedInControl = juce::Point<float> { 270.0f, 305.0f };
+    const auto rejectedInButton = rejectedInControl
+                                - lowButton.getPosition().toFloat();
+    lowButton.mouseDrag(makeMouseEvent(lowButton,
+                                       rejectedInButton,
+                                       primary,
+                                       downPosition));
+
+    for (size_t index = 0; index < parameterIDs.size(); ++index)
+    {
+        const auto* parameter = processor.treeState.getRawParameterValue(
+            parameterIDs[index]);
+        REQUIRE(parameter != nullptr);
+        INFO("Parameter " << parameterIDs[index]);
+        CHECK(parameter->load(std::memory_order_relaxed)
+              == Catch::Approx(acceptedValues[index]));
+        checkBalanced(capture.forParameter(index));
+    }
+}
+
 TEST_CASE("Filter graph nodes discard primary drag ownership when hidden",
           "[filter-control][ui][automation][gesture][input][lifecycle]")
 {
@@ -524,10 +734,21 @@ TEST_CASE("Filter graph drag completion survives control release from a host cal
                                                    LOW_ID,
                                                    ParameterCallbackStage::end,
                                                    control);
-    lowButton->mouseUp(makeMouseEvent(*lowButton,
-                                      targetInButton,
-                                      {},
-                                      downPosition));
+    SECTION("explicit mouse release")
+    {
+        lowButton->mouseUp(makeMouseEvent(*lowButton,
+                                          targetInButton,
+                                          {},
+                                          downPosition));
+    }
+
+    SECTION("movement after a missing mouse release")
+    {
+        lowButton->mouseMove(makeMouseEvent(*lowButton,
+                                            targetInButton,
+                                            {},
+                                            downPosition));
+    }
 
     CHECK(releaseOnEnd.didRelease());
     CHECK(control == nullptr);

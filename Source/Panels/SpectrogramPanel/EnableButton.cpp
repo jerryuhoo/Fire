@@ -74,6 +74,13 @@ void EnableButton::mouseEnter(const juce::MouseEvent& e)
     juce::ToggleButton::mouseEnter(e);
     isEntered = true;
     repaint();
+    recoverMissingPointerUp(e);
+}
+
+void EnableButton::mouseMove(const juce::MouseEvent& e)
+{
+    juce::ToggleButton::mouseMove(e);
+    recoverMissingPointerUp(e);
 }
 
 void EnableButton::mouseExit(const juce::MouseEvent& e)
@@ -81,6 +88,7 @@ void EnableButton::mouseExit(const juce::MouseEvent& e)
     juce::ToggleButton::mouseExit(e);
     isEntered = false;
     repaint();
+    recoverMissingPointerUp(e);
 }
 
 void EnableButton::mouseDown(const juce::MouseEvent& event)
@@ -146,6 +154,14 @@ void EnableButton::dismissPointerGesture() noexcept
 
     if (isDown())
         setState(juce::Button::buttonNormal);
+}
+
+void EnableButton::recoverMissingPointerUp(const juce::MouseEvent& event)
+{
+    if (primaryPointerDown
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        dismissPointerGesture();
 }
 
 bool EnableButton::isPointerSource(const juce::MouseEvent& event) const noexcept

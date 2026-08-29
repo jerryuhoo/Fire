@@ -26,6 +26,7 @@ public:
     void resized() override;
     
     void mouseEnter (const juce::MouseEvent& e) override;
+    void mouseMove (const juce::MouseEvent& e) override;
     void mouseExit (const juce::MouseEvent& e) override;
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
@@ -35,6 +36,7 @@ public:
 private:
     void visibilityChanged() override;
     void enablementChanged() override;
+    void recoverMissingPointerUp(const juce::MouseEvent& event);
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
 
     bool isEntered = false;

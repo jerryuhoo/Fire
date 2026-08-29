@@ -60,6 +60,13 @@ void SoloButton::mouseEnter(const juce::MouseEvent& e)
     juce::ToggleButton::mouseEnter(e);
     isEntered = true;
     repaint();
+    recoverMissingPointerUp(e);
+}
+
+void SoloButton::mouseMove(const juce::MouseEvent& e)
+{
+    juce::ToggleButton::mouseMove(e);
+    recoverMissingPointerUp(e);
 }
 
 void SoloButton::mouseExit(const juce::MouseEvent& e)
@@ -67,6 +74,7 @@ void SoloButton::mouseExit(const juce::MouseEvent& e)
     juce::ToggleButton::mouseExit(e);
     isEntered = false;
     repaint();
+    recoverMissingPointerUp(e);
 }
 
 void SoloButton::mouseDown(const juce::MouseEvent& event)
@@ -132,6 +140,14 @@ void SoloButton::dismissPointerGesture() noexcept
 
     if (isDown())
         setState(juce::Button::buttonNormal);
+}
+
+void SoloButton::recoverMissingPointerUp(const juce::MouseEvent& event)
+{
+    if (primaryPointerDown
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        dismissPointerGesture();
 }
 
 bool SoloButton::isPointerSource(const juce::MouseEvent& event) const noexcept

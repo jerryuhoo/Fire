@@ -250,6 +250,35 @@ TEST_CASE("Band toggles discard pointer ownership when hidden or disabled",
     }
 }
 
+TEST_CASE("Band toggles recover when a primary pointer release is lost",
+          "[band-toggle][multiband][ui][input][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    forEachBandToggle([leftButton](auto& button)
+    {
+        int clickCount = 0;
+        button.onClick = [&clickCount] { ++clickCount; };
+        auto& component = static_cast<juce::Component&>(button);
+
+        component.mouseDown(makeMouseEvent(button, leftButton));
+        REQUIRE(button.isDown());
+
+        // Pointer capture was lost, and the next owner event proves that its
+        // primary button is no longer held.
+        component.mouseMove(makeMouseEvent(button, {}));
+        CHECK_FALSE(button.isDown());
+
+        // A delayed release from the abandoned gesture must be inert.
+        component.mouseUp(makeMouseEvent(button, {}));
+        CHECK_FALSE(button.getToggleState());
+        CHECK(clickCount == 0);
+    });
+}
+
 TEST_CASE("Band toggles preserve keyboard and programmatic activation",
           "[band-toggle][multiband][ui][input][keyboard]")
 {

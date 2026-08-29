@@ -78,6 +78,53 @@ struct WidthGraphHistorySourceTestAccess
                && ! graph.restoreTrailOnCacheRebuild
                && graph.lastHistoryGeneration == 0;
     }
+
+    static void rebuildCache(WidthGraph& graph)
+    {
+        graph.rebuildPointCloudCache(1.0f);
+    }
+
+    static bool matchesSnapshot(
+        const WidthGraph& graph,
+        const FireAudioProcessor::HistorySnapshot& snapshot)
+    {
+        return graph.lastHistoryGeneration == snapshot.generation
+               && graph.historySourceToken == snapshot.sourceToken
+               && WidthGraph::arraysMatch(graph.historyL, snapshot.left)
+               && WidthGraph::arraysMatch(graph.historyR, snapshot.right);
+    }
+
+    static std::uint64_t lastGeneration(const WidthGraph& graph)
+    {
+        return graph.lastHistoryGeneration;
+    }
+
+    static std::uint64_t sourceToken(const WidthGraph& graph)
+    {
+        return graph.historySourceToken;
+    }
+
+    static int fadeFramesRemaining(const WidthGraph& graph)
+    {
+        return graph.fadeFramesRemaining;
+    }
+
+    static bool hasRenderableCache(const WidthGraph& graph)
+    {
+        return graph.pointCloudCache.isValid()
+               && graph.cacheHasContent
+               && ! graph.cacheGeometryDirty;
+    }
+
+    static bool cacheGeometryDirty(const WidthGraph& graph)
+    {
+        return graph.cacheGeometryDirty;
+    }
+
+    static bool shouldRestoreTrail(const WidthGraph& graph)
+    {
+        return graph.restoreTrailOnCacheRebuild;
+    }
 };
 
 namespace
@@ -208,4 +255,157 @@ TEST_CASE("History graphs hard-clear on a source request without audio",
     CHECK_FALSE(processor.copyHistorySnapshot(notYetPublished));
     CHECK(notYetPublished.left.isEmpty());
     CHECK(notYetPublished.right.isEmpty());
+}
+
+TEST_CASE("Width graph consumes hidden history before its first visible repaint",
+          "[ui][history][width-graph][visibility][freshness][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.prepareToPlay(sampleRate, blockSize);
+    REQUIRE(processor.getTotalNumInputChannels() == 2);
+
+    juce::Component desktopHost;
+    desktopHost.setBounds(0, 0, 420, 260);
+    desktopHost.setVisible(false);
+
+    WidthGraph widthGraph(processor);
+    desktopHost.addAndMakeVisible(widthGraph);
+    widthGraph.setBounds(20, 20, 280, 180);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    REQUIRE(widthGraph.isShowing());
+
+    WidthGraphHistorySourceTestAccess::rebuildCache(widthGraph);
+    processHistoryBlock(processor, 0.2f);
+
+    FireAudioProcessor::HistorySnapshot visibleSnapshot;
+    REQUIRE(processor.copyHistorySnapshot(visibleSnapshot));
+    widthGraph.timerCallback();
+    REQUIRE(WidthGraphHistorySourceTestAccess::matchesSnapshot(
+        widthGraph,
+        visibleSnapshot));
+    REQUIRE(WidthGraphHistorySourceTestAccess::hasRenderableCache(widthGraph));
+    REQUIRE(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
+            == 24);
+
+    // Establish an observable old trail.  With no new generation this timer
+    // only fades the existing cache; accepting the hidden generation must
+    // reinforce the first visible frame back to the full trail lifetime.
+    widthGraph.timerCallback();
+    REQUIRE(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
+            == 23);
+
+    const auto stableSourceToken = processor.getHistorySourceToken();
+    const auto visibleGeneration = visibleSnapshot.generation;
+    desktopHost.setVisible(false);
+    REQUIRE_FALSE(widthGraph.isShowing());
+
+    SECTION("an existing point-cloud cache is refreshed synchronously")
+    {
+        processHistoryBlock(processor, 0.7f);
+        FireAudioProcessor::HistorySnapshot hiddenSnapshot;
+        REQUIRE(processor.copyHistorySnapshot(hiddenSnapshot));
+        REQUIRE(hiddenSnapshot.sourceToken == stableSourceToken);
+        REQUIRE(hiddenSnapshot.generation > visibleGeneration);
+        REQUIRE(WidthGraphHistorySourceTestAccess::lastGeneration(widthGraph)
+                == visibleGeneration);
+
+        // Do not dispatch the message loop or invoke the graph timer manually:
+        // the visibility transition itself must consume the newest snapshot
+        // before its queued repaint can expose the old cache.
+        desktopHost.setVisible(true);
+        REQUIRE(widthGraph.isShowing());
+        CHECK(WidthGraphHistorySourceTestAccess::matchesSnapshot(
+            widthGraph,
+            hiddenSnapshot));
+        CHECK(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
+              == 24);
+        CHECK(processor.getHistorySourceToken() == stableSourceToken);
+    }
+
+    SECTION("the same generation resumes fading without reinforcement")
+    {
+        desktopHost.setVisible(true);
+        REQUIRE(widthGraph.isShowing());
+        CHECK(WidthGraphHistorySourceTestAccess::matchesSnapshot(
+            widthGraph,
+            visibleSnapshot));
+        CHECK(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
+              == 22);
+        CHECK(processor.getHistorySourceToken() == stableSourceToken);
+    }
+
+    SECTION("an unpublished source epoch clears the hidden trail")
+    {
+        processor.setHistoryArray(0);
+        const auto pendingSourceToken = processor.getHistorySourceToken();
+        REQUIRE(pendingSourceToken != stableSourceToken);
+
+        FireAudioProcessor::HistorySnapshot unpublishedSnapshot;
+        REQUIRE_FALSE(processor.copyHistorySnapshot(unpublishedSnapshot));
+
+        desktopHost.setVisible(true);
+        REQUIRE(widthGraph.isShowing());
+        CHECK(WidthGraphHistorySourceTestAccess::sourceToken(widthGraph)
+              == pendingSourceToken);
+        CHECK(WidthGraphHistorySourceTestAccess::isHardCleared(widthGraph));
+    }
+
+    SECTION("a cache invalidated by a hidden resize restores the newest history")
+    {
+        widthGraph.setBounds(20, 20, 320, 190);
+        REQUIRE(WidthGraphHistorySourceTestAccess::cacheGeometryDirty(widthGraph));
+        REQUIRE(WidthGraphHistorySourceTestAccess::shouldRestoreTrail(widthGraph));
+        widthGraph.setBounds(20, 20, 300, 170);
+        REQUIRE(WidthGraphHistorySourceTestAccess::cacheGeometryDirty(widthGraph));
+        REQUIRE(WidthGraphHistorySourceTestAccess::shouldRestoreTrail(widthGraph));
+
+        processHistoryBlock(processor, 0.7f);
+        FireAudioProcessor::HistorySnapshot hiddenSnapshot;
+        REQUIRE(processor.copyHistorySnapshot(hiddenSnapshot));
+        REQUIRE(hiddenSnapshot.sourceToken == stableSourceToken);
+        REQUIRE(hiddenSnapshot.generation > visibleGeneration);
+
+        desktopHost.setVisible(true);
+        REQUIRE(widthGraph.isShowing());
+        CHECK(WidthGraphHistorySourceTestAccess::matchesSnapshot(
+            widthGraph,
+            hiddenSnapshot));
+        CHECK(processor.getHistorySourceToken() == stableSourceToken);
+
+        // Rebuilding the invalid cache must use the snapshot consumed by the
+        // visibility callback, never the pre-hide history retained for resize.
+        WidthGraphHistorySourceTestAccess::rebuildCache(widthGraph);
+        CHECK(WidthGraphHistorySourceTestAccess::hasRenderableCache(widthGraph));
+        CHECK(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
+              == 24);
+    }
+
+    SECTION("zero bounds retain the newest hidden frame until geometry returns")
+    {
+        widthGraph.setBounds(0, 0, 0, 0);
+        REQUIRE(WidthGraphHistorySourceTestAccess::cacheGeometryDirty(widthGraph));
+        REQUIRE(WidthGraphHistorySourceTestAccess::shouldRestoreTrail(widthGraph));
+
+        processHistoryBlock(processor, 0.7f);
+        FireAudioProcessor::HistorySnapshot hiddenSnapshot;
+        REQUIRE(processor.copyHistorySnapshot(hiddenSnapshot));
+        REQUIRE(hiddenSnapshot.sourceToken == stableSourceToken);
+        REQUIRE(hiddenSnapshot.generation > visibleGeneration);
+
+        desktopHost.setVisible(true);
+        REQUIRE(widthGraph.isShowing());
+        CHECK(WidthGraphHistorySourceTestAccess::matchesSnapshot(
+            widthGraph,
+            hiddenSnapshot));
+        CHECK(WidthGraphHistorySourceTestAccess::shouldRestoreTrail(widthGraph));
+
+        widthGraph.setBounds(20, 20, 300, 170);
+        CHECK(WidthGraphHistorySourceTestAccess::shouldRestoreTrail(widthGraph));
+        WidthGraphHistorySourceTestAccess::rebuildCache(widthGraph);
+        CHECK(WidthGraphHistorySourceTestAccess::hasRenderableCache(widthGraph));
+        CHECK(WidthGraphHistorySourceTestAccess::fadeFramesRemaining(widthGraph)
+              == 24);
+    }
 }

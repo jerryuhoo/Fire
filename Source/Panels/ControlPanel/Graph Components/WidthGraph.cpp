@@ -67,15 +67,17 @@ void WidthGraph::timerCallback()
     if (! isShowing())
         return;
 
-    if (cacheGeometryDirty || ! pointCloudCache.isValid())
-    {
-        repaint();
-        return;
-    }
-
+    const bool cacheIsRenderable = ! cacheGeometryDirty
+                                   && pointCloudCache.isValid();
     const auto historyGeneration = processor.getHistoryGeneration();
     if (historyGeneration == lastHistoryGeneration)
     {
+        if (! cacheIsRenderable)
+        {
+            repaint();
+            return;
+        }
+
         if (fadeFramesRemaining > 0 && drawLatestFrame(false))
             repaint(getGraphPlotBounds().getSmallestIntegerContainer());
         return;
@@ -105,6 +107,17 @@ void WidthGraph::timerCallback()
             historyR.swapWith(historyScratch.right);
     }
 
+    if (! cacheIsRenderable)
+    {
+        // A hidden resize invalidates only the image geometry, not the
+        // processor history.  Retain the newly accepted frame so the first
+        // cache rebuild after reappearing cannot restore the pre-hide data.
+        restoreTrailOnCacheRebuild = ! historyL.isEmpty()
+                                     && (monoChannel || ! historyR.isEmpty());
+        repaint();
+        return;
+    }
+
     // A new generation is a new visual frame even if its values happen to be
     // identical (DC input or a periodic window). Reinforce that frame instead
     // of letting the trail fade to nothing while audio is still arriving.
@@ -115,7 +128,8 @@ void WidthGraph::timerCallback()
 void WidthGraph::resized()
 {
     GraphTemplate::resized();
-    restoreTrailOnCacheRebuild = cacheHasContent;
+    restoreTrailOnCacheRebuild = cacheHasContent
+                                 || restoreTrailOnCacheRebuild;
     pointCloudCache = {};
     cacheHasContent = false;
     fadeFramesRemaining = 0;
@@ -144,6 +158,7 @@ void WidthGraph::graphShowingStateChanged(bool isNowShowing)
 
     synchroniseHistorySource();
     startTimerHz(60);
+    timerCallback();
     repaint();
 }
 

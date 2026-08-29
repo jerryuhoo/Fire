@@ -132,7 +132,8 @@ private:
 
     // Helper methods for brush mode
     int getOrCreatePointAtX(float targetX);
-    void applyBrushShape(const juce::Point<int>& clickPosition);
+    bool applyBrushShape(const juce::Point<int>& clickPosition);
+    void publishActiveData();
     int findSegmentIndexAt(const juce::Point<int>& position) const;
 
     juce::Point<float> toNormalized(juce::Point<int> localPoint);

@@ -559,13 +559,19 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
         if (event.mods.isLeftButtonDown())
         {
             isBrushing = true;
-            applyBrushShape(event.getPosition());
+            const bool shapeChanged =
+                applyBrushShape(event.getPosition());
 
             const float gridW = 1.0f / (float) hGridDivs;
             const float gridH = 1.0f / (float) vGridDivs;
             const int gridX = juce::jlimit(0, hGridDivs - 1, (int) ((float) event.x / (float) juce::jmax(1, getWidth()) / gridW));
             const int gridY = juce::jlimit(0, vGridDivs - 1, (int) ((float) event.y / (float) juce::jmax(1, getHeight()) / gridH));
             lastBrushCell = { gridX, gridY };
+
+            // The first painted cell is already visible, so publish it now.
+            // Do this last because the callback may rebind or delete us.
+            if (shapeChanged)
+                publishActiveData();
         }
         return;
     }
@@ -675,10 +681,14 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
 
         if (currentCell != lastBrushCell)
         {
-            applyBrushShape(event.getPosition());
+            const bool shapeChanged =
+                applyBrushShape(event.getPosition());
             lastBrushCell = currentCell;
-            if (onDataChanged)
-                onDataChanged(activeLfoData);
+
+            // Keep every newly painted cell in step with the manager. The
+            // callback is last because it may rebind or delete this editor.
+            if (shapeChanged)
+                publishActiveData();
         }
         return; // Brush drag is handled, so we exit here.
     }
@@ -903,22 +913,21 @@ void LfoEditor::mouseUp(const juce::MouseEvent& event)
     {
         isBrushing = false;
         lastBrushCell = { -1, -1 };
-        dataWasChanged = true;
+    }
+
+    if (dataWasChanged && dataIsActive)
+    {
+        const auto pointCountBeforeMerge = activeLfoData.points.size();
+        activeLfoData.mergeDuplicatePoints();
+        if (activeLfoData.points.size() != pointCountBeforeMerge)
+            cancelPointAndCurveInteraction();
     }
 
     repaint();
 
-    if (dataWasChanged && onDataChanged)
-    {
-        if (dataIsActive)
-        {
-            const auto pointCountBeforeMerge = activeLfoData.points.size();
-            activeLfoData.mergeDuplicatePoints();
-            if (activeLfoData.points.size() != pointCountBeforeMerge)
-                cancelPointAndCurveInteraction();
-        }
-        onDataChanged(activeLfoData);
-    }
+    // This must remain the final operation: the callback may delete us.
+    if (dataWasChanged)
+        publishActiveData();
 }
 
 void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
@@ -1130,10 +1139,10 @@ void LfoEditor::rebuildCurvatures()
     activeLfoData.curvatures.assign(numSegments, 0.0f);
 }
 
-void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
+bool LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 {
     if (! dataIsActive)
-        return;
+        return false;
 
     // Brush painting replaces and reorders points, invalidating every point or
     // curve index. Keep the brush gesture itself alive so drag-to-paint and its
@@ -1152,6 +1161,7 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
     const juce::Rectangle<float> cellBounds(startX, bottomY, endX - startX, topY - bottomY);
 
     const auto oldPoints = activeLfoData.points;
+    const auto oldCurvatures = activeLfoData.curvatures;
 
     // 2. Cleanup old points with smarter boundary logic.
     activeLfoData.points.erase(
@@ -1229,9 +1239,9 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
             {
                 if (juce::approximatelyEqual(oldPoints[j].x, p1.x) && juce::approximatelyEqual(oldPoints[j + 1].x, p2.x))
                 {
-                    if (j < activeLfoData.curvatures.size())
+                    if (j < oldCurvatures.size())
                     {
-                        oldCurvature = activeLfoData.curvatures[j];
+                        oldCurvature = oldCurvatures[j];
                         break;
                     }
                 }
@@ -1242,14 +1252,24 @@ void LfoEditor::applyBrushShape(const juce::Point<int>& clickPosition)
 
     activeLfoData.curvatures.swap(newCurvatures);
 
-    // Brush replacement can add up to three points to a sparse grid cell even
-    // when the editor was already at its handle limit. Canonicalise the
-    // completed topology before it can be displayed or published so the UI
-    // and LfoManager never independently reduce different copies of it.
-    if (activeLfoData.points.size() > LfoData::maximumNumberOfPoints)
-        activeLfoData.sanitise();
+    // Canonicalise every completed cell before publishing it. Besides keeping
+    // the handle limit, this prevents a near-duplicate grid seam from making
+    // the release event produce a second, different manager shape.
+    activeLfoData.mergeDuplicatePoints();
 
     repaint();
+    return activeLfoData.points != oldPoints
+        || activeLfoData.curvatures != oldCurvatures;
+}
+
+void LfoEditor::publishActiveData()
+{
+    auto callback = onDataChanged;
+    if (! callback || ! dataIsActive)
+        return;
+
+    auto dataToPublish = activeLfoData;
+    callback(dataToPublish);
 }
 
 int LfoEditor::findSegmentIndexAt(const juce::Point<int>& position) const

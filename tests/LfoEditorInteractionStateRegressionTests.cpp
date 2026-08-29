@@ -328,15 +328,17 @@ void checkBrushPointLimit(size_t initialPointCount)
     const juce::Point<float> mouseDownPosition { 150.0f, 25.0f };
     editor.mouseDown(makeMouseEvent(editor, mouseDownPosition, leftButton));
 
+    REQUIRE(publicationCount == 1);
     REQUIRE(LfoEditorTestAccess::pointCount(editor) <= LfoData::maximumNumberOfPoints);
     REQUIRE(hasValidLfoTopology(LfoEditorTestAccess::data(editor)));
+    checkSameLfoData(lastPublished, LfoEditorTestAccess::data(editor));
 
     editor.mouseDrag(makeMouseEvent(editor,
                                     { 250.0f, 25.0f },
                                     leftButton,
                                     mouseDownPosition));
 
-    REQUIRE(publicationCount == 1);
+    REQUIRE(publicationCount == 2);
     REQUIRE(LfoEditorTestAccess::pointCount(editor) <= LfoData::maximumNumberOfPoints);
     REQUIRE(lastPublished.points.size() <= LfoData::maximumNumberOfPoints);
     REQUIRE(hasValidLfoTopology(lastPublished));
@@ -817,14 +819,17 @@ TEST_CASE("LFO brush replacement cancels stale point selection",
     editor.setEditMode(LfoEditMode::BrushPaint);
     editor.mouseDown(makeMouseEvent(editor, { 200.0f, 100.0f }, leftButton));
 
+    REQUIRE(publicationCount == 1);
     REQUIRE(LfoEditorTestAccess::pointCount(editor) == 2);
     REQUIRE(LfoEditorTestAccess::selectedPointCount(editor) == 0);
     REQUIRE(LfoEditorTestAccess::interactionStateIsValid(editor));
     REQUIRE(LfoEditorTestAccess::isBrushing(editor));
     REQUIRE(LfoEditorTestAccess::lastBrushCell(editor) == juce::Point<int>(0, 0));
+    checkSameLfoData(lastPublished, LfoEditorTestAccess::data(editor));
 
     editor.mouseUp(makeMouseEvent(editor, { 200.0f, 100.0f }));
     REQUIRE_FALSE(LfoEditorTestAccess::isBrushing(editor));
+    REQUIRE(publicationCount == 1);
 
     editor.setEditMode(LfoEditMode::PointEdit);
     REQUIRE(LfoEditorTestAccess::interactionStateIsValid(editor));
@@ -841,9 +846,197 @@ TEST_CASE("LFO brush replacement cancels stale point selection",
                                   {},
                                   endpoint));
 
-    REQUIRE(publicationCount >= 2);
+    REQUIRE(publicationCount == 3);
     CHECK(hasValidLfoTopology(lastPublished));
     CHECK(LfoEditorTestAccess::interactionStateIsValid(editor));
+}
+
+TEST_CASE("LFO brush mouse-down immediately commits through the panel",
+          "[lfo][editor][brush][panel][immediate][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto initialShape = makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+    });
+    processor.getLfoManager().setLfoData(0, initialShape);
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+    prepareEditor(*editor);
+    editor->setGridDivisions(4, 4);
+    editor->setCurrentBrush(LfoPresetShape::SineConvex);
+    editor->setEditMode(LfoEditMode::BrushPaint);
+
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&] { ++dirtyCount; });
+    const juce::Point<float> mouseDownPosition { 150.0f, 25.0f };
+    const auto initialContext = editor->getDataContext();
+    editor->mouseDown(makeMouseEvent(
+        *editor, mouseDownPosition, leftButton));
+
+    REQUIRE(dirtyCount == 1);
+    const auto firstCommit =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    REQUIRE(firstCommit.revision != initialContext.revision);
+    CHECK(editor->getDataContext().revision == firstCommit.revision);
+    checkSameLfoData(firstCommit.data,
+                     LfoEditorTestAccess::data(*editor));
+
+    editor->mouseDrag(makeMouseEvent(*editor,
+                                     { 160.0f, 30.0f },
+                                     leftButton,
+                                     mouseDownPosition));
+    REQUIRE(dirtyCount == 1);
+    CHECK(processor.getLfoManager().getLfoDataSnapshot(0).revision
+          == firstCommit.revision);
+
+    // Crossing into an adjacent cell within this same held gesture is a
+    // second transaction based on the revision committed by mouseDown.
+    const juce::Point<float> adjacentCell { 250.0f, 25.0f };
+    editor->mouseDrag(makeMouseEvent(*editor,
+                                     adjacentCell,
+                                     leftButton,
+                                     mouseDownPosition));
+    REQUIRE(dirtyCount == 2);
+    const auto secondCommit =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    REQUIRE(secondCommit.revision != firstCommit.revision);
+    CHECK(editor->getDataContext().revision == secondCommit.revision);
+    checkSameLfoData(secondCommit.data,
+                     LfoEditorTestAccess::data(*editor));
+    editor->mouseUp(makeMouseEvent(
+        *editor, adjacentCell, {}, mouseDownPosition));
+    CHECK(dirtyCount == 2);
+    CHECK(processor.getLfoManager().getLfoDataSnapshot(0).revision
+          == secondCommit.revision);
+
+    // Repainting that already identical cell in a new gesture is a no-op.
+    editor->mouseDown(makeMouseEvent(
+        *editor, adjacentCell, leftButton));
+    CHECK(dirtyCount == 2);
+    CHECK(editor->getDataContext().revision == secondCommit.revision);
+    editor->mouseUp(makeMouseEvent(
+        *editor, adjacentCell, {}, adjacentCell));
+    CHECK(dirtyCount == 2);
+    CHECK(processor.getLfoManager().getLfoDataSnapshot(0).revision
+          == secondCommit.revision);
+}
+
+TEST_CASE("LFO brush publication tolerates editor deletion",
+          "[lfo][editor][brush][lifetime][regression]")
+{
+    auto editor = std::make_unique<LfoEditor>();
+    prepareEditor(*editor);
+    editor->setDataToDisplay(makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 1.0f, 0.25f }
+    }));
+    editor->setGridDivisions(4, 4);
+    editor->setCurrentBrush(LfoPresetShape::SineConvex);
+    editor->setEditMode(LfoEditMode::BrushPaint);
+
+    bool callbackRan = false;
+    editor->onDataChanged = [&](const LfoData& published)
+    {
+        callbackRan = published.points.size() >= 2;
+        editor.reset();
+    };
+
+    auto* rawEditor = editor.get();
+    rawEditor->mouseDown(makeMouseEvent(
+        *rawEditor, { 150.0f, 25.0f }, leftButton));
+
+    CHECK(callbackRan);
+    CHECK(editor == nullptr);
+}
+
+TEST_CASE("Stale LFO brush publication restores manager authority",
+          "[lfo][editor][brush][panel][revision][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto initialShape = makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 0.70f, 0.25f }, { 1.0f, 0.65f }
+    });
+    processor.getLfoManager().setLfoData(0, initialShape);
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+    prepareEditor(*editor);
+    editor->setGridDivisions(4, 4);
+    editor->setCurrentBrush(LfoPresetShape::SineConvex);
+    editor->setEditMode(LfoEditMode::BrushPaint);
+
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&] { ++dirtyCount; });
+    const auto replacement = makeLfoData({
+        { 0.0f, 0.90f }, { 0.20f, 0.35f }, { 0.55f, 0.75f }, { 1.0f, 0.10f }
+    });
+    auto replacementShapes = std::array<LfoData, 4> {
+        replacement, LfoData {}, LfoData {}, LfoData {}
+    };
+    // Keep the editor stale to exercise the CAS failure path itself.
+    processor.getLfoManager().replaceLfoDataAndRoutings(
+        replacementShapes, {});
+    const auto replacementSnapshot =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+
+    const juce::Point<float> mouseDownPosition { 150.0f, 25.0f };
+    editor->mouseDown(makeMouseEvent(
+        *editor, mouseDownPosition, leftButton));
+
+    CHECK(dirtyCount == 0);
+    checkSameLfoData(
+        processor.getLfoManager().getLfoDataSnapshot(0).data,
+        replacementSnapshot.data);
+    checkSameLfoData(LfoEditorTestAccess::data(*editor),
+                     replacementSnapshot.data);
+    CHECK(editor->getDataContext().revision
+          == replacementSnapshot.revision);
+    CHECK_FALSE(LfoEditorTestAccess::isBrushing(*editor));
+    CHECK(LfoEditorTestAccess::lastBrushCell(*editor)
+          == juce::Point<int>(-1, -1));
+
+    editor->mouseDrag(makeMouseEvent(*editor,
+                                     { 250.0f, 25.0f },
+                                     leftButton,
+                                     mouseDownPosition));
+    editor->mouseUp(makeMouseEvent(
+        *editor, { 250.0f, 25.0f }, {}, mouseDownPosition));
+    CHECK(dirtyCount == 0);
+    const auto finalSnapshot =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    CHECK(finalSnapshot.revision == replacementSnapshot.revision);
+    checkSameLfoData(finalSnapshot.data, replacementSnapshot.data);
+}
+
+TEST_CASE("LFO brush publication tolerates panel deletion",
+          "[lfo][editor][brush][panel][lifetime][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.getLfoManager().setLfoData(0, makeLfoData({
+        { 0.0f, 0.15f }, { 0.35f, 0.80f }, { 1.0f, 0.25f }
+    }));
+
+    auto panel = std::make_unique<LfoPanel>(processor);
+    panel->setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(*panel);
+    REQUIRE(editor != nullptr);
+    prepareEditor(*editor);
+    editor->setGridDivisions(4, 4);
+    editor->setCurrentBrush(LfoPresetShape::SineConvex);
+    editor->setEditMode(LfoEditMode::BrushPaint);
+    panel->setOnDataChangedCallback([&] { panel.reset(); });
+
+    editor->mouseDown(makeMouseEvent(
+        *editor, { 150.0f, 25.0f }, leftButton));
+
+    CHECK(panel == nullptr);
 }
 
 TEST_CASE("LFO brush painting never publishes more points than the DSP accepts",

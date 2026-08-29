@@ -3960,6 +3960,70 @@ TEST_CASE("Close controls remain hit-testable while crossing a divider child",
     checkMoveThroughDivider(static_cast<float>(divider.getWidth() - 1));
 }
 
+TEST_CASE("Divider compatibility toggles reject user commands but follow automation",
+          "[multiband][divider][line-state][input][automation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+
+    auto& dividerGroup = *dividerGroups[0];
+    const auto lineStateId =
+        ParameterIDAndName::getIDString(LINE_STATE_ID, 0);
+    const auto* lineState =
+        processor.treeState.getRawParameterValue(lineStateId);
+    REQUIRE(lineState != nullptr);
+    REQUIRE(lineState->load(std::memory_order_relaxed) >= 0.5f);
+    REQUIRE(dividerGroup.getToggleState());
+    REQUIRE(dividerGroup.isVisible());
+
+    CHECK_FALSE(dividerGroup.getWantsKeyboardFocus());
+    CHECK_FALSE(dividerGroup.getMouseClickGrabsKeyboardFocus());
+    CHECK_FALSE(dividerGroup.isAccessible());
+    CHECK(dividerGroup.getAccessibilityHandler() == nullptr);
+
+    const auto checkStillActive = [&]
+    {
+        CHECK(lineState->load(std::memory_order_relaxed) >= 0.5f);
+        CHECK(dividerGroup.getToggleState());
+        CHECK(dividerGroup.isVisible());
+    };
+
+    dividerGroup.triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    checkStillActive();
+
+    auto& component = static_cast<juce::Component&>(dividerGroup);
+    CHECK(component.keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    CHECK(component.keyPressed(
+        juce::KeyPress { juce::KeyPress::spaceKey }));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    checkStillActive();
+
+    // ButtonAttachment updates the ToggleButton with
+    // setToggleState(sendNotificationSync). That internal compatibility path
+    // must continue to invoke clicked() and update divider presentation.
+    setPlainParameter(processor, lineStateId, 0.0f);
+    CHECK(lineState->load(std::memory_order_relaxed) < 0.5f);
+    CHECK_FALSE(dividerGroup.getToggleState());
+    CHECK_FALSE(dividerGroup.isVisible());
+
+    setPlainParameter(processor, lineStateId, 1.0f);
+    CHECK(lineState->load(std::memory_order_relaxed) >= 0.5f);
+    CHECK(dividerGroup.getToggleState());
+    CHECK(dividerGroup.isVisible());
+}
+
 TEST_CASE("Host band-count automation is authoritative over divider presentation state",
           "[multiband][ui][automation][focus]")
 {

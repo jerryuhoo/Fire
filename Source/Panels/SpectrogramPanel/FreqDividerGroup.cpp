@@ -18,6 +18,12 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor
 {
     margin = getHeight() / 20.0f;
 
+    // This ToggleButton is only an APVTS compatibility mirror. It is not a
+    // user-facing command: the visible child controls own all interaction.
+    setWantsKeyboardFocus(false);
+    setMouseClickGrabsKeyboardFocus(false);
+    setAccessible(false);
+
     addAndMakeVisible(verticalLine);
 
     verticalLine.addListener(this);
@@ -249,6 +255,23 @@ int FreqDividerGroup::getFreq()
 {
     return juce::roundToInt(verticalLine.getValue());
 }
+
+bool FreqDividerGroup::keyPressed(const juce::KeyPress& key)
+{
+    if (key.isKeyCode(juce::KeyPress::returnKey)
+        || key.isKeyCode(juce::KeyPress::spaceKey))
+        return true;
+
+    return false;
+}
+
+void FreqDividerGroup::triggerClick()
+{
+    // Accessibility and queued Button commands must not write LINE_STATE.
+    // ButtonAttachment updates still use setToggleState(sendNotificationSync),
+    // which invokes clicked() directly and deliberately bypasses this method.
+}
+
 void FreqDividerGroup::mouseUp(const juce::MouseEvent& e)
 {
     juce::ignoreUnused(e);

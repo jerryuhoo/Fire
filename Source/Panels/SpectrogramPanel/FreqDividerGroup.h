@@ -42,6 +42,8 @@ public:
                  juce::NotificationType notification = juce::sendNotificationSync);
     int getFreq ();
 
+    bool keyPressed(const juce::KeyPress& key) override;
+    void triggerClick() override;
     void clicked(const juce::ModifierKeys& modifiers) override;
 
 private:

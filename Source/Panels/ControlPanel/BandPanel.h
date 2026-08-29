@@ -78,6 +78,7 @@ private:
 
     void updateAttachments();
     void dismissButtonInteractions() noexcept;
+    void dismissTransientInteractionForParameterRebind() noexcept;
     void invalidateDistortionModeInteractions() noexcept;
     bool canOpenDistortionModePopup(size_t modeIndex) const noexcept;
     bool hasActiveSliderInteraction() const noexcept;

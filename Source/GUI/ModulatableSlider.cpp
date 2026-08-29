@@ -682,6 +682,22 @@ void ModulatableSlider::resetTransientPresentation()
 
 void ModulatableSlider::dismissTransientInteraction()
 {
+    dismissTransientInteractionImpl(true);
+}
+
+void ModulatableSlider::dismissTransientInteractionPreservingContextMenu()
+{
+    dismissTransientInteractionImpl(false);
+}
+
+void ModulatableSlider::dismissTransientInteractionImpl(
+    bool invalidateContextMenu)
+{
+    // Invalidate before any drag-end or hover callback. Those callbacks may
+    // re-enter UI code, and an abandoned menu must already be inert there.
+    if (invalidateContextMenu)
+        ++contextMenuRevision;
+
     const bool shouldNotifyHoverEnd = isModHandleMouseOver;
     std::optional<juce::MouseEvent> releaseEvent;
     if (lastAcceptedPointerEvent.has_value())
@@ -718,10 +734,20 @@ std::function<void(int)> ModulatableSlider::createModulationMenuResultHandler(
     if (targetParameterIDAtOpen.isEmpty())
         targetParameterIDAtOpen = parameterID;
 
+    const auto sessionRevision = ++contextMenuRevision;
     return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
+            sessionRevision,
             frozenTargetParameterID = std::move(targetParameterIDAtOpen)](int result)
     {
-        if (! safeThis || result <= 0)
+        if (! safeThis
+            || safeThis->contextMenuRevision != sessionRevision)
+            return;
+
+        // Consume before dispatching user code. A processor/host callback may
+        // synchronously delete this slider, and duplicate PopupMenu results
+        // must never execute the same command twice.
+        ++safeThis->contextMenuRevision;
+        if (result <= 0)
             return;
 
         safeThis->executeModulationMenuCommand(
@@ -736,10 +762,17 @@ std::function<void(int)> ModulatableSlider::createLfoAssignmentMenuResultHandler
     if (targetParameterIDAtOpen.isEmpty())
         targetParameterIDAtOpen = parameterID;
 
+    const auto sessionRevision = ++contextMenuRevision;
     return [safeThis = juce::Component::SafePointer<ModulatableSlider>(this),
+            sessionRevision,
             frozenTargetParameterID = std::move(targetParameterIDAtOpen)](int result)
     {
-        if (! safeThis || ! juce::isPositiveAndBelow(result - 1, 4)
+        if (! safeThis
+            || safeThis->contextMenuRevision != sessionRevision)
+            return;
+
+        ++safeThis->contextMenuRevision;
+        if (! juce::isPositiveAndBelow(result - 1, 4)
             || frozenTargetParameterID.isEmpty())
             return;
 

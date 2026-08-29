@@ -12,6 +12,7 @@
 
 #include "InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <cstdint>
 #include <optional>
 
 struct ModulatableSliderTestAccess;
@@ -59,6 +60,10 @@ public:
             || activePointerGesture == PointerGesture::modulationHandle;
     }
     void dismissTransientInteraction();
+    /** Closes pointer, editor and hover state while retaining an asynchronous
+        context-menu result for the parameter that originally opened it. This
+        is only for a shared control's deliberate parameter rebind. */
+    void dismissTransientInteractionPreservingContextMenu();
     bool advanceAnimation(float deltaSeconds) noexcept;
     float getHoverAnimation() const noexcept { return hoverAnimation; }
     float getPressAnimation() const noexcept { return pressAnimation; }
@@ -155,6 +160,7 @@ private:
         const juce::MouseEvent& event) const noexcept;
     void clearAssignmentDoubleClickSuppression() noexcept;
     bool finishActivePointerGesture(const juce::MouseEvent& releaseEvent);
+    void dismissTransientInteractionImpl(bool invalidateContextMenu);
     void beginPointerGesture(PointerGesture gesture,
                              const juce::MouseEvent& event);
     void resetTransientPresentation();
@@ -195,6 +201,7 @@ private:
         juce::MouseInputSource::mouse;
     int assignmentSourceIndex = -1;
     juce::int64 assignmentDoubleClickDeadlineMs = 0;
+    std::uint64_t contextMenuRevision = 0;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;
 

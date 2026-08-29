@@ -761,6 +761,168 @@ TEST_CASE("Modulation menu callbacks tolerate synchronous slider deletion",
     CHECK(callbackParameterID == "menu-target");
 }
 
+TEST_CASE("Slider context menu sessions reject stale and repeated results",
+          "[modulatable-slider][ui][popup][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    const auto exerciseBoundary = [](const std::function<void(ModulatableSlider&)>& boundary)
+    {
+        ModulatableSlider slider;
+        slider.parameterID = "menu-target";
+        slider.setBounds(0, 0, 120, 120);
+        slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        slider.setVisible(true);
+        const juce::ScopeGuard removePeer { [&]
+        {
+            slider.removeFromDesktop();
+        } };
+
+        int modulationCommandCount = 0;
+        int assignmentCount = 0;
+        slider.onModulationCleared = [&](const juce::String& target)
+        {
+            CHECK(target == "menu-target");
+            ++modulationCommandCount;
+        };
+        slider.onLfoAssignmentRequested = [&](int lfoIndex,
+                                               const juce::String& target)
+        {
+            CHECK(lfoIndex == 1);
+            CHECK(target == "menu-target");
+            ++assignmentCount;
+        };
+
+        auto staleModulationResult =
+            ModulatableSliderInteractionTestAccess::createModulationHandler(
+                slider, "menu-target");
+        boundary(slider);
+        staleModulationResult(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+        CHECK(modulationCommandCount == 0);
+
+        auto freshModulationResult =
+            ModulatableSliderInteractionTestAccess::createModulationHandler(
+                slider, "menu-target");
+        freshModulationResult(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+        freshModulationResult(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+        CHECK(modulationCommandCount == 1);
+
+        auto staleAssignmentResult =
+            ModulatableSliderInteractionTestAccess::createAssignmentHandler(
+                slider, "menu-target");
+        boundary(slider);
+        staleAssignmentResult(2);
+        CHECK(assignmentCount == 0);
+
+        auto freshAssignmentResult =
+            ModulatableSliderInteractionTestAccess::createAssignmentHandler(
+                slider, "menu-target");
+        freshAssignmentResult(2);
+        freshAssignmentResult(2);
+        CHECK(assignmentCount == 1);
+    };
+
+    SECTION("explicit dismissal")
+    {
+        exerciseBoundary([](ModulatableSlider& slider)
+        {
+            slider.dismissTransientInteraction();
+        });
+    }
+
+    SECTION("visibility ABA")
+    {
+        exerciseBoundary([](ModulatableSlider& slider)
+        {
+            slider.setVisible(false);
+            slider.setVisible(true);
+        });
+    }
+
+    SECTION("enablement ABA")
+    {
+        exerciseBoundary([](ModulatableSlider& slider)
+        {
+            slider.setEnabled(false);
+            slider.setEnabled(true);
+        });
+    }
+
+    SECTION("a replacement menu supersedes both menu kinds")
+    {
+        ModulatableSlider slider;
+        slider.parameterID = "menu-target";
+        int modulationCommandCount = 0;
+        int assignmentCount = 0;
+        slider.onModulationCleared = [&](const juce::String&)
+        {
+            ++modulationCommandCount;
+        };
+        slider.onLfoAssignmentRequested = [&](int,
+                                               const juce::String&)
+        {
+            ++assignmentCount;
+        };
+
+        auto staleModulationResult =
+            ModulatableSliderInteractionTestAccess::createModulationHandler(
+                slider, "menu-target");
+        auto currentAssignmentResult =
+            ModulatableSliderInteractionTestAccess::createAssignmentHandler(
+                slider, "menu-target");
+
+        staleModulationResult(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+        CHECK(modulationCommandCount == 0);
+        currentAssignmentResult(3);
+        currentAssignmentResult(3);
+        CHECK(assignmentCount == 1);
+    }
+
+    SECTION("cancellation consumes its session")
+    {
+        ModulatableSlider slider;
+        slider.parameterID = "menu-target";
+        int commandCount = 0;
+        slider.onModulationCleared = [&](const juce::String&)
+        {
+            ++commandCount;
+        };
+        auto result =
+            ModulatableSliderInteractionTestAccess::createModulationHandler(
+                slider, "menu-target");
+
+        result(0);
+        result(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+        CHECK(commandCount == 0);
+    }
+
+    SECTION("a deleted slider makes its captured result inert")
+    {
+        int commandCount = 0;
+        std::function<void(int)> result;
+        {
+            auto slider = std::make_unique<ModulatableSlider>();
+            slider->parameterID = "menu-target";
+            slider->onModulationCleared = [&](const juce::String&)
+            {
+                ++commandCount;
+            };
+            result =
+                ModulatableSliderInteractionTestAccess::createModulationHandler(
+                    *slider, "menu-target");
+        }
+
+        result(static_cast<int>(
+            ModulatableSlider::ModulationMenuCommand::clearModulation));
+        CHECK(commandCount == 0);
+    }
+}
+
 TEST_CASE("Dismiss resets slider hover, editor and animation presentation exactly once",
           "[modulatable-slider][ui][hover][lifecycle]")
 {

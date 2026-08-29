@@ -681,6 +681,16 @@ void BandPanel::dismissTransientInteraction() noexcept
     invalidateDistortionModeInteractions();
 }
 
+void BandPanel::dismissTransientInteractionForParameterRebind() noexcept
+{
+    for (auto* slider : modulatableSliders)
+        if (slider != nullptr)
+            slider->dismissTransientInteractionPreservingContextMenu();
+
+    dismissButtonInteractions();
+    invalidateDistortionModeInteractions();
+}
+
 void BandPanel::invalidateDistortionModeInteractions() noexcept
 {
     ++distortionModeInteractionGeneration;
@@ -892,7 +902,9 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     // Shared controls must not carry a pointer, text-entry, or hover session
     // across attachment targets. A late release or value-editor commit would
     // otherwise reach the replacement attachment for the newly focused band.
-    dismissTransientInteraction();
+    // An already chosen context-menu command is different: its handler froze
+    // the old parameter ID when the menu opened, so preserve that one session.
+    dismissTransientInteractionForParameterRebind();
 
     processor.setUiFocusBand(num);
 

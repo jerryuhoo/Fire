@@ -187,11 +187,14 @@ void ModulationMatrixRow::PrimaryButtonSlider::mouseUp(
 ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
                                          int routingIndex,
                                          const ModulationRouting& routing,
-                                         std::function<void()> onDelete)
+                                         std::shared_ptr<ModulationRoutingEditSession> editSession,
+                                         std::function<void(std::uint64_t,
+                                                            ModulationRouting)> onDelete)
     : processor(p),
       index(routingIndex),
-      targetParameterIDAtBuild(routing.targetParameterID),
-      onDeleteCallback(onDelete)
+      expectedRouting(routing),
+      routingEditSession(std::move(editSession)),
+      onDeleteCallback(std::move(onDelete))
 {
     setOpaque(false);
     setLookAndFeel(&fireLookAndFeel);
@@ -332,36 +335,38 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
             return;
         }
 
-        auto& manager = processor.getLfoManager();
-        bool routingStillMatches = false;
-        bool didUpdate = false;
+        auto editSession = routingEditSession;
+        if (editSession == nullptr)
         {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size())
-                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
-            {
-                routingStillMatches = true;
-                auto& routing = routings.getReference(index);
-                if (button == &bipolarButton
-                    && routing.isBipolar != bipolarButton.getToggleState())
-                {
-                    routing.isBipolar = bipolarButton.getToggleState();
-                    didUpdate = true;
-                }
-                else if (button == &bypassButton
-                         && routing.isBypassed != bypassButton.getToggleState())
-                {
-                    routing.isBypassed = bypassButton.getToggleState();
-                    didUpdate = true;
-                }
-            }
+            requestParentRebuild();
+            return;
         }
 
-        if (didUpdate)
-            processor.lfoDataHasChanged();
-        else if (! routingStillMatches)
+        auto replacementRouting = expectedRouting;
+        if (button == &bipolarButton)
+            replacementRouting.isBipolar = bipolarButton.getToggleState();
+        else
+            replacementRouting.isBypassed = bypassButton.getToggleState();
+
+        auto& manager = processor.getLfoManager();
+        const auto result = manager.updateModulationRoutingIfRevisionMatches(
+            index,
+            editSession->revision,
+            expectedRouting,
+            replacementRouting);
+        if (! result.accepted)
+        {
             requestParentRebuild();
+            return;
+        }
+
+        editSession->revision = result.revision;
+        expectedRouting = result.routing;
+        if (result.changed)
+        {
+            auto& processorToNotify = processor;
+            processorToNotify.lfoDataHasChanged();
+        }
 
         return;
     }
@@ -375,8 +380,10 @@ void ModulationMatrixRow::buttonClicked(juce::Button* button)
         }
 
         auto callback = onDeleteCallback;
-        if (callback)
-            callback();
+        auto editSession = routingEditSession;
+        const auto routingToDelete = expectedRouting;
+        if (callback && editSession != nullptr)
+            callback(editSession->revision, routingToDelete);
         return;
     }
 }
@@ -391,23 +398,34 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
             return;
         }
 
-        auto& manager = processor.getLfoManager();
-        bool didUpdate = false;
+        auto editSession = routingEditSession;
+        if (editSession == nullptr)
         {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            auto& routings = manager.getModulationRoutings();
-            if (juce::isPositiveAndBelow(index, routings.size())
-                && routings.getReference(index).targetParameterID == targetParameterIDAtBuild)
-            {
-                routings.getReference(index).depth = (float) amountSlider.getValue();
-                didUpdate = true;
-            }
+            requestParentRebuild();
+            return;
         }
 
-        if (didUpdate)
-            processor.lfoDataHasChanged();
-        else
+        auto replacementRouting = expectedRouting;
+        replacementRouting.depth = static_cast<float>(amountSlider.getValue());
+        auto& manager = processor.getLfoManager();
+        const auto result = manager.updateModulationRoutingIfRevisionMatches(
+            index,
+            editSession->revision,
+            expectedRouting,
+            replacementRouting);
+        if (! result.accepted)
+        {
             requestParentRebuild();
+            return;
+        }
+
+        editSession->revision = result.revision;
+        expectedRouting = result.routing;
+        if (result.changed)
+        {
+            auto& processorToNotify = processor;
+            processorToNotify.lfoDataHasChanged();
+        }
     }
 }
 
@@ -436,21 +454,36 @@ void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
             }
         }
 
-        // 2. Call the new, safe method in the processor to apply the changes.
-        const auto expectedTargetParameterID = targetParameterIDAtBuild;
-        juce::Component::SafePointer<ModulationMatrixRow> safeThis(this);
-        auto& processorToNotify = processor;
-        processorToNotify.assignModulation(index,
-                                           selectedSourceIndex,
-                                           selectedTargetID,
-                                           expectedTargetParameterID);
-
-        if (safeThis == nullptr)
+        auto editSession = routingEditSession;
+        if (editSession == nullptr)
+        {
+            requestParentRebuild();
             return;
+        }
 
-        // 3. IMPORTANT: Tell the parent panel to rebuild its UI.
-        // This ensures that if another row was cleared, it will visually update to "None".
-        safeThis->requestParentRebuild();
+        // 2. Commit only if this row still represents the complete routing
+        // identity and the shared matrix session is still current.
+        auto& manager = processor.getLfoManager();
+        const auto result =
+            manager.assignModulationRoutingIfRevisionMatches(
+                index,
+                editSession->revision,
+                expectedRouting,
+                selectedSourceIndex,
+                selectedTargetID);
+        if (! result.accepted)
+        {
+            requestParentRebuild();
+            return;
+        }
+
+        // Source/destination edits may also clear another row. Invalidate the
+        // complete visible matrix before notifying a re-entrant host; the old
+        // rows deliberately retain their previous revision until rebuilt.
+        requestParentRebuild();
+        auto& processorToNotify = processor;
+        if (result.changed)
+            processorToNotify.lfoDataHasChanged();
         return;
     }
 }
@@ -550,18 +583,29 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
         if (isUiRebuildPending())
             return;
 
-        auto& manager = processor.getLfoManager();
+        auto editSession = routingEditSession;
+        if (editSession == nullptr)
         {
-            const juce::ScopedLock lock(manager.getLfoDataLock());
-            manager.getModulationRoutings().add({});
-        }
-        juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
-        auto& processorToNotify = processor;
-        processorToNotify.lfoDataHasChanged();
-        if (safeThis == nullptr)
+            requestUiRebuild();
             return;
+        }
 
-        safeThis->requestUiRebuild();
+        auto& manager = processor.getLfoManager();
+        const auto result =
+            manager.addEmptyModulationRoutingIfRevisionMatches(
+                editSession->revision);
+        if (! result.accepted)
+        {
+            requestUiRebuild();
+            return;
+        }
+
+        // Adding changes the visible routing set. Mark every old row stale
+        // before a synchronous host listener can re-enter this panel.
+        requestUiRebuild();
+        auto& processorToNotify = processor;
+        if (result.changed)
+            processorToNotify.lfoDataHasChanged();
         return;
     }
 
@@ -579,47 +623,50 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
 
     // Build from one coherent snapshot. Component construction and callbacks
     // must not happen while the shared routing lock is held.
-    const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
-    for (int i = 0; i < routings.size(); ++i)
+    const auto routingState =
+        processor.getLfoManager().getModulationRoutingStateSnapshot();
+    routingEditSession = std::make_shared<ModulationRoutingEditSession>();
+    routingEditSession->revision = routingState.revision;
+    const auto editSession = routingEditSession;
+    for (int i = 0; i < routingState.routings.size(); ++i)
     {
         // When creating a row, pass a lambda function that captures the index 'i'.
         // This lambda will be called when the row's remove button is clicked.
         auto onDelete = [this,
-                         index = i,
-                         expectedTargetParameterID = routings.getReference(i).targetParameterID]()
+                         index = i](std::uint64_t expectedRevision,
+                                    ModulationRouting expectedRouting)
         {
             juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
             auto& processorToNotify = processor;
 
-            // Remove the routing from the processor's data model.
             auto& manager = processorToNotify.getLfoManager();
-            bool didRemove = false;
+            const auto result =
+                manager.removeModulationRoutingIfRevisionMatches(
+                    index,
+                    expectedRevision,
+                    expectedRouting);
+            if (! result.accepted)
             {
-                const juce::ScopedLock lock(manager.getLfoDataLock());
-                auto& mutableRoutings = manager.getModulationRoutings();
-                if (juce::isPositiveAndBelow(index, mutableRoutings.size())
-                    && mutableRoutings.getReference(index).targetParameterID
-                           == expectedTargetParameterID)
-                {
-                    mutableRoutings.remove(index);
-                    didRemove = true;
-                }
+                if (safeThis != nullptr)
+                    safeThis->requestUiRebuild();
+                return;
             }
 
-            if (didRemove)
-            {
+            // Removal shifts every following index. Do not advance the old
+            // rows' shared session to the new model revision: invalidate and
+            // queue their rebuild before notifying any re-entrant listener.
+            if (safeThis != nullptr)
+                safeThis->requestUiRebuild();
+            if (result.changed)
                 processorToNotify.lfoDataHasChanged();
-                if (safeThis == nullptr)
-                    return;
-            }
-
-            // Defer rebuilding until the current button callback has returned.
-            // Clearing rows synchronously here would destroy the row that is
-            // currently executing this callback.
-            safeThis->requestUiRebuild();
         };
 
-        rows.push_back(std::make_unique<ModulationMatrixRow>(processor, i, routings.getReference(i), onDelete));
+        rows.push_back(std::make_unique<ModulationMatrixRow>(
+            processor,
+            i,
+            routingState.routings.getReference(i),
+            editSession,
+            std::move(onDelete)));
         contentComponent.addAndMakeVisible(*rows.back());
     }
 

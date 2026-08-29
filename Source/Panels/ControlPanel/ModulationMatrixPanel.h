@@ -14,6 +14,8 @@
 #include "../../PluginProcessor.h"
 #include "../../Utility/Parameters.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <cstdint>
+#include <memory>
 
 class ModulationMatrixPrimaryButton final : public juce::TextButton
 {
@@ -61,6 +63,11 @@ private:
     juce::Label destinationLabel;
 };
 
+struct ModulationRoutingEditSession
+{
+    std::uint64_t revision = 0;
+};
+
 //
 //  A single row in our modulation matrix UI.
 //
@@ -74,7 +81,9 @@ public:
     ModulationMatrixRow(FireAudioProcessor& p,
                         int routingIndex,
                         const ModulationRouting& routing,
-                        std::function<void()> onDelete);
+                        std::shared_ptr<ModulationRoutingEditSession> editSession,
+                        std::function<void(std::uint64_t,
+                                           ModulationRouting)> onDelete);
     ~ModulationMatrixRow() override;
 
     void paint(juce::Graphics& g) override;
@@ -101,8 +110,10 @@ private:
     FireAudioProcessor& processor;
     FireLookAndFeel fireLookAndFeel;
     int index; // The index of the routing this row represents in the processor's array
-    const juce::String targetParameterIDAtBuild;
-    std::function<void()> onDeleteCallback; // The function to call when the delete button is pressed.
+    ModulationRouting expectedRouting;
+    std::shared_ptr<ModulationRoutingEditSession> routingEditSession;
+    std::function<void(std::uint64_t, ModulationRouting)>
+        onDeleteCallback;
 
     juce::ComboBox sourceMenu;
     PrimaryButtonSlider amountSlider;
@@ -149,4 +160,5 @@ private:
     juce::Viewport viewport;
     juce::Component contentComponent;
     juce::Rectangle<int> titleArea;
+    std::shared_ptr<ModulationRoutingEditSession> routingEditSession;
 };

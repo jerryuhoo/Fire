@@ -38,6 +38,15 @@ void collectMatrixRows(juce::Component& component,
             collectMatrixRows(*child, rows);
 }
 
+std::shared_ptr<ModulationRoutingEditSession> makeRoutingEditSession(
+    FireAudioProcessor& processor)
+{
+    auto session = std::make_shared<ModulationRoutingEditSession>();
+    session->revision =
+        processor.getLfoManager().getModulationRoutingRevision();
+    return session;
+}
+
 juce::Slider* findAmountSlider(juce::Component& component)
 {
     if (auto* slider = dynamic_cast<juce::Slider*>(&component))
@@ -171,6 +180,50 @@ public:
     FireAudioProcessor& processor;
     std::unique_ptr<ModulationMatrixPanel>& panel;
     int notificationCount = 0;
+    bool callbackCompleted = false;
+};
+
+class EditSliderOnHostNotification final
+    : public juce::AudioProcessorListener
+{
+public:
+    EditSliderOnHostNotification(
+        FireAudioProcessor& processorToObserve,
+        juce::Slider& sliderToEdit)
+        : processor(processorToObserve), slider(sliderToEdit)
+    {
+        processor.addListener(this);
+    }
+
+    ~EditSliderOnHostNotification() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (! details.nonParameterStateChanged)
+            return;
+
+        ++notificationCount;
+        if (attemptedEdit)
+            return;
+
+        attemptedEdit = true;
+        slider.setValue(0.91, juce::sendNotificationSync);
+        callbackCompleted = true;
+    }
+
+    FireAudioProcessor& processor;
+    juce::Slider& slider;
+    int notificationCount = 0;
+    bool attemptedEdit = false;
     bool callbackCompleted = false;
 };
 
@@ -358,6 +411,48 @@ TEST_CASE("Modulation matrix host notifications may synchronously delete the pan
     }
 }
 
+TEST_CASE("Modulation matrix invalidates shifted rows before host notification",
+          "[ui][modulation-matrix][state][identity][reentrancy][aba][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add({});
+        routings.add({});
+        routings.add({});
+    }
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(panel, rows);
+    REQUIRE(rows.size() == 3);
+    auto* staleSecondAmount = findAmountSlider(*rows[1]);
+    auto* firstRemoveButton = dynamic_cast<juce::TextButton*>(
+        rows[0]->findChildWithID("remove_button"));
+    REQUIRE(staleSecondAmount != nullptr);
+    REQUIRE(firstRemoveButton != nullptr);
+
+    const auto initialRevision = manager.getModulationRoutingRevision();
+    EditSliderOnHostNotification host(processor, *staleSecondAmount);
+    exerciseButtonPointerGesture(
+        *firstRemoveButton,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+    CHECK(host.callbackCompleted);
+    CHECK(host.notificationCount == 1);
+    CHECK(panel.isUiRebuildPending());
+    CHECK(manager.getModulationRoutingRevision() == initialRevision + 1);
+    const auto liveRoutings = manager.getModulationRoutingsCopy();
+    REQUIRE(liveRoutings.size() == 2);
+    CHECK(liveRoutings[0].depth == Catch::Approx(0.5f));
+    CHECK(liveRoutings[1].depth == Catch::Approx(0.5f));
+}
+
 TEST_CASE("Modulation matrix amount accepts only primary-button drags",
           "[ui][modulation-matrix][input][amount-slider]")
 {
@@ -378,7 +473,12 @@ TEST_CASE("Modulation matrix amount accepts only primary-button drags",
         routings.set(0, routing);
     }
 
-    ModulationMatrixRow row(processor, 0, routing, [] {});
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
     row.setBounds(0, 0, 760, 40);
     auto* amountSlider = findAmountSlider(row);
     REQUIRE(amountSlider != nullptr);
@@ -492,8 +592,15 @@ TEST_CASE("Modulation matrix buttons accept only complete primary-button clicks"
     }
 
     int deleteCount = 0;
-    ModulationMatrixRow row(processor, 0, routing, [&deleteCount]
-                            { ++deleteCount; });
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [&deleteCount](std::uint64_t, ModulationRouting)
+        {
+            ++deleteCount;
+        });
     row.setBounds(0, 0, 760, 40);
     auto* polarityButton = findTextButton(row, "Bi");
     auto* bypassButton = findTextButton(row, "Off");
@@ -738,8 +845,15 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
     }
 
     int deleteCount = 0;
-    ModulationMatrixRow row(processor, 0, routing, [&deleteCount]
-                            { ++deleteCount; });
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [&deleteCount](std::uint64_t, ModulationRouting)
+        {
+            ++deleteCount;
+        });
     row.setBounds(0, 0, 760, 40);
     auto* polarityButton = findTextButton(row, "Bi");
     auto* bypassButton = findTextButton(row, "Off");
@@ -819,7 +933,12 @@ TEST_CASE("Modulation matrix toggle buttons publish only real model changes",
         routings.set(0, routing);
     }
 
-    ModulationMatrixRow row(processor, 0, routing, [] {});
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
     row.setBounds(0, 0, 760, 40);
     auto* polarityButton = findTextButton(row, "Bi");
     auto* bypassButton = findTextButton(row, "Off");
@@ -938,6 +1057,242 @@ TEST_CASE("Modulation matrix follows externally recalled routings without stale-
     CHECK(rowsDisplaying(targets[0].displayText) == 0);
 }
 
+TEST_CASE("Modulation matrix rejects stale rows after same-target state recall",
+          "[ui][modulation-matrix][state][recall][identity][aba][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting initialRouting {
+        0, targets.front().parameterID, 0.10f, true, false
+    };
+    const ModulationRouting recalledRouting {
+        2, targets.front().parameterID, -0.45f, true, false
+    };
+
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(initialRouting);
+    }
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* staleRow = rows.front();
+
+    juce::XmlElement recalledPreset { "WINGSFIRE" };
+    state::saveStateToXml(processor, recalledPreset);
+    replacePresetRoutings(recalledPreset, { recalledRouting });
+    REQUIRE(state::loadStateFromXml(recalledPreset, processor));
+    REQUIRE_FALSE(panel.isUiRebuildPending());
+    const auto revisionAfterRecall =
+        manager.getModulationRoutingRevision();
+    NonParameterChangeCapture host(processor);
+
+    const auto checkRecalledAuthority = [&]
+    {
+        const auto liveRoutings = manager.getModulationRoutingsCopy();
+        REQUIRE(liveRoutings.size() == 1);
+        CHECK(liveRoutings[0].sourceLfoIndex
+              == recalledRouting.sourceLfoIndex);
+        CHECK(liveRoutings[0].targetParameterID
+              == recalledRouting.targetParameterID);
+        CHECK(liveRoutings[0].depth
+              == Catch::Approx(recalledRouting.depth));
+        CHECK(liveRoutings[0].isBipolar
+              == recalledRouting.isBipolar);
+        CHECK(liveRoutings[0].isBypassed
+              == recalledRouting.isBypassed);
+        CHECK(host.notificationCount == 0);
+        CHECK(panel.isUiRebuildPending());
+        CHECK(manager.getModulationRoutingRevision()
+              == revisionAfterRecall);
+    };
+
+    SECTION("amount")
+    {
+        auto* amountSlider = findAmountSlider(*staleRow);
+        REQUIRE(amountSlider != nullptr);
+        amountSlider->setValue(0.91, juce::sendNotificationSync);
+        checkRecalledAuthority();
+    }
+
+    SECTION("polarity")
+    {
+        auto* polarityButton = findTextButton(*staleRow, "Bi");
+        REQUIRE(polarityButton != nullptr);
+        exerciseButtonPointerGesture(
+            *polarityButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+        checkRecalledAuthority();
+    }
+
+    SECTION("source")
+    {
+        std::vector<juce::ComboBox*> comboBoxes;
+        collectComboBoxes(*staleRow, comboBoxes);
+        const auto sourceMenu = std::find_if(
+            comboBoxes.begin(), comboBoxes.end(), [](const auto* comboBox)
+            {
+                return comboBox->getNumItems() == 4;
+            });
+        REQUIRE(sourceMenu != comboBoxes.end());
+        (*sourceMenu)->setSelectedId(2, juce::sendNotificationSync);
+        checkRecalledAuthority();
+    }
+
+    SECTION("remove")
+    {
+        auto* removeButton = dynamic_cast<juce::TextButton*>(
+            staleRow->findChildWithID("remove_button"));
+        REQUIRE(removeButton != nullptr);
+        exerciseButtonPointerGesture(
+            *removeButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+        checkRecalledAuthority();
+    }
+}
+
+TEST_CASE("Modulation matrix invalidates rows after identical state recall",
+          "[ui][modulation-matrix][state][recall][identity][aba][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        1, targets.front().parameterID, 0.25f, false, true
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* staleAmountSlider = findAmountSlider(*rows.front());
+    REQUIRE(staleAmountSlider != nullptr);
+
+    juce::XmlElement identicalPreset { "WINGSFIRE" };
+    state::saveStateToXml(processor, identicalPreset);
+    const auto revisionBeforeRecall =
+        manager.getModulationRoutingRevision();
+    REQUIRE(state::loadStateFromXml(identicalPreset, processor));
+    CHECK(manager.getModulationRoutingRevision() != revisionBeforeRecall);
+    REQUIRE_FALSE(panel.isUiRebuildPending());
+    const auto revisionAfterRecall =
+        manager.getModulationRoutingRevision();
+
+    NonParameterChangeCapture host(processor);
+    staleAmountSlider->setValue(0.73, juce::sendNotificationSync);
+
+    const auto liveRoutings = manager.getModulationRoutingsCopy();
+    REQUIRE(liveRoutings.size() == 1);
+    CHECK(liveRoutings[0].sourceLfoIndex == routing.sourceLfoIndex);
+    CHECK(liveRoutings[0].targetParameterID == routing.targetParameterID);
+    CHECK(liveRoutings[0].depth == Catch::Approx(routing.depth));
+    CHECK(liveRoutings[0].isBipolar == routing.isBipolar);
+    CHECK(liveRoutings[0].isBypassed == routing.isBypassed);
+    CHECK(host.notificationCount == 0);
+    CHECK(panel.isUiRebuildPending());
+    CHECK(manager.getModulationRoutingRevision() == revisionAfterRecall);
+}
+
+TEST_CASE("Modulation matrix keeps its edit session current after local edits",
+          "[ui][modulation-matrix][state][identity][session][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE(targets.size() >= 2);
+
+    const ModulationRouting firstRouting {
+        0, targets[0].parameterID, 0.10f, true, false
+    };
+    const ModulationRouting secondRouting {
+        1, targets[1].parameterID, -0.10f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(firstRouting);
+        routings.add(secondRouting);
+    }
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(panel, rows);
+    REQUIRE(rows.size() == 2);
+    auto* firstAmount = findAmountSlider(*rows[0]);
+    auto* secondAmount = findAmountSlider(*rows[1]);
+    REQUIRE(firstAmount != nullptr);
+    REQUIRE(secondAmount != nullptr);
+    NonParameterChangeCapture host(processor);
+    const auto initialRevision = manager.getModulationRoutingRevision();
+
+    firstAmount->setValue(0.20, juce::sendNotificationSync);
+    CHECK(manager.getModulationRoutingRevision() == initialRevision + 1);
+    CHECK(host.notificationCount == 1);
+    CHECK_FALSE(panel.isUiRebuildPending());
+
+    firstAmount->setValue(0.30, juce::sendNotificationSync);
+    CHECK(manager.getModulationRoutingRevision() == initialRevision + 2);
+    CHECK(host.notificationCount == 2);
+    CHECK_FALSE(panel.isUiRebuildPending());
+
+    secondAmount->setValue(-0.40, juce::sendNotificationSync);
+    CHECK(manager.getModulationRoutingRevision() == initialRevision + 3);
+    CHECK(host.notificationCount == 3);
+    CHECK_FALSE(panel.isUiRebuildPending());
+
+    auto* firstPolarity = findTextButton(*rows[0], "Bi");
+    REQUIRE(firstPolarity != nullptr);
+    exerciseButtonPointerGesture(
+        *firstPolarity,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+    CHECK(manager.getModulationRoutingRevision() == initialRevision + 4);
+    CHECK(host.notificationCount == 4);
+    CHECK_FALSE(panel.isUiRebuildPending());
+
+    auto liveRoutings = manager.getModulationRoutingsCopy();
+    REQUIRE(liveRoutings.size() == 2);
+    CHECK(liveRoutings[0].depth == Catch::Approx(0.30f));
+    CHECK_FALSE(liveRoutings[0].isBipolar);
+    CHECK(liveRoutings[1].depth == Catch::Approx(-0.40f));
+
+    auto* removeButton = dynamic_cast<juce::TextButton*>(
+        rows[0]->findChildWithID("remove_button"));
+    REQUIRE(removeButton != nullptr);
+    exerciseButtonPointerGesture(
+        *removeButton,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+
+    liveRoutings = manager.getModulationRoutingsCopy();
+    REQUIRE(liveRoutings.size() == 1);
+    CHECK(liveRoutings[0].targetParameterID
+          == secondRouting.targetParameterID);
+    CHECK(manager.getModulationRoutingRevision() == initialRevision + 5);
+    CHECK(host.notificationCount == 5);
+    CHECK(panel.isUiRebuildPending());
+}
+
 TEST_CASE("Modulation matrix ignores empty rows while a structural rebuild is pending",
           "[ui][modulation-matrix][state][identity]")
 {
@@ -960,20 +1315,24 @@ TEST_CASE("Modulation matrix ignores empty rows while a structural rebuild is pe
     REQUIRE(rows.size() >= 3);
     auto* staleSecondAmount = findAmountSlider(*rows[1]);
     REQUIRE(staleSecondAmount != nullptr);
+    NonParameterChangeCapture host(processor);
 
     // Removing the first empty slot shifts every later empty row while their
-    // target IDs remain indistinguishable. Once a rebuild is pending, the old
-    // row objects must stop writing by cached index.
+    // target IDs remain indistinguishable. The revision must make the old row
+    // reject the shifted slot without relying on a pre-existing rebuild flag.
     {
         const juce::ScopedLock lock(manager.getLfoDataLock());
         manager.getModulationRoutings().remove(0);
+        manager.advanceModulationRoutingRevisionLocked();
     }
-    panel.requestUiRebuild();
+    REQUIRE_FALSE(panel.isUiRebuildPending());
     staleSecondAmount->setValue(0.91, juce::sendNotificationSync);
 
     const auto liveRoutings = manager.getModulationRoutingsCopy();
     REQUIRE(liveRoutings.size() >= 2);
     CHECK(liveRoutings[1].depth == Catch::Approx(0.30f));
+    CHECK(host.notificationCount == 0);
+    CHECK(panel.isUiRebuildPending());
 
     juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
     rows.clear();

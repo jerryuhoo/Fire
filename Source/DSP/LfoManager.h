@@ -143,6 +143,44 @@ public:
     const juce::Array<ModulationRouting>& getModulationRoutings() const { return modulationRoutings; }
     juce::Array<ModulationRouting> getModulationRoutingsCopy() const;
 
+    struct ModulationRoutingStateSnapshot
+    {
+        juce::Array<ModulationRouting> routings;
+        std::uint64_t revision = 0;
+    };
+
+    struct ModulationRoutingEditResult
+    {
+        bool accepted = false;
+        bool changed = false;
+        std::uint64_t revision = 0;
+        ModulationRouting routing;
+    };
+
+    ModulationRoutingStateSnapshot getModulationRoutingStateSnapshot() const;
+    std::uint64_t getModulationRoutingRevision() const;
+    ModulationRoutingEditResult updateModulationRoutingIfRevisionMatches(
+        int routingIndex,
+        std::uint64_t expectedRevision,
+        const ModulationRouting& expectedRouting,
+        const ModulationRouting& replacementRouting);
+    ModulationRoutingEditResult assignModulationRoutingIfRevisionMatches(
+        int routingIndex,
+        std::uint64_t expectedRevision,
+        const ModulationRouting& expectedRouting,
+        int sourceLfoIndex,
+        const juce::String& targetParameterID);
+    ModulationRoutingEditResult addEmptyModulationRoutingIfRevisionMatches(
+        std::uint64_t expectedRevision);
+    ModulationRoutingEditResult removeModulationRoutingIfRevisionMatches(
+        int routingIndex,
+        std::uint64_t expectedRevision,
+        const ModulationRouting& expectedRouting);
+
+    /** Advances the routing identity after a caller has changed the live
+        routing array while holding getLfoDataLock(). */
+    std::uint64_t advanceModulationRoutingRevisionLocked() noexcept;
+
     struct SerializableStateSnapshot
     {
         juce::ValueTree parameterState;
@@ -255,6 +293,7 @@ private:
 
     // Owns all modulation connection rules.
     juce::Array<ModulationRouting> modulationRoutings;
+    std::uint64_t modulationRoutingRevision = 0;
 
     // Fixed-capacity, audio-thread-owned snapshots avoid per-block allocation and UI lock waits.
     std::array<RuntimeRouting, maxRuntimeRoutings> runtimeRoutings {};

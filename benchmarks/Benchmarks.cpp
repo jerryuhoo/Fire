@@ -172,8 +172,13 @@ TEST_CASE("Modular DSP Performance")
             routing.depth = 1.0f; // Full depth
             routing.isBipolar = false; // Unipolar
 
-            // Add the routing to the manager
-            lfoManager.getModulationRoutings().add(routing);
+            // Add the routing to the manager while preserving the same
+            // routing-revision invariant used by production writers.
+            {
+                const juce::ScopedLock lock(lfoManager.getLfoDataLock());
+                lfoManager.getModulationRoutings().add(routing);
+                lfoManager.advanceModulationRoutingRevisionLocked();
+            }
 
             auto bufferCopy = buffer;
             juce::AudioBuffer<float> lfoOutputBuffer(4, buffer.getNumSamples());
@@ -190,8 +195,12 @@ TEST_CASE("Modular DSP Performance")
                 plugin.applyDownsamplingEffect(bufferCopy, lfoOutputBuffer);
             };
 
-            // Clean up by removing the routing after the test
-            lfoManager.getModulationRoutings().clear();
+            // Clean up by removing the routing after the test.
+            {
+                const juce::ScopedLock lock(lfoManager.getLfoDataLock());
+                lfoManager.getModulationRoutings().clear();
+                lfoManager.advanceModulationRoutingRevisionLocked();
+            }
         }
     }
 

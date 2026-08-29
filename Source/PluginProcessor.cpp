@@ -7195,8 +7195,13 @@ void FireAudioProcessor::setModulationValue(const juce::String& targetParameterI
             }
 
             // Clamp the final depth to the valid range [-1.0, 1.0] and update the routing.
-            routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
-            didUpdate = true;
+            const float safeDepth = juce::jlimit(-1.0f, 1.0f, newDepth);
+            if (! juce::exactlyEqual(routing.depth, safeDepth))
+            {
+                routing.depth = safeDepth;
+                lfoManager->advanceModulationRoutingRevisionLocked();
+                didUpdate = true;
+            }
             break;
         }
     }
@@ -7217,8 +7222,14 @@ void FireAudioProcessor::setModulationDepth(const juce::String& targetParameterI
         {
             if (routing.targetParameterID == targetParameterID)
             {
-                routing.depth = juce::jlimit(-1.0f, 1.0f, newDepth);
-                didUpdate = true;
+                const float safeDepth = juce::jlimit(-1.0f, 1.0f,
+                                                     newDepth);
+                if (! juce::exactlyEqual(routing.depth, safeDepth))
+                {
+                    routing.depth = safeDepth;
+                    lfoManager->advanceModulationRoutingRevisionLocked();
+                    didUpdate = true;
+                }
                 break;
             }
         }
@@ -7238,6 +7249,7 @@ void FireAudioProcessor::toggleBipolarMode(const juce::String& targetParameterID
             if (routing.targetParameterID == targetParameterID)
             {
                 routing.isBipolar = ! routing.isBipolar;
+                lfoManager->advanceModulationRoutingRevisionLocked();
                 didUpdate = true;
                 break;
             }
@@ -7257,9 +7269,14 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
         {
             if (routing.targetParameterID == targetParameterID)
             {
-                routing.depth = 0.5f;
-                routing.isBipolar = true;
-                didUpdate = true;
+                if (! juce::exactlyEqual(routing.depth, 0.5f)
+                    || ! routing.isBipolar)
+                {
+                    routing.depth = 0.5f;
+                    routing.isBipolar = true;
+                    lfoManager->advanceModulationRoutingRevisionLocked();
+                    didUpdate = true;
+                }
                 break;
             }
         }
@@ -7267,46 +7284,6 @@ void FireAudioProcessor::resetModulation(const juce::String& targetParameterID)
 
     if (didUpdate)
         lfoDataHasChanged();
-}
-
-bool FireAudioProcessor::assignModulation(int routingIndex,
-                                          int sourceLfoIndex,
-                                          const juce::String& targetParameterID,
-                                          const juce::String& expectedTargetParameterID)
-{
-    if (targetParameterID.isNotEmpty()
-        && (! juce::isPositiveAndBelow(sourceLfoIndex, 4) || treeState.getParameter(targetParameterID) == nullptr))
-        return false;
-
-    bool didUpdate = false;
-    {
-        const juce::ScopedLock lock(lfoManager->getLfoDataLock());
-        auto& routings = lfoManager->getModulationRoutings();
-        if (! juce::isPositiveAndBelow(routingIndex, routings.size()))
-            return false;
-
-        auto& currentRouting = routings.getReference(routingIndex);
-        if (currentRouting.targetParameterID != expectedTargetParameterID)
-            return false;
-
-        if (targetParameterID.isNotEmpty())
-        {
-            for (int i = 0; i < routings.size(); ++i)
-            {
-                if (i != routingIndex && routings.getReference(i).targetParameterID == targetParameterID)
-                    routings.getReference(i).targetParameterID.clear();
-            }
-        }
-
-        currentRouting.sourceLfoIndex = juce::jlimit(0, 3, sourceLfoIndex);
-        currentRouting.targetParameterID = targetParameterID;
-        didUpdate = true;
-    }
-
-    if (didUpdate)
-        lfoDataHasChanged();
-
-    return didUpdate;
 }
 
 float FireAudioProcessor::getRealtimeModulatedThreshold(int bandIndex) const
@@ -7801,6 +7778,9 @@ void FireAudioProcessor::shiftLfoModulationTargets(int startIndex,
 
             didUpdate = true;
         }
+
+        if (didUpdate)
+            lfoManager->advanceModulationRoutingRevisionLocked();
     }
 
     if (didUpdate && notifyHost)
@@ -7835,6 +7815,8 @@ void FireAudioProcessor::clearLfoModulationForBand(int bandIndex,
                 didUpdate = true;
             }
         }
+        if (didUpdate)
+            lfoManager->advanceModulationRoutingRevisionLocked();
     }
 
     if (didUpdate && notifyHost)

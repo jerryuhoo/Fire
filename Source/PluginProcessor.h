@@ -413,11 +413,6 @@ public:
         bool isBypassed = false;
     };
 
-    bool assignModulation(int routingIndex,
-                          int sourceLfoIndex,
-                          const juce::String& targetParameterID,
-                          const juce::String& expectedTargetParameterID);
-
     // New public method for the editor to call
     ModulationInfo getModulationInfoForParameter(const juce::String& parameterID) const;
     void setModulationValue(const juce::String& targetParameterID, float newValue);

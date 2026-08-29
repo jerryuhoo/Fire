@@ -15,6 +15,19 @@
 #include <cmath>
 #include <limits>
 
+namespace
+{
+bool haveSameModulationRoutingState(const ModulationRouting& lhs,
+                                    const ModulationRouting& rhs) noexcept
+{
+    return lhs.sourceLfoIndex == rhs.sourceLfoIndex
+        && lhs.targetParameterID == rhs.targetParameterID
+        && juce::exactlyEqual(lhs.depth, rhs.depth)
+        && lhs.isBipolar == rhs.isBipolar
+        && lhs.isBypassed == rhs.isBypassed;
+}
+} // namespace
+
 LfoManager::LfoManager(juce::AudioProcessorValueTreeState& apvts) : treeState(apvts)
 {
     const auto indexedParameterId = [](const char* baseId, int index)
@@ -780,6 +793,166 @@ juce::Array<ModulationRouting> LfoManager::getModulationRoutingsCopy() const
     return modulationRoutings;
 }
 
+LfoManager::ModulationRoutingStateSnapshot
+LfoManager::getModulationRoutingStateSnapshot() const
+{
+    const juce::ScopedLock lock(dataAccessLock);
+    return { modulationRoutings, modulationRoutingRevision };
+}
+
+std::uint64_t LfoManager::getModulationRoutingRevision() const
+{
+    const juce::ScopedLock lock(dataAccessLock);
+    return modulationRoutingRevision;
+}
+
+LfoManager::ModulationRoutingEditResult
+LfoManager::updateModulationRoutingIfRevisionMatches(
+    int routingIndex,
+    std::uint64_t expectedRevision,
+    const ModulationRouting& expectedRouting,
+    const ModulationRouting& replacementRouting)
+{
+    auto safeReplacement = replacementRouting;
+    safeReplacement.sanitise();
+    if (safeReplacement.sourceLfoIndex != expectedRouting.sourceLfoIndex
+        || safeReplacement.targetParameterID
+               != expectedRouting.targetParameterID)
+        return {};
+
+    const juce::ScopedLock lock(dataAccessLock);
+    ModulationRoutingEditResult result;
+    result.revision = modulationRoutingRevision;
+    if (modulationRoutingRevision != expectedRevision
+        || ! juce::isPositiveAndBelow(routingIndex,
+                                      modulationRoutings.size()))
+        return result;
+
+    auto& currentRouting = modulationRoutings.getReference(routingIndex);
+    if (! haveSameModulationRoutingState(currentRouting, expectedRouting))
+        return result;
+
+    result.accepted = true;
+    if (! haveSameModulationRoutingState(currentRouting, safeReplacement))
+    {
+        currentRouting = safeReplacement;
+        result.changed = true;
+        result.revision = advanceModulationRoutingRevisionLocked();
+    }
+
+    result.routing = currentRouting;
+    return result;
+}
+
+LfoManager::ModulationRoutingEditResult
+LfoManager::assignModulationRoutingIfRevisionMatches(
+    int routingIndex,
+    std::uint64_t expectedRevision,
+    const ModulationRouting& expectedRouting,
+    int sourceLfoIndex,
+    const juce::String& targetParameterID)
+{
+    if (targetParameterID.isNotEmpty()
+        && (! juce::isPositiveAndBelow(sourceLfoIndex, 4)
+            || treeState.getParameter(targetParameterID) == nullptr))
+        return {};
+
+    const int safeSourceIndex = juce::jlimit(0, 3, sourceLfoIndex);
+    const juce::ScopedLock lock(dataAccessLock);
+    ModulationRoutingEditResult result;
+    result.revision = modulationRoutingRevision;
+    if (modulationRoutingRevision != expectedRevision
+        || ! juce::isPositiveAndBelow(routingIndex,
+                                      modulationRoutings.size()))
+        return result;
+
+    auto& currentRouting = modulationRoutings.getReference(routingIndex);
+    if (! haveSameModulationRoutingState(currentRouting, expectedRouting))
+        return result;
+
+    result.accepted = true;
+    if (targetParameterID.isNotEmpty())
+    {
+        for (int i = 0; i < modulationRoutings.size(); ++i)
+        {
+            auto& candidate = modulationRoutings.getReference(i);
+            if (i != routingIndex
+                && candidate.targetParameterID == targetParameterID)
+            {
+                candidate.targetParameterID.clear();
+                result.changed = true;
+            }
+        }
+    }
+
+    if (currentRouting.sourceLfoIndex != safeSourceIndex)
+    {
+        currentRouting.sourceLfoIndex = safeSourceIndex;
+        result.changed = true;
+    }
+    if (currentRouting.targetParameterID != targetParameterID)
+    {
+        currentRouting.targetParameterID = targetParameterID;
+        result.changed = true;
+    }
+
+    if (result.changed)
+        result.revision = advanceModulationRoutingRevisionLocked();
+
+    result.routing = currentRouting;
+    return result;
+}
+
+LfoManager::ModulationRoutingEditResult
+LfoManager::addEmptyModulationRoutingIfRevisionMatches(
+    std::uint64_t expectedRevision)
+{
+    const juce::ScopedLock lock(dataAccessLock);
+    ModulationRoutingEditResult result;
+    result.revision = modulationRoutingRevision;
+    if (modulationRoutingRevision != expectedRevision)
+        return result;
+
+    modulationRoutings.add({});
+    result.accepted = true;
+    result.changed = true;
+    result.revision = advanceModulationRoutingRevisionLocked();
+    result.routing = modulationRoutings.getReference(
+        modulationRoutings.size() - 1);
+    return result;
+}
+
+LfoManager::ModulationRoutingEditResult
+LfoManager::removeModulationRoutingIfRevisionMatches(
+    int routingIndex,
+    std::uint64_t expectedRevision,
+    const ModulationRouting& expectedRouting)
+{
+    const juce::ScopedLock lock(dataAccessLock);
+    ModulationRoutingEditResult result;
+    result.revision = modulationRoutingRevision;
+    if (modulationRoutingRevision != expectedRevision
+        || ! juce::isPositiveAndBelow(routingIndex,
+                                      modulationRoutings.size())
+        || ! haveSameModulationRoutingState(
+            modulationRoutings.getReference(routingIndex),
+            expectedRouting))
+        return result;
+
+    modulationRoutings.remove(routingIndex);
+    result.accepted = true;
+    result.changed = true;
+    result.revision = advanceModulationRoutingRevisionLocked();
+    return result;
+}
+
+std::uint64_t LfoManager::advanceModulationRoutingRevisionLocked() noexcept
+{
+    ++modulationRoutingRevision;
+    updatePublishedRoutingState();
+    return modulationRoutingRevision;
+}
+
 LfoManager::SerializableStateSnapshot
 LfoManager::captureSerializableStateSnapshot() const
 {
@@ -898,8 +1071,11 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
     {
         if (routing.targetParameterID == targetParameterID)
         {
-            routing.sourceLfoIndex = sourceLfoIndex;
-            updatePublishedRoutingState();
+            if (routing.sourceLfoIndex != sourceLfoIndex)
+            {
+                routing.sourceLfoIndex = sourceLfoIndex;
+                advanceModulationRoutingRevisionLocked();
+            }
             return; // Assignment complete.
         }
     }
@@ -914,7 +1090,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
             if (juce::approximatelyEqual(routing.depth, 0.0f))
                 routing.depth = 0.5f; // Set a sensible default depth.
             routing.isBypassed = false;
-            updatePublishedRoutingState();
+            advanceModulationRoutingRevisionLocked();
             return; // Assignment complete.
         }
     }
@@ -931,7 +1107,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
     newRouting.sourceLfoIndex = sourceLfoIndex;
     newRouting.targetParameterID = targetParameterID;
     newRouting.depth = 0.5f; // Set a sensible default depth.
-    updatePublishedRoutingState();
+    advanceModulationRoutingRevisionLocked();
 }
 
 void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
@@ -941,6 +1117,7 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
     {
         if (routing.targetParameterID == targetParameterID)
         {
+            const auto previousRouting = routing;
             // Unbind by clearing the target ID
             routing.targetParameterID = juce::String();
 
@@ -948,7 +1125,8 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
             routing.depth = 0.5f;
             routing.isBipolar = true;
             routing.isBypassed = false;
-            updatePublishedRoutingState();
+            if (! haveSameModulationRoutingState(routing, previousRouting))
+                advanceModulationRoutingRevisionLocked();
             return; // Exit after finding and clearing
         }
     }
@@ -961,9 +1139,15 @@ void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
     {
         if (routing.targetParameterID == targetParameterID)
         {
-            routing.depth = std::isfinite(routing.depth)
-                                ? juce::jlimit(-1.0f, 1.0f, -routing.depth)
-                                : -0.5f;
+            const float newDepth = std::isfinite(routing.depth)
+                                       ? juce::jlimit(-1.0f, 1.0f,
+                                                      -routing.depth)
+                                       : -0.5f;
+            if (! juce::exactlyEqual(routing.depth, newDepth))
+            {
+                routing.depth = newDepth;
+                advanceModulationRoutingRevisionLocked();
+            }
             return;
         }
     }
@@ -977,6 +1161,7 @@ void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
         if (routing.targetParameterID == targetParameterID)
         {
             routing.isBypassed = ! routing.isBypassed;
+            advanceModulationRoutingRevisionLocked();
             return; // Assuming one routing per target for now
         }
     }
@@ -1091,6 +1276,8 @@ void LfoManager::replaceLfoDataAndRoutings(
         }
 
         modulationRoutings = std::move(newRoutings);
-        updatePublishedRoutingState();
+        // A complete state replacement is a new routing identity even when
+        // every serialised field is byte-for-byte identical.
+        advanceModulationRoutingRevisionLocked();
     }
 }

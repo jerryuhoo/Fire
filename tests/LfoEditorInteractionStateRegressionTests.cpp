@@ -516,6 +516,13 @@ juce::KeyPress commandKey(juce::juce_wchar character)
              character };
 }
 
+juce::KeyPress commandKeyWithoutText(juce::juce_wchar keyCode)
+{
+    return { static_cast<int>(keyCode),
+             juce::ModifierKeys(juce::ModifierKeys::commandModifier),
+             0 };
+}
+
 void checkSameLfoData(const LfoData& actual, const LfoData& expected)
 {
     REQUIRE(actual.points.size() == expected.points.size());
@@ -627,6 +634,42 @@ TEST_CASE("LFO paste remains unavailable until a shape has been copied",
     REQUIRE(publicationCount == 1);
     checkSameLfoData(LfoEditorTestAccess::data(editor), source);
     checkSameLfoData(lastPublished, source);
+}
+
+TEST_CASE("LFO command shortcuts use key codes when text is unavailable",
+          "[lfo][editor][keyboard][regression]")
+{
+    ScopedLfoClipboardReset resetClipboard;
+    LfoEditor editor;
+    prepareEditor(editor);
+
+    const auto source = makeLfoData({
+        { 0.0f, 0.90f }, { 0.25f, 0.20f },
+        { 0.70f, 0.75f }, { 1.0f, 0.10f }
+    });
+    const auto target = makeLfoData({
+        { 0.0f, 0.15f }, { 0.40f, 0.80f }, { 1.0f, 0.25f }
+    });
+
+    editor.setDataToDisplay(source);
+    CHECK(editor.keyPressed(commandKeyWithoutText('c')));
+    REQUIRE(LfoEditorTestAccess::canPasteShape(editor));
+
+    editor.setDataToDisplay(target);
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData&)
+    {
+        ++publicationCount;
+    };
+    CHECK(editor.keyPressed(commandKeyWithoutText('V')));
+    CHECK(publicationCount == 1);
+    checkSameLfoData(LfoEditorTestAccess::data(editor), source);
+
+    editor.setDataToDisplay(target);
+    REQUIRE(LfoEditorTestAccess::selectedPointCount(editor) == 0);
+    CHECK(editor.keyPressed(commandKeyWithoutText('A')));
+    CHECK(LfoEditorTestAccess::selectedPointCount(editor)
+          == target.points.size());
 }
 
 TEST_CASE("LFO deletion shortcuts use the delivered key event",

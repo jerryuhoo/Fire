@@ -1483,20 +1483,23 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
 {
     if (key.getModifiers().isCommandDown()) // Command for macOS, Ctrl for Windows/Linux
     {
-        if (key.getTextCharacter() == 'c' || key.getTextCharacter() == 'C')
+        const auto keyCode = juce::CharacterFunctions::toLowerCase(
+            static_cast<juce::juce_wchar>(key.getKeyCode()));
+
+        if (keyCode == 'c')
         {
             copyShape();
             return true;
         }
 
-        if (key.getTextCharacter() == 'v' || key.getTextCharacter() == 'V')
+        if (keyCode == 'v')
         {
             if (pasteShape())
                 publishActiveData();
             return true;
         }
 
-        if (key.getTextCharacter() == 'a' || key.getTextCharacter() == 'A')
+        if (keyCode == 'a')
         {
             selectAllPoints();
             return true;

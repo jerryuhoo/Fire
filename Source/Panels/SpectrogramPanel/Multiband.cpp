@@ -1258,6 +1258,21 @@ void Multiband::mouseExit(const juce::MouseEvent& event)
 
 void Multiband::visibilityChanged()
 {
+    const juce::Component::SafePointer<Multiband> safeThis(this);
+    juce::Component::visibilityChanged();
+
+    if (safeThis == nullptr)
+        return;
+
+    if (! isVisible())
+    {
+        // A parent visibility change is not forwarded to children, so close
+        // divider gestures and button presses explicitly before this surface
+        // can be shown again. Gesture-end may synchronously delete the editor.
+        dismissTransientUi();
+        return;
+    }
+
     if (isShowing())
         processor.setHistoryArray(focusIndex);
 }

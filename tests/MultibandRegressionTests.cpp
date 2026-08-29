@@ -1429,6 +1429,177 @@ TEST_CASE("Crossover controls replace stale ownership from the same pointer sour
     }
 }
 
+TEST_CASE("Hiding Multiband balances an active crossover gesture",
+          "[multiband][ui][automation][gesture][visibility][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1000.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    auto& divider = dividerGroups[0]->getVerticalLine();
+    auto& dividerComponent = static_cast<juce::Component&>(divider);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    auto* frequencyParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 0));
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor,
+                                 frequencyParameter->getParameterIndex());
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto dividerCentre = divider.getLocalBounds().toFloat().getCentre();
+    const auto down = makeMouseEvent(divider, dividerCentre, primary);
+    dividerComponent.mouseDown(down);
+    multibandComponent.mouseDown(down);
+
+    const auto targetInMultiband = juce::Point<float> {
+        static_cast<float>(multiband->getWidth()) * 0.62f,
+        static_cast<float>(multiband->getHeight()) * 0.50f
+    };
+    const auto targetInDivider = divider.getLocalPoint(multiband,
+                                                        targetInMultiband);
+    const auto drag = makeDragMouseEvent(divider,
+                                          targetInDivider,
+                                          dividerCentre,
+                                          primary);
+    dividerComponent.mouseDrag(drag);
+    multibandComponent.mouseDrag(drag);
+    REQUIRE(host.beginCount == 1);
+    REQUIRE(host.endCount == 0);
+    REQUIRE(host.valueChangeCount >= 1);
+    REQUIRE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+    REQUIRE(VerticalLinePointerTestAccess::hasPrimaryDrag(divider));
+
+    SECTION("visibility boundary")
+    {
+        multiband->setVisible(false);
+
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+        CHECK_FALSE(VerticalLinePointerTestAccess::hasPrimaryDrag(divider));
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+
+        multiband->setVisible(true);
+        const auto delayedUp = makeMouseEvent(divider, targetInDivider);
+        dividerComponent.mouseUp(delayedUp);
+        multibandComponent.mouseUp(delayedUp);
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 0);
+    }
+
+    SECTION("gesture-end synchronously closes the editor")
+    {
+        EditorResetOnParameterStage resetter(
+            processor,
+            editor,
+            frequencyParameter->getParameterIndex(),
+            ParameterCallbackStage::end);
+
+        multiband->setVisible(false);
+
+        CHECK(resetter.didResetEditor);
+        CHECK(editor == nullptr);
+        checkBalancedGesture(host);
+    }
+}
+
+TEST_CASE("Hiding Multiband clears every band-button press",
+          "[multiband][ui][button][visibility][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("enable")
+    {
+        auto& button = multiband->getEnableButton(0);
+        auto& component = static_cast<juce::Component&>(button);
+        const auto originalState = button.getToggleState();
+        component.mouseDown(makeMouseEvent(
+            component, component.getLocalBounds().toFloat().getCentre(), primary));
+        REQUIRE(button.isDown());
+
+        multiband->setVisible(false);
+
+        CHECK_FALSE(button.isDown());
+        multiband->setVisible(true);
+        component.mouseUp(makeMouseEvent(
+            component, component.getLocalBounds().toFloat().getCentre()));
+        CHECK(button.getToggleState() == originalState);
+    }
+
+    SECTION("solo")
+    {
+        SoloButton* button = nullptr;
+        for (auto* child : multiband->getChildren())
+            if (auto* candidate = dynamic_cast<SoloButton*>(child);
+                candidate != nullptr
+                && candidate->isVisible()
+                && ! candidate->getBounds().isEmpty())
+            {
+                button = candidate;
+                break;
+            }
+
+        REQUIRE(button != nullptr);
+        auto& component = static_cast<juce::Component&>(*button);
+        const auto originalState = button->getToggleState();
+        component.mouseDown(makeMouseEvent(
+            component, component.getLocalBounds().toFloat().getCentre(), primary));
+        REQUIRE(button->isDown());
+
+        multiband->setVisible(false);
+
+        CHECK_FALSE(button->isDown());
+        multiband->setVisible(true);
+        component.mouseUp(makeMouseEvent(
+            component, component.getLocalBounds().toFloat().getCentre()));
+        CHECK(button->getToggleState() == originalState);
+    }
+
+    SECTION("close")
+    {
+        const auto closeButtons = getPositionedCloseButtons(*multiband);
+        REQUIRE_FALSE(closeButtons.empty());
+        auto* button = closeButtons.front();
+        REQUIRE(button != nullptr);
+        button->setPresented(true, false);
+        auto& component = static_cast<juce::Component&>(*button);
+        component.mouseDown(makeMouseEvent(
+            component, component.getLocalBounds().toFloat().getCentre(), primary));
+        REQUIRE(button->isDown());
+
+        multiband->setVisible(false);
+
+        CHECK_FALSE(button->isDown());
+        CHECK_FALSE(button->isPresented());
+    }
+}
+
 TEST_CASE("A foreign pointer cannot steal a crossover gesture through another divider",
           "[multiband][ui][automation][gesture][input][source][multitouch]")
 {

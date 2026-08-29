@@ -42,6 +42,32 @@ struct MultibandPointerTestAccess
     {
         return multiband.primaryDragActive;
     }
+
+    static void setTrackedPointerSource(
+        Multiband& multiband,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex)
+    {
+        multiband.pointerSourceType = sourceType;
+        multiband.pointerSourceIndex = sourceIndex;
+    }
+};
+
+struct VerticalLinePointerTestAccess
+{
+    static bool hasPrimaryDrag(const VerticalLine& divider)
+    {
+        return divider.primaryDragActive;
+    }
+
+    static void setTrackedPointerSource(
+        VerticalLine& divider,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex)
+    {
+        divider.pointerSourceType = sourceType;
+        divider.pointerSourceIndex = sourceIndex;
+    }
 };
 
 namespace
@@ -1204,6 +1230,367 @@ TEST_CASE("Crossover controls reject popup and auxiliary pointer gestures",
                              | juce::ModifierKeys::ctrlModifier },
         juce::ModifierKeys { juce::ModifierKeys::ctrlModifier });
 #endif
+}
+
+TEST_CASE("Crossover controls replace stale ownership from the same pointer source",
+          "[multiband][ui][automation][gesture][input][stale][source]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1000.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+
+    auto& divider = dividerGroups[0]->getVerticalLine();
+    auto& dividerComponent = static_cast<juce::Component&>(divider);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    auto* frequencyParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 0));
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor,
+                                 frequencyParameter->getParameterIndex());
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto secondary = juce::ModifierKeys {
+        juce::ModifierKeys::rightButtonModifier
+    };
+    const auto dividerCentre = divider.getLocalBounds().toFloat().getCentre();
+    const auto dispatchDown = [&](juce::ModifierKeys modifiers)
+    {
+        const auto event = makeMouseEvent(divider, dividerCentre, modifiers);
+        dividerComponent.mouseDown(event);
+        multibandComponent.mouseDown(event);
+    };
+    const auto dispatchDrag = [&](float xPercent,
+                                  juce::ModifierKeys modifiers)
+    {
+        const auto targetInMultiband = juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * xPercent,
+            static_cast<float>(multiband->getHeight()) * 0.50f
+        };
+        const auto targetInDivider = divider.getLocalPoint(multiband,
+                                                            targetInMultiband);
+        const auto event = makeDragMouseEvent(divider,
+                                               targetInDivider,
+                                               dividerCentre,
+                                               modifiers);
+        dividerComponent.mouseDrag(event);
+        multibandComponent.mouseDrag(event);
+    };
+    const auto dispatchUp = [&]
+    {
+        const auto event = makeMouseEvent(divider, dividerCentre);
+        dividerComponent.mouseUp(event);
+        multibandComponent.mouseUp(event);
+    };
+
+    dispatchDown(primary);
+    dispatchDrag(0.62f, primary);
+    const auto acceptedFrequency = frequencyParameter->convertFrom0to1(
+        frequencyParameter->getValue());
+    REQUIRE(host.beginCount == 1);
+    REQUIRE(host.endCount == 0);
+    REQUIRE(host.valueChangeCount >= 1);
+
+    SECTION("a rejected down closes the old gesture and cannot keep dragging")
+    {
+        dispatchDown(secondary);
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+
+        dispatchDrag(0.78f, secondary);
+        dispatchUp();
+        CHECK(frequencyParameter->convertFrom0to1(frequencyParameter->getValue())
+              == Catch::Approx(acceptedFrequency));
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(host.minimumGestureDepth == 0);
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+    }
+
+    SECTION("a new primary down closes the old gesture before starting another")
+    {
+        dispatchDown(primary);
+        // Crossover host gestures are lazy: a fresh pointer owns the UI now,
+        // but its host begin is emitted only when the first value is written.
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+
+        dispatchDrag(0.72f, primary);
+        CHECK(host.beginCount == 2);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 1);
+        dispatchUp();
+        CHECK(host.beginCount == 2);
+        CHECK(host.endCount == 2);
+        CHECK(host.gestureDepth == 0);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(host.minimumGestureDepth == 0);
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+    }
+
+    SECTION("a parent-only mouseUp still closes the divider gesture")
+    {
+        const auto event = makeMouseEvent(divider, dividerCentre);
+        multibandComponent.mouseUp(event);
+
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+        CHECK_FALSE(VerticalLinePointerTestAccess::hasPrimaryDrag(divider));
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+    }
+
+    SECTION("a buttonless move recovers an omitted mouseUp")
+    {
+        multibandComponent.mouseMove(makeMouseEvent(divider, dividerCentre));
+
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+        CHECK_FALSE(VerticalLinePointerTestAccess::hasPrimaryDrag(divider));
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+    }
+}
+
+TEST_CASE("A foreign pointer cannot steal a crossover gesture through another divider",
+          "[multiband][ui][automation][gesture][input][source][multitouch]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 3, { 1000.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    REQUIRE(dividerGroups[1] != nullptr);
+
+    auto& first = dividerGroups[0]->getVerticalLine();
+    auto& second = dividerGroups[1]->getVerticalLine();
+    auto& firstComponent = static_cast<juce::Component&>(first);
+    auto& secondComponent = static_cast<juce::Component&>(second);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    auto* firstParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 0));
+    auto* secondParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 1));
+    REQUIRE(firstParameter != nullptr);
+    REQUIRE(secondParameter != nullptr);
+    ParameterGestureCapture firstHost(processor,
+                                      firstParameter->getParameterIndex());
+    ParameterGestureCapture secondHost(processor,
+                                       secondParameter->getParameterIndex());
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto firstCentre = first.getLocalBounds().toFloat().getCentre();
+    const auto secondCentre = second.getLocalBounds().toFloat().getCentre();
+    const auto firstDown = makeMouseEvent(first, firstCentre, primary);
+    firstComponent.mouseDown(firstDown);
+    multibandComponent.mouseDown(firstDown);
+
+    const auto targetInMultiband = juce::Point<float> {
+        static_cast<float>(multiband->getWidth()) * 0.45f,
+        static_cast<float>(multiband->getHeight()) * 0.50f
+    };
+    const auto targetInFirst = first.getLocalPoint(multiband,
+                                                    targetInMultiband);
+    const auto firstDrag = makeDragMouseEvent(first,
+                                               targetInFirst,
+                                               firstCentre,
+                                               primary);
+    firstComponent.mouseDrag(firstDrag);
+    multibandComponent.mouseDrag(firstDrag);
+    REQUIRE(firstHost.beginCount == 1);
+    REQUIRE(firstHost.endCount == 0);
+    REQUIRE(firstHost.valueChangeCount >= 1);
+    const auto acceptedFirstValue = firstParameter->getValue();
+    const auto acceptedSecondValue = secondParameter->getValue();
+
+    // Even the owning source cannot redirect an established drag stream to a
+    // sibling divider without a new mouseDown lifecycle boundary.
+    const auto redirectedTargetInSecond = second.getLocalPoint(
+        multiband,
+        juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * 0.72f,
+            static_cast<float>(multiband->getHeight()) * 0.50f
+        });
+    const auto redirectedDrag = makeDragMouseEvent(second,
+                                                    redirectedTargetInSecond,
+                                                    secondCentre,
+                                                    primary);
+    secondComponent.mouseDrag(redirectedDrag);
+    multibandComponent.mouseDrag(redirectedDrag);
+    CHECK(firstParameter->getValue() == Catch::Approx(acceptedFirstValue));
+    CHECK(secondParameter->getValue() == Catch::Approx(acceptedSecondValue));
+    checkNoGestureActivity(secondHost);
+
+    // The public test event factory uses the main mouse source. Rebind the
+    // accepted gesture to a synthetic touch identity so the next main-mouse
+    // event reproduces an interleaved foreign source deterministically.
+    const auto mainSource = juce::Desktop::getInstance().getMainMouseSource();
+    constexpr auto foreignType = juce::MouseInputSource::touch;
+    const int foreignIndex = mainSource.getIndex() + 17;
+    VerticalLinePointerTestAccess::setTrackedPointerSource(first,
+                                                            foreignType,
+                                                            foreignIndex);
+    MultibandPointerTestAccess::setTrackedPointerSource(*multiband,
+                                                        foreignType,
+                                                        foreignIndex);
+
+    const auto secondDown = makeMouseEvent(second, secondCentre, primary);
+    secondComponent.mouseDown(secondDown);
+    multibandComponent.mouseDown(secondDown);
+
+    CHECK(VerticalLinePointerTestAccess::hasPrimaryDrag(first));
+    CHECK_FALSE(VerticalLinePointerTestAccess::hasPrimaryDrag(second));
+    CHECK(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+    CHECK(firstHost.beginCount == 1);
+    CHECK(firstHost.endCount == 0);
+    checkNoGestureActivity(secondHost);
+
+    const auto secondDrag = makeDragMouseEvent(second,
+                                                redirectedTargetInSecond,
+                                                secondCentre,
+                                                primary);
+    secondComponent.mouseDrag(secondDrag);
+    multibandComponent.mouseDrag(secondDrag);
+    CHECK(firstParameter->getValue() == Catch::Approx(acceptedFirstValue));
+    CHECK(secondParameter->getValue() == Catch::Approx(acceptedSecondValue));
+
+    VerticalLinePointerTestAccess::setTrackedPointerSource(
+        first, mainSource.getType(), mainSource.getIndex());
+    MultibandPointerTestAccess::setTrackedPointerSource(
+        *multiband, mainSource.getType(), mainSource.getIndex());
+    const auto firstUp = makeMouseEvent(first, firstCentre);
+    firstComponent.mouseUp(firstUp);
+    multibandComponent.mouseUp(firstUp);
+
+    CHECK(firstHost.endCount == 1);
+    CHECK(firstHost.gestureDepth == 0);
+
+    // Always dispatch a release to the rejected target too. With correct
+    // ownership this is a no-op; it also keeps a failing implementation from
+    // leaking test-only gesture state into destruction.
+    const auto secondUp = makeMouseEvent(second, secondCentre);
+    secondComponent.mouseUp(secondUp);
+    multibandComponent.mouseUp(secondUp);
+
+    checkBalancedGesture(firstHost);
+    checkNoGestureActivity(secondHost);
+}
+
+TEST_CASE("Crossover stale-pointer recovery survives synchronous editor teardown",
+          "[multiband][ui][automation][gesture][input][stale][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 3, { 1000.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    REQUIRE(dividerGroups[1] != nullptr);
+
+    auto& first = dividerGroups[0]->getVerticalLine();
+    auto& second = dividerGroups[1]->getVerticalLine();
+    auto& firstComponent = static_cast<juce::Component&>(first);
+    auto& secondComponent = static_cast<juce::Component&>(second);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    auto* firstParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 0));
+    auto* secondParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 1));
+    REQUIRE(firstParameter != nullptr);
+    REQUIRE(secondParameter != nullptr);
+    ParameterGestureCapture firstHost(processor,
+                                      firstParameter->getParameterIndex());
+    ParameterGestureCapture secondHost(processor,
+                                       secondParameter->getParameterIndex());
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto firstCentre = first.getLocalBounds().toFloat().getCentre();
+    const auto firstDown = makeMouseEvent(first, firstCentre, primary);
+    firstComponent.mouseDown(firstDown);
+    multibandComponent.mouseDown(firstDown);
+
+    const auto targetInMultiband = juce::Point<float> {
+        static_cast<float>(multiband->getWidth()) * 0.45f,
+        static_cast<float>(multiband->getHeight()) * 0.50f
+    };
+    const auto targetInFirst = first.getLocalPoint(multiband,
+                                                    targetInMultiband);
+    const auto firstDrag = makeDragMouseEvent(first,
+                                               targetInFirst,
+                                               firstCentre,
+                                               primary);
+    firstComponent.mouseDrag(firstDrag);
+    multibandComponent.mouseDrag(firstDrag);
+    REQUIRE(firstHost.beginCount == 1);
+    REQUIRE(firstHost.endCount == 0);
+    REQUIRE(firstHost.valueChangeCount >= 1);
+
+    EditorResetOnParameterStage resetter(
+        processor,
+        editor,
+        firstParameter->getParameterIndex(),
+        ParameterCallbackStage::end);
+
+    SECTION("parent-only release")
+    {
+        // Skip VerticalLine::mouseUp to exercise the parent's fallback. Its
+        // final gesture-end callback deletes multiband and the editor.
+        multibandComponent.mouseUp(makeMouseEvent(first, firstCentre));
+    }
+
+    SECTION("same-source replacement on another divider")
+    {
+        // JUCE invokes the target before recursive mouse listeners. The
+        // admission callback must stop immediately when ending the old line
+        // synchronously destroys this new target too.
+        const auto secondCentre = second.getLocalBounds().toFloat().getCentre();
+        secondComponent.mouseDown(makeMouseEvent(second,
+                                                  secondCentre,
+                                                  primary));
+    }
+
+    CHECK(resetter.didResetEditor);
+    CHECK(editor == nullptr);
+    checkBalancedGesture(firstHost);
+    checkNoGestureActivity(secondHost);
 }
 
 TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",

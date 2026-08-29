@@ -96,16 +96,11 @@ void VerticalLine::resized()
 
 void VerticalLine::mouseUp (const juce::MouseEvent& e)
 {
-    juce::ignoreUnused(e);
-
-    if (! primaryDragActive)
+    if (! primaryDragActive || ! isPointerSource(e))
         return;
 
-    primaryDragActive = false;
-    updateAnimationTargets();
-
     // The matching host notification may synchronously delete this slider.
-    endParameterGesture();
+    dismissPrimaryPointerGesture();
 }
 
 void VerticalLine::mouseDoubleClick (const juce::MouseEvent& e)
@@ -136,10 +131,35 @@ void VerticalLine::mouseDrag (const juce::MouseEvent& e)
 
 void VerticalLine::mouseDown (const juce::MouseEvent& e)
 {
+    juce::Component::SafePointer<VerticalLine> safeThis(this);
+    if (primaryDragActive)
+    {
+        // Interleaved touch/pen streams cannot steal the active gesture. A
+        // fresh down from its owner is the only reliable boundary when a host
+        // or window manager omitted the previous mouseUp.
+        if (! isPointerSource(e))
+            return;
+
+        dismissPrimaryPointerGesture();
+        if (safeThis == nullptr)
+            return;
+    }
+
     if (! isPrimaryPointerDown(e))
         return;
 
+    if (pointerGestureAdmission)
+    {
+        auto admissionCallback = pointerGestureAdmission;
+        const bool wasAccepted = admissionCallback(
+            e.source.getType(), e.source.getIndex());
+        if (safeThis == nullptr || ! wasAccepted)
+            return;
+    }
+
     primaryDragActive = true;
+    pointerSourceType = e.source.getType();
+    pointerSourceIndex = e.source.getIndex();
     updateAnimationTargets();
 
     // The callback is deliberately last so a synchronous owner teardown does
@@ -154,10 +174,33 @@ bool VerticalLine::advanceAnimation(float deltaSeconds) noexcept
     return hoverChanged || pressChanged;
 }
 
+bool VerticalLine::isPointerSource(const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void VerticalLine::dismissPrimaryPointerGesture()
+{
+    if (! primaryDragActive)
+        return;
+
+    // Clear ownership before the callback so re-entrant teardown cannot end
+    // the same pointer contribution twice. Text editing may hold a separate
+    // nested contribution, which endParameterGesture deliberately preserves.
+    primaryDragActive = false;
+    pointerSourceIndex = -1;
+    updateAnimationTargets();
+
+    // The matching host notification may synchronously delete this slider.
+    endParameterGesture();
+}
+
 void VerticalLine::dismissTransientInteraction()
 {
     isEntered = false;
     primaryDragActive = false;
+    pointerSourceIndex = -1;
 
     // Hosts may keep an editor object alive after hiding its window. If that
     // happens during a drag, no later mouseUp is guaranteed, so close the
@@ -192,6 +235,7 @@ void VerticalLine::setParameterGestureCallbacks(ParameterGestureCallback gesture
                          : ParameterGestureCallback {};
     parameterGestureDepth = 0;
     primaryDragActive = false;
+    pointerSourceIndex = -1;
     updateAnimationTargets();
 
     parameterGestureBegin = std::move(gestureBegin);
@@ -202,6 +246,12 @@ void VerticalLine::setParameterGestureCallbacks(ParameterGestureCallback gesture
     // The old callback is allowed to synchronously destroy this component.
     if (previousEnd)
         previousEnd();
+}
+
+void VerticalLine::setPointerGestureAdmissionCallback(
+    PointerGestureAdmissionCallback callback)
+{
+    pointerGestureAdmission = std::move(callback);
 }
 
 void VerticalLine::beginParameterGesture()

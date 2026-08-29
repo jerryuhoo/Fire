@@ -15,6 +15,10 @@
 #include <functional>
 #include <memory>
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct VerticalLinePointerTestAccess;
+#endif
+
 //==============================================================================
 /*
 */
@@ -41,20 +45,30 @@ public:
     using ParameterGestureCallback = std::function<void()>;
     using ParameterGestureToken = std::shared_ptr<void>;
     using ParameterChangeCallback = std::function<ParameterGestureToken()>;
+    using PointerGestureAdmissionCallback = std::function<bool(
+        juce::MouseInputSource::InputSourceType, int)>;
     void setParameterGestureCallbacks (ParameterGestureCallback gestureBegin,
                                        ParameterChangeCallback parameterChange,
                                        ParameterGestureCallback gestureEnd);
+    void setPointerGestureAdmissionCallback(
+        PointerGestureAdmissionCallback callback);
     void beginParameterGesture();
     void endParameterGesture();
     void setValueAsPartOfGesture (double newValue,
                                   juce::NotificationType notification);
     bool advanceAnimation(float deltaSeconds) noexcept;
+    void dismissPrimaryPointerGesture();
     void dismissTransientInteraction();
     float getHoverAnimation() const noexcept { return hoverAnimation.current; }
     float getPressAnimation() const noexcept { return pressAnimation.current; }
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct VerticalLinePointerTestAccess;
+#endif
+
     bool isEntered = false;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
     void updateAnimationTargets() noexcept;
 
     void mouseUp (const juce::MouseEvent& e) override;
@@ -72,8 +86,12 @@ private:
     ParameterGestureCallback parameterGestureBegin;
     ParameterChangeCallback parameterChange;
     ParameterGestureCallback parameterGestureEnd;
+    PointerGestureAdmissionCallback pointerGestureAdmission;
     int parameterGestureDepth = 0;
     bool primaryDragActive = false;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;
 

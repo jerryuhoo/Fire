@@ -90,6 +90,10 @@ private:
     int focusIndex = 0;
     bool isDragging = false;
     bool primaryDragActive = false;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+    int activePointerDividerIndex = -1;
     bool isCanonicalisingLines = false;
     bool isPublishingCrossoverCascade = false;
     int hoveredBandIndex = -1;
@@ -122,6 +126,14 @@ private:
     int getBandIndexAtX(int x) const;
     int getDividerIndexForEvent(const juce::MouseEvent& event) const;
     bool isEventFromDividerGroup(const juce::MouseEvent& event) const;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    bool admitDividerPointerGesture(
+        int dividerIndex,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex);
+    void clearPrimaryPointerState() noexcept;
+    void dismissTrackedDividerGesture(int dividerIndex);
+    void recoverMissingPointerUp(const juce::MouseEvent& event);
     void updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside);
     void refreshHoveredBandFromMouse();
     void updateCloseButtonVisibility();

@@ -110,6 +110,12 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
             [this] { beginCrossoverGesture(); },
             [this, i] { return touchCrossoverParameter(i); },
             [this] { endCrossoverGesture(); });
+        freqDividerGroup[i]->getVerticalLine().setPointerGestureAdmissionCallback(
+            [this, i](juce::MouseInputSource::InputSourceType sourceType,
+                      int sourceIndex)
+            {
+                return admitDividerPointerGesture(i, sourceType, sourceIndex);
+            });
         freqDividerGroup[i]->setFrequencyEditCallback([this, i](float xPercent)
         {
             dragLines(xPercent, i);
@@ -267,8 +273,7 @@ void Multiband::animationTick(float deltaSeconds)
 
 void Multiband::dismissTransientUi()
 {
-    isDragging = false;
-    primaryDragActive = false;
+    clearPrimaryPointerState();
     hoveredBandIndex = -1;
     juce::Component::SafePointer<Multiband> safeThis(this);
 
@@ -554,17 +559,19 @@ void Multiband::setLineIndex()
 
 void Multiband::mouseUp(const juce::MouseEvent& e)
 {
-    if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
+    if (! primaryDragActive || ! isPointerSource(e))
         return;
 
-    if (! primaryDragActive)
-        return;
-
-    primaryDragActive = false;
-    isDragging = false;
+    const int completedDividerIndex = activePointerDividerIndex;
+    clearPrimaryPointerState();
     const auto localEvent = e.getEventRelativeTo(this);
     updateHoveredBand(localEvent.getPosition(), getLocalBounds().contains(localEvent.getPosition()));
     repaint();
+
+    // VerticalLine normally receives mouseUp before this recursive listener.
+    // Keep this idempotent fallback for hosts that only deliver the parent
+    // notification; ending the gesture may synchronously close the editor.
+    dismissTrackedDividerGesture(completedDividerIndex);
 }
 
 void Multiband::mouseDrag(const juce::MouseEvent& e)
@@ -572,12 +579,13 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
     if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
         return;
 
-    if (! primaryDragActive || getWidth() <= 0)
+    if (! primaryDragActive || ! isPointerSource(e) || getWidth() <= 0)
         return;
 
     // moving lines by dragging mouse
     const int dividerIndex = getDividerIndexForEvent(e);
-    if (! juce::isPositiveAndBelow(dividerIndex, lineNum))
+    if (! juce::isPositiveAndBelow(dividerIndex, lineNum)
+        || dividerIndex != activePointerDividerIndex)
         return;
 
     isDragging = true;
@@ -604,6 +612,28 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
 
 void Multiband::mouseDown(const juce::MouseEvent& e)
 {
+    const int incomingDividerIndex = getDividerIndexForEvent(e);
+    if (primaryDragActive)
+    {
+        if (! isPointerSource(e))
+            return;
+
+        const int previousDividerIndex = activePointerDividerIndex;
+        clearPrimaryPointerState();
+
+        // For an event on the same VerticalLine, the target receives
+        // mouseDown before this recursive listener and has already replaced
+        // or rejected its stale gesture. Events anywhere else need the
+        // parent to close the abandoned divider explicitly.
+        if (previousDividerIndex != incomingDividerIndex)
+        {
+            juce::Component::SafePointer<Multiband> safeThis(this);
+            dismissTrackedDividerGesture(previousDividerIndex);
+            if (safeThis == nullptr)
+                return;
+        }
+    }
+
     if (dynamic_cast<juce::Button*>(e.eventComponent) != nullptr)
         return;
 
@@ -613,11 +643,14 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
     if (! isPrimaryPointerDown(e))
         return;
 
-    const int dividerIndex = getDividerIndexForEvent(e);
+    const int dividerIndex = incomingDividerIndex;
     if (dividerIndex < 0 && isEventFromDividerGroup(e))
         return;
 
     primaryDragActive = true;
+    pointerSourceType = e.source.getType();
+    pointerSourceIndex = e.source.getIndex();
+    activePointerDividerIndex = dividerIndex;
     isDragging = dividerIndex >= 0;
 
     const auto localEvent = e.getEventRelativeTo(this);
@@ -1094,13 +1127,12 @@ juce::Rectangle<float> Multiband::getBandBounds(int index) const
 
 void Multiband::mouseMove(const juce::MouseEvent& event)
 {
-    const auto relativeEvent = event.getEventRelativeTo(this);
-    if (! event.mods.isLeftButtonDown())
-    {
-        isDragging = false;
-        primaryDragActive = false;
-    }
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    recoverMissingPointerUp(event);
+    if (safeThis == nullptr)
+        return;
 
+    const auto relativeEvent = event.getEventRelativeTo(this);
     updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
     if (lineNum < 3
         && relativeEvent.y >= 0
@@ -1110,12 +1142,22 @@ void Multiband::mouseMove(const juce::MouseEvent& event)
 
 void Multiband::mouseEnter(const juce::MouseEvent& event)
 {
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    recoverMissingPointerUp(event);
+    if (safeThis == nullptr)
+        return;
+
     const auto relativeEvent = event.getEventRelativeTo(this);
     updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
 }
 
 void Multiband::mouseExit(const juce::MouseEvent& event)
 {
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    recoverMissingPointerUp(event);
+    if (safeThis == nullptr)
+        return;
+
     const auto relativeEvent = event.getEventRelativeTo(this);
     updateHoveredBand(relativeEvent.getPosition(), getLocalBounds().contains(relativeEvent.getPosition()));
 }
@@ -1167,6 +1209,68 @@ bool Multiband::isEventFromDividerGroup(const juce::MouseEvent& event) const
     }
 
     return false;
+}
+
+bool Multiband::isPointerSource(const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+bool Multiband::admitDividerPointerGesture(
+    int dividerIndex,
+    juce::MouseInputSource::InputSourceType sourceType,
+    int sourceIndex)
+{
+    if (! primaryDragActive)
+        return true;
+
+    if (sourceType != pointerSourceType || sourceIndex != pointerSourceIndex)
+        return false;
+
+    const int previousDividerIndex = activePointerDividerIndex;
+    clearPrimaryPointerState();
+    if (previousDividerIndex == dividerIndex)
+        return true;
+
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    dismissTrackedDividerGesture(previousDividerIndex);
+    return safeThis != nullptr;
+}
+
+void Multiband::clearPrimaryPointerState() noexcept
+{
+    isDragging = false;
+    primaryDragActive = false;
+    pointerSourceIndex = -1;
+    activePointerDividerIndex = -1;
+}
+
+void Multiband::dismissTrackedDividerGesture(int dividerIndex)
+{
+    if (! juce::isPositiveAndBelow(dividerIndex, 3)
+        || freqDividerGroup[static_cast<size_t>(dividerIndex)] == nullptr)
+        return;
+
+    // The gesture-end callback may synchronously close the editor. This must
+    // remain the final access through Multiband in the calling branch.
+    freqDividerGroup[static_cast<size_t>(dividerIndex)]
+        ->getVerticalLine().dismissPrimaryPointerGesture();
+}
+
+void Multiband::recoverMissingPointerUp(const juce::MouseEvent& event)
+{
+    if (! primaryDragActive
+        || ! isPointerSource(event)
+        || event.mods.isLeftButtonDown())
+        return;
+
+    const int completedDividerIndex = activePointerDividerIndex;
+    clearPrimaryPointerState();
+
+    // A move/enter/exit without the accepted primary button is the first
+    // observable boundary after a missing mouseUp.
+    dismissTrackedDividerGesture(completedDividerIndex);
 }
 
 void Multiband::updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside)

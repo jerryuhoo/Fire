@@ -20,16 +20,17 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 struct BandPanelGraphTestAccess;
+struct BandPanelModeTestAccess;
 
 //==============================================================================
 class BandPanel : public PanelBase,
                   public juce::AudioProcessorValueTreeState::Listener,
                   private juce::Timer,
-                  public juce::Button::Listener,
-                  public juce::ComboBox::Listener // Add ComboBox::Listener
+                  public juce::Button::Listener
 {
 public:
     BandPanel(FireAudioProcessor&,
@@ -47,7 +48,6 @@ public:
     void dismissTransientInteraction() noexcept;
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
-    void comboBoxChanged(juce::ComboBox* comboBoxThatHasChanged) override;
 
     void setBandKnobsStates(bool isBandEnabled, bool callFromSubBypass);
 
@@ -73,9 +73,51 @@ public:
 
 private:
     friend struct BandPanelGraphTestAccess;
+    friend struct BandPanelModeTestAccess;
+
+    class DistortionModeComboBox final : public juce::ComboBox
+    {
+    public:
+        using GenerationProvider = std::function<std::uint64_t()>;
+        using ContextValidator = std::function<bool()>;
+
+        void configurePopupSession(GenerationProvider generationProvider,
+                                   ContextValidator contextValidator,
+                                   juce::RangedAudioParameter* parameter);
+        void dismissTransientInteraction() noexcept;
+        void showPopup() override;
+
+    private:
+        friend class BandPanel;
+        friend struct BandPanelModeTestAccess;
+
+        bool keyPressed(const juce::KeyPress& key) override;
+        void mouseDown(const juce::MouseEvent& event) override;
+        void mouseDrag(const juce::MouseEvent& event) override;
+        void mouseUp(const juce::MouseEvent& event) override;
+        std::function<void(int)> createPopupResultHandler();
+        std::function<void(int)> createPopupResultHandler(
+            std::uint64_t contextGeneration);
+        void capturePopupRequest() noexcept;
+        bool isContextCurrent(std::uint64_t contextGeneration) const;
+        void closePopupWindow() noexcept;
+
+        GenerationProvider getCurrentGeneration;
+        ContextValidator isPopupContextValid;
+        juce::RangedAudioParameter* boundParameter = nullptr;
+        std::uint64_t popupRequestGeneration = 0;
+        std::uint64_t popupSessionRevision = 0;
+        std::uint64_t pointerInteractionGeneration = 0;
+        bool popupRequestArmed = false;
+        bool popupSessionActive = false;
+        bool pointerInteractionActive = false;
+        bool cancelPendingPointerRelease = false;
+    };
 
     void updateAttachments();
     void dismissButtonInteractions() noexcept;
+    void invalidateDistortionModeInteractions() noexcept;
+    bool canOpenDistortionModePopup(size_t modeIndex) const noexcept;
     bool hasActiveSliderInteraction() const noexcept;
     void applyPendingFocusChange();
     bool canEnableSubKnob(juce::Component& component);
@@ -161,8 +203,9 @@ private:
     WidthGraph widthGraph { processor };
 
     // Distortion modes moved from PluginEditor
-    std::array<juce::ComboBox, 4> distortionModes;
+    std::array<DistortionModeComboBox, 4> distortionModes;
     std::array<std::unique_ptr<ComboBoxAttachment>, 4> modeAttachments;
+    std::uint64_t distortionModeInteractionGeneration = 0;
 
     juce::Component* preDragVisibleGraph = nullptr;
 

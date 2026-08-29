@@ -295,7 +295,7 @@ void FilterControl::visibilityChanged()
 {
     if (isShowing())
     {
-        processor.setHistoryArray(5); // 5 means global view
+        processor.setHistoryArray(FireAudioProcessor::globalHistorySourceIndex);
         parameterUpdatePending.store(true, std::memory_order_release);
         routingStateDirty.store(true, std::memory_order_release);
     }

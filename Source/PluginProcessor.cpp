@@ -4886,7 +4886,9 @@ bool FireAudioProcessor::isSlient(const juce::AudioBuffer<float>& buffer)
 void FireAudioProcessor::setHistoryArray(int bandIndex)
 {
     const auto normalisedSource = static_cast<std::uint64_t>(
-        juce::isPositiveAndBelow(bandIndex, 4) ? bandIndex : 4);
+        juce::isPositiveAndBelow(bandIndex, globalHistorySourceIndex)
+            ? bandIndex
+            : globalHistorySourceIndex);
     auto currentToken = historySourceRequestToken.load(
         std::memory_order_relaxed);
 

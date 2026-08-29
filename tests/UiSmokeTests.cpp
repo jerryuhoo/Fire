@@ -331,6 +331,23 @@ std::uint64_t contentFingerprint(const juce::Image& image)
     return hash;
 }
 
+struct HistorySourceAtShow final : juce::ComponentListener
+{
+    explicit HistorySourceAtShow(FireAudioProcessor& processorToObserve)
+        : processor(processorToObserve)
+    {
+    }
+
+    void componentVisibilityChanged(juce::Component& component) override
+    {
+        if (component.isVisible())
+            sourceWhenShown = processor.getHistorySourceToken() & 0x7u;
+    }
+
+    FireAudioProcessor& processor;
+    std::uint64_t sourceWhenShown = 99u;
+};
+
 void checkRenderedEditor(const juce::Image& image, int expectedWidth, int expectedHeight)
 {
     REQUIRE_FALSE(image.isNull());
@@ -427,6 +444,74 @@ TEST_CASE("Fire editor renders at supported scale extremes", "[ui][smoke]")
         CHECK(contentFingerprint(bandImage) != contentFingerprint(masterImage));
         CHECK(contentFingerprint(modulationImage) != contentFingerprint(masterImage));
     }
+}
+
+TEST_CASE("Editor publishes the selected history source before its graphs appear",
+          "[ui][history][workspace][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    setParameterValue(processor, NUM_BANDS_ID, 3.0f);
+    for (int divider = 0; divider < 2; ++divider)
+        setParameterValue(processor,
+                          ParameterIDAndName::getIDString(LINE_STATE_ID, divider),
+                          1.0f);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    auto* multiband = findComponentOfType<Multiband>(*editor);
+    auto* bandPanel = findComponentOfType<BandPanel>(*editor);
+    auto* globalPanel = findComponentOfType<GlobalPanel>(*editor);
+    REQUIRE(multiband != nullptr);
+    REQUIRE(bandPanel != nullptr);
+    REQUIRE(globalPanel != nullptr);
+
+    constexpr std::uint64_t sourceMask = 0x7u;
+    CHECK((processor.getHistorySourceToken() & sourceMask) == 0u);
+
+    multiband->setFocusIndex(2);
+    REQUIRE(multiband->getFocusIndex() == 2);
+    CHECK((processor.getHistorySourceToken() & sourceMask) == 2u);
+
+    const auto bandTwoToken = processor.getHistorySourceToken();
+    selectWorkspace(*editor, "MOD FORGE");
+    CHECK(processor.getHistorySourceToken() == bandTwoToken);
+
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+
+    HistorySourceAtShow globalShow(processor);
+    globalPanel->addComponentListener(&globalShow);
+    const juce::ScopeGuard removeGlobalShowListener {
+        [&] { globalPanel->removeComponentListener(&globalShow); }
+    };
+    selectWorkspace(*editor, "MASTER LAB");
+    CHECK(globalShow.sourceWhenShown == 4u);
+    CHECK((processor.getHistorySourceToken() & sourceMask) == 4u);
+
+    // A host topology reduction can clamp focus while the band view is
+    // hidden.  It must not steal the global graph source, but the clamped
+    // band must be ready before BAND LAB becomes visible again.
+    setParameterValue(processor, NUM_BANDS_ID, 1.0f);
+    editor->timerCallback();
+    REQUIRE(multiband->getFocusIndex() == 0);
+    CHECK((processor.getHistorySourceToken() & sourceMask) == 4u);
+
+    HistorySourceAtShow bandShow(processor);
+    bandPanel->addComponentListener(&bandShow);
+    const juce::ScopeGuard removeBandShowListener {
+        [&] { bandPanel->removeComponentListener(&bandShow); }
+    };
+    selectWorkspace(*editor, "BAND LAB");
+    CHECK(bandShow.sourceWhenShown == 0u);
+    CHECK((processor.getHistorySourceToken() & sourceMask) == 0u);
+
+    editor->setVisible(false);
+    processor.setHistoryArray(FireAudioProcessor::globalHistorySourceIndex);
+    REQUIRE((processor.getHistorySourceToken() & sourceMask) == 4u);
+    editor->setVisible(true);
+    CHECK((processor.getHistorySourceToken() & sourceMask) == 0u);
 }
 
 TEST_CASE("Editor scale reaches every embedded control-panel graph",

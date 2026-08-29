@@ -188,6 +188,7 @@ private:
 
     void updateWhenChangingFocus(int bandIndex);
     void updateMainPanelVisibility();
+    void synchroniseHistorySourceForWorkspace(int workspace);
     void rebuildBackgroundCache();
     void initialiseHeaderEmbers();
     void advanceAnimations(float deltaSeconds);

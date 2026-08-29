@@ -432,6 +432,7 @@ public:
         std::uint64_t generation = 0;
     };
 
+    static constexpr int globalHistorySourceIndex = 4;
     void setHistoryArray(int bandIndex);
     std::uint64_t getHistorySourceToken() const noexcept;
     std::uint64_t getHistoryGeneration() const noexcept;
@@ -888,9 +889,14 @@ private:
     // The message thread advances the epoch whenever the normalised source
     // changes. Keeping epoch and source in one atomic prevents the audio
     // thread from ever pairing one request's source with another's identity.
-    std::atomic<std::uint64_t> historySourceRequestToken { 4u };
-    std::uint64_t activeHistorySourceToken = 4u;
-    std::atomic<std::uint64_t> publishedHistorySourceToken { 4u };
+    std::atomic<std::uint64_t> historySourceRequestToken {
+        static_cast<std::uint64_t>(globalHistorySourceIndex)
+    };
+    std::uint64_t activeHistorySourceToken =
+        static_cast<std::uint64_t>(globalHistorySourceIndex);
+    std::atomic<std::uint64_t> publishedHistorySourceToken {
+        static_cast<std::uint64_t>(globalHistorySourceIndex)
+    };
     std::atomic<std::uint64_t> historyGeneration { 0 };
     std::atomic<std::uint64_t> historyPublicationSequence { 0 };
 

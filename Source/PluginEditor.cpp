@@ -407,13 +407,15 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     const bool isGlobalView = windowRightButton.getToggleState();
     const bool isLfoView = windowLfoButton.getToggleState();
 
+    activeWorkspace = isGlobalView ? 2 : (isLfoView ? 1 : 0);
+    synchroniseHistorySourceForWorkspace(activeWorkspace);
+
     multiband.setVisible(isBandView || isLfoView);
     bandPanel.setVisible(isBandView);
     globalPanel.setVisible(isGlobalView);
     lfoPanel.setVisible(isLfoView);
     filterControl.setVisible(isGlobalView);
 
-    activeWorkspace = isGlobalView ? 2 : (isLfoView ? 1 : 0);
     workspaceSelection.snapTo(static_cast<float>(activeWorkspace));
 
     hqAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processor.treeState, HQ_ID, hqButton);
@@ -611,7 +613,11 @@ void FireAudioProcessorEditor::visibilityChanged()
 {
     juce::AudioProcessorEditor::visibilityChanged();
 
-    if (! isShowing())
+    if (isShowing())
+    {
+        synchroniseHistorySourceForWorkspace(activeWorkspace);
+    }
+    else
     {
         for (auto* slider : allModulatableSliders)
             if (slider != nullptr)
@@ -998,6 +1004,10 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     }
 
     activeWorkspace = targetWorkspace;
+    // Publish the target before any graph-bearing panel becomes visible.
+    // Graph visibility callbacks can synchronously repaint, so changing the
+    // source afterwards exposes one frame from the previous workspace.
+    synchroniseHistorySourceForWorkspace(activeWorkspace);
     if (animateSelection && isShowing() && ! navigationArea.isEmpty())
         workspaceSelection.setTarget(static_cast<float>(activeWorkspace));
     else
@@ -1120,6 +1130,13 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
 
 void FireAudioProcessorEditor::updateWhenChangingFocus(int bandIndex)
 {
+    // MOD FORGE shares the focused band's history.  Keep this current even
+    // while the editor has no desktop peer so the first graph frame is never
+    // sourced from the processor's default global history.  MASTER LAB must
+    // retain its global source while a hidden topology change clamps focus.
+    if (activeWorkspace != 2)
+        processor.setHistoryArray(juce::jlimit(0, 3, bandIndex));
+
     // Keep attachments authoritative even while BAND LAB is hidden.  The old
     // mouse-listener path missed close-button clicks and selections made from
     // MOD FORGE, leaving the visible rail and the edited DSP band out of sync.
@@ -1127,6 +1144,14 @@ void FireAudioProcessorEditor::updateWhenChangingFocus(int bandIndex)
     modulationSnapshotFramesRemaining = 0;
     updateModulationStates();
     repaint();
+}
+
+void FireAudioProcessorEditor::synchroniseHistorySourceForWorkspace(int workspace)
+{
+    processor.setHistoryArray(
+        workspace == 2
+            ? FireAudioProcessor::globalHistorySourceIndex
+            : multiband.getFocusIndex());
 }
 
 void FireAudioProcessorEditor::handleAsyncUpdate()

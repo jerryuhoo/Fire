@@ -1392,10 +1392,14 @@ void Multiband::handleDividerHidden(int dividerIndex)
 
     auto safeGroup = juce::Component::SafePointer<FreqDividerGroup>(
         freqDividerGroup[static_cast<size_t>(dividerIndex)].get());
-    juce::MessageManager::callAsync([safeGroup]
+    if (safeGroup == nullptr)
+        return;
+
+    const auto visibilityGeneration = safeGroup->getVisibilityGeneration();
+    juce::MessageManager::callAsync([safeGroup, visibilityGeneration]
     {
         if (safeGroup != nullptr)
-            safeGroup->dismissImmediately();
+            safeGroup->dismissIfHidden(visibilityGeneration);
     });
 }
 

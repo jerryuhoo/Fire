@@ -1936,6 +1936,70 @@ TEST_CASE("Topology automation closes a crossover gesture before hiding its divi
     CHECK(host.minimumGestureDepth == 0);
 }
 
+TEST_CASE("Deferred divider cleanup cannot end a reactivated slot gesture",
+          "[multiband][ui][automation][gesture][topology][lifecycle][session][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1800.0f, 0.0f, 0.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->setVisible(true);
+    editor->stopTimer();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+
+    auto& dividerGroup = *dividerGroups[0];
+    auto& divider = dividerGroup.getVerticalLine();
+    auto* frequencyParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, 0));
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor,
+                                 frequencyParameter->getParameterIndex());
+
+    const auto publishInsideGesture = [&](double frequency)
+    {
+        divider.beginParameterGesture();
+        divider.setValueAsPartOfGesture(frequency,
+                                        juce::sendNotificationSync);
+    };
+
+    publishInsideGesture(2400.0);
+    REQUIRE(host.beginCount == 1);
+    REQUIRE(host.endCount == 0);
+
+    const auto lineStateID = ParameterIDAndName::getIDString(LINE_STATE_ID, 0);
+    setPlainParameter(processor, lineStateID, 0.0f);
+    REQUIRE_FALSE(dividerGroup.isVisible());
+
+    // Reuse the same fixed divider component before the old attachment-stack
+    // cleanup gets its message turn, then replace the abandoned edit with a
+    // valid gesture in the new visible session.
+    setPlainParameter(processor, lineStateID, 1.0f);
+    REQUIRE(dividerGroup.isVisible());
+    divider.endParameterGesture();
+    publishInsideGesture(3600.0);
+    REQUIRE(host.beginCount == 2);
+    REQUIRE(host.endCount == 1);
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    CHECK(dividerGroup.isVisible());
+    CHECK(host.beginCount == 2);
+    CHECK(host.endCount == 1);
+
+    divider.endParameterGesture();
+    CHECK(host.beginCount == 2);
+    CHECK(host.endCount == 2);
+    CHECK(host.gestureDepth == 0);
+}
+
 TEST_CASE("Topology-driven crossover teardown survives synchronous editor closure",
           "[multiband][ui][automation][gesture][topology][lifecycle][teardown]")
 {

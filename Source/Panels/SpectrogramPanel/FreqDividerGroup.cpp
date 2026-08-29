@@ -105,6 +105,28 @@ void FreqDividerGroup::dismissImmediately()
     verticalLine.dismissTransientInteraction();
 }
 
+void FreqDividerGroup::visibilityChanged()
+{
+    juce::ToggleButton::visibilityChanged();
+
+    // A deferred LINE_STATE cleanup belongs to one hidden lifetime of this
+    // fixed divider slot. Re-showing the same component starts a new session.
+    ++visibilityGeneration;
+}
+
+std::uint64_t FreqDividerGroup::getVisibilityGeneration() const noexcept
+{
+    return visibilityGeneration;
+}
+
+void FreqDividerGroup::dismissIfHidden(std::uint64_t expectedGeneration)
+{
+    if (visibilityGeneration != expectedGeneration || isVisible())
+        return;
+
+    dismissImmediately();
+}
+
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
 {
     juce::Component::SafePointer<FreqDividerGroup> safeThis(this);

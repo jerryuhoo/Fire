@@ -13,6 +13,7 @@
 #include "FreqTextLabel.h"
 #include "VerticalLine.h"
 #include "../../PluginProcessor.h"
+#include <cstdint>
 #include <functional>
 //==============================================================================
 /*
@@ -44,6 +45,12 @@ public:
     void clicked(const juce::ModifierKeys& modifiers) override;
 
 private:
+    friend class Multiband;
+
+    void visibilityChanged() override;
+    std::uint64_t getVisibilityGeneration() const noexcept;
+    void dismissIfHidden(std::uint64_t expectedGeneration);
+
     FireAudioProcessor& processor;
     VerticalLine verticalLine;
     float margin = 7.5f;
@@ -66,6 +73,7 @@ private:
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     HiddenCallback hiddenCallback;
+    std::uint64_t visibilityGeneration = 0;
     
     FreqTextLabel freqTextLabel;
     

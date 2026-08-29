@@ -113,13 +113,17 @@ FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
         // JUCE's Return/focus-loss commit has copied the TextEditor value into
         // the Label before this callback. Apply it now so the host sees the
         // value change before the matching endChangeGesture notification.
+        juce::Component::SafePointer<FreqTextLabel> safeThis(this);
         applyEditedText();
+
+        if (safeThis == nullptr)
+            return;
+
         updateLabelText();
-        if (editorGestureOpen)
-        {
-            editorGestureOpen = false;
-            verticalLine.endParameterGesture();
-        }
+
+        // A host end notification can synchronously destroy this label, so it
+        // must be the final operation in the callback.
+        finishEditorGesture();
     };
 }
 
@@ -242,19 +246,22 @@ void FreqTextLabel::dismissImmediately()
     // onEditorHide callback while the VerticalLine is still alive.  Keep the
     // explicit guard as a defensive balance for a host tearing down the view
     // between Label callbacks.
+    juce::Component::SafePointer<FreqTextLabel> safeThis(this);
     if (freqLabel.isBeingEdited())
+    {
         freqLabel.hideEditor(true);
 
-    if (editorGestureOpen)
-    {
-        editorGestureOpen = false;
-        verticalLine.endParameterGesture();
+        if (safeThis == nullptr)
+            return;
     }
 
     revealAnimation.snapTo(0.0f);
     hoverAnimation.snapTo(0.0f);
     freqLabel.setAlpha(0.0f);
     setVisible(false);
+
+    // Keep the potentially destructive host notification last.
+    finishEditorGesture();
 }
 
 void FreqTextLabel::setFreq(int freq)
@@ -277,8 +284,23 @@ void FreqTextLabel::applyEditedText()
     if (juce::approximatelyEqual(constrainedFrequency, verticalLine.getValue()))
         return;
 
-    frequencyEditCallback(static_cast<float>(transformToLog(constrainedFrequency)));
+    auto editCallback = frequencyEditCallback;
+    juce::Component::SafePointer<FreqTextLabel> safeThis(this);
+    editCallback(static_cast<float>(transformToLog(constrainedFrequency)));
+
+    if (safeThis == nullptr)
+        return;
+
     mFrequency = juce::roundToInt(verticalLine.getValue());
+}
+
+void FreqTextLabel::finishEditorGesture()
+{
+    if (! editorGestureOpen)
+        return;
+
+    editorGestureOpen = false;
+    verticalLine.endParameterGesture();
 }
 
 void FreqTextLabel::setFrequencyEditCallback(FrequencyEditCallback callback)

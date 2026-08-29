@@ -31,12 +31,18 @@ VerticalLine::VerticalLine()
 
 VerticalLine::~VerticalLine()
 {
-    if (parameterGestureDepth > 0)
-    {
-        parameterGestureDepth = 0;
-        if (parameterGestureEnd)
-            parameterGestureEnd();
-    }
+    auto endCallback = parameterGestureDepth > 0
+                         ? std::move(parameterGestureEnd)
+                         : ParameterGestureCallback {};
+    parameterGestureDepth = 0;
+    parameterGestureBegin = nullptr;
+    parameterChange = nullptr;
+    parameterGestureEnd = nullptr;
+
+    // This callback can synchronously destroy the owning editor. Keep it as
+    // the final operation that depends on the component's lifetime.
+    if (endCallback)
+        endCallback();
 }
 
 void VerticalLine::paint(juce::Graphics& g)
@@ -96,8 +102,10 @@ void VerticalLine::mouseUp (const juce::MouseEvent& e)
         return;
 
     primaryDragActive = false;
-    endParameterGesture();
     updateAnimationTargets();
+
+    // The matching host notification may synchronously delete this slider.
+    endParameterGesture();
 }
 
 void VerticalLine::mouseDoubleClick (const juce::MouseEvent& e)
@@ -132,8 +140,11 @@ void VerticalLine::mouseDown (const juce::MouseEvent& e)
         return;
 
     primaryDragActive = true;
-    beginParameterGesture();
     updateAnimationTargets();
+
+    // The callback is deliberately last so a synchronous owner teardown does
+    // not leave a continuation that accesses this component.
+    beginParameterGesture();
 }
 
 bool VerticalLine::advanceAnimation(float deltaSeconds) noexcept
@@ -151,15 +162,18 @@ void VerticalLine::dismissTransientInteraction()
     // Hosts may keep an editor object alive after hiding its window. If that
     // happens during a drag, no later mouseUp is guaranteed, so close the
     // parameter gesture here just as the destructor would.
-    if (parameterGestureDepth > 0)
-    {
-        parameterGestureDepth = 0;
-        if (parameterGestureEnd)
-            parameterGestureEnd();
-    }
+    auto endCallback = parameterGestureDepth > 0
+                         ? parameterGestureEnd
+                         : ParameterGestureCallback {};
+    parameterGestureDepth = 0;
 
     hoverAnimation.snapTo(0.0f);
     pressAnimation.snapTo(0.0f);
+
+    // Ending a host gesture can synchronously close the editor. Nothing below
+    // this call may depend on the VerticalLine still existing.
+    if (endCallback)
+        endCallback();
 }
 
 void VerticalLine::updateAnimationTargets() noexcept
@@ -170,25 +184,35 @@ void VerticalLine::updateAnimationTargets() noexcept
 }
 
 void VerticalLine::setParameterGestureCallbacks(ParameterGestureCallback gestureBegin,
-                                                ParameterGestureCallback change,
+                                                ParameterChangeCallback change,
                                                 ParameterGestureCallback gestureEnd)
 {
-    if (parameterGestureDepth > 0)
-    {
-        parameterGestureDepth = 0;
-        if (parameterGestureEnd)
-            parameterGestureEnd();
-    }
+    auto previousEnd = parameterGestureDepth > 0
+                         ? parameterGestureEnd
+                         : ParameterGestureCallback {};
+    parameterGestureDepth = 0;
+    primaryDragActive = false;
+    updateAnimationTargets();
 
     parameterGestureBegin = std::move(gestureBegin);
     parameterChange = std::move(change);
     parameterGestureEnd = std::move(gestureEnd);
+
+    // Install the complete replacement before closing the previous gesture.
+    // The old callback is allowed to synchronously destroy this component.
+    if (previousEnd)
+        previousEnd();
 }
 
 void VerticalLine::beginParameterGesture()
 {
-    if (parameterGestureDepth++ == 0 && parameterGestureBegin)
-        parameterGestureBegin();
+    const bool shouldNotify = parameterGestureDepth++ == 0;
+    updateAnimationTargets();
+    auto beginCallback = shouldNotify ? parameterGestureBegin
+                                      : ParameterGestureCallback {};
+
+    if (beginCallback)
+        beginCallback();
 }
 
 void VerticalLine::endParameterGesture()
@@ -196,8 +220,13 @@ void VerticalLine::endParameterGesture()
     if (parameterGestureDepth <= 0)
         return;
 
-    if (--parameterGestureDepth == 0 && parameterGestureEnd)
-        parameterGestureEnd();
+    const bool shouldNotify = --parameterGestureDepth == 0;
+    updateAnimationTargets();
+    auto endCallback = shouldNotify ? parameterGestureEnd
+                                    : ParameterGestureCallback {};
+
+    if (endCallback)
+        endCallback();
 }
 
 void VerticalLine::setValueAsPartOfGesture(double newValue,
@@ -205,7 +234,20 @@ void VerticalLine::setValueAsPartOfGesture(double newValue,
 {
     const double constrainedValue = getNormalisableRange().snapToLegalValue(newValue);
     if (! juce::approximatelyEqual(constrainedValue, getValue()) && parameterChange)
-        parameterChange();
+    {
+        auto changeCallback = parameterChange;
+        juce::Component::SafePointer<VerticalLine> safeThis(this);
+        auto gestureToken = changeCallback();
+
+        if (safeThis == nullptr || gestureToken == nullptr)
+            return;
+
+        // Keep the processor-owned gesture session alive until every
+        // synchronous value callback has returned. setValue is intentionally
+        // the final component access in this branch.
+        setValue(newValue, notification);
+        return;
+    }
 
     setValue(newValue, notification);
 }

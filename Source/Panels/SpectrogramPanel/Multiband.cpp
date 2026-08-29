@@ -23,6 +23,59 @@ bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
 }
 } // namespace
 
+struct Multiband::CrossoverGestureSession
+{
+    explicit CrossoverGestureSession(
+        std::array<juce::RangedAudioParameter*, 3> parametersToUse)
+        : parameters(parametersToUse)
+    {
+    }
+
+    ~CrossoverGestureSession()
+    {
+        finish();
+    }
+
+    bool touch(size_t dividerIndex)
+    {
+        if (dividerIndex >= parameters.size())
+            return false;
+
+        if (touched[dividerIndex])
+            return true;
+
+        auto* parameter = parameters[dividerIndex];
+        if (parameter == nullptr)
+            return false;
+
+        // Mark first: beginChangeGesture may synchronously destroy the editor
+        // and release its owning reference to this session.
+        touched[dividerIndex] = true;
+        parameter->beginChangeGesture();
+        return true;
+    }
+
+private:
+    void finish()
+    {
+        const auto parametersToEnd = parameters;
+        const auto touchedToEnd = touched;
+        parameters.fill(nullptr);
+        touched.fill(false);
+
+        // Use only processor-owned parameter pointers from here on. Any one
+        // end notification may synchronously destroy the editor, but every
+        // gesture that began still receives its matching end notification.
+        for (size_t dividerIndex = 0; dividerIndex < parametersToEnd.size(); ++dividerIndex)
+            if (touchedToEnd[dividerIndex])
+                if (auto* parameter = parametersToEnd[dividerIndex])
+                    parameter->endChangeGesture();
+    }
+
+    std::array<juce::RangedAudioParameter*, 3> parameters {};
+    std::array<bool, 3> touched {};
+};
+
 //==============================================================================
 Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : processor(p), stateComponent(sc)
 {
@@ -55,7 +108,7 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
             ParameterIDAndName::getIDString(FREQ_ID, i));
         freqDividerGroup[i]->getVerticalLine().setParameterGestureCallbacks(
             [this] { beginCrossoverGesture(); },
-            [this, i] { touchCrossoverParameter(i); },
+            [this, i] { return touchCrossoverParameter(i); },
             [this] { endCrossoverGesture(); });
         freqDividerGroup[i]->setFrequencyEditCallback([this, i](float xPercent)
         {
@@ -229,21 +282,36 @@ void Multiband::dismissTransientUi()
     isDragging = false;
     primaryDragActive = false;
     hoveredBandIndex = -1;
+    juce::Component::SafePointer<Multiband> safeThis(this);
 
     for (const auto& dividerGroup : freqDividerGroup)
+    {
         if (dividerGroup != nullptr)
             dividerGroup->dismissImmediately();
+
+        if (safeThis == nullptr)
+            return;
+    }
 
     for (auto& bandUI : bandUIs)
     {
         if (bandUI.soloButton != nullptr)
             bandUI.soloButton->dismissPointerGesture();
 
+        if (safeThis == nullptr)
+            return;
+
         if (bandUI.enableButton != nullptr)
             bandUI.enableButton->dismissPointerGesture();
 
+        if (safeThis == nullptr)
+            return;
+
         if (bandUI.closeButton != nullptr)
             bandUI.closeButton->setPresented(false, false);
+
+        if (safeThis == nullptr)
+            return;
     }
 }
 
@@ -623,9 +691,17 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
 
     const auto localEvent = e.getEventRelativeTo(this);
     const float targetXPercent = localEvent.position.x / static_cast<float>(getWidth());
+    juce::Component::SafePointer<Multiband> safeThis(this);
     dragLines(targetXPercent, dividerIndex);
 
+    if (safeThis == nullptr)
+        return;
+
     sortLinesInternal(false);
+
+    if (safeThis == nullptr)
+        return;
+
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
     repaint();
@@ -736,14 +812,22 @@ void Multiband::dragLines(float xPercent, int index)
     if (! juce::isPositiveAndBelow(index, lineNum))
         return;
 
+    juce::Component::SafePointer<Multiband> safeThis(this);
     {
         // SliderAttachment notifications are synchronous. Suppress the normal
         // slider canonicalisation callback until this ordered recursive
         // publication is complete, otherwise integer-Hz quantisation can
         // re-enter moveToX and publish an outer divider prematurely.
-        const juce::ScopedValueSetter<bool> cascadeGuard(
-            isPublishingCrossoverCascade, true);
+        isPublishingCrossoverCascade = true;
+        const juce::ScopeGuard cascadeGuard { [safeThis]
+        {
+            if (safeThis != nullptr)
+                safeThis->isPublishingCrossoverCascade = false;
+        } };
         freqDividerGroup[index]->moveToX(lineNum, xPercent, limitLeft, freqDividerGroup);
+
+        if (safeThis == nullptr)
+            return;
     }
 
     setLineRelatedBoundsByX();
@@ -755,23 +839,41 @@ void Multiband::dragLines(float xPercent, int index)
 void Multiband::beginCrossoverGesture()
 {
     if (crossoverGestureDepth++ == 0)
-        crossoverParametersTouched.fill(false);
+        crossoverGestureSession = std::make_shared<CrossoverGestureSession>(
+            crossoverParameters);
 }
 
-void Multiband::touchCrossoverParameter(int dividerIndex)
+VerticalLine::ParameterGestureToken Multiband::touchCrossoverParameter(
+    int dividerIndex)
 {
-    if (crossoverGestureDepth <= 0 || ! juce::isPositiveAndBelow(dividerIndex, 3))
-        return;
+    if (! juce::isPositiveAndBelow(dividerIndex, 3))
+        return {};
+
+    // Some regression and state-restoration paths intentionally publish a
+    // crossover without an interactive gesture. They still need the value
+    // update, but do not require a host begin/end pair.
+    if (crossoverGestureDepth <= 0)
+    {
+        static const auto publicationToken = std::make_shared<int>(0);
+        return publicationToken;
+    }
 
     const auto arrayIndex = static_cast<size_t>(dividerIndex);
-    if (crossoverParametersTouched[arrayIndex])
-        return;
+    auto session = crossoverGestureSession;
+    if (session == nullptr)
+        return {};
 
-    if (auto* parameter = crossoverParameters[arrayIndex])
-    {
-        parameter->beginChangeGesture();
-        crossoverParametersTouched[arrayIndex] = true;
-    }
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    if (! session->touch(arrayIndex))
+        return {};
+
+    if (safeThis == nullptr)
+        return {};
+
+    if (crossoverGestureDepth <= 0 || crossoverGestureSession != session)
+        return {};
+
+    return session;
 }
 
 void Multiband::endCrossoverGesture()
@@ -779,14 +881,11 @@ void Multiband::endCrossoverGesture()
     if (crossoverGestureDepth <= 0 || --crossoverGestureDepth > 0)
         return;
 
-    for (size_t dividerIndex = 0; dividerIndex < crossoverParameters.size(); ++dividerIndex)
-    {
-        if (crossoverParametersTouched[dividerIndex])
-            if (auto* parameter = crossoverParameters[dividerIndex])
-                parameter->endChangeGesture();
-    }
+    auto endingSession = std::move(crossoverGestureSession);
 
-    crossoverParametersTouched.fill(false);
+    // Releasing the last reference emits every matching end notification and
+    // may synchronously delete this Multiband. It must remain the final access.
+    endingSession.reset();
 }
 
 void Multiband::setLineRelatedBoundsByX()
@@ -894,7 +993,13 @@ bool Multiband::updateFocusIndex(int requestedIndex, bool forceNotification)
     focusIndex = newFocus;
 
     if (didChange || forceNotification)
+    {
+        juce::Component::SafePointer<Multiband> safeThis(this);
         notifyFocusChanged();
+
+        if (safeThis == nullptr)
+            return didChange;
+    }
 
     if (didChange)
         repaint();
@@ -922,6 +1027,7 @@ void Multiband::sliderValueChanged(juce::Slider* slider)
         || processor.isMultibandTopologyEditInProgress())
         return;
 
+    juce::Component::SafePointer<Multiband> safeThis(this);
     lineNum = countLines();
     setLineIndex();
     for (int i = 0; i < lineNum; i++)
@@ -930,12 +1036,23 @@ void Multiband::sliderValueChanged(juce::Slider* slider)
         {
             int freq = slider->getValue();
             freqDividerGroup[i]->setFreq(freq);
+
+            if (safeThis == nullptr)
+                return;
+
             freqDividerGroup[i]->moveToX(lineNum, freqDividerGroup[i]->getVerticalLine().getXPercent(), limitLeft, freqDividerGroup);
+
+            if (safeThis == nullptr)
+                return;
         }
     }
     // Parameters and presets can reduce the band count asynchronously.  Route
     // the clamp through the same focus notification path as direct clicks.
     updateFocusIndex(focusIndex, false);
+
+    if (safeThis == nullptr)
+        return;
+
     setLineRelatedBoundsByX();
     setSoloRelatedBounds();
     refreshHoveredBandFromMouse();

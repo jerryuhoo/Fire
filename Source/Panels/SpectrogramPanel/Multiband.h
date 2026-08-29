@@ -20,6 +20,7 @@
 #include "SoloButton.h"
 #include "SpectrumComponent.h"
 #include <functional>
+#include <memory>
 #include <vector>
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -132,11 +133,12 @@ private:
     void refreshHoveredBandFromMouse();
     void updateCloseButtonVisibility();
 
+    struct CrossoverGestureSession;
     void beginCrossoverGesture();
-    void touchCrossoverParameter(int dividerIndex);
+    VerticalLine::ParameterGestureToken touchCrossoverParameter(int dividerIndex);
     void endCrossoverGesture();
     std::array<juce::RangedAudioParameter*, 3> crossoverParameters {};
-    std::array<bool, 3> crossoverParametersTouched {};
+    std::shared_ptr<CrossoverGestureSession> crossoverGestureSession;
     int crossoverGestureDepth = 0;
 
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];

@@ -39,6 +39,7 @@ public:
 
 private:
     void applyEditedText();
+    void finishEditorGesture();
     void updateLabelText();
 
     VerticalLine& verticalLine;

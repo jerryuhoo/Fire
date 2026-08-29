@@ -211,6 +211,80 @@ private:
     }
 };
 
+enum class ParameterCallbackStage
+{
+    begin,
+    value,
+    end
+};
+
+class EditorResetOnParameterStage final : public juce::AudioProcessorListener
+{
+public:
+    EditorResetOnParameterStage(
+        FireAudioProcessor& processorToObserve,
+        std::unique_ptr<FireAudioProcessorEditor>& editorToReset,
+        int parameterIndexToObserve,
+        ParameterCallbackStage stageToObserve)
+        : processor(processorToObserve),
+          editor(editorToReset),
+          parameterIndex(parameterIndexToObserve),
+          stage(stageToObserve)
+    {
+        processor.addListener(this);
+    }
+
+    ~EditorResetOnParameterStage() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (stage == ParameterCallbackStage::value)
+            resetEditor(changedParameterIndex);
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    void audioProcessorParameterChangeGestureBegin(juce::AudioProcessor*,
+                                                   int changedParameterIndex) override
+    {
+        if (stage == ParameterCallbackStage::begin)
+            resetEditor(changedParameterIndex);
+    }
+
+    void audioProcessorParameterChangeGestureEnd(juce::AudioProcessor*,
+                                                 int changedParameterIndex) override
+    {
+        if (stage == ParameterCallbackStage::end)
+            resetEditor(changedParameterIndex);
+    }
+
+    bool didResetEditor = false;
+
+private:
+    void resetEditor(int changedParameterIndex)
+    {
+        if (changedParameterIndex != parameterIndex || editor == nullptr)
+            return;
+
+        didResetEditor = true;
+        editor.reset();
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<FireAudioProcessorEditor>& editor;
+    int parameterIndex = -1;
+    ParameterCallbackStage stage;
+};
+
 class ParameterGestureCapture final : public juce::AudioProcessorListener
 {
 public:
@@ -798,6 +872,229 @@ TEST_CASE("Crossover mouse and text edits bracket host automation gestures",
     }
 }
 
+TEST_CASE("Crossover text gestures survive synchronous editor teardown",
+          "[multiband][ui][automation][gesture][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1000.0f, 0.0f, 0.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+
+    auto* frequencyText = findDescendant<FreqTextLabel>(*dividerGroups[0]);
+    REQUIRE(frequencyText != nullptr);
+    auto* label = findDescendant<juce::Label>(*frequencyText);
+    REQUIRE(label != nullptr);
+    REQUIRE(static_cast<bool>(label->onEditorShow));
+    REQUIRE(static_cast<bool>(label->onEditorHide));
+
+    const auto frequencyID = ParameterIDAndName::getIDString(FREQ_ID, 0);
+    auto* frequencyParameter = processor.treeState.getParameter(frequencyID);
+    REQUIRE(frequencyParameter != nullptr);
+    const auto initialFrequency = frequencyParameter->convertFrom0to1(
+        frequencyParameter->getValue());
+    ParameterGestureCapture host(processor, frequencyParameter->getParameterIndex());
+
+    const auto commitText = [label]
+    {
+        label->onEditorShow();
+        label->setText("1.60 kHz", juce::dontSendNotification);
+        auto editorHide = label->onEditorHide;
+        editorHide();
+    };
+
+    SECTION("teardown from begin notification closes before any value")
+    {
+        EditorResetOnParameterStage resetter(
+            processor,
+            editor,
+            frequencyParameter->getParameterIndex(),
+            ParameterCallbackStage::begin);
+
+        commitText();
+
+        CHECK(resetter.didResetEditor);
+        CHECK(editor == nullptr);
+        CHECK(frequencyParameter->convertFrom0to1(frequencyParameter->getValue())
+              == Catch::Approx(initialFrequency));
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.valueChangeCount == 0);
+        CHECK(host.gestureDepth == 0);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(host.minimumGestureDepth == 0);
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+        CHECK(host.events == std::vector<char> { 'B', 'E' });
+    }
+
+    SECTION("teardown from value notification preserves begin value end ordering")
+    {
+        EditorResetOnParameterStage resetter(
+            processor,
+            editor,
+            frequencyParameter->getParameterIndex(),
+            ParameterCallbackStage::value);
+
+        commitText();
+
+        CHECK(resetter.didResetEditor);
+        CHECK(editor == nullptr);
+        CHECK(frequencyParameter->convertFrom0to1(frequencyParameter->getValue())
+              == Catch::Approx(1600.0f));
+        CHECK(host.beginCount == 1);
+        CHECK(host.endCount == 1);
+        CHECK(host.valueChangeCount >= 1);
+        CHECK(host.gestureDepth == 0);
+        CHECK(host.maximumGestureDepth == 1);
+        CHECK(host.minimumGestureDepth == 0);
+        CHECK_FALSE(host.valueChangedOutsideGesture);
+        REQUIRE(host.events.size() >= 3);
+        CHECK(host.events.front() == 'B');
+        CHECK(host.events.back() == 'E');
+    }
+}
+
+TEST_CASE("Crossover cascade finishes every gesture after editor teardown",
+          "[multiband][ui][automation][gesture][lifecycle][cascade]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 4, { 320.0f, 640.0f, 1280.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    REQUIRE(dividerGroups[1] != nullptr);
+    REQUIRE(dividerGroups[2] != nullptr);
+
+    std::array<juce::RangedAudioParameter*, 3> frequencyParameters {};
+    for (int dividerIndex = 0; dividerIndex < 3; ++dividerIndex)
+    {
+        frequencyParameters[static_cast<size_t>(dividerIndex)] =
+            processor.treeState.getParameter(
+                ParameterIDAndName::getIDString(FREQ_ID, dividerIndex));
+        REQUIRE(frequencyParameters[static_cast<size_t>(dividerIndex)] != nullptr);
+    }
+
+    ParameterGestureCapture firstHost(
+        processor, frequencyParameters[0]->getParameterIndex());
+    ParameterGestureCapture secondHost(
+        processor, frequencyParameters[1]->getParameterIndex());
+    ParameterGestureCapture thirdHost(
+        processor, frequencyParameters[2]->getParameterIndex());
+
+    const std::array<double, 3> initialFrequencies {
+        frequencyParameters[0]->convertFrom0to1(frequencyParameters[0]->getValue()),
+        frequencyParameters[1]->convertFrom0to1(frequencyParameters[1]->getValue()),
+        frequencyParameters[2]->convertFrom0to1(frequencyParameters[2]->getValue())
+    };
+
+    SECTION("deepest value teardown stops the recursive publication")
+    {
+        EditorResetOnParameterStage resetter(
+            processor,
+            editor,
+            frequencyParameters[2]->getParameterIndex(),
+            ParameterCallbackStage::value);
+
+        auto& source = dividerGroups[0]->getVerticalLine();
+        auto& sourceComponent = static_cast<juce::Component&>(source);
+        const auto eventPosition = source.getLocalBounds().toFloat().getCentre();
+        sourceComponent.mouseDown(
+            makeMouseEvent(source,
+                           eventPosition,
+                           juce::ModifierKeys::leftButtonModifier));
+        multiband->dragLines(0.70f, 0);
+
+        CHECK(resetter.didResetEditor);
+        CHECK(editor == nullptr);
+        CHECK(frequencyParameters[0]->convertFrom0to1(frequencyParameters[0]->getValue())
+              == Catch::Approx(initialFrequencies[0]));
+        CHECK(frequencyParameters[1]->convertFrom0to1(frequencyParameters[1]->getValue())
+              == Catch::Approx(initialFrequencies[1]));
+        CHECK(frequencyParameters[2]->convertFrom0to1(frequencyParameters[2]->getValue())
+              != Catch::Approx(initialFrequencies[2]));
+        checkNoGestureActivity(firstHost);
+        checkNoGestureActivity(secondHost);
+        checkBalancedGesture(thirdHost);
+    }
+
+    SECTION("first end teardown still finishes every touched parameter")
+    {
+        auto& source = dividerGroups[0]->getVerticalLine();
+        auto& sourceComponent = static_cast<juce::Component&>(source);
+        const auto eventPosition = source.getLocalBounds().toFloat().getCentre();
+        sourceComponent.mouseDown(
+            makeMouseEvent(source,
+                           eventPosition,
+                           juce::ModifierKeys::leftButtonModifier));
+        multiband->dragLines(0.70f, 0);
+
+        CHECK(firstHost.beginCount == 1);
+        CHECK(secondHost.beginCount == 1);
+        CHECK(thirdHost.beginCount == 1);
+        CHECK(firstHost.endCount == 0);
+        CHECK(secondHost.endCount == 0);
+        CHECK(thirdHost.endCount == 0);
+
+        EditorResetOnParameterStage resetter(
+            processor,
+            editor,
+            frequencyParameters[0]->getParameterIndex(),
+            ParameterCallbackStage::end);
+        sourceComponent.mouseUp(makeMouseEvent(source, eventPosition));
+
+        CHECK(resetter.didResetEditor);
+        CHECK(editor == nullptr);
+        checkBalancedGesture(firstHost);
+        checkBalancedGesture(secondHost);
+        checkBalancedGesture(thirdHost);
+    }
+}
+
+TEST_CASE("VerticalLine stops value publication when its owner is removed",
+          "[multiband][ui][automation][gesture][lifecycle][vertical-line]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    auto divider = std::make_unique<VerticalLine>();
+    divider->setRange(40.0, 10024.0, 1.0);
+    divider->setValue(1000.0, juce::dontSendNotification);
+
+    bool changeCallbackRan = false;
+    const auto lifetimeToken = std::make_shared<int>(0);
+    divider->setParameterGestureCallbacks(
+        [] {},
+        [&divider, &changeCallbackRan, lifetimeToken]
+        {
+            changeCallbackRan = true;
+            divider.reset();
+            return lifetimeToken;
+        },
+        [] {});
+
+    auto* dividerToEdit = divider.get();
+    REQUIRE(dividerToEdit != nullptr);
+    dividerToEdit->setValueAsPartOfGesture(1600.0,
+                                           juce::sendNotificationSync);
+
+    CHECK(changeCallbackRan);
+    CHECK(divider == nullptr);
+}
+
 TEST_CASE("Crossover controls reject popup and auxiliary pointer gestures",
           "[multiband][ui][automation][gesture][input]")
 {
@@ -1132,7 +1429,7 @@ TEST_CASE("Frequency labels animate on the shared UI clock and stay edge-safe",
     int gestureEnds = 0;
     lifecycleDivider.setParameterGestureCallbacks(
         [&gestureBegins] { ++gestureBegins; },
-        [] {},
+        [] { return std::make_shared<int>(0); },
         [&gestureEnds] { ++gestureEnds; });
     auto* lifecycleChild = findDescendant<juce::Label>(lifecycleLabel);
     REQUIRE(lifecycleChild != nullptr);
@@ -2095,7 +2392,7 @@ TEST_CASE("Crossover divider hover and press feedback fades on the shared clock"
     int gestureBegins = 0;
     int gestureEnds = 0;
     divider.setParameterGestureCallbacks([&gestureBegins] { ++gestureBegins; },
-                                         [] {},
+                                         [] { return std::make_shared<int>(0); },
                                          [&gestureEnds] { ++gestureEnds; });
     static_cast<juce::Component&>(divider).mouseEnter(
         makeMouseEvent(divider, centre));

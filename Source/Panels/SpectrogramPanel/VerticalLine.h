@@ -13,6 +13,7 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/FireTheme.h"
 #include <functional>
+#include <memory>
 
 //==============================================================================
 /*
@@ -38,8 +39,10 @@ public:
     void moveToX (int lineNum, float newXPercent, float margin, std::unique_ptr<VerticalLine> verticalLines[]);
 
     using ParameterGestureCallback = std::function<void()>;
+    using ParameterGestureToken = std::shared_ptr<void>;
+    using ParameterChangeCallback = std::function<ParameterGestureToken()>;
     void setParameterGestureCallbacks (ParameterGestureCallback gestureBegin,
-                                       ParameterGestureCallback parameterChange,
+                                       ParameterChangeCallback parameterChange,
                                        ParameterGestureCallback gestureEnd);
     void beginParameterGesture();
     void endParameterGesture();
@@ -67,7 +70,7 @@ private:
     int rightIndex = -1; // right index
     int index = -1;
     ParameterGestureCallback parameterGestureBegin;
-    ParameterGestureCallback parameterChange;
+    ParameterChangeCallback parameterChange;
     ParameterGestureCallback parameterGestureEnd;
     int parameterGestureDepth = 0;
     bool primaryDragActive = false;

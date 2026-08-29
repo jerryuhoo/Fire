@@ -89,12 +89,20 @@ bool FreqDividerGroup::advanceAnimation(float deltaSeconds)
 
 void FreqDividerGroup::dismissImmediately()
 {
+    juce::Component::SafePointer<FreqDividerGroup> safeThis(this);
     freqTextLabel.dismissImmediately();
+
+    if (safeThis == nullptr)
+        return;
+
+    // The gesture-end callback may synchronously delete the owning editor, so
+    // this is deliberately the final component operation.
     verticalLine.dismissTransientInteraction();
 }
 
 void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std::unique_ptr<FreqDividerGroup> freqDividerGroup[])
 {
+    juce::Component::SafePointer<FreqDividerGroup> safeThis(this);
     const int index = verticalLine.getIndex();
     if (! getToggleState() || ! juce::isPositiveAndBelow(index, lineNum)
         || lineNum > 3 || ! std::isfinite(newXPercent))
@@ -122,10 +130,16 @@ void FreqDividerGroup::moveToX(int lineNum, float newXPercent, float margin, std
     if (verticalLine.getLeft() >= 0 && freqDividerGroup[verticalLine.getLeft()]->getToggleState() && newXPercent - freqDividerGroup[verticalLine.getLeft()]->verticalLine.getXPercent() - margin < -0.00001f) // float is not accurate!!!!
     {
         freqDividerGroup[verticalLine.getLeft()]->moveToX(lineNum, newXPercent - margin, margin, freqDividerGroup);
+
+        if (safeThis == nullptr)
+            return;
     }
     if (verticalLine.getRight() > 0 && verticalLine.getRight() < lineNum && freqDividerGroup[verticalLine.getRight()]->getToggleState() && freqDividerGroup[verticalLine.getRight()]->verticalLine.getXPercent() - newXPercent - margin < -0.00001f)
     {
         freqDividerGroup[verticalLine.getRight()]->moveToX(lineNum, newXPercent + margin, margin, freqDividerGroup);
+
+        if (safeThis == nullptr)
+            return;
     }
 
     // Keep the APVTS frequency authoritative in the same message-thread turn,
@@ -186,7 +200,12 @@ void FreqDividerGroup::setFreq(float f, juce::NotificationType notification)
         return;
     }
 
+    juce::Component::SafePointer<FreqDividerGroup> safeThis(this);
     verticalLine.setValue(f, notification);
+
+    if (safeThis == nullptr)
+        return;
+
     const auto clampedFrequency = static_cast<float>(verticalLine.getValue());
     verticalLine.setXPercent(static_cast<float>(transformToLog(clampedFrequency)));
     freqTextLabel.setFreq(juce::roundToInt(clampedFrequency));

@@ -19,9 +19,8 @@
 #include "../../Utility/VersionInfo.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
-#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+#include <cstdint>
 #include <functional>
-#endif
 
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -241,6 +240,8 @@ PluginProcessor).
         //TextButton deletePresetButton;
         PrimaryTextButton menuButton;
         juce::PopupMenu presetMenu;
+        std::uint64_t presetMenuSessionGeneration = 0;
+        bool presetMenuSessionActive = false;
 
         bool isChanged = false;
 
@@ -256,6 +257,8 @@ PluginProcessor).
         void rescanPresetFolder();
         void creatFolderIfNotExist(juce::File userFile);
         void popPresetMenu();
+        std::function<void(int)> createPresetMenuResultHandler();
+        void invalidatePresetMenuSession() noexcept;
         void handlePresetMenuResult(int result);
         void showSettingsDialog();
         float getPresetMenuScale() const noexcept;

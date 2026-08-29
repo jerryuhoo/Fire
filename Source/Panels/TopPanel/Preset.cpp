@@ -13,6 +13,7 @@
 #include <cerrno>
 #include <cstdlib>
 #include <limits>
+#include <utility>
 
 namespace
 {
@@ -1257,6 +1258,7 @@ namespace state
     StateComponent::~StateComponent()
     {
         stopTimer();
+        invalidatePresetMenuSession();
         dismissSettingsDialog();
         presetMenu.setLookAndFeel(nullptr);
 
@@ -1410,7 +1412,10 @@ namespace state
         juce::Component::visibilityChanged();
 
         if (! isShowing())
+        {
+            invalidatePresetMenuSession();
             dismissSettingsDialog();
+        }
     }
 
     void StateComponent::buttonClicked(juce::Button* clickedButton)
@@ -1863,6 +1868,10 @@ namespace state
 
     void StateComponent::popPresetMenu()
     {
+        if (! isShowing())
+            return;
+
+        auto resultHandler = createPresetMenuResultHandler();
         presetMenu.clear();
         presetMenu.addItem(1, "Init", true);
         presetMenu.addItem(2, "Open Preset Folder", true);
@@ -1876,14 +1885,50 @@ namespace state
         menuLookAndFeel->scale = menuScale;
         presetMenu.setLookAndFeel(menuLookAndFeel.get());
 
-        juce::Component::SafePointer<StateComponent> safeThis(this);
         presetMenu.showMenuAsync(createPresetMenuOptions(menuScale),
-                                 [safeThis, menuLookAndFeel](int result)
+                                 [consumeResult = std::move(resultHandler),
+                                  menuLookAndFeel](int result) mutable
                                  {
                                      juce::ignoreUnused(menuLookAndFeel);
-                                     if (safeThis != nullptr)
-                                         safeThis->handlePresetMenuResult(result);
+                                     consumeResult(result);
                                  });
+    }
+
+    std::function<void(int)> StateComponent::createPresetMenuResultHandler()
+    {
+        // Only the newest visible menu may issue a command. PopupMenu closes
+        // asynchronously, so cancellation from an older menu can arrive after
+        // a replacement has already opened.
+        invalidatePresetMenuSession();
+        const auto sessionGeneration = presetMenuSessionGeneration;
+        presetMenuSessionActive = true;
+
+        return [safeThis = juce::Component::SafePointer<StateComponent>(this),
+                sessionGeneration](int result)
+        {
+            if (safeThis == nullptr
+                || ! safeThis->presetMenuSessionActive
+                || safeThis->presetMenuSessionGeneration != sessionGeneration)
+                return;
+
+            // Consume before dispatch. Init and other commands can synchronously
+            // notify the host, which is allowed to destroy the complete editor.
+            safeThis->presetMenuSessionActive = false;
+            ++safeThis->presetMenuSessionGeneration;
+            safeThis->presetMenu.setLookAndFeel(nullptr);
+
+            if (! safeThis->isShowing() || ! safeThis->isEnabled())
+                return;
+
+            safeThis->handlePresetMenuResult(result);
+        };
+    }
+
+    void StateComponent::invalidatePresetMenuSession() noexcept
+    {
+        presetMenuSessionActive = false;
+        ++presetMenuSessionGeneration;
+        presetMenu.setLookAndFeel(nullptr);
     }
 
     void StateComponent::handlePresetMenuResult(int result)
@@ -2038,6 +2083,10 @@ namespace state
 
     void StateComponent::dismissPointerGestures() noexcept
     {
+        // The editor calls this when an ancestor is hidden. JUCE does not send
+        // visibilityChanged() to every descendant, so invalidate the menu here
+        // as well as in StateComponent::visibilityChanged().
+        invalidatePresetMenuSession();
         toggleABButton.dismissPointerGesture();
         copyABButton.dismissPointerGesture();
         previousButton.dismissPointerGesture();

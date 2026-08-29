@@ -12,6 +12,12 @@
 
 struct StateComponentMenuTestAccess
 {
+    static std::function<void(int)> createResultHandler(
+        state::StateComponent& component)
+    {
+        return component.createPresetMenuResultHandler();
+    }
+
     static void handleResult(state::StateComponent& component, int result)
     {
         component.handlePresetMenuResult(result);
@@ -806,6 +812,88 @@ TEST_CASE("Preset Init survives synchronous component deletion by the host",
         CHECK(committedHost.generations.front() % 2u == 0u);
         CHECK(getPlainParameter(processor, driveID)
               == Catch::Approx(defaultDrive));
+    }
+}
+
+TEST_CASE("Preset menu rejects hidden and superseded asynchronous results",
+          "[preset][ui][menu][session][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    auto* driveParameter = processor.treeState.getParameter(driveID);
+    REQUIRE(driveParameter != nullptr);
+    const auto defaultDrive = driveParameter->getNormalisableRange()
+                                  .convertFrom0to1(
+                                      driveParameter->getDefaultValue());
+
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(0);
+    component.setVisible(true);
+    const juce::ScopeGuard removeFromDesktop { [&]
+    {
+        component.removeFromDesktop();
+    } };
+    REQUIRE(component.isShowing());
+
+    SECTION("a replacement menu invalidates the older result")
+    {
+        setPlainParameter(processor, driveID, 73.0f);
+        auto staleResult =
+            StateComponentMenuTestAccess::createResultHandler(component);
+        auto currentResult =
+            StateComponentMenuTestAccess::createResultHandler(component);
+
+        staleResult(1);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+
+        currentResult(1);
+        CHECK(getPlainParameter(processor, driveID)
+              == Catch::Approx(defaultDrive));
+
+        setPlainParameter(processor, driveID, 61.0f);
+        currentResult(1);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(61.0f));
+    }
+
+    SECTION("an editor visibility boundary invalidates the pending result")
+    {
+        setPlainParameter(processor, driveID, 73.0f);
+        auto staleResult =
+            StateComponentMenuTestAccess::createResultHandler(component);
+
+        component.dismissPointerGestures();
+        staleResult(1);
+
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
+
+    SECTION("direct hiding invalidates the pending result")
+    {
+        setPlainParameter(processor, driveID, 73.0f);
+        auto staleResult =
+            StateComponentMenuTestAccess::createResultHandler(component);
+
+        component.setVisible(false);
+        staleResult(1);
+
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
+
+    SECTION("disabling rejects and consumes the pending result")
+    {
+        setPlainParameter(processor, driveID, 73.0f);
+        auto staleResult =
+            StateComponentMenuTestAccess::createResultHandler(component);
+
+        component.setEnabled(false);
+        staleResult(1);
+        component.setEnabled(true);
+        staleResult(1);
+
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
     }
 }
 

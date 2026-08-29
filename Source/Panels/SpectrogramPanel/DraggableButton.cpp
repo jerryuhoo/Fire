@@ -89,11 +89,13 @@ void DraggableButton::setState(const bool state)
     if (mState == state)
         return;
 
-    if (! state)
-        dismissTransientInteraction();
-
     mState = state;
     repaint();
+
+    // Ending an active drag can synchronously remove this component through a
+    // host parameter callback, so it must be the final access in this path.
+    if (! state)
+        dismissTransientInteraction();
 }
 
 void DraggableButton::mouseDown(const juce::MouseEvent& event)
@@ -102,13 +104,21 @@ void DraggableButton::mouseDown(const juce::MouseEvent& event)
 
     // A host can hide the editor before JUCE delivers mouseUp. Close that
     // stale ownership before deciding whether this new pointer is eligible.
+    juce::Component::SafePointer<DraggableButton> safeThis(this);
     dismissTransientInteraction();
+
+    if (safeThis == nullptr)
+        return;
 
     if (! mState || ! onDrag || ! isPrimaryPointerDown(event))
         return;
 
     primaryDragActive = true;
-    onDrag(*this, event);
+    auto dragCallback = onDrag;
+
+    // Keep the callable alive if it removes its owning component. No member is
+    // accessed after the callback begins.
+    dragCallback(*this, event);
 }
 
 void DraggableButton::mouseDrag(const juce::MouseEvent& event)
@@ -116,7 +126,10 @@ void DraggableButton::mouseDrag(const juce::MouseEvent& event)
     juce::Component::mouseDrag(event);
 
     if (primaryDragActive && mState && onDrag)
-        onDrag(*this, event);
+    {
+        auto dragCallback = onDrag;
+        dragCallback(*this, event);
+    }
 }
 
 void DraggableButton::mouseUp(const juce::MouseEvent& event)
@@ -136,7 +149,10 @@ void DraggableButton::dismissTransientInteraction()
 
     primaryDragActive = false;
     if (onDragFinished)
-        onDragFinished();
+    {
+        auto finishedCallback = onDragFinished;
+        finishedCallback();
+    }
 }
 
 void DraggableButton::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
@@ -145,6 +161,7 @@ void DraggableButton::mouseWheelMove(const juce::MouseEvent& event, const juce::
 
     if (mState && onQValueChanged)
     {
-        onQValueChanged(wheel.deltaY);
+        auto qValueCallback = onQValueChanged;
+        qValueCallback(wheel.deltaY);
     }
 }

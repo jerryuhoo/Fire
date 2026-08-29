@@ -7,6 +7,7 @@
 
 #include <array>
 #include <atomic>
+#include <memory>
 #include <vector>
 
 struct FilterControlTestAccess
@@ -14,6 +15,11 @@ struct FilterControlTestAccess
     static DraggableButton& lowButton(FilterControl& control)
     {
         return control.draggableLowButton;
+    }
+
+    static void updateButtonStates(FilterControl& control)
+    {
+        control.updateDraggableButtonStates();
     }
 };
 
@@ -121,6 +127,78 @@ private:
     FireAudioProcessor& processor;
     std::vector<int> observedIndices;
     std::vector<GestureEvents> events;
+};
+
+enum class ParameterCallbackStage
+{
+    begin,
+    value,
+    end
+};
+
+class ControlReleaseOnParameterCallback final : public juce::AudioProcessorListener
+{
+public:
+    ControlReleaseOnParameterCallback(FireAudioProcessor& processorToObserve,
+                                      const juce::String& parameterID,
+                                      ParameterCallbackStage stageToObserve,
+                                      std::unique_ptr<FilterControl>& controlToRelease)
+        : processor(processorToObserve), control(controlToRelease), stage(stageToObserve)
+    {
+        const auto* parameter = processor.treeState.getParameter(parameterID);
+        REQUIRE(parameter != nullptr);
+        targetParameterIndex = parameter->getParameterIndex();
+        processor.addListener(this);
+    }
+
+    ~ControlReleaseOnParameterCallback() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int parameterIndex,
+                                        float) override
+    {
+        releaseIfMatching(ParameterCallbackStage::value, parameterIndex);
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails&) override
+    {
+    }
+
+    void audioProcessorParameterChangeGestureBegin(juce::AudioProcessor*,
+                                                   int parameterIndex) override
+    {
+        releaseIfMatching(ParameterCallbackStage::begin, parameterIndex);
+    }
+
+    void audioProcessorParameterChangeGestureEnd(juce::AudioProcessor*,
+                                                 int parameterIndex) override
+    {
+        releaseIfMatching(ParameterCallbackStage::end, parameterIndex);
+    }
+
+    bool didRelease() const noexcept { return released; }
+
+private:
+    void releaseIfMatching(ParameterCallbackStage callbackStage, int parameterIndex)
+    {
+        if (callbackStage == stage && parameterIndex == targetParameterIndex
+            && control != nullptr)
+        {
+            released = true;
+            control.reset();
+        }
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<FilterControl>& control;
+    ParameterCallbackStage stage;
+    int targetParameterIndex = -1;
+    bool released = false;
 };
 
 void checkBalanced(const GestureEvents& events)
@@ -400,4 +478,199 @@ TEST_CASE("Filter graph nodes discard primary drag ownership when hidden",
               == Catch::Approx(valuesAfterHide[index]));
         checkInactive(rejectedCapture.forParameter(index));
     }
+}
+
+TEST_CASE("Filter graph drag completion survives control release from a host callback",
+          "[filter-control][ui][automation][gesture][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    setPlainParameter(processor, LOW_ID, 0.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    auto control = std::make_unique<FilterControl>(processor, panel);
+    control->setBounds(0, 0, 1000, 400);
+    auto* lowButton = &FilterControlTestAccess::lowButton(*control);
+    REQUIRE_FALSE(lowButton->getBounds().isEmpty());
+
+    GestureCapture capture(processor,
+                           { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID });
+    const auto downPosition = lowButton->getLocalBounds().toFloat().getCentre();
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    lowButton->mouseDown(makeMouseEvent(*lowButton,
+                                        downPosition,
+                                        leftButton,
+                                        downPosition));
+
+    const auto targetInControl = juce::Point<float> { 650.0f, 95.0f };
+    const auto targetInButton = targetInControl
+                              - lowButton->getPosition().toFloat();
+    lowButton->mouseDrag(makeMouseEvent(*lowButton,
+                                        targetInButton,
+                                        leftButton,
+                                        downPosition));
+
+    for (size_t parameter = 0; parameter < 3; ++parameter)
+    {
+        INFO("Parameter " << parameter);
+        CHECK(capture.forParameter(parameter).beginCount == 1);
+        CHECK(capture.forParameter(parameter).depth == 1);
+    }
+
+    ControlReleaseOnParameterCallback releaseOnEnd(processor,
+                                                   LOW_ID,
+                                                   ParameterCallbackStage::end,
+                                                   control);
+    lowButton->mouseUp(makeMouseEvent(*lowButton,
+                                      targetInButton,
+                                      {},
+                                      downPosition));
+
+    CHECK(releaseOnEnd.didRelease());
+    CHECK(control == nullptr);
+    checkBalanced(capture.forParameter(0));
+    checkBalanced(capture.forParameter(1));
+    checkBalanced(capture.forParameter(2));
+}
+
+TEST_CASE("Filter graph drag publication survives control release from host callbacks",
+          "[filter-control][ui][automation][gesture][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    setPlainParameter(processor, LOW_ID, 0.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    auto control = std::make_unique<FilterControl>(processor, panel);
+    control->setBounds(0, 0, 1000, 400);
+    auto* lowButton = &FilterControlTestAccess::lowButton(*control);
+    REQUIRE_FALSE(lowButton->getBounds().isEmpty());
+
+    GestureCapture capture(processor,
+                           { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID });
+    const auto downPosition = lowButton->getLocalBounds().toFloat().getCentre();
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("gesture begin")
+    {
+        ControlReleaseOnParameterCallback releaseOnBegin(
+            processor, LOW_ID, ParameterCallbackStage::begin, control);
+        lowButton->mouseDown(makeMouseEvent(*lowButton,
+                                            downPosition,
+                                            leftButton,
+                                            downPosition));
+
+        CHECK(releaseOnBegin.didRelease());
+        CHECK(control == nullptr);
+        const auto& selectionEvents = capture.forParameter(0);
+        CHECK(selectionEvents.beginCount == 1);
+        CHECK(selectionEvents.endCount == 1);
+        CHECK(selectionEvents.valueCount == 0);
+        CHECK(selectionEvents.depth == 0);
+        CHECK(selectionEvents.minimumDepth == 0);
+        CHECK(selectionEvents.maximumDepth == 1);
+        CHECK_FALSE(selectionEvents.valueOutsideGesture);
+        CHECK(selectionEvents.order == std::vector<char> { 'B', 'E' });
+        checkInactive(capture.forParameter(1));
+        checkInactive(capture.forParameter(2));
+    }
+
+    SECTION("parameter value")
+    {
+        ControlReleaseOnParameterCallback releaseOnValue(
+            processor, LOW_ID, ParameterCallbackStage::value, control);
+        lowButton->mouseDown(makeMouseEvent(*lowButton,
+                                            downPosition,
+                                            leftButton,
+                                            downPosition));
+
+        CHECK(releaseOnValue.didRelease());
+        CHECK(control == nullptr);
+        checkBalanced(capture.forParameter(0));
+        checkInactive(capture.forParameter(1));
+        checkInactive(capture.forParameter(2));
+    }
+}
+
+TEST_CASE("Filter graph Q wheel survives control release from a host callback",
+          "[filter-control][ui][automation][gesture][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    auto control = std::make_unique<FilterControl>(processor, panel);
+    control->setBounds(0, 0, 1000, 400);
+    auto* lowButton = &FilterControlTestAccess::lowButton(*control);
+    REQUIRE_FALSE(lowButton->getBounds().isEmpty());
+
+    GestureCapture capture(processor, { LOWCUT_Q_ID });
+    ControlReleaseOnParameterCallback releaseOnValue(
+        processor, LOWCUT_Q_ID, ParameterCallbackStage::value, control);
+    const auto position = lowButton->getLocalBounds().toFloat().getCentre();
+    juce::MouseWheelDetails wheel;
+    wheel.deltaY = 0.4f;
+    lowButton->mouseWheelMove(makeMouseEvent(*lowButton,
+                                             position,
+                                             {},
+                                             position),
+                                  wheel);
+
+    CHECK(releaseOnValue.didRelease());
+    CHECK(control == nullptr);
+    checkBalanced(capture.forParameter(0));
+}
+
+TEST_CASE("Filter graph disable survives control release from a host callback",
+          "[filter-control][ui][automation][gesture][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    setPlainParameter(processor, LOW_ID, 0.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    auto control = std::make_unique<FilterControl>(processor, panel);
+    control->setBounds(0, 0, 1000, 400);
+    auto* lowButton = &FilterControlTestAccess::lowButton(*control);
+    REQUIRE_FALSE(lowButton->getBounds().isEmpty());
+
+    GestureCapture capture(processor,
+                           { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID });
+    const auto downPosition = lowButton->getLocalBounds().toFloat().getCentre();
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    lowButton->mouseDown(makeMouseEvent(*lowButton,
+                                        downPosition,
+                                        leftButton,
+                                        downPosition));
+
+    const auto targetInControl = juce::Point<float> { 650.0f, 95.0f };
+    const auto targetInButton = targetInControl
+                              - lowButton->getPosition().toFloat();
+    lowButton->mouseDrag(makeMouseEvent(*lowButton,
+                                        targetInButton,
+                                        leftButton,
+                                        downPosition));
+
+    setPlainParameter(processor, FILTER_BYPASS_ID, 0.0f);
+    ControlReleaseOnParameterCallback releaseOnEnd(processor,
+                                                   LOW_ID,
+                                                   ParameterCallbackStage::end,
+                                                   control);
+    FilterControlTestAccess::updateButtonStates(*control);
+
+    CHECK(releaseOnEnd.didRelease());
+    CHECK(control == nullptr);
+    checkBalanced(capture.forParameter(0));
+    checkBalanced(capture.forParameter(1));
+    checkBalanced(capture.forParameter(2));
 }

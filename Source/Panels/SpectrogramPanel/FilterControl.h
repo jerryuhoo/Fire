@@ -15,6 +15,7 @@
 #include "../../Utility/Parameters.h"
 #include "DraggableButton.h"
 #include <array>
+#include <memory>
 
 class GlobalPanel;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -67,7 +68,7 @@ private:
                           const juce::String& selectionParameter,
                           const juce::String& frequencyParameter,
                           const juce::String& gainParameter);
-    void setDragParameterValue(juce::RangedAudioParameter& parameter,
+    bool setDragParameterValue(juce::RangedAudioParameter& parameter,
                                float normalisedValue);
     void finishDragParameterGestures() noexcept;
     void finishFilterDrag();
@@ -85,8 +86,8 @@ private:
     double dragFrequency = 0.0;
     double dragGain = 0.0;
     juce::Point<int> dragTooltipAnchor;
-    std::array<juce::RangedAudioParameter*, 3> activeDragParameters {};
-    int numActiveDragParameters = 0;
+    struct DragGestureSession;
+    std::shared_ptr<DragGestureSession> dragGestureSession;
 
     DraggableButton draggableLowButton, draggablePeakButton, draggableHighButton;
 

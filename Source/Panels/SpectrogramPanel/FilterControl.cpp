@@ -28,6 +28,52 @@ bool isFilterModulationTarget(const juce::String& parameterID)
 }
 } // namespace
 
+struct FilterControl::DragGestureSession
+{
+    ~DragGestureSession()
+    {
+        finish();
+    }
+
+    bool touch(juce::RangedAudioParameter& parameter)
+    {
+        const auto activeEnd = parameters.begin() + numParameters;
+        if (std::find(parameters.begin(), activeEnd, &parameter) != activeEnd)
+            return true;
+
+        if (numParameters >= static_cast<int>(parameters.size()))
+        {
+            jassertfalse;
+            return false;
+        }
+
+        // Record ownership before notifying the host. The notification can
+        // synchronously remove the UI that created this session.
+        parameters[static_cast<size_t>(numParameters++)] = &parameter;
+        parameter.beginChangeGesture();
+        return true;
+    }
+
+private:
+    void finish()
+    {
+        const auto parametersToEnd = parameters;
+        const auto countToEnd = numParameters;
+        parameters.fill(nullptr);
+        numParameters = 0;
+
+        // From here on, use only processor-owned parameters. Any individual
+        // callback may remove the editor, while all begun gestures still need
+        // exactly one matching end notification.
+        for (int index = 0; index < countToEnd; ++index)
+            if (auto* parameter = parametersToEnd[static_cast<size_t>(index)])
+                parameter->endChangeGesture();
+    }
+
+    std::array<juce::RangedAudioParameter*, 3> parameters {};
+    int numParameters = 0;
+};
+
 //==============================================================================
 FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
     : processor(p)
@@ -110,11 +156,14 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
 
 FilterControl::~FilterControl()
 {
-    finishDragParameterGestures();
     processor.removeChangeListener(this);
 
     for (auto* parameter : observedParameters)
         parameter->removeListener(this);
+
+    // Releasing the session emits host callbacks and is intentionally the
+    // final operation that can synchronously re-enter editor ownership.
+    finishDragParameterGestures();
 }
 
 void FilterControl::paint(juce::Graphics& g)
@@ -225,7 +274,12 @@ void FilterControl::animationTick()
         updateChain();
         updateResponseCurve();
         setDraggableButtonBounds();
+
+        juce::Component::SafePointer<FilterControl> safeThis(this);
         updateDraggableButtonStates();
+
+        if (safeThis == nullptr)
+            return;
     }
 
     if (routingChanged || parametersChanged)
@@ -301,11 +355,24 @@ void FilterControl::visibilityChanged()
     }
     else
     {
+        juce::Component::SafePointer<FilterControl> safeThis(this);
         draggableLowButton.dismissTransientInteraction();
+
+        if (safeThis == nullptr)
+            return;
+
         draggablePeakButton.dismissTransientInteraction();
+
+        if (safeThis == nullptr)
+            return;
+
         draggableHighButton.dismissTransientInteraction();
-        finishDragParameterGestures();
+
+        if (safeThis == nullptr)
+            return;
+
         dragTooltipVisible = false;
+        finishDragParameterGestures();
     }
 }
 
@@ -334,90 +401,120 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
     point.y = juce::jlimit(0.0f, static_cast<float>(getHeight()), point.y);
 
     const auto buttonSize = juce::jlimit(12.0f, 20.0f, getWidth() * 0.015f);
+    juce::Component::SafePointer<FilterControl> safeThis(this);
     button.setBounds(juce::Rectangle<float>(buttonSize, buttonSize)
                          .withCentre(point)
                          .toNearestInt());
 
+    if (safeThis == nullptr)
+        return;
+
     if (auto* selection = processor.treeState.getParameter(selectionParameter))
-        setDragParameterValue(*selection, 1.0f);
+        if (! setDragParameterValue(*selection, 1.0f) || safeThis == nullptr)
+            return;
 
-    dragFrequency = juce::mapToLog10(static_cast<double>(point.x) / getWidth(),
-                                     minimumDisplayFrequency,
-                                     maximumDisplayFrequency);
-    dragGain = juce::jmap(static_cast<double>(point.y),
-                          0.0,
-                          static_cast<double>(getHeight()),
-                          maximumDisplayDecibels,
-                          minimumDisplayDecibels);
+    const auto frequency = juce::mapToLog10(static_cast<double>(point.x) / getWidth(),
+                                            minimumDisplayFrequency,
+                                            maximumDisplayFrequency);
+    const auto gain = juce::jmap(static_cast<double>(point.y),
+                                 0.0,
+                                 static_cast<double>(getHeight()),
+                                 maximumDisplayDecibels,
+                                 minimumDisplayDecibels);
 
-    const auto setParameterValue = [this](const juce::String& parameterID, double plainValue)
+    const auto setParameterValue = [this](const juce::String& parameterID,
+                                          double plainValue)
     {
         if (auto* parameter = processor.treeState.getParameter(parameterID))
         {
             const auto normalisedValue = parameter->convertTo0to1(static_cast<float>(plainValue));
-            setDragParameterValue(*parameter, normalisedValue);
+            return setDragParameterValue(*parameter, normalisedValue);
         }
+
+        return true;
     };
 
-    setParameterValue(frequencyParameter, dragFrequency);
-    setParameterValue(gainParameter, dragGain);
+    if (! setParameterValue(frequencyParameter, frequency) || safeThis == nullptr)
+        return;
 
+    if (! setParameterValue(gainParameter, gain) || safeThis == nullptr)
+        return;
+
+    dragFrequency = frequency;
+    dragGain = gain;
     dragTooltipAnchor = point.toInt();
     dragTooltipVisible = true;
     repaint();
 }
 
-void FilterControl::setDragParameterValue(juce::RangedAudioParameter& parameter,
+bool FilterControl::setDragParameterValue(juce::RangedAudioParameter& parameter,
                                           float normalisedValue)
 {
     normalisedValue = juce::jlimit(0.0f, 1.0f, normalisedValue);
     if (juce::approximatelyEqual(parameter.getValue(), normalisedValue))
-        return;
+        return true;
 
-    const auto activeEnd = activeDragParameters.begin() + numActiveDragParameters;
-    if (std::find(activeDragParameters.begin(), activeEnd, &parameter) == activeEnd)
-    {
-        if (numActiveDragParameters >= static_cast<int>(activeDragParameters.size()))
-        {
-            jassertfalse;
-            return;
-        }
+    if (dragGestureSession == nullptr)
+        dragGestureSession = std::make_shared<DragGestureSession>();
 
-        activeDragParameters[static_cast<size_t>(numActiveDragParameters++)] = &parameter;
-        parameter.beginChangeGesture();
-    }
+    auto session = dragGestureSession;
+    juce::Component::SafePointer<FilterControl> safeThis(this);
+    if (! session->touch(parameter) || safeThis == nullptr)
+        return false;
 
+    if (dragGestureSession != session)
+        return false;
+
+    // The local session token keeps the host gesture valid throughout the
+    // value callback. Do not access component state until SafePointer confirms
+    // that the owner survived it.
     parameter.setValueNotifyingHost(normalisedValue);
+
+    if (safeThis == nullptr)
+        return false;
+
+    return dragGestureSession == session;
 }
 
 void FilterControl::finishDragParameterGestures() noexcept
 {
-    for (int index = 0; index < numActiveDragParameters; ++index)
-        if (auto* parameter = activeDragParameters[static_cast<size_t>(index)])
-            parameter->endChangeGesture();
+    auto endingSession = std::move(dragGestureSession);
 
-    activeDragParameters.fill(nullptr);
-    numActiveDragParameters = 0;
+    // The last session reference can synchronously remove this FilterControl.
+    // It must therefore remain the final member-related operation.
+    endingSession.reset();
 }
 
 void FilterControl::finishFilterDrag()
 {
-    finishDragParameterGestures();
+    auto endingSession = std::move(dragGestureSession);
 
-    if (! dragTooltipVisible)
-        return;
+    if (dragTooltipVisible)
+    {
+        dragTooltipVisible = false;
+        setDraggableButtonBounds();
+        repaint();
+    }
 
-    dragTooltipVisible = false;
-    setDraggableButtonBounds();
-    repaint();
+    // Host end callbacks may remove this component, so release last.
+    endingSession.reset();
 }
 
 void FilterControl::updateDraggableButtonStates()
 {
     const auto* enableParameter = processor.treeState.getRawParameterValue(FILTER_BYPASS_ID);
     const bool enabled = enableParameter != nullptr && enableParameter->load() > 0.5f;
+    juce::Component::SafePointer<FilterControl> safeThis(this);
     draggableLowButton.setState(enabled);
+
+    if (safeThis == nullptr)
+        return;
+
     draggablePeakButton.setState(enabled);
+
+    if (safeThis == nullptr)
+        return;
+
     draggableHighButton.setState(enabled);
 }
 

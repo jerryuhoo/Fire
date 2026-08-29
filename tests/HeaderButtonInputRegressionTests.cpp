@@ -4,7 +4,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <map>
+#include <memory>
 #include <vector>
 
 struct PrimaryButtonTestAccess
@@ -126,6 +128,60 @@ void collectHeaderButtons(juce::Component& component,
         if (auto* child = component.getChildComponent(childIndex))
             collectHeaderButtons(*child, result);
 }
+
+PrimaryTextButton* findHeaderButton(juce::Component& editor,
+                                    const juce::String& componentID,
+                                    const juce::String& buttonText)
+{
+    std::vector<PrimaryTextButton*> buttons;
+    collectHeaderButtons(editor, buttons);
+    const auto match = std::find_if(
+        buttons.begin(), buttons.end(), [&](const auto* button)
+        {
+            return button->getComponentID() == componentID
+                && button->getButtonText() == buttonText;
+        });
+    return match != buttons.end() ? *match : nullptr;
+}
+
+class DeleteEditorOnStateNotification final
+    : public juce::AudioProcessorListener
+{
+public:
+    DeleteEditorOnStateNotification(
+        FireAudioProcessor& processorToObserve,
+        std::unique_ptr<FireAudioProcessorEditor>& editorToDelete)
+        : processor(processorToObserve), editor(editorToDelete)
+    {
+        processor.addListener(this);
+    }
+
+    ~DeleteEditorOnStateNotification() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (! details.nonParameterStateChanged || notificationCount != 0)
+            return;
+
+        ++notificationCount;
+        editor.reset();
+        callbackCompleted = true;
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<FireAudioProcessorEditor>& editor;
+    int notificationCount = 0;
+    bool callbackCompleted = false;
+};
 } // namespace
 
 TEST_CASE("Primary buttons reject popup and auxiliary pointer gestures",
@@ -434,5 +490,45 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
         CHECK_FALSE(button->isDown());
         CHECK(clickCount == 0);
         button->onClick = nullptr;
+    }
+}
+
+TEST_CASE("A-B header actions survive synchronous editor deletion by the host",
+          "[header-button][ui][preset][host][lifetime][self-delete][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    DeleteEditorOnStateNotification deleteOnChange(processor, editor);
+
+    SECTION("toggle A-B")
+    {
+        auto* button = findHeaderButton(*editor, "header_ab", "A");
+        REQUIRE(button != nullptr);
+        REQUIRE(processor.stateAB.isCurrentA());
+
+        CHECK(button->keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+
+        CHECK(deleteOnChange.notificationCount == 1);
+        CHECK(deleteOnChange.callbackCompleted);
+        CHECK(editor == nullptr);
+        CHECK_FALSE(processor.stateAB.isCurrentA());
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
+    }
+
+    SECTION("copy current state")
+    {
+        auto* button = findHeaderButton(*editor, "header_action", "Copy");
+        REQUIRE(button != nullptr);
+
+        CHECK(button->keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+
+        CHECK(deleteOnChange.notificationCount == 1);
+        CHECK(deleteOnChange.callbackCompleted);
+        CHECK(editor == nullptr);
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
     }
 }

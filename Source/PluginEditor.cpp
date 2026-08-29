@@ -1032,9 +1032,18 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
 {
     if (clickedButton == stateComponent.getToggleABButton())
     {
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
+            this);
         stateComponent.getProcStateAB()->toggleAB();
+
+        if (safeThis == nullptr)
+            return;
+
         clickedButton->setButtonText(stateComponent.getProcStateAB()->isCurrentA() ? "A" : "B");
         multiband.resortAndRedrawLines();
+
+        if (safeThis == nullptr)
+            return;
     }
     if (multiband.getStateComponent().getChangedState())
     {

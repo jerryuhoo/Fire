@@ -1420,17 +1420,37 @@ namespace state
         //        the code is moved to Editor
         //    }
         if (clickedButton == &copyABButton)
+        {
+            // copyAB notifies the host synchronously and may delete this
+            // component. Returning immediately leaves no stale member access.
             procStateAB.copyAB();
+            return;
+        }
+
         if (clickedButton == &previousButton)
+        {
             setPreviousPreset();
+            return;
+        }
+
         if (clickedButton == &nextButton)
+        {
             setNextPreset();
+            return;
+        }
+
         if (clickedButton == &savePresetButton)
+        {
             savePresetAlertWindow();
+            return;
+        }
         //if (clickedButton == &deletePresetButton)
         //    deletePresetAndRefresh();
         if (clickedButton == &menuButton)
+        {
             popPresetMenu();
+            return;
+        }
     }
 
     void StateComponent::markAsDirty()

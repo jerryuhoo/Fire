@@ -3193,6 +3193,194 @@ FireAudioProcessor::captureCurrentSerializablePresetStateSnapshotForABFallback()
     };
 }
 
+bool FireAudioProcessor::deleteMultibandBand(int deletedBandIndex,
+                                             int currentBandCount)
+{
+    if (currentBandCount < 2 || currentBandCount > 4
+        || ! juce::isPositiveAndBelow(deletedBandIndex, currentBandCount))
+    {
+        jassertfalse;
+        return false;
+    }
+
+    bool didDelete = false;
+    {
+        // Snapshot validation is part of the writer transaction too. Without
+        // this outer level, a preset/host-state writer could publish between
+        // individual reads and leave the migration with a mixed-generation
+        // source tuple. beginMultibandTopologyEdit() recursively acquires the
+        // same lock and retains its own level until publication.
+        const juce::ScopedLock writerLock(multibandTopologyWriterLock);
+        didDelete = deleteMultibandBandLocked(deletedBandIndex,
+                                              currentBandCount);
+    }
+
+    if (! didDelete)
+        return false;
+
+    // The complete APVTS/LFO tuple is now visible under an even generation and
+    // the writer lock has been released. Keep this as the final externally-
+    // calling operation: its host callback may synchronously close the editor.
+    lfoDataHasChanged();
+    return true;
+}
+
+bool FireAudioProcessor::deleteMultibandBandLocked(int deletedBandIndex,
+                                                   int currentBandCount)
+{
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::function<void()> snapshotHook;
+    {
+        const juce::ScopedLock hookLock(serializableStateHookLock);
+        snapshotHook = multibandDeleteSnapshotHookForTesting;
+    }
+    if (snapshotHook)
+        snapshotHook();
+#endif
+
+    struct ParameterWrite
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        float normalisedValue = 0.0f;
+    };
+
+    const int oldLastBandIndex = currentBandCount - 1;
+    const int newBandCount = currentBandCount - 1;
+    const int oldLineCount = currentBandCount - 1;
+    const int newLineCount = newBandCount - 1;
+    const int removedDividerIndex = deletedBandIndex == oldLastBandIndex
+                                      ? oldLineCount - 1
+                                      : deletedBandIndex;
+
+    std::vector<ParameterWrite> copiedBandParameters;
+    std::vector<ParameterWrite> resetBandParameters;
+    const auto& bandParameters = ParameterIDAndName::getBandParameterInfo();
+    copiedBandParameters.reserve(
+        static_cast<size_t>(oldLastBandIndex - deletedBandIndex)
+        * bandParameters.size());
+    resetBandParameters.reserve(bandParameters.size());
+
+    // Capture every source before the first synchronous notification. A host
+    // callback may re-enter state code, and later writes must still have
+    // memmove semantics rather than reading already-overwritten slots.
+    for (int targetBand = deletedBandIndex;
+         targetBand < oldLastBandIndex;
+         ++targetBand)
+    {
+        for (const auto& parameterInfo : bandParameters)
+        {
+            auto* target = treeState.getParameter(
+                ParameterIDAndName::getIDString(parameterInfo.idBase,
+                                                targetBand));
+            auto* source = treeState.getParameter(
+                ParameterIDAndName::getIDString(parameterInfo.idBase,
+                                                targetBand + 1));
+            if (target == nullptr || source == nullptr)
+            {
+                jassertfalse;
+                return false;
+            }
+
+            copiedBandParameters.push_back({ target, source->getValue() });
+        }
+    }
+
+    for (const auto& parameterInfo : bandParameters)
+    {
+        auto* parameter = treeState.getParameter(
+            ParameterIDAndName::getIDString(parameterInfo.idBase,
+                                            oldLastBandIndex));
+        if (parameter == nullptr)
+        {
+            jassertfalse;
+            return false;
+        }
+
+        resetBandParameters.push_back(
+            { parameter, parameter->getDefaultValue() });
+    }
+
+    std::array<juce::RangedAudioParameter*, 3> frequencyParameters {};
+    std::array<juce::RangedAudioParameter*, 3> lineStateParameters {};
+    std::array<float, 3> originalFrequencies {};
+    for (int divider = 0; divider < 3; ++divider)
+    {
+        frequencyParameters[static_cast<size_t>(divider)] =
+            treeState.getParameter(
+                ParameterIDAndName::getIDString(FREQ_ID, divider));
+        lineStateParameters[static_cast<size_t>(divider)] =
+            treeState.getParameter(
+                ParameterIDAndName::getIDString(LINE_STATE_ID, divider));
+        if (frequencyParameters[static_cast<size_t>(divider)] == nullptr
+            || lineStateParameters[static_cast<size_t>(divider)] == nullptr)
+        {
+            jassertfalse;
+            return false;
+        }
+
+        originalFrequencies[static_cast<size_t>(divider)] =
+            frequencyParameters[static_cast<size_t>(divider)]->getValue();
+    }
+
+    auto* bandCountParameter = treeState.getParameter(NUM_BANDS_ID);
+    if (bandCountParameter == nullptr)
+    {
+        jassertfalse;
+        return false;
+    }
+
+    const int publishedBandCount = juce::roundToInt(
+        bandCountParameter->getNormalisableRange().convertFrom0to1(
+            bandCountParameter->getValue()));
+    if (publishedBandCount != currentBandCount)
+        return false;
+
+    {
+        beginMultibandTopologyEdit();
+        const juce::ScopeGuard finishTopologyEdit { [processor = this]
+        {
+            processor->requestMultibandTopologyReset();
+        } };
+
+        // Publish the final canonical divider tuple directly. In particular,
+        // deleting the leftmost band compacts FREQ1 into FREQ0 even though the
+        // final LINE0 state remains enabled throughout the transaction.
+        for (int divider = 0; divider < 3; ++divider)
+            lineStateParameters[static_cast<size_t>(divider)]
+                ->setValueNotifyingHost(divider < newLineCount ? 1.0f : 0.0f);
+
+        for (int targetDivider = removedDividerIndex;
+             targetDivider < newLineCount;
+             ++targetDivider)
+        {
+            frequencyParameters[static_cast<size_t>(targetDivider)]
+                ->setValueNotifyingHost(
+                    originalFrequencies[static_cast<size_t>(targetDivider + 1)]);
+        }
+
+        clearLfoModulationForBand(deletedBandIndex, false);
+
+        for (const auto& write : copiedBandParameters)
+            write.parameter->setValueNotifyingHost(write.normalisedValue);
+
+        if (deletedBandIndex < oldLastBandIndex)
+            shiftLfoModulationTargets(deletedBandIndex + 1,
+                                      oldLastBandIndex,
+                                      -1,
+                                      false);
+
+        for (const auto& write : resetBandParameters)
+            write.parameter->setValueNotifyingHost(write.normalisedValue);
+
+        clearLfoModulationForBand(oldLastBandIndex, false);
+        bandCountParameter->setValueNotifyingHost(
+            bandCountParameter->getNormalisableRange().convertTo0to1(
+                static_cast<float>(newBandCount)));
+    }
+
+    return true;
+}
+
 void FireAudioProcessor::beginMultibandTopologyEdit()
 {
     // Keep one recursive writer-lock level alive until the matching publish.
@@ -3263,6 +3451,13 @@ void FireAudioProcessor::setAudioCallbackStateCaptureHookForTesting(
 {
     const juce::ScopedLock lock(serializableStateHookLock);
     audioCallbackStateCaptureHookForTesting = std::move(hook);
+}
+
+void FireAudioProcessor::setMultibandDeleteSnapshotHookForTesting(
+    std::function<void()> hook)
+{
+    const juce::ScopedLock lock(serializableStateHookLock);
+    multibandDeleteSnapshotHookForTesting = std::move(hook);
 }
 
 FireAudioProcessor::AudioCallbackRecipeForTesting

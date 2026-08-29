@@ -100,7 +100,6 @@ private:
     void setParametersToAFromB(int toIndex, int fromIndex);
     void initParameters(int bandindex);
     void setStatesWhenAdd(int changedIndex, bool newBandIsOnLeft);
-    void setStatesWhenDelete(int changedIndex);
 
     void setLineIndex();
     int sortLinesInternal(bool notifyFocusChange);

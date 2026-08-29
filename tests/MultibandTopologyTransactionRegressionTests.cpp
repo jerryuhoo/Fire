@@ -1408,3 +1408,117 @@ TEST_CASE("Concurrent topology writers serialize complete publications",
     CHECK(finalPublicationError < publicationTolerance);
     REQUIRE(finalOldSeparation > 0.02f);
 }
+
+TEST_CASE("Band deletion snapshots while excluding concurrent topology writers",
+          "[processor][multiband][topology][delete][transaction][writer][thread]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor subject;
+    configureProcessor(subject);
+    setPublishedThreeBandTopology(subject);
+
+    const auto generationBefore =
+        subject.getMultibandTopologyGenerationForTesting();
+    REQUIRE((generationBefore & 1u) == 0u);
+
+    juce::WaitableEvent deleteSnapshotEntered;
+    juce::WaitableEvent allowDeleteSnapshot;
+    juce::WaitableEvent writerAttempting;
+    juce::WaitableEvent writerEntered;
+    juce::WaitableEvent writerFinished;
+    std::atomic<bool> deleteResult { false };
+    std::atomic<bool> writerParametersValid { true };
+
+    subject.setMultibandDeleteSnapshotHookForTesting([&]
+    {
+        deleteSnapshotEntered.signal();
+        allowDeleteSnapshot.wait();
+    });
+
+    std::thread deletingWriter([&]
+    {
+        deleteResult.store(subject.deleteMultibandBand(0, 3),
+                           std::memory_order_release);
+    });
+
+    const bool observedDeleteSnapshot = deleteSnapshotEntered.wait(2000);
+    std::thread competingWriter([&]
+    {
+        writerAttempting.signal();
+        subject.beginMultibandTopologyEdit();
+        writerEntered.signal();
+
+        bool valid = setPlainParameterFromWriter(
+            subject, bandParameter(FREQ_ID, 0), 800.0f);
+        valid = setPlainParameterFromWriter(
+                    subject, bandParameter(FREQ_ID, 1), 2500.0f)
+             && valid;
+        valid = setPlainParameterFromWriter(
+                    subject, bandParameter(FREQ_ID, 2), 7000.0f)
+             && valid;
+        for (int divider = 0; divider < 3; ++divider)
+            valid = setPlainParameterFromWriter(
+                        subject,
+                        bandParameter(LINE_STATE_ID, divider),
+                        1.0f)
+                 && valid;
+        for (int band = 0; band < 4; ++band)
+            valid = setPlainParameterFromWriter(
+                        subject,
+                        bandParameter(OUTPUT_ID, band),
+                        -1.0f - static_cast<float>(band))
+                 && valid;
+        valid = setPlainParameterFromWriter(subject, NUM_BANDS_ID, 4.0f)
+             && valid;
+        writerParametersValid.store(valid, std::memory_order_release);
+        subject.requestMultibandTopologyReset();
+        writerFinished.signal();
+    });
+
+    const bool observedWriterAttempt = writerAttempting.wait(2000);
+    const bool writerEnteredBeforeDeleteSnapshotContinued =
+        writerEntered.wait(75);
+
+    // The delete snapshot hook runs before its first APVTS read. The competing
+    // writer must remain blocked until deletion has snapshotted, migrated and
+    // published the complete 3->2 topology under the same writer lock.
+    allowDeleteSnapshot.signal();
+    if (deletingWriter.joinable())
+        deletingWriter.join();
+
+    const bool writerEnteredAfterDeletePublication =
+        writerEnteredBeforeDeleteSnapshotContinued || writerEntered.wait(2000);
+    const bool observedWriterFinish = writerFinished.wait(2000);
+    if (competingWriter.joinable())
+        competingWriter.join();
+    subject.setMultibandDeleteSnapshotHookForTesting(nullptr);
+
+    const auto generationAfter =
+        subject.getMultibandTopologyGenerationForTesting();
+    const auto* bandCount = subject.treeState.getRawParameterValue(NUM_BANDS_ID);
+    const auto* firstFrequency = subject.treeState.getRawParameterValue(
+        bandParameter(FREQ_ID, 0));
+    const auto* thirdFrequency = subject.treeState.getRawParameterValue(
+        bandParameter(FREQ_ID, 2));
+    const auto* fourthOutput = subject.treeState.getRawParameterValue(
+        bandParameter(OUTPUT_ID, 3));
+
+    CHECK(observedDeleteSnapshot);
+    CHECK(observedWriterAttempt);
+    CHECK_FALSE(writerEnteredBeforeDeleteSnapshotContinued);
+    CHECK(deleteResult.load(std::memory_order_acquire));
+    CHECK(writerEnteredAfterDeletePublication);
+    CHECK(observedWriterFinish);
+    CHECK(writerParametersValid.load(std::memory_order_acquire));
+    CHECK(generationAfter == generationBefore + 4u);
+    CHECK((generationAfter & 1u) == 0u);
+    CHECK(subject.tryAcquireMultibandTopologyWriterLockForTesting());
+    REQUIRE(bandCount != nullptr);
+    REQUIRE(firstFrequency != nullptr);
+    REQUIRE(thirdFrequency != nullptr);
+    REQUIRE(fourthOutput != nullptr);
+    CHECK(bandCount->load() == Catch::Approx(4.0f));
+    CHECK(firstFrequency->load() == Catch::Approx(800.0f));
+    CHECK(thirdFrequency->load() == Catch::Approx(7000.0f));
+    CHECK(fourthOutput->load() == Catch::Approx(-4.0f));
+}

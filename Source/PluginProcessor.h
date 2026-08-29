@@ -535,6 +535,11 @@ public:
     void clearLfoModulationForBand(int bandIndex,
                                    bool notifyHost = true);
 
+    // Complete a band-removal migration without depending on editor lifetime.
+    // Parameter notifications are synchronous and a host is allowed to close
+    // the editor from any of them, so the processor must own the transaction.
+    bool deleteMultibandBand(int deletedBandIndex, int currentBandCount);
+
     // Parameter migration for an add/remove operation is performed on the
     // message thread. Mark the start before the first slot/routing write, then
     // publish the completed transaction with requestMultibandTopologyReset().
@@ -542,6 +547,11 @@ public:
     // fixed-size snapshot instead of observing a half-migrated layout.
     void beginMultibandTopologyEdit();
     void requestMultibandTopologyReset() noexcept;
+    bool isMultibandTopologyEditInProgress() const noexcept
+    {
+        return (multibandTopologyResetGeneration.load(std::memory_order_acquire)
+                & 1u) != 0u;
+    }
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     struct AudioCallbackRecipeForTesting
     {
@@ -559,6 +569,8 @@ public:
     void setSerializableStateReaderHookForTesting(std::function<void()> hook);
     void setHostStateMainCaptureHookForTesting(std::function<void()> hook);
     void setAudioCallbackStateCaptureHookForTesting(
+        std::function<void()> hook);
+    void setMultibandDeleteSnapshotHookForTesting(
         std::function<void()> hook);
     AudioCallbackRecipeForTesting
     getLastAudioCallbackRecipeForTesting() const noexcept;
@@ -742,6 +754,8 @@ private:
     void performReset();
     void resetMultibandProcessingState(
         const HqCallbackContext* callbackContext = nullptr) noexcept;
+    bool deleteMultibandBandLocked(int deletedBandIndex,
+                                   int currentBandCount);
     std::array<float, 3> getEffectiveCrossoverFrequencies(
         int crossoversToValidate) const noexcept;
     void snapCrossoverSmoothers(
@@ -791,6 +805,7 @@ private:
     mutable std::function<void()> serializableStateReaderHookForTesting;
     std::function<void()> hostStateMainCaptureHookForTesting;
     std::function<void()> audioCallbackStateCaptureHookForTesting;
+    std::function<void()> multibandDeleteSnapshotHookForTesting;
 #endif
     std::uint32_t appliedMultibandTopologyResetGeneration = 0;
     MultibandTopologySnapshot activeMultibandTopologySnapshot;

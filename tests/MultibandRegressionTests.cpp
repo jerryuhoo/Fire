@@ -156,6 +156,61 @@ public:
     bool captureInProgress = false;
 };
 
+class EditorResetOnProcessorCallback final : public juce::AudioProcessorListener
+{
+public:
+    EditorResetOnProcessorCallback(
+        FireAudioProcessor& processorToObserve,
+        std::unique_ptr<FireAudioProcessorEditor>& editorToReset,
+        int parameterIndexToObserve,
+        bool resetForNonParameterState)
+        : processor(processorToObserve),
+          editor(editorToReset),
+          parameterIndex(parameterIndexToObserve),
+          resetOnNonParameterState(resetForNonParameterState)
+    {
+        processor.addListener(this);
+    }
+
+    ~EditorResetOnProcessorCallback() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*,
+                                        int changedParameterIndex,
+                                        float) override
+    {
+        if (! resetOnNonParameterState
+            && changedParameterIndex == parameterIndex)
+            resetEditor();
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (resetOnNonParameterState && details.nonParameterStateChanged)
+            resetEditor();
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<FireAudioProcessorEditor>& editor;
+    int parameterIndex = -1;
+    bool resetOnNonParameterState = false;
+    bool didResetEditor = false;
+
+private:
+    void resetEditor()
+    {
+        if (editor == nullptr)
+            return;
+
+        didResetEditor = true;
+        editor.reset();
+    }
+};
+
 class ParameterGestureCapture final : public juce::AudioProcessorListener
 {
 public:
@@ -1386,6 +1441,130 @@ TEST_CASE("Band add and delete notify the host after topology commit",
         REQUIRE(movedRouting != nullptr);
         CHECK(movedRouting->sourceLfoIndex == 1);
         CHECK(findRouting(restoredRoutings, survivingDrive) == nullptr);
+    }
+}
+
+TEST_CASE("Band removal survives synchronous editor teardown at every publication phase",
+          "[multiband][ui][delete][lifetime][topology][transaction]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    struct TeardownScenario
+    {
+        const char* description = nullptr;
+        juce::String parameterID;
+        bool nonParameterState = false;
+    };
+
+    const std::array<TeardownScenario, 6> scenarios {{
+        { "disabled divider", ParameterIDAndName::getIDString(LINE_STATE_ID, 1), false },
+        { "compacted crossover", ParameterIDAndName::getIDString(FREQ_ID, 0), false },
+        { "copied band parameter", ParameterIDAndName::getIDString(DRIVE_ID, 0), false },
+        { "reset inactive parameter", ParameterIDAndName::getIDString(DRIVE_ID, 2), false },
+        { "final band count", NUM_BANDS_ID, false },
+        { "post-commit non-parameter state", {}, true },
+    }};
+
+    for (const auto& scenario : scenarios)
+    DYNAMIC_SECTION(scenario.description)
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        initialiseBandLayout(processor, 3, { 1000.0f, 3000.0f, 7000.0f });
+
+        const auto firstDrive = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        const auto secondDrive = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+        const auto thirdDrive = ParameterIDAndName::getIDString(DRIVE_ID, 2);
+        setPlainParameter(processor, firstDrive, 11.0f);
+        setPlainParameter(processor, secondDrive, 22.0f);
+        setPlainParameter(processor, thirdDrive, 33.0f);
+        processor.assignLfoToTarget(0, firstDrive);
+        processor.assignLfoToTarget(1, secondDrive);
+        processor.assignLfoToTarget(2, thirdDrive);
+
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->setBounds(0, 0, 1000, 500);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        auto* multiband = findDescendant<Multiband>(*editor);
+        REQUIRE(multiband != nullptr);
+        auto closeButtons = getPositionedCloseButtons(*multiband);
+        REQUIRE(closeButtons.size() == 3);
+        auto* firstBandClose = closeButtons.front();
+        REQUIRE(firstBandClose != nullptr);
+        const auto closeCentre = firstBandClose->getBounds().toFloat().getCentre();
+        multiband->mouseMove(makeMouseEvent(*multiband, closeCentre));
+        REQUIRE(firstBandClose->isVisible());
+
+        int parameterIndex = -1;
+        if (! scenario.nonParameterState)
+        {
+            auto* observedParameter = processor.treeState.getParameter(
+                scenario.parameterID);
+            REQUIRE(observedParameter != nullptr);
+            parameterIndex = observedParameter->getParameterIndex();
+        }
+
+        const auto generationBefore =
+            processor.getMultibandTopologyGenerationForTesting();
+        REQUIRE((generationBefore & 1u) == 0u);
+        EditorResetOnProcessorCallback teardownListener(
+            processor, editor, parameterIndex, scenario.nonParameterState);
+
+        firstBandClose->triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        CHECK(teardownListener.didResetEditor);
+        CHECK(editor == nullptr);
+        const auto generationAfter =
+            processor.getMultibandTopologyGenerationForTesting();
+        CHECK((generationAfter & 1u) == 0u);
+        CHECK(generationAfter == generationBefore + 2u);
+        CHECK(processor.tryAcquireMultibandTopologyWriterLockForTesting());
+
+        const auto* bandCount = processor.treeState.getRawParameterValue(
+            NUM_BANDS_ID);
+        const auto* firstFrequency = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(FREQ_ID, 0));
+        const auto* firstLineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, 0));
+        const auto* secondLineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, 1));
+        const auto* thirdLineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, 2));
+        REQUIRE(bandCount != nullptr);
+        REQUIRE(firstFrequency != nullptr);
+        REQUIRE(firstLineState != nullptr);
+        REQUIRE(secondLineState != nullptr);
+        REQUIRE(thirdLineState != nullptr);
+        CHECK(bandCount->load() == Catch::Approx(2.0f));
+        CHECK(firstFrequency->load() == Catch::Approx(3000.0f));
+        CHECK(firstLineState->load() == Catch::Approx(1.0f));
+        CHECK(secondLineState->load() == Catch::Approx(0.0f));
+        CHECK(thirdLineState->load() == Catch::Approx(0.0f));
+
+        const auto* movedFirstDrive = processor.treeState.getRawParameterValue(
+            firstDrive);
+        const auto* movedSecondDrive = processor.treeState.getRawParameterValue(
+            secondDrive);
+        const auto* resetThirdDrive = processor.treeState.getRawParameterValue(
+            thirdDrive);
+        REQUIRE(movedFirstDrive != nullptr);
+        REQUIRE(movedSecondDrive != nullptr);
+        REQUIRE(resetThirdDrive != nullptr);
+        CHECK(movedFirstDrive->load() == Catch::Approx(22.0f));
+        CHECK(movedSecondDrive->load() == Catch::Approx(33.0f));
+        CHECK(resetThirdDrive->load() == Catch::Approx(0.0f));
+
+        const auto routings = processor.getLfoManager()
+                                  .getModulationRoutingsCopy();
+        const auto* movedFirstRouting = findRouting(routings, firstDrive);
+        const auto* movedSecondRouting = findRouting(routings, secondDrive);
+        REQUIRE(movedFirstRouting != nullptr);
+        REQUIRE(movedSecondRouting != nullptr);
+        CHECK(movedFirstRouting->sourceLfoIndex == 1);
+        CHECK(movedSecondRouting->sourceLfoIndex == 2);
+        CHECK(findRouting(routings, thirdDrive) == nullptr);
     }
 }
 

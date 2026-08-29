@@ -356,51 +356,6 @@ void Multiband::setStatesWhenAdd(int insertionIndex, bool newBandIsOnLeft)
     }
 }
 
-void Multiband::setStatesWhenDelete(int deletedIndex)
-{
-    if (lineNum <= 0 || ! juce::isPositiveAndBelow(deletedIndex, lineNum + 1))
-        return;
-
-    // 1. Based on the deleted band's index, update the state of the divider line.
-    // If the last band is deleted (e.g., Band 4), the line to its left (Line 3) must be disabled.
-    if (deletedIndex == lineNum)
-    {
-        if (lineNum > 0)
-            freqDividerGroup[lineNum - 1]->setToggleState(false, juce::sendNotificationSync);
-    }
-    else // Otherwise, just disable the divider line corresponding to the index.
-    {
-        freqDividerGroup[deletedIndex]->setToggleState(false, juce::sendNotificationSync);
-    }
-
-    // Remove routings owned by the deleted logical band before moving later
-    // routings into its index.  Otherwise both the deleted band and its
-    // successor can target the same newly-visible parameter.
-    processor.clearLfoModulationForBand(deletedIndex, false);
-
-    // Shift all active bands that came after the deleted one forward.
-    // e.g., if index 1 is deleted, copy settings from 2 to 1, and from 3 to 2.
-    const int oldLastBandIndex = lineNum;
-    for (int i = deletedIndex; i < oldLastBandIndex; ++i)
-        copyBandSettings(i, i + 1);
-
-    // Also shift LFO targets for the same range
-    processor.shiftLfoModulationTargets(deletedIndex + 1,
-                                        oldLastBandIndex,
-                                        -1,
-                                        false);
-
-    // Clean up the slot that has just become inactive.  Resetting band 3
-    // unconditionally left stale state behind when deleting from a two- or
-    // three-band layout.
-    resetBandToDefault(oldLastBandIndex);
-    processor.clearLfoModulationForBand(oldLastBandIndex, false);
-
-    // NOTE: We no longer need to call setSoloRelatedBounds() manually here,
-    // as it will be handled automatically later in the call chain
-    // (sortLines() -> sliderValueChanged() -> resized()).
-}
-
 int Multiband::countLines()
 {
     int count = 0;
@@ -949,16 +904,22 @@ bool Multiband::updateFocusIndex(int requestedIndex, bool forceNotification)
 
 void Multiband::notifyFocusChanged()
 {
-    if (isShowing())
-        processor.setHistoryArray(focusIndex);
+    const int publishedFocus = focusIndex;
+    auto callback = focusChangedCallback;
 
-    if (focusChangedCallback)
-        focusChangedCallback(focusIndex);
+    if (isShowing())
+        processor.setHistoryArray(publishedFocus);
+
+    // The callback can synchronously close the editor. Invoke a local copy so
+    // deleting this component cannot destroy the callable while it is active.
+    if (callback)
+        callback(publishedFocus);
 }
 
 void Multiband::sliderValueChanged(juce::Slider* slider)
 {
-    if (isCanonicalisingLines || isPublishingCrossoverCascade)
+    if (isCanonicalisingLines || isPublishingCrossoverCascade
+        || processor.isMultibandTopologyEditInProgress())
         return;
 
     lineNum = countLines();
@@ -982,42 +943,42 @@ void Multiband::sliderValueChanged(juce::Slider* slider)
 
 void Multiband::buttonClicked(juce::Button* button)
 {
-    // click closebutton and delete line.
-    bool bandWasDeleted = false;
     for (int i = 0; i <= lineNum; ++i)
     {
         if (button == bandUIs[i].closeButton.get()) // <--- MODIFIED
         {
             const int deletedIndex = i;
             const int oldFocus = focusIndex;
-            processor.beginMultibandTopologyEdit();
-            const juce::ScopeGuard finishTopologyEdit { [this]
-            {
-                processor.requestMultibandTopologyReset();
-            } };
-            setStatesWhenDelete(i);
-            sortLinesInternal(false);
-
+            const int oldBandCount = lineNum + 1;
+            const int newBandCount = oldBandCount - 1;
             int focusAfterDelete = oldFocus;
             if (deletedIndex < oldFocus
-                || (deletedIndex == oldFocus && oldFocus > lineNum))
+                || (deletedIndex == oldFocus && oldFocus >= newBandCount))
                 --focusAfterDelete;
-            updateFocusIndex(focusAfterDelete, true);
 
-            setLineRelatedBoundsByX();
-            setSoloRelatedBounds();
-            if (auto* param = processor.treeState.getParameter(NUM_BANDS_ID))
-            {
-                param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(lineNum + 1));
-            }
-            refreshHoveredBandFromMouse();
-            bandWasDeleted = true;
-            break;
+            // Any synchronous host callback below may delete this component
+            // together with the whole editor. Keep the transaction processor-
+            // owned, and inspect the weak pointer before touching presentation.
+            auto& processorToUse = processor;
+            juce::Component::SafePointer<Multiband> safeThis(this);
+            if (! processorToUse.deleteMultibandBand(deletedIndex,
+                                                      oldBandCount)
+                || safeThis == nullptr)
+                return;
+
+            safeThis->focusIndex = juce::jlimit(0,
+                                                newBandCount - 1,
+                                                focusAfterDelete);
+            safeThis->applyAuthoritativeBandCount(newBandCount,
+                                                  false,
+                                                  false);
+
+            // Focus propagation can also invoke editor-owned callbacks, so it
+            // is deliberately the final operation in this listener.
+            safeThis->notifyFocusChanged();
+            return;
         }
     }
-
-    if (bandWasDeleted)
-        processor.lfoDataHasChanged();
 
     repaint();
 }

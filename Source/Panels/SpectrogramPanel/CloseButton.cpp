@@ -10,6 +10,17 @@
 
 #include "CloseButton.h"
 
+namespace
+{
+bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isPopupMenu()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown();
+}
+} // namespace
+
 //==============================================================================
 CloseButton::CloseButton()
     : juce::Button("Delete band")
@@ -127,8 +138,7 @@ void CloseButton::setPresented(bool shouldBePresented, bool animate)
         // keyboard focus immediately: the tile remains visible during its
         // fade, but Space/Return must no longer be able to delete a band.
         setInterceptsMouseClicks(false, false);
-        primaryPointerDown = false;
-        setState(juce::Button::buttonNormal);
+        dismissPointerGesture();
         if (hasKeyboardFocus(true))
             giveAwayKeyboardFocus();
         if (! animate || visibilityAnimation.current <= 0.001f)
@@ -157,30 +167,103 @@ bool CloseButton::advanceAnimation(float deltaSeconds)
     return visibilityChanged || hoverChanged || pressChanged;
 }
 
+void CloseButton::mouseEnter(const juce::MouseEvent& event)
+{
+    juce::Button::mouseEnter(event);
+    recoverMissingPointerUp(event);
+}
+
+void CloseButton::mouseMove(const juce::MouseEvent& event)
+{
+    juce::Button::mouseMove(event);
+    recoverMissingPointerUp(event);
+}
+
+void CloseButton::mouseExit(const juce::MouseEvent& event)
+{
+    juce::Button::mouseExit(event);
+    recoverMissingPointerUp(event);
+}
+
 void CloseButton::mouseDown(const juce::MouseEvent& event)
 {
+    if (primaryPointerDown)
+    {
+        if (! isPointerSource(event))
+            return;
+
+        // A fresh down from the owner closes a gesture whose mouseUp was lost.
+        dismissPointerGesture();
+    }
+
     // JUCE Button accepts every mouse button by default. A secondary click on
     // a destructive affordance must never delete a band; on macOS this also
     // covers Ctrl-click through isPopupMenu().
-    primaryPointerDown = event.mods.isLeftButtonDown()
-                         && ! event.mods.isPopupMenu();
-    if (primaryPointerDown)
-        juce::Button::mouseDown(event);
+    if (! presentationTarget || ! isEnabled() || ! isPrimaryPointerDown(event))
+        return;
+
+    primaryPointerDown = true;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+    juce::Button::mouseDown(event);
 }
 
 void CloseButton::mouseDrag(const juce::MouseEvent& event)
 {
-    if (primaryPointerDown)
+    if (primaryPointerDown && isPointerSource(event))
         juce::Button::mouseDrag(event);
 }
 
 void CloseButton::mouseUp(const juce::MouseEvent& event)
 {
-    if (! primaryPointerDown)
+    if (! primaryPointerDown || ! isPointerSource(event))
         return;
 
     primaryPointerDown = false;
+    pointerSourceIndex = -1;
+
+    // Releasing over the tile can invoke onClick and synchronously remove it,
+    // so the JUCE dispatch must remain the final operation in this path.
     juce::Button::mouseUp(event);
+}
+
+void CloseButton::visibilityChanged()
+{
+    juce::Button::visibilityChanged();
+
+    if (! isVisible())
+        dismissPointerGesture();
+}
+
+void CloseButton::enablementChanged()
+{
+    juce::Button::enablementChanged();
+
+    if (! isEnabled())
+        dismissPointerGesture();
+}
+
+void CloseButton::dismissPointerGesture() noexcept
+{
+    primaryPointerDown = false;
+    pointerSourceIndex = -1;
+
+    if (isDown())
+        setState(juce::Button::buttonNormal);
+}
+
+void CloseButton::recoverMissingPointerUp(const juce::MouseEvent& event)
+{
+    if (primaryPointerDown
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        dismissPointerGesture();
+}
+
+bool CloseButton::isPointerSource(const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
 }
 
 void CloseButton::buttonStateChanged()

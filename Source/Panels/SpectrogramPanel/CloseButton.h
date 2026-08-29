@@ -12,6 +12,10 @@
 
 #include "../../GUI/FireTheme.h"
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct CloseButtonPointerTestAccess;
+#endif
+
 //==============================================================================
 /*
 */
@@ -35,15 +39,30 @@ public:
     bool isPresented() const noexcept { return presentationTarget; }
 
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct CloseButtonPointerTestAccess;
+#endif
+
     void paintButton(juce::Graphics&, bool, bool) override;
     void buttonStateChanged() override;
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseMove(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void visibilityChanged() override;
+    void enablementChanged() override;
     void updateInteractionTargets() noexcept;
+    void dismissPointerGesture() noexcept;
+    void recoverMissingPointerUp(const juce::MouseEvent&);
+    bool isPointerSource(const juce::MouseEvent&) const noexcept;
 
     bool presentationTarget = false;
     bool primaryPointerDown = false;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
     fire::ui::DampedValue visibilityAnimation;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;

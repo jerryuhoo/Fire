@@ -3,6 +3,23 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 
+struct CloseButtonPointerTestAccess
+{
+    static bool hasPrimaryPointer(const CloseButton& button)
+    {
+        return button.primaryPointerDown;
+    }
+
+    static void setTrackedPointerSource(
+        CloseButton& button,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex)
+    {
+        button.pointerSourceType = sourceType;
+        button.pointerSourceIndex = sourceIndex;
+    }
+};
+
 namespace
 {
 class TestableCloseButton final : public CloseButton
@@ -211,6 +228,19 @@ TEST_CASE("Band deletion requires a primary click",
     component.mouseUp(makeMouseEvent(button, {}));
     CHECK(clickCount == 0);
 
+    const auto middleClick = juce::ModifierKeys {
+        juce::ModifierKeys::middleButtonModifier };
+    component.mouseDown(makeMouseEvent(button, middleClick));
+    component.mouseUp(makeMouseEvent(button, {}));
+    CHECK(clickCount == 0);
+
+    const auto primaryAndMiddle = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+        | juce::ModifierKeys::middleButtonModifier };
+    component.mouseDown(makeMouseEvent(button, primaryAndMiddle));
+    component.mouseUp(makeMouseEvent(button, {}));
+    CHECK(clickCount == 0);
+
 #if JUCE_MAC
     const auto controlClick = juce::ModifierKeys {
         juce::ModifierKeys::leftButtonModifier
@@ -225,4 +255,98 @@ TEST_CASE("Band deletion requires a primary click",
     component.mouseDown(makeMouseEvent(button, leftClick));
     component.mouseUp(makeMouseEvent(button, {}));
     CHECK(clickCount == 1);
+}
+
+TEST_CASE("Band deletion remains owned by one pointer source",
+          "[close-button][multiband][ui][input][source][multitouch]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    CloseButton button;
+    button.setBounds(0,
+                     0,
+                     CloseButton::minimumHitTargetSize,
+                     CloseButton::minimumHitTargetSize);
+    button.setPresented(true, false);
+
+    int clickCount = 0;
+    button.onClick = [&clickCount] { ++clickCount; };
+    auto& component = static_cast<juce::Component&>(button);
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    component.mouseDown(makeMouseEvent(button, primary));
+    REQUIRE(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+
+    const auto mainSource = juce::Desktop::getInstance().getMainMouseSource();
+    CloseButtonPointerTestAccess::setTrackedPointerSource(
+        button,
+        juce::MouseInputSource::touch,
+        mainSource.getIndex() + 19);
+
+    SECTION("foreign release is ignored")
+    {
+        component.mouseUp(makeMouseEvent(button, {}));
+    }
+
+    SECTION("foreign popup down cannot cancel the owner")
+    {
+        component.mouseDown(makeMouseEvent(
+            button,
+            juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier }));
+    }
+
+    CHECK(clickCount == 0);
+    CHECK(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+
+    CloseButtonPointerTestAccess::setTrackedPointerSource(
+        button, mainSource.getType(), mainSource.getIndex());
+    component.mouseUp(makeMouseEvent(button, {}));
+
+    CHECK(clickCount == 1);
+    CHECK_FALSE(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+}
+
+TEST_CASE("Band deletion recovers when its primary release is lost",
+          "[close-button][multiband][ui][input][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    CloseButton button;
+    button.setBounds(0,
+                     0,
+                     CloseButton::minimumHitTargetSize,
+                     CloseButton::minimumHitTargetSize);
+    button.setPresented(true, false);
+
+    int clickCount = 0;
+    button.onClick = [&clickCount] { ++clickCount; };
+    auto& component = static_cast<juce::Component&>(button);
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("owner movement without the primary button")
+    {
+        component.mouseDown(makeMouseEvent(button, primary));
+        REQUIRE(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+
+        component.mouseMove(makeMouseEvent(button, {}));
+        CHECK_FALSE(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+        CHECK_FALSE(button.isDown());
+
+        component.mouseUp(makeMouseEvent(button, {}));
+    }
+
+    SECTION("presentation is withdrawn while pressed")
+    {
+        component.mouseDown(makeMouseEvent(button, primary));
+        REQUIRE(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+
+        button.setPresented(false);
+        CHECK_FALSE(CloseButtonPointerTestAccess::hasPrimaryPointer(button));
+        CHECK_FALSE(button.isDown());
+
+        component.mouseUp(makeMouseEvent(button, {}));
+    }
+
+    CHECK(clickCount == 0);
 }

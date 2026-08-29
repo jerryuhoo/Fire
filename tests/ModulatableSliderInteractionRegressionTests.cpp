@@ -207,6 +207,51 @@ public:
     int minimumDepth = 0;
 };
 
+template <typename Owner>
+class DeleteOwnerOnGestureEnd final : public juce::AudioProcessorListener
+{
+public:
+    DeleteOwnerOnGestureEnd(FireAudioProcessor& processorToObserve,
+                            std::unique_ptr<Owner>& ownerToDelete)
+        : processor(processorToObserve), owner(ownerToDelete)
+    {
+        processor.addListener(this);
+    }
+
+    ~DeleteOwnerOnGestureEnd() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override {}
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails&) override {}
+
+    void audioProcessorParameterChangeGestureBegin(
+        juce::AudioProcessor*, int) override
+    {
+        ++beginCount;
+    }
+
+    void audioProcessorParameterChangeGestureEnd(
+        juce::AudioProcessor*, int) override
+    {
+        ++endCount;
+        if (owner != nullptr)
+        {
+            owner.reset();
+            callbackCompleted = true;
+        }
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<Owner>& owner;
+    int beginCount = 0;
+    int endCount = 0;
+    bool callbackCompleted = false;
+};
+
 template <typename ComponentType>
 ComponentType* findDescendant(juce::Component& root)
 {
@@ -234,6 +279,27 @@ juce::Button* findButtonWithText(juce::Component& root,
                 return match;
 
     return nullptr;
+}
+
+juce::Slider* findSliderAttachedToLabel(juce::Component& root,
+                                        const juce::String& labelText)
+{
+    if (auto* label = dynamic_cast<juce::Label*>(&root);
+        label != nullptr && label->getText() == labelText)
+        return dynamic_cast<juce::Slider*>(label->getAttachedComponent());
+
+    for (int index = 0; index < root.getNumChildComponents(); ++index)
+        if (auto* child = root.getChildComponent(index))
+            if (auto* slider = findSliderAttachedToLabel(*child, labelText))
+                return slider;
+
+    return nullptr;
+}
+
+void beginPrimaryGesture(juce::Slider& slider)
+{
+    const auto position = slider.getLocalBounds().toFloat().getCentre();
+    slider.mouseDown(makeMouseEvent(slider, position, primaryButton));
 }
 
 void performPrimaryClick(juce::Button& button)
@@ -1243,4 +1309,198 @@ TEST_CASE("Editor hide and panel transitions dismiss all modulatable slider gest
     checkBalanced(host, 3);
 
     editor->removeFromDesktop();
+}
+
+TEST_CASE("Panel gesture cleanup survives synchronous owner deletion",
+          "[modulatable-slider][ui][gesture][lifecycle][self-delete][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+
+    SECTION("BandPanel")
+    {
+        auto panel = std::make_unique<BandPanel>(
+            processor, nullptr, nullptr, nullptr, nullptr, nullptr);
+        panel->setBounds(0, 0, 1000, 300);
+        auto* slider = panel->getDriveKnob();
+        REQUIRE(slider != nullptr);
+        DeleteOwnerOnGestureEnd<BandPanel> deleteOnEnd(processor, panel);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        auto* rawPanel = panel.get();
+        rawPanel->dismissTransientInteraction();
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+
+    SECTION("GlobalPanel")
+    {
+        auto panel = std::make_unique<GlobalPanel>(
+            processor, nullptr, nullptr, nullptr, nullptr, nullptr);
+        panel->setBounds(0, 0, 1000, 300);
+        auto* slider = panel->getModulatableSliders().front();
+        REQUIRE(slider != nullptr);
+        DeleteOwnerOnGestureEnd<GlobalPanel> deleteOnEnd(processor, panel);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        auto* rawPanel = panel.get();
+        rawPanel->dismissTransientInteraction();
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+
+    SECTION("LfoPanel")
+    {
+        auto panel = std::make_unique<LfoPanel>(processor);
+        panel->setBounds(0, 0, 1000, 500);
+        auto* slider = findSliderAttachedToLabel(*panel, "Rate");
+        REQUIRE(slider != nullptr);
+        DeleteOwnerOnGestureEnd<LfoPanel> deleteOnEnd(processor, panel);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        auto* rawPanel = panel.get();
+        rawPanel->dismissTransientInteraction();
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+
+    SECTION("LfoPanel selection")
+    {
+        auto panel = std::make_unique<LfoPanel>(processor);
+        panel->setBounds(0, 0, 1000, 500);
+        auto* slider = findSliderAttachedToLabel(*panel, "Rate");
+        auto* button = findButtonWithText(*panel, "LFO 2");
+        REQUIRE(slider != nullptr);
+        REQUIRE(button != nullptr);
+        DeleteOwnerOnGestureEnd<LfoPanel> deleteOnEnd(processor, panel);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        performPrimaryClick(*button);
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+
+    SECTION("LfoPanel visibility boundary")
+    {
+        auto panel = std::make_unique<LfoPanel>(processor);
+        panel->setBounds(0, 0, 1000, 500);
+        panel->setVisible(true);
+        auto* slider = findSliderAttachedToLabel(*panel, "Rate");
+        REQUIRE(slider != nullptr);
+        DeleteOwnerOnGestureEnd<LfoPanel> deleteOnEnd(processor, panel);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        auto* rawPanel = panel.get();
+        rawPanel->setVisible(false);
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+}
+
+TEST_CASE("Editor gesture cleanup survives synchronous owner deletion",
+          "[modulatable-slider][ui][editor][gesture][lifecycle][self-delete][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    auto* panel = findDescendant<BandPanel>(*editor);
+    REQUIRE(panel != nullptr);
+    auto* slider = panel->getDriveKnob();
+    REQUIRE(slider != nullptr);
+    DeleteOwnerOnGestureEnd<FireAudioProcessorEditor> deleteOnEnd(
+        processor, editor);
+
+    SECTION("workspace transition")
+    {
+        auto* button = findButtonWithText(*editor, "MASTER LAB");
+        REQUIRE(button != nullptr);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        performPrimaryClick(*button);
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(editor == nullptr);
+    }
+
+    SECTION("LFO workspace transition")
+    {
+        auto* lfoButton = findButtonWithText(*editor, "MOD FORGE");
+        auto* masterButton = findButtonWithText(*editor, "MASTER LAB");
+        auto* lfoPanel = findDescendant<LfoPanel>(*editor);
+        REQUIRE(lfoButton != nullptr);
+        REQUIRE(masterButton != nullptr);
+        REQUIRE(lfoPanel != nullptr);
+
+        performPrimaryClick(*lfoButton);
+        auto* rateSlider = findSliderAttachedToLabel(*lfoPanel, "Rate");
+        REQUIRE(rateSlider != nullptr);
+        beginPrimaryGesture(*rateSlider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        performPrimaryClick(*masterButton);
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(editor == nullptr);
+    }
+
+    SECTION("zoom transition")
+    {
+        auto* button = dynamic_cast<juce::Button*>(
+            editor->findChildWithID("zoom"));
+        REQUIRE(button != nullptr);
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        performPrimaryClick(*button);
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(editor == nullptr);
+    }
+
+    SECTION("visibility boundary")
+    {
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        editor->setVisible(false);
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(editor == nullptr);
+    }
+
+    SECTION("hidden timer cleanup")
+    {
+        editor->removeFromDesktop();
+        beginPrimaryGesture(*slider);
+        REQUIRE(deleteOnEnd.beginCount == 1);
+
+        editor->timerCallback();
+
+        CHECK(deleteOnEnd.endCount == 1);
+        CHECK(deleteOnEnd.callbackCompleted);
+        CHECK(editor == nullptr);
+    }
 }

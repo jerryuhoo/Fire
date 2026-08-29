@@ -102,9 +102,15 @@ GlobalPanel::~GlobalPanel()
 
 void GlobalPanel::dismissTransientInteraction() noexcept
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     for (auto* slider : modulatableSliders)
+    {
         if (slider != nullptr)
             slider->dismissTransientInteraction();
+
+        if (safeThis == nullptr)
+            return;
+    }
 
     filterLowCutButton.dismissPointerGesture();
     filterPeakButton.dismissPointerGesture();
@@ -150,9 +156,10 @@ bool GlobalPanel::canOpenSlopePopup(bool lowCut) const noexcept
 
 void GlobalPanel::visibilityChanged()
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     juce::Component::visibilityChanged();
 
-    if (! isShowing())
+    if (safeThis != nullptr && ! isShowing())
         dismissTransientInteraction();
 }
 

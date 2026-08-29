@@ -2002,10 +2002,15 @@ void LfoPanel::setLfo(int newIndex)
     if (! juce::isPositiveAndBelow(newIndex, static_cast<int>(lfoSelectButtons.size())))
         return;
 
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+
     // This must precede changing currentLfoIndex, editor data, or resetting an
     // attachment. A stale drag/text editor belongs exclusively to the LFO that
     // was visible when the interaction began.
     dismissTransientInteraction();
+
+    if (safeThis == nullptr)
+        return;
 
     const bool selectionChanged = currentLfoIndex != newIndex;
 
@@ -2044,6 +2049,8 @@ void LfoPanel::setLfo(int newIndex)
 
 void LfoPanel::dismissTransientInteraction()
 {
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+
     // Cancel the editor first. Slider dismissal may synchronously notify
     // listeners, while LFO editing cancellation is deliberately callback-free.
     lfoEditor.dismissTransientInteraction();
@@ -2058,9 +2065,21 @@ void LfoPanel::dismissTransientInteraction()
     syncButton.dismissPointerGesture();
 
     rateSlider.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+
     gridXSlider.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+
     gridYSlider.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+
     lfoSmoothSlider.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+
     lfoPhaseSlider.dismissTransientInteraction();
 }
 
@@ -2126,11 +2145,19 @@ void LfoPanel::dismissModulationMatrixDialog()
 
 void LfoPanel::visibilityChanged()
 {
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
     juce::Component::visibilityChanged();
+
+    if (safeThis == nullptr)
+        return;
 
     if (! isShowing())
     {
         dismissTransientInteraction();
+
+        if (safeThis == nullptr)
+            return;
+
         dismissModulationMatrixDialog();
     }
 }

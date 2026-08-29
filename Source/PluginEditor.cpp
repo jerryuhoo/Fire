@@ -611,7 +611,11 @@ void FireAudioProcessorEditor::resized()
 
 void FireAudioProcessorEditor::visibilityChanged()
 {
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
     juce::AudioProcessorEditor::visibilityChanged();
+
+    if (safeThis == nullptr)
+        return;
 
     if (isShowing())
     {
@@ -620,14 +624,38 @@ void FireAudioProcessorEditor::visibilityChanged()
     else
     {
         for (auto* slider : allModulatableSliders)
+        {
             if (slider != nullptr)
                 slider->dismissTransientInteraction();
+
+            if (safeThis == nullptr)
+                return;
+        }
+
         bandPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         globalPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         lfoPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         lfoPanel.dismissModulationMatrixDialog();
+        if (safeThis == nullptr)
+            return;
+
         stateComponent.dismissSettingsDialog();
+        if (safeThis == nullptr)
+            return;
+
         hideValuePopup();
+        if (safeThis == nullptr)
+            return;
+
         hqButton.dismissPointerGesture();
         windowLeftButton.dismissPointerGesture();
         windowRightButton.dismissPointerGesture();
@@ -635,6 +663,10 @@ void FireAudioProcessorEditor::visibilityChanged()
         zoomButton.dismissPointerGesture();
         stateComponent.dismissPointerGestures();
         valueEntryPopup.dismissSession();
+
+        if (safeThis == nullptr)
+            return;
+
         multiband.dismissTransientUi();
     }
 }
@@ -832,6 +864,8 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
 
 void FireAudioProcessorEditor::timerCallback()
 {
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+
     MeterValues latestMeterValues;
     if (processor.getLatestMeterValues(latestMeterValues))
     {
@@ -851,6 +885,9 @@ void FireAudioProcessorEditor::timerCallback()
     // generic host surface automates only that parameter.
     multiband.synchroniseBandCountFromParameter();
 
+    if (safeThis == nullptr)
+        return;
+
     // Always consume graph telemetry, even while the host keeps this editor
     // instance hidden. A hidden frame deliberately discards the value below;
     // showing the editor again must wait for a packet from the current source
@@ -865,15 +902,42 @@ void FireAudioProcessorEditor::timerCallback()
     if (! isShowing())
     {
         for (auto* slider : allModulatableSliders)
+        {
             if (slider != nullptr)
                 slider->dismissTransientInteraction();
+
+            if (safeThis == nullptr)
+                return;
+        }
+
         bandPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         globalPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         lfoPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         lfoPanel.dismissModulationMatrixDialog();
+        if (safeThis == nullptr)
+            return;
+
         stateComponent.dismissSettingsDialog();
+        if (safeThis == nullptr)
+            return;
+
         hideValuePopup();
+        if (safeThis == nullptr)
+            return;
+
         valueEntryPopup.dismissSession();
+        if (safeThis == nullptr)
+            return;
+
         multiband.dismissTransientUi();
         return;
     }
@@ -987,6 +1051,7 @@ void FireAudioProcessorEditor::updateMainPanelVisibility()
 
 void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animateSelection)
 {
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
     targetWorkspace = juce::jlimit(0, 2, targetWorkspace);
 
     const bool willHideBandPanel = targetWorkspace != 0 && bandPanel.isVisible();
@@ -994,13 +1059,28 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     if (willHideBandPanel || willHideGlobalPanel)
     {
         if (willHideBandPanel)
+        {
             bandPanel.dismissTransientInteraction();
 
+            if (safeThis == nullptr)
+                return;
+        }
+
         if (willHideGlobalPanel)
+        {
             globalPanel.dismissTransientInteraction();
 
+            if (safeThis == nullptr)
+                return;
+        }
+
         hideValuePopup();
+        if (safeThis == nullptr)
+            return;
+
         valueEntryPopup.dismissSession();
+        if (safeThis == nullptr)
+            return;
     }
 
     activeWorkspace = targetWorkspace;
@@ -1018,22 +1098,30 @@ void FireAudioProcessorEditor::selectWorkspace(int targetWorkspace, bool animate
     {
         panels[static_cast<size_t>(index)]->setAlpha(1.0f);
         panels[static_cast<size_t>(index)]->setVisible(index == activeWorkspace);
+
+        if (safeThis == nullptr)
+            return;
     }
 
     multiband.setAlpha(1.0f);
     filterControl.setAlpha(1.0f);
     multiband.setVisible(activeWorkspace != 2);
+    if (safeThis == nullptr)
+        return;
+
     filterControl.setVisible(activeWorkspace == 2);
+    if (safeThis == nullptr)
+        return;
 
     repaint(navigationArea.getUnion(contentArea));
 }
 
 void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
 {
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+
     if (clickedButton == stateComponent.getToggleABButton())
     {
-        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
-            this);
         stateComponent.getProcStateAB()->toggleAB();
 
         if (safeThis == nullptr)
@@ -1048,6 +1136,10 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     if (multiband.getStateComponent().getChangedState())
     {
         multiband.setFocusIndex(0);
+
+        if (safeThis == nullptr)
+            return;
+
         multiband.getStateComponent().setChangedState(false);
     }
     if (clickedButton == &zoomButton)
@@ -1070,27 +1162,55 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         // Set visibility for the top-level controls.
         // If we are zoomed, these are NOT visible. If not zoomed, they ARE visible.
         for (auto* comp : componentsToHideOnZoom)
+        {
             comp->setVisible(! isNowZoomed);
+
+            if (safeThis == nullptr)
+                return;
+        }
 
         if (isNowZoomed)
         {
             for (auto* slider : allModulatableSliders)
+            {
                 if (slider != nullptr)
                     slider->dismissTransientInteraction();
+
+                if (safeThis == nullptr)
+                    return;
+            }
+
             hideValuePopup();
+            if (safeThis == nullptr)
+                return;
+
             valueEntryPopup.dismissSession();
+            if (safeThis == nullptr)
+                return;
 
             // When entering zoom, hide all main panels.
             bandPanel.setVisible(false);
+            if (safeThis == nullptr)
+                return;
+
             globalPanel.setVisible(false);
+            if (safeThis == nullptr)
+                return;
+
             lfoPanel.setVisible(false);
+            if (safeThis == nullptr)
+                return;
         }
         else
         {
             // When exiting zoom, restore the correct panel visibility using our helper function.
             updateMainPanelVisibility();
+
+            if (safeThis == nullptr)
+                return;
         }
         resized();
+        return;
     }
     if (clickedButton == &windowLeftButton || clickedButton == &windowRightButton || clickedButton == &windowLfoButton)
     {
@@ -1098,6 +1218,7 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
                                          ? 0
                                          : (clickedButton == &windowLfoButton ? 1 : 2);
         selectWorkspace(targetWorkspace, true);
+        return;
     }
     for (int i = 0; i < 4; i++)
     {
@@ -1108,6 +1229,9 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
             if (i == bandPanel.getFocusBandNum())
             {
                 bandPanel.setBandKnobsStates(clickedButton->getToggleState(), false);
+
+                if (safeThis == nullptr)
+                    return;
             }
         }
     }
@@ -1146,6 +1270,8 @@ void FireAudioProcessorEditor::setLinearSlider(juce::Slider& slider)
 
 void FireAudioProcessorEditor::updateWhenChangingFocus(int bandIndex)
 {
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+
     // MOD FORGE shares the focused band's history.  Keep this current even
     // while the editor has no desktop peer so the first graph frame is never
     // sourced from the processor's default global history.  MASTER LAB must
@@ -1157,6 +1283,10 @@ void FireAudioProcessorEditor::updateWhenChangingFocus(int bandIndex)
     // mouse-listener path missed close-button clicks and selections made from
     // MOD FORGE, leaving the visible rail and the edited DSP band out of sync.
     bandPanel.setFocusBandNum(juce::jlimit(0, 3, bandIndex), true);
+
+    if (safeThis == nullptr)
+        return;
+
     modulationSnapshotFramesRemaining = 0;
     updateModulationStates();
     repaint();

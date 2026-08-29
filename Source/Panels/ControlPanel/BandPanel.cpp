@@ -689,9 +689,15 @@ void BandPanel::dismissButtonInteractions() noexcept
 
 void BandPanel::dismissTransientInteraction() noexcept
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     for (auto* slider : modulatableSliders)
+    {
         if (slider != nullptr)
             slider->dismissTransientInteraction();
+
+        if (safeThis == nullptr)
+            return;
+    }
 
     dismissButtonInteractions();
     invalidateDistortionModeInteractions();
@@ -699,9 +705,15 @@ void BandPanel::dismissTransientInteraction() noexcept
 
 void BandPanel::dismissTransientInteractionForParameterRebind() noexcept
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     for (auto* slider : modulatableSliders)
+    {
         if (slider != nullptr)
             slider->dismissTransientInteractionPreservingContextMenu();
+
+        if (safeThis == nullptr)
+            return;
+    }
 
     dismissButtonInteractions();
     invalidateDistortionModeInteractions();
@@ -730,9 +742,10 @@ bool BandPanel::canOpenDistortionModePopup(size_t modeIndex) const noexcept
 
 void BandPanel::visibilityChanged()
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     juce::Component::visibilityChanged();
 
-    if (! isShowing())
+    if (safeThis != nullptr && ! isShowing())
         dismissTransientInteraction();
 }
 
@@ -882,6 +895,8 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
 
 void BandPanel::setFocusBandNum(int num, bool forceUpdate)
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+
     if (! juce::isPositiveAndBelow(num, 4))
     {
         jassertfalse;
@@ -921,6 +936,9 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     // An already chosen context-menu command is different: its handler froze
     // the old parameter ID when the menu opened, so preserve that one session.
     dismissTransientInteractionForParameterRebind();
+
+    if (safeThis == nullptr)
+        return;
 
     processor.setUiFocusBand(num);
 

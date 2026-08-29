@@ -1,10 +1,12 @@
 #include "../Source/PluginProcessor.h"
+#include "../Source/PluginEditor.h"
 #include "../Source/Panels/TopPanel/Preset.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <memory>
 #include <stdexcept>
 #include <thread>
 
@@ -224,6 +226,79 @@ public:
     int parameterIndex = -1;
     bool throwOnNextChange = true;
 };
+
+enum class HostDeletionTrigger
+{
+    parameterChange,
+    nonParameterChange
+};
+
+template <typename Owner>
+class DeleteUiOnHostNotification final
+    : public juce::AudioProcessorListener
+{
+public:
+    DeleteUiOnHostNotification(FireAudioProcessor& processorToObserve,
+                               std::unique_ptr<Owner>& ownerToDelete,
+                               HostDeletionTrigger triggerToUse)
+        : processor(processorToObserve),
+          owner(ownerToDelete),
+          trigger(triggerToUse)
+    {
+        processor.addListener(this);
+    }
+
+    ~DeleteUiOnHostNotification() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override
+    {
+        if (trigger == HostDeletionTrigger::parameterChange)
+            deleteOwnerOnce();
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (trigger == HostDeletionTrigger::nonParameterChange
+            && details.nonParameterStateChanged)
+            deleteOwnerOnce();
+    }
+
+    FireAudioProcessor& processor;
+    std::unique_ptr<Owner>& owner;
+    HostDeletionTrigger trigger;
+    int callbackCount = 0;
+    bool callbackCompleted = false;
+
+private:
+    void deleteOwnerOnce()
+    {
+        if (callbackCount != 0)
+            return;
+
+        ++callbackCount;
+        owner.reset();
+        callbackCompleted = true;
+    }
+};
+
+template <typename ComponentType>
+ComponentType* findComponentOfType(juce::Component& root)
+{
+    if (auto* component = dynamic_cast<ComponentType*>(&root))
+        return component;
+
+    for (int index = 0; index < root.getNumChildComponents(); ++index)
+        if (auto* child = root.getChildComponent(index))
+            if (auto* component = findComponentOfType<ComponentType>(*child))
+                return component;
+
+    return nullptr;
+}
 
 int getParameterIndex(const FireAudioProcessor& processor,
                       const juce::String& parameterID)
@@ -602,6 +677,72 @@ TEST_CASE("Preset selection publishes identity and sound as one host generation"
 
     CHECK(getPlainParameter(subject, NUM_BANDS_ID) == Catch::Approx(1.0f));
     CHECK(subject.statePresets.getCurrentPresetKey() == "New.fire");
+}
+
+TEST_CASE("Preset selection survives synchronous editor deletion by the host",
+          "[preset][ui][host][lifetime][self-delete][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    FireAudioProcessor presetSource;
+    setPlainParameter(presetSource, driveID, 73.0f);
+    writePresetFile(presetSource,
+                    temporaryDirectory.directory.getChildFile("Delete.fire"),
+                    "Delete");
+
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    setPlainParameter(processor, driveID, 11.0f);
+    processor.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    auto* stateComponent =
+        findComponentOfType<state::StateComponent>(*editor);
+    REQUIRE(stateComponent != nullptr);
+    auto* presetBox = stateComponent->getPresetBox();
+    REQUIRE(presetBox != nullptr);
+    REQUIRE(presetBox->getNumItems() == 1);
+
+    SECTION("parameter notification during preset load")
+    {
+        NonParameterStateCapture committedHost(processor);
+        DeleteUiOnHostNotification<FireAudioProcessorEditor> deleteOnChange(
+            processor, editor, HostDeletionTrigger::parameterChange);
+        presetBox->setSelectedId(1, juce::sendNotificationSync);
+
+        CHECK(deleteOnChange.callbackCount == 1);
+        CHECK(deleteOnChange.callbackCompleted);
+        CHECK(editor == nullptr);
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
+        CHECK((processor.getMultibandTopologyGenerationForTesting() & 1u)
+              == 0u);
+        REQUIRE(committedHost.states.size() == 1);
+        CHECK(committedHost.generations.front() % 2u == 0u);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
+
+    SECTION("final non-parameter state notification")
+    {
+        NonParameterStateCapture committedHost(processor);
+        DeleteUiOnHostNotification<FireAudioProcessorEditor> deleteOnChange(
+            processor, editor, HostDeletionTrigger::nonParameterChange);
+        presetBox->setSelectedId(1, juce::sendNotificationSync);
+
+        CHECK(deleteOnChange.callbackCount == 1);
+        CHECK(deleteOnChange.callbackCompleted);
+        CHECK(editor == nullptr);
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
+        CHECK((processor.getMultibandTopologyGenerationForTesting() & 1u)
+              == 0u);
+        REQUIRE(committedHost.states.size() == 1);
+        CHECK(committedHost.generations.front() % 2u == 0u);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
 }
 
 TEST_CASE("Preset scan rejects malformed and foreign XML without exposing reset traps",

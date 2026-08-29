@@ -1476,6 +1476,7 @@ namespace state
 
     void StateComponent::updatePresetBox(int selectedId) // when preset is changed
     {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
         isChanged = true; // do it first
 
         if (selectedId > 0)
@@ -1497,9 +1498,10 @@ namespace state
             if (internalIdToLoad.isNotEmpty())
             {
                 beginProgrammaticChange();
-                const juce::ScopeGuard finishProgrammaticLoad { [this]
+                const juce::ScopeGuard finishProgrammaticLoad { [safeThis]
                 {
-                    endProgrammaticChange();
+                    if (safeThis != nullptr)
+                        safeThis->endProgrammaticChange();
                 } };
                 bool presetWasLoaded = false;
                 {
@@ -1530,11 +1532,18 @@ namespace state
                     juce::AudioProcessorListener::ChangeDetails {}
                         .withNonParameterStateChanged(true));
 
-                const juce::String loadedPresetName = presetBox.getItemText(presetBox.indexOfItemId(selectedId));
+                if (safeThis == nullptr)
+                    return;
 
-                presetBox.setText(loadedPresetName, juce::dontSendNotification);
+                const juce::String loadedPresetName =
+                    safeThis->presetBox.getItemText(
+                        safeThis->presetBox.indexOfItemId(selectedId));
 
-                presetBox.setSelectedId(selectedId, juce::dontSendNotification);
+                safeThis->presetBox.setText(
+                    loadedPresetName, juce::dontSendNotification);
+
+                safeThis->presetBox.setSelectedId(
+                    selectedId, juce::dontSendNotification);
             }
             else
             {

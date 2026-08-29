@@ -1108,6 +1108,8 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
 {
     if (combobox == stateComponent.getPresetBox())
     {
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
+            this);
         const int selectedId = combobox->getSelectedId();
 
         // Programmatic synchronisation always uses dontSendNotification, so a
@@ -1117,6 +1119,11 @@ void FireAudioProcessorEditor::comboBoxChanged(juce::ComboBox* combobox)
         if (selectedId > 0)
             stateComponent.updatePresetBox(selectedId);
 
+        if (safeThis == nullptr)
+            return;
+
+        // Resorting can synchronously notify the host through a crossover
+        // repair. Keep it as the final operation in this callback.
         multiband.resortAndRedrawLines();
     }
 }

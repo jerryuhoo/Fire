@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <stdexcept>
 #include <thread>
@@ -21,6 +22,40 @@ struct StateComponentMenuTestAccess
     static void handleResult(state::StateComponent& component, int result)
     {
         component.handlePresetMenuResult(result);
+    }
+};
+
+struct StateComponentPresetBoxTestAccess
+{
+    static std::function<void(int)> createResultHandler(
+        state::StateComponent& component)
+    {
+        auto& presetBox = component.presetBox;
+        return presetBox.createPopupResultHandler(
+            presetBox.popupContextRevision);
+    }
+
+    static bool isPopupRequestArmed(
+        const state::StateComponent& component)
+    {
+        return component.presetBox.popupRequestArmed;
+    }
+
+    static bool isPopupSessionActive(
+        const state::StateComponent& component)
+    {
+        return component.presetBox.popupSessionActive;
+    }
+
+    static bool hasActivePointerInteraction(
+        const state::StateComponent& component)
+    {
+        return component.presetBox.pointerInteractionActive;
+    }
+
+    static void selectNextPreset(state::StateComponent& component)
+    {
+        component.setNextPreset();
     }
 };
 
@@ -68,6 +103,30 @@ float getPlainParameter(const FireAudioProcessor& processor,
     const auto* value = processor.treeState.getRawParameterValue(parameterID);
     REQUIRE(value != nullptr);
     return value->load(std::memory_order_relaxed);
+}
+
+juce::MouseEvent makePresetBoxMouseEvent(
+    juce::Component& component,
+    juce::ModifierKeys modifiers,
+    bool wasDragged = false)
+{
+    const auto position = component.getLocalBounds().toFloat().getCentre();
+    const auto time = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             time,
+             position,
+             time,
+             1,
+             wasDragged };
 }
 
 LfoData makeLfoShape(float middleX, float middleY, float smoothness)
@@ -894,6 +953,266 @@ TEST_CASE("Preset menu rejects hidden and superseded asynchronous results",
         staleResult(1);
 
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
+}
+
+TEST_CASE("Preset box accepts only deliberate input in its current lifecycle",
+          "[preset][ui][preset-box][input][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    FireAudioProcessor firstPreset;
+    FireAudioProcessor secondPreset;
+    writePresetFile(firstPreset,
+                    temporaryDirectory.directory.getChildFile("First.fire"),
+                    "First");
+    writePresetFile(secondPreset,
+                    temporaryDirectory.directory.getChildFile("Second.fire"),
+                    "Second");
+
+    FireAudioProcessor processor;
+    processor.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    auto* presetBox = component.getPresetBox();
+    REQUIRE(presetBox != nullptr);
+    REQUIRE(component.isShowing());
+    REQUIRE(presetBox->getNumItems() == 2);
+
+    int changeCount = 0;
+    presetBox->onChange = [&changeCount] { ++changeCount; };
+    const juce::ScopeGuard cleanup { [&]
+    {
+        presetBox->onChange = nullptr;
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+    auto& presetBoxComponent = static_cast<juce::Component&>(*presetBox);
+
+    SECTION("auxiliary and mixed presses never arm the popup")
+    {
+        const std::array rejectedModifiers {
+            juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier },
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                                 | juce::ModifierKeys::middleButtonModifier }
+        };
+
+        for (const auto modifiers : rejectedModifiers)
+        {
+            presetBoxComponent.mouseDown(
+                makePresetBoxMouseEvent(presetBoxComponent, modifiers));
+            presetBoxComponent.mouseDrag(
+                makePresetBoxMouseEvent(
+                    presetBoxComponent, modifiers, true));
+            presetBoxComponent.mouseUp(
+                makePresetBoxMouseEvent(presetBoxComponent, {}, true));
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+            CHECK_FALSE(presetBox->isPopupActive());
+            CHECK_FALSE(
+                StateComponentPresetBoxTestAccess::isPopupRequestArmed(
+                    component));
+            CHECK_FALSE(
+                StateComponentPresetBoxTestAccess::hasActivePointerInteraction(
+                    component));
+            CHECK(presetBox->getSelectedId() == 0);
+            CHECK(changeCount == 0);
+        }
+    }
+
+    SECTION("a queued primary opener cannot cross a hide-show boundary")
+    {
+        presetBoxComponent.mouseDown(makePresetBoxMouseEvent(
+            presetBoxComponent,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+        REQUIRE(presetBox->isPopupActive());
+        REQUIRE(StateComponentPresetBoxTestAccess::isPopupRequestArmed(
+            component));
+        REQUIRE(
+            StateComponentPresetBoxTestAccess::hasActivePointerInteraction(
+                component));
+
+        component.setVisible(false);
+        CHECK_FALSE(presetBox->isPopupActive());
+        component.setVisible(true);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        CHECK_FALSE(presetBox->isPopupActive());
+        CHECK_FALSE(StateComponentPresetBoxTestAccess::isPopupRequestArmed(
+            component));
+        CHECK_FALSE(StateComponentPresetBoxTestAccess::isPopupSessionActive(
+            component));
+        CHECK(presetBox->getSelectedId() == 0);
+        CHECK(changeCount == 0);
+
+        presetBoxComponent.mouseMove(
+            makePresetBoxMouseEvent(presetBoxComponent, {}));
+        CHECK_FALSE(
+            StateComponentPresetBoxTestAccess::hasActivePointerInteraction(
+                component));
+    }
+
+    SECTION("hidden and disabled direct commands are inert")
+    {
+        component.setVisible(false);
+        presetBox->showPopup();
+        REQUIRE(presetBox->keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK_FALSE(presetBox->isPopupActive());
+        CHECK(presetBox->getSelectedId() == 0);
+        CHECK(changeCount == 0);
+
+        component.setVisible(true);
+        component.setEnabled(false);
+        presetBox->showPopup();
+        REQUIRE(presetBox->keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK_FALSE(presetBox->isPopupActive());
+        CHECK(presetBox->getSelectedId() == 0);
+        CHECK(changeCount == 0);
+    }
+
+    SECTION("direction keys commit synchronously")
+    {
+        REQUIRE(presetBox->keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        CHECK(presetBox->getSelectedId() == 1);
+        CHECK(changeCount == 1);
+
+        REQUIRE(presetBox->keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        CHECK(presetBox->getSelectedId() == 2);
+        CHECK(changeCount == 2);
+
+        REQUIRE(presetBox->keyPressed(
+            juce::KeyPress { juce::KeyPress::leftKey }));
+        CHECK(presetBox->getSelectedId() == 1);
+        CHECK(changeCount == 3);
+    }
+
+    SECTION("header navigation commits before the preset list can change")
+    {
+        StateComponentPresetBoxTestAccess::selectNextPreset(component);
+        CHECK(presetBox->getSelectedId() == 1);
+        CHECK(changeCount == 1);
+    }
+}
+
+TEST_CASE("Preset box binds asynchronous results to one preset-list revision",
+          "[preset][ui][preset-box][session][identity][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    FireAudioProcessor laterPreset;
+    setPlainParameter(laterPreset, driveID, 77.0f);
+    writePresetFile(laterPreset,
+                    temporaryDirectory.directory.getChildFile("Zed.fire"),
+                    "Zed");
+
+    FireAudioProcessor processor;
+    processor.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    auto* presetBox = component.getPresetBox();
+    REQUIRE(presetBox != nullptr);
+    REQUIRE(component.isShowing());
+    REQUIRE(presetBox->getNumItems() == 1);
+
+    presetBox->onChange = [&]
+    {
+        component.updatePresetBox(presetBox->getSelectedId());
+    };
+    const juce::ScopeGuard cleanup { [&]
+    {
+        presetBox->onChange = nullptr;
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+
+    SECTION("a rescan cannot reinterpret an old numeric item ID")
+    {
+        auto staleResult =
+            StateComponentPresetBoxTestAccess::createResultHandler(component);
+
+        FireAudioProcessor earlierPreset;
+        setPlainParameter(earlierPreset, driveID, 33.0f);
+        writePresetFile(
+            earlierPreset,
+            temporaryDirectory.directory.getChildFile("Alpha.fire"),
+            "Alpha");
+        processor.statePresets.scanAllPresets();
+        component.synchronisePresetSelectionFromManager();
+        REQUIRE(presetBox->getNumItems() == 2);
+        REQUIRE(presetBox->getItemText(presetBox->indexOfItemId(1))
+                == "Alpha");
+
+        setPlainParameter(processor, driveID, 11.0f);
+        staleResult(1);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(11.0f));
+        CHECK(processor.statePresets.getCurrentPresetKey().isEmpty());
+        CHECK(presetBox->getSelectedId() == 0);
+
+        auto currentResult =
+            StateComponentPresetBoxTestAccess::createResultHandler(component);
+        currentResult(1);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(33.0f));
+        CHECK(processor.statePresets.getCurrentPresetKey() == "Alpha.fire");
+        CHECK(presetBox->getSelectedId() == 1);
+
+        setPlainParameter(processor, driveID, 19.0f);
+        currentResult(2);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(19.0f));
+        CHECK(presetBox->getSelectedId() == 1);
+    }
+
+    SECTION("only the newest result handler may commit")
+    {
+        auto staleResult =
+            StateComponentPresetBoxTestAccess::createResultHandler(component);
+        auto currentResult =
+            StateComponentPresetBoxTestAccess::createResultHandler(component);
+
+        setPlainParameter(processor, driveID, 11.0f);
+        staleResult(1);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(11.0f));
+        CHECK(presetBox->getSelectedId() == 0);
+
+        currentResult(1);
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(77.0f));
+        CHECK(processor.statePresets.getCurrentPresetKey() == "Zed.fire");
+        CHECK(presetBox->getSelectedId() == 1);
+    }
+
+    SECTION("disable-enable consumes the pending result")
+    {
+        auto staleResult =
+            StateComponentPresetBoxTestAccess::createResultHandler(component);
+        setPlainParameter(processor, driveID, 11.0f);
+
+        component.setEnabled(false);
+        component.setEnabled(true);
+        staleResult(1);
+
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(11.0f));
+        CHECK(processor.statePresets.getCurrentPresetKey().isEmpty());
+        CHECK(presetBox->getSelectedId() == 0);
     }
 }
 

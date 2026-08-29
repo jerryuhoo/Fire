@@ -26,6 +26,7 @@ class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct StateComponentDialogTestAccess;
 struct StateComponentMenuTestAccess;
+struct StateComponentPresetBoxTestAccess;
 #endif
 
 namespace state
@@ -196,7 +197,61 @@ PluginProcessor).
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         friend struct ::StateComponentDialogTestAccess;
         friend struct ::StateComponentMenuTestAccess;
+        friend struct ::StateComponentPresetBoxTestAccess;
 #endif
+
+        class PresetComboBox final : public juce::ComboBox
+        {
+        public:
+            void dismissTransientInteraction() noexcept;
+            void invalidateMenuContents() noexcept;
+            void showPopup() override;
+
+        private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+            friend struct ::StateComponentPresetBoxTestAccess;
+#endif
+
+            bool keyPressed(const juce::KeyPress& key) override;
+            void mouseDown(const juce::MouseEvent& event) override;
+            void mouseDrag(const juce::MouseEvent& event) override;
+            void mouseEnter(const juce::MouseEvent& event) override;
+            void mouseMove(const juce::MouseEvent& event) override;
+            void mouseExit(const juce::MouseEvent& event) override;
+            void mouseUp(const juce::MouseEvent& event) override;
+            void mouseWheelMove(
+                const juce::MouseEvent& event,
+                const juce::MouseWheelDetails& wheel) override;
+            void visibilityChanged() override;
+            void enablementChanged() override;
+            void parentHierarchyChanged() override;
+
+            void capturePopupRequest() noexcept;
+            bool isPopupContextCurrent(
+                std::uint64_t contextRevision) const noexcept;
+            std::function<void(int)> createPopupResultHandler(
+                std::uint64_t contextRevision);
+            bool isCompletePrimaryDown(
+                const juce::MouseEvent& event) const noexcept;
+            bool isPointerSource(
+                const juce::MouseEvent& event) const noexcept;
+            void recoverMissingPointerUp(const juce::MouseEvent& event);
+            void releasePointerInteractionWithoutSelection(
+                const juce::MouseEvent& event);
+            void clearPointerInteraction() noexcept;
+            void closePopupWindow() noexcept;
+
+            std::uint64_t popupContextRevision = 0;
+            std::uint64_t popupRequestContextRevision = 0;
+            std::uint64_t popupSessionRevision = 0;
+            juce::MouseInputSource::InputSourceType pointerSourceType =
+                juce::MouseInputSource::mouse;
+            int pointerSourceIndex = -1;
+            bool popupRequestArmed = false;
+            bool popupSessionActive = false;
+            bool pointerInteractionActive = false;
+            bool cancelPendingPointerRelease = false;
+        };
 
         class ManualUpdateCheckThread final : public juce::Thread
         {
@@ -233,7 +288,7 @@ PluginProcessor).
 
         PrimaryTextButton toggleABButton;
         PrimaryTextButton copyABButton;
-        juce::ComboBox presetBox;
+        PresetComboBox presetBox;
         PrimaryTextButton previousButton;
         PrimaryTextButton nextButton;
         PrimaryTextButton savePresetButton;

@@ -1165,6 +1165,374 @@ namespace state
         stopThread(-1);
     }
 
+    void StateComponent::PresetComboBox::capturePopupRequest() noexcept
+    {
+        popupRequestContextRevision = popupContextRevision;
+        popupRequestArmed = true;
+    }
+
+    bool StateComponent::PresetComboBox::isPopupContextCurrent(
+        std::uint64_t contextRevision) const noexcept
+    {
+        return popupContextRevision == contextRevision
+               && isShowing()
+               && isEnabled();
+    }
+
+    bool StateComponent::PresetComboBox::keyPressed(
+        const juce::KeyPress& key)
+    {
+        const bool movesBackward = key == juce::KeyPress::upKey
+                                   || key == juce::KeyPress::leftKey;
+        const bool movesForward = key == juce::KeyPress::downKey
+                                  || key == juce::KeyPress::rightKey;
+
+        if (movesBackward || movesForward)
+        {
+            if (! isShowing() || ! isEnabled()
+                || isPopupActive() || popupRequestArmed)
+                return true;
+
+            const int delta = movesBackward ? -1 : 1;
+            for (int itemIndex = getSelectedItemIndex() + delta;
+                 juce::isPositiveAndBelow(itemIndex, getNumItems());
+                 itemIndex += delta)
+            {
+                const int itemId = getItemId(itemIndex);
+                if (itemId == 0 || ! isItemEnabled(itemId))
+                    continue;
+
+                // A direction key is a complete user decision. Notify now so
+                // its numeric ID cannot be interpreted after a preset rescan.
+                // The listener may synchronously delete this complete editor,
+                // so selection is deliberately the final operation.
+                popupSessionActive = false;
+                ++popupSessionRevision;
+                setSelectedId(itemId, juce::sendNotificationSync);
+                return true;
+            }
+
+            return true;
+        }
+
+        if (key == juce::KeyPress::returnKey)
+        {
+            if (! isShowing() || ! isEnabled()
+                || isPopupActive() || popupRequestArmed)
+                return true;
+
+            capturePopupRequest();
+        }
+
+        return juce::ComboBox::keyPressed(key);
+    }
+
+    bool StateComponent::PresetComboBox::isCompletePrimaryDown(
+        const juce::MouseEvent& event) const noexcept
+    {
+        return event.mods.isLeftButtonDown()
+               && ! event.mods.isRightButtonDown()
+               && ! event.mods.isMiddleButtonDown()
+               && ! event.mods.isPopupMenu();
+    }
+
+    bool StateComponent::PresetComboBox::isPointerSource(
+        const juce::MouseEvent& event) const noexcept
+    {
+        return event.source.getType() == pointerSourceType
+               && event.source.getIndex() == pointerSourceIndex;
+    }
+
+    void StateComponent::PresetComboBox::mouseDown(
+        const juce::MouseEvent& event)
+    {
+        if (! isShowing() || ! isEnabled()
+            || ! isCompletePrimaryDown(event)
+            || popupRequestArmed || isPopupActive())
+            return;
+
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
+        if (pointerInteractionActive)
+        {
+            if (! isPointerSource(event))
+                return;
+
+            // Recover a release omitted by the host before accepting another
+            // press from the same physical source.
+            releasePointerInteractionWithoutSelection(event);
+            if (safeThis == nullptr)
+                return;
+        }
+
+        pointerInteractionActive = true;
+        cancelPendingPointerRelease = false;
+        pointerSourceType = event.source.getType();
+        pointerSourceIndex = event.source.getIndex();
+        capturePopupRequest();
+
+        juce::ComboBox::mouseDown(event);
+        if (safeThis == nullptr)
+            return;
+
+        if (! isPopupActive())
+        {
+            popupRequestArmed = false;
+            clearPointerInteraction();
+        }
+    }
+
+    void StateComponent::PresetComboBox::mouseDrag(
+        const juce::MouseEvent& event)
+    {
+        if (! pointerInteractionActive
+            || ! isPointerSource(event)
+            || cancelPendingPointerRelease)
+            return;
+
+        // This non-editable ComboBox opens on mouseDown. Forwarding a drag
+        // after an asynchronous menu dismissal could reopen it under a stale
+        // preset-list revision, so the opener press owns no drag command.
+    }
+
+    void StateComponent::PresetComboBox::mouseEnter(
+        const juce::MouseEvent& event)
+    {
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
+        juce::ComboBox::mouseEnter(event);
+        if (safeThis != nullptr)
+            recoverMissingPointerUp(event);
+    }
+
+    void StateComponent::PresetComboBox::mouseMove(
+        const juce::MouseEvent& event)
+    {
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
+        juce::ComboBox::mouseMove(event);
+        if (safeThis != nullptr)
+            recoverMissingPointerUp(event);
+    }
+
+    void StateComponent::PresetComboBox::mouseExit(
+        const juce::MouseEvent& event)
+    {
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
+        juce::ComboBox::mouseExit(event);
+        if (safeThis != nullptr)
+            recoverMissingPointerUp(event);
+    }
+
+    void StateComponent::PresetComboBox::mouseUp(
+        const juce::MouseEvent& event)
+    {
+        if (! pointerInteractionActive || ! isPointerSource(event))
+            return;
+
+        releasePointerInteractionWithoutSelection(event);
+    }
+
+    void StateComponent::PresetComboBox::recoverMissingPointerUp(
+        const juce::MouseEvent& event)
+    {
+        if (pointerInteractionActive
+            && isPointerSource(event)
+            && ! event.mods.isLeftButtonDown())
+            releasePointerInteractionWithoutSelection(event);
+    }
+
+    void StateComponent::PresetComboBox::releasePointerInteractionWithoutSelection(
+        const juce::MouseEvent& event)
+    {
+        // Clear custom ownership first: ComboBox::mouseUp() can synchronously
+        // notify code that destroys this component. An off-control position
+        // only releases JUCE's private pressed bit and cannot open a menu.
+        clearPointerInteraction();
+        juce::ComboBox::mouseUp(
+            event.getEventRelativeTo(this).withNewPosition(
+                juce::Point<float> { -1.0f, -1.0f }));
+    }
+
+    void StateComponent::PresetComboBox::clearPointerInteraction() noexcept
+    {
+        pointerInteractionActive = false;
+        cancelPendingPointerRelease = false;
+        pointerSourceIndex = -1;
+    }
+
+    void StateComponent::PresetComboBox::mouseWheelMove(
+        const juce::MouseEvent& event,
+        const juce::MouseWheelDetails& wheel)
+    {
+        // Preset loading must be an explicit decision and must never inherit
+        // ComboBox's asynchronous wheel-nudge notification path.
+        juce::Component::mouseWheelMove(event, wheel);
+    }
+
+    void StateComponent::PresetComboBox::closePopupWindow() noexcept
+    {
+        juce::ComboBox::hidePopup();
+    }
+
+    void StateComponent::PresetComboBox::dismissTransientInteraction() noexcept
+    {
+        ++popupContextRevision;
+        popupSessionActive = false;
+        ++popupSessionRevision;
+        cancelPendingPointerRelease = cancelPendingPointerRelease
+                                      || pointerInteractionActive;
+
+        // Do not clear popupRequestArmed. showPopup() may already be queued by
+        // JUCE and must consume that old request instead of treating it as a
+        // new accessibility command after the component becomes visible again.
+        closePopupWindow();
+    }
+
+    void StateComponent::PresetComboBox::invalidateMenuContents() noexcept
+    {
+        dismissTransientInteraction();
+    }
+
+    void StateComponent::PresetComboBox::visibilityChanged()
+    {
+        juce::Component::visibilityChanged();
+        if (! isShowing())
+            dismissTransientInteraction();
+    }
+
+    void StateComponent::PresetComboBox::enablementChanged()
+    {
+        if (! isEnabled())
+            dismissTransientInteraction();
+
+        juce::ComboBox::enablementChanged();
+    }
+
+    void StateComponent::PresetComboBox::parentHierarchyChanged()
+    {
+        if (! isShowing())
+            dismissTransientInteraction();
+
+        juce::ComboBox::parentHierarchyChanged();
+    }
+
+    std::function<void(int)>
+    StateComponent::PresetComboBox::createPopupResultHandler(
+        std::uint64_t contextRevision)
+    {
+        popupSessionActive = true;
+        const auto sessionRevision = ++popupSessionRevision;
+
+        return [safeThis = juce::Component::SafePointer<PresetComboBox>(this),
+                contextRevision,
+                sessionRevision](int result)
+        {
+            if (safeThis == nullptr
+                || ! safeThis->popupSessionActive
+                || safeThis->popupSessionRevision != sessionRevision)
+                return;
+
+            const int itemIndex = safeThis->indexOfItemId(result);
+            const bool mayCommit = result != 0
+                                   && safeThis->isPopupContextCurrent(
+                                       contextRevision)
+                                   && itemIndex >= 0
+                                   && safeThis->isItemEnabled(result);
+
+            // Consume before notifying. Preset loading notifies the host and
+            // may synchronously destroy this ComboBox and the whole editor.
+            safeThis->popupSessionActive = false;
+            ++safeThis->popupSessionRevision;
+            safeThis->cancelPendingPointerRelease =
+                safeThis->cancelPendingPointerRelease
+                || safeThis->pointerInteractionActive;
+            safeThis->closePopupWindow();
+
+            if (! mayCommit
+                || safeThis == nullptr
+                || ! safeThis->isPopupContextCurrent(contextRevision))
+                return;
+
+            // Synchronous delivery keeps this numeric item ID bound to the
+            // exact menu contents that were validated above.
+            safeThis->setSelectedId(result, juce::sendNotificationSync);
+        };
+    }
+
+    void StateComponent::PresetComboBox::showPopup()
+    {
+        if (! isShowing() || ! isEnabled())
+        {
+            dismissTransientInteraction();
+            popupRequestArmed = false;
+            return;
+        }
+
+        // Accessibility actions call showPopup() directly. Route them through
+        // JUCE's normal asynchronous opener so its private menu-active state is
+        // established before the actual menu is constructed.
+        if (! popupRequestArmed)
+        {
+            if (isPopupActive())
+                return;
+
+            capturePopupRequest();
+            juce::ComboBox::keyPressed(
+                juce::KeyPress { juce::KeyPress::returnKey });
+            return;
+        }
+
+        const auto requestContextRevision = popupRequestContextRevision;
+        popupRequestArmed = false;
+        if (! isPopupContextCurrent(requestContextRevision))
+        {
+            popupSessionActive = false;
+            ++popupSessionRevision;
+            closePopupWindow();
+            return;
+        }
+
+        auto menu = *getRootMenu();
+        if (menu.getNumItems() > 0)
+        {
+            const int selectedId = getSelectedId();
+            for (juce::PopupMenu::MenuItemIterator iterator(menu, true);
+                 iterator.next();)
+            {
+                auto& item = iterator.getItem();
+                if (item.itemID != 0)
+                    item.isTicked = item.itemID == selectedId;
+            }
+        }
+        else
+        {
+            menu.addItem(1, getTextWhenNoChoicesAvailable(), false, false);
+        }
+
+        auto& lookAndFeel = getLookAndFeel();
+        menu.setLookAndFeel(&lookAndFeel);
+
+        auto options = juce::PopupMenu::Options()
+                           .withTargetComponent(this)
+                           .withItemThatMustBeVisible(getSelectedId())
+                           .withInitiallySelectedItem(getSelectedId())
+                           .withMinimumWidth(getWidth())
+                           .withMaximumNumColumns(1)
+                           .withStandardItemHeight(getHeight());
+
+        for (auto* child : getChildren())
+        {
+            if (auto* label = dynamic_cast<juce::Label*>(child))
+            {
+                options = lookAndFeel.getOptionsForComboBoxPopupMenu(
+                    *this, *label);
+                break;
+            }
+        }
+
+        menu.showMenuAsync(
+            options,
+            createPopupResultHandler(requestContextRevision));
+    }
+
     StateComponent::StateComponent(StateAB& sab, StatePresets& sp, juce::AudioProcessorValueTreeState& vts)
         : procStateAB { sab },
           procStatePresets { sp },
@@ -1258,6 +1626,7 @@ namespace state
     StateComponent::~StateComponent()
     {
         stopTimer();
+        presetBox.dismissTransientInteraction();
         invalidatePresetMenuSession();
         dismissSettingsDialog();
         presetMenu.setLookAndFeel(nullptr);
@@ -1413,6 +1782,7 @@ namespace state
 
         if (! isShowing())
         {
+            presetBox.dismissTransientInteraction();
             invalidatePresetMenuSession();
             dismissSettingsDialog();
         }
@@ -1481,7 +1851,16 @@ namespace state
         int presetIndex = procStatePresets.getCurrentPresetId() - 1;
         if (presetIndex > 0)
         {
-            presetBox.setSelectedId(presetIndex);
+            const juce::Component::SafePointer<StateComponent> safeThis(this);
+            presetBox.dismissTransientInteraction();
+            if (safeThis == nullptr)
+                return;
+
+            // Loading a preset may synchronously close the editor. Keep this
+            // synchronous selection as the final component operation so its
+            // numeric ID cannot cross a later preset-list revision.
+            presetBox.setSelectedId(presetIndex,
+                                    juce::sendNotificationSync);
         }
     }
 
@@ -1490,7 +1869,15 @@ namespace state
         int presetIndex = procStatePresets.getCurrentPresetId() + 1;
         if (presetIndex <= procStatePresets.getNumPresets())
         {
-            presetBox.setSelectedId(presetIndex);
+            const juce::Component::SafePointer<StateComponent> safeThis(this);
+            presetBox.dismissTransientInteraction();
+            if (safeThis == nullptr)
+                return;
+
+            // See setPreviousPreset(): no queued ComboBox notification may
+            // reinterpret this item ID after a rescan or state restore.
+            presetBox.setSelectedId(presetIndex,
+                                    juce::sendNotificationSync);
         }
     }
 
@@ -1580,6 +1967,10 @@ namespace state
 
     void StateComponent::refreshPresetBox() // rescan, init, save, or delete
     {
+        // clear()/repopulation can reuse the same numeric IDs for different
+        // files. Invalidate any queued opener or result before the first item
+        // and the manager's ID maps are changed.
+        presetBox.invalidateMenuContents();
         presetBox.clear(juce::dontSendNotification);
         procStatePresets.setPresetAndFolderNames(presetBox);
     }
@@ -2086,6 +2477,7 @@ namespace state
         // The editor calls this when an ancestor is hidden. JUCE does not send
         // visibilityChanged() to every descendant, so invalidate the menu here
         // as well as in StateComponent::visibilityChanged().
+        presetBox.dismissTransientInteraction();
         invalidatePresetMenuSession();
         toggleABButton.dismissPointerGesture();
         copyABButton.dismissPointerGesture();

@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "../../GUI/ContextAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../ControlPanel/Graph Components/DistortionGraph.h"
 #include "../ControlPanel/Graph Components/Oscilloscope.h"
@@ -74,45 +75,6 @@ public:
 private:
     friend struct BandPanelGraphTestAccess;
     friend struct BandPanelModeTestAccess;
-
-    class DistortionModeComboBox final : public juce::ComboBox
-    {
-    public:
-        using GenerationProvider = std::function<std::uint64_t()>;
-        using ContextValidator = std::function<bool()>;
-
-        void configurePopupSession(GenerationProvider generationProvider,
-                                   ContextValidator contextValidator,
-                                   juce::RangedAudioParameter* parameter);
-        void dismissTransientInteraction() noexcept;
-        void showPopup() override;
-
-    private:
-        friend class BandPanel;
-        friend struct BandPanelModeTestAccess;
-
-        bool keyPressed(const juce::KeyPress& key) override;
-        void mouseDown(const juce::MouseEvent& event) override;
-        void mouseDrag(const juce::MouseEvent& event) override;
-        void mouseUp(const juce::MouseEvent& event) override;
-        std::function<void(int)> createPopupResultHandler();
-        std::function<void(int)> createPopupResultHandler(
-            std::uint64_t contextGeneration);
-        void capturePopupRequest() noexcept;
-        bool isContextCurrent(std::uint64_t contextGeneration) const;
-        void closePopupWindow() noexcept;
-
-        GenerationProvider getCurrentGeneration;
-        ContextValidator isPopupContextValid;
-        juce::RangedAudioParameter* boundParameter = nullptr;
-        std::uint64_t popupRequestGeneration = 0;
-        std::uint64_t popupSessionRevision = 0;
-        std::uint64_t pointerInteractionGeneration = 0;
-        bool popupRequestArmed = false;
-        bool popupSessionActive = false;
-        bool pointerInteractionActive = false;
-        bool cancelPendingPointerRelease = false;
-    };
 
     void updateAttachments();
     void dismissButtonInteractions() noexcept;
@@ -203,7 +165,7 @@ private:
     WidthGraph widthGraph { processor };
 
     // Distortion modes moved from PluginEditor
-    std::array<DistortionModeComboBox, 4> distortionModes;
+    std::array<ContextAwareComboBox, 4> distortionModes;
     std::array<std::unique_ptr<ComboBoxAttachment>, 4> modeAttachments;
     std::uint64_t distortionModeInteractionGeneration = 0;
 

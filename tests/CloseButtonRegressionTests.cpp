@@ -2,6 +2,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <memory>
 
 struct CloseButtonPointerTestAccess
 {
@@ -257,6 +258,116 @@ TEST_CASE("Band deletion requires a primary click",
     CHECK(clickCount == 1);
 }
 
+TEST_CASE("Band deletion activation stays inside the presented session",
+          "[close-button][multiband][ui][input][keyboard][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    CloseButton button;
+    button.setBounds(0,
+                     0,
+                     CloseButton::minimumHitTargetSize,
+                     CloseButton::minimumHitTargetSize);
+    button.setPresented(true, false);
+
+    int clickCount = 0;
+    button.onClick = [&clickCount] { ++clickCount; };
+
+    SECTION("programmatic and keyboard activation are synchronous")
+    {
+        button.triggerClick();
+        CHECK(clickCount == 1);
+
+        REQUIRE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK(clickCount == 2);
+
+        REQUIRE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::spaceKey }));
+        CHECK(clickCount == 3);
+
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK(clickCount == 3);
+    }
+
+    SECTION("withdrawn presentation rejects stale commands")
+    {
+        button.setPresented(false, false);
+        CHECK_FALSE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK_FALSE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::spaceKey }));
+        button.triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK(clickCount == 0);
+    }
+
+    SECTION("hidden parent rejects accessibility activation")
+    {
+        juce::Component hiddenParent;
+        hiddenParent.addAndMakeVisible(button);
+        hiddenParent.setVisible(false);
+        button.triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK(clickCount == 0);
+    }
+}
+
+TEST_CASE("Band deletion callbacks may synchronously delete their control",
+          "[close-button][multiband][ui][input][lifecycle][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto makeButton = []
+    {
+        auto button = std::make_unique<CloseButton>();
+        button->setBounds(0,
+                          0,
+                          CloseButton::minimumHitTargetSize,
+                          CloseButton::minimumHitTargetSize);
+        button->setPresented(true, false);
+        return button;
+    };
+
+    SECTION("activation callback")
+    {
+        auto button = makeButton();
+        auto* rawButton = button.get();
+        rawButton->onClick = [&button] { button.reset(); };
+
+        rawButton->triggerClick();
+        CHECK(button == nullptr);
+    }
+
+    SECTION("hover state callback")
+    {
+        auto button = makeButton();
+        auto* rawButton = button.get();
+        auto& component = static_cast<juce::Component&>(*rawButton);
+        component.mouseDown(makeMouseEvent(
+            *rawButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+        REQUIRE(rawButton->isDown());
+        rawButton->onStateChange = [&button] { button.reset(); };
+
+        component.mouseExit(makeMouseEvent(*rawButton, {}));
+        CHECK(button == nullptr);
+    }
+
+    SECTION("presentation withdrawal callback")
+    {
+        auto button = makeButton();
+        auto* rawButton = button.get();
+        auto& component = static_cast<juce::Component&>(*rawButton);
+        component.mouseDown(makeMouseEvent(
+            *rawButton,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+        REQUIRE(rawButton->isDown());
+        rawButton->onStateChange = [&button] { button.reset(); };
+
+        rawButton->setPresented(false, false);
+        CHECK(button == nullptr);
+    }
+}
+
 TEST_CASE("Band deletion remains owned by one pointer source",
           "[close-button][multiband][ui][input][source][multitouch]")
 {
@@ -293,6 +404,16 @@ TEST_CASE("Band deletion remains owned by one pointer source",
         component.mouseDown(makeMouseEvent(
             button,
             juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier }));
+    }
+
+    SECTION("foreign hover events cannot cancel the owner")
+    {
+        component.mouseExit(makeMouseEvent(button, {}));
+        CHECK(button.isDown());
+        component.mouseMove(makeMouseEvent(button, {}));
+        CHECK(button.isDown());
+        component.mouseEnter(makeMouseEvent(button, {}));
+        CHECK(button.isDown());
     }
 
     CHECK(clickCount == 0);

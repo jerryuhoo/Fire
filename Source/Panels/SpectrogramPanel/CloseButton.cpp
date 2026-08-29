@@ -19,6 +19,17 @@ bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
         && ! event.mods.isRightButtonDown()
         && ! event.mods.isMiddleButtonDown();
 }
+
+bool isVisibleInHierarchy(const juce::Component& component) noexcept
+{
+    for (auto* current = &component;
+         current != nullptr;
+         current = current->getParentComponent())
+        if (! current->isVisible())
+            return false;
+
+    return true;
+}
 } // namespace
 
 //==============================================================================
@@ -115,6 +126,7 @@ void CloseButton::paintButton(juce::Graphics& g, bool, bool)
 
 void CloseButton::setPresented(bool shouldBePresented, bool animate)
 {
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
     presentationTarget = shouldBePresented;
     visibilityAnimation.setTarget(shouldBePresented ? 1.0f : 0.0f);
 
@@ -128,7 +140,13 @@ void CloseButton::setPresented(bool shouldBePresented, bool animate)
     if (shouldBePresented)
     {
         if (! isVisible())
+        {
             juce::Component::setVisible(true);
+
+            if (safeThis == nullptr)
+                return;
+        }
+
         setInterceptsMouseClicks(true, false);
     }
     else
@@ -139,10 +157,25 @@ void CloseButton::setPresented(bool shouldBePresented, bool animate)
         // fade, but Space/Return must no longer be able to delete a band.
         setInterceptsMouseClicks(false, false);
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
+
         if (hasKeyboardFocus(true))
+        {
             giveAwayKeyboardFocus();
+
+            if (safeThis == nullptr)
+                return;
+        }
+
         if (! animate || visibilityAnimation.current <= 0.001f)
+        {
             juce::Component::setVisible(false);
+
+            if (safeThis == nullptr)
+                return;
+        }
     }
 
     updateInteractionTargets();
@@ -161,7 +194,11 @@ bool CloseButton::advanceAnimation(float deltaSeconds)
         && isVisible())
     {
         visibilityAnimation.snapTo(0.0f);
+        const juce::Component::SafePointer<CloseButton> safeThis(this);
         juce::Component::setVisible(false);
+
+        if (safeThis == nullptr)
+            return true;
     }
 
     return visibilityChanged || hoverChanged || pressChanged;
@@ -169,20 +206,38 @@ bool CloseButton::advanceAnimation(float deltaSeconds)
 
 void CloseButton::mouseEnter(const juce::MouseEvent& event)
 {
+    if (primaryPointerDown && ! isPointerSource(event))
+        return;
+
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::mouseEnter(event);
-    recoverMissingPointerUp(event);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
 }
 
 void CloseButton::mouseMove(const juce::MouseEvent& event)
 {
+    if (primaryPointerDown && ! isPointerSource(event))
+        return;
+
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::mouseMove(event);
-    recoverMissingPointerUp(event);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
 }
 
 void CloseButton::mouseExit(const juce::MouseEvent& event)
 {
+    if (primaryPointerDown && ! isPointerSource(event))
+        return;
+
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::mouseExit(event);
-    recoverMissingPointerUp(event);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
 }
 
 void CloseButton::mouseDown(const juce::MouseEvent& event)
@@ -193,7 +248,11 @@ void CloseButton::mouseDown(const juce::MouseEvent& event)
             return;
 
         // A fresh down from the owner closes a gesture whose mouseUp was lost.
+        const juce::Component::SafePointer<CloseButton> safeThis(this);
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
     }
 
     // JUCE Button accepts every mouse button by default. A secondary click on
@@ -227,19 +286,54 @@ void CloseButton::mouseUp(const juce::MouseEvent& event)
     juce::Button::mouseUp(event);
 }
 
+bool CloseButton::keyPressed(const juce::KeyPress& key)
+{
+    if (key.isKeyCode(juce::KeyPress::returnKey)
+        || key.isKeyCode(juce::KeyPress::spaceKey))
+    {
+        if (! presentationTarget
+            || ! isEnabled()
+            || ! isVisibleInHierarchy(*this))
+            return false;
+
+        // Button::keyPressed queues triggerClick(). Delete the band while this
+        // transient tile still identifies it; moving the pointer can present a
+        // different tile before a queued message is delivered.
+        internalClickCallback(key.getModifiers());
+        return true;
+    }
+
+    return juce::Button::keyPressed(key);
+}
+
+void CloseButton::triggerClick()
+{
+    if (! presentationTarget
+        || ! isEnabled()
+        || ! isVisibleInHierarchy(*this))
+        return;
+
+    // Accessibility presses are committed at invocation time rather than
+    // being replayed after the hover target changes. The deletion callback
+    // may destroy this button, so this is final.
+    internalClickCallback(juce::ModifierKeys::currentModifiers);
+}
+
 void CloseButton::visibilityChanged()
 {
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::visibilityChanged();
 
-    if (! isVisible())
+    if (safeThis != nullptr && ! isVisible())
         dismissPointerGesture();
 }
 
 void CloseButton::enablementChanged()
 {
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::enablementChanged();
 
-    if (! isEnabled())
+    if (safeThis != nullptr && ! isEnabled())
         dismissPointerGesture();
 }
 

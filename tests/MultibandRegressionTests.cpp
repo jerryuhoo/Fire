@@ -2603,6 +2603,7 @@ TEST_CASE("Band add and delete notify the host after topology commit",
 
         auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
         editor->setBounds(0, 0, 1000, 500);
+        editor->setVisible(true);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
         auto* multiband = findDescendant<Multiband>(*editor);
         REQUIRE(multiband != nullptr);
@@ -2676,6 +2677,7 @@ TEST_CASE("Band removal survives synchronous editor teardown at every publicatio
 
         auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
         editor->setBounds(0, 0, 1000, 500);
+        editor->setVisible(true);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
         auto* multiband = findDescendant<Multiband>(*editor);
@@ -2906,6 +2908,7 @@ TEST_CASE("Deleting the focused last band rebinds Drive to the remaining audible
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->setVisible(true);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
     auto* multiband = findDescendant<Multiband>(*editor);
@@ -3503,6 +3506,7 @@ TEST_CASE("Deleting a middle band moves every survivor setting and resets the in
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->setVisible(true);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
     auto* multiband = findDescendant<Multiband>(*editor);
@@ -3754,6 +3758,7 @@ TEST_CASE("A rapid add-delete cycle resets reused DSP slots even when the band c
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(editedProcessor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->setVisible(true);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     auto* multiband = findDescendant<Multiband>(*editor);
     REQUIRE(multiband != nullptr);
@@ -3771,7 +3776,12 @@ TEST_CASE("A rapid add-delete cycle resets reused DSP slots even when the band c
                        juce::ModifierKeys::leftButtonModifier));
     auto closeButtons = getPositionedCloseButtons(*multiband);
     REQUIRE(closeButtons.size() == 2);
-    closeButtons.front()->triggerClick();
+    auto* firstBandClose = closeButtons.front();
+    REQUIRE(firstBandClose != nullptr);
+    const auto closeCentre = firstBandClose->getBounds().toFloat().getCentre();
+    multiband->mouseMove(makeMouseEvent(*multiband, closeCentre));
+    REQUIRE(firstBandClose->isPresented());
+    firstBandClose->triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
     const auto* finalBandCount = editedProcessor.treeState.getRawParameterValue(NUM_BANDS_ID);

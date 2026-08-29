@@ -37,6 +37,8 @@ public:
     float getHoverAnimation() const noexcept { return hoverAnimation.current; }
     float getPressAnimation() const noexcept { return pressAnimation.current; }
     bool isPresented() const noexcept { return presentationTarget; }
+    bool keyPressed(const juce::KeyPress&) override;
+    void triggerClick() override;
 
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS

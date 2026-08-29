@@ -1089,3 +1089,380 @@ TEST_CASE("GlobalPanel slope commit survives synchronous panel destruction",
         }
     }
 }
+
+TEST_CASE("Global slope direction keys commit before a later context boundary",
+          "[control-panel][global][filter][slope][keyboard][attachment][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    constexpr std::array<const char*, 5> boundaries {
+        "filter type", "panel visibility", "filter enabled", "module", "ancestor enabled"
+    };
+
+    for (const bool lowCut : { true, false })
+    {
+        for (size_t boundaryIndex = 0;
+             boundaryIndex < boundaries.size();
+             ++boundaryIndex)
+        {
+            DYNAMIC_SECTION((lowCut ? "low-cut " : "high-cut ")
+                            << boundaries[boundaryIndex])
+            {
+                FireAudioProcessor processor;
+                setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+                GlobalPanel panel(processor, {}, {}, {}, {}, {});
+                prepareGlobalSlopePanel(panel, lowCut);
+
+                auto* targetParameter = processor.treeState.getParameter(
+                    lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID);
+                auto* otherParameter = processor.treeState.getParameter(
+                    lowCut ? HIGHCUT_SLOPE_ID : LOWCUT_SLOPE_ID);
+                REQUIRE(targetParameter != nullptr);
+                REQUIRE(otherParameter != nullptr);
+                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, lowCut);
+                const auto initialIndex = target.getSelectedItemIndex();
+                const auto nextIndex = initialIndex + 1;
+                REQUIRE(juce::isPositiveAndBelow(nextIndex,
+                                                 target.getNumItems()));
+                const auto expectedValue = static_cast<float>(nextIndex)
+                                           / static_cast<float>(
+                                               target.getNumItems() - 1);
+                const auto otherInitialValue = otherParameter->getValue();
+                ParameterGestureRecorder targetGestures;
+                ParameterGestureRecorder otherGestures;
+                targetParameter->addListener(&targetGestures);
+                otherParameter->addListener(&otherGestures);
+                const juce::ScopeGuard cleanup { [&]
+                {
+                    dismissGlobalSlopePopups(panel);
+                    panel.removeFromDesktop();
+                    targetParameter->removeListener(&targetGestures);
+                    otherParameter->removeListener(&otherGestures);
+                } };
+
+                auto& comboBox = static_cast<juce::ComboBox&>(target);
+                REQUIRE(comboBox.keyPressed(
+                    juce::KeyPress { juce::KeyPress::rightKey }));
+
+                // The key event itself is the user decision. It must not leave
+                // a stock ComboBoxAttachment notification queued behind it.
+                CHECK(targetParameter->getValue()
+                      == Catch::Approx(expectedValue));
+                CHECK(targetGestures.gestures
+                      == std::vector<bool> { true, false });
+                CHECK(otherParameter->getValue()
+                      == Catch::Approx(otherInitialValue));
+                CHECK(otherGestures.gestures.empty());
+
+                switch (boundaryIndex)
+                {
+                    case 0:
+                        selectGlobalSlopeType(panel, ! lowCut);
+                        selectGlobalSlopeType(panel, lowCut);
+                        break;
+                    case 1:
+                        panel.setVisible(false);
+                        panel.setVisible(true);
+                        break;
+                    case 2:
+                        GlobalPanelSlopeTestAccess::setFilterEnabled(
+                            panel, false);
+                        GlobalPanelSlopeTestAccess::setFilterEnabled(
+                            panel, true);
+                        break;
+                    case 3:
+                        GlobalPanelSlopeTestAccess::selectModule(panel, 1);
+                        GlobalPanelSlopeTestAccess::selectModule(panel, 0);
+                        break;
+                    case 4:
+                        panel.setEnabled(false);
+                        panel.setEnabled(true);
+                        break;
+                    default:
+                        FAIL("Unexpected slope boundary index");
+                }
+
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+                CHECK(targetParameter->getValue()
+                      == Catch::Approx(expectedValue));
+                CHECK(targetGestures.gestures
+                      == std::vector<bool> { true, false });
+                CHECK(otherParameter->getValue()
+                      == Catch::Approx(otherInitialValue));
+                CHECK(otherGestures.gestures.empty());
+            }
+        }
+    }
+}
+
+TEST_CASE("Global slope direction keys reject an already invalid context",
+          "[control-panel][global][filter][slope][keyboard][context][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const bool lowCut : { true, false })
+    {
+        for (const bool wrongModule : { false, true })
+        {
+            DYNAMIC_SECTION((lowCut ? "low-cut " : "high-cut ")
+                            << (wrongModule ? "wrong module" : "wrong type"))
+            {
+                FireAudioProcessor processor;
+                setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+                GlobalPanel panel(processor, {}, {}, {}, {}, {});
+                prepareGlobalSlopePanel(panel, lowCut);
+
+                auto* targetParameter = processor.treeState.getParameter(
+                    lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID);
+                REQUIRE(targetParameter != nullptr);
+                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, lowCut);
+                const auto initialValue = targetParameter->getValue();
+                const auto initialSelectedId = target.getSelectedId();
+                ParameterGestureRecorder gestures;
+                targetParameter->addListener(&gestures);
+                const juce::ScopeGuard cleanup { [&]
+                {
+                    dismissGlobalSlopePopups(panel);
+                    panel.removeFromDesktop();
+                    targetParameter->removeListener(&gestures);
+                } };
+
+                if (wrongModule)
+                    GlobalPanelSlopeTestAccess::selectModule(panel, 1);
+                else
+                    selectGlobalSlopeType(panel, ! lowCut);
+
+                auto& comboBox = static_cast<juce::ComboBox&>(target);
+                REQUIRE(comboBox.keyPressed(
+                    juce::KeyPress { juce::KeyPress::rightKey }));
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+                CHECK(targetParameter->getValue()
+                      == Catch::Approx(initialValue));
+                CHECK(target.getSelectedId() == initialSelectedId);
+                CHECK(gestures.gestures.empty());
+            }
+        }
+    }
+}
+
+TEST_CASE("Context-aware ComboBox never routes mouse wheel input to an attachment",
+          "[control-panel][global][filter][slope][mouse-wheel][attachment][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const bool lowCut : { true, false })
+    {
+        for (const float deltaY : { -0.25f, 0.25f })
+        {
+            DYNAMIC_SECTION((lowCut ? "low-cut " : "high-cut ")
+                            << (deltaY < 0.0f ? "wheel down" : "wheel up"))
+            {
+                FireAudioProcessor processor;
+                setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+                setParameterValue(
+                    processor,
+                    lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID,
+                    1.0f / 3.0f);
+                GlobalPanel panel(processor, {}, {}, {}, {}, {});
+                prepareGlobalSlopePanel(panel, lowCut);
+
+                auto* targetParameter = processor.treeState.getParameter(
+                    lowCut ? LOWCUT_SLOPE_ID : HIGHCUT_SLOPE_ID);
+                REQUIRE(targetParameter != nullptr);
+                auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(
+                    panel, lowCut);
+                REQUIRE(target.getSelectedItemIndex() == 1);
+                const auto initialValue = targetParameter->getValue();
+                const auto initialSelectedId = target.getSelectedId();
+                ParameterGestureRecorder gestures;
+                targetParameter->addListener(&gestures);
+                const juce::ScopeGuard cleanup { [&]
+                {
+                    dismissGlobalSlopePopups(panel);
+                    panel.removeFromDesktop();
+                    targetParameter->removeListener(&gestures);
+                } };
+
+                // Protect the invariant even if future theme/setup code turns
+                // JUCE's normally-disabled ComboBox wheel option back on.
+                target.setScrollWheelEnabled(true);
+                juce::MouseWheelDetails wheel;
+                wheel.deltaY = deltaY;
+                auto& component = static_cast<juce::Component&>(target);
+                component.mouseWheelMove(makeMouseEvent(component, {}),
+                                         wheel);
+
+                CHECK(target.getSelectedId() == initialSelectedId);
+                CHECK(targetParameter->getValue()
+                      == Catch::Approx(initialValue));
+                CHECK(gestures.gestures.empty());
+                juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+                CHECK(target.getSelectedId() == initialSelectedId);
+                CHECK(targetParameter->getValue()
+                      == Catch::Approx(initialValue));
+                CHECK(gestures.gestures.empty());
+            }
+        }
+    }
+}
+
+TEST_CASE("Context-aware ComboBox direction sequences remain synchronous and menu-exclusive",
+          "[control-panel][global][filter][slope][keyboard][sequence][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    prepareGlobalSlopePanel(panel, true);
+
+    auto* parameter = processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+    REQUIRE(parameter != nullptr);
+    auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+    ParameterGestureRecorder gestures;
+    parameter->addListener(&gestures);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        dismissGlobalSlopePopups(panel);
+        panel.removeFromDesktop();
+        parameter->removeListener(&gestures);
+    } };
+    auto& comboBox = static_cast<juce::ComboBox&>(target);
+
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::rightKey }));
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::rightKey }));
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::leftKey }));
+    CHECK(target.getSelectedItemIndex() == 1);
+    CHECK(parameter->getValue() == Catch::Approx(1.0f / 3.0f));
+    CHECK(gestures.gestures
+          == std::vector<bool> {
+              true, false, true, false, true, false
+          });
+
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::leftKey }));
+    REQUIRE(target.getSelectedItemIndex() == 0);
+    REQUIRE(gestures.gestures
+            == std::vector<bool> {
+                true, false, true, false, true, false, true, false
+            });
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::leftKey }));
+    CHECK(target.getSelectedItemIndex() == 0);
+    CHECK(gestures.gestures
+          == std::vector<bool> {
+              true, false, true, false, true, false, true, false
+          });
+
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    REQUIRE(target.isPopupActive());
+    const auto valueBeforePopupDirection = parameter->getValue();
+    const auto gesturesBeforePopupDirection = gestures.gestures;
+    REQUIRE(comboBox.keyPressed(
+        juce::KeyPress { juce::KeyPress::rightKey }));
+    CHECK(parameter->getValue()
+          == Catch::Approx(valueBeforePopupDirection));
+    CHECK(gestures.gestures == gesturesBeforePopupDirection);
+}
+
+TEST_CASE("Context-aware ComboBox keyboard commits survive synchronous panel destruction",
+          "[control-panel][ui][combobox][keyboard][attachment][reentrancy][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("GlobalPanel slope")
+    {
+        FireAudioProcessor processor;
+        setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+        auto panel = std::make_unique<GlobalPanel>(
+            processor,
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {});
+        prepareGlobalSlopePanel(*panel, true);
+
+        auto* parameter = processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+        REQUIRE(parameter != nullptr);
+        auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(*panel, true);
+        const auto nextIndex = target.getSelectedItemIndex() + 1;
+        REQUIRE(juce::isPositiveAndBelow(nextIndex, target.getNumItems()));
+        const auto expectedValue = static_cast<float>(nextIndex)
+                                   / static_cast<float>(target.getNumItems() - 1);
+        ParameterGestureRecorder gestures;
+        OneShotParameterValueCallback destroyPanel { [&]
+        {
+            panel.reset();
+        } };
+        parameter->addListener(&gestures);
+        parameter->addListener(&destroyPanel);
+        const juce::ScopeGuard cleanup { [&]
+        {
+            parameter->removeListener(&gestures);
+            parameter->removeListener(&destroyPanel);
+            if (panel != nullptr)
+            {
+                dismissGlobalSlopePopups(*panel);
+                panel->removeFromDesktop();
+            }
+        } };
+
+        auto& comboBox = static_cast<juce::ComboBox&>(target);
+        REQUIRE(comboBox.keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+
+        CHECK(panel == nullptr);
+        CHECK(parameter->getValue() == Catch::Approx(expectedValue));
+        CHECK(gestures.gestures == std::vector<bool> { true, false });
+    }
+
+    SECTION("BandPanel distortion mode")
+    {
+        FireAudioProcessor processor;
+        auto panel = std::make_unique<BandPanel>(
+            processor,
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {});
+        panel->setBounds(0, 0, 1000, 500);
+        panel->setVisible(true);
+        panel->setSwitch(1, true);
+
+        auto* parameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(MODE_ID, 0));
+        REQUIRE(parameter != nullptr);
+        auto& target = BandPanelModeTestAccess::getModeBox(*panel, 0);
+        const auto nextIndex = target.getSelectedItemIndex() + 1;
+        REQUIRE(juce::isPositiveAndBelow(nextIndex, target.getNumItems()));
+        const auto expectedValue = static_cast<float>(nextIndex)
+                                   / static_cast<float>(target.getNumItems() - 1);
+        ParameterGestureRecorder gestures;
+        OneShotParameterValueCallback destroyPanel { [&]
+        {
+            panel.reset();
+        } };
+        parameter->addListener(&gestures);
+        parameter->addListener(&destroyPanel);
+        const juce::ScopeGuard cleanup { [&]
+        {
+            parameter->removeListener(&gestures);
+            parameter->removeListener(&destroyPanel);
+        } };
+
+        auto& comboBox = static_cast<juce::ComboBox&>(target);
+        REQUIRE(comboBox.keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+
+        CHECK(panel == nullptr);
+        CHECK(parameter->getValue() == Catch::Approx(expectedValue));
+        CHECK(gestures.gestures == std::vector<bool> { true, false });
+    }
+}

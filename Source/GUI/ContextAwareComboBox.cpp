@@ -10,6 +10,23 @@
 
 #include <utility>
 
+namespace
+{
+void commitNormalizedParameterValue(juce::RangedAudioParameter& parameter,
+                                    float normalizedValue)
+{
+    if (juce::approximatelyEqual(parameter.getValue(), normalizedValue))
+        return;
+
+    // The parameter belongs to the processor and outlives this editor. Keep
+    // the complete host call stack free of ComboBox/attachment state: any one
+    // of these callbacks may synchronously delete the owning panel.
+    parameter.beginChangeGesture();
+    parameter.setValueNotifyingHost(normalizedValue);
+    parameter.endChangeGesture();
+}
+} // namespace
+
 void ContextAwareComboBox::configurePopupSession(
     GenerationProvider generationProvider,
     ContextValidator contextValidator,
@@ -39,6 +56,54 @@ bool ContextAwareComboBox::isContextCurrent(
 
 bool ContextAwareComboBox::keyPressed(const juce::KeyPress& key)
 {
+    const bool movesBackward = key == juce::KeyPress::upKey
+                               || key == juce::KeyPress::leftKey;
+    const bool movesForward = key == juce::KeyPress::downKey
+                              || key == juce::KeyPress::rightKey;
+    if (movesBackward || movesForward)
+    {
+        // Popup windows own their keyboard navigation. A queued popup request
+        // must also consume directions until showPopup() has classified it.
+        if (isPopupActive() || popupRequestArmed)
+            return true;
+
+        const auto contextGeneration = getCurrentGeneration != nullptr
+                                           ? getCurrentGeneration()
+                                           : 0;
+        if (! isContextCurrent(contextGeneration))
+            return true;
+
+        const auto delta = movesBackward ? -1 : 1;
+        const auto itemCount = getNumItems();
+        for (int itemIndex = getSelectedItemIndex() + delta;
+             juce::isPositiveAndBelow(itemIndex, itemCount);
+             itemIndex += delta)
+        {
+            const auto itemId = getItemId(itemIndex);
+            if (itemId == 0 || ! isItemEnabled(itemId))
+                continue;
+
+            auto* const parameter = boundParameter;
+            const auto normalizedValue = itemCount > 1
+                                             ? static_cast<float>(itemIndex)
+                                                   / static_cast<float>(itemCount - 1)
+                                             : 0.0f;
+            if (parameter == nullptr
+                || ! isContextCurrent(contextGeneration))
+                return true;
+
+            // A direction key is a complete decision at this point. Invalidate
+            // a result from any menu that has just closed, then submit directly
+            // instead of queuing ComboBoxAttachment::comboBoxChanged().
+            popupSessionActive = false;
+            ++popupSessionRevision;
+            commitNormalizedParameterValue(*parameter, normalizedValue);
+            return true;
+        }
+
+        return true;
+    }
+
     if (key == juce::KeyPress::returnKey && ! isPopupActive())
     {
         // A previous showPopup() may still be queued after its context was
@@ -150,6 +215,17 @@ void ContextAwareComboBox::mouseUp(const juce::MouseEvent& event)
     pointerInteractionActive = false;
 }
 
+void ContextAwareComboBox::mouseWheelMove(
+    const juce::MouseEvent& event,
+    const juce::MouseWheelDetails& wheel)
+{
+    // A ComboBox wheel nudge posts an asynchronous change notification, which
+    // cannot retain this control's context identity and lets the stock
+    // ComboBoxAttachment own the UI-to-host call stack. Keep slope/mode changes
+    // deliberate and pass scrolling to the nearest enabled ancestor instead.
+    juce::Component::mouseWheelMove(event, wheel);
+}
+
 void ContextAwareComboBox::closePopupWindow() noexcept
 {
     juce::ComboBox::hidePopup();
@@ -223,12 +299,7 @@ std::function<void(int)> ContextAwareComboBox::createPopupResultHandler(
         // accessibility notification). It must not own the UI-to-parameter
         // call stack: a synchronous host callback may delete the panel and its
         // attachment during setValueNotifyingHost().
-        if (! juce::approximatelyEqual(parameter->getValue(), normalizedValue))
-        {
-            parameter->beginChangeGesture();
-            parameter->setValueNotifyingHost(normalizedValue);
-            parameter->endChangeGesture();
-        }
+        commitNormalizedParameterValue(*parameter, normalizedValue);
     };
 }
 

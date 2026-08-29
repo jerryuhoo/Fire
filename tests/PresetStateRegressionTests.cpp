@@ -59,6 +59,44 @@ struct StateComponentPresetBoxTestAccess
     }
 };
 
+struct StateComponentSaveChooserTestAccess
+{
+    struct Session
+    {
+        std::shared_ptr<juce::FileChooser> chooser;
+        std::uint64_t generation = 0;
+        std::function<void(const juce::File&)> deliverResult;
+    };
+
+    static Session beginSession(state::StateComponent& component)
+    {
+        component.invalidateSaveChooserSession();
+
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Test preset save", juce::File(), "*.fire", false, false,
+            &component);
+        component.fileChooser = chooser;
+        component.fileChooserSessionActive = true;
+        const auto generation = ++component.fileChooserSessionGeneration;
+        return { chooser,
+                 generation,
+                 component.createSaveChooserResultHandler(chooser,
+                                                           generation) };
+    }
+
+    static bool isCurrent(const state::StateComponent& component,
+                          const Session& session)
+    {
+        return component.isSaveChooserSessionCurrent(
+            session.generation, session.chooser.get());
+    }
+
+    static bool hasOwnedChooser(const state::StateComponent& component)
+    {
+        return component.fileChooser != nullptr;
+    }
+};
+
 namespace
 {
 class ScopedTemporaryDirectory
@@ -953,6 +991,124 @@ TEST_CASE("Preset menu rejects hidden and superseded asynchronous results",
         staleResult(1);
 
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+    }
+}
+
+TEST_CASE("Preset save chooser results stay inside one visible owner session",
+          "[preset][ui][save-chooser][session][identity][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    FireAudioProcessor processor;
+    processor.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    const juce::ScopeGuard removeFromDesktop { [&]
+    {
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+    REQUIRE(component.isShowing());
+
+    const auto checkSavedDrive = [&](const juce::File& presetFile,
+                                     float expectedDrive)
+    {
+        auto presetXml = juce::XmlDocument::parse(presetFile);
+        REQUIRE(presetXml != nullptr);
+        FireAudioProcessor restored;
+        REQUIRE(state::loadStateFromXml(*presetXml, restored));
+        CHECK(getPlainParameter(restored, driveID)
+              == Catch::Approx(expectedDrive));
+    };
+
+    SECTION("an ancestor hide boundary releases the owner and rejects its result")
+    {
+        setPlainParameter(processor, driveID, 23.0f);
+        auto staleSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+        REQUIRE(StateComponentSaveChooserTestAccess::isCurrent(
+            component, staleSession));
+
+        component.dismissPointerGestures();
+        CHECK_FALSE(StateComponentSaveChooserTestAccess::hasOwnedChooser(
+            component));
+
+        setPlainParameter(processor, driveID, 77.0f);
+        auto replacementSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+        REQUIRE(StateComponentSaveChooserTestAccess::isCurrent(
+            component, replacementSession));
+
+        const auto stalePath =
+            temporaryDirectory.directory.getChildFile("Stale.fire");
+        staleSession.deliverResult(stalePath);
+        CHECK_FALSE(stalePath.existsAsFile());
+        CHECK(StateComponentSaveChooserTestAccess::isCurrent(
+            component, replacementSession));
+
+        const auto currentPath =
+            temporaryDirectory.directory.getChildFile("Current.fire");
+        replacementSession.deliverResult(currentPath);
+        REQUIRE(currentPath.existsAsFile());
+        CHECK_FALSE(StateComponentSaveChooserTestAccess::hasOwnedChooser(
+            component));
+        checkSavedDrive(currentPath, 77.0f);
+    }
+
+    SECTION("direct hide and restore cannot revive the old chooser")
+    {
+        setPlainParameter(processor, driveID, 31.0f);
+        auto staleSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+
+        component.setVisible(false);
+        component.setVisible(true);
+        CHECK_FALSE(StateComponentSaveChooserTestAccess::hasOwnedChooser(
+            component));
+
+        setPlainParameter(processor, driveID, 68.0f);
+        auto replacementSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+        const auto stalePath =
+            temporaryDirectory.directory.getChildFile("Hidden.fire");
+        staleSession.deliverResult(stalePath);
+
+        CHECK_FALSE(stalePath.existsAsFile());
+        CHECK(StateComponentSaveChooserTestAccess::isCurrent(
+            component, replacementSession));
+
+        const auto currentPath =
+            temporaryDirectory.directory.getChildFile("Visible.fire");
+        replacementSession.deliverResult(currentPath);
+        REQUIRE(currentPath.existsAsFile());
+        checkSavedDrive(currentPath, 68.0f);
+    }
+
+    SECTION("cancelling consumes only the matching chooser")
+    {
+        auto cancelledSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+        cancelledSession.deliverResult({});
+        CHECK_FALSE(StateComponentSaveChooserTestAccess::hasOwnedChooser(
+            component));
+
+        auto replacementSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+        CHECK(StateComponentSaveChooserTestAccess::isCurrent(
+            component, replacementSession));
+
+        cancelledSession.deliverResult({});
+        CHECK(StateComponentSaveChooserTestAccess::isCurrent(
+            component, replacementSession));
     }
 }
 

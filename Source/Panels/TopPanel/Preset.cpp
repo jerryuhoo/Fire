@@ -1633,7 +1633,7 @@ namespace state
 
         manualUpdateCheckThread.stop();
         cancelPendingUpdate();
-        fileChooser.reset();
+        invalidateSaveChooserSession();
         presetBox.onChange = nullptr;
 
         // Remove listeners from all buttons that had them added in the constructor
@@ -1784,6 +1784,7 @@ namespace state
         {
             presetBox.dismissTransientInteraction();
             invalidatePresetMenuSession();
+            invalidateSaveChooserSession();
             dismissSettingsDialog();
         }
     }
@@ -2069,7 +2070,7 @@ namespace state
 
     void StateComponent::savePresetAlertWindow()
     {
-        if (fileChooser != nullptr)
+        if (fileChooserSessionActive || fileChooser != nullptr)
             return;
 
         juce::File userFile = procStatePresets.getFile().getChildFile("User");
@@ -2083,87 +2084,162 @@ namespace state
             return;
         }
 
-        fileChooser = std::make_unique<juce::FileChooser>("Save preset", userFile, "*.fire", true, false, this);
+        auto chooser = std::make_shared<juce::FileChooser>(
+            "Save preset", userFile, "*.fire", true, false, this);
+        fileChooser = chooser;
+        fileChooserSessionActive = true;
+        const auto sessionGeneration = ++fileChooserSessionGeneration;
         const auto folderChooserFlags = juce::FileBrowserComponent::saveMode
                                         | juce::FileBrowserComponent::canSelectFiles;
+        auto resultHandler = createSaveChooserResultHandler(
+            chooser, sessionGeneration);
+
+        // Keep the launch call free of member access after JUCE/native code:
+        // opening a platform dialog may synchronously close the editor.
+        chooser->launchAsync(
+            folderChooserFlags,
+            [resultHandler = std::move(resultHandler)](
+                const juce::FileChooser& completedChooser)
+            {
+                resultHandler(completedChooser.getResult());
+            });
+    }
+
+    std::function<void(const juce::File&)>
+    StateComponent::createSaveChooserResultHandler(
+        std::weak_ptr<juce::FileChooser> expectedChooser,
+        std::uint64_t expectedGeneration)
+    {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+        return [safeThis,
+                expectedChooser = std::move(expectedChooser),
+                expectedGeneration](const juce::File& inputName)
+        {
+            auto chooserKeepAlive = expectedChooser.lock();
+            if (chooserKeepAlive == nullptr)
+                return;
+
+            // FileChooser::finished() invokes client code from a member stack.
+            // If a nested dialog or host callback destroys/hides the editor,
+            // its owner reference is released immediately, while this local
+            // reference keeps the chooser alive. Transfer that last reference
+            // to the next message only as this callback exits.
+            const juce::ScopeGuard releaseChooserAfterCallback { [chooserKeepAlive]
+            {
+                juce::MessageManager::callAsync([chooserKeepAlive] {});
+            } };
+
+            if (safeThis == nullptr
+                || ! safeThis->isSaveChooserSessionCurrent(
+                    expectedGeneration, chooserKeepAlive.get()))
+                return;
+
+            safeThis->handleSaveChooserResult(
+                inputName, expectedGeneration, chooserKeepAlive.get());
+        };
+    }
+
+    bool StateComponent::isSaveChooserSessionCurrent(
+        std::uint64_t expectedGeneration,
+        const juce::FileChooser* expectedChooser) const noexcept
+    {
+        return fileChooserSessionActive
+            && fileChooserSessionGeneration == expectedGeneration
+            && fileChooser.get() == expectedChooser
+            && isEnabled()
+            && isShowing();
+    }
+
+    void StateComponent::handleSaveChooserResult(
+        const juce::File& inputName,
+        std::uint64_t expectedGeneration,
+        const juce::FileChooser* expectedChooser)
+    {
+        if (! isSaveChooserSessionCurrent(expectedGeneration,
+                                           expectedChooser))
+            return;
+
+        if (inputName == juce::File())
+        {
+            invalidateSaveChooserSession();
+            return;
+        }
+
+        // Confirm against the final path after appending .fire. Native
+        // choosers do not consistently apply the extension before their
+        // overwrite check, which could otherwise silently replace an
+        // existing preset when the user omitted the suffix.
+        const auto finalPath = inputName.hasFileExtension(PRESET_EXETENSION)
+                                   ? inputName
+                                   : juce::File(inputName.getFullPathName()
+                                                + PRESET_EXETENSION);
         juce::Component::SafePointer<StateComponent> safeThis(this);
+        const bool mayOverwrite = ! finalPath.existsAsFile()
+                                  || juce::NativeMessageBox::showOkCancelBox(
+                                      juce::AlertWindow::WarningIcon,
+                                      "Replace preset?",
+                                      "\"" + finalPath.getFileName()
+                                          + "\" already exists. Replacing it will overwrite its current contents.",
+                                      this,
+                                      nullptr);
 
-        fileChooser->launchAsync(folderChooserFlags, [safeThis](const juce::FileChooser& chooser)
-                                 {
+        // A synchronous native dialog runs a nested event loop. It may hide
+        // or destroy this owner and may even start a replacement chooser.
+        if (safeThis == nullptr
+            || ! safeThis->isSaveChooserSessionCurrent(
+                expectedGeneration, expectedChooser))
+            return;
+
+        if (! mayOverwrite)
+        {
+            safeThis->invalidateSaveChooserSession();
+            return;
+        }
+
+        auto& presets = safeThis->procStatePresets;
+
+        // Consume the exact chooser before serialising. Re-entrant UI code may
+        // now start a new chooser, which this old callback must never clear.
+        safeThis->invalidateSaveChooserSession();
+        const juce::String savedPresetName = presets.savePreset(finalPath, true);
+
+        // State capture and host observers may synchronously delete the editor.
+        if (safeThis == nullptr)
+            return;
+
+        if (savedPresetName.isNotEmpty())
+        {
+            safeThis->dirtyUpdatePending.store(false,
+                                               std::memory_order_release);
+            safeThis->refreshPresetBox();
             if (safeThis == nullptr)
                 return;
 
-            const juce::File inputName = chooser.getResult();
-            if (inputName == juce::File())
+            const int newPresetIdToSelect =
+                safeThis->procStatePresets.getCurrentPresetId();
+            if (newPresetIdToSelect > 0)
             {
-                juce::MessageManager::callAsync([safeThis]
-                {
-                    if (safeThis != nullptr)
-                        safeThis->fileChooser.reset();
-                });
-                return;
+                safeThis->presetBox.setSelectedId(
+                    newPresetIdToSelect, juce::dontSendNotification);
+                safeThis->presetBox.setText(
+                    savedPresetName, juce::dontSendNotification);
             }
+        }
+        else
+        {
+            juce::NativeMessageBox::showMessageBoxAsync(
+                juce::AlertWindow::WarningIcon,
+                "Preset save failed",
+                "The preset could not be written to the selected location.",
+                safeThis.getComponent());
+        }
+    }
 
-            // Confirm against the final path after appending .fire. Native
-            // choosers do not consistently apply the extension before their
-            // overwrite check, which could otherwise silently replace an
-            // existing preset when the user omitted the suffix.
-            const auto finalPath = inputName.hasFileExtension(PRESET_EXETENSION)
-                                       ? inputName
-                                       : juce::File(inputName.getFullPathName() + PRESET_EXETENSION);
-            const bool mayOverwrite = ! finalPath.existsAsFile()
-                                      || juce::NativeMessageBox::showOkCancelBox(
-                                          juce::AlertWindow::WarningIcon,
-                                          "Replace preset?",
-                                          "\"" + finalPath.getFileName()
-                                              + "\" already exists. Replacing it will overwrite its current contents.",
-                                          safeThis.getComponent(),
-                                          nullptr);
-
-            // A synchronous native dialog runs a nested event loop; the host
-            // may close the editor while it is open.
-            if (safeThis == nullptr)
-                return;
-
-            if (! mayOverwrite)
-            {
-                juce::MessageManager::callAsync([safeThis]
-                {
-                    if (safeThis != nullptr)
-                        safeThis->fileChooser.reset();
-                });
-                return;
-            }
-
-            const juce::String savedPresetName = safeThis->procStatePresets.savePreset(finalPath, true);
-
-            if (savedPresetName.isNotEmpty())
-            {
-                safeThis->dirtyUpdatePending.store(false, std::memory_order_release);
-                safeThis->refreshPresetBox();
-
-                const int newPresetIdToSelect = safeThis->procStatePresets.getCurrentPresetId();
-                if (newPresetIdToSelect > 0)
-                {
-                    safeThis->presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
-                    safeThis->presetBox.setText(savedPresetName, juce::dontSendNotification);
-                }
-            }
-            else
-            {
-                juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-                                                            "Preset save failed",
-                                                            "The preset could not be written to the selected location.",
-                                                            safeThis.getComponent());
-            }
-
-            // FileChooser invokes this callback from its own finished() stack.
-            // Defer destruction until that stack has unwound.
-            juce::MessageManager::callAsync([safeThis]
-            {
-                if (safeThis != nullptr)
-                    safeThis->fileChooser.reset();
-            }); });
+    void StateComponent::invalidateSaveChooserSession() noexcept
+    {
+        fileChooserSessionActive = false;
+        ++fileChooserSessionGeneration;
+        fileChooser.reset();
     }
 
     void StateComponent::openPresetFolder()
@@ -2479,6 +2555,7 @@ namespace state
         // as well as in StateComponent::visibilityChanged().
         presetBox.dismissTransientInteraction();
         invalidatePresetMenuSession();
+        invalidateSaveChooserSession();
         toggleABButton.dismissPointerGesture();
         copyABButton.dismissPointerGesture();
         previousButton.dismissPointerGesture();

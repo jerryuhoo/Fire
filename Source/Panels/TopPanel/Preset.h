@@ -21,12 +21,14 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct StateComponentDialogTestAccess;
 struct StateComponentMenuTestAccess;
 struct StateComponentPresetBoxTestAccess;
+struct StateComponentSaveChooserTestAccess;
 #endif
 
 namespace state
@@ -198,6 +200,7 @@ PluginProcessor).
         friend struct ::StateComponentDialogTestAccess;
         friend struct ::StateComponentMenuTestAccess;
         friend struct ::StateComponentPresetBoxTestAccess;
+        friend struct ::StateComponentSaveChooserTestAccess;
 #endif
 
         class PresetComboBox final : public juce::ComboBox
@@ -275,7 +278,9 @@ PluginProcessor).
         //Multiband multiband{};
         //FireAudioProcessorEditor& editor;
 
-        std::unique_ptr<juce::FileChooser> fileChooser;
+        std::shared_ptr<juce::FileChooser> fileChooser;
+        std::uint64_t fileChooserSessionGeneration = 0;
+        bool fileChooserSessionActive = false;
         ManualUpdateCheckThread manualUpdateCheckThread;
         juce::CriticalSection updateResultLock;
         std::unique_ptr<VersionInfo> pendingVersionInfo;
@@ -308,6 +313,18 @@ PluginProcessor).
         void refreshPresetBox();
         void deletePresetAndRefresh();
         void savePresetAlertWindow();
+        std::function<void(const juce::File&)>
+            createSaveChooserResultHandler(
+                std::weak_ptr<juce::FileChooser> expectedChooser,
+                std::uint64_t expectedGeneration);
+        bool isSaveChooserSessionCurrent(
+            std::uint64_t expectedGeneration,
+            const juce::FileChooser* expectedChooser) const noexcept;
+        void handleSaveChooserResult(
+            const juce::File& inputName,
+            std::uint64_t expectedGeneration,
+            const juce::FileChooser* expectedChooser);
+        void invalidateSaveChooserSession() noexcept;
         void openPresetFolder();
         void rescanPresetFolder();
         void creatFolderIfNotExist(juce::File userFile);

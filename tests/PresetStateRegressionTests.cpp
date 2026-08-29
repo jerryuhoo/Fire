@@ -3052,7 +3052,7 @@ TEST_CASE("State loaders enforce one modulation routing per target",
         CHECK(countRoutingsForTarget(routings, targetID) == 1);
     }
 
-    SECTION("host state")
+    SECTION("versioned host state is rejected atomically")
     {
         FireAudioProcessor source;
         juce::MemoryBlock stateBlock;
@@ -3070,7 +3070,7 @@ TEST_CASE("State loaders enforce one modulation routing per target",
         restored.setStateInformation(stateBlock.getData(),
                                      static_cast<int>(stateBlock.getSize()));
         const auto routings = restored.getLfoManager().getModulationRoutingsCopy();
-        CHECK(countRoutingsForTarget(routings, targetID) == 1);
+        CHECK(countRoutingsForTarget(routings, targetID) == 0);
     }
 }
 

@@ -169,6 +169,11 @@ void VUPanel::presentMeterValues(const MeterValues& values,
     if (! meterPresentationActive || generation == 0)
         return;
 
+    // Host-bypass packets refresh only the global taps.  Ignore their retained
+    // band payload before consuming the generation or resetting stale decay.
+    if (focusBandNum >= 0 && ! values.bandLevelsAreFresh)
+        return;
+
     const auto sourceIndex = static_cast<size_t>(focusBandNum + 1);
     auto& lastPresentedGeneration =
         lastPresentedMeterGenerationBySource[sourceIndex];

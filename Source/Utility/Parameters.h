@@ -77,6 +77,10 @@ struct MeterValues
     std::array<float, 4> bandInputPeak_L { 0.0f }, bandInputPeak_R { 0.0f };
     std::array<float, 4> bandOutputRMS_L { 0.0f }, bandOutputRMS_R { 0.0f };
     std::array<float, 4> bandOutputPeak_L { 0.0f }, bandOutputPeak_R { 0.0f };
+
+    // Global-only packets retain the last band payload for lock-free copying,
+    // but consumers must not treat those historical values as a new reading.
+    bool bandLevelsAreFresh { true };
 };
 
 struct DistortionGraphValues

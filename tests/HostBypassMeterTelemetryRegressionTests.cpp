@@ -203,6 +203,7 @@ TEST_CASE("Host bypass continuously publishes delayed-raw global VU packets",
 
                 MeterValues lastNormalPacket;
                 REQUIRE(processor.getLatestMeterValues(lastNormalPacket));
+                REQUIRE(lastNormalPacket.bandLevelsAreFresh);
                 REQUIRE(lastNormalPacket.inputPeak_L > 0.01f);
                 REQUIRE(lastNormalPacket.outputPeak_L > 0.001f);
                 REQUIRE(lastNormalPacket.bandInputRMS_L[0] > 0.001f);
@@ -226,6 +227,7 @@ TEST_CASE("Host bypass continuously publishes delayed-raw global VU packets",
                     MeterValues bypassPacket;
                     CAPTURE(useHq, numChannels, callback);
                     REQUIRE(processor.getLatestMeterValues(bypassPacket));
+                    REQUIRE_FALSE(bypassPacket.bandLevelsAreFresh);
                     requireGlobalLevels(bypassPacket,
                                         expectedInput,
                                         expectedOutput);
@@ -248,6 +250,15 @@ TEST_CASE("Host bypass continuously publishes delayed-raw global VU packets",
                                      - lastNormalPacket.inputPeak_L)
                             > 0.1f);
                 }
+
+                auto resumedBuffer = makeInput(numChannels,
+                                               streamPosition,
+                                               0.17f);
+                processor.processBlock(resumedBuffer, midi);
+
+                MeterValues resumedPacket;
+                REQUIRE(processor.getLatestMeterValues(resumedPacket));
+                REQUIRE(resumedPacket.bandLevelsAreFresh);
             }
         }
     }

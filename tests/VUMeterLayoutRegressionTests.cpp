@@ -550,6 +550,71 @@ TEST_CASE("VU panel never restores same-band ballistics without a newer packet",
     VUPanelTestAccess::setGraphShowing(panel, false);
 }
 
+TEST_CASE("Global-only meter packets do not refresh band presentations",
+          "[ui][meter][freshness][host-bypass][regression]")
+{
+    FireAudioProcessor processor;
+
+    VUPanel bandPanel(processor);
+    MeterValues freshBandPacket;
+    freshBandPacket.bandInputRMS_L[0] = 1.0f;
+    freshBandPacket.bandInputPeak_L[0] = 1.0f;
+    freshBandPacket.bandOutputRMS_L[0] = 0.8f;
+    freshBandPacket.bandOutputPeak_L[0] = 0.9f;
+
+    VUPanelTestAccess::setGraphShowing(bandPanel, true);
+    VUPanelTestAccess::present(bandPanel, freshBandPacket, 1);
+    REQUIRE(VUPanelTestAccess::inputRms(bandPanel) > 0.99f);
+    REQUIRE(VUPanelTestAccess::outputRms(bandPanel) > 0.95f);
+
+    const auto inputBeforeGlobalOnlyPacket =
+        VUPanelTestAccess::inputRms(bandPanel);
+    const auto outputBeforeGlobalOnlyPacket =
+        VUPanelTestAccess::outputRms(bandPanel);
+    VUPanelTestAccess::setStaleTimerTicks(bandPanel, 3);
+
+    MeterValues globalOnlyPacket = freshBandPacket;
+    globalOnlyPacket.bandLevelsAreFresh = false;
+    VUPanelTestAccess::present(bandPanel, globalOnlyPacket, 2);
+
+    CHECK(VUPanelTestAccess::staleTimerTicks(bandPanel) == 3);
+    CHECK(VUPanelTestAccess::inputRms(bandPanel)
+          == Catch::Approx(inputBeforeGlobalOnlyPacket));
+    CHECK(VUPanelTestAccess::outputRms(bandPanel)
+          == Catch::Approx(outputBeforeGlobalOnlyPacket));
+
+    // Rejecting a global-only packet must not consume this source's
+    // generation. A complete replacement with the same generation is valid.
+    globalOnlyPacket.bandLevelsAreFresh = true;
+    globalOnlyPacket.bandInputRMS_L[0] = 0.0f;
+    globalOnlyPacket.bandInputPeak_L[0] = 0.0f;
+    globalOnlyPacket.bandOutputRMS_L[0] = 0.0f;
+    globalOnlyPacket.bandOutputPeak_L[0] = 0.0f;
+    VUPanelTestAccess::present(bandPanel, globalOnlyPacket, 2);
+
+    CHECK(VUPanelTestAccess::staleTimerTicks(bandPanel) == 0);
+    CHECK(VUPanelTestAccess::inputRms(bandPanel)
+          < inputBeforeGlobalOnlyPacket);
+    CHECK(VUPanelTestAccess::outputRms(bandPanel)
+          < outputBeforeGlobalOnlyPacket);
+    VUPanelTestAccess::setGraphShowing(bandPanel, false);
+
+    VUPanel globalPanel(processor);
+    globalPanel.setFocusBandNum(-1);
+    MeterValues freshGlobalPacket;
+    freshGlobalPacket.bandLevelsAreFresh = false;
+    freshGlobalPacket.inputRMS_L = 1.0f;
+    freshGlobalPacket.inputPeak_L = 1.0f;
+    freshGlobalPacket.outputRMS_L = 0.75f;
+    freshGlobalPacket.outputPeak_L = 0.9f;
+
+    VUPanelTestAccess::setGraphShowing(globalPanel, true);
+    VUPanelTestAccess::present(globalPanel, freshGlobalPacket, 1);
+    CHECK(VUPanelTestAccess::inputRms(globalPanel) > 0.99f);
+    CHECK(VUPanelTestAccess::outputRms(globalPanel) > 0.95f);
+    VUPanelTestAccess::setGraphShowing(globalPanel, false);
+}
+
 TEST_CASE("Hidden and reopened editors establish fresh meter epochs",
           "[ui][editor][meter][freshness]")
 {

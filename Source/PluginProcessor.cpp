@@ -7760,6 +7760,7 @@ void FireAudioProcessor::publishMeterValues(bool refreshBandMeters)
         return;
 
     auto values = lastPublishedMeterValues;
+    values.bandLevelsAreFresh = refreshBandMeters;
 
     values.inputRMS_L = mInputLeftRMSGlobal.load();
     values.inputRMS_R = mInputRightRMSGlobal.load();

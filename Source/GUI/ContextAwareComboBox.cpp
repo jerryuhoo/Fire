@@ -120,37 +120,54 @@ bool ContextAwareComboBox::keyPressed(const juce::KeyPress& key)
 
 void ContextAwareComboBox::mouseDown(const juce::MouseEvent& event)
 {
-    // Match ComboBox's own popup eligibility. Capturing a superset here is
-    // harmless, while failing to capture an input that JUCE queues would lose
-    // the context identity needed by showPopup().
-    const bool mayStartPopup = isEnabled() && ! event.mods.isPopupMenu();
-
-    if (mayStartPopup && popupRequestArmed && ! isPopupActive())
+    if (! isEnabled() || ! isCompletePrimaryDown(event))
         return;
 
-    if (mayStartPopup)
-    {
-        pointerInteractionGeneration = getCurrentGeneration != nullptr
-                                           ? getCurrentGeneration()
-                                           : 0;
-        pointerInteractionActive = true;
-        cancelPendingPointerRelease = false;
+    // A previous showPopup() may still be queued with another generation.
+    // Classify that request before accepting any later physical press.
+    if (popupRequestArmed && ! isPopupActive())
+        return;
 
-        if (! isPopupActive())
-            capturePopupRequest();
+    const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
+    if (pointerInteractionActive)
+    {
+        if (! isPointerSource(event))
+            return;
+
+        // A fresh down from the owning source is a lifecycle boundary when a
+        // host omitted the previous release. Clear ComboBox's private pressed
+        // bit without selecting or disturbing an already-open popup session.
+        releasePointerInteractionWithoutSelection(event);
+        if (safeThis == nullptr)
+            return;
     }
 
+    pointerInteractionGeneration = getCurrentGeneration != nullptr
+                                       ? getCurrentGeneration()
+                                       : 0;
+    pointerInteractionActive = true;
+    cancelPendingPointerRelease = false;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+
+    if (! isPopupActive())
+        capturePopupRequest();
+
     juce::ComboBox::mouseDown(event);
+    if (safeThis == nullptr)
+        return;
 
     // Editable labels can decline to start a popup. Avoid leaving a request
     // armed when JUCE did not actually queue showPopup().
-    if (mayStartPopup && ! isPopupActive())
+    if (! isPopupActive())
         popupRequestArmed = false;
 }
 
 void ContextAwareComboBox::mouseDrag(const juce::MouseEvent& event)
 {
-    if (cancelPendingPointerRelease)
+    if (! pointerInteractionActive
+        || ! isPointerSource(event)
+        || cancelPendingPointerRelease)
         return;
 
     const bool mayQueuePopup = pointerInteractionActive
@@ -167,23 +184,50 @@ void ContextAwareComboBox::mouseDrag(const juce::MouseEvent& event)
         popupRequestArmed = true;
     }
 
+    const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
     juce::ComboBox::mouseDrag(event);
+    if (safeThis == nullptr)
+        return;
 
     if (mayQueuePopup && ! isPopupActive())
         popupRequestArmed = false;
 }
 
+void ContextAwareComboBox::mouseEnter(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
+    juce::ComboBox::mouseEnter(event);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void ContextAwareComboBox::mouseMove(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
+    juce::ComboBox::mouseMove(event);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void ContextAwareComboBox::mouseExit(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
+    juce::ComboBox::mouseExit(event);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
 void ContextAwareComboBox::mouseUp(const juce::MouseEvent& event)
 {
+    if (! pointerInteractionActive || ! isPointerSource(event))
+        return;
+
     if (cancelPendingPointerRelease)
     {
-        // ComboBox keeps its button-down bit private. Give it an outside
-        // release so that bit is cleared without showPopupIfNotActive().
-        juce::ComboBox::mouseUp(
-            event.getEventRelativeTo(this).withNewPosition(
-                juce::Point<float> { -1.0f, -1.0f }));
-        cancelPendingPointerRelease = false;
-        pointerInteractionActive = false;
+        releasePointerInteractionWithoutSelection(event);
         return;
     }
 
@@ -196,10 +240,7 @@ void ContextAwareComboBox::mouseUp(const juce::MouseEvent& event)
             || getCurrentGeneration() != pointerInteractionGeneration
             || popupRequestArmed)
         {
-            juce::ComboBox::mouseUp(
-                event.getEventRelativeTo(this).withNewPosition(
-                    juce::Point<float> { -1.0f, -1.0f }));
-            pointerInteractionActive = false;
+            releasePointerInteractionWithoutSelection(event);
             return;
         }
 
@@ -207,12 +248,62 @@ void ContextAwareComboBox::mouseUp(const juce::MouseEvent& event)
         popupRequestArmed = true;
     }
 
+    const juce::Component::SafePointer<ContextAwareComboBox> safeThis(this);
     juce::ComboBox::mouseUp(event);
+    if (safeThis == nullptr)
+        return;
 
     if (mayQueuePopup && ! isPopupActive())
         popupRequestArmed = false;
 
+    clearPointerInteraction();
+}
+
+bool ContextAwareComboBox::isCompletePrimaryDown(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown()
+        && ! event.mods.isPopupMenu();
+}
+
+bool ContextAwareComboBox::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void ContextAwareComboBox::recoverMissingPointerUp(
+    const juce::MouseEvent& event)
+{
+    if (pointerInteractionActive
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+    {
+        // Releasing ComboBox's private pressed bit can synchronously invoke UI
+        // listeners, so keep it as the final operation in this recovery path.
+        releasePointerInteractionWithoutSelection(event);
+    }
+}
+
+void ContextAwareComboBox::releasePointerInteractionWithoutSelection(
+    const juce::MouseEvent& event)
+{
+    // Clear custom ownership first because ComboBox::mouseUp may delete this
+    // control. Popup request/session generations deliberately remain intact.
+    clearPointerInteraction();
+    juce::ComboBox::mouseUp(
+        event.getEventRelativeTo(this).withNewPosition(
+            juce::Point<float> { -1.0f, -1.0f }));
+}
+
+void ContextAwareComboBox::clearPointerInteraction() noexcept
+{
     pointerInteractionActive = false;
+    cancelPendingPointerRelease = false;
+    pointerSourceIndex = -1;
 }
 
 void ContextAwareComboBox::mouseWheelMove(

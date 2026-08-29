@@ -21,6 +21,43 @@ struct ContextAwareComboBoxTestAccess
     {
         return comboBox.createPopupResultHandler();
     }
+
+    static bool hasActivePointerInteraction(
+        const ContextAwareComboBox& comboBox)
+    {
+        return comboBox.pointerInteractionActive;
+    }
+
+    static bool isCancelPending(const ContextAwareComboBox& comboBox)
+    {
+        return comboBox.cancelPendingPointerRelease;
+    }
+
+    static juce::MouseInputSource::InputSourceType getPointerSourceType(
+        const ContextAwareComboBox& comboBox)
+    {
+        return comboBox.pointerSourceType;
+    }
+
+    static int getPointerSourceIndex(const ContextAwareComboBox& comboBox)
+    {
+        return comboBox.pointerSourceIndex;
+    }
+
+    static void setPointerSource(
+        ContextAwareComboBox& comboBox,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex)
+    {
+        comboBox.pointerSourceType = sourceType;
+        comboBox.pointerSourceIndex = sourceIndex;
+    }
+
+    static std::uint64_t getPopupSessionRevision(
+        const ContextAwareComboBox& comboBox)
+    {
+        return comboBox.popupSessionRevision;
+    }
 };
 
 struct BandPanelModeTestAccess
@@ -1244,6 +1281,198 @@ TEST_CASE("Global slope direction keys reject an already invalid context",
                 CHECK(gestures.gestures.empty());
             }
         }
+    }
+}
+
+TEST_CASE("Context-aware ComboBox rejects auxiliary and mixed pointer presses",
+          "[control-panel][global][filter][slope][combobox][mouse][primary][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    const std::array rejectedModifiers {
+        juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                             | juce::ModifierKeys::middleButtonModifier }
+    };
+
+    for (size_t modifierIndex = 0;
+         modifierIndex < rejectedModifiers.size();
+         ++modifierIndex)
+    {
+        const auto* sectionName = modifierIndex == 0
+                                      ? "middle button"
+                                      : "left plus middle buttons";
+        DYNAMIC_SECTION(sectionName)
+        {
+            FireAudioProcessor processor;
+            setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+            GlobalPanel panel(processor, {}, {}, {}, {}, {});
+            prepareGlobalSlopePanel(panel, true);
+
+            auto* parameter =
+                processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+            REQUIRE(parameter != nullptr);
+            auto& target =
+                GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+            const auto initialSelectedId = target.getSelectedId();
+            const auto initialValue = parameter->getValue();
+            ParameterGestureRecorder gestures;
+            parameter->addListener(&gestures);
+            const juce::ScopeGuard cleanup { [&]
+            {
+                dismissGlobalSlopePopups(panel);
+                panel.removeFromDesktop();
+                parameter->removeListener(&gestures);
+            } };
+
+            auto& component = static_cast<juce::Component&>(target);
+            component.mouseDown(makeMouseEvent(
+                component, rejectedModifiers[modifierIndex]));
+
+            CHECK_FALSE(target.isPopupActive());
+            CHECK_FALSE(
+                ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+                    target));
+            CHECK(ContextAwareComboBoxTestAccess::getPointerSourceIndex(target)
+                  == -1);
+
+            component.mouseDrag(makeMouseEvent(
+                component, rejectedModifiers[modifierIndex], true));
+            component.mouseUp(makeMouseEvent(component, {}, true));
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+            CHECK_FALSE(target.isPopupActive());
+            CHECK(target.getSelectedId() == initialSelectedId);
+            CHECK(parameter->getValue() == Catch::Approx(initialValue));
+            CHECK(gestures.gestures.empty());
+        }
+    }
+}
+
+TEST_CASE("Context-aware ComboBox owns and recovers its opener pointer",
+          "[control-panel][global][filter][slope][combobox][mouse][source][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    prepareGlobalSlopePanel(panel, true);
+
+    auto* parameter = processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+    REQUIRE(parameter != nullptr);
+    auto& target = GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+    auto& component = static_cast<juce::Component&>(target);
+    const auto primaryDown = makeMouseEvent(
+        component,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+    const auto sourceType = primaryDown.source.getType();
+    const auto sourceIndex = primaryDown.source.getIndex();
+    const auto initialValue = parameter->getValue();
+    ParameterGestureRecorder gestures;
+    parameter->addListener(&gestures);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        dismissGlobalSlopePopups(panel);
+        panel.removeFromDesktop();
+        parameter->removeListener(&gestures);
+    } };
+
+    SECTION("foreign events cannot finish the opener press")
+    {
+        component.mouseDown(primaryDown);
+        REQUIRE(target.isPopupActive());
+        REQUIRE(ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+            target));
+        CHECK(ContextAwareComboBoxTestAccess::getPointerSourceType(target)
+              == sourceType);
+        CHECK(ContextAwareComboBoxTestAccess::getPointerSourceIndex(target)
+              == sourceIndex);
+        const auto sessionRevision =
+            ContextAwareComboBoxTestAccess::getPopupSessionRevision(target);
+
+        ContextAwareComboBoxTestAccess::setPointerSource(
+            target, juce::MouseInputSource::touch, sourceIndex + 17);
+        component.mouseDrag(makeMouseEvent(
+            component,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+            true));
+        component.mouseUp(makeMouseEvent(component, {}, true));
+        component.mouseMove(makeMouseEvent(component, {}));
+
+        CHECK(ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+            target));
+        CHECK(ContextAwareComboBoxTestAccess::getPointerSourceType(target)
+              == juce::MouseInputSource::touch);
+        CHECK(ContextAwareComboBoxTestAccess::getPointerSourceIndex(target)
+              == sourceIndex + 17);
+        CHECK(target.isPopupActive());
+        CHECK(ContextAwareComboBoxTestAccess::getPopupSessionRevision(target)
+              == sessionRevision);
+
+        ContextAwareComboBoxTestAccess::setPointerSource(
+            target, sourceType, sourceIndex);
+        component.mouseMove(makeMouseEvent(component, {}));
+
+        CHECK_FALSE(
+            ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+                target));
+        CHECK(ContextAwareComboBoxTestAccess::getPointerSourceIndex(target)
+              == -1);
+        CHECK(target.isPopupActive());
+        CHECK(ContextAwareComboBoxTestAccess::getPopupSessionRevision(target)
+              == sessionRevision);
+
+        component.mouseUp(makeMouseEvent(component, {}, true));
+        CHECK_FALSE(
+            ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+                target));
+        CHECK(target.isPopupActive());
+        CHECK(ContextAwareComboBoxTestAccess::getPopupSessionRevision(target)
+              == sessionRevision);
+        CHECK(parameter->getValue() == Catch::Approx(initialValue));
+        CHECK(gestures.gestures.empty());
+    }
+
+    SECTION("missing release recovery preserves a replacement popup")
+    {
+        component.mouseDown(primaryDown);
+        REQUIRE(target.isPopupActive());
+        REQUIRE(ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+            target));
+
+        selectGlobalSlopeType(panel, false);
+        selectGlobalSlopeType(panel, true);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        REQUIRE_FALSE(target.isPopupActive());
+        REQUIRE(ContextAwareComboBoxTestAccess::isCancelPending(target));
+
+        auto& comboBox = static_cast<juce::ComboBox&>(target);
+        REQUIRE(comboBox.keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        REQUIRE(target.isPopupActive());
+        const auto replacementRevision =
+            ContextAwareComboBoxTestAccess::getPopupSessionRevision(target);
+
+        ContextAwareComboBoxTestAccess::setPointerSource(
+            target, sourceType, sourceIndex);
+        component.mouseMove(makeMouseEvent(component, {}));
+
+        CHECK_FALSE(
+            ContextAwareComboBoxTestAccess::hasActivePointerInteraction(
+                target));
+        CHECK_FALSE(ContextAwareComboBoxTestAccess::isCancelPending(target));
+        CHECK(ContextAwareComboBoxTestAccess::getPointerSourceIndex(target)
+              == -1);
+        CHECK(target.isPopupActive());
+        CHECK(ContextAwareComboBoxTestAccess::getPopupSessionRevision(target)
+              == replacementRevision);
+
+        component.mouseUp(makeMouseEvent(component, {}, true));
+        CHECK(target.isPopupActive());
+        CHECK(ContextAwareComboBoxTestAccess::getPopupSessionRevision(target)
+              == replacementRevision);
+        CHECK(parameter->getValue() == Catch::Approx(initialValue));
+        CHECK(gestures.gestures.empty());
     }
 }
 

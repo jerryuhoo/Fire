@@ -36,6 +36,9 @@ private:
     bool keyPressed(const juce::KeyPress& key) override;
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseEnter(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseWheelMove(const juce::MouseEvent& event,
                         const juce::MouseWheelDetails& wheel) override;
@@ -44,6 +47,12 @@ private:
         std::uint64_t contextGeneration);
     void capturePopupRequest() noexcept;
     bool isContextCurrent(std::uint64_t contextGeneration) const;
+    bool isCompletePrimaryDown(const juce::MouseEvent& event) const noexcept;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    void recoverMissingPointerUp(const juce::MouseEvent& event);
+    void releasePointerInteractionWithoutSelection(
+        const juce::MouseEvent& event);
+    void clearPointerInteraction() noexcept;
     void closePopupWindow() noexcept;
 
     GenerationProvider getCurrentGeneration;
@@ -52,6 +61,9 @@ private:
     std::uint64_t popupRequestGeneration = 0;
     std::uint64_t popupSessionRevision = 0;
     std::uint64_t pointerInteractionGeneration = 0;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
     bool popupRequestArmed = false;
     bool popupSessionActive = false;
     bool pointerInteractionActive = false;

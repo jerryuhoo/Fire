@@ -161,6 +161,8 @@ TEST_CASE("Value entry popup rejects incomplete and non-finite numbers",
                                     juce::String { "12junk" },
                                     juce::String { "NaN" },
                                     juce::String { "inf" },
+                                    juce::String { "1e100" },
+                                    juce::String { "-1e100" },
                                     juce::String { "1e9999" } })
     {
         INFO("input: " << invalidText);

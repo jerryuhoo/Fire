@@ -17,7 +17,8 @@ bool parseStrictFiniteDouble(const juce::String& text, double& value) noexcept
     errno = 0;
     const auto parsed = std::strtod(first, &last);
     if (last == first || last == nullptr || *last != '\0'
-        || errno == ERANGE || ! std::isfinite(parsed))
+        || errno == ERANGE || ! std::isfinite(parsed)
+        || ! std::isfinite(static_cast<float>(parsed)))
         return false;
 
     value = parsed;

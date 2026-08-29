@@ -14,9 +14,12 @@
 #include "Utility/AudioHelpers.h"
 #include "Utility/VersionInfo.h"
 #include <array>
+#include <utility>
 
 FireAudioProcessorEditor::UpdateCheckThread::UpdateCheckThread(FireAudioProcessorEditor& ownerToUse)
-    : juce::Thread("Fire update check"), owner(ownerToUse)
+    : juce::Thread("Fire update check"),
+      owner(ownerToUse),
+      sessionGeneration(owner.captureUpdateCheckSession())
 {
 }
 
@@ -34,7 +37,8 @@ void FireAudioProcessorEditor::UpdateCheckThread::run()
     const Version currentVersion { juce::String(VERSION) };
     const Version fetchedVersion { versionInfo->versionString };
     if (currentVersion < fetchedVersion && ! threadShouldExit())
-        owner.publishAvailableUpdate(versionInfo->versionString);
+        owner.publishAvailableUpdate(versionInfo->versionString,
+                                     sessionGeneration);
 }
 
 void FireAudioProcessorEditor::UpdateCheckThread::stop()
@@ -461,6 +465,12 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
+    // Reject a worker already returning from fetchLatest(), and remove any UI
+    // result before teardown can run nested message loops.
+    invalidateUpdateCheckSessionForDestruction();
+    dismissAvailableUpdateAlert();
+    cancelPendingUpdate();
+
     // End SliderAttachment gestures before the panels (and their attachment
     // maps) begin member teardown. This also removes any hover/value popup
     // state owned by a slider that never received mouseUp from the host.
@@ -629,6 +639,8 @@ void FireAudioProcessorEditor::visibilityChanged()
     if (safeThis == nullptr)
         return;
 
+    updateUpdateCheckVisibilitySession();
+
     if (isShowing())
     {
         synchroniseHistorySourceForWorkspace(activeWorkspace);
@@ -681,6 +693,27 @@ void FireAudioProcessorEditor::visibilityChanged()
 
         multiband.dismissTransientUi();
     }
+}
+
+void FireAudioProcessorEditor::enablementChanged()
+{
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+    juce::AudioProcessorEditor::enablementChanged();
+
+    if (safeThis == nullptr)
+        return;
+
+    if (! isEnabled())
+    {
+        // Disabling is a session boundary even if the same editor is enabled
+        // again before a worker or alert callback arrives.
+        invalidateUpdateCheckSessionForDisable();
+        return;
+    }
+
+    const juce::ScopedLock lock(updateResultLock);
+    if (! updateCheckDestructionStarted)
+        updateCheckEnabled = true;
 }
 
 void FireAudioProcessorEditor::rebuildBackgroundCache()
@@ -877,6 +910,10 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
 void FireAudioProcessorEditor::timerCallback()
 {
     const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+
+    // Some hosts minimise or detach their peer without changing this
+    // component's own visible flag. Observe that boundary here too.
+    updateUpdateCheckVisibilitySession();
 
     MeterValues latestMeterValues;
     if (processor.getLatestMeterValues(latestMeterValues))
@@ -1317,18 +1354,12 @@ void FireAudioProcessorEditor::handleAsyncUpdate()
     const auto availableVersion = takeAvailableUpdate();
     if (availableVersion.isNotEmpty())
     {
-        const auto callback = juce::ModalCallbackFunction::create([availableVersion](int result)
-        {
-            if (result == 1)
-                juce::URL(GITHUB_TAG_LINK + availableVersion).launchInDefaultBrowser();
-        });
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
+            this);
+        presentAvailableUpdate(availableVersion);
 
-        juce::NativeMessageBox::showOkCancelBox(
-            juce::AlertWindow::InfoIcon,
-            "New Version",
-            "New version " + availableVersion + " available, do you want to download it?",
-            this,
-            callback);
+        if (safeThis == nullptr)
+            return;
     }
 
     // Processor-side routing changes can arrive through AsyncUpdater. Refresh the
@@ -1339,22 +1370,310 @@ void FireAudioProcessorEditor::handleAsyncUpdate()
     repaint(headerArea);
 }
 
-void FireAudioProcessorEditor::publishAvailableUpdate(const juce::String& version)
+std::uint64_t FireAudioProcessorEditor::captureUpdateCheckSession()
 {
+    const juce::ScopedLock lock(updateResultLock);
+    return updateCheckDestructionStarted || ! updateCheckEnabled
+               ? 0
+               : updateCheckSessionGeneration;
+}
+
+bool FireAudioProcessorEditor::publishAvailableUpdate(
+    const juce::String& version,
+    std::uint64_t sessionGeneration)
+{
+    if (version.isEmpty() || sessionGeneration == 0)
+        return false;
+
     {
         const juce::ScopedLock lock(updateResultLock);
-        pendingUpdateVersion = version;
+        if (updateCheckDestructionStarted
+            || ! updateCheckEnabled
+            || updateCheckVisibilityState
+                   == UpdateCheckVisibilityState::hidden
+            || sessionGeneration != updateCheckSessionGeneration)
+            return false;
+
+        pendingUpdateResult = { version, sessionGeneration };
     }
 
     triggerAsyncUpdate();
+    return true;
 }
 
 juce::String FireAudioProcessorEditor::takeAvailableUpdate()
 {
+    // This is a message-thread consumer, so it can safely establish the first
+    // visible session or observe a peer that has just disappeared.
+    updateUpdateCheckVisibilitySession(false);
+
     const juce::ScopedLock lock(updateResultLock);
-    auto result = pendingUpdateVersion;
-    pendingUpdateVersion.clear();
+    if (pendingUpdateResult.version.isEmpty())
+        return {};
+
+    if (updateCheckDestructionStarted
+        || ! updateCheckEnabled
+        || pendingUpdateResult.sessionGeneration
+               != updateCheckSessionGeneration
+        || updateCheckVisibilityState
+               == UpdateCheckVisibilityState::hidden)
+    {
+        pendingUpdateResult = {};
+        return {};
+    }
+
+    // Before the host attaches the first peer, retain a valid result instead
+    // of treating normal editor construction as a hidden-window boundary.
+    if (updateCheckVisibilityState
+        == UpdateCheckVisibilityState::provisional)
+        return {};
+
+    auto result = std::move(pendingUpdateResult.version);
+    pendingUpdateResult = {};
     return result;
+}
+
+void FireAudioProcessorEditor::presentAvailableUpdate(
+    const juce::String& version)
+{
+    if (version.isEmpty())
+        return;
+
+    updateUpdateCheckVisibilitySession(false);
+
+    std::uint64_t sessionGeneration = 0;
+    {
+        const juce::ScopedLock lock(updateResultLock);
+        if (updateCheckDestructionStarted
+            || ! updateCheckEnabled
+            || updateCheckVisibilityState
+                   != UpdateCheckVisibilityState::visible)
+            return;
+
+        sessionGeneration = updateCheckSessionGeneration;
+    }
+
+    if (! isShowing() || ! isEnabled())
+        return;
+
+    // Closing the previous member-held alert first invalidates its callback.
+    // A late result from that alert therefore cannot consume this replacement.
+    dismissAvailableUpdateAlert();
+    const auto alertGeneration = availableUpdateAlertGeneration;
+    availableUpdateAlertActive = true;
+
+    const auto options = juce::MessageBoxOptions()
+                             .withIconType(
+                                 juce::MessageBoxIconType::InfoIcon)
+                             .withTitle("New Version")
+                             .withMessage(
+                                 "New version " + version
+                                 + " available, do you want to download it?")
+                             .withButton("Download")
+                             .withButton("Cancel")
+                             .withAssociatedComponent(this)
+                             .withParentComponent(this);
+
+    const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
+        this);
+    UpdateAlertCompletion completion =
+        [safeThis,
+         alertGeneration,
+         sessionGeneration,
+         version](int result)
+        {
+            if (safeThis != nullptr)
+                safeThis->handleAvailableUpdateAlertResult(
+                    result,
+                    alertGeneration,
+                    sessionGeneration,
+                    version);
+        };
+
+    juce::ScopedMessageBox newAlert;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (availableUpdateAlertFactoryForTesting)
+    {
+        // The factory is copied because a test seam is allowed to invoke the
+        // completion synchronously, including deleting this editor.
+        auto factory = availableUpdateAlertFactoryForTesting;
+        newAlert = factory(options, std::move(completion));
+    }
+    else
+#endif
+    {
+        newAlert = juce::NativeMessageBox::showScopedAsync(
+            options,
+            std::move(completion));
+    }
+
+    if (safeThis == nullptr)
+    {
+        newAlert.close();
+        return;
+    }
+
+    // A synchronous completion, hide, or replacement may have invalidated
+    // this alert while its platform handle was being created.
+    if (! safeThis->availableUpdateAlertActive
+        || safeThis->availableUpdateAlertGeneration != alertGeneration
+        || ! safeThis->isShowing()
+        || ! safeThis->isEnabled()
+        || ! safeThis->isCurrentVisibleUpdateCheckSession(
+            sessionGeneration))
+    {
+        newAlert.close();
+        return;
+    }
+
+    safeThis->availableUpdateAlert = std::move(newAlert);
+}
+
+void FireAudioProcessorEditor::handleAvailableUpdateAlertResult(
+    int result,
+    std::uint64_t alertGeneration,
+    std::uint64_t sessionGeneration,
+    const juce::String& version)
+{
+    updateUpdateCheckVisibilitySession(false);
+
+    // Check the alert generation before touching the member handle. In
+    // particular, an old OK callback must not close a replacement alert.
+    if (! availableUpdateAlertActive
+        || alertGeneration != availableUpdateAlertGeneration)
+        return;
+
+    const bool shouldLaunch =
+        result == 1
+        && isShowing()
+        && isEnabled()
+        && isCurrentVisibleUpdateCheckSession(sessionGeneration);
+    const auto downloadUrl = juce::String(GITHUB_TAG_LINK) + version;
+
+    // Invalidate and close before invoking an external URL handler. This is
+    // deliberately the last editor mutation in the successful callback path.
+    dismissAvailableUpdateAlert();
+
+    if (! shouldLaunch)
+        return;
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (availableUpdateUrlLauncherForTesting)
+    {
+        auto launcher = availableUpdateUrlLauncherForTesting;
+        launcher(downloadUrl);
+        return;
+    }
+#endif
+
+    juce::URL(downloadUrl).launchInDefaultBrowser();
+}
+
+void FireAudioProcessorEditor::dismissAvailableUpdateAlert()
+{
+    const bool wasActive = availableUpdateAlertActive;
+    availableUpdateAlertActive = false;
+    ++availableUpdateAlertGeneration;
+    if (availableUpdateAlertGeneration == 0)
+        ++availableUpdateAlertGeneration;
+    availableUpdateAlert.close();
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (wasActive)
+        ++availableUpdateAlertDismissalCountForTesting;
+#else
+    juce::ignoreUnused(wasActive);
+#endif
+}
+
+bool FireAudioProcessorEditor::isCurrentVisibleUpdateCheckSession(
+    std::uint64_t sessionGeneration)
+{
+    const juce::ScopedLock lock(updateResultLock);
+    return ! updateCheckDestructionStarted
+           && updateCheckEnabled
+           && updateCheckVisibilityState
+                  == UpdateCheckVisibilityState::visible
+           && sessionGeneration != 0
+           && sessionGeneration == updateCheckSessionGeneration;
+}
+
+void FireAudioProcessorEditor::invalidateUpdateCheckSessionForDisable()
+{
+    bool shouldDismissAlert = false;
+    {
+        const juce::ScopedLock lock(updateResultLock);
+        if (updateCheckDestructionStarted || ! updateCheckEnabled)
+            return;
+
+        updateCheckEnabled = false;
+        ++updateCheckSessionGeneration;
+        if (updateCheckSessionGeneration == 0)
+            ++updateCheckSessionGeneration;
+        pendingUpdateResult = {};
+        shouldDismissAlert = availableUpdateAlertActive;
+    }
+
+    if (shouldDismissAlert)
+        dismissAvailableUpdateAlert();
+}
+
+void FireAudioProcessorEditor::updateUpdateCheckVisibilitySession(
+    bool retriggerPendingResult)
+{
+    const bool showing = isShowing();
+    bool shouldTriggerPendingResult = false;
+    bool shouldDismissAlert = false;
+
+    {
+        const juce::ScopedLock lock(updateResultLock);
+        if (updateCheckDestructionStarted)
+            return;
+
+        if (showing)
+        {
+            updateCheckVisibilityState =
+                UpdateCheckVisibilityState::visible;
+            shouldTriggerPendingResult =
+                retriggerPendingResult
+                && updateCheckEnabled
+                && pendingUpdateResult.version.isNotEmpty()
+                && pendingUpdateResult.sessionGeneration
+                       == updateCheckSessionGeneration;
+        }
+        else if (updateCheckVisibilityState
+                 == UpdateCheckVisibilityState::visible)
+        {
+            // Only a window that has actually been visible can become hidden.
+            // The initial no-peer construction state remains provisional.
+            updateCheckVisibilityState =
+                UpdateCheckVisibilityState::hidden;
+            ++updateCheckSessionGeneration;
+            if (updateCheckSessionGeneration == 0)
+                ++updateCheckSessionGeneration;
+            pendingUpdateResult = {};
+            shouldDismissAlert = availableUpdateAlertActive;
+        }
+    }
+
+    if (shouldDismissAlert)
+        dismissAvailableUpdateAlert();
+
+    if (shouldTriggerPendingResult)
+        triggerAsyncUpdate();
+}
+
+void FireAudioProcessorEditor::invalidateUpdateCheckSessionForDestruction()
+    noexcept
+{
+    const juce::ScopedLock lock(updateResultLock);
+    updateCheckDestructionStarted = true;
+    updateCheckEnabled = false;
+    updateCheckVisibilityState = UpdateCheckVisibilityState::hidden;
+    ++updateCheckSessionGeneration;
+    if (updateCheckSessionGeneration == 0)
+        ++updateCheckSessionGeneration;
+    pendingUpdateResult = {};
 }
 
 void FireAudioProcessorEditor::exitAssignMode()

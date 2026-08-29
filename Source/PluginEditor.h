@@ -24,11 +24,15 @@
 #include "Utility/VersionInfo.h"
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 // Note: Removed includes for individual graph components as they are now managed by BandPanel/GlobalPanel
 
 struct DistortionGraphSourceEpochTestAccess;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct EditorUpdateCheckLifecycleTestAccess;
+#endif
 
 struct Version
 {
@@ -108,6 +112,7 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void visibilityChanged() override;
+    void enablementChanged() override;
     void timerCallback() override;
     void handleAsyncUpdate() override;
     void markPresetAsDirty();
@@ -120,6 +125,9 @@ public:
 private:
     friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct EditorUpdateCheckLifecycleTestAccess;
+#endif
 
     class UpdateCheckThread final : public juce::Thread
     {
@@ -130,6 +138,7 @@ private:
 
     private:
         FireAudioProcessorEditor& owner;
+        std::uint64_t sessionGeneration = 0;
         VersionInfo::FetchOperation fetchOperation;
     };
 
@@ -260,15 +269,62 @@ private:
     juce::Array<ModulationRouting> modulationRoutingSnapshot;
     std::vector<int> modulationRoutingIndexBySlider;
     int modulationSnapshotFramesRemaining = 0;
-    void publishAvailableUpdate(const juce::String& version);
+    std::uint64_t captureUpdateCheckSession();
+    bool publishAvailableUpdate(const juce::String& version,
+                                std::uint64_t sessionGeneration);
     juce::String takeAvailableUpdate();
+    void presentAvailableUpdate(const juce::String& version);
+    void handleAvailableUpdateAlertResult(
+        int result,
+        std::uint64_t alertGeneration,
+        std::uint64_t sessionGeneration,
+        const juce::String& version);
+    void dismissAvailableUpdateAlert();
+    bool isCurrentVisibleUpdateCheckSession(
+        std::uint64_t sessionGeneration);
+    void invalidateUpdateCheckSessionForDisable();
+    void updateUpdateCheckVisibilitySession(
+        bool retriggerPendingResult = true);
+    void invalidateUpdateCheckSessionForDestruction() noexcept;
 
     // Button attachment
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
         hqAttachment;
 
+    enum class UpdateCheckVisibilityState
+    {
+        provisional,
+        visible,
+        hidden
+    };
+
+    struct PendingUpdateResult
+    {
+        juce::String version;
+        std::uint64_t sessionGeneration = 0;
+    };
+
+    using UpdateAlertCompletion = std::function<void(int)>;
+    using UpdateAlertFactory = std::function<juce::ScopedMessageBox(
+        const juce::MessageBoxOptions&,
+        UpdateAlertCompletion)>;
+
     juce::CriticalSection updateResultLock;
-    juce::String pendingUpdateVersion;
+    PendingUpdateResult pendingUpdateResult;
+    std::uint64_t updateCheckSessionGeneration = 1;
+    UpdateCheckVisibilityState updateCheckVisibilityState =
+        UpdateCheckVisibilityState::provisional;
+    bool updateCheckEnabled = true;
+    bool updateCheckDestructionStarted = false;
+    juce::ScopedMessageBox availableUpdateAlert;
+    std::uint64_t availableUpdateAlertGeneration = 0;
+    bool availableUpdateAlertActive = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    UpdateAlertFactory availableUpdateAlertFactoryForTesting;
+    std::function<void(const juce::String&)>
+        availableUpdateUrlLauncherForTesting;
+    std::uint64_t availableUpdateAlertDismissalCountForTesting = 0;
+#endif
     UpdateCheckThread updateCheckThread;
 
     // ComboBoxes and attachments are now managed by BandPanel

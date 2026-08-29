@@ -351,7 +351,16 @@ int Multiband::sortLinesInternal(bool notifyFocusChange)
     if (isCanonicalisingLines)
         return juce::jlimit(0, juce::jmax(0, lineNum - 1), 0);
 
-    const juce::ScopedValueSetter<bool> canonicalising(isCanonicalisingLines, true);
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    const bool previousCanonicalisingState = isCanonicalisingLines;
+    isCanonicalisingLines = true;
+    const juce::ScopeGuard restoreCanonicalisingState {
+        [safeThis, previousCanonicalisingState]
+        {
+            if (safeThis != nullptr)
+                safeThis->isCanonicalisingLines = previousCanonicalisingState;
+        }
+    };
 
     // clear disabled lines and sort lines by frequency
     int newFreq = -1;
@@ -376,14 +385,36 @@ int Multiband::sortLinesInternal(bool notifyFocusChange)
     for (int i = 0; i < static_cast<int>(freqVector.size()); ++i)
     {
         freqDividerGroup[i]->setFreq(freqVector[static_cast<size_t>(i)]);
+
+        if (safeThis == nullptr)
+            return changeIndex;
+
         freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
+
+        if (safeThis == nullptr)
+            return changeIndex;
+
         freqDividerGroup[i]->setVisible(true);
+
+        if (safeThis == nullptr)
+            return changeIndex;
     }
     for (int i = static_cast<int>(freqVector.size()); i < 3; ++i)
     {
         freqDividerGroup[i]->setFreq(-1);
+
+        if (safeThis == nullptr)
+            return changeIndex;
+
         freqDividerGroup[i]->setToggleState(false, juce::sendNotificationSync);
+
+        if (safeThis == nullptr)
+            return changeIndex;
+
         freqDividerGroup[i]->setVisible(false);
+
+        if (safeThis == nullptr)
+            return changeIndex;
     }
     setLineIndex();
 

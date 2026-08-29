@@ -988,6 +988,64 @@ TEST_CASE("Crossover text gestures survive synchronous editor teardown",
     }
 }
 
+TEST_CASE("Crossover sorting survives synchronous editor teardown",
+          "[multiband][ui][automation][focus][sort][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 3, { 1000.0f, 3000.0f, 0.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+
+    SECTION("focus notification")
+    {
+        bool callbackRan = false;
+        multiband->setFocusChangedCallback(
+            [&callbackRan, &editor](int)
+            {
+                callbackRan = true;
+                editor.reset();
+            });
+
+        multiband->sortLines();
+
+        CHECK(callbackRan);
+        CHECK(editor == nullptr);
+    }
+
+    SECTION("frequency parameter notification")
+    {
+        const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+        REQUIRE(dividerGroups[0] != nullptr);
+        REQUIRE(dividerGroups[1] != nullptr);
+
+        // Make the presentation unsorted without publishing it. Sorting then
+        // changes FREQ0 synchronously through its SliderAttachment.
+        dividerGroups[0]->setFreq(5000.0f, juce::dontSendNotification);
+        dividerGroups[1]->setFreq(2000.0f, juce::dontSendNotification);
+
+        auto* frequencyParameter = processor.treeState.getParameter(
+            ParameterIDAndName::getIDString(FREQ_ID, 0));
+        REQUIRE(frequencyParameter != nullptr);
+        EditorResetOnProcessorCallback resetter(
+            processor,
+            editor,
+            frequencyParameter->getParameterIndex(),
+            false);
+
+        multiband->sortLines();
+
+        CHECK(resetter.didResetEditor);
+        CHECK(editor == nullptr);
+    }
+}
+
 TEST_CASE("Crossover cascade finishes every gesture after editor teardown",
           "[multiband][ui][automation][gesture][lifecycle][cascade]")
 {

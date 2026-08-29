@@ -17,6 +17,45 @@ struct VUMeterTestAccess
     {
         return meter.rightMeterBounds;
     }
+
+    static void updateBallistics(VUMeter& meter,
+                                 float rmsLeft,
+                                 float rmsRight,
+                                 float peakLeft,
+                                 float peakRight)
+    {
+        meter.updateBallistics(rmsLeft, rmsRight, peakLeft, peakRight);
+    }
+
+    static float peakHoldLeft(const VUMeter& meter)
+    {
+        return meter.mPeakHoldCh0Level;
+    }
+
+    static float peakHoldRight(const VUMeter& meter)
+    {
+        return meter.mPeakHoldCh1Level;
+    }
+
+    static constexpr int peakHoldFrameCount()
+    {
+        return VUMeter::peakHoldFrames;
+    }
+
+    static int peakHoldCounterLeft(const VUMeter& meter)
+    {
+        return meter.mPeakHoldCh0DecayCounter;
+    }
+
+    static int peakHoldCounterRight(const VUMeter& meter)
+    {
+        return meter.mPeakHoldCh1DecayCounter;
+    }
+
+    static void reset(VUMeter& meter)
+    {
+        meter.resetLevels();
+    }
 };
 
 struct VUPanelTestAccess
@@ -191,6 +230,116 @@ TEST_CASE("VU meter updates bar bounds when the host channel layout changes",
           == juce::Rectangle<int>(0, 0, 10, 120));
     CHECK(VUMeterTestAccess::rightBounds(meter)
           == juce::Rectangle<int>(20, 0, 10, 120));
+}
+
+TEST_CASE("VU meter peak holds decay independently per channel",
+          "[ui][meter][ballistics][channels][regression]")
+{
+    FireAudioProcessor processor;
+    VUMeter meter(&processor);
+
+    const auto tick = [&meter](float peakLeft, float peakRight)
+    {
+        VUMeterTestAccess::updateBallistics(meter,
+                                            0.0f,
+                                            0.0f,
+                                            peakLeft,
+                                            peakRight);
+    };
+    const auto silenceTicks = [&tick](int count)
+    {
+        for (int frame = 0; frame < count; ++frame)
+            tick(0.0f, 0.0f);
+    };
+
+    SECTION("a new left peak does not inherit right-channel decay")
+    {
+        tick(0.0f, 1.0f);
+        silenceTicks(VUMeterTestAccess::peakHoldFrameCount() + 1);
+        const auto decayingRight = VUMeterTestAccess::peakHoldRight(meter);
+        REQUIRE(decayingRight < 1.0f);
+
+        tick(1.0f, 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) == Catch::Approx(1.0f));
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) < decayingRight);
+
+        const auto rightAfterLeftPeak = VUMeterTestAccess::peakHoldRight(meter);
+        silenceTicks(VUMeterTestAccess::peakHoldFrameCount());
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) == Catch::Approx(1.0f));
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) < rightAfterLeftPeak);
+
+        tick(0.0f, 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) < 1.0f);
+    }
+
+    SECTION("a new right peak does not inherit left-channel decay")
+    {
+        tick(1.0f, 0.0f);
+        silenceTicks(VUMeterTestAccess::peakHoldFrameCount() + 1);
+        const auto decayingLeft = VUMeterTestAccess::peakHoldLeft(meter);
+        REQUIRE(decayingLeft < 1.0f);
+
+        tick(0.0f, 1.0f);
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) == Catch::Approx(1.0f));
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) < decayingLeft);
+
+        const auto leftAfterRightPeak = VUMeterTestAccess::peakHoldLeft(meter);
+        silenceTicks(VUMeterTestAccess::peakHoldFrameCount());
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) == Catch::Approx(1.0f));
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) < leftAfterRightPeak);
+
+        tick(0.0f, 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) < 1.0f);
+    }
+
+    SECTION("new and equal peaks restart a channel's full hold interval")
+    {
+        tick(0.6f, 0.0f);
+        silenceTicks(3);
+        REQUIRE(VUMeterTestAccess::peakHoldCounterLeft(meter) == 3);
+
+        tick(0.8f, 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter)
+              == Catch::Approx(0.8f));
+        CHECK(VUMeterTestAccess::peakHoldCounterLeft(meter) == 0);
+
+        silenceTicks(3);
+        REQUIRE(VUMeterTestAccess::peakHoldCounterLeft(meter) == 3);
+        tick(0.8f, 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter)
+              == Catch::Approx(0.8f));
+        CHECK(VUMeterTestAccess::peakHoldCounterLeft(meter) == 0);
+
+        for (int frame = 0;
+             frame < VUMeterTestAccess::peakHoldFrameCount() + 5;
+             ++frame)
+        {
+            tick(1.0f, 0.0f);
+            CHECK(VUMeterTestAccess::peakHoldLeft(meter)
+                  == Catch::Approx(1.0f));
+            CHECK(VUMeterTestAccess::peakHoldCounterLeft(meter) == 0);
+        }
+    }
+
+    SECTION("reset clears both peak-hold states")
+    {
+        tick(1.0f, 0.75f);
+        silenceTicks(3);
+        REQUIRE(VUMeterTestAccess::peakHoldLeft(meter) > 0.0f);
+        REQUIRE(VUMeterTestAccess::peakHoldRight(meter) > 0.0f);
+        REQUIRE(VUMeterTestAccess::peakHoldCounterLeft(meter) > 0);
+        REQUIRE(VUMeterTestAccess::peakHoldCounterRight(meter) > 0);
+
+        VUMeterTestAccess::reset(meter);
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) == 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) == 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldCounterLeft(meter) == 0);
+        CHECK(VUMeterTestAccess::peakHoldCounterRight(meter) == 0);
+
+        silenceTicks(VUMeterTestAccess::peakHoldFrameCount() + 2);
+        CHECK(VUMeterTestAccess::peakHoldLeft(meter) == 0.0f);
+        CHECK(VUMeterTestAccess::peakHoldRight(meter) == 0.0f);
+    }
 }
 
 TEST_CASE("VU readouts report the loudest visible channel and remain mono-safe",

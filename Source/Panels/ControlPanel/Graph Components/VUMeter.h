@@ -52,7 +52,8 @@ private:
     float mPeakHoldCh0Level;
     float mPeakHoldCh1Level;
 
-    int mPeakHoldDecayCounter;
+    int mPeakHoldCh0DecayCounter;
+    int mPeakHoldCh1DecayCounter;
     static constexpr int peakHoldFrames = 42;
 
     juce::Rectangle<int> leftMeterBounds;

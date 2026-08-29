@@ -25,7 +25,8 @@ VUMeter::VUMeter(FireAudioProcessor* inProcessor)
       mPeakCh1Level(0.0f),
       mPeakHoldCh0Level(0.0f),
       mPeakHoldCh1Level(0.0f),
-      mPeakHoldDecayCounter(0)
+      mPeakHoldCh0DecayCounter(0),
+      mPeakHoldCh1DecayCounter(0)
 {
     setInterceptsMouseClicks(false, false);
 }
@@ -144,7 +145,8 @@ void VUMeter::resetLevels() noexcept
     mPeakCh1Level = 0.0f;
     mPeakHoldCh0Level = 0.0f;
     mPeakHoldCh1Level = 0.0f;
-    mPeakHoldDecayCounter = 0;
+    mPeakHoldCh0DecayCounter = 0;
+    mPeakHoldCh1DecayCounter = 0;
 }
 
 bool VUMeter::updateLevels(const MeterValues& latestValues)
@@ -223,26 +225,33 @@ bool VUMeter::updateBallistics(float updatedRmsCh0,
     mPeakCh0Level = applySmoothing(mPeakCh0Level, updatedPeakCh0);
     mPeakCh1Level = applySmoothing(mPeakCh1Level, updatedPeakCh1);
 
-    // 4. Update peak-hold levels.
-    mPeakHoldCh0Level = juce::jmax(mPeakHoldCh0Level, mPeakCh0Level);
-    mPeakHoldCh1Level = juce::jmax(mPeakHoldCh1Level, mPeakCh1Level);
-
-    if (mPeakHoldCh0Level > mPeakCh0Level || mPeakHoldCh1Level > mPeakCh1Level)
+    // 4. Update each peak-hold independently. A new peak on one channel must
+    // not inherit the other channel's hold or decay phase.
+    const auto updatePeakHold = [](float peakLevel,
+                                   float& peakHoldLevel,
+                                   int& decayCounter)
     {
-        if (mPeakHoldDecayCounter < peakHoldFrames)
+        if (peakLevel >= peakHoldLevel)
         {
-            ++mPeakHoldDecayCounter;
+            peakHoldLevel = peakLevel;
+            decayCounter = 0;
+        }
+        else if (decayCounter < peakHoldFrames)
+        {
+            ++decayCounter;
         }
         else
         {
-            mPeakHoldCh0Level = juce::jmax(0.0f, mPeakHoldCh0Level - 0.018f);
-            mPeakHoldCh1Level = juce::jmax(0.0f, mPeakHoldCh1Level - 0.018f);
+            peakHoldLevel = juce::jmax(0.0f, peakHoldLevel - 0.018f);
         }
-    }
-    else
-    {
-        mPeakHoldDecayCounter = 0;
-    }
+    };
+
+    updatePeakHold(mPeakCh0Level,
+                   mPeakHoldCh0Level,
+                   mPeakHoldCh0DecayCounter);
+    updatePeakHold(mPeakCh1Level,
+                   mPeakHoldCh1Level,
+                   mPeakHoldCh1DecayCounter);
 
     mRmsCh0Level = helper_denormalize(mRmsCh0Level);
     mRmsCh1Level = helper_denormalize(mRmsCh1Level);

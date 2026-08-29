@@ -11,8 +11,11 @@
 #pragma once
 #include "InterfaceDefines.h"
 #include "LookAndFeel.h"
+#include "PrimaryButton.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+
+struct SettingsComponentTestAccess;
 
 // A dedicated component for all settings.
 class SettingsComponent : public juce::Component
@@ -76,6 +79,19 @@ public:
         setLookAndFeel(nullptr);
     }
 
+    void visibilityChanged() override
+    {
+        if (! isShowing())
+            dismissPointerGestures();
+    }
+
+    void enablementChanged() override
+    {
+        // Parent enablement changes do not form a valid continuation of a
+        // pointer gesture that began in the previous settings-dialog state.
+        dismissPointerGestures();
+    }
+
     void paint(juce::Graphics& g) override
     {
         fire::ui::drawCanvas(g, getLocalBounds().toFloat());
@@ -115,13 +131,67 @@ public:
     }
 
 private:
+    friend struct SettingsComponentTestAccess;
+
+    template <typename PrimaryButtonType>
+    class DialogSessionButton final : public PrimaryButtonType
+    {
+    public:
+        using PrimaryButtonType::PrimaryButtonType;
+
+        void triggerClick() override
+        {
+            if (! canActivateInCurrentDialog())
+                return;
+
+            // Accessibility presses use triggerClick(), whose JUCE default is
+            // posted. Complete this dialog-local action synchronously so it
+            // cannot arrive after the settings window has been hidden/reused.
+            // This is the final operation because the callback may delete the
+            // dialog, its editor, and this button.
+            this->internalClickCallback(juce::ModifierKeys::currentModifiers);
+        }
+
+        bool keyPressed(const juce::KeyPress& key) override
+        {
+            if (key.isKeyCode(juce::KeyPress::returnKey)
+                || key.isKeyCode(juce::KeyPress::spaceKey))
+            {
+                if (! canActivateInCurrentDialog())
+                    return false;
+
+                // Match native button keyboard expectations without posting a
+                // command into a later settings-dialog session.
+                this->internalClickCallback(key.getModifiers());
+                return true;
+            }
+
+            return PrimaryButtonType::keyPressed(key);
+        }
+
+    private:
+        bool canActivateInCurrentDialog() const noexcept
+        {
+            return this->isEnabled() && this->isShowing();
+        }
+    };
+
+    void dismissPointerGestures() noexcept
+    {
+        const juce::Component::SafePointer<SettingsComponent> safeThis(this);
+        companyLabel.dismissPointerGesture();
+
+        if (safeThis != nullptr)
+            autoUpdateToggle.dismissPointerGesture();
+    }
+
     juce::PropertiesFile& appProperties;
 
     juce::Rectangle<int> fireGlyphArea;
     FireLookAndFeel fireLookAndFeel;
     juce::Label versionLabel;
     juce::Label authorLabel;
-    juce::HyperlinkButton companyLabel;
+    DialogSessionButton<PrimaryHyperlinkButton> companyLabel;
 
-    juce::ToggleButton autoUpdateToggle;
+    DialogSessionButton<PrimaryToggleButton> autoUpdateToggle;
 };

@@ -88,6 +88,12 @@ void forEachPrimaryButtonType(Callback&& callback)
     toggleButton.setBounds(0, 0, 80, 24);
     toggleButton.setVisible(true);
     callback(toggleButton);
+
+    PrimaryHyperlinkButton hyperlinkButton;
+    hyperlinkButton.setButtonText("Hyperlink");
+    hyperlinkButton.setBounds(0, 0, 80, 24);
+    hyperlinkButton.setVisible(true);
+    callback(hyperlinkButton);
 }
 
 std::vector<juce::ModifierKeys> rejectedPointerModifiers()

@@ -18,9 +18,9 @@ struct PrimaryButtonTestAccess;
 
     Return-key activation is synchronous so an event cannot be replayed after a
     shared control has been rebound. Explicit Button::triggerClick calls retain
-    JUCE's asynchronous behaviour. The template is shared by text and toggle
-    buttons so controls with different drawing implementations use the same
-    pointer ownership rules.
+    JUCE's asynchronous behaviour. The template is shared by text, toggle, and
+    hyperlink buttons so controls with different drawing implementations use
+    the same pointer ownership rules.
 */
 template <typename ButtonType>
 class PrimaryPointerButton : public ButtonType
@@ -203,3 +203,4 @@ private:
 
 using PrimaryTextButton = PrimaryPointerButton<juce::TextButton>;
 using PrimaryToggleButton = PrimaryPointerButton<juce::ToggleButton>;
+using PrimaryHyperlinkButton = PrimaryPointerButton<juce::HyperlinkButton>;

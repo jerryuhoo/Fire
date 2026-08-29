@@ -1054,7 +1054,7 @@ TEST_CASE("Settings dialog closes synchronously with its owning UI",
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 
-    SECTION("editor destruction cancels queued content callbacks")
+    SECTION("editor destruction leaves no queued content callbacks")
     {
         auto processor = std::make_unique<FireAudioProcessor>();
         processor->hasUpdateCheckBeenPerformed = true;
@@ -1078,17 +1078,17 @@ TEST_CASE("Settings dialog closes synchronously with its owning UI",
             dialog->getContentComponent());
         juce::Component::SafePointer<juce::Button> safeToggle(autoUpdateToggle);
 
-        // The posted Button command must become a no-op when synchronous
-        // teardown destroys the dialog's controls.
+        // Settings commands now complete inside their visible dialog session,
+        // so teardown cannot inherit a posted command from that session.
         autoUpdateToggle->triggerClick();
-        CHECK(queuedClicks == 0);
+        CHECK(queuedClicks == 1);
         editor.reset();
         CHECK(safeDialog == nullptr);
         CHECK(safeContent == nullptr);
         CHECK(safeToggle == nullptr);
 
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
-        CHECK(queuedClicks == 0);
+        CHECK(queuedClicks == 1);
         CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
         processor.reset();
     }

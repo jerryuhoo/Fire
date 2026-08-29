@@ -122,6 +122,7 @@ constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
 constexpr int hostStateFormatVersion = 1;
 constexpr int oldestWrappedHostParameterCount = 19;
+constexpr int maximumStateModulationRoutings = 128;
 constexpr std::array<const char*, 8> legacyHostStateParameterAnchors {
     HQ_ID,
     DOWNSAMPLE_ID,
@@ -132,6 +133,165 @@ constexpr std::array<const char*, 8> legacyHostStateParameterAnchors {
     BAND_ID,
     HIGH_ID,
 };
+
+bool hasStrictFiniteAttributeInRange(const juce::XmlElement& xml,
+                                     const char* attributeName,
+                                     double minimum,
+                                     double maximum) noexcept
+{
+    double parsed = 0.0;
+    return xml.hasAttribute(attributeName)
+           && parseStrictFiniteDouble(xml.getStringAttribute(attributeName),
+                                      parsed)
+           && parsed >= minimum && parsed <= maximum;
+}
+
+bool hasStrictBooleanAttribute(const juce::XmlElement& xml,
+                               const char* attributeName) noexcept
+{
+    if (! xml.hasAttribute(attributeName))
+        return false;
+
+    const auto value = xml.getStringAttribute(attributeName).trim();
+    return value == "0" || value == "1";
+}
+
+int countDirectChildrenWithTagName(const juce::XmlElement& parent,
+                                   const char* tagName) noexcept
+{
+    int count = 0;
+    for (auto* child : parent.getChildIterator())
+        if (child->hasTagName(tagName))
+            ++count;
+    return count;
+}
+
+bool isValidVersionedHostLfoState(const juce::XmlElement& lfoState) noexcept
+{
+    if (! lfoState.hasTagName("LFO_STATE")
+        || lfoState.getNumChildElements() != 4)
+        return false;
+
+    std::array<bool, 4> seenIndices {};
+    for (auto* lfo : lfoState.getChildIterator())
+    {
+        int index = -1;
+        if (! lfo->hasTagName("LFO")
+            || ! parseStrictNonNegativeIntegerAttribute(*lfo, "index", index)
+            || ! juce::isPositiveAndBelow(index,
+                                          static_cast<int>(seenIndices.size()))
+            || seenIndices[static_cast<size_t>(index)])
+        {
+            return false;
+        }
+
+        seenIndices[static_cast<size_t>(index)] = true;
+        if (lfo->hasAttribute("smoothness")
+            && ! hasStrictFiniteAttributeInRange(*lfo,
+                                                 "smoothness",
+                                                 0.0,
+                                                 1.0))
+        {
+            return false;
+        }
+
+        const juce::XmlElement* points = nullptr;
+        const juce::XmlElement* curvatures = nullptr;
+        for (auto* payload : lfo->getChildIterator())
+        {
+            if (payload->hasTagName("POINTS") && points == nullptr)
+                points = payload;
+            else if (payload->hasTagName("CURVATURES")
+                     && curvatures == nullptr)
+                curvatures = payload;
+            else
+                return false;
+        }
+
+        if (points == nullptr || curvatures == nullptr
+            || lfo->getNumChildElements() != 2
+            || points->getNumChildElements() < 2
+            || points->getNumChildElements()
+                   > static_cast<int>(LfoData::maximumNumberOfPoints)
+            || curvatures->getNumChildElements()
+                   != points->getNumChildElements() - 1)
+        {
+            return false;
+        }
+
+        for (auto* point : points->getChildIterator())
+            if (! point->hasTagName("P")
+                || point->getNumChildElements() != 0
+                || ! hasStrictFiniteAttributeInRange(*point, "x", 0.0, 1.0)
+                || ! hasStrictFiniteAttributeInRange(*point, "y", 0.0, 1.0))
+            {
+                return false;
+            }
+
+        for (auto* curvature : curvatures->getChildIterator())
+            if (! curvature->hasTagName("C")
+                || curvature->getNumChildElements() != 0
+                || ! hasStrictFiniteAttributeInRange(*curvature,
+                                                     "v",
+                                                     -2.0,
+                                                     2.0))
+            {
+                return false;
+            }
+    }
+
+    return true;
+}
+
+bool isValidVersionedHostRoutingState(
+    const juce::XmlElement& routingState,
+    juce::AudioProcessorValueTreeState& parameterState) noexcept
+{
+    if (! routingState.hasTagName("MODULATION_STATE")
+        || routingState.getNumChildElements()
+               > maximumStateModulationRoutings)
+    {
+        return false;
+    }
+
+    juce::StringArray seenTargets;
+    for (auto* routing : routingState.getChildIterator())
+    {
+        int source = -1;
+        if (! routing->hasTagName("ROUTING")
+            || routing->getNumChildElements() != 0
+            || ! parseStrictNonNegativeIntegerAttribute(*routing,
+                                                        "source",
+                                                        source)
+            || ! juce::isPositiveAndBelow(source, 4)
+            || ! routing->hasAttribute("target")
+            || ! hasStrictFiniteAttributeInRange(*routing,
+                                                 "depth",
+                                                 -1.0,
+                                                 1.0)
+            || ! hasStrictBooleanAttribute(*routing, "bipolar")
+            || ! hasStrictBooleanAttribute(*routing, "bypassed"))
+        {
+            return false;
+        }
+
+        // Current Init snapshots contain empty preallocated slots. They have no
+        // semantic routing and may repeat, but all populated targets must be
+        // known and unique.
+        const auto target = routing->getStringAttribute("target");
+        if (target.isEmpty())
+            continue;
+        if (parameterState.getParameter(target) == nullptr
+            || seenTargets.contains(target))
+        {
+            return false;
+        }
+
+        seenTargets.add(target);
+    }
+
+    return true;
+}
 
 void replaceNonFiniteSamplesWithSilence(
     juce::AudioBuffer<float>& buffer) noexcept
@@ -4596,6 +4756,9 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     {
         int incomingFormatVersion = 0;
         int declaredParameterCount = 0;
+        const auto* versionedLfoState = xmlState->getChildByName("LFO_STATE");
+        const auto* versionedRoutingState =
+            xmlState->getChildByName("MODULATION_STATE");
         if (! parseStrictNonNegativeIntegerAttribute(
                 *xmlState, "stateFormatVersion", incomingFormatVersion)
             || ! parseStrictNonNegativeIntegerAttribute(
@@ -4603,8 +4766,14 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
             || incomingFormatVersion != hostStateFormatVersion
             || declaredParameterCount != incomingParameterIDs.size()
             || xmlState->getChildByName("otherState") == nullptr
-            || xmlState->getChildByName("LFO_STATE") == nullptr
-            || xmlState->getChildByName("MODULATION_STATE") == nullptr
+            || versionedLfoState == nullptr
+            || versionedRoutingState == nullptr
+            || countDirectChildrenWithTagName(*xmlState, "LFO_STATE") != 1
+            || countDirectChildrenWithTagName(*xmlState,
+                                              "MODULATION_STATE") != 1
+            || ! isValidVersionedHostLfoState(*versionedLfoState)
+            || ! isValidVersionedHostRoutingState(*versionedRoutingState,
+                                                  treeState)
             || xmlState->getChildByName("AB_STATE") == nullptr)
         {
             return;
@@ -4791,7 +4960,6 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
         }
     }
 
-    constexpr int maximumStateModulationRoutings = 128;
     juce::Array<ModulationRouting> loadedRoutings;
     juce::StringArray loadedRoutingTargets;
     if (auto* modMatrixState = xmlState->getChildByName("MODULATION_STATE"))

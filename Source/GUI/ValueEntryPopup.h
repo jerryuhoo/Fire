@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "PrimaryButton.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <functional>
 
@@ -51,24 +52,10 @@ private:
         bool keyPressed(const juce::KeyPress& key) override;
     };
 
-    class PrimaryTextButton final : public juce::TextButton
+    class SessionTextButton final : public ::PrimaryTextButton
     {
     public:
-        void mouseDown(const juce::MouseEvent& event) override;
-        void mouseDrag(const juce::MouseEvent& event) override;
-        void mouseUp(const juce::MouseEvent& event) override;
-        bool keyPressed(const juce::KeyPress& key) override;
-        void dismissPointerGesture() noexcept;
-
-    private:
-        void visibilityChanged() override;
-        void enablementChanged() override;
-        bool isPointerSource(const juce::MouseEvent& event) const noexcept;
-
-        bool primaryPointerDown = false;
-        juce::MouseInputSource::InputSourceType pointerSourceType =
-            juce::MouseInputSource::mouse;
-        int pointerSourceIndex = -1;
+        void triggerClick() override;
     };
 
     bool submitEditorText();
@@ -78,8 +65,8 @@ private:
     void setInputError(bool shouldShowError);
 
     SessionTextEditor editor;
-    PrimaryTextButton okButton;
-    PrimaryTextButton cancelButton;
+    SessionTextButton okButton;
+    SessionTextButton cancelButton;
     bool sessionActive = false;
     bool completingSession = false;
 

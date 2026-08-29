@@ -243,91 +243,15 @@ void ValueEntryPopup::setInputError(bool shouldShowError)
     editor.repaint();
 }
 
-void ValueEntryPopup::PrimaryTextButton::mouseDown(const juce::MouseEvent& event)
+void ValueEntryPopup::SessionTextButton::triggerClick()
 {
-    if (primaryPointerDown && ! isPointerSource(event))
-        return;
-
-    dismissPointerGesture();
-    primaryPointerDown = event.mods.isLeftButtonDown()
-                         && ! event.mods.isRightButtonDown()
-                         && ! event.mods.isMiddleButtonDown()
-                         && ! event.mods.isPopupMenu();
-
-    if (! primaryPointerDown)
-        return;
-
-    pointerSourceType = event.source.getType();
-    pointerSourceIndex = event.source.getIndex();
-    juce::TextButton::mouseDown(event);
-}
-
-void ValueEntryPopup::PrimaryTextButton::mouseDrag(const juce::MouseEvent& event)
-{
-    if (primaryPointerDown && isPointerSource(event))
-        juce::TextButton::mouseDrag(event);
-}
-
-void ValueEntryPopup::PrimaryTextButton::mouseUp(const juce::MouseEvent& event)
-{
-    if (! primaryPointerDown)
-    {
-        dismissPointerGesture();
-        return;
-    }
-
-    if (! isPointerSource(event))
-        return;
-
-    primaryPointerDown = false;
-    pointerSourceIndex = -1;
-    juce::TextButton::mouseUp(event);
-}
-
-bool ValueEntryPopup::PrimaryTextButton::keyPressed(
-    const juce::KeyPress& key)
-{
-    if (isEnabled() && key.isKeyCode(juce::KeyPress::returnKey))
-    {
-        // Button::keyPressed queues triggerClick(). Invoke the normal callback
-        // synchronously so a key from session A cannot commit session B.
-        internalClickCallback(key.getModifiers());
-        return true;
-    }
-
-    return juce::TextButton::keyPressed(key);
-}
-
-void ValueEntryPopup::PrimaryTextButton::visibilityChanged()
-{
-    juce::TextButton::visibilityChanged();
-
-    if (! isVisible())
-        dismissPointerGesture();
-}
-
-void ValueEntryPopup::PrimaryTextButton::enablementChanged()
-{
-    juce::TextButton::enablementChanged();
-
     if (! isEnabled())
-        dismissPointerGesture();
-}
+        return;
 
-void ValueEntryPopup::PrimaryTextButton::dismissPointerGesture() noexcept
-{
-    primaryPointerDown = false;
-    pointerSourceIndex = -1;
-
-    if (isDown())
-        setState(juce::Button::buttonNormal);
-}
-
-bool ValueEntryPopup::PrimaryTextButton::isPointerSource(
-    const juce::MouseEvent& event) const noexcept
-{
-    return event.source.getType() == pointerSourceType
-        && event.source.getIndex() == pointerSourceIndex;
+    // Accessibility presses use Button::triggerClick(), whose default command
+    // is asynchronous. This popup is rebound between sessions, so invoke the
+    // callback now and make it the final operation: it may delete the popup.
+    internalClickCallback(juce::ModifierKeys::currentModifiers);
 }
 
 bool ValueEntryPopup::SessionTextEditor::keyPressed(

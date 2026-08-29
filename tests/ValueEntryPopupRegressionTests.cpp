@@ -1,4 +1,5 @@
 #include <GUI/InterfaceDefines.h>
+#include <GUI/PrimaryButton.h>
 #include <GUI/ValueEntryPopup.h>
 #include <PluginEditor.h>
 #include <PluginProcessor.h>
@@ -77,6 +78,29 @@ struct ValueEntryPopupTestAccess
     static bool okIsDown(const ValueEntryPopup& popup)
     {
         return popup.okButton.isDown();
+    }
+
+    static void moveOk(ValueEntryPopup& popup,
+                       juce::ModifierKeys modifiers = {})
+    {
+        auto& button = static_cast<juce::Component&>(popup.okButton);
+        button.mouseMove(makeMouseEvent(button, modifiers));
+    }
+
+    static void triggerOk(ValueEntryPopup& popup)
+    {
+        popup.okButton.triggerClick();
+    }
+
+    static void triggerCancel(ValueEntryPopup& popup)
+    {
+        popup.cancelButton.triggerClick();
+    }
+
+    static bool buttonsUseSharedPrimaryControl(const ValueEntryPopup& popup)
+    {
+        return dynamic_cast<const ::PrimaryTextButton*>(&popup.okButton) != nullptr
+            && dynamic_cast<const ::PrimaryTextButton*>(&popup.cancelButton) != nullptr;
     }
 
     static bool pressOkReturn(ValueEntryPopup& popup)
@@ -392,6 +416,100 @@ TEST_CASE("Value entry buttons reject stale releases after popup dismissal",
     CHECK(popup.isVisible());
 }
 
+TEST_CASE("Value entry buttons recover a lost primary release through the shared control",
+          "[ui][modulation][value-entry][input][lifecycle][stale][primary-button]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ValueEntryPopup popup;
+    int acceptedCount = 0;
+    int cancelledCount = 0;
+    popup.onOk = [&](double) { ++acceptedCount; };
+    popup.onCancel = [&] { ++cancelledCount; };
+
+    CHECK(ValueEntryPopupTestAccess::buttonsUseSharedPrimaryControl(popup));
+    ValueEntryPopupTestAccess::open(popup);
+    ValueEntryPopupTestAccess::setText(popup, "3.5");
+    ValueEntryPopupTestAccess::pressOkWithoutRelease(
+        popup,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+    REQUIRE(ValueEntryPopupTestAccess::okIsDown(popup));
+
+    ValueEntryPopupTestAccess::moveOk(popup);
+    CHECK_FALSE(ValueEntryPopupTestAccess::okIsDown(popup));
+
+    // A release delivered after ownership recovery belongs to the abandoned
+    // gesture and must not submit the still-active popup session.
+    ValueEntryPopupTestAccess::releaseOk(popup);
+    CHECK(acceptedCount == 0);
+    CHECK(cancelledCount == 0);
+    CHECK(popup.isVisible());
+
+    ValueEntryPopupTestAccess::clickOk(
+        popup,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier });
+    CHECK(acceptedCount == 1);
+    CHECK(cancelledCount == 0);
+    CHECK_FALSE(popup.isVisible());
+}
+
+TEST_CASE("Value entry button commands cannot cross popup sessions",
+          "[ui][modulation][value-entry][input][accessibility][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ValueEntryPopup popup;
+    int acceptedCount = 0;
+    int cancelledCount = 0;
+    double acceptedValue = 0.0;
+    popup.onOk = [&](double value)
+    {
+        ++acceptedCount;
+        acceptedValue = value;
+    };
+    popup.onCancel = [&] { ++cancelledCount; };
+
+    SECTION("OK command")
+    {
+        ValueEntryPopupTestAccess::open(popup);
+        ValueEntryPopupTestAccess::setText(popup, "4.5");
+        ValueEntryPopupTestAccess::triggerOk(popup);
+
+        CHECK(acceptedCount == 1);
+        CHECK(acceptedValue == Catch::Approx(4.5));
+        CHECK(cancelledCount == 0);
+        CHECK_FALSE(popup.isVisible());
+
+        ValueEntryPopupTestAccess::open(popup);
+        ValueEntryPopupTestAccess::setText(popup, "8.5");
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+
+        CHECK(acceptedCount == 1);
+        CHECK(acceptedValue == Catch::Approx(4.5));
+        CHECK(cancelledCount == 0);
+        CHECK(popup.isVisible());
+        CHECK(ValueEntryPopupTestAccess::text(popup) == "8.5");
+    }
+
+    SECTION("Cancel command")
+    {
+        ValueEntryPopupTestAccess::open(popup);
+        ValueEntryPopupTestAccess::setText(popup, "4.5");
+        ValueEntryPopupTestAccess::triggerCancel(popup);
+
+        CHECK(acceptedCount == 0);
+        CHECK(cancelledCount == 1);
+        CHECK_FALSE(popup.isVisible());
+
+        ValueEntryPopupTestAccess::open(popup);
+        ValueEntryPopupTestAccess::setText(popup, "8.5");
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+
+        CHECK(acceptedCount == 0);
+        CHECK(cancelledCount == 1);
+        CHECK(popup.isVisible());
+        CHECK(ValueEntryPopupTestAccess::text(popup) == "8.5");
+    }
+}
+
 TEST_CASE("Value entry button Return is synchronous across popup sessions",
           "[ui][modulation][value-entry][input][keyboard][lifecycle]")
 {
@@ -448,6 +566,50 @@ TEST_CASE("Value entry keyboard completion may delete its popup",
 
         const auto consumed = ValueEntryPopupTestAccess::pressEscape(*rawPopup);
         CHECK(consumed);
+        CHECK(popup == nullptr);
+    }
+}
+
+TEST_CASE("Value entry pointer and command completion may delete its popup",
+          "[ui][modulation][value-entry][input][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("OK pointer callback")
+    {
+        auto popup = std::make_unique<ValueEntryPopup>();
+        auto* rawPopup = popup.get();
+        rawPopup->onOk = [&](double) { popup.reset(); };
+        ValueEntryPopupTestAccess::open(*rawPopup);
+        ValueEntryPopupTestAccess::setText(*rawPopup, "7.5");
+
+        ValueEntryPopupTestAccess::clickOk(*rawPopup, leftButton);
+        CHECK(popup == nullptr);
+    }
+
+    SECTION("Cancel pointer callback")
+    {
+        auto popup = std::make_unique<ValueEntryPopup>();
+        auto* rawPopup = popup.get();
+        rawPopup->onCancel = [&] { popup.reset(); };
+        ValueEntryPopupTestAccess::open(*rawPopup);
+
+        ValueEntryPopupTestAccess::clickCancel(*rawPopup, leftButton);
+        CHECK(popup == nullptr);
+    }
+
+    SECTION("synchronous command callback")
+    {
+        auto popup = std::make_unique<ValueEntryPopup>();
+        auto* rawPopup = popup.get();
+        rawPopup->onOk = [&](double) { popup.reset(); };
+        ValueEntryPopupTestAccess::open(*rawPopup);
+        ValueEntryPopupTestAccess::setText(*rawPopup, "7.5");
+
+        ValueEntryPopupTestAccess::triggerOk(*rawPopup);
         CHECK(popup == nullptr);
     }
 }

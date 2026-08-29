@@ -23,6 +23,7 @@ class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct LfoEditorTestAccess;
 struct LfoPanelDialogTestAccess;
+struct LfoPanelBrushTestAccess;
 #endif
 
 inline std::optional<LfoData> lfoClipboard;
@@ -98,6 +99,7 @@ public:
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct LfoEditorTestAccess;
+    friend struct LfoPanelBrushTestAccess;
 #endif
 
     enum class PointerGesture
@@ -237,6 +239,74 @@ private:
     void invertShape(bool invertX, bool invertY);
 };
 
+//==============================================================================
+/** A ComboBox whose asynchronous result belongs to exactly one LFO editing
+    session. JUCE's stock ComboBox callback only retains the component, so a
+    result from a popup opened before a mode/data/LFO switch can otherwise
+    select a brush in the replacement session.
+*/
+class LfoBrushSelector final : public juce::ComboBox
+{
+public:
+    using SelectionCallback = std::function<void(LfoPresetShape)>;
+
+    LfoBrushSelector() = default;
+
+    void setSelectionCallback(SelectionCallback callback);
+    void setInteractionAvailable(bool shouldBeAvailable) noexcept;
+    void invalidateInteractionContext() noexcept;
+    void dismissTransientInteraction() noexcept;
+    void showPopup() override;
+
+private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct LfoPanelBrushTestAccess;
+#endif
+
+    bool keyPressed(const juce::KeyPress& key) override;
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseEnter(const juce::MouseEvent& event) override;
+    void mouseMove(const juce::MouseEvent& event) override;
+    void mouseExit(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
+    void mouseWheelMove(const juce::MouseEvent& event,
+                        const juce::MouseWheelDetails& wheel) override;
+    void visibilityChanged() override;
+    void enablementChanged() override;
+
+    std::function<void(int)> createPopupResultHandler();
+    std::function<void(int)> createPopupResultHandler(
+        std::uint64_t contextGeneration);
+    void capturePopupRequest() noexcept;
+    bool isContextCurrent(std::uint64_t generation) const noexcept;
+    bool commitSelection(int itemId, std::uint64_t generation);
+    bool isCompletePrimaryDown(const juce::MouseEvent& event) const noexcept;
+    bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    void recoverMissingPointerUp(const juce::MouseEvent& event);
+    void releasePointerInteractionWithoutSelection(
+        const juce::MouseEvent& event);
+    void clearPointerInteraction() noexcept;
+    void cancelCurrentInteraction() noexcept;
+    void closePopupWindow() noexcept;
+
+    SelectionCallback selectionCallback;
+    std::uint64_t interactionContextGeneration = 0;
+    std::uint64_t popupRequestGeneration = 0;
+    std::uint64_t popupSessionRevision = 0;
+    std::uint64_t pointerInteractionGeneration = 0;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+    bool interactionAvailable = false;
+    bool popupRequestArmed = false;
+    bool popupSessionActive = false;
+    bool pointerInteractionActive = false;
+    bool cancelPendingPointerRelease = false;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LfoBrushSelector)
+};
+
 //
 //  The LfoPanel is the main "Controller" component.
 //  It owns all the LFO data and all the UI controls.
@@ -271,10 +341,12 @@ public:
     void dismissTransientInteraction();
     void dismissModulationMatrixDialog();
     void visibilityChanged() override;
+    void enablementChanged() override;
 
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct LfoPanelDialogTestAccess;
+    friend struct LfoPanelBrushTestAccess;
 #endif
 
     void buttonClicked(juce::Button* button) override;
@@ -306,7 +378,7 @@ private:
     // --- UI Components for mode selection ---
     PrimaryTextButton editModeButton { "Edit Mode" };
     PrimaryTextButton brushModeButton { "Brush Mode" };
-    juce::ComboBox brushSelector;
+    LfoBrushSelector brushSelector;
 
     PrimaryTextButton matrixButton { "Matrix" };
     PrimaryTextButton syncButton;

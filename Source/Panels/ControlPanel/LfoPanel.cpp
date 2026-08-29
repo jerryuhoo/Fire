@@ -3,6 +3,8 @@
 #include "../../GUI/FireTheme.h"
 #include "../../PluginProcessor.h"
 
+#include <utility>
+
 static juce::Rectangle<int> makeNormalised(const juce::Point<int>& p1,
                                            const juce::Point<int>& p2)
 {
@@ -1536,6 +1538,445 @@ void LfoEditor::deleteSelectedPoints()
 }
 
 //==============================================================================
+// LfoBrushSelector Implementation
+//==============================================================================
+void LfoBrushSelector::setSelectionCallback(SelectionCallback callback)
+{
+    // The callback identifies the owner of a selection. A popup opened for
+    // the previous owner must never deliver into its replacement.
+    invalidateInteractionContext();
+    selectionCallback = std::move(callback);
+}
+
+void LfoBrushSelector::setInteractionAvailable(
+    bool shouldBeAvailable) noexcept
+{
+    ++interactionContextGeneration;
+    interactionAvailable = shouldBeAvailable;
+    cancelCurrentInteraction();
+}
+
+void LfoBrushSelector::invalidateInteractionContext() noexcept
+{
+    ++interactionContextGeneration;
+    cancelCurrentInteraction();
+}
+
+void LfoBrushSelector::dismissTransientInteraction() noexcept
+{
+    invalidateInteractionContext();
+}
+
+void LfoBrushSelector::capturePopupRequest() noexcept
+{
+    popupRequestGeneration = interactionContextGeneration;
+    popupRequestArmed = true;
+}
+
+bool LfoBrushSelector::isContextCurrent(
+    std::uint64_t generation) const noexcept
+{
+    return generation == interactionContextGeneration
+        && interactionAvailable
+        && isEnabled()
+        && isShowing();
+}
+
+bool LfoBrushSelector::keyPressed(const juce::KeyPress& key)
+{
+    const bool movesBackward = key == juce::KeyPress::upKey
+                               || key == juce::KeyPress::leftKey;
+    const bool movesForward = key == juce::KeyPress::downKey
+                              || key == juce::KeyPress::rightKey;
+    if (movesBackward || movesForward)
+    {
+        if (isPopupActive() || popupRequestArmed)
+            return true;
+
+        const auto generation = interactionContextGeneration;
+        if (! isContextCurrent(generation))
+            return true;
+
+        const auto delta = movesBackward ? -1 : 1;
+        for (int itemIndex = getSelectedItemIndex() + delta;
+             juce::isPositiveAndBelow(itemIndex, getNumItems());
+             itemIndex += delta)
+        {
+            const auto itemId = getItemId(itemIndex);
+            if (itemId != 0 && isItemEnabled(itemId))
+            {
+                commitSelection(itemId, generation);
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    if (key == juce::KeyPress::returnKey)
+    {
+        if (isPopupActive() || popupRequestArmed)
+            return true;
+
+        const auto generation = interactionContextGeneration;
+        if (! isContextCurrent(generation))
+            return true;
+
+        capturePopupRequest();
+    }
+
+    return juce::ComboBox::keyPressed(key);
+}
+
+void LfoBrushSelector::mouseDown(const juce::MouseEvent& event)
+{
+    const auto generation = interactionContextGeneration;
+    if (! isContextCurrent(generation) || ! isCompletePrimaryDown(event))
+        return;
+
+    // Let an already-queued showPopup() consume its captured generation before
+    // accepting another physical opener.
+    if (popupRequestArmed && ! isPopupActive())
+        return;
+
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    if (pointerInteractionActive)
+    {
+        if (! isPointerSource(event))
+            return;
+
+        releasePointerInteractionWithoutSelection(event);
+        if (safeThis == nullptr)
+            return;
+    }
+
+    pointerInteractionGeneration = generation;
+    pointerInteractionActive = true;
+    cancelPendingPointerRelease = false;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+
+    if (! isPopupActive())
+        capturePopupRequest();
+
+    juce::ComboBox::mouseDown(event);
+    if (safeThis != nullptr && ! isPopupActive())
+        popupRequestArmed = false;
+}
+
+void LfoBrushSelector::mouseDrag(const juce::MouseEvent& event)
+{
+    if (! pointerInteractionActive
+        || ! isPointerSource(event)
+        || cancelPendingPointerRelease)
+        return;
+
+    const bool mayQueuePopup = ! isPopupActive();
+    if (mayQueuePopup)
+    {
+        if (pointerInteractionGeneration != interactionContextGeneration
+            || popupRequestArmed
+            || ! isContextCurrent(pointerInteractionGeneration))
+            return;
+
+        popupRequestGeneration = pointerInteractionGeneration;
+        popupRequestArmed = true;
+    }
+
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::mouseDrag(event);
+    if (safeThis != nullptr && mayQueuePopup && ! isPopupActive())
+        popupRequestArmed = false;
+}
+
+void LfoBrushSelector::mouseEnter(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::mouseEnter(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void LfoBrushSelector::mouseMove(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::mouseMove(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void LfoBrushSelector::mouseExit(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::mouseExit(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void LfoBrushSelector::mouseUp(const juce::MouseEvent& event)
+{
+    if (! pointerInteractionActive || ! isPointerSource(event))
+        return;
+
+    if (cancelPendingPointerRelease
+        || pointerInteractionGeneration != interactionContextGeneration
+        || ! isContextCurrent(pointerInteractionGeneration))
+    {
+        releasePointerInteractionWithoutSelection(event);
+        return;
+    }
+
+    const bool mayQueuePopup = ! isPopupActive();
+    if (mayQueuePopup)
+    {
+        if (popupRequestArmed)
+        {
+            releasePointerInteractionWithoutSelection(event);
+            return;
+        }
+
+        popupRequestGeneration = pointerInteractionGeneration;
+        popupRequestArmed = true;
+    }
+
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::mouseUp(event);
+    if (safeThis == nullptr)
+        return;
+
+    if (mayQueuePopup && ! isPopupActive())
+        popupRequestArmed = false;
+
+    clearPointerInteraction();
+}
+
+void LfoBrushSelector::mouseWheelMove(
+    const juce::MouseEvent& event,
+    const juce::MouseWheelDetails& wheel)
+{
+    // Native ComboBox wheel selection posts an unscoped async change. Scrolling
+    // the surrounding panel must never silently choose a brush.
+    juce::Component::mouseWheelMove(event, wheel);
+}
+
+void LfoBrushSelector::visibilityChanged()
+{
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::visibilityChanged();
+    if (safeThis != nullptr && ! isShowing())
+        invalidateInteractionContext();
+}
+
+void LfoBrushSelector::enablementChanged()
+{
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    juce::ComboBox::enablementChanged();
+    if (safeThis != nullptr && ! isEnabled())
+        invalidateInteractionContext();
+}
+
+bool LfoBrushSelector::commitSelection(
+    int itemId,
+    std::uint64_t generation)
+{
+    if (! isContextCurrent(generation)
+        || itemId == 0
+        || indexOfItemId(itemId) < 0
+        || ! isItemEnabled(itemId)
+        || getSelectedId() == itemId)
+        return false;
+
+    popupSessionActive = false;
+    ++popupSessionRevision;
+
+    const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
+    setSelectedId(itemId, juce::dontSendNotification);
+    if (safeThis == nullptr || ! safeThis->isContextCurrent(generation))
+        return true;
+
+    if (auto* handler = safeThis->getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(
+            juce::AccessibilityEvent::valueChanged);
+
+    if (safeThis == nullptr || ! safeThis->isContextCurrent(generation))
+        return true;
+
+    // Copy the callable out of the component and invoke it last: applying a
+    // selection may synchronously tear down the complete editor.
+    auto callback = safeThis->selectionCallback;
+    if (callback)
+        callback(static_cast<LfoPresetShape>(itemId));
+
+    return true;
+}
+
+bool LfoBrushSelector::isCompletePrimaryDown(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown()
+        && ! event.mods.isPopupMenu();
+}
+
+bool LfoBrushSelector::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void LfoBrushSelector::recoverMissingPointerUp(
+    const juce::MouseEvent& event)
+{
+    if (pointerInteractionActive
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        releasePointerInteractionWithoutSelection(event);
+}
+
+void LfoBrushSelector::releasePointerInteractionWithoutSelection(
+    const juce::MouseEvent& event)
+{
+    clearPointerInteraction();
+    juce::ComboBox::mouseUp(
+        event.getEventRelativeTo(this).withNewPosition(
+            juce::Point<float> { -1.0f, -1.0f }));
+}
+
+void LfoBrushSelector::clearPointerInteraction() noexcept
+{
+    pointerInteractionActive = false;
+    cancelPendingPointerRelease = false;
+    pointerSourceIndex = -1;
+}
+
+void LfoBrushSelector::cancelCurrentInteraction() noexcept
+{
+    popupSessionActive = false;
+    ++popupSessionRevision;
+    cancelPendingPointerRelease = cancelPendingPointerRelease
+                                  || pointerInteractionActive;
+
+    // A queued virtual showPopup() retains popupRequestGeneration and must be
+    // allowed to classify that old request as stale.
+    closePopupWindow();
+}
+
+void LfoBrushSelector::closePopupWindow() noexcept
+{
+    juce::ComboBox::hidePopup();
+}
+
+std::function<void(int)> LfoBrushSelector::createPopupResultHandler()
+{
+    return createPopupResultHandler(interactionContextGeneration);
+}
+
+std::function<void(int)> LfoBrushSelector::createPopupResultHandler(
+    std::uint64_t contextGeneration)
+{
+    popupSessionActive = true;
+    const auto sessionRevision = ++popupSessionRevision;
+
+    return [safeThis = juce::Component::SafePointer<LfoBrushSelector>(this),
+            contextGeneration,
+            sessionRevision](int result)
+    {
+        if (safeThis == nullptr
+            || ! safeThis->popupSessionActive
+            || safeThis->popupSessionRevision != sessionRevision)
+            return;
+
+        const bool mayCommit = result != 0
+                               && safeThis->indexOfItemId(result) >= 0
+                               && safeThis->isItemEnabled(result)
+                               && safeThis->isContextCurrent(contextGeneration);
+
+        // Consume before closing the menu or invoking client code. A stale old
+        // callback therefore cannot close or invalidate a replacement popup.
+        safeThis->popupSessionActive = false;
+        ++safeThis->popupSessionRevision;
+        safeThis->cancelPendingPointerRelease =
+            safeThis->cancelPendingPointerRelease
+            || safeThis->pointerInteractionActive;
+        safeThis->closePopupWindow();
+
+        if (mayCommit
+            && safeThis != nullptr
+            && safeThis->isContextCurrent(contextGeneration))
+            safeThis->commitSelection(result, contextGeneration);
+    };
+}
+
+void LfoBrushSelector::showPopup()
+{
+    // Accessibility invokes showPopup() directly. Route it through JUCE's
+    // normal queued opener so its private menuActive flag remains coherent.
+    if (! popupRequestArmed)
+    {
+        if (isPopupActive())
+            return;
+
+        const auto generation = interactionContextGeneration;
+        if (! isContextCurrent(generation))
+            return;
+
+        capturePopupRequest();
+        juce::ComboBox::keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey });
+        return;
+    }
+
+    const auto requestGeneration = popupRequestGeneration;
+    popupRequestArmed = false;
+    if (! isContextCurrent(requestGeneration))
+    {
+        popupSessionActive = false;
+        ++popupSessionRevision;
+        closePopupWindow();
+        return;
+    }
+
+    auto menu = *getRootMenu();
+    if (menu.getNumItems() > 0)
+    {
+        const auto selectedId = getSelectedId();
+        for (juce::PopupMenu::MenuItemIterator iterator(menu, true);
+             iterator.next();)
+        {
+            auto& item = iterator.getItem();
+            if (item.itemID != 0)
+                item.isTicked = item.itemID == selectedId;
+        }
+    }
+    else
+    {
+        menu.addItem(1, getTextWhenNoChoicesAvailable(), false, false);
+    }
+
+    auto& lookAndFeel = getLookAndFeel();
+    menu.setLookAndFeel(&lookAndFeel);
+    auto options = juce::PopupMenu::Options()
+                       .withTargetComponent(this)
+                       .withItemThatMustBeVisible(getSelectedId())
+                       .withInitiallySelectedItem(getSelectedId())
+                       .withMinimumWidth(getWidth())
+                       .withMaximumNumColumns(1)
+                       .withStandardItemHeight(getHeight());
+
+    for (auto* child : getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+        {
+            options = lookAndFeel.getOptionsForComboBoxPopupMenu(*this, *label);
+            break;
+        }
+
+    menu.showMenuAsync(options,
+                       createPopupResultHandler(requestGeneration));
+}
+
+//==============================================================================
 // LfoPanel Implementation
 //==============================================================================
 LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
@@ -1627,8 +2068,13 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     brushSelector.addItem("Sine Concave", (int) LfoPresetShape::SineConcave);
     brushSelector.addItem("Square High", (int) LfoPresetShape::SquareHigh);
     brushSelector.addItem("Square Low", (int) LfoPresetShape::SquareLow);
-    brushSelector.onChange = [this]
-    { lfoEditor.setCurrentBrush(static_cast<LfoPresetShape>(brushSelector.getSelectedId())); };
+    brushSelector.setSelectionCallback(
+        [this](LfoPresetShape brush)
+        {
+            // LfoBrushSelector invokes this as its final operation, so a future
+            // callback added here may safely tear down the owning editor.
+            lfoEditor.setCurrentBrush(brush);
+        });
 
     setEditMode(LfoEditMode::PointEdit); // Set initial state
 
@@ -2063,6 +2509,10 @@ void LfoPanel::dismissTransientInteraction()
     assignButton.dismissPointerGesture();
     matrixButton.dismissPointerGesture();
     syncButton.dismissPointerGesture();
+    brushSelector.dismissTransientInteraction();
+
+    if (safeThis == nullptr)
+        return;
 
     rateSlider.dismissTransientInteraction();
     if (safeThis == nullptr)
@@ -2162,6 +2612,15 @@ void LfoPanel::visibilityChanged()
     }
 }
 
+void LfoPanel::enablementChanged()
+{
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+    juce::Component::enablementChanged();
+
+    if (safeThis != nullptr && ! isEnabled())
+        dismissTransientInteraction();
+}
+
 void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)
 {
     // Here we connect the LfoPanel's callback to the LfoEditor's callback.
@@ -2176,6 +2635,11 @@ void LfoPanel::displayLfoData(int index)
         jassertfalse;
         return;
     }
+
+    // A refreshed snapshot is a new editing authority even when its numeric
+    // LFO index is unchanged. Results from the old brush popup cannot cross
+    // that data-session boundary.
+    brushSelector.invalidateInteractionContext();
 
     auto snapshot = processor.getLfoManager().getLfoDataSnapshot(index);
     lfoEditor.setDataToDisplay(
@@ -2337,8 +2801,11 @@ void LfoPanel::setScale(float newScale)
 
 void LfoPanel::setEditMode(LfoEditMode newMode)
 {
-    // 1. Update the internal state of the LfoPanel
-    // currentMode = newMode; // Assuming you add a currentMode member to LfoPanel
+    // Invalidate before changing visibility or editor behaviour. Re-entering
+    // the same mode is deliberately a new session so an old result also fails
+    // across Brush -> Point -> Brush ABA transitions.
+    brushSelector.setInteractionAvailable(
+        newMode == LfoEditMode::BrushPaint);
 
     if (newMode == LfoEditMode::PointEdit)
     {

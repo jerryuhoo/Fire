@@ -465,7 +465,15 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
             return;
     }
 
-    const juce::ScopedValueSetter<bool> canonicalising(isCanonicalisingLines, true);
+    const bool previousCanonicalisingState = isCanonicalisingLines;
+    isCanonicalisingLines = true;
+    const juce::ScopeGuard restoreCanonicalisingState {
+        [safeThis, previousCanonicalisingState]
+        {
+            if (safeThis != nullptr)
+                safeThis->isCanonicalisingLines = previousCanonicalisingState;
+        }
+    };
     for (int divider = 0; divider < 3; ++divider)
     {
         const bool enabled = divider < newLineCount;
@@ -473,6 +481,9 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
                         enabled,
                         frequencies[static_cast<size_t>(divider)],
                         juce::dontSendNotification);
+
+        if (safeThis == nullptr)
+            return;
 
         if (! publishCanonicalParameters)
             continue;
@@ -489,7 +500,12 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
                 const float normalised = frequencyParameter->getNormalisableRange().convertTo0to1(
                     frequencies[static_cast<size_t>(divider)]);
                 if (! juce::approximatelyEqual(frequencyParameter->getValue(), normalised))
+                {
                     frequencyParameter->setValueNotifyingHost(normalised);
+
+                    if (safeThis == nullptr)
+                        return;
+                }
             }
         }
 
@@ -498,16 +514,37 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
         {
             const float normalised = enabled ? 1.0f : 0.0f;
             if (! juce::approximatelyEqual(lineStateParameter->getValue(), normalised))
+            {
                 lineStateParameter->setValueNotifyingHost(normalised);
+
+                if (safeThis == nullptr)
+                    return;
+            }
         }
     }
 
     lineNum = newLineCount;
     setLineIndex();
     updateFocusIndex(focusIndex, forceFocusNotification);
+
+    if (safeThis == nullptr)
+        return;
+
     setLineRelatedBoundsByX();
+
+    if (safeThis == nullptr)
+        return;
+
     setSoloRelatedBounds();
+
+    if (safeThis == nullptr)
+        return;
+
     refreshHoveredBandFromMouse();
+
+    if (safeThis == nullptr)
+        return;
+
     repaint();
 }
 

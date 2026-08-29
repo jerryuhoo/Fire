@@ -1811,6 +1811,67 @@ TEST_CASE("Topology-driven crossover teardown survives synchronous editor closur
     checkBalancedGesture(host);
 }
 
+TEST_CASE("Fallback crossover publication survives editor closure at every UI stage",
+          "[multiband][ui][automation][fallback][topology][lifecycle][teardown]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    struct ClosureScenario
+    {
+        const char* description = nullptr;
+        juce::String parameterID;
+    };
+
+    const std::array<ClosureScenario, 4> scenarios {{
+        { "first fallback frequency", ParameterIDAndName::getIDString(FREQ_ID, 0) },
+        { "second fallback frequency", ParameterIDAndName::getIDString(FREQ_ID, 1) },
+        { "first compatibility line state", ParameterIDAndName::getIDString(LINE_STATE_ID, 0) },
+        { "second compatibility line state", ParameterIDAndName::getIDString(LINE_STATE_ID, 1) },
+    }};
+
+    for (const auto& scenario : scenarios)
+    DYNAMIC_SECTION(scenario.description)
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        initialiseBandLayout(processor, 1, { 21.0f, 21.0f, 21.0f });
+
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->setBounds(0, 0, 1000, 500);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        auto* multiband = findDescendant<Multiband>(*editor);
+        REQUIRE(multiband != nullptr);
+
+        auto* observedParameter = processor.treeState.getParameter(
+            scenario.parameterID);
+        REQUIRE(observedParameter != nullptr);
+        const auto generationBefore =
+            processor.getMultibandTopologyGenerationForTesting();
+        REQUIRE((generationBefore & 1u) == 0u);
+
+        // A generic host changes only the authoritative count. Reconciliation
+        // must publish usable FREQ/LINE_STATE fallbacks, and any one of those
+        // synchronous notifications is allowed to close this editor.
+        setPlainParameter(processor, NUM_BANDS_ID, 3.0f);
+        EditorResetOnProcessorCallback closureListener(
+            processor,
+            editor,
+            observedParameter->getParameterIndex(),
+            false);
+
+        multiband->synchroniseBandCountFromParameter();
+
+        CHECK(closureListener.didResetEditor);
+        CHECK(editor == nullptr);
+        const auto generationAfter =
+            processor.getMultibandTopologyGenerationForTesting();
+        CHECK((generationAfter & 1u) == 0u);
+        CHECK(generationAfter == generationBefore + 2u);
+        CHECK_FALSE(processor.isMultibandTopologyEditInProgress());
+        CHECK(processor.tryAcquireMultibandTopologyWriterLockForTesting());
+    }
+}
+
 TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
           "[multiband][ui][automation][crossover][tuple]")
 {

@@ -19,6 +19,17 @@ bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
         && ! event.mods.isRightButtonDown()
         && ! event.mods.isMiddleButtonDown();
 }
+
+bool isVisibleInHierarchy(const juce::Component& component) noexcept
+{
+    for (auto* current = &component;
+         current != nullptr;
+         current = current->getParentComponent())
+        if (! current->isVisible())
+            return false;
+
+    return true;
+}
 } // namespace
 
 //==============================================================================
@@ -57,7 +68,15 @@ void SoloButton::resized()
 
 void SoloButton::mouseEnter(const juce::MouseEvent& e)
 {
+    if (primaryPointerDown && ! isPointerSource(e))
+        return;
+
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::mouseEnter(e);
+
+    if (safeThis == nullptr)
+        return;
+
     isEntered = true;
     repaint();
     recoverMissingPointerUp(e);
@@ -65,13 +84,27 @@ void SoloButton::mouseEnter(const juce::MouseEvent& e)
 
 void SoloButton::mouseMove(const juce::MouseEvent& e)
 {
+    if (primaryPointerDown && ! isPointerSource(e))
+        return;
+
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::mouseMove(e);
-    recoverMissingPointerUp(e);
+
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(e);
 }
 
 void SoloButton::mouseExit(const juce::MouseEvent& e)
 {
+    if (primaryPointerDown && ! isPointerSource(e))
+        return;
+
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::mouseExit(e);
+
+    if (safeThis == nullptr)
+        return;
+
     isEntered = false;
     repaint();
     recoverMissingPointerUp(e);
@@ -84,7 +117,12 @@ void SoloButton::mouseDown(const juce::MouseEvent& event)
 
     // A missing mouseUp (for example, while a host hides the editor) must not
     // let a later secondary-button event complete an old toggle gesture.
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     dismissPointerGesture();
+
+    if (safeThis == nullptr)
+        return;
+
     primaryPointerDown = isPrimaryPointerDown(event);
 
     if (primaryPointerDown)
@@ -117,19 +155,50 @@ void SoloButton::mouseUp(const juce::MouseEvent& event)
     juce::ToggleButton::mouseUp(event);
 }
 
+bool SoloButton::keyPressed(const juce::KeyPress& key)
+{
+    if (key.isKeyCode(juce::KeyPress::returnKey)
+        || key.isKeyCode(juce::KeyPress::spaceKey))
+    {
+        if (! isEnabled() || ! isVisibleInHierarchy(*this))
+            return false;
+
+        // Button::keyPressed queues triggerClick(). Commit while this visible
+        // band still owns the request, because topology changes can hide the
+        // same fixed-index button before the message queue is serviced.
+        internalClickCallback(key.getModifiers());
+        return true;
+    }
+
+    return juce::ToggleButton::keyPressed(key);
+}
+
+void SoloButton::triggerClick()
+{
+    if (! isEnabled() || ! isVisibleInHierarchy(*this))
+        return;
+
+    // Accessibility press actions also arrive through triggerClick(). Commit
+    // at invocation time instead of replaying the request after a topology
+    // change. The callback may delete this button, so it is final.
+    internalClickCallback(juce::ModifierKeys::currentModifiers);
+}
+
 void SoloButton::visibilityChanged()
 {
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::visibilityChanged();
 
-    if (! isVisible())
+    if (safeThis != nullptr && ! isVisible())
         dismissPointerGesture();
 }
 
 void SoloButton::enablementChanged()
 {
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::enablementChanged();
 
-    if (! isEnabled())
+    if (safeThis != nullptr && ! isEnabled())
         dismissPointerGesture();
 }
 

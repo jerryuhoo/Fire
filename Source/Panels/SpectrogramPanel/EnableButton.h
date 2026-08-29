@@ -13,6 +13,10 @@
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/FireTheme.h"
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct BandToggleButtonPointerTestAccess;
+#endif
+
 //==============================================================================
 /*
  */
@@ -31,9 +35,15 @@ public:
     void mouseDown (const juce::MouseEvent& e) override;
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp (const juce::MouseEvent& e) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+    void triggerClick() override;
     void dismissPointerGesture() noexcept;
     
 private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct BandToggleButtonPointerTestAccess;
+#endif
+
     void visibilityChanged() override;
     void enablementChanged() override;
     void recoverMissingPointerUp(const juce::MouseEvent& event);

@@ -4,6 +4,26 @@
 #include <PluginProcessor.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
+
+struct BandToggleButtonPointerTestAccess
+{
+    template <typename ButtonType>
+    static bool hasPrimaryPointer(const ButtonType& button)
+    {
+        return button.primaryPointerDown;
+    }
+
+    template <typename ButtonType>
+    static void setTrackedPointerSource(
+        ButtonType& button,
+        juce::MouseInputSource::InputSourceType sourceType,
+        int sourceIndex)
+    {
+        button.pointerSourceType = sourceType;
+        button.pointerSourceIndex = sourceIndex;
+    }
+};
 
 namespace
 {
@@ -82,6 +102,39 @@ void checkRejectedGesture(ButtonType& button,
 
     CHECK_FALSE(button.getToggleState());
     CHECK(clickCount == 0);
+}
+
+template <typename ButtonType>
+void checkActivationMayDeleteButton(const juce::KeyPress& key)
+{
+    auto button = std::make_unique<ButtonType>();
+    button->setBounds(0, 0, 24, 24);
+    button->setVisible(true);
+    auto* rawButton = button.get();
+    rawButton->onClick = [&button] { button.reset(); };
+
+    CHECK(static_cast<juce::Component&>(*rawButton).keyPressed(key));
+    CHECK(button == nullptr);
+}
+
+template <typename ButtonType>
+void checkStateCallbackMayDeleteButton()
+{
+    auto button = std::make_unique<ButtonType>();
+    button->setBounds(0, 0, 24, 24);
+    button->setVisible(true);
+    auto* rawButton = button.get();
+    auto& component = static_cast<juce::Component&>(*rawButton);
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    component.mouseDown(makeMouseEvent(*rawButton, leftButton));
+    REQUIRE(rawButton->isDown());
+    rawButton->onStateChange = [&button] { button.reset(); };
+    component.mouseExit(makeMouseEvent(*rawButton, {}));
+
+    CHECK(button == nullptr);
 }
 } // namespace
 
@@ -291,8 +344,11 @@ TEST_CASE("Band toggles preserve keyboard and programmatic activation",
             int clickCount = 0;
             button.onClick = [&clickCount] { ++clickCount; };
             button.triggerClick();
-            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
             CHECK(button.getToggleState());
             CHECK(clickCount == 1);
         });
@@ -308,11 +364,125 @@ TEST_CASE("Band toggles preserve keyboard and programmatic activation",
 
             REQUIRE(component.keyPressed(
                 juce::KeyPress { juce::KeyPress::returnKey }));
-            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+            CHECK(button.getToggleState());
+            CHECK(clickCount == 1);
+        });
+    }
+
+    SECTION("Space key")
+    {
+        forEachBandToggle([](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+
+            REQUIRE(component.keyPressed(
+                juce::KeyPress { juce::KeyPress::spaceKey }));
 
             CHECK(button.getToggleState());
             CHECK(clickCount == 1);
         });
+    }
+}
+
+TEST_CASE("Band toggle commands cannot outlive their visible topology slot",
+          "[band-toggle][multiband][ui][input][keyboard][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    forEachBandToggle([](auto& button)
+    {
+        int clickCount = 0;
+        button.onClick = [&clickCount] { ++clickCount; };
+
+        // The command is committed before a host/topology update can hide the
+        // fixed-index control. No queued command may be left for that slot.
+        button.triggerClick();
+        CHECK(button.getToggleState());
+        CHECK(clickCount == 1);
+        button.setVisible(false);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK(button.getToggleState());
+        CHECK(clickCount == 1);
+
+        button.setVisible(true);
+        button.setToggleState(false, juce::dontSendNotification);
+        juce::Component hiddenParent;
+        hiddenParent.addAndMakeVisible(button);
+        hiddenParent.setVisible(false);
+        button.triggerClick();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        CHECK_FALSE(button.getToggleState());
+        CHECK(clickCount == 1);
+    });
+}
+
+TEST_CASE("Band toggles keep pointer ownership across foreign hover events",
+          "[band-toggle][multiband][ui][input][source][multitouch]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    forEachBandToggle([leftButton](auto& button)
+    {
+        int clickCount = 0;
+        button.onClick = [&clickCount] { ++clickCount; };
+        auto& component = static_cast<juce::Component&>(button);
+        component.mouseDown(makeMouseEvent(button, leftButton));
+        REQUIRE(button.isDown());
+        REQUIRE(BandToggleButtonPointerTestAccess::hasPrimaryPointer(button));
+
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
+        BandToggleButtonPointerTestAccess::setTrackedPointerSource(
+            button,
+            source.getType() == juce::MouseInputSource::mouse
+                ? juce::MouseInputSource::touch
+                : juce::MouseInputSource::mouse,
+            source.getIndex() + 23);
+
+        component.mouseExit(makeMouseEvent(button, {}));
+        CHECK(button.isDown());
+        component.mouseMove(makeMouseEvent(button, {}));
+        CHECK(button.isDown());
+        component.mouseEnter(makeMouseEvent(button, {}));
+        CHECK(button.isDown());
+        CHECK(clickCount == 0);
+
+        BandToggleButtonPointerTestAccess::setTrackedPointerSource(
+            button, source.getType(), source.getIndex());
+        component.mouseUp(makeMouseEvent(button, {}));
+
+        CHECK_FALSE(button.isDown());
+        CHECK(button.getToggleState());
+        CHECK(clickCount == 1);
+    });
+}
+
+TEST_CASE("Band toggle callbacks may synchronously delete their control",
+          "[band-toggle][multiband][ui][input][lifecycle][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("keyboard activation")
+    {
+        checkActivationMayDeleteButton<SoloButton>(
+            juce::KeyPress { juce::KeyPress::returnKey });
+        checkActivationMayDeleteButton<EnableButton>(
+            juce::KeyPress { juce::KeyPress::spaceKey });
+    }
+
+    SECTION("hover state transition")
+    {
+        checkStateCallbackMayDeleteButton<SoloButton>();
+        checkStateCallbackMayDeleteButton<EnableButton>();
     }
 }
 

@@ -299,6 +299,102 @@ TEST_CASE("Primary buttons own complete primary pointer gestures",
             CHECK(clickCount == 1);
         });
     }
+
+    SECTION("hover events from a different source cannot cancel ownership")
+    {
+        forEachPrimaryButtonType([leftButton](auto& button)
+        {
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+            beginPointerGesture(button, leftButton);
+            REQUIRE(button.isDown());
+
+            const auto source = juce::Desktop::getInstance().getMainMouseSource();
+            PrimaryButtonTestAccess::setTrackedPointerSource(
+                button,
+                source.getType() == juce::MouseInputSource::mouse
+                    ? juce::MouseInputSource::touch
+                    : juce::MouseInputSource::mouse,
+                source.getIndex() + 1);
+
+            component.mouseExit(makeMouseEvent(component, {}));
+            CHECK(button.isDown());
+            component.mouseMove(makeMouseEvent(component, {}));
+            CHECK(button.isDown());
+            component.mouseEnter(makeMouseEvent(component, {}));
+            CHECK(button.isDown());
+            CHECK(clickCount == 0);
+
+            PrimaryButtonTestAccess::setTrackedPointerSource(
+                button, source.getType(), source.getIndex());
+            endPointerGesture(button);
+
+            CHECK_FALSE(button.isDown());
+            CHECK(clickCount == 1);
+        });
+    }
+}
+
+TEST_CASE("Primary button state callbacks may synchronously delete their control",
+          "[header-button][ui][input][primary-button][lifecycle][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    const auto makePressedButton = [&]
+    {
+        auto button = std::make_unique<PrimaryTextButton>("Delete");
+        button->setBounds(0, 0, 80, 24);
+        button->setVisible(true);
+        beginPointerGesture(*button, leftButton);
+        REQUIRE(button->isDown());
+        return button;
+    };
+
+    SECTION("replacing stale ownership")
+    {
+        auto button = makePressedButton();
+        auto* rawButton = button.get();
+        const auto down = makeMouseEvent(*rawButton, leftButton);
+        rawButton->onStateChange = [&button] { button.reset(); };
+
+        static_cast<juce::Component&>(*rawButton).mouseDown(down);
+        CHECK(button == nullptr);
+    }
+
+    SECTION("hover state transition")
+    {
+        auto button = makePressedButton();
+        auto* rawButton = button.get();
+        const auto exit = makeMouseEvent(*rawButton, {});
+        rawButton->onStateChange = [&button] { button.reset(); };
+
+        static_cast<juce::Component&>(*rawButton).mouseExit(exit);
+        CHECK(button == nullptr);
+    }
+
+    SECTION("visibility transition")
+    {
+        auto button = makePressedButton();
+        auto* rawButton = button.get();
+        rawButton->onStateChange = [&button] { button.reset(); };
+
+        rawButton->setVisible(false);
+        CHECK(button == nullptr);
+    }
+
+    SECTION("enablement transition")
+    {
+        auto button = makePressedButton();
+        auto* rawButton = button.get();
+        rawButton->onStateChange = [&button] { button.reset(); };
+
+        rawButton->setEnabled(false);
+        CHECK(button == nullptr);
+    }
 }
 
 TEST_CASE("Primary buttons discard gestures at visibility and enablement boundaries",

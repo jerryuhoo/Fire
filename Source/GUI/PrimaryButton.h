@@ -38,7 +38,11 @@ public:
 
         // Hosts can remove or hide an editor without delivering mouseUp. A
         // fresh down from the owning source starts a new gesture boundary.
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
 
         const auto isPrimaryButton = event.mods.isLeftButtonDown()
                                      && ! event.mods.isRightButtonDown()
@@ -64,20 +68,41 @@ public:
 
     void mouseEnter(const juce::MouseEvent& event) override
     {
+        if (pointerGesture == PointerGesture::primary
+            && ! isPointerSource(event))
+            return;
+
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::mouseEnter(event);
-        recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            recoverMissingPointerUp(event);
     }
 
     void mouseMove(const juce::MouseEvent& event) override
     {
+        if (pointerGesture == PointerGesture::primary
+            && ! isPointerSource(event))
+            return;
+
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::mouseMove(event);
-        recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            recoverMissingPointerUp(event);
     }
 
     void mouseExit(const juce::MouseEvent& event) override
     {
+        if (pointerGesture == PointerGesture::primary
+            && ! isPointerSource(event))
+            return;
+
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::mouseExit(event);
-        recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            recoverMissingPointerUp(event);
     }
 
     void mouseUp(const juce::MouseEvent& event) override
@@ -113,15 +138,20 @@ public:
 
     void visibilityChanged() override
     {
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::visibilityChanged();
 
-        if (! this->isShowing())
+        if (safeThis != nullptr && ! this->isShowing())
             dismissPointerGesture();
     }
 
     void enablementChanged() override
     {
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::enablementChanged();
+
+        if (safeThis == nullptr)
+            return;
 
         // Re-enabling while a physical button remains held must not revive an
         // abandoned gesture through Button::updateState().

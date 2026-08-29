@@ -134,6 +134,7 @@ private:
     void clearPrimaryPointerState() noexcept;
     void dismissTrackedDividerGesture(int dividerIndex);
     void recoverMissingPointerUp(const juce::MouseEvent& event);
+    void handleDividerHidden(int dividerIndex);
     void updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside);
     void refreshHoveredBandFromMouse();
     void updateCloseButtonVisibility();

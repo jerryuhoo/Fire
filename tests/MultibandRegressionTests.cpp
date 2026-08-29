@@ -1593,6 +1593,224 @@ TEST_CASE("Crossover stale-pointer recovery survives synchronous editor teardown
     checkNoGestureActivity(secondHost);
 }
 
+TEST_CASE("Topology automation closes a crossover gesture before hiding its divider",
+          "[multiband][ui][automation][gesture][topology][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 3, { 1000.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    REQUIRE(dividerGroups[1] != nullptr);
+
+    enum class TopologyChange
+    {
+        bandCount,
+        legacyLineState
+    };
+    int activeDividerIndex = -1;
+    TopologyChange topologyChange = TopologyChange::bandCount;
+
+    SECTION("NUM_BANDS collapses the active divider")
+    {
+        activeDividerIndex = 1;
+        topologyChange = TopologyChange::bandCount;
+    }
+
+    SECTION("legacy LINE_STATE hides the active divider")
+    {
+        activeDividerIndex = 0;
+        topologyChange = TopologyChange::legacyLineState;
+    }
+
+    REQUIRE(juce::isPositiveAndBelow(activeDividerIndex, 2));
+    auto& dividerGroup = *dividerGroups[static_cast<size_t>(activeDividerIndex)];
+    auto& divider = dividerGroup.getVerticalLine();
+    auto& dividerComponent = static_cast<juce::Component&>(divider);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    auto* frequencyParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, activeDividerIndex));
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor,
+                                 frequencyParameter->getParameterIndex());
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto dividerCentre = divider.getLocalBounds().toFloat().getCentre();
+    const auto down = makeMouseEvent(divider, dividerCentre, primary);
+    dividerComponent.mouseDown(down);
+    multibandComponent.mouseDown(down);
+
+    const float acceptedX = activeDividerIndex == 0 ? 0.45f : 0.72f;
+    const auto targetInMultiband = juce::Point<float> {
+        static_cast<float>(multiband->getWidth()) * acceptedX,
+        static_cast<float>(multiband->getHeight()) * 0.50f
+    };
+    const auto targetInDivider = divider.getLocalPoint(multiband,
+                                                        targetInMultiband);
+    const auto drag = makeDragMouseEvent(divider,
+                                          targetInDivider,
+                                          dividerCentre,
+                                          primary);
+    dividerComponent.mouseDrag(drag);
+    multibandComponent.mouseDrag(drag);
+    REQUIRE(host.beginCount == 1);
+    REQUIRE(host.endCount == 0);
+    REQUIRE(host.valueChangeCount >= 1);
+
+    if (topologyChange == TopologyChange::bandCount)
+    {
+        setPlainParameter(processor, NUM_BANDS_ID, 1.0f);
+        multiband->synchroniseBandCountFromParameter();
+    }
+    else
+    {
+        setPlainParameter(
+            processor,
+            ParameterIDAndName::getIDString(LINE_STATE_ID,
+                                             activeDividerIndex),
+            0.0f);
+        CHECK_FALSE(dividerGroup.isVisible());
+
+        // LINE_STATE arrives through ButtonAttachment::setValue. Ownership is
+        // revoked in that callback, while the host end waits one message turn
+        // so it cannot delete the attachment under its ScopedValueSetter.
+        CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    if (topologyChange == TopologyChange::bandCount)
+        CHECK_FALSE(dividerGroup.isVisible());
+    CHECK(host.beginCount == 1);
+    CHECK(host.endCount == 1);
+    CHECK(host.gestureDepth == 0);
+    CHECK_FALSE(MultibandPointerTestAccess::hasPrimaryDrag(*multiband));
+    CHECK_FALSE(VerticalLinePointerTestAccess::hasPrimaryDrag(divider));
+    CHECK_FALSE(host.valueChangedOutsideGesture);
+
+    // Keep failing implementations balanced during teardown; with the fixed
+    // lifecycle this is idempotent and emits no additional host notification.
+    multiband->dismissTransientUi();
+    CHECK(host.beginCount == 1);
+    CHECK(host.endCount == 1);
+    CHECK(host.gestureDepth == 0);
+    CHECK(host.maximumGestureDepth == 1);
+    CHECK(host.minimumGestureDepth == 0);
+}
+
+TEST_CASE("Topology-driven crossover teardown survives synchronous editor closure",
+          "[multiband][ui][automation][gesture][topology][lifecycle][teardown]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 3, { 1000.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    REQUIRE(dividerGroups[1] != nullptr);
+
+    enum class TopologyChange
+    {
+        bandCount,
+        legacyLineState
+    };
+    int activeDividerIndex = -1;
+    TopologyChange topologyChange = TopologyChange::bandCount;
+
+    SECTION("NUM_BANDS synchronous reconciliation")
+    {
+        activeDividerIndex = 1;
+        topologyChange = TopologyChange::bandCount;
+    }
+
+    SECTION("LINE_STATE deferred attachment cleanup")
+    {
+        activeDividerIndex = 0;
+        topologyChange = TopologyChange::legacyLineState;
+    }
+
+    REQUIRE(juce::isPositiveAndBelow(activeDividerIndex, 2));
+    auto& divider = dividerGroups[static_cast<size_t>(activeDividerIndex)]
+                        ->getVerticalLine();
+    auto& dividerComponent = static_cast<juce::Component&>(divider);
+    auto& multibandComponent = static_cast<juce::Component&>(*multiband);
+    auto* frequencyParameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(FREQ_ID, activeDividerIndex));
+    REQUIRE(frequencyParameter != nullptr);
+    ParameterGestureCapture host(processor,
+                                 frequencyParameter->getParameterIndex());
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto dividerCentre = divider.getLocalBounds().toFloat().getCentre();
+    const auto down = makeMouseEvent(divider, dividerCentre, primary);
+    dividerComponent.mouseDown(down);
+    multibandComponent.mouseDown(down);
+
+    const float acceptedX = activeDividerIndex == 0 ? 0.45f : 0.72f;
+    const auto targetInMultiband = juce::Point<float> {
+        static_cast<float>(multiband->getWidth()) * acceptedX,
+        static_cast<float>(multiband->getHeight()) * 0.50f
+    };
+    const auto targetInDivider = divider.getLocalPoint(multiband,
+                                                        targetInMultiband);
+    const auto drag = makeDragMouseEvent(divider,
+                                          targetInDivider,
+                                          dividerCentre,
+                                          primary);
+    dividerComponent.mouseDrag(drag);
+    multibandComponent.mouseDrag(drag);
+    REQUIRE(host.beginCount == 1);
+    REQUIRE(host.endCount == 0);
+    REQUIRE(host.valueChangeCount >= 1);
+
+    EditorResetOnParameterStage resetter(
+        processor,
+        editor,
+        frequencyParameter->getParameterIndex(),
+        ParameterCallbackStage::end);
+
+    if (topologyChange == TopologyChange::bandCount)
+    {
+        setPlainParameter(processor, NUM_BANDS_ID, 1.0f);
+        multiband->synchroniseBandCountFromParameter();
+    }
+    else
+    {
+        setPlainParameter(
+            processor,
+            ParameterIDAndName::getIDString(LINE_STATE_ID,
+                                             activeDividerIndex),
+            0.0f);
+
+        // The attachment callback must return before gesture end is allowed
+        // to delete the attachment and its owning editor.
+        CHECK(editor != nullptr);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    CHECK(resetter.didResetEditor);
+    CHECK(editor == nullptr);
+    checkBalancedGesture(host);
+}
+
 TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
           "[multiband][ui][automation][crossover][tuple]")
 {

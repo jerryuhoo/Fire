@@ -120,6 +120,10 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         {
             dragLines(xPercent, i);
         });
+        freqDividerGroup[i]->setHiddenCallback([this, i]
+        {
+            handleDividerHidden(i);
+        });
         addAndMakeVisible(*freqDividerGroup[i]);
         (freqDividerGroup[i]->getVerticalLine()).addListener(this);
         // Listen recursively so moving between the divider, its value label and
@@ -447,6 +451,20 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
     const int newLineCount = newBandCount - 1;
     const auto frequencies = getCanonicalCrossoverFrequencies(newBandCount);
 
+    // End interactions while every group and callback is still alive. This
+    // happens before ScopedValueSetter below because a host gesture-end
+    // notification is allowed to synchronously destroy the editor.
+    if (primaryDragActive && activePointerDividerIndex >= newLineCount)
+        clearPrimaryPointerState();
+
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    for (int divider = newLineCount; divider < 3; ++divider)
+    {
+        freqDividerGroup[static_cast<size_t>(divider)]->dismissImmediately();
+        if (safeThis == nullptr)
+            return;
+    }
+
     const juce::ScopedValueSetter<bool> canonicalising(isCanonicalisingLines, true);
     for (int divider = 0; divider < 3; ++divider)
     {
@@ -531,20 +549,25 @@ void Multiband::synchroniseBandCountFromParameter()
 
     if (! presentationIsCanonical)
     {
+        auto* processorToUse = &processor;
+        juce::Component::SafePointer<Multiband> safeThis(this);
         {
-            processor.beginMultibandTopologyEdit();
-            const juce::ScopeGuard finishTopologyEdit { [this]
+            processorToUse->beginMultibandTopologyEdit();
+            const juce::ScopeGuard finishTopologyEdit { [processorToUse]
             {
-                processor.requestMultibandTopologyReset();
+                processorToUse->requestMultibandTopologyReset();
             } };
             applyAuthoritativeBandCount(requestedBandCount, true, true);
+
+            if (safeThis == nullptr)
+                return;
         }
 
         // Parameter callbacks fired while the generation was odd can only
         // observe the immutable pre-edit snapshot. Publish one post-commit
         // notification so hosts persist the canonical NUM_BANDS/FREQ/LINE
         // tuple instead of the stale presentation generation.
-        processor.lfoDataHasChanged();
+        processorToUse->lfoDataHasChanged();
     }
 }
 
@@ -1005,6 +1028,9 @@ void Multiband::buttonClicked(juce::Button* button)
                                                   false,
                                                   false);
 
+            if (safeThis == nullptr)
+                return;
+
             // Focus propagation can also invoke editor-owned callbacks, so it
             // is deliberately the final operation in this listener.
             safeThis->notifyFocusChanged();
@@ -1271,6 +1297,23 @@ void Multiband::recoverMissingPointerUp(const juce::MouseEvent& event)
     // A move/enter/exit without the accepted primary button is the first
     // observable boundary after a missing mouseUp.
     dismissTrackedDividerGesture(completedDividerIndex);
+}
+
+void Multiband::handleDividerHidden(int dividerIndex)
+{
+    if (primaryDragActive && activePointerDividerIndex == dividerIndex)
+        clearPrimaryPointerState();
+
+    if (! juce::isPositiveAndBelow(dividerIndex, 3))
+        return;
+
+    auto safeGroup = juce::Component::SafePointer<FreqDividerGroup>(
+        freqDividerGroup[static_cast<size_t>(dividerIndex)].get());
+    juce::MessageManager::callAsync([safeGroup]
+    {
+        if (safeGroup != nullptr)
+            safeGroup->dismissImmediately();
+    });
 }
 
 void Multiband::updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside)

@@ -13,6 +13,7 @@
 #include "FreqTextLabel.h"
 #include "VerticalLine.h"
 #include "../../PluginProcessor.h"
+#include <functional>
 //==============================================================================
 /*
  */
@@ -29,6 +30,8 @@ public:
     
     void setDeleteState (bool deleteState);
     void setFrequencyEditCallback(FreqTextLabel::FrequencyEditCallback callback);
+    using HiddenCallback = std::function<void()>;
+    void setHiddenCallback(HiddenCallback callback);
     bool advanceAnimation(float deltaSeconds);
     void dismissImmediately();
 
@@ -62,6 +65,7 @@ private:
     void buttonClicked (juce::Button* button) override;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
+    HiddenCallback hiddenCallback;
     
     FreqTextLabel freqTextLabel;
     

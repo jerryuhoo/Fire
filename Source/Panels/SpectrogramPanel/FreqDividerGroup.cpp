@@ -82,6 +82,11 @@ void FreqDividerGroup::setFrequencyEditCallback(
     freqTextLabel.setFrequencyEditCallback(std::move(callback));
 }
 
+void FreqDividerGroup::setHiddenCallback(HiddenCallback callback)
+{
+    hiddenCallback = std::move(callback);
+}
+
 bool FreqDividerGroup::advanceAnimation(float deltaSeconds)
 {
     return freqTextLabel.advanceAnimation(deltaSeconds);
@@ -169,6 +174,13 @@ void FreqDividerGroup::clicked(const juce::ModifierKeys& modifiers)
         freqTextLabel.setFade(true, false);
         verticalLine.setXPercent(0.0f);
         setVisible(false);
+
+        // APVTS ButtonAttachment invokes clicked() inside its own
+        // ScopedValueSetter. The parent clears drag ownership synchronously,
+        // then defers any gesture-end callback until that JUCE stack unwinds.
+        auto callback = hiddenCallback;
+        if (callback)
+            callback();
     }
 }
 

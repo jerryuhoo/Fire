@@ -10,6 +10,27 @@
 #include <memory>
 #include <vector>
 
+struct ModulationMatrixRoutingComboBoxTestAccess
+{
+    static std::function<void(int)> createPopupResultHandler(
+        ModulationMatrixRoutingComboBox& comboBox)
+    {
+        return comboBox.createPopupResultHandler();
+    }
+
+    static bool hasActivePointerInteraction(
+        const ModulationMatrixRoutingComboBox& comboBox)
+    {
+        return comboBox.pointerInteractionActive;
+    }
+
+    static std::uint64_t getPopupSessionRevision(
+        const ModulationMatrixRoutingComboBox& comboBox)
+    {
+        return comboBox.popupSessionRevision;
+    }
+};
+
 namespace
 {
 void replacePresetRoutings(juce::XmlElement& preset,
@@ -240,6 +261,25 @@ void collectComboBoxes(juce::Component& component,
             collectComboBoxes(*child, comboBoxes);
 }
 
+ModulationMatrixRoutingComboBox* findRoutingComboBox(
+    juce::Component& component,
+    bool sourceMenu)
+{
+    std::vector<juce::ComboBox*> comboBoxes;
+    collectComboBoxes(component, comboBoxes);
+    const auto match = std::find_if(
+        comboBoxes.begin(), comboBoxes.end(), [sourceMenu](const auto* comboBox)
+        {
+            const auto isSource = comboBox->getNumItems() > 0
+                                  && comboBox->getItemText(0) == "LFO 1";
+            return isSource == sourceMenu;
+        });
+
+    return match != comboBoxes.end()
+               ? dynamic_cast<ModulationMatrixRoutingComboBox*>(*match)
+               : nullptr;
+}
+
 class SliderInteractionCapture final : public juce::Slider::Listener
 {
 public:
@@ -451,6 +491,334 @@ TEST_CASE("Modulation matrix invalidates shifted rows before host notification",
     REQUIRE(liveRoutings.size() == 2);
     CHECK(liveRoutings[0].depth == Catch::Approx(0.5f));
     CHECK(liveRoutings[1].depth == Catch::Approx(0.5f));
+}
+
+TEST_CASE("Modulation matrix routing menus reject auxiliary and mixed pointer input",
+          "[ui][modulation-matrix][input][combo-box][pointer][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    juce::Component desktopHost;
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
+    desktopHost.setBounds(0, 0, 760, 80);
+    row.setBounds(0, 0, 760, 40);
+    desktopHost.addAndMakeVisible(row);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+
+    auto* sourceMenu = findRoutingComboBox(row, true);
+    REQUIRE(sourceMenu != nullptr);
+    REQUIRE(sourceMenu->isShowing());
+    const auto selectedId = sourceMenu->getSelectedId();
+    const auto sessionRevision =
+        ModulationMatrixRoutingComboBoxTestAccess::getPopupSessionRevision(
+            *sourceMenu);
+    std::vector<juce::ModifierKeys> rejectedModifiers {
+        juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::middleButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                             | juce::ModifierKeys::rightButtonModifier },
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                             | juce::ModifierKeys::middleButtonModifier }
+    };
+#if JUCE_MAC
+    rejectedModifiers.emplace_back(juce::ModifierKeys::leftButtonModifier
+                                   | juce::ModifierKeys::ctrlModifier);
+#endif
+
+    for (const auto modifiers : rejectedModifiers)
+    {
+        const auto position = sourceMenu->getLocalBounds().toFloat().getCentre();
+        auto& component = static_cast<juce::Component&>(*sourceMenu);
+        component.mouseDown(makeMouseEvent(*sourceMenu,
+                                           position,
+                                           modifiers,
+                                           position,
+                                           false));
+        component.mouseUp(makeMouseEvent(*sourceMenu,
+                                         position,
+                                         {},
+                                         position,
+                                         false));
+
+        CHECK_FALSE(sourceMenu->isPopupActive());
+        CHECK_FALSE(ModulationMatrixRoutingComboBoxTestAccess::
+                        hasActivePointerInteraction(*sourceMenu));
+        CHECK(sourceMenu->getSelectedId() == selectedId);
+        CHECK(ModulationMatrixRoutingComboBoxTestAccess::
+                  getPopupSessionRevision(*sourceMenu)
+              == sessionRevision);
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].sourceLfoIndex == routing.sourceLfoIndex);
+    }
+
+    sourceMenu->setScrollWheelEnabled(true);
+    juce::MouseWheelDetails wheel;
+    wheel.deltaY = -0.5f;
+    static_cast<juce::Component&>(*sourceMenu).mouseWheelMove(
+        makeMouseEvent(*sourceMenu,
+                       sourceMenu->getLocalBounds().toFloat().getCentre(),
+                       {},
+                       {},
+                       false),
+        wheel);
+    CHECK(sourceMenu->getSelectedId() == selectedId);
+    CHECK(manager.getModulationRoutingsCopy()[0].sourceLfoIndex
+          == routing.sourceLfoIndex);
+}
+
+TEST_CASE("Modulation matrix popup results remain bound to their routing session",
+          "[ui][modulation-matrix][combo-box][session][identity][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE(targets.size() >= 2);
+
+    const ModulationRouting routing {
+        0, targets[0].parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* sourceMenu = findRoutingComboBox(*rows.front(), true);
+    auto* destinationMenu = findRoutingComboBox(*rows.front(), false);
+    auto* amountSlider = findAmountSlider(*rows.front());
+    REQUIRE(sourceMenu != nullptr);
+    REQUIRE(destinationMenu != nullptr);
+    REQUIRE(amountSlider != nullptr);
+    REQUIRE(sourceMenu->isShowing());
+    REQUIRE(destinationMenu->isShowing());
+
+    const auto checkInitialAssignment = [&]
+    {
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].sourceLfoIndex == routing.sourceLfoIndex);
+        CHECK(routings[0].targetParameterID == routing.targetParameterID);
+    };
+
+    SECTION("source result cannot borrow a newer row revision")
+    {
+        auto staleResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+        amountSlider->setValue(0.40, juce::sendNotificationSync);
+        staleResult(2);
+
+        checkInitialAssignment();
+        CHECK(sourceMenu->getSelectedId() == 1);
+        CHECK_FALSE(panel.isUiRebuildPending());
+
+        auto currentResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+        currentResult(2);
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].sourceLfoIndex == 1);
+        CHECK(routings[0].depth == Catch::Approx(0.40f));
+        CHECK(panel.isUiRebuildPending());
+    }
+
+    SECTION("destination result preserves its captured complete routing")
+    {
+        auto staleResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*destinationMenu);
+        amountSlider->setValue(-0.35, juce::sendNotificationSync);
+        staleResult(3);
+
+        checkInitialAssignment();
+        CHECK(destinationMenu->getSelectedId() == 2);
+        CHECK_FALSE(panel.isUiRebuildPending());
+
+        auto currentResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*destinationMenu);
+        currentResult(3);
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].targetParameterID == targets[1].parameterID);
+        CHECK(routings[0].depth == Catch::Approx(-0.35f));
+        CHECK(panel.isUiRebuildPending());
+    }
+
+    SECTION("a replacement popup owns the only consumable result")
+    {
+        auto supersededResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+        auto currentResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+
+        supersededResult(2);
+        checkInitialAssignment();
+        CHECK_FALSE(panel.isUiRebuildPending());
+
+        currentResult(2);
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].sourceLfoIndex == 1);
+        CHECK(panel.isUiRebuildPending());
+    }
+
+    SECTION("row hide and restore invalidates the old popup")
+    {
+        auto staleResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+        rows.front()->setVisible(false);
+        rows.front()->setVisible(true);
+        staleResult(2);
+
+        checkInitialAssignment();
+        CHECK(sourceMenu->getSelectedId() == 1);
+        CHECK_FALSE(panel.isUiRebuildPending());
+    }
+
+    SECTION("disable and restore invalidates the old popup")
+    {
+        auto staleResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+        rows.front()->setEnabled(false);
+        rows.front()->setEnabled(true);
+        staleResult(2);
+
+        checkInitialAssignment();
+        CHECK(sourceMenu->getSelectedId() == 1);
+        CHECK_FALSE(panel.isUiRebuildPending());
+    }
+
+    SECTION("panel hide and restore invalidates the old popup")
+    {
+        auto staleResult = ModulationMatrixRoutingComboBoxTestAccess::
+            createPopupResultHandler(*sourceMenu);
+        panel.setVisible(false);
+        panel.setVisible(true);
+        staleResult(2);
+
+        checkInitialAssignment();
+        CHECK(sourceMenu->getSelectedId() == 1);
+        CHECK_FALSE(panel.isUiRebuildPending());
+    }
+
+    SECTION("keyboard direction commits synchronously")
+    {
+        CHECK(static_cast<juce::Component&>(*sourceMenu).keyPressed(
+            juce::KeyPress { juce::KeyPress::downKey }));
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].sourceLfoIndex == 1);
+        CHECK(panel.isUiRebuildPending());
+    }
+}
+
+TEST_CASE("Modulation matrix rebuilt rows reject late popup results",
+          "[ui][modulation-matrix][combo-box][session][lifetime][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* sourceMenu = findRoutingComboBox(*rows.front(), true);
+    REQUIRE(sourceMenu != nullptr);
+    auto staleResult = ModulationMatrixRoutingComboBoxTestAccess::
+        createPopupResultHandler(*sourceMenu);
+
+    panel.buildUiFromProcessorState();
+    staleResult(2);
+
+    const auto routings = manager.getModulationRoutingsCopy();
+    REQUIRE(routings.size() == 1);
+    CHECK(routings[0].sourceLfoIndex == routing.sourceLfoIndex);
+    CHECK(routings[0].targetParameterID == routing.targetParameterID);
+    CHECK_FALSE(panel.isUiRebuildPending());
+}
+
+TEST_CASE("Modulation matrix popup commit survives synchronous panel deletion",
+          "[ui][modulation-matrix][combo-box][session][reentrancy][lifetime][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    auto panel = std::make_unique<ModulationMatrixPanel>(processor);
+    panel->setBounds(0, 0, 760, 420);
+    panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel->setVisible(true);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(*panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* sourceMenu = findRoutingComboBox(*rows.front(), true);
+    REQUIRE(sourceMenu != nullptr);
+    auto popupResult = ModulationMatrixRoutingComboBoxTestAccess::
+        createPopupResultHandler(*sourceMenu);
+    DeleteMatrixPanelOnHostNotification host(processor, panel);
+
+    popupResult(2);
+
+    CHECK(host.callbackCompleted);
+    CHECK(host.notificationCount == 1);
+    CHECK(panel == nullptr);
+    const auto routings = manager.getModulationRoutingsCopy();
+    REQUIRE(routings.size() == 1);
+    CHECK(routings[0].sourceLfoIndex == 1);
 }
 
 TEST_CASE("Modulation matrix amount accepts only primary-button drags",

@@ -11,6 +11,464 @@
 #include "ModulationMatrixPanel.h"
 #include "../../Utility/AudioHelpers.h"
 
+#include <utility>
+
+namespace
+{
+bool haveSameRoutingState(const ModulationRouting& lhs,
+                          const ModulationRouting& rhs) noexcept
+{
+    return lhs.sourceLfoIndex == rhs.sourceLfoIndex
+        && lhs.targetParameterID == rhs.targetParameterID
+        && juce::exactlyEqual(lhs.depth, rhs.depth)
+        && lhs.isBipolar == rhs.isBipolar
+        && lhs.isBypassed == rhs.isBypassed;
+}
+} // namespace
+
+void ModulationMatrixRoutingComboBox::configurePopupSession(
+    EditContextProvider contextProvider,
+    EditContextValidator contextValidator,
+    SelectionCommitter selectionCommitter)
+{
+    getCurrentEditContext = std::move(contextProvider);
+    isEditContextValid = std::move(contextValidator);
+    commitSelection = std::move(selectionCommitter);
+}
+
+bool ModulationMatrixRoutingComboBox::capturePopupRequest()
+{
+    if (getCurrentEditContext == nullptr)
+        return false;
+
+    popupRequestContext = getCurrentEditContext();
+    popupRequestInteractionGeneration = interactionGeneration;
+    popupRequestArmed = true;
+    return true;
+}
+
+bool ModulationMatrixRoutingComboBox::isContextCurrent(
+    const EditContext& context) const
+{
+    return isEnabled()
+        && isShowing()
+        && isEditContextValid != nullptr
+        && isEditContextValid(context);
+}
+
+bool ModulationMatrixRoutingComboBox::isPopupContextCurrent(
+    const EditContext& context,
+    std::uint64_t expectedInteractionGeneration) const
+{
+    return interactionGeneration == expectedInteractionGeneration
+        && isContextCurrent(context);
+}
+
+bool ModulationMatrixRoutingComboBox::keyPressed(
+    const juce::KeyPress& key)
+{
+    const bool movesBackward = key == juce::KeyPress::upKey
+                               || key == juce::KeyPress::leftKey;
+    const bool movesForward = key == juce::KeyPress::downKey
+                              || key == juce::KeyPress::rightKey;
+    if (movesBackward || movesForward)
+    {
+        if (isPopupActive() || popupRequestArmed)
+            return true;
+
+        if (getCurrentEditContext == nullptr)
+            return true;
+
+        const auto context = getCurrentEditContext();
+        if (! isContextCurrent(context))
+            return true;
+
+        const auto delta = movesBackward ? -1 : 1;
+        for (int itemIndex = getSelectedItemIndex() + delta;
+             juce::isPositiveAndBelow(itemIndex, getNumItems());
+             itemIndex += delta)
+        {
+            const auto itemId = getItemId(itemIndex);
+            if (itemId == 0 || ! isItemEnabled(itemId))
+                continue;
+
+            return commitKeyboardSelection(itemId, context);
+        }
+
+        return true;
+    }
+
+    if (key == juce::KeyPress::returnKey && ! isPopupActive())
+    {
+        if (popupRequestArmed)
+            return true;
+
+        if (! capturePopupRequest())
+            return true;
+    }
+
+    return juce::ComboBox::keyPressed(key);
+}
+
+bool ModulationMatrixRoutingComboBox::commitKeyboardSelection(
+    int itemId,
+    const EditContext& context)
+{
+    if (! isContextCurrent(context)
+        || itemId == 0
+        || ! isItemEnabled(itemId))
+        return true;
+
+    popupSessionActive = false;
+    ++popupSessionRevision;
+    setSelectedId(itemId, juce::dontSendNotification);
+
+    auto selectionCommitter = commitSelection;
+    if (selectionCommitter != nullptr)
+        selectionCommitter(*this, itemId, context);
+
+    return true;
+}
+
+void ModulationMatrixRoutingComboBox::mouseDown(
+    const juce::MouseEvent& event)
+{
+    if (! isEnabled()
+        || ! isShowing()
+        || ! isCompletePrimaryDown(event))
+        return;
+
+    if (popupRequestArmed && ! isPopupActive())
+        return;
+
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
+    if (pointerInteractionActive)
+    {
+        if (! isPointerSource(event))
+            return;
+
+        releasePointerInteractionWithoutSelection(event);
+        if (safeThis == nullptr)
+            return;
+    }
+
+    pointerInteractionActive = true;
+    cancelPendingPointerRelease = false;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+
+    if (! isPopupActive() && ! capturePopupRequest())
+    {
+        clearPointerInteraction();
+        return;
+    }
+
+    juce::ComboBox::mouseDown(event);
+    if (safeThis != nullptr && ! isPopupActive())
+        popupRequestArmed = false;
+}
+
+void ModulationMatrixRoutingComboBox::mouseDrag(
+    const juce::MouseEvent& event)
+{
+    if (! pointerInteractionActive
+        || ! isPointerSource(event)
+        || cancelPendingPointerRelease)
+        return;
+
+    const bool mayQueuePopup = ! isPopupActive();
+    if (mayQueuePopup && popupRequestArmed)
+        return;
+
+    if (mayQueuePopup)
+    {
+        if (! capturePopupRequest())
+            return;
+    }
+
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
+    juce::ComboBox::mouseDrag(event);
+    if (safeThis != nullptr && mayQueuePopup && ! isPopupActive())
+        popupRequestArmed = false;
+}
+
+void ModulationMatrixRoutingComboBox::mouseEnter(
+    const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
+    juce::ComboBox::mouseEnter(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void ModulationMatrixRoutingComboBox::mouseMove(
+    const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
+    juce::ComboBox::mouseMove(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void ModulationMatrixRoutingComboBox::mouseExit(
+    const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
+    juce::ComboBox::mouseExit(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
+void ModulationMatrixRoutingComboBox::mouseUp(
+    const juce::MouseEvent& event)
+{
+    if (! pointerInteractionActive || ! isPointerSource(event))
+        return;
+
+    if (cancelPendingPointerRelease)
+    {
+        releasePointerInteractionWithoutSelection(event);
+        return;
+    }
+
+    const bool mayQueuePopup = ! isPopupActive();
+    if (mayQueuePopup && popupRequestArmed)
+    {
+        releasePointerInteractionWithoutSelection(event);
+        return;
+    }
+
+    if (mayQueuePopup && ! capturePopupRequest())
+    {
+        releasePointerInteractionWithoutSelection(event);
+        return;
+    }
+
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
+    juce::ComboBox::mouseUp(event);
+    if (safeThis == nullptr)
+        return;
+
+    if (mayQueuePopup && ! isPopupActive())
+        popupRequestArmed = false;
+
+    clearPointerInteraction();
+}
+
+void ModulationMatrixRoutingComboBox::mouseWheelMove(
+    const juce::MouseEvent& event,
+    const juce::MouseWheelDetails& wheel)
+{
+    juce::Component::mouseWheelMove(event, wheel);
+}
+
+void ModulationMatrixRoutingComboBox::visibilityChanged()
+{
+    juce::ComboBox::visibilityChanged();
+    if (! isShowing())
+        dismissTransientInteraction();
+}
+
+void ModulationMatrixRoutingComboBox::enablementChanged()
+{
+    dismissTransientInteraction();
+    juce::ComboBox::enablementChanged();
+}
+
+void ModulationMatrixRoutingComboBox::parentHierarchyChanged()
+{
+    juce::ComboBox::parentHierarchyChanged();
+    dismissTransientInteraction();
+}
+
+bool ModulationMatrixRoutingComboBox::isCompletePrimaryDown(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown()
+        && ! event.mods.isPopupMenu();
+}
+
+bool ModulationMatrixRoutingComboBox::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void ModulationMatrixRoutingComboBox::recoverMissingPointerUp(
+    const juce::MouseEvent& event)
+{
+    if (pointerInteractionActive
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        releasePointerInteractionWithoutSelection(event);
+}
+
+void ModulationMatrixRoutingComboBox::releasePointerInteractionWithoutSelection(
+    const juce::MouseEvent& event)
+{
+    clearPointerInteraction();
+    juce::ComboBox::mouseUp(
+        event.getEventRelativeTo(this).withNewPosition(
+            juce::Point<float> { -1.0f, -1.0f }));
+}
+
+void ModulationMatrixRoutingComboBox::clearPointerInteraction() noexcept
+{
+    pointerInteractionActive = false;
+    cancelPendingPointerRelease = false;
+    pointerSourceIndex = -1;
+}
+
+void ModulationMatrixRoutingComboBox::closePopupWindow() noexcept
+{
+    juce::ComboBox::hidePopup();
+}
+
+void ModulationMatrixRoutingComboBox::dismissTransientInteraction() noexcept
+{
+    popupSessionActive = false;
+    ++popupSessionRevision;
+    ++interactionGeneration;
+    cancelPendingPointerRelease = cancelPendingPointerRelease
+                                  || pointerInteractionActive;
+    closePopupWindow();
+}
+
+std::function<void(int)>
+ModulationMatrixRoutingComboBox::createPopupResultHandler()
+{
+    if (getCurrentEditContext == nullptr)
+        return [] (int) {};
+
+    return createPopupResultHandler(getCurrentEditContext(),
+                                    interactionGeneration);
+}
+
+std::function<void(int)>
+ModulationMatrixRoutingComboBox::createPopupResultHandler(
+    EditContext context,
+    std::uint64_t expectedInteractionGeneration)
+{
+    popupSessionActive = true;
+    const auto sessionRevision = ++popupSessionRevision;
+
+    return [safeThis =
+                juce::Component::SafePointer<ModulationMatrixRoutingComboBox>(this),
+            capturedContext = std::move(context),
+            expectedInteractionGeneration,
+            sessionRevision](int result)
+    {
+        if (safeThis == nullptr
+            || ! safeThis->popupSessionActive
+            || safeThis->popupSessionRevision != sessionRevision)
+            return;
+
+        const bool mayCommit = result != 0
+                               && safeThis->isPopupContextCurrent(
+                                   capturedContext,
+                                   expectedInteractionGeneration)
+                               && safeThis->indexOfItemId(result) >= 0
+                               && safeThis->isItemEnabled(result);
+
+        safeThis->popupSessionActive = false;
+        ++safeThis->popupSessionRevision;
+        safeThis->cancelPendingPointerRelease =
+            safeThis->cancelPendingPointerRelease
+            || safeThis->pointerInteractionActive;
+        safeThis->closePopupWindow();
+
+        if (! mayCommit
+            || safeThis == nullptr
+            || ! safeThis->isPopupContextCurrent(
+                capturedContext,
+                expectedInteractionGeneration))
+            return;
+
+        safeThis->setSelectedId(result, juce::dontSendNotification);
+        auto selectionCommitter = safeThis->commitSelection;
+        if (selectionCommitter != nullptr)
+            selectionCommitter(*safeThis, result, capturedContext);
+    };
+}
+
+void ModulationMatrixRoutingComboBox::showPopup()
+{
+    if (! popupRequestArmed)
+    {
+        if (isPopupActive() || ! capturePopupRequest())
+            return;
+
+        juce::ComboBox::keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey });
+        return;
+    }
+
+    auto requestContext = popupRequestContext;
+    const auto requestInteractionGeneration =
+        popupRequestInteractionGeneration;
+    popupRequestArmed = false;
+
+    if (! isPopupContextCurrent(requestContext,
+                                requestInteractionGeneration))
+    {
+        popupSessionActive = false;
+        ++popupSessionRevision;
+        closePopupWindow();
+        return;
+    }
+
+    auto menu = *getRootMenu();
+    if (menu.getNumItems() > 0)
+    {
+        const auto selectedId = getSelectedId();
+        for (juce::PopupMenu::MenuItemIterator iterator(menu, true);
+             iterator.next();)
+        {
+            auto& item = iterator.getItem();
+            if (item.itemID != 0)
+                item.isTicked = item.itemID == selectedId;
+        }
+    }
+    else
+    {
+        menu.addItem(1, getTextWhenNoChoicesAvailable(), false, false);
+    }
+
+    auto& lookAndFeel = getLookAndFeel();
+    menu.setLookAndFeel(&lookAndFeel);
+    auto options = juce::PopupMenu::Options()
+                       .withTargetComponent(this)
+                       .withItemThatMustBeVisible(getSelectedId())
+                       .withInitiallySelectedItem(getSelectedId())
+                       .withMinimumWidth(getWidth())
+                       .withMaximumNumColumns(1)
+                       .withStandardItemHeight(getHeight());
+
+    for (auto* child : getChildren())
+    {
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+        {
+            options = lookAndFeel.getOptionsForComboBoxPopupMenu(*this,
+                                                                 *label);
+            break;
+        }
+    }
+
+    menu.showMenuAsync(options,
+                       createPopupResultHandler(
+                           std::move(requestContext),
+                           requestInteractionGeneration));
+}
+
 void ModulationMatrixPrimaryButton::mouseDown(const juce::MouseEvent& event)
 {
     if (pointerGesture == PointerGesture::primary
@@ -281,6 +739,25 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     destinationMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     destinationMenu.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
 
+    const auto configureRoutingMenu = [this](auto& menu)
+    {
+        menu.configurePopupSession(
+            [this]
+            {
+                return captureComboBoxEditContext();
+            },
+            [this](const auto& context)
+            {
+                return isComboBoxEditContextCurrent(context);
+            },
+            [this](auto& comboBox, int selectedId, const auto& context)
+            {
+                commitComboBoxSelection(comboBox, selectedId, context);
+            });
+    };
+    configureRoutingMenu(sourceMenu);
+    configureRoutingMenu(destinationMenu);
+
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
     removeButton.setComponentID("remove_button");
@@ -300,6 +777,8 @@ void ModulationMatrixRow::paint(juce::Graphics& g)
 
 ModulationMatrixRow::~ModulationMatrixRow()
 {
+    sourceMenu.dismissTransientInteraction();
+    destinationMenu.dismissTransientInteraction();
     sourceMenu.removeListener(this);
     amountSlider.removeListener(this);
     bipolarButton.removeListener(this);
@@ -320,6 +799,26 @@ void ModulationMatrixRow::resized()
     flex.items.add(juce::FlexItem(destinationMenu).withFlex(1.6f).withMargin(2));
     flex.items.add(juce::FlexItem(removeButton).withWidth(35).withMargin(2));
     flex.performLayout(getLocalBounds());
+}
+
+void ModulationMatrixRow::visibilityChanged()
+{
+    juce::Component::visibilityChanged();
+    if (! isShowing())
+    {
+        sourceMenu.dismissTransientInteraction();
+        destinationMenu.dismissTransientInteraction();
+    }
+}
+
+void ModulationMatrixRow::enablementChanged()
+{
+    juce::Component::enablementChanged();
+    if (! isEnabled())
+    {
+        sourceMenu.dismissTransientInteraction();
+        destinationMenu.dismissTransientInteraction();
+    }
 }
 
 void ModulationMatrixRow::buttonClicked(juce::Button* button)
@@ -431,61 +930,102 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
 
 void ModulationMatrixRow::comboBoxChanged(juce::ComboBox* comboBox)
 {
-    // This function now handles changes from BOTH combo boxes.
-    if (comboBox == &sourceMenu || comboBox == &destinationMenu)
+    auto* routingMenu = dynamic_cast<ModulationMatrixRoutingComboBox*>(comboBox);
+    if (routingMenu == &sourceMenu || routingMenu == &destinationMenu)
+        commitComboBoxSelection(*routingMenu,
+                                routingMenu->getSelectedId(),
+                                captureComboBoxEditContext());
+}
+
+ModulationMatrixRoutingComboBox::EditContext
+ModulationMatrixRow::captureComboBoxEditContext() const
+{
+    return { routingEditSession,
+             routingEditSession != nullptr ? routingEditSession->revision : 0,
+             expectedRouting };
+}
+
+bool ModulationMatrixRow::isComboBoxEditContextCurrent(
+    const ModulationMatrixRoutingComboBox::EditContext& context)
+{
+    return context.editSession != nullptr
+        && context.editSession == routingEditSession
+        && routingEditSession != nullptr
+        && context.revision == routingEditSession->revision
+        && haveSameRoutingState(context.expectedRouting, expectedRouting)
+        && ! isParentRebuildPending();
+}
+
+void ModulationMatrixRow::commitComboBoxSelection(
+    ModulationMatrixRoutingComboBox& comboBox,
+    int selectedId,
+    const ModulationMatrixRoutingComboBox::EditContext& context)
+{
+    if (! isComboBoxEditContextCurrent(context))
     {
-        if (isParentRebuildPending())
-        {
-            requestParentRebuild();
-            return;
-        }
-
-        // 1. Get the current selections from both menus.
-        int selectedSourceIndex = sourceMenu.getSelectedId() - 1;
-        juce::String selectedTargetID = "";
-
-        int selectedDestinationId = destinationMenu.getSelectedId();
-        if (selectedDestinationId > 1) // i.e., not "None"
-        {
-            int listIndex = selectedDestinationId - 2;
-            if (juce::isPositiveAndBelow(listIndex, static_cast<int>(allPossibleTargets.size())))
-            {
-                selectedTargetID = allPossibleTargets[static_cast<size_t>(listIndex)].parameterID;
-            }
-        }
-
-        auto editSession = routingEditSession;
-        if (editSession == nullptr)
-        {
-            requestParentRebuild();
-            return;
-        }
-
-        // 2. Commit only if this row still represents the complete routing
-        // identity and the shared matrix session is still current.
-        auto& manager = processor.getLfoManager();
-        const auto result =
-            manager.assignModulationRoutingIfRevisionMatches(
-                index,
-                editSession->revision,
-                expectedRouting,
-                selectedSourceIndex,
-                selectedTargetID);
-        if (! result.accepted)
-        {
-            requestParentRebuild();
-            return;
-        }
-
-        // Source/destination edits may also clear another row. Invalidate the
-        // complete visible matrix before notifying a re-entrant host; the old
-        // rows deliberately retain their previous revision until rebuilt.
         requestParentRebuild();
-        auto& processorToNotify = processor;
-        if (result.changed)
-            processorToNotify.lfoDataHasChanged();
         return;
     }
+
+    auto selectedSourceIndex = context.expectedRouting.sourceLfoIndex;
+    auto selectedTargetId = context.expectedRouting.targetParameterID;
+
+    if (&comboBox == &sourceMenu)
+    {
+        if (! juce::isPositiveAndBelow(selectedId - 1, 4))
+        {
+            requestParentRebuild();
+            return;
+        }
+
+        selectedSourceIndex = selectedId - 1;
+    }
+    else if (&comboBox == &destinationMenu)
+    {
+        if (selectedId == 1)
+        {
+            selectedTargetId.clear();
+        }
+        else
+        {
+            const auto targetIndex = selectedId - 2;
+            if (! juce::isPositiveAndBelow(
+                    targetIndex,
+                    static_cast<int>(allPossibleTargets.size())))
+            {
+                requestParentRebuild();
+                return;
+            }
+
+            selectedTargetId =
+                allPossibleTargets[static_cast<size_t>(targetIndex)]
+                    .parameterID;
+        }
+    }
+    else
+    {
+        return;
+    }
+
+    auto& processorToNotify = processor;
+    auto& manager = processorToNotify.getLfoManager();
+    const auto result = manager.assignModulationRoutingIfRevisionMatches(
+        index,
+        context.revision,
+        context.expectedRouting,
+        selectedSourceIndex,
+        selectedTargetId);
+    if (! result.accepted)
+    {
+        requestParentRebuild();
+        return;
+    }
+
+    // Source/destination edits may clear another row. Invalidate all rows
+    // before the host can synchronously destroy or re-enter the editor.
+    requestParentRebuild();
+    if (result.changed)
+        processorToNotify.lfoDataHasChanged();
 }
 
 bool ModulationMatrixRow::isParentRebuildPending()
@@ -531,6 +1071,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
 
 ModulationMatrixPanel::~ModulationMatrixPanel()
 {
+    dismissTransientInteractions();
     processor.removeChangeListener(this);
     cancelPendingUpdate();
     addButton.removeListener(this);
@@ -576,6 +1117,38 @@ void ModulationMatrixPanel::resized()
     flex.performLayout(contentComponent.getLocalBounds());
 }
 
+void ModulationMatrixPanel::visibilityChanged()
+{
+    juce::Component::visibilityChanged();
+    if (! isShowing())
+        dismissTransientInteractions();
+}
+
+void ModulationMatrixPanel::enablementChanged()
+{
+    juce::Component::enablementChanged();
+    if (! isEnabled())
+        dismissTransientInteractions();
+}
+
+void ModulationMatrixPanel::dismissTransientInteractions() noexcept
+{
+    for (auto& row : rows)
+    {
+        if (row == nullptr)
+            continue;
+
+        for (int childIndex = 0;
+             childIndex < row->getNumChildComponents();
+             ++childIndex)
+        {
+            if (auto* comboBox = dynamic_cast<ModulationMatrixRoutingComboBox*>(
+                    row->getChildComponent(childIndex)))
+                comboBox->dismissTransientInteraction();
+        }
+    }
+}
+
 void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 {
     if (button == &addButton)
@@ -618,6 +1191,7 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 
 void ModulationMatrixPanel::buildUiFromProcessorState()
 {
+    dismissTransientInteractions();
     rows.clear();
     contentComponent.removeAllChildren();
 

@@ -69,6 +69,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     addChildComponent(valueEntryPopup);
     valueEntryPopup.setAlwaysOnTop(true);
 
+    // Modulation writes notify the host synchronously, and a host callback may
+    // delete this editor. Finish editor mutations first, or guard any required
+    // post-write refresh with a SafePointer.
     valueEntryPopup.onOk = [this](double value)
     {
         const auto targetParameterID = valueEntryTargetParameterID;
@@ -76,8 +79,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
         if (targetParameterID.isNotEmpty())
         {
-            processor.setModulationValue(targetParameterID, (float) value);
             modulationSnapshotFramesRemaining = 0;
+            processor.setModulationValue(targetParameterID, (float) value);
         }
     };
 
@@ -112,13 +115,18 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 // It no longer handles any UI state changes.
                 if (isLfoAssignMode) // Check again just in case.
                 {
-                    processor.assignLfoToTarget(lfoSourceForAssignment, parameterID);
+                    const auto sourceLfoIndex = lfoSourceForAssignment;
                     // This callback runs on the message thread, so complete the
                     // one-shot assignment interaction here instead of relying on
                     // a broad parameter-listener notification.
                     exitAssignMode();
                     modulationSnapshotFramesRemaining = 0;
-                    updateModulationStates();
+
+                    const juce::Component::SafePointer<FireAudioProcessorEditor>
+                        safeThis(this);
+                    processor.assignLfoToTarget(sourceLfoIndex, parameterID);
+                    if (safeThis != nullptr)
+                        safeThis->updateModulationStates();
                 }
             };
 
@@ -152,9 +160,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     auto bypassCallback = [this](const juce::String& parameterID)
     {
         processor.getLfoManager().toggleBypassForRouting(parameterID);
-        processor.lfoDataHasChanged();
         modulationSnapshotFramesRemaining = 0;
         updateModulationStates();
+        processor.lfoDataHasChanged();
     };
 
     // Use the new helper function to get all sliders and assign the callback in a single loop
@@ -208,8 +216,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
         slider->onModAmountSetValue = [this, slider](double newValue)
         {
-            processor.setModulationValue(slider->getParamID(), (float) newValue);
             modulationSnapshotFramesRemaining = 0;
+            processor.setModulationValue(slider->getParamID(), (float) newValue);
         };
 
         slider->onSetValueRequested = [this](ModulatableSlider* sliderToEdit,
@@ -250,11 +258,15 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 || targetParameterID.isEmpty())
                 return;
 
-            processor.assignLfoToTarget(lfoIndex, targetParameterID);
             modulationSnapshotFramesRemaining = 0;
-            updateModulationStates();
             if (isLfoAssignMode)
                 exitAssignMode();
+
+            const juce::Component::SafePointer<FireAudioProcessorEditor>
+                safeThis(this);
+            processor.assignLfoToTarget(lfoIndex, targetParameterID);
+            if (safeThis != nullptr)
+                safeThis->updateModulationStates();
         };
 
         slider->onBypassToggled = [bypassCallback](const juce::String& targetParameterID)
@@ -264,32 +276,32 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
         slider->onModulationCleared = [this](const juce::String& targetParameterID)
         {
-            processor.clearModulationForParameter(targetParameterID);
             modulationSnapshotFramesRemaining = 0;
+            processor.clearModulationForParameter(targetParameterID);
         };
 
         slider->onModulationInverted = [this](const juce::String& targetParameterID)
         {
-            processor.invertModulationDepthForParameter(targetParameterID);
             modulationSnapshotFramesRemaining = 0;
+            processor.invertModulationDepthForParameter(targetParameterID);
         };
 
         slider->onBipolarModeToggled = [this](const juce::String& targetParameterID)
         {
-            processor.toggleBipolarMode(targetParameterID);
             modulationSnapshotFramesRemaining = 0;
+            processor.toggleBipolarMode(targetParameterID);
         };
 
         slider->onModAmountChanged = [this, slider](float newDepth)
         {
-            processor.setModulationDepth(slider->getParamID(), newDepth);
             modulationSnapshotFramesRemaining = 0;
+            processor.setModulationDepth(slider->getParamID(), newDepth);
         };
 
         slider->onModulationReset = [this, slider]()
         {
-            processor.resetModulation(slider->getParamID());
             modulationSnapshotFramesRemaining = 0;
+            processor.resetModulation(slider->getParamID());
         };
     }
 

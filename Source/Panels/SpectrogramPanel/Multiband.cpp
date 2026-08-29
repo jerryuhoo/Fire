@@ -124,18 +124,6 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
         freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
     }
 
-    // Initialize parameter arrays for each band
-    paramsArrays.resize(4);
-    const auto& bandParams = ParameterIDAndName::getBandParameterInfo();
-    for (int i = 0; i < 4; ++i)
-    {
-        paramsArrays[i].clear();
-        for (const auto& paramInfo : bandParams)
-        {
-            paramsArrays[i].push_back(ParameterIDAndName::getIDString(paramInfo.idBase, i));
-        }
-    }
-
     // Initialize attachments using loops
     multiEnableAttachments.resize(4);
     multiSoloAttachments.resize(4);
@@ -329,99 +317,6 @@ bool Multiband::shouldSetBlackMask(int index)
         }
     }
     return (! bandUIs[index].soloButton->getToggleState() && otherBandSoloIsOn); // <--- MODIFIED
-}
-
-void Multiband::setParametersToAFromB(int toIndex, int fromIndex)
-{
-    if (! juce::isPositiveAndBelow(toIndex, static_cast<int>(paramsArrays.size()))
-        || ! juce::isPositiveAndBelow(fromIndex, static_cast<int>(paramsArrays.size())))
-        return;
-
-    const auto& fromArray = paramsArrays[static_cast<size_t>(fromIndex)];
-    const auto& toArray = paramsArrays[static_cast<size_t>(toIndex)];
-    jassert(fromArray.size() == toArray.size());
-
-    const auto parameterCount = juce::jmin(fromArray.size(), toArray.size());
-    for (size_t parameterIndex = 0; parameterIndex < parameterCount; ++parameterIndex)
-    {
-        auto* source = processor.treeState.getParameter(fromArray[parameterIndex]);
-        auto* target = processor.treeState.getParameter(toArray[parameterIndex]);
-        jassert(source != nullptr && target != nullptr);
-        if (source != nullptr && target != nullptr)
-            target->setValueNotifyingHost(source->getValue());
-    }
-}
-
-void Multiband::initParameters(int bandindex)
-{
-    if (! juce::isPositiveAndBelow(bandindex, static_cast<int>(paramsArrays.size())))
-        return;
-
-    const auto& paramArray = paramsArrays[static_cast<size_t>(bandindex)];
-    for (const auto& parameterID : paramArray)
-    {
-        auto* parameter = processor.treeState.getParameter(parameterID);
-        jassert(parameter != nullptr);
-        if (parameter != nullptr)
-            parameter->setValueNotifyingHost(parameter->getDefaultValue());
-    }
-}
-
-void Multiband::setStatesWhenAdd(int insertionIndex, bool newBandIsOnLeft)
-{
-    // lineNum already includes the divider that was just inserted.  Therefore
-    // the highest previously active band index is lineNum - 1.
-    const int oldLastBandIndex = lineNum - 1;
-    if (! juce::isPositiveAndBelow(insertionIndex, lineNum)
-        || ! juce::isPositiveAndBelow(oldLastBandIndex, 4))
-    {
-        jassertfalse;
-        return;
-    }
-
-    // Make space by shifting active bands from the insertion point one step to
-    // the right.  Iterating backwards avoids overwriting a source band.
-    // We loop backwards from the end to avoid overwriting the data we need to copy.
-    // After this loop, the settings of the original band at `insertionIndex` are now temporarily stored at `insertionIndex + 1`.
-    for (int i = oldLastBandIndex; i >= insertionIndex; --i)
-        copyBandSettings(i + 1, i);
-
-    // Also shift LFO targets for the same range of bands
-    processor.shiftLfoModulationTargets(insertionIndex,
-                                        oldLastBandIndex,
-                                        1,
-                                        false);
-
-    // Preserve the logical identity of the old band.  If the new region is on
-    // the left the old settings stay in insertionIndex + 1; otherwise restore
-    // them to insertionIndex and create the default band on the right.
-    if (newBandIsOnLeft)
-    {
-        // USER ACTION: Clicked on the LEFT side of the band.
-        // EXPECTED RESULT: The NEW band appears on the LEFT, OLD band is shifted to the RIGHT.
-
-        // The "Make Space" step has already moved the OLD band's settings to insertionIndex + 1. This is perfect.
-        // We just need to reset the band at the original insertionIndex to its default state, creating the NEW band on the LEFT.
-        resetBandToDefault(insertionIndex);
-        processor.clearLfoModulationForBand(insertionIndex, false); // Clear LFOs for the new default band
-    }
-    else // Clicked on the RIGHT side
-    {
-        // USER ACTION: Clicked on the RIGHT side of the band.
-        // EXPECTED RESULT: The OLD band stays on the LEFT, NEW band appears on the RIGHT.
-
-        // The "Make Space" step moved the OLD settings to insertionIndex + 1. We need them back.
-        // So, we copy the temporarily stored settings from (insertionIndex + 1) back to the original position.
-        copyBandSettings(insertionIndex, insertionIndex + 1);
-        processor.shiftLfoModulationTargets(insertionIndex + 1,
-                                            insertionIndex + 1,
-                                            -1,
-                                            false);
-
-        // Now, we reset the band to the right to be a new, default band.
-        resetBandToDefault(insertionIndex + 1);
-        processor.clearLfoModulationForBand(insertionIndex + 1, false); // Clear LFOs for the new default band
-    }
 }
 
 int Multiband::countLines()
@@ -750,50 +645,37 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
 
                 const bool newBandIsOnLeft = localEvent.position.x
                                              < getBandBounds(splitBandIndex).getCentreX();
-                bool bandWasAdded = false;
-                for (; i < 3; i++)
-                {
-                    // create lines and close buttons and then set state
-                    if (! freqDividerGroup[i]->getToggleState())
-                    {
-                        processor.beginMultibandTopologyEdit();
-                        const juce::ScopeGuard finishTopologyEdit { [this]
-                        {
-                            processor.requestMultibandTopologyReset();
-                        } };
-                        freqDividerGroup[i]->getVerticalLine().setXPercent(xPercent);
-                        int freq = static_cast<int>(transformFromLog(xPercent));
-                        freqDividerGroup[i]->setFreq(freq);
-                        freqDividerGroup[i]->setToggleState(true, juce::sendNotificationSync);
-                        const int changeIndex = sortLinesInternal(false);
-                        setStatesWhenAdd(changeIndex, newBandIsOnLeft);
+                const int oldBandCount = lineNum + 1;
+                const int newBandCount = oldBandCount + 1;
+                int focusAfterInsert = focusIndex;
+                if (focusIndex > splitBandIndex
+                    || (focusIndex == splitBandIndex && newBandIsOnLeft))
+                    ++focusAfterInsert;
 
-                        int focusAfterInsert = focusIndex;
-                        if (focusIndex > changeIndex
-                            || (focusIndex == changeIndex && newBandIsOnLeft))
-                            ++focusAfterInsert;
-                        updateFocusIndex(focusAfterInsert, true);
+                auto& processorToUse = processor;
+                juce::Component::SafePointer<Multiband> safeThis(this);
+                if (! processorToUse.addMultibandBand(
+                        splitBandIndex,
+                        oldBandCount,
+                        newBandIsOnLeft,
+                        transformFromLog(xPercent))
+                    || safeThis == nullptr)
+                    return;
 
-                        // Publish the larger DSP band count only after every
-                        // destination parameter and attachment is coherent.
-                        if (auto* param = processor.treeState.getParameter(NUM_BANDS_ID))
-                            param->setValueNotifyingHost(
-                                param->getNormalisableRange().convertTo0to1(lineNum + 1));
+                safeThis->focusIndex = juce::jlimit(0,
+                                                    newBandCount - 1,
+                                                    focusAfterInsert);
+                safeThis->applyAuthoritativeBandCount(newBandCount,
+                                                      false,
+                                                      false);
 
-                        // Publish only after every parameter, routing,
-                        // frequency and the final band count are coherent.
-                        // This also catches add/delete pairs that happen
-                        // between audio blocks and finish on the same count.
-                        bandWasAdded = true;
-                        break;
-                    }
-                }
-                if (bandWasAdded)
-                    processor.lfoDataHasChanged();
-                setLineRelatedBoundsByX(); // TODO: dont use this, only set freq
-                setSoloRelatedBounds();
-                refreshHoveredBandFromMouse();
-                repaint();
+                if (safeThis == nullptr)
+                    return;
+
+                // Focus propagation is the only remaining editor callback and
+                // is deliberately the final operation in this path.
+                safeThis->notifyFocusChanged();
+                return;
             }
         }
     }
@@ -1208,64 +1090,6 @@ juce::Rectangle<float> Multiband::getBandBounds(int index) const
                                                        0.0f,
                                                        juce::jmax(left, right),
                                                        static_cast<float>(getHeight()));
-}
-
-// Gets the enable and solo state for a specific band.
-Multiband::BandState Multiband::getBandState(int bandIndex)
-{
-    if (! juce::isPositiveAndBelow(bandIndex, static_cast<int>(bandUIs.size())))
-    {
-        jassertfalse;
-        return { true, false };
-    }
-
-    return { bandUIs[bandIndex].enableButton->getToggleState(), bandUIs[bandIndex].soloButton->getToggleState() };
-}
-
-// Sets the enable and solo state for a specific band.
-void Multiband::setBandState(int bandIndex, BandState state, juce::NotificationType notification)
-{
-    if (! juce::isPositiveAndBelow(bandIndex, static_cast<int>(bandUIs.size())))
-    {
-        jassertfalse;
-        return;
-    }
-
-    bandUIs[bandIndex].enableButton->setToggleState(state.isEnabled, notification);
-    bandUIs[bandIndex].soloButton->setToggleState(state.isSoloed, notification);
-}
-
-// Copies the complete settings (state and parameters) from one band to another.
-void Multiband::copyBandSettings(int targetIndex, int sourceIndex)
-{
-    if (! juce::isPositiveAndBelow(targetIndex, 4)
-        || ! juce::isPositiveAndBelow(sourceIndex, 4))
-    {
-        jassertfalse;
-        return;
-    }
-
-    // 1. Copy the button states.
-    setBandState(targetIndex, getBandState(sourceIndex));
-
-    // 2. Copy all related audio parameters.
-    setParametersToAFromB(targetIndex, sourceIndex);
-}
-
-// Resets a specific band to its default settings.
-void Multiband::resetBandToDefault(int bandIndex)
-{
-    if (! juce::isPositiveAndBelow(bandIndex, 4))
-    {
-        jassertfalse;
-        return;
-    }
-
-    // 1. Set button states to default (enabled, not soloed).
-    setBandState(bandIndex, { true, false });
-
-    // 2. Reset all related audio parameters to their default values.
-    initParameters(bandIndex);
 }
 
 void Multiband::mouseMove(const juce::MouseEvent& event)

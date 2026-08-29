@@ -1865,6 +1865,137 @@ TEST_CASE("Band removal survives synchronous editor teardown at every publicatio
     }
 }
 
+TEST_CASE("Band addition survives synchronous editor closure at every publication phase",
+          "[multiband][ui][add][lifetime][topology][transaction]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    struct ClosureScenario
+    {
+        const char* description = nullptr;
+        juce::String parameterID;
+        bool nonParameterState = false;
+    };
+
+    const std::array<ClosureScenario, 7> scenarios {{
+        { "inserted crossover", ParameterIDAndName::getIDString(FREQ_ID, 0), false },
+        { "shifted crossover", ParameterIDAndName::getIDString(FREQ_ID, 1), false },
+        { "enabled divider", ParameterIDAndName::getIDString(LINE_STATE_ID, 1), false },
+        { "copied band parameter", ParameterIDAndName::getIDString(DRIVE_ID, 2), false },
+        { "reset new band parameter", ParameterIDAndName::getIDString(DRIVE_ID, 0), false },
+        { "final band count", NUM_BANDS_ID, false },
+        { "post-commit non-parameter state", {}, true },
+    }};
+
+    for (const auto& scenario : scenarios)
+    DYNAMIC_SECTION(scenario.description)
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        initialiseBandLayout(processor, 2, { 1000.0f, 3000.0f, 7000.0f });
+
+        const auto firstDrive = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        const auto secondDrive = ParameterIDAndName::getIDString(DRIVE_ID, 1);
+        const auto thirdDrive = ParameterIDAndName::getIDString(DRIVE_ID, 2);
+        setPlainParameter(processor, firstDrive, 11.0f);
+        setPlainParameter(processor, secondDrive, 22.0f);
+        setPlainParameter(processor, thirdDrive, 73.0f);
+        processor.assignLfoToTarget(0, firstDrive);
+        processor.assignLfoToTarget(1, secondDrive);
+        processor.assignLfoToTarget(2, thirdDrive);
+
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->setBounds(0, 0, 1000, 500);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        auto* multiband = findDescendant<Multiband>(*editor);
+        REQUIRE(multiband != nullptr);
+
+        int parameterIndex = -1;
+        if (! scenario.nonParameterState)
+        {
+            auto* observedParameter = processor.treeState.getParameter(
+                scenario.parameterID);
+            REQUIRE(observedParameter != nullptr);
+            parameterIndex = observedParameter->getParameterIndex();
+        }
+
+        const auto generationBefore =
+            processor.getMultibandTopologyGenerationForTesting();
+        REQUIRE((generationBefore & 1u) == 0u);
+        EditorResetOnProcessorCallback closureListener(
+            processor, editor, parameterIndex, scenario.nonParameterState);
+
+        constexpr float insertionX = 0.20f;
+        const auto insertionPoint = juce::Point<float> {
+            static_cast<float>(multiband->getWidth()) * insertionX,
+            static_cast<float>(multiband->getHeight()) * 0.10f
+        };
+        static_cast<juce::Component&>(*multiband).mouseDown(
+            makeMouseEvent(*multiband,
+                           insertionPoint,
+                           juce::ModifierKeys::leftButtonModifier));
+
+        CHECK(closureListener.didResetEditor);
+        CHECK(editor == nullptr);
+        const auto generationAfter =
+            processor.getMultibandTopologyGenerationForTesting();
+        CHECK((generationAfter & 1u) == 0u);
+        CHECK(generationAfter == generationBefore + 2u);
+        CHECK(processor.tryAcquireMultibandTopologyWriterLockForTesting());
+
+        const auto* bandCount = processor.treeState.getRawParameterValue(
+            NUM_BANDS_ID);
+        const auto* firstFrequency = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(FREQ_ID, 0));
+        const auto* secondFrequency = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(FREQ_ID, 1));
+        const auto* firstLineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, 0));
+        const auto* secondLineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, 1));
+        const auto* thirdLineState = processor.treeState.getRawParameterValue(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, 2));
+        REQUIRE(bandCount != nullptr);
+        REQUIRE(firstFrequency != nullptr);
+        REQUIRE(secondFrequency != nullptr);
+        REQUIRE(firstLineState != nullptr);
+        REQUIRE(secondLineState != nullptr);
+        REQUIRE(thirdLineState != nullptr);
+        CHECK(bandCount->load() == Catch::Approx(3.0f));
+        CHECK(firstFrequency->load()
+              == Catch::Approx(static_cast<float>(
+                  static_cast<int>(transformFromLog(insertionX)))).margin(1.0f));
+        CHECK(secondFrequency->load() == Catch::Approx(1000.0f));
+        CHECK(firstLineState->load() == Catch::Approx(1.0f));
+        CHECK(secondLineState->load() == Catch::Approx(1.0f));
+        CHECK(thirdLineState->load() == Catch::Approx(0.0f));
+
+        const auto* resetFirstDrive = processor.treeState.getRawParameterValue(
+            firstDrive);
+        const auto* movedFirstDrive = processor.treeState.getRawParameterValue(
+            secondDrive);
+        const auto* movedSecondDrive = processor.treeState.getRawParameterValue(
+            thirdDrive);
+        REQUIRE(resetFirstDrive != nullptr);
+        REQUIRE(movedFirstDrive != nullptr);
+        REQUIRE(movedSecondDrive != nullptr);
+        CHECK(resetFirstDrive->load() == Catch::Approx(0.0f));
+        CHECK(movedFirstDrive->load() == Catch::Approx(11.0f));
+        CHECK(movedSecondDrive->load() == Catch::Approx(22.0f));
+
+        const auto routings = processor.getLfoManager()
+                                  .getModulationRoutingsCopy();
+        const auto* movedFirstRouting = findRouting(routings, secondDrive);
+        const auto* movedSecondRouting = findRouting(routings, thirdDrive);
+        REQUIRE(movedFirstRouting != nullptr);
+        REQUIRE(movedSecondRouting != nullptr);
+        CHECK(movedFirstRouting->sourceLfoIndex == 0);
+        CHECK(movedSecondRouting->sourceLfoIndex == 1);
+        CHECK(findRouting(routings, firstDrive) == nullptr);
+    }
+}
+
 TEST_CASE("Deleting the focused last band rebinds Drive to the remaining audible band",
           "[multiband][ui][delete][focus]")
 {
@@ -2532,6 +2663,7 @@ TEST_CASE("Adding a divider preserves the focused band's identity on either side
         const auto secondDriveBypassID = ParameterIDAndName::getIDString(DRIVE_BYPASS_ID, 1);
         setPlainParameter(processor, firstDriveID, 61.0f);
         setPlainParameter(processor, firstDriveBypassID, 0.0f);
+        processor.assignLfoToTarget(2, firstDriveID);
 
         auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
         editor->setBounds(0, 0, 1000, 500);
@@ -2577,6 +2709,12 @@ TEST_CASE("Adding a divider preserves the focused band's identity on either side
             CHECK(firstDriveBypass->load() == Catch::Approx(1.0f));
             CHECK(secondDrive->load() == Catch::Approx(61.0f));
             CHECK(secondDriveBypass->load() == Catch::Approx(0.0f));
+            const auto routings = processor.getLfoManager()
+                                      .getModulationRoutingsCopy();
+            const auto* movedRouting = findRouting(routings, secondDriveID);
+            REQUIRE(movedRouting != nullptr);
+            CHECK(movedRouting->sourceLfoIndex == 2);
+            CHECK(findRouting(routings, firstDriveID) == nullptr);
         }
         else
         {
@@ -2589,6 +2727,12 @@ TEST_CASE("Adding a divider preserves the focused band's identity on either side
             CHECK(firstDriveBypass->load() == Catch::Approx(0.0f));
             CHECK(secondDrive->load() == Catch::Approx(0.0f));
             CHECK(secondDriveBypass->load() == Catch::Approx(1.0f));
+            const auto routings = processor.getLfoManager()
+                                      .getModulationRoutingsCopy();
+            const auto* preservedRouting = findRouting(routings, firstDriveID);
+            REQUIRE(preservedRouting != nullptr);
+            CHECK(preservedRouting->sourceLfoIndex == 2);
+            CHECK(findRouting(routings, secondDriveID) == nullptr);
         }
     };
 

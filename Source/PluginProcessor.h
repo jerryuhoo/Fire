@@ -535,6 +535,13 @@ public:
     void clearLfoModulationForBand(int bandIndex,
                                    bool notifyHost = true);
 
+    // Complete a band-insertion migration without depending on editor
+    // lifetime. The returned topology is already fully published.
+    bool addMultibandBand(int splitBandIndex,
+                          int currentBandCount,
+                          bool newBandIsOnLeft,
+                          float crossoverFrequency);
+
     // Complete a band-removal migration without depending on editor lifetime.
     // Parameter notifications are synchronous and a host is allowed to close
     // the editor from any of them, so the processor must own the transaction.
@@ -754,6 +761,10 @@ private:
     void performReset();
     void resetMultibandProcessingState(
         const HqCallbackContext* callbackContext = nullptr) noexcept;
+    bool addMultibandBandLocked(int splitBandIndex,
+                                int currentBandCount,
+                                bool newBandIsOnLeft,
+                                float crossoverFrequency);
     bool deleteMultibandBandLocked(int deletedBandIndex,
                                    int currentBandCount);
     std::array<float, 3> getEffectiveCrossoverFrequencies(

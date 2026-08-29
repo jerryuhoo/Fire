@@ -3193,6 +3193,212 @@ FireAudioProcessor::captureCurrentSerializablePresetStateSnapshotForABFallback()
     };
 }
 
+bool FireAudioProcessor::addMultibandBand(int splitBandIndex,
+                                          int currentBandCount,
+                                          bool newBandIsOnLeft,
+                                          float crossoverFrequency)
+{
+    if (currentBandCount < 1 || currentBandCount >= 4
+        || ! juce::isPositiveAndBelow(splitBandIndex, currentBandCount)
+        || ! std::isfinite(crossoverFrequency))
+    {
+        jassertfalse;
+        return false;
+    }
+
+    bool didAdd = false;
+    {
+        // Validate and capture the source tuple under the same writer lock as
+        // the mutation. A preset or host-state writer must not replace it
+        // between those two phases.
+        const juce::ScopedLock writerLock(multibandTopologyWriterLock);
+        didAdd = addMultibandBandLocked(splitBandIndex,
+                                        currentBandCount,
+                                        newBandIsOnLeft,
+                                        crossoverFrequency);
+    }
+
+    if (! didAdd)
+        return false;
+
+    // The APVTS/LFO tuple and even generation are complete before this
+    // externally-calling notification. It may synchronously close the editor.
+    lfoDataHasChanged();
+    return true;
+}
+
+bool FireAudioProcessor::addMultibandBandLocked(int splitBandIndex,
+                                                int currentBandCount,
+                                                bool newBandIsOnLeft,
+                                                float crossoverFrequency)
+{
+    struct ParameterWrite
+    {
+        juce::RangedAudioParameter* parameter = nullptr;
+        float normalisedValue = 0.0f;
+    };
+
+    const int oldLastBandIndex = currentBandCount - 1;
+    const int newBandCount = currentBandCount + 1;
+    const int oldLineCount = currentBandCount - 1;
+    const int newLineCount = currentBandCount;
+    const int newBandIndex = newBandIsOnLeft ? splitBandIndex
+                                             : splitBandIndex + 1;
+
+    std::vector<ParameterWrite> copiedBandParameters;
+    std::vector<ParameterWrite> resetBandParameters;
+    const auto& bandParameters = ParameterIDAndName::getBandParameterInfo();
+    const int firstBandToShift = newBandIsOnLeft ? splitBandIndex
+                                                 : splitBandIndex + 1;
+    copiedBandParameters.reserve(
+        static_cast<size_t>(juce::jmax(0,
+                                      oldLastBandIndex - firstBandToShift + 1))
+        * bandParameters.size());
+    resetBandParameters.reserve(bandParameters.size());
+
+    // Capture every source before publishing the first parameter. This gives
+    // the right shift memmove semantics even when synchronous callbacks
+    // inspect or replace other state.
+    for (int sourceBand = oldLastBandIndex;
+         sourceBand >= firstBandToShift;
+         --sourceBand)
+    {
+        for (const auto& parameterInfo : bandParameters)
+        {
+            auto* source = treeState.getParameter(
+                ParameterIDAndName::getIDString(parameterInfo.idBase,
+                                                sourceBand));
+            auto* target = treeState.getParameter(
+                ParameterIDAndName::getIDString(parameterInfo.idBase,
+                                                sourceBand + 1));
+            if (source == nullptr || target == nullptr)
+            {
+                jassertfalse;
+                return false;
+            }
+
+            copiedBandParameters.push_back({ target, source->getValue() });
+        }
+    }
+
+    for (const auto& parameterInfo : bandParameters)
+    {
+        auto* parameter = treeState.getParameter(
+            ParameterIDAndName::getIDString(parameterInfo.idBase,
+                                            newBandIndex));
+        if (parameter == nullptr)
+        {
+            jassertfalse;
+            return false;
+        }
+
+        resetBandParameters.push_back(
+            { parameter, parameter->getDefaultValue() });
+    }
+
+    std::array<juce::RangedAudioParameter*, 3> frequencyParameters {};
+    std::array<juce::RangedAudioParameter*, 3> lineStateParameters {};
+    std::array<float, 3> originalFrequencies {};
+    for (int divider = 0; divider < 3; ++divider)
+    {
+        auto* frequency = treeState.getParameter(
+            ParameterIDAndName::getIDString(FREQ_ID, divider));
+        auto* lineState = treeState.getParameter(
+            ParameterIDAndName::getIDString(LINE_STATE_ID, divider));
+        if (frequency == nullptr || lineState == nullptr)
+        {
+            jassertfalse;
+            return false;
+        }
+
+        frequencyParameters[static_cast<size_t>(divider)] = frequency;
+        lineStateParameters[static_cast<size_t>(divider)] = lineState;
+        originalFrequencies[static_cast<size_t>(divider)] =
+            frequency->getNormalisableRange().convertFrom0to1(
+                frequency->getValue());
+    }
+
+    const auto& crossoverRange =
+        frequencyParameters[static_cast<size_t>(splitBandIndex)]
+            ->getNormalisableRange();
+    const float constrainedFrequency = crossoverRange.snapToLegalValue(
+        juce::jlimit(crossoverRange.start,
+                     crossoverRange.end,
+                     crossoverFrequency));
+    if (! std::isfinite(constrainedFrequency)
+        || (splitBandIndex > 0
+            && constrainedFrequency
+                   <= originalFrequencies[static_cast<size_t>(splitBandIndex - 1)])
+        || (splitBandIndex < oldLineCount
+            && constrainedFrequency
+                   >= originalFrequencies[static_cast<size_t>(splitBandIndex)]))
+        return false;
+
+    std::array<float, 3> finalFrequencies = originalFrequencies;
+    for (int divider = 0; divider < newLineCount; ++divider)
+    {
+        if (divider < splitBandIndex)
+            continue;
+
+        finalFrequencies[static_cast<size_t>(divider)] =
+            divider == splitBandIndex
+                ? constrainedFrequency
+                : originalFrequencies[static_cast<size_t>(divider - 1)];
+    }
+
+    auto* bandCountParameter = treeState.getParameter(NUM_BANDS_ID);
+    if (bandCountParameter == nullptr)
+    {
+        jassertfalse;
+        return false;
+    }
+
+    const int publishedBandCount = juce::roundToInt(
+        bandCountParameter->getNormalisableRange().convertFrom0to1(
+            bandCountParameter->getValue()));
+    if (publishedBandCount != currentBandCount)
+        return false;
+
+    {
+        beginMultibandTopologyEdit();
+        const juce::ScopeGuard finishTopologyEdit { [processor = this]
+        {
+            processor->requestMultibandTopologyReset();
+        } };
+
+        for (int divider = 0; divider < 3; ++divider)
+            lineStateParameters[static_cast<size_t>(divider)]
+                ->setValueNotifyingHost(divider < newLineCount ? 1.0f : 0.0f);
+
+        for (int divider = 0; divider < newLineCount; ++divider)
+        {
+            auto* parameter = frequencyParameters[static_cast<size_t>(divider)];
+            parameter->setValueNotifyingHost(
+                parameter->getNormalisableRange().convertTo0to1(
+                    finalFrequencies[static_cast<size_t>(divider)]));
+        }
+
+        for (const auto& write : copiedBandParameters)
+            write.parameter->setValueNotifyingHost(write.normalisedValue);
+
+        if (firstBandToShift <= oldLastBandIndex)
+            shiftLfoModulationTargets(firstBandToShift,
+                                      oldLastBandIndex,
+                                      1,
+                                      false);
+
+        for (const auto& write : resetBandParameters)
+            write.parameter->setValueNotifyingHost(write.normalisedValue);
+
+        clearLfoModulationForBand(newBandIndex, false);
+        bandCountParameter->setValueNotifyingHost(
+            bandCountParameter->getNormalisableRange().convertTo0to1(
+                static_cast<float>(newBandCount)));
+    }
+
+    return true;
+}
+
 bool FireAudioProcessor::deleteMultibandBand(int deletedBandIndex,
                                              int currentBandCount)
 {

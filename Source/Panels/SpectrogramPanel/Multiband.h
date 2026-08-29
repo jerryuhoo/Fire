@@ -95,13 +95,6 @@ private:
     int hoveredBandIndex = -1;
     FocusChangedCallback focusChangedCallback;
 
-    // Use a 2D vector to store parameter arrays for each band
-    std::vector<std::vector<juce::String>> paramsArrays;
-
-    void setParametersToAFromB(int toIndex, int fromIndex);
-    void initParameters(int bandindex);
-    void setStatesWhenAdd(int changedIndex, bool newBandIsOnLeft);
-
     void setLineIndex();
     int sortLinesInternal(bool notifyFocusChange);
     void applyAuthoritativeBandCount(int requestedBandCount,
@@ -147,16 +140,6 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> multiEnableAttachments;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> multiSoloAttachments;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> freqDividerGroupAttachments;
-
-    struct BandState
-    {
-        bool isEnabled;
-        bool isSoloed;
-    };
-    BandState getBandState(int bandIndex);
-    void setBandState(int bandIndex, BandState state, juce::NotificationType notification = juce::NotificationType::sendNotification);
-    void copyBandSettings(int targetIndex, int sourceIndex);
-    void resetBandToDefault(int bandIndex);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Multiband)
 };

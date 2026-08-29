@@ -45,6 +45,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void animationTick(float deltaSeconds);
+    void setScale(float newScale);
     void setFocusBandNum(int num, bool forceUpdate = false);
     void dismissTransientInteraction() noexcept;
 

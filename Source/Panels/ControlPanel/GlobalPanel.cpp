@@ -12,6 +12,7 @@
 #include "../../GUI/FireTheme.h"
 #include "../../Utility/AudioHelpers.h"
 #include <algorithm>
+#include <array>
 
 namespace
 {
@@ -668,6 +669,22 @@ void GlobalPanel::animationTick(float deltaSeconds)
 
     if (changed)
         repaint(tabAreaRect.expanded(juce::jmax(2, juce::roundToInt(3.0f * scale))));
+}
+
+void GlobalPanel::setScale(float newScale)
+{
+    newScale = juce::jmax(0.25f, newScale);
+    if (juce::approximatelyEqual(scale, newScale))
+        return;
+
+    scale = newScale;
+    const std::array<GraphTemplate*, 3> graphs {
+        &oscilloscope, &vuPanel, &widthGraph
+    };
+    for (auto* graph : graphs)
+        graph->setScale(newScale);
+
+    resized();
 }
 
 juce::TextButton* GlobalPanel::getSelectedSwitch() noexcept

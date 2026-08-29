@@ -538,9 +538,9 @@ void FireAudioProcessorEditor::resized()
 
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
     fireLookAndFeel.scale = scale;
-    bandPanel.scale = scale;
+    bandPanel.setScale(scale);
     lfoPanel.setScale(scale);
-    globalPanel.scale = scale;
+    globalPanel.setScale(scale);
 
     const auto gap = juce::jmax(4, juce::roundToInt(8.0f * scale));
     auto bounds = getLocalBounds();

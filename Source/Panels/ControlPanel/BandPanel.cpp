@@ -655,6 +655,22 @@ void BandPanel::animationTick(float deltaSeconds)
                 .getSmallestIntegerContainer());
 }
 
+void BandPanel::setScale(float newScale)
+{
+    newScale = juce::jmax(0.25f, newScale);
+    if (juce::approximatelyEqual(scale, newScale))
+        return;
+
+    scale = newScale;
+    const std::array<GraphTemplate*, 4> graphs {
+        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
+    };
+    for (auto* graph : graphs)
+        graph->setScale(newScale);
+
+    resized();
+}
+
 void BandPanel::dismissButtonInteractions() noexcept
 {
     linkedButton.dismissPointerGesture();

@@ -40,6 +40,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void animationTick(float deltaSeconds);
+    void setScale(float newScale);
     void dismissTransientInteraction() noexcept;
 
     ModulatableSlider& getLowcutFreqKnob();

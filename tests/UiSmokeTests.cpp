@@ -2,6 +2,7 @@
 #include <PluginProcessor.h>
 #include <GUI/FireTheme.h>
 #include <GUI/SettingsComponent.h>
+#include <Panels/ControlPanel/Graph Components/GraphTemplate.h>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <array>
@@ -158,6 +159,17 @@ ComponentType* findComponentOfType(juce::Component& root)
                 return match;
 
     return nullptr;
+}
+
+void collectGraphTemplates(juce::Component& root,
+                           std::vector<GraphTemplate*>& graphs)
+{
+    if (auto* graph = dynamic_cast<GraphTemplate*>(&root))
+        graphs.push_back(graph);
+
+    for (auto* child : root.getChildren())
+        if (child != nullptr)
+            collectGraphTemplates(*child, graphs);
 }
 
 juce::DialogWindow* createModulationMatrixDialog(
@@ -414,6 +426,44 @@ TEST_CASE("Fire editor renders at supported scale extremes", "[ui][smoke]")
         CHECK(contentFingerprint(bandImage) != contentFingerprint(modulationImage));
         CHECK(contentFingerprint(bandImage) != contentFingerprint(masterImage));
         CHECK(contentFingerprint(modulationImage) != contentFingerprint(masterImage));
+    }
+}
+
+TEST_CASE("Editor scale reaches every embedded control-panel graph",
+          "[ui][graph][scale][layout][regression]")
+{
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+
+    struct ScaleCase
+    {
+        int width;
+        int height;
+        float expectedScale;
+    };
+    constexpr std::array scaleCases {
+        ScaleCase { 1000, 500, 1.0f },
+        ScaleCase { 1500, 750, 1.5f },
+        ScaleCase { 2000, 1000, 2.0f }
+    };
+
+    for (const auto& scaleCase : scaleCases)
+    {
+        DYNAMIC_SECTION(scaleCase.width << "x" << scaleCase.height)
+        {
+            editor->setBounds(0, 0, scaleCase.width, scaleCase.height);
+
+            std::vector<GraphTemplate*> graphs;
+            collectGraphTemplates(*editor, graphs);
+            REQUIRE(graphs.size() >= 7);
+            for (const auto* graph : graphs)
+            {
+                REQUIRE(graph != nullptr);
+                CHECK(graph->getScale()
+                      == Catch::Approx(scaleCase.expectedScale));
+            }
+        }
     }
 }
 

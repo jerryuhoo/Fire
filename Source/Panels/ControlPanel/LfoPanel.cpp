@@ -865,8 +865,7 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
         activeLfoData.curvatures[curveIndex] = juce::jlimit(-2.0f, 2.0f, initialCurvature + curvatureChange);
 
         repaint();
-        if (onDataChanged)
-            onDataChanged(activeLfoData);
+        publishActiveData();
         return; // Curvature drag is handled, so we exit here.
     }
 
@@ -973,10 +972,8 @@ void LfoEditor::mouseDrag(const juce::MouseEvent& event)
             }
             repaint();
 
-            if (onDataChanged)
-                onDataChanged(activeLfoData);
-
-            break;
+            publishActiveData();
+            return;
         }
 
         case DraggingState::None:
@@ -1100,9 +1097,7 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
             if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
             {
                 removePoint((int) i);
-                if (onDataChanged)
-                    onDataChanged(activeLfoData);
-                repaint();
+                publishActiveData();
                 return; // Point was found and removed, so we're done.
             }
         }
@@ -1113,9 +1108,8 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
     if (activeLfoData.points.size() < maxPoints)
     {
         addPoint(toNormalized(event.getPosition()));
-        if (onDataChanged)
-            onDataChanged(activeLfoData);
-        // addPoint already calls repaint().
+        publishActiveData();
+        return; // addPoint already calls repaint().
     }
 }
 
@@ -1497,8 +1491,8 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
 
         if (key.getTextCharacter() == 'v' || key.getTextCharacter() == 'V')
         {
-            if (pasteShape() && onDataChanged)
-                onDataChanged(activeLfoData);
+            if (pasteShape())
+                publishActiveData();
             return true;
         }
 
@@ -1512,8 +1506,7 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
     if (! selectedPointIndices.empty() && (key.isKeyCurrentlyDown(juce::KeyPress::deleteKey) || key.isKeyCurrentlyDown(juce::KeyPress::backspaceKey)))
     {
         deleteSelectedPoints();
-        if (onDataChanged)
-            onDataChanged(activeLfoData);
+        publishActiveData();
         return true;
     }
     return false;

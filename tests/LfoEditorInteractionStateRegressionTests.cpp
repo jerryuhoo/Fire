@@ -420,6 +420,95 @@ struct ScopedLfoClipboardReset
     ~ScopedLfoClipboardReset() { lfoClipboard.reset(); }
 };
 
+struct DeletingLfoCallbackState
+{
+    int liveCallbackInstances = 0;
+    int liveInstancesDuringCallback = -1;
+    const LfoData* editorDataAddress = nullptr;
+    bool publishedDataWasSnapshot = false;
+    size_t pointCountBeforeDeletion = 0;
+    size_t pointCountAfterDeletion = 0;
+    bool callbackCompleted = false;
+    std::function<void()> deleteOwner;
+};
+
+class DeletingLfoCallback
+{
+public:
+    explicit DeletingLfoCallback(
+        std::shared_ptr<DeletingLfoCallbackState> stateToUse)
+        : state(std::move(stateToUse))
+    {
+        ++state->liveCallbackInstances;
+    }
+
+    DeletingLfoCallback(const DeletingLfoCallback& other)
+        : state(other.state)
+    {
+        if (state != nullptr)
+            ++state->liveCallbackInstances;
+    }
+
+    DeletingLfoCallback(DeletingLfoCallback&& other) noexcept
+        : state(std::move(other.state))
+    {
+    }
+
+    DeletingLfoCallback& operator=(const DeletingLfoCallback&) = delete;
+    DeletingLfoCallback& operator=(DeletingLfoCallback&&) = delete;
+
+    ~DeletingLfoCallback()
+    {
+        if (state != nullptr)
+            --state->liveCallbackInstances;
+    }
+
+    void operator()(const LfoData& publishedData) const
+    {
+        auto stateToKeepAlive = state;
+        stateToKeepAlive->publishedDataWasSnapshot =
+            &publishedData != stateToKeepAlive->editorDataAddress;
+        stateToKeepAlive->pointCountBeforeDeletion =
+            publishedData.points.size();
+        auto deleteOwner = stateToKeepAlive->deleteOwner;
+        deleteOwner();
+
+        stateToKeepAlive->liveInstancesDuringCallback =
+            stateToKeepAlive->liveCallbackInstances;
+        if (stateToKeepAlive->publishedDataWasSnapshot)
+            stateToKeepAlive->pointCountAfterDeletion =
+                publishedData.points.size();
+        stateToKeepAlive->callbackCompleted = true;
+    }
+
+private:
+    std::shared_ptr<DeletingLfoCallbackState> state;
+};
+
+std::shared_ptr<DeletingLfoCallbackState> installDeletingCallback(
+    std::unique_ptr<LfoEditor>& editor)
+{
+    auto state = std::make_shared<DeletingLfoCallbackState>();
+    state->editorDataAddress = &LfoEditorTestAccess::data(*editor);
+    state->deleteOwner = [&editor] { editor.reset(); };
+    editor->onDataChanged = DeletingLfoCallback { state };
+    REQUIRE(state->liveCallbackInstances == 1);
+    return state;
+}
+
+void checkSafeCallbackDeletion(
+    const std::unique_ptr<LfoEditor>& editor,
+    const std::shared_ptr<DeletingLfoCallbackState>& state)
+{
+    CHECK(editor == nullptr);
+    CHECK(state->callbackCompleted);
+    CHECK(state->liveInstancesDuringCallback >= 1);
+    CHECK(state->publishedDataWasSnapshot);
+    CHECK(state->pointCountAfterDeletion
+          == state->pointCountBeforeDeletion);
+    CHECK(state->liveCallbackInstances == 0);
+}
+
 juce::KeyPress commandKey(juce::juce_wchar character)
 {
     return { static_cast<int>(character),
@@ -1175,6 +1264,115 @@ TEST_CASE("LFO brush publication tolerates panel deletion",
         *editor, { 150.0f, 25.0f }, leftButton));
 
     CHECK(panel == nullptr);
+}
+
+TEST_CASE("LFO edit publications retain callback and data through editor deletion",
+          "[lfo][editor][callback-safety][lifetime][regression]")
+{
+    const auto data = makeLfoData({
+        { 0.0f, 0.20f }, { 0.35f, 0.70f },
+        { 0.70f, 0.35f }, { 1.0f, 0.80f }
+    });
+
+    SECTION("curve drag")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(data);
+        auto state = installDeletingCallback(editor);
+        auto* rawEditor = editor.get();
+        const juce::Point<float> downPosition { 200.0f, 175.0f };
+
+        rawEditor->mouseDown(makeMouseEvent(
+            *rawEditor, downPosition, leftButton));
+        rawEditor->mouseDrag(makeMouseEvent(
+            *rawEditor,
+            { 200.0f, 135.0f },
+            leftButton,
+            downPosition,
+            true));
+
+        checkSafeCallbackDeletion(editor, state);
+    }
+
+    SECTION("point drag")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(data);
+        const auto downPosition =
+            LfoEditorTestAccess::pointScreenPosition(*editor, 1);
+        auto state = installDeletingCallback(editor);
+        auto* rawEditor = editor.get();
+
+        rawEditor->mouseDown(makeMouseEvent(
+            *rawEditor, downPosition, leftButton));
+        rawEditor->mouseDrag(makeMouseEvent(
+            *rawEditor,
+            downPosition + juce::Point<float> { 20.0f, -15.0f },
+            leftButton,
+            downPosition,
+            true));
+
+        checkSafeCallbackDeletion(editor, state);
+    }
+
+    SECTION("double-click removal")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(data);
+        auto* rawEditor = editor.get();
+        const auto position =
+            LfoEditorTestAccess::pointScreenPosition(*rawEditor, 1);
+        rawEditor->mouseDown(makeMouseEvent(
+            *rawEditor, position, leftButton, position, false, 2));
+        const auto completedRelease = makeMouseEvent(
+            *rawEditor, position, leftButton, position, false, 2);
+        rawEditor->mouseUp(completedRelease);
+
+        auto state = installDeletingCallback(editor);
+        rawEditor->mouseDoubleClick(completedRelease);
+
+        checkSafeCallbackDeletion(editor, state);
+    }
+
+    SECTION("double-click insertion")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(data);
+        auto* rawEditor = editor.get();
+        const juce::Point<float> position { 220.0f, 175.0f };
+        rawEditor->mouseDown(makeMouseEvent(
+            *rawEditor, position, leftButton, position, false, 2));
+        const auto completedRelease = makeMouseEvent(
+            *rawEditor, position, leftButton, position, false, 2);
+        rawEditor->mouseUp(completedRelease);
+
+        auto state = installDeletingCallback(editor);
+        rawEditor->mouseDoubleClick(completedRelease);
+
+        checkSafeCallbackDeletion(editor, state);
+    }
+
+    SECTION("keyboard paste")
+    {
+        ScopedLfoClipboardReset resetClipboard;
+        lfoClipboard = makeLfoData({
+            { 0.0f, 0.90f }, { 0.25f, 0.30f },
+            { 0.65f, 0.75f }, { 1.0f, 0.10f }
+        });
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(data);
+        auto state = installDeletingCallback(editor);
+        auto* rawEditor = editor.get();
+
+        CHECK(rawEditor->keyPressed(commandKey('v')));
+
+        checkSafeCallbackDeletion(editor, state);
+    }
 }
 
 TEST_CASE("LFO brush painting never publishes more points than the DSP accepts",

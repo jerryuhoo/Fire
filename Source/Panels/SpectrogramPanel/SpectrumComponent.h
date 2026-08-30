@@ -71,6 +71,7 @@ private:
     void resetRenderedData();
     bool consumePendingFrame(bool startFromSilence);
     void setMouseOverSpectrum(bool shouldBeOver);
+    void resetHoverPresentation();
     void rebuildPaths();
     void updateAnimationTimer();
 
@@ -114,6 +115,7 @@ private:
     float maxDecibelValue = -100.0f;
     float maxFreq = 0.0f;
     bool mouseOver = false;
+    fire::ui::DampedValue hoverOpacity;
     juce::Point<float> maxDecibelPoint;
     float specAlpha = 0.8f;
     bool isPeakLineVisible = false;

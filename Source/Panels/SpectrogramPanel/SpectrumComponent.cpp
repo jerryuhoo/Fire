@@ -36,6 +36,7 @@ SpectrumComponent::SpectrumComponent(int style, bool drawPeak)
     setOpaque(false);
     setInterceptsMouseClicks(false, false);
     presentationOpacity.snapTo(1.0f);
+    hoverOpacity.snapTo(0.0f);
 }
 
 SpectrumComponent::~SpectrumComponent()
@@ -90,11 +91,14 @@ void SpectrumComponent::timerCallback()
 {
     if (! isShowing())
     {
+        resetHoverPresentation();
         stopTimer();
         return;
     }
 
     bool visualStateChanged = presentationOpacity.advance(1.0f / 60.0f, 0.11f);
+    visualStateChanged = hoverOpacity.advance(1.0f / 60.0f, 0.10f)
+                      || visualStateChanged;
     const auto newestGeneration = pendingGeneration.load(std::memory_order_acquire);
 
     if (hostBypassed)
@@ -320,6 +324,7 @@ void SpectrumComponent::paint(juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
     const auto opacity = juce::jlimit(0.0f, 1.0f, presentationOpacity.current);
+    const auto hover = juce::jlimit(0.0f, 1.0f, hoverOpacity.current);
     if (bounds.isEmpty() || spectrumLinePath.isEmpty() || opacity <= 0.001f)
         return;
 
@@ -361,15 +366,17 @@ void SpectrumComponent::paint(juce::Graphics& g)
                                           juce::PathStrokeType::rounded));
     }
 
-    if (mDrawPeak && isPeakLineVisible && ! peakLinePath.isEmpty())
+    if (mDrawPeak && isPeakLineVisible && hover > 0.001f
+        && ! peakLinePath.isEmpty())
     {
-        g.setColour(fire::ui::colours::whiteHot.withAlpha(mouseOver ? 0.56f : 0.30f));
+        g.setColour(fire::ui::colours::whiteHot.withAlpha(0.56f * hover * opacity));
         g.strokePath(peakLinePath,
                      juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
                                           juce::PathStrokeType::rounded));
     }
 
-    if (mDrawPeak && mouseOver && maxDecibelValue > minDisplayDb + 0.1f)
+    if (mDrawPeak && hover > 0.001f
+        && maxDecibelValue > minDisplayDb + 0.1f)
     {
         constexpr float popupWidth = 112.0f;
         constexpr float popupHeight = 38.0f;
@@ -383,6 +390,14 @@ void SpectrumComponent::paint(juce::Graphics& g)
                                        bounds.getBottom() - popupHeight - 4.0f,
                                        popup.getY()));
 
+        // setOpacity() is a property of JUCE's current FillType and is lost
+        // when drawGlassPill() selects its gradients/colours. A clipped layer
+        // applies the hover fade to the complete pill without allocating a
+        // full-component intermediate surface.
+        const juce::Graphics::ScopedSaveState popupState(g);
+        g.reduceClipRegion(popup.getSmallestIntegerContainer().expanded(1));
+        g.beginTransparencyLayer(hover * opacity);
+
         fire::ui::drawGlassPill(g, popup, fire::ui::colours::ember, true, false, false);
         g.setFont(fire::ui::displayFont(11.0f));
         g.setColour(fire::ui::colours::whiteHot);
@@ -395,6 +410,8 @@ void SpectrumComponent::paint(juce::Graphics& g)
                                      ? juce::String(maxFreq / 1000.0f, 2) + " kHz"
                                      : juce::String(juce::roundToInt(maxFreq)) + " Hz";
         g.drawText(frequencyText, popup.reduced(8.0f, 0.0f), juce::Justification::centredLeft);
+
+        g.endTransparencyLayer();
     }
 }
 
@@ -528,10 +545,12 @@ void SpectrumComponent::mouseExit(const juce::MouseEvent& event)
 
 void SpectrumComponent::setMouseOverSpectrum(bool shouldBeOver)
 {
+    shouldBeOver = shouldBeOver && mDrawPeak && isShowing();
     if (! mDrawPeak || mouseOver == shouldBeOver)
         return;
 
     mouseOver = shouldBeOver;
+    hoverOpacity.setTarget(mouseOver ? 1.0f : 0.0f);
     if (mouseOver)
     {
         resetPeakData();
@@ -540,10 +559,16 @@ void SpectrumComponent::setMouseOverSpectrum(bool shouldBeOver)
         rebuildPaths();
         repaint();
     }
-    else if (isPeakLineVisible && ! isTimerRunning())
-    {
-        startTimerHz(60);
-    }
+    updateAnimationTimer();
+}
+
+void SpectrumComponent::resetHoverPresentation()
+{
+    mouseOver = false;
+    hoverOpacity.snapTo(0.0f);
+    resetPeakData();
+    isPeakLineVisible = false;
+    peakLinePath.clear();
 }
 
 void SpectrumComponent::resetPeakData()
@@ -562,13 +587,19 @@ void SpectrumComponent::parentHierarchyChanged()
     observedMouseSource = mDrawPeak ? getParentComponent() : nullptr;
     if (observedMouseSource != nullptr)
         observedMouseSource->addMouseListener(this, true);
+
+    if (getPeer() == nullptr)
+    {
+        resetHoverPresentation();
+        stopTimer();
+    }
 }
 
 void SpectrumComponent::visibilityChanged()
 {
     if (! isShowing())
     {
-        setMouseOverSpectrum(false);
+        resetHoverPresentation();
         stopTimer();
         return;
     }
@@ -582,9 +613,16 @@ void SpectrumComponent::updateAnimationTimer()
     const bool hasPendingFrame = pendingGeneration.load(std::memory_order_acquire) != consumedGeneration;
     const bool peakIsDecaying = mDrawPeak && isPeakLineVisible && ! mouseOver;
     const bool opacityIsAnimating = ! presentationOpacity.isSettled();
+    const bool hoverIsAnimating = ! hoverOpacity.isSettled();
+    // JUCE does not emit a hierarchy callback when a top-level peer is
+    // removed. Retain the inexpensive 60 Hz liveness check while a hover
+    // session is active, so peer detach clears it within one frame even when
+    // audio/FFT publication has stopped and the fade itself has settled.
+    const bool hoverSessionIsActive = mDrawPeak && mouseOver;
     const bool canPresentPendingFrame = hasPendingFrame && ! hostBypassed;
     if (isShowing() && (canPresentPendingFrame || interpolationActive
-                        || peakIsDecaying || opacityIsAnimating))
+                        || peakIsDecaying || opacityIsAnimating
+                        || hoverIsAnimating || hoverSessionIsActive))
     {
         if (! isTimerRunning())
             startTimerHz(60);

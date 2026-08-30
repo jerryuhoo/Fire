@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 
 struct SpectrumComponentTestAccess
 {
@@ -39,6 +40,45 @@ struct SpectrumComponentTestAccess
         return component.presentationOpacity.current;
     }
 
+    static float hoverOpacity(const SpectrumComponent& component)
+    {
+        return component.hoverOpacity.current;
+    }
+
+    static float hoverTarget(const SpectrumComponent& component)
+    {
+        return component.hoverOpacity.target;
+    }
+
+    static bool isMouseOver(const SpectrumComponent& component)
+    {
+        return component.mouseOver;
+    }
+
+    static bool isTimerRunning(const SpectrumComponent& component)
+    {
+        return component.isTimerRunning();
+    }
+
+    static juce::Rectangle<int> peakPillBounds(
+        const SpectrumComponent& component)
+    {
+        constexpr float popupWidth = 112.0f;
+        constexpr float popupHeight = 38.0f;
+        const auto bounds = component.getLocalBounds().toFloat();
+        auto popup = juce::Rectangle<float>(popupWidth, popupHeight)
+                         .withCentre({ component.maxDecibelPoint.x,
+                                       component.maxDecibelPoint.y
+                                           - popupHeight * 0.72f });
+        popup.setPosition(juce::jlimit(bounds.getX() + 4.0f,
+                                       bounds.getRight() - popupWidth - 4.0f,
+                                       popup.getX()),
+                          juce::jlimit(bounds.getY() + 4.0f,
+                                       bounds.getBottom() - popupHeight - 4.0f,
+                                       popup.getY()));
+        return popup.getSmallestIntegerContainer();
+    }
+
     static bool isAwaitingFreshFrame(const SpectrumComponent& component)
     {
         return component.awaitingFreshFrame;
@@ -54,6 +94,158 @@ struct SpectrumComponentTestAccess
         return ! component.spectrumLinePath.isEmpty();
     }
 };
+
+namespace
+{
+std::uint64_t renderedAlphaSum(SpectrumComponent& component,
+                               juce::Rectangle<int> area)
+{
+    juce::Image image(juce::Image::ARGB,
+                      juce::jmax(1, component.getWidth()),
+                      juce::jmax(1, component.getHeight()),
+                      true);
+    juce::Graphics graphics(image);
+    component.paintEntireComponent(graphics, true);
+
+    area = area.getIntersection(image.getBounds());
+    std::uint64_t total = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+            total += image.getPixelAt(x, y).getAlpha();
+
+    return total;
+}
+} // namespace
+
+TEST_CASE("Spectrum peak line and readout pill fade on the 60 Hz presentation clock",
+          "[spectrum][ui][peak][hover][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum { 1, true };
+    spectrum.setBounds(0, 0, 800, 300);
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        spectrum.removeFromDesktop();
+    } };
+    REQUIRE(spectrum.isShowing());
+
+    constexpr int numBins = 64;
+    std::array<float, numBins> frame {};
+    frame[12] = 100.0f;
+    spectrum.updateSpectrum(frame.data(), numBins, 10.0f);
+    for (int tick = 0; tick < 120; ++tick)
+        SpectrumComponentTestAccess::tick(spectrum);
+
+    SpectrumComponentTestAccess::setMouseOver(spectrum, true);
+    CHECK(SpectrumComponentTestAccess::isMouseOver(spectrum));
+    CHECK(SpectrumComponentTestAccess::hoverTarget(spectrum)
+          == Catch::Approx(1.0f));
+    CHECK(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+          == Catch::Approx(0.0f));
+    const auto pillBounds =
+        SpectrumComponentTestAccess::peakPillBounds(spectrum);
+    const auto idleAlpha = renderedAlphaSum(spectrum, pillBounds);
+
+    SpectrumComponentTestAccess::tick(spectrum);
+    const auto firstFadeIn = SpectrumComponentTestAccess::hoverOpacity(spectrum);
+    const auto enteringAlpha = renderedAlphaSum(spectrum, pillBounds);
+    CHECK(firstFadeIn > 0.0f);
+    CHECK(firstFadeIn < 1.0f);
+    REQUIRE(enteringAlpha > idleAlpha);
+
+    for (int tick = 0; tick < 120; ++tick)
+        SpectrumComponentTestAccess::tick(spectrum);
+
+    REQUIRE(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+            == Catch::Approx(1.0f));
+    const auto establishedAlpha = renderedAlphaSum(spectrum, pillBounds);
+    REQUIRE(establishedAlpha > enteringAlpha);
+    CHECK(enteringAlpha - idleAlpha
+          < (establishedAlpha - idleAlpha) / 2u);
+
+    SpectrumComponentTestAccess::setMouseOver(spectrum, false);
+    CHECK_FALSE(SpectrumComponentTestAccess::isMouseOver(spectrum));
+    CHECK(SpectrumComponentTestAccess::hoverTarget(spectrum)
+          == Catch::Approx(0.0f));
+    CHECK(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+          == Catch::Approx(1.0f));
+    CHECK(renderedAlphaSum(spectrum, pillBounds) == establishedAlpha);
+
+    SpectrumComponentTestAccess::tick(spectrum);
+    const auto firstFadeOut = SpectrumComponentTestAccess::hoverOpacity(spectrum);
+    const auto leavingAlpha = renderedAlphaSum(spectrum, pillBounds);
+    CHECK(firstFadeOut > 0.0f);
+    CHECK(firstFadeOut < 1.0f);
+    CHECK(leavingAlpha > idleAlpha);
+    CHECK(leavingAlpha < establishedAlpha);
+
+    for (int tick = 0; tick < 120; ++tick)
+        SpectrumComponentTestAccess::tick(spectrum);
+
+    CHECK(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+          == Catch::Approx(0.0f));
+    CHECK(renderedAlphaSum(spectrum, pillBounds) == idleAlpha);
+}
+
+TEST_CASE("Spectrum hover presentation resets when hidden or detached from its peer",
+          "[spectrum][ui][peak][hover][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    SpectrumComponent spectrum { 1, true };
+    spectrum.setBounds(0, 0, 800, 300);
+    spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    spectrum.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        spectrum.removeFromDesktop();
+    } };
+    REQUIRE(spectrum.isShowing());
+
+    const auto beginHover = [&]
+    {
+        SpectrumComponentTestAccess::setMouseOver(spectrum, true);
+        SpectrumComponentTestAccess::tick(spectrum);
+        REQUIRE(SpectrumComponentTestAccess::isMouseOver(spectrum));
+        REQUIRE(SpectrumComponentTestAccess::hoverOpacity(spectrum) > 0.0f);
+        REQUIRE(SpectrumComponentTestAccess::isPeakVisible(spectrum));
+    };
+
+    beginHover();
+    spectrum.setVisible(false);
+
+    CHECK_FALSE(SpectrumComponentTestAccess::isMouseOver(spectrum));
+    CHECK(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+          == Catch::Approx(0.0f));
+    CHECK(SpectrumComponentTestAccess::hoverTarget(spectrum)
+          == Catch::Approx(0.0f));
+    CHECK_FALSE(SpectrumComponentTestAccess::isPeakVisible(spectrum));
+    CHECK_FALSE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+
+    spectrum.setVisible(true);
+    REQUIRE(spectrum.isShowing());
+    beginHover();
+
+    // A settled hover retains the cheap liveness tick because JUCE does not
+    // send a hierarchy callback when the top-level peer itself is removed.
+    for (int tick = 0; tick < 120; ++tick)
+        SpectrumComponentTestAccess::tick(spectrum);
+    REQUIRE(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+            == Catch::Approx(1.0f));
+    REQUIRE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+
+    spectrum.removeFromDesktop();
+    SpectrumComponentTestAccess::tick(spectrum);
+
+    CHECK_FALSE(SpectrumComponentTestAccess::isMouseOver(spectrum));
+    CHECK(SpectrumComponentTestAccess::hoverOpacity(spectrum)
+          == Catch::Approx(0.0f));
+    CHECK(SpectrumComponentTestAccess::hoverTarget(spectrum)
+          == Catch::Approx(0.0f));
+    CHECK_FALSE(SpectrumComponentTestAccess::isPeakVisible(spectrum));
+    CHECK_FALSE(SpectrumComponentTestAccess::isTimerRunning(spectrum));
+}
 
 TEST_CASE("Spectrum grid changes discard peaks from the previous frequency scale",
           "[spectrum][ui][peak][sample-rate][lifecycle][regression]")

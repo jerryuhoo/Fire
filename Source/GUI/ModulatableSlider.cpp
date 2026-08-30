@@ -218,6 +218,9 @@ void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
     if (! safeThis)
         return;
 
+    if (! recoverMissingPointerUp(event) || ! safeThis)
+        return;
+
     const bool isOverHandleNow = isModulated
         && getModulationHandleBounds().contains(event.getPosition().toFloat());
 
@@ -256,6 +259,9 @@ void ModulatableSlider::mouseExit(const juce::MouseEvent& event)
     auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
     juce::Slider::mouseExit(event);
     if (! safeThis)
+        return;
+
+    if (! recoverMissingPointerUp(event) || ! safeThis)
         return;
 
     const bool endedHandleHover = isModHandleMouseOver;
@@ -563,6 +569,30 @@ bool ModulatableSlider::isPointerSource(
 {
     return event.source.getType() == pointerSourceType
         && event.source.getIndex() == pointerSourceIndex;
+}
+
+bool ModulatableSlider::recoverMissingPointerUp(
+    const juce::MouseEvent& event)
+{
+    if (activePointerGesture == PointerGesture::none
+        || ! isPointerSource(event))
+        return true;
+
+    const bool ownsPrimaryButton =
+        activePointerGesture == PointerGesture::assignment
+        || activePointerGesture == PointerGesture::mainSlider
+        || activePointerGesture == PointerGesture::modulationHandle;
+    const bool owningButtonStillDown = ownsPrimaryButton
+                                           ? event.mods.isLeftButtonDown()
+                                           : event.mods.isAnyMouseButtonDown();
+    if (owningButtonStillDown)
+        return true;
+
+    // A host or window manager may omit mouseUp while pointer capture changes.
+    // Treat the first same-source hover event without the gesture's owning
+    // button as a cancelled release. An unrelated button must not leave a
+    // primary SliderAttachment gesture open, and this path never opens a menu.
+    return finishActivePointerGesture(event);
 }
 
 bool ModulatableSlider::shouldSuppressAssignmentDoubleClick(

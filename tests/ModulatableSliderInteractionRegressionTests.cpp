@@ -799,6 +799,74 @@ TEST_CASE("A fresh owned down closes the stale slider gesture before changing ki
     CHECK(interactionEnds == 2);
 }
 
+TEST_CASE("Modulatable sliders recover omitted releases from hover events",
+          "[modulatable-slider][ui][input][gesture][stale][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    enum class HoverEvent
+    {
+        move,
+        enter,
+        exit
+    };
+
+    for (const auto hoverEvent : { HoverEvent::move,
+                                   HoverEvent::enter,
+                                   HoverEvent::exit })
+        for (const bool modulationHandle : { false, true })
+            for (const auto releaseModifiers : {
+                     juce::ModifierKeys {},
+                     juce::ModifierKeys {
+                         juce::ModifierKeys::rightButtonModifier } })
+        {
+            DYNAMIC_SECTION((modulationHandle ? "modulation" : "main")
+                            << " via "
+                            << (hoverEvent == HoverEvent::move ? "move"
+                                : hoverEvent == HoverEvent::enter ? "enter"
+                                                                  : "exit")
+                            << (releaseModifiers.isRightButtonDown()
+                                    ? " while right remains down"
+                                    : " with no button down"))
+            {
+                ModulatableSlider slider;
+                slider.setBounds(0, 0, 120, 120);
+                slider.isModulated = true;
+                int mainEnds = 0;
+                int modulationEnds = 0;
+                int interactionEnds = 0;
+                slider.onMainDragEnd = [&](ModulatableSlider*) { ++mainEnds; };
+                slider.onModDragEnd = [&](ModulatableSlider*) { ++modulationEnds; };
+                slider.onInteractionEnded = [&] { ++interactionEnds; };
+
+                const auto position = modulationHandle
+                                          ? slider.getModulationHandleBounds().getCentre()
+                                          : slider.getLocalBounds().toFloat().getCentre();
+                slider.mouseDown(makeMouseEvent(slider, position, primaryButton));
+                REQUIRE(slider.hasActiveInteraction());
+
+                const auto releaseEvent =
+                    makeMouseEvent(slider, position, releaseModifiers);
+                if (hoverEvent == HoverEvent::move)
+                    slider.mouseMove(releaseEvent);
+                else if (hoverEvent == HoverEvent::enter)
+                    slider.mouseEnter(releaseEvent);
+                else
+                    slider.mouseExit(releaseEvent);
+
+                CHECK_FALSE(slider.hasActiveInteraction());
+                CHECK(mainEnds == (modulationHandle ? 0 : 1));
+                CHECK(modulationEnds == (modulationHandle ? 1 : 0));
+                CHECK(interactionEnds == 1);
+
+                slider.mouseUp(releaseEvent);
+                CHECK(mainEnds == (modulationHandle ? 0 : 1));
+                CHECK(modulationEnds == (modulationHandle ? 1 : 0));
+                CHECK(interactionEnds == 1);
+            }
+        }
+}
+
 TEST_CASE("Modulation menu callbacks tolerate synchronous slider deletion",
           "[modulatable-slider][ui][popup][callback-safety]")
 {

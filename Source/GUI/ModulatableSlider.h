@@ -156,6 +156,7 @@ private:
     static bool isStandalonePopupDown(
         const juce::MouseEvent& event) noexcept;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    bool recoverMissingPointerUp(const juce::MouseEvent& event);
     bool shouldSuppressAssignmentDoubleClick(
         const juce::MouseEvent& event) const noexcept;
     void clearAssignmentDoubleClickSuppression() noexcept;

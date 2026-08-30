@@ -1,6 +1,7 @@
 #include <Panels/ControlPanel/LfoPanel.h>
 #include <PluginProcessor.h>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -33,6 +34,18 @@ struct LfoEditorTestAccess
     static bool animationIsRunning(const LfoEditor& editor) noexcept
     {
         return editor.isTimerRunning();
+    }
+
+    static bool accessibilityHandlerWasCreated(
+        const LfoEditor& editor) noexcept
+    {
+        return editor.accessibilityHandlerHasBeenCreated;
+    }
+
+    static int accessibilityStructureNotificationCount(
+        const LfoEditor& editor) noexcept
+    {
+        return editor.accessibilityStructureNotificationCount;
     }
 
     static void tickAnimation(LfoEditor& editor)
@@ -198,6 +211,27 @@ struct LfoEditorTestAccess
     static size_t selectedPointCount(const LfoEditor& editor)
     {
         return editor.selectedPointIndices.size();
+    }
+
+    static std::vector<int> selectedPoints(const LfoEditor& editor)
+    {
+        return editor.selectedPointIndices;
+    }
+
+    static void selectPoint(LfoEditor& editor, int pointIndex)
+    {
+        REQUIRE(editor.isValidPointIndex(pointIndex));
+        editor.cancelAllInteraction();
+        editor.selectedPointIndices = { pointIndex };
+    }
+
+    static void selectPoints(LfoEditor& editor,
+                             std::initializer_list<int> pointIndices)
+    {
+        editor.cancelAllInteraction();
+        editor.selectedPointIndices.assign(pointIndices.begin(),
+                                           pointIndices.end());
+        REQUIRE(editor.hasValidSelectedPointIndices());
     }
 
     static juce::Point<float> pointScreenPosition(LfoEditor& editor, int index)
@@ -558,6 +592,13 @@ juce::KeyPress commandKeyWithoutText(juce::juce_wchar keyCode)
              0 };
 }
 
+juce::KeyPress shiftedKey(int keyCode)
+{
+    return { keyCode,
+             juce::ModifierKeys(juce::ModifierKeys::shiftModifier),
+             0 };
+}
+
 void checkSameLfoData(const LfoData& actual, const LfoData& expected)
 {
     REQUIRE(actual.points.size() == expected.points.size());
@@ -744,6 +785,287 @@ TEST_CASE("LFO deletion shortcuts use the delivered key event",
     {
         checkDeletionKey(juce::KeyPress::backspaceKey);
     }
+}
+
+TEST_CASE("LFO editor exposes its control-point keyboard state to accessibility",
+          "[lfo][editor][keyboard][accessibility][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    // Normal panel refreshes must not create native accessibility state when
+    // no client has ever requested this editor.
+    {
+        LfoEditor unrequestedEditor;
+        unrequestedEditor.setDataToDisplay(makeLfoData({
+            { 0.0f, 0.20f }, { 0.50f, 0.80f }, { 1.0f, 0.30f }
+        }));
+        unrequestedEditor.setEditMode(LfoEditMode::BrushPaint);
+        CHECK_FALSE(LfoEditorTestAccess::accessibilityHandlerWasCreated(
+            unrequestedEditor));
+    }
+
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+
+    auto* accessibility = editor.getAccessibilityHandler();
+    REQUIRE(accessibility != nullptr);
+    REQUIRE(LfoEditorTestAccess::accessibilityHandlerWasCreated(editor));
+    REQUIRE(LfoEditorTestAccess::accessibilityStructureNotificationCount(
+                editor) == 0);
+    CHECK(accessibility->getRole() == juce::AccessibilityRole::group);
+    CHECK(accessibility->getTitle() == "LFO shape editor");
+    CHECK_FALSE(accessibility->getHelp().isEmpty());
+    CHECK(accessibility->getDescription()
+              == "No LFO shape is loaded.");
+
+    const auto data = makeLfoData({
+        { 0.0f, 0.15f }, { 0.30f, 0.80f },
+        { 0.65f, 0.25f }, { 1.0f, 0.70f }
+    });
+    editor.setDataToDisplay(data);
+    REQUIRE(LfoEditorTestAccess::accessibilityStructureNotificationCount(
+                editor) == 1);
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+    const auto idleState = accessibility->getCurrentState();
+    CHECK(idleState.isFocusable());
+    CHECK(idleState.isMultiSelectable());
+    CHECK_FALSE(idleState.isSelected());
+    CHECK(accessibility->getDescription().contains(
+        "4 control points"));
+    CHECK(accessibility->getDescription().contains(
+        "No control point selected"));
+
+    REQUIRE(editor.keyPressed(
+        juce::KeyPress { juce::KeyPress::tabKey }));
+    CHECK(LfoEditorTestAccess::selectedPoints(editor)
+          == std::vector<int> { 0 });
+    CHECK(accessibility->getCurrentState().isSelected());
+    CHECK(accessibility->getDescription().contains(
+        "Control point 1 of 4"));
+
+    REQUIRE(editor.keyPressed(
+        juce::KeyPress { juce::KeyPress::tabKey }));
+    CHECK(LfoEditorTestAccess::selectedPoints(editor)
+          == std::vector<int> { 1 });
+    CHECK(accessibility->getDescription().contains(
+        "Position 30.0 percent"));
+
+    REQUIRE(editor.keyPressed(
+        shiftedKey(juce::KeyPress::tabKey)));
+    CHECK(LfoEditorTestAccess::selectedPoints(editor)
+          == std::vector<int> { 0 });
+
+    // At either edge, Tab is left unconsumed so JUCE can continue its normal
+    // focus traversal outside this composite editor.
+    CHECK_FALSE(editor.keyPressed(
+        shiftedKey(juce::KeyPress::tabKey)));
+    CHECK(LfoEditorTestAccess::selectedPoints(editor)
+          == std::vector<int> { 0 });
+    CHECK(publicationCount == 0);
+
+    const auto replacement = makeLfoData({
+        { 0.0f, 0.90f }, { 0.45f, 0.20f }, { 1.0f, 0.60f }
+    });
+    const auto notificationsBeforeReplacement =
+        LfoEditorTestAccess::accessibilityStructureNotificationCount(editor);
+    editor.setDataToDisplay(replacement);
+    CHECK(LfoEditorTestAccess::accessibilityStructureNotificationCount(editor)
+          == notificationsBeforeReplacement + 1);
+    CHECK_FALSE(accessibility->getCurrentState().isSelected());
+    CHECK(accessibility->getDescription().contains(
+        "3 control points"));
+
+    LfoEditorTestAccess::selectPoint(editor, 1);
+    REQUIRE(accessibility->getCurrentState().isSelected());
+    const auto notificationsBeforeModeChange =
+        LfoEditorTestAccess::accessibilityStructureNotificationCount(editor);
+    editor.setEditMode(LfoEditMode::BrushPaint);
+    CHECK(LfoEditorTestAccess::accessibilityStructureNotificationCount(editor)
+          == notificationsBeforeModeChange + 1);
+    CHECK_FALSE(accessibility->getCurrentState().isSelected());
+
+    editor.removeFromDesktop();
+}
+
+TEST_CASE("LFO arrow keys publish only real constrained point changes",
+          "[lfo][editor][keyboard][points][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+    editor.setDataToDisplay(makeLfoData({
+        { 0.0f, 1.0f }, { 0.300f, 0.50f },
+        { 0.310f, 0.25f }, { 0.315f, 0.70f },
+        { 1.0f, 0.20f }
+    }));
+
+    LfoData lastPublished;
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData& data)
+    {
+        lastPublished = data;
+        ++publicationCount;
+    };
+
+    SECTION("single-point fine and accelerated movement")
+    {
+        LfoEditorTestAccess::selectPoint(editor, 1);
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        CHECK(publicationCount == 1);
+        CHECK(LfoEditorTestAccess::data(editor).points[1].x
+              == Catch::Approx(0.305f));
+
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::upKey }));
+        CHECK(publicationCount == 2);
+        CHECK(LfoEditorTestAccess::data(editor).points[1].y
+              == Catch::Approx(0.505f));
+
+        REQUIRE(editor.keyPressed(
+            shiftedKey(juce::KeyPress::downKey)));
+        CHECK(publicationCount == 3);
+        CHECK(LfoEditorTestAccess::data(editor).points[1].y
+              == Catch::Approx(0.480f));
+        checkSameLfoData(lastPublished,
+                         LfoEditorTestAccess::data(editor));
+    }
+
+    SECTION("selected blocks stop at unselected neighbours")
+    {
+        LfoEditorTestAccess::selectPoints(editor, { 1, 2 });
+        REQUIRE(editor.keyPressed(
+            shiftedKey(juce::KeyPress::rightKey)));
+        CHECK(publicationCount == 1);
+        CHECK(LfoEditorTestAccess::data(editor).points[1].x
+              == Catch::Approx(0.305f));
+        CHECK(LfoEditorTestAccess::data(editor).points[2].x
+              == Catch::Approx(0.315f));
+
+        // The next key is valid and consumed, but cannot move the block
+        // through point 4. It must not emit a duplicate manager update.
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        CHECK(publicationCount == 1);
+        checkSameLfoData(lastPublished,
+                         LfoEditorTestAccess::data(editor));
+        CHECK(hasValidLfoTopology(
+            LfoEditorTestAccess::data(editor)));
+    }
+
+    SECTION("fixed endpoint coordinates and value limits are no-ops")
+    {
+        LfoEditorTestAccess::selectPoint(editor, 0);
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::leftKey }));
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::upKey }));
+        CHECK(publicationCount == 0);
+
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::downKey }));
+        CHECK(publicationCount == 1);
+        CHECK(LfoEditorTestAccess::data(editor).points.front().x
+              == Catch::Approx(0.0f));
+        CHECK(LfoEditorTestAccess::data(editor).points.front().y
+              == Catch::Approx(0.995f));
+    }
+
+    editor.removeFromDesktop();
+}
+
+TEST_CASE("LFO point keyboard edits reject stale and inactive UI sessions",
+          "[lfo][editor][keyboard][context][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto original = makeLfoData({
+        { 0.0f, 0.15f }, { 0.30f, 0.80f },
+        { 0.65f, 0.25f }, { 1.0f, 0.70f }
+    });
+
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+    editor.setDataToDisplay(original,
+                            LfoEditor::DataContext { 1, 7 });
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+    SECTION("stale revision")
+    {
+        editor.setDataContextValidator(
+            [](const LfoEditor::DataContext&) { return false; });
+        LfoEditorTestAccess::selectPoint(editor, 1);
+
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::upKey }));
+        CHECK(publicationCount == 0);
+        CHECK(LfoEditorTestAccess::selectedPointCount(editor) == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("validator rebind")
+    {
+        const auto replacement = makeLfoData({
+            { 0.0f, 0.90f }, { 0.45f, 0.20f }, { 1.0f, 0.60f }
+        });
+        editor.setDataContextValidator(
+            [&](const LfoEditor::DataContext&)
+            {
+                editor.setDataToDisplay(
+                    replacement,
+                    LfoEditor::DataContext { 1, 8 });
+                return true;
+            });
+        LfoEditorTestAccess::selectPoint(editor, 1);
+
+        REQUIRE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::downKey }));
+        CHECK(publicationCount == 0);
+        CHECK(LfoEditorTestAccess::selectedPointCount(editor) == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), replacement);
+    }
+
+    SECTION("hidden")
+    {
+        editor.setVisible(false);
+        LfoEditorTestAccess::selectPoint(editor, 1);
+        CHECK_FALSE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::upKey }));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("disabled")
+    {
+        editor.setEnabled(false);
+        LfoEditorTestAccess::selectPoint(editor, 1);
+        CHECK_FALSE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::upKey }));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    SECTION("detached peer")
+    {
+        editor.removeFromDesktop();
+        LfoEditorTestAccess::selectPoint(editor, 1);
+        CHECK_FALSE(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::upKey }));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    }
+
+    editor.removeFromDesktop();
 }
 
 TEST_CASE("Stale LFO context menu commands cannot edit replacement data",

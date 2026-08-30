@@ -21,6 +21,7 @@
 #include <optional>
 
 class FireAudioProcessor;
+class LfoEditorAccessibilityHandler;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct LfoEditorTestAccess;
 struct LfoPanelDialogTestAccess;
@@ -77,6 +78,8 @@ public:
     void enablementChanged() override;
     void focusGained(FocusChangeType) override;
     void focusLost(FocusChangeType) override;
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
@@ -102,6 +105,7 @@ public:
     };
 
 private:
+    friend class LfoEditorAccessibilityHandler;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct LfoEditorTestAccess;
     friend struct LfoPanelBrushTestAccess;
@@ -175,6 +179,12 @@ private:
     juce::Point<float> fromNormalized(juce::Point<float> normalizedPoint);
 
     void deleteSelectedPoints();
+    bool canAcceptPointKeyboardInput() const noexcept;
+    bool selectAdjacentPoint(bool moveBackwards);
+    bool nudgeSelectedPoints(juce::Point<float> requestedDelta);
+    juce::String getAccessiblePointStatus() const;
+    void notifyAccessiblePointStateChanged(
+        juce::AccessibilityEvent event);
 
     void rebuildGridCache(float physicalScale);
     void rebuildWavePath();
@@ -239,8 +249,10 @@ private:
     juce::int64 doubleClickAuthorizationDeadlineMs = 0;
     std::uint64_t contextMenuGeneration = 0;
     bool contextMenuSessionActive = false;
+    bool accessibilityHandlerHasBeenCreated = false;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::function<void()> contextMenuLaunchHook;
+    int accessibilityStructureNotificationCount = 0;
 #endif
 
     void selectAllPoints();

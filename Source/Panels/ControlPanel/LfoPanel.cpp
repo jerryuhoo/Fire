@@ -34,6 +34,41 @@ static void deleteDialogSynchronously(
     dialog.deleteAndZero();
 }
 
+class LfoEditorAccessibilityHandler final
+    : public juce::AccessibilityHandler
+{
+public:
+    explicit LfoEditorAccessibilityHandler(LfoEditor& editorToUse)
+        : juce::AccessibilityHandler(editorToUse,
+                                     juce::AccessibilityRole::group),
+          editor(editorToUse)
+    {
+    }
+
+    juce::String getDescription() const override
+    {
+        return editor.getAccessiblePointStatus();
+    }
+
+    juce::AccessibleState getCurrentState() const override
+    {
+        auto state = juce::AccessibilityHandler::getCurrentState();
+        if (! editor.dataIsActive)
+            return state;
+
+        // This handler represents the complete canvas rather than one
+        // synthetic child per point. Selected therefore deliberately means
+        // that one or more control points inside the canvas are selected.
+        state = state.withMultiSelectable();
+        return editor.selectedPointIndices.empty()
+                 ? state
+                 : state.withSelected();
+    }
+
+private:
+    LfoEditor& editor;
+};
+
 //==============================================================================
 // LfoEditor Implementation
 //==============================================================================
@@ -42,6 +77,11 @@ LfoEditor::LfoEditor()
 {
     setWantsKeyboardFocus(true);
     setOpaque(true);
+    setTitle("LFO shape editor");
+    setHelpText(
+        "Use Tab and Shift+Tab to choose a control point. Use the arrow "
+        "keys to adjust it, hold Shift for larger steps, and press Delete "
+        "to remove selected interior points.");
     pointHoverAnimation.snapTo(0.0f);
     focusAnimation.snapTo(0.0f);
 }
@@ -407,6 +447,8 @@ void LfoEditor::setDataToDisplay(const LfoData& dataToDisplay,
 
     dataIsActive = true;
     repaint();
+    notifyAccessiblePointStateChanged(
+        juce::AccessibilityEvent::structureChanged);
 }
 
 bool LfoEditor::updateDataContextRevision(
@@ -1658,11 +1700,190 @@ void LfoEditor::setEditMode(LfoEditMode newMode)
     cancelAllInteraction();
     currentMode = newMode;
     repaint();
+    notifyAccessiblePointStateChanged(
+        juce::AccessibilityEvent::structureChanged);
 }
 
 void LfoEditor::setCurrentBrush(LfoPresetShape newBrush)
 {
     currentBrush = newBrush;
+}
+
+bool LfoEditor::canAcceptPointKeyboardInput() const noexcept
+{
+    return dataIsActive
+        && currentMode == LfoEditMode::PointEdit
+        && isEnabled()
+        && isShowing()
+        && activePointerGesture == PointerGesture::none;
+}
+
+bool LfoEditor::selectAdjacentPoint(bool moveBackwards)
+{
+    if (! dataIsActive || activeLfoData.points.empty())
+        return false;
+
+    int pointToSelect = moveBackwards
+                          ? static_cast<int>(activeLfoData.points.size()) - 1
+                          : 0;
+    if (! selectedPointIndices.empty())
+    {
+        const auto selectedBoundary = moveBackwards
+                                        ? *std::min_element(
+                                              selectedPointIndices.begin(),
+                                              selectedPointIndices.end())
+                                        : *std::max_element(
+                                              selectedPointIndices.begin(),
+                                              selectedPointIndices.end());
+        pointToSelect = selectedBoundary + (moveBackwards ? -1 : 1);
+        if (! isValidPointIndex(pointToSelect))
+            return false;
+    }
+
+    if (selectedPointIndices.size() == 1
+        && selectedPointIndices.front() == pointToSelect)
+        return true;
+
+    selectedPointIndices.assign(1, pointToSelect);
+    selectionRectangle = {};
+    repaint();
+    notifyAccessiblePointStateChanged(
+        juce::AccessibilityEvent::structureChanged);
+    return true;
+}
+
+bool LfoEditor::nudgeSelectedPoints(
+    juce::Point<float> requestedDelta)
+{
+    if (! dataIsActive || selectedPointIndices.empty()
+        || ! hasValidSelectedPointIndices())
+        return false;
+
+    std::sort(selectedPointIndices.begin(), selectedPointIndices.end());
+    selectedPointIndices.erase(
+        std::unique(selectedPointIndices.begin(),
+                    selectedPointIndices.end()),
+        selectedPointIndices.end());
+
+    const auto oldPoints = activeLfoData.points;
+    if (! juce::approximatelyEqual(requestedDelta.x, 0.0f))
+    {
+        const auto lastPointIndex =
+            static_cast<int>(activeLfoData.points.size()) - 1;
+        const auto isMovable = [this, lastPointIndex](int pointIndex)
+        {
+            return pointIndex > 0
+                && pointIndex < lastPointIndex
+                && std::binary_search(selectedPointIndices.begin(),
+                                      selectedPointIndices.end(),
+                                      pointIndex);
+        };
+
+        float minimumDelta = -1.0f;
+        float maximumDelta = 1.0f;
+        bool hasMovablePoint = false;
+        for (const auto pointIndex : selectedPointIndices)
+        {
+            if (! isMovable(pointIndex))
+                continue;
+
+            hasMovablePoint = true;
+            const auto& point =
+                activeLfoData.points[static_cast<size_t>(pointIndex)];
+            if (! isMovable(pointIndex - 1))
+                minimumDelta = juce::jmax(
+                    minimumDelta,
+                    activeLfoData.points[
+                        static_cast<size_t>(pointIndex - 1)].x
+                        - point.x);
+            if (! isMovable(pointIndex + 1))
+                maximumDelta = juce::jmin(
+                    maximumDelta,
+                    activeLfoData.points[
+                        static_cast<size_t>(pointIndex + 1)].x
+                        - point.x);
+        }
+
+        if (! hasMovablePoint)
+            return false;
+
+        const auto actualDelta = juce::jlimit(
+            minimumDelta, maximumDelta, requestedDelta.x);
+        for (const auto pointIndex : selectedPointIndices)
+            if (isMovable(pointIndex))
+                activeLfoData.points[static_cast<size_t>(pointIndex)].x
+                    += actualDelta;
+    }
+    else if (! juce::approximatelyEqual(requestedDelta.y, 0.0f))
+    {
+        float minimumDelta = -1.0f;
+        float maximumDelta = 1.0f;
+        for (const auto pointIndex : selectedPointIndices)
+        {
+            const auto pointY =
+                activeLfoData.points[static_cast<size_t>(pointIndex)].y;
+            minimumDelta = juce::jmax(minimumDelta, -pointY);
+            maximumDelta = juce::jmin(maximumDelta, 1.0f - pointY);
+        }
+
+        const auto actualDelta = juce::jlimit(
+            minimumDelta, maximumDelta, requestedDelta.y);
+        for (const auto pointIndex : selectedPointIndices)
+            activeLfoData.points[static_cast<size_t>(pointIndex)].y
+                += actualDelta;
+    }
+
+    if (activeLfoData.points == oldPoints)
+        return false;
+
+    repaint();
+    notifyAccessiblePointStateChanged(
+        juce::AccessibilityEvent::valueChanged);
+    return true;
+}
+
+juce::String LfoEditor::getAccessiblePointStatus() const
+{
+    if (! dataIsActive || activeLfoData.points.empty())
+        return "No LFO shape is loaded.";
+
+    const auto pointCount =
+        static_cast<int>(activeLfoData.points.size());
+    if (selectedPointIndices.empty()
+        || ! hasValidSelectedPointIndices())
+        return juce::String(pointCount)
+            + " control points. No control point selected.";
+
+    if (selectedPointIndices.size() != 1)
+        return juce::String(
+                   static_cast<int>(selectedPointIndices.size())) + " of "
+            + juce::String(pointCount) + " control points selected.";
+
+    const auto selectedIndex = selectedPointIndices.front();
+    const auto& selectedPoint =
+        activeLfoData.points[static_cast<size_t>(selectedIndex)];
+    return "Control point " + juce::String(selectedIndex + 1) + " of "
+        + juce::String(pointCount) + ". Position "
+        + juce::String(selectedPoint.x * 100.0f, 1) + " percent, value "
+        + juce::String(selectedPoint.y * 100.0f, 1) + " percent.";
+}
+
+void LfoEditor::notifyAccessiblePointStateChanged(
+    juce::AccessibilityEvent event)
+{
+    // Data is refreshed frequently by the panel. Do not instantiate a native
+    // accessibility object unless a client has requested this component, but
+    // keep an already-cached handler in sync across every session boundary.
+    if (! accessibilityHandlerHasBeenCreated)
+        return;
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (event == juce::AccessibilityEvent::structureChanged)
+        ++accessibilityStructureNotificationCount;
+#endif
+
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(event);
 }
 
 bool LfoEditor::keyPressed(const juce::KeyPress& key)
@@ -1692,6 +1913,76 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
         }
     }
 
+    const bool isTab = key.isKeyCode(juce::KeyPress::tabKey);
+    const bool isLeft = key.isKeyCode(juce::KeyPress::leftKey);
+    const bool isRight = key.isKeyCode(juce::KeyPress::rightKey);
+    const bool isUp = key.isKeyCode(juce::KeyPress::upKey);
+    const bool isDown = key.isKeyCode(juce::KeyPress::downKey);
+    const bool isPointKeyboardCommand =
+        isTab || isLeft || isRight || isUp || isDown;
+    const auto modifiers = key.getModifiers();
+    const bool hasUnsupportedModifier =
+        modifiers.isCommandDown()
+        || modifiers.isCtrlDown()
+        || modifiers.isAltDown();
+
+    if (isPointKeyboardCommand && ! hasUnsupportedModifier)
+    {
+        if (! canAcceptPointKeyboardInput())
+            return false;
+
+        const auto contextBeforeValidation = activeDataContext;
+        auto validator = dataContextValidator;
+        const juce::Component::SafePointer<LfoEditor> safeThis(this);
+        const bool contextIsCurrent =
+            ! validator || validator(contextBeforeValidation);
+        if (safeThis == nullptr)
+            return true;
+
+        if (! contextIsCurrent
+            || activeDataContext.lfoIndex
+                   != contextBeforeValidation.lfoIndex
+            || activeDataContext.revision
+                   != contextBeforeValidation.revision)
+        {
+            cancelPointAndCurveInteraction();
+            repaint();
+            notifyAccessiblePointStateChanged(
+                juce::AccessibilityEvent::structureChanged);
+            return true;
+        }
+
+        if (! hasValidSelectedPointIndices())
+        {
+            cancelPointAndCurveInteraction();
+            repaint();
+        }
+
+        if (isTab)
+            return selectAdjacentPoint(modifiers.isShiftDown());
+
+        if (selectedPointIndices.empty())
+        {
+            selectAdjacentPoint(false);
+            return true;
+        }
+
+        const auto step = modifiers.isShiftDown() ? 0.025f : 0.005f;
+        juce::Point<float> delta;
+        if (isLeft)
+            delta.x = -step;
+        else if (isRight)
+            delta.x = step;
+        else if (isUp)
+            delta.y = step;
+        else if (isDown)
+            delta.y = -step;
+
+        if (nudgeSelectedPoints(delta))
+            publishActiveData();
+        return true;
+    }
+
     if (! selectedPointIndices.empty()
         && (key.isKeyCode(juce::KeyPress::deleteKey)
             || key.isKeyCode(juce::KeyPress::backspaceKey)))
@@ -1701,6 +1992,13 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
         return true;
     }
     return false;
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+LfoEditor::createAccessibilityHandler()
+{
+    accessibilityHandlerHasBeenCreated = true;
+    return std::make_unique<LfoEditorAccessibilityHandler>(*this);
 }
 
 void LfoEditor::deleteSelectedPoints()

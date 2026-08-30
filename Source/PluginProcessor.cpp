@@ -4608,9 +4608,12 @@ void FireAudioProcessor::processWetBlock(
         else
             vals.drive = powerDrive;
 
-        vals.rateDivide = getBlockModulatedValue(downsampleRateParameter, lfoOutputBuffer);
-        if (loadCachedParameter(downsampleEnabledParameter) > 0.5f)
-            vals.rateDivide = 1.0f;
+        const bool downsampleEnabled =
+            loadCachedParameter(downsampleEnabledParameter) > 0.5f;
+        vals.rateDivide = downsampleEnabled
+                              ? getBlockModulatedValue(downsampleRateParameter,
+                                                       lfoOutputBuffer)
+                              : 1.0f;
 
         pushToFifo(graphFifo, graphFifoBuffer, vals);
     }

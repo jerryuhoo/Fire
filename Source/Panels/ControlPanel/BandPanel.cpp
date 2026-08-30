@@ -1156,9 +1156,11 @@ void BandPanel::updateDistortionGraphFromParameters()
 
     const auto* downsample = processor.treeState.getRawParameterValue(DOWNSAMPLE_ID);
     const auto* downsampleBypass = processor.treeState.getRawParameterValue(DOWNSAMPLE_BYPASS_ID);
-    values.rateDivide = downsample != nullptr ? downsample->load() : 1.0f;
-    if (downsampleBypass != nullptr && downsampleBypass->load() > 0.5f)
-        values.rateDivide = 1.0f;
+    const bool downsampleEnabled = downsampleBypass != nullptr
+                                && downsampleBypass->load() > 0.5f;
+    values.rateDivide = downsampleEnabled && downsample != nullptr
+                            ? downsample->load()
+                            : 1.0f;
 
     distortionGraph.setState(values.mode,
                              values.rec,

@@ -4391,9 +4391,54 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
     // discarded copy through the complete wet graph so recursive filters,
     // compressors, Lo-Fi, LFOs and live HQ/topology state machines remain on
     // the same timeline they would have followed without host bypass.
-    hostBypassWetBuffer.makeCopyOf(buffer, true);
-    processLatencyMatchedBypass(buffer, hostBypassSessionHqMode);
-    processWetBlock(hostBypassWetBuffer, midiMessages, true);
+    const int rangeCapacity = juce::jmax(1, preparedProcessingBlockCapacity);
+    if (buffer.getNumSamples() <= rangeCapacity)
+    {
+        hostBypassWetBuffer.makeCopyOf(buffer, true);
+        processLatencyMatchedBypass(buffer, hostBypassSessionHqMode);
+        processWetBlock(hostBypassWetBuffer, midiMessages, true);
+    }
+    else
+    {
+        // Keep every scratch buffer within the capacity reserved by
+        // prepareToPlay(). AudioBuffer views are non-owning (and use JUCE's
+        // inline channel-pointer storage), so a malformed oversized host
+        // callback cannot force heap allocation on the audio thread.
+        const int numChannels = buffer.getNumChannels();
+        int sampleOffset = 0;
+        while (sampleOffset < buffer.getNumSamples())
+        {
+            const int samplesInRange = juce::jmin(
+                rangeCapacity, buffer.getNumSamples() - sampleOffset);
+            juce::AudioBuffer<float> audibleRange(
+                buffer.getArrayOfWritePointers(),
+                numChannels,
+                sampleOffset,
+                samplesInRange);
+
+            hostBypassWetBuffer.setSize(numChannels,
+                                        samplesInRange,
+                                        false,
+                                        false,
+                                        true);
+            for (int channel = 0; channel < numChannels; ++channel)
+                hostBypassWetBuffer.copyFrom(channel,
+                                             0,
+                                             audibleRange,
+                                             channel,
+                                             0,
+                                             samplesInRange);
+
+            processLatencyMatchedBypass(audibleRange,
+                                        hostBypassSessionHqMode);
+            processWetBlock(hostBypassWetBuffer,
+                            midiMessages,
+                            true,
+                            sampleOffset,
+                            false);
+            sampleOffset += samplesInRange;
+        }
+    }
     calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
     publishMeterValues(false);
 }
@@ -4407,19 +4452,70 @@ void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         performReset();
 
     replaceNonFiniteSamplesWithSilence(buffer);
-    processWetBlock(buffer, midiMessages, false);
+    const int rangeCapacity = juce::jmax(1, preparedProcessingBlockCapacity);
+    if (buffer.getNumChannels() == 0
+        || buffer.getNumSamples() <= rangeCapacity)
+    {
+        processWetBlock(buffer, midiMessages, false);
+        return;
+    }
+
+    // Defensive fixed-capacity fallback for hosts which exceed the maximum
+    // block size they supplied to prepareToPlay(). Preserve one callback-wide
+    // global meter packet while streaming all stateful DSP and analysis in
+    // allocation-free non-owning ranges.
+    const int numChannels = buffer.getNumChannels();
+    const int totalNumInputChannels = getTotalNumInputChannels();
+    for (int channel = juce::jlimit(0,
+                                   numChannels,
+                                   totalNumInputChannels);
+         channel < numChannels;
+         ++channel)
+        buffer.clear(channel, 0, buffer.getNumSamples());
+
+    calculateAndStoreLevels(buffer,
+                            mInputLeftRMSGlobal,
+                            mInputRightRMSGlobal,
+                            mInputLeftPeakGlobal,
+                            mInputRightPeakGlobal);
+    int sampleOffset = 0;
+    while (sampleOffset < buffer.getNumSamples())
+    {
+        const int samplesInRange = juce::jmin(
+            rangeCapacity, buffer.getNumSamples() - sampleOffset);
+        juce::AudioBuffer<float> range(buffer.getArrayOfWritePointers(),
+                                       numChannels,
+                                       sampleOffset,
+                                       samplesInRange);
+        processWetBlock(range,
+                        midiMessages,
+                        false,
+                        sampleOffset,
+                        false);
+        sampleOffset += samplesInRange;
+    }
+
+    calculateAndStoreLevels(buffer,
+                            mOutputLeftRMSGlobal,
+                            mOutputRightRMSGlobal,
+                            mOutputLeftPeakGlobal,
+                            mOutputRightPeakGlobal);
+    publishMeterValues(true);
 }
 
 void FireAudioProcessor::processWetBlock(
     juce::AudioBuffer<float>& buffer,
     juce::MidiBuffer& midiMessages,
-    bool hostBypassShadow)
+    bool hostBypassShadow,
+    int playheadSampleOffset,
+    bool publishMeterPacket)
 {
     juce::ignoreUnused(midiMessages);
     juce::ScopedNoDenormals noDenormals;
     const int totalNumInputChannels = getTotalNumInputChannels();
     const int numBufferChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
+    jassert(numSamples <= juce::jmax(1, preparedProcessingBlockCapacity));
     auto sampleRate = getSampleRate();
 
     if (! std::isfinite(sampleRate) || sampleRate <= 0)
@@ -4432,7 +4528,7 @@ void FireAudioProcessor::processWetBlock(
          ++channel)
         buffer.clear(channel, 0, numSamples);
 
-    if (! hostBypassShadow)
+    if (! hostBypassShadow && publishMeterPacket)
         calculateAndStoreLevels(buffer,
                                 mInputLeftRMSGlobal,
                                 mInputRightRMSGlobal,
@@ -4481,7 +4577,8 @@ void FireAudioProcessor::processWetBlock(
         static_cast<float>(sampleRate),
         getPlayHead(),
         numSamples,
-        activeAudioCallbackParameterSnapshot.lfoParameters);
+        activeAudioCallbackParameterSnapshot.lfoParameters,
+        playheadSampleOffset);
     publishMultibandTelemetry(callbackContext,
                               numBands,
                               lfoOutputBuffer);
@@ -4577,7 +4674,12 @@ void FireAudioProcessor::processWetBlock(
     mWetBuffer.makeCopyOf(buffer, true);
     captureHistorySamples();
     pushDataPairToFFT(mWetBuffer, delayMatchedDryBuffer);
-    calculateAndStoreLevels(mWetBuffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
+    if (publishMeterPacket)
+        calculateAndStoreLevels(mWetBuffer,
+                                mOutputLeftRMSGlobal,
+                                mOutputRightRMSGlobal,
+                                mOutputLeftPeakGlobal,
+                                mOutputRightPeakGlobal);
 
     // --- 1. Push Modulated Filter Data to its FIFO ---
     if (filterFifo.getFreeSpace() >= 1)
@@ -4651,7 +4753,8 @@ void FireAudioProcessor::processWetBlock(
 
         pushToFifo(graphFifo, graphFifoBuffer, vals);
     }
-    publishMeterValues(true);
+    if (publishMeterPacket)
+        publishMeterValues(true);
 
 }
 

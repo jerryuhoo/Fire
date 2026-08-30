@@ -836,7 +836,9 @@ private:
 
     void processWetBlock(juce::AudioBuffer<float>& buffer,
                          juce::MidiBuffer& midiMessages,
-                         bool hostBypassShadow);
+                         bool hostBypassShadow,
+                         int playheadSampleOffset = 0,
+                         bool publishMeterPacket = true);
     bool updateParameters(const juce::AudioBuffer<float>& lfoOutputs,
                           std::uint32_t topologySequenceAtCallbackStart,
                           bool routingSnapshotWasRefreshed,

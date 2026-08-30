@@ -164,7 +164,8 @@ void LfoManager::processBlock(juce::AudioBuffer<float>& outputBuffer, float samp
                 playHead,
                 numSamples,
                 captureAudioThreadParameterSnapshot(),
-                true);
+                true,
+                0);
 }
 
 void LfoManager::processBlock(
@@ -172,7 +173,8 @@ void LfoManager::processBlock(
     float sampleRate,
     juce::AudioPlayHead* playHead,
     int numSamples,
-    const AudioThreadParameterSnapshot& parameterSnapshot)
+    const AudioThreadParameterSnapshot& parameterSnapshot,
+    juce::int64 playheadSampleOffset)
 {
     // A successful candidate capture deliberately owns dataAccessLock until
     // finish or abort. Rendering while that transaction is open would make a
@@ -183,7 +185,8 @@ void LfoManager::processBlock(
                 playHead,
                 numSamples,
                 parameterSnapshot,
-                false);
+                false,
+                playheadSampleOffset);
 }
 
 void LfoManager::renderBlock(
@@ -192,7 +195,8 @@ void LfoManager::renderBlock(
     juce::AudioPlayHead* playHead,
     int numSamples,
     const AudioThreadParameterSnapshot& parameterSnapshot,
-    bool readLiveRoutingBaseValues)
+    bool readLiveRoutingBaseValues,
+    juce::int64 playheadSampleOffset)
 {
     modulatedValueCount = 0;
 
@@ -206,22 +210,48 @@ void LfoManager::renderBlock(
     if (samplesToProcess <= 0)
         return;
 
-    // Hosts should honour maximumBlockSize, but grow safely if a host sends a larger block.
-    if (samplesToProcess > lfoOutputBuffer.getNumSamples())
-        lfoOutputBuffer.setSize(4, samplesToProcess, false, false, true);
-
-    // 1. Generate all raw LFO signals for the current block.
-    // This fills the internal 'lfoOutputBuffer'.
-    generateLfoOutput(sampleRate,
-                      playHead,
-                      samplesToProcess,
-                      parameterSnapshot);
-
-    // 2. Copy the generated LFO signals to the output buffer.
-    const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(), lfoOutputBuffer.getNumChannels());
-    for (int channel = 0; channel < channelsToCopy; ++channel)
+    const int rangeCapacity = lfoOutputBuffer.getNumSamples();
+    if (rangeCapacity <= 0)
     {
-        outputBuffer.copyFrom(channel, 0, lfoOutputBuffer, channel, 0, samplesToProcess);
+        // processBlock() is an audio callback API and therefore requires a
+        // matching prepare(). Allocating here would hide that contract by
+        // doing heap work on the real-time thread.
+        jassertfalse;
+        return;
+    }
+
+    std::array<float, 4> firstLfoValues {};
+    const int channelsToCopy = juce::jmin(outputBuffer.getNumChannels(),
+                                          lfoOutputBuffer.getNumChannels());
+    int sampleOffset = 0;
+    while (sampleOffset < samplesToProcess)
+    {
+        const int samplesInRange = juce::jmin(
+            rangeCapacity, samplesToProcess - sampleOffset);
+
+        // Render into the fixed buffer prepared off the audio thread. The
+        // timeline offset keeps transport-synchronised LFOs continuous when a
+        // host exceeds its advertised maximum callback size.
+        generateLfoOutput(sampleRate,
+                          playHead,
+                          samplesInRange,
+                          parameterSnapshot,
+                          playheadSampleOffset + sampleOffset);
+
+        if (sampleOffset == 0)
+            for (size_t channel = 0; channel < firstLfoValues.size(); ++channel)
+                firstLfoValues[channel] = lfoOutputBuffer.getSample(
+                    static_cast<int>(channel), 0);
+
+        for (int channel = 0; channel < channelsToCopy; ++channel)
+            outputBuffer.copyFrom(channel,
+                                  sampleOffset,
+                                  lfoOutputBuffer,
+                                  channel,
+                                  0,
+                                  samplesInRange);
+
+        sampleOffset += samplesInRange;
     }
 
     // 4. Iterate through all modulation routings to calculate final parameter values.
@@ -232,7 +262,8 @@ void LfoManager::renderBlock(
             continue;
 
         // Use the first sample of the LFO output as the representative value for the whole block.
-        float lfoValue = lfoOutputBuffer.getSample(routing.sourceLfoIndex, 0);
+        float lfoValue = firstLfoValues[
+            static_cast<size_t>(routing.sourceLfoIndex)];
         if (! std::isfinite(lfoValue))
             continue;
 
@@ -497,11 +528,14 @@ void LfoManager::generateLfoOutput(
     double sampleRate,
     juce::AudioPlayHead* playHead,
     int numSamples,
-    const AudioThreadParameterSnapshot& parameterSnapshot)
+    const AudioThreadParameterSnapshot& parameterSnapshot,
+    juce::int64 playheadSampleOffset)
 {
     const double safeSampleRate = std::isfinite(sampleRate) && sampleRate > 0.0
                                       ? sampleRate
                                       : preparedSampleRate;
+    const double timelineOffsetSeconds =
+        static_cast<double>(playheadSampleOffset) / safeSampleRate;
 
     juce::Optional<juce::AudioPlayHead::PositionInfo> positionInfo;
     bool transportIsPlaying = false;
@@ -652,7 +686,10 @@ void LfoManager::generateLfoOutput(
                     if (cycleLengthInBeats > 0.0f && std::isfinite(*ppq))
                     {
                         synchroniseAbsolutePhase(wrapPhase(
-                            *ppq / cycleLengthInBeats + phaseOffset));
+                            (*ppq
+                             + timelineOffsetSeconds * currentBpm / 60.0)
+                                / cycleLengthInBeats
+                            + phaseOffset));
                     }
                 }
             }
@@ -663,7 +700,8 @@ void LfoManager::generateLfoOutput(
                     if (std::isfinite(*timeSec))
                     {
                         synchroniseAbsolutePhase(wrapPhase(
-                            *timeSec * freqInHz + phaseOffset));
+                            (*timeSec + timelineOffsetSeconds) * freqInHz
+                            + phaseOffset));
                     }
                 }
             }

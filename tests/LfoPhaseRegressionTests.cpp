@@ -279,6 +279,50 @@ TEST_CASE("Playing synced LFO remains locked to absolute PPQ plus Phase",
     checkLinearBlock(final, wrapPhase(static_cast<float>(finalPpq) + 0.5f), delta);
 }
 
+TEST_CASE("Oversized LFO rendering advances its absolute timeline across fixed ranges",
+          "[processor][lfo][phase][playing][oversized][timeline][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    constexpr int oversizedSamples = preparedBlockSize * 2 + 7;
+
+    for (const bool syncMode : std::array { false, true })
+    {
+        CAPTURE(syncMode);
+        FireAudioProcessor processor;
+        configureLfo(processor, syncMode, 0.25f);
+        auto& manager = processor.getLfoManager();
+
+        TestPlayHead playHead;
+        playHead.position.setIsPlaying(true);
+        playHead.position.setBpm(stoppedHostBpm);
+        playHead.position.setTimeSignature(
+            juce::AudioPlayHead::TimeSignature { 4, 4 });
+
+        constexpr float timelinePhase = 0.125f;
+        if (syncMode)
+            playHead.position.setPpqPosition(timelinePhase);
+        else
+            playHead.position.setTimeInSeconds(
+                timelinePhase / freeRateHz);
+
+        // The manager was prepared for only 64 samples. Its fixed-capacity
+        // fallback must advance the host anchor for each internal range instead
+        // of replaying sample zero at offsets 64 and 128.
+        const auto output = processLfoBlock(manager,
+                                            oversizedSamples,
+                                            &playHead);
+        checkLinearBlock(output,
+                         timelinePhase + 0.25f,
+                         phaseDelta(syncMode));
+        CHECK(manager.getLfoPhase(0)
+              == Catch::Approx(wrapPhase(
+                     timelinePhase + 0.25f
+                     + static_cast<float>(oversizedSamples)
+                           * phaseDelta(syncMode)))
+                     .margin(2.0e-5f));
+    }
+}
+
 TEST_CASE("LFO reset reapplies a nonzero Phase offset on the first sample",
           "[processor][lfo][phase][reset]")
 {

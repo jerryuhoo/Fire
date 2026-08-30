@@ -77,7 +77,8 @@ public:
                       float sampleRate,
                       juce::AudioPlayHead* playHead,
                       int numSamples,
-                      const AudioThreadParameterSnapshot& parameterSnapshot);
+                      const AudioThreadParameterSnapshot& parameterSnapshot,
+                      juce::int64 playheadSampleOffset = 0);
 
     /** Starts a non-blocking candidate capture of routes and staged shapes.
 
@@ -261,13 +262,15 @@ private:
         double sampleRate,
         juce::AudioPlayHead* playHead,
         int numSamples,
-        const AudioThreadParameterSnapshot& parameterSnapshot);
+        const AudioThreadParameterSnapshot& parameterSnapshot,
+        juce::int64 playheadSampleOffset);
     void renderBlock(juce::AudioBuffer<float>& outputBuffer,
                      float sampleRate,
                      juce::AudioPlayHead* playHead,
                      int numSamples,
                      const AudioThreadParameterSnapshot& parameterSnapshot,
-                     bool readLiveRoutingBaseValues);
+                     bool readLiveRoutingBaseValues,
+                     juce::int64 playheadSampleOffset);
     bool captureRuntimeRoutings(
         std::array<RuntimeRouting, maxRuntimeRoutings>& destination,
         size_t& destinationCount) const;

@@ -39,11 +39,13 @@ public:
     void mouseEnter(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
+    bool keyPressed(const juce::KeyPress& key) override;
     void visibilityChanged() override;
     void enablementChanged() override;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void parentHierarchyChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
 
 private:
     friend struct GraphTemplateInputTestAccess;
@@ -87,6 +89,8 @@ private:
     bool isPointerSource(const juce::MouseEvent&) const noexcept;
     void recoverMissingPointerUp(const juce::MouseEvent&) noexcept;
     void dismissPointerGesture() noexcept;
+    bool canRequestZoom() const noexcept;
+    void requestZoom();
     void updateHoverState() noexcept;
     void updateAnimationTargets() noexcept;
     bool advanceAnimation(float deltaSeconds) noexcept;

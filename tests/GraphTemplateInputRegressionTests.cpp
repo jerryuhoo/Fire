@@ -1,4 +1,6 @@
 #include <Panels/ControlPanel/Graph Components/GraphPanel.h>
+#include <Panels/ControlPanel/BandPanel.h>
+#include <Panels/ControlPanel/GlobalPanel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -96,6 +98,25 @@ std::vector<juce::ModifierKeys> rejectedModifiers()
                         | juce::ModifierKeys::ctrlModifier);
 #endif
     return result;
+}
+
+std::vector<GraphTemplate*> directGraphs(juce::Component& owner)
+{
+    std::vector<GraphTemplate*> result;
+    for (int index = 0; index < owner.getNumChildComponents(); ++index)
+        if (auto* graph = dynamic_cast<GraphTemplate*>(owner.getChildComponent(index)))
+            result.push_back(graph);
+    return result;
+}
+
+juce::Button* findDirectButton(juce::Component& owner,
+                               const juce::String& text)
+{
+    for (int index = 0; index < owner.getNumChildComponents(); ++index)
+        if (auto* button = dynamic_cast<juce::Button*>(owner.getChildComponent(index));
+            button != nullptr && button->getButtonText() == text)
+            return button;
+    return nullptr;
 }
 } // namespace
 
@@ -241,4 +262,128 @@ TEST_CASE("Non-interactive graph presentation remains static",
     CHECK(GraphTemplateInputTestAccess::press(graph) == 0.0f);
     CHECK(GraphTemplateInputTestAccess::focus(graph) == 0.0f);
     CHECK(GraphTemplateInputTestAccess::disabled(graph) == 0.0f);
+}
+
+TEST_CASE("Graph keyboard and accessibility activation tolerate owner deletion",
+          "[graph][keyboard][accessibility][callback-safety][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("keyboard")
+    {
+        auto graph = std::make_unique<GraphTemplate>();
+        graph->setBounds(0, 0, 200, 100);
+        graph->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        graph->setVisible(true);
+        graph->setZoomRequestCallback([&graph] { graph.reset(); });
+
+        REQUIRE(graph->keyPressed(juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK(graph == nullptr);
+    }
+
+    SECTION("accessibility")
+    {
+        auto graph = std::make_unique<GraphTemplate>();
+        graph->setBounds(0, 0, 200, 100);
+        graph->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        graph->setVisible(true);
+        graph->setZoomRequestCallback([&graph] { graph.reset(); });
+        auto* handler = graph->getAccessibilityHandler();
+        REQUIRE(handler != nullptr);
+
+        REQUIRE(handler->getActions().invoke(
+            juce::AccessibilityActionType::press));
+        CHECK(graph == nullptr);
+    }
+}
+
+TEST_CASE("Production control panels wire graph zoom into their live layouts",
+          "[graph][integration][band-panel][global-panel]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("band graph expands across the module workspace")
+    {
+        BandPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1180, 430);
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+        panel.resized();
+
+        auto graphs = directGraphs(panel);
+        auto visible = std::find_if(graphs.begin(), graphs.end(),
+                                    [](const auto* graph) { return graph->isShowing(); });
+        REQUIRE(visible != graphs.end());
+        auto* graph = *visible;
+        const auto normalBounds = graph->getBounds();
+
+        graph->mouseDown(makeMouseEvent(*graph, primary));
+        graph->mouseUp(makeMouseEvent(*graph, {}));
+        CHECK(graph->getZoomState());
+        CHECK(graph->getWidth() > normalBounds.getWidth());
+
+        REQUIRE(graph->keyPressed(juce::KeyPress { juce::KeyPress::spaceKey }));
+        CHECK_FALSE(graph->getZoomState());
+        CHECK(graph->getBounds() == normalBounds);
+    }
+
+    SECTION("global graph zoom hides and restores its siblings")
+    {
+        GlobalPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1180, 430);
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+        panel.resized();
+
+        auto* analysisButton = findDirectButton(panel, "Analysis");
+        REQUIRE(analysisButton != nullptr);
+        analysisButton->triggerClick();
+
+        auto graphs = directGraphs(panel);
+        REQUIRE(graphs.size() == 3);
+        REQUIRE(std::all_of(graphs.begin(), graphs.end(),
+                            [](const auto* graph) { return graph->isShowing(); }));
+        auto* graph = graphs.front();
+        const auto normalBounds = graph->getBounds();
+
+        graph->mouseDown(makeMouseEvent(*graph, primary));
+        graph->mouseUp(makeMouseEvent(*graph, {}));
+        CHECK(graph->getZoomState());
+        CHECK(graph->getWidth() > normalBounds.getWidth());
+        CHECK(std::count_if(graphs.begin(), graphs.end(),
+                            [](const auto* candidate) { return candidate->isShowing(); })
+              == 1);
+
+        auto* handler = graph->getAccessibilityHandler();
+        REQUIRE(handler != nullptr);
+        REQUIRE(handler->getActions().invoke(
+            juce::AccessibilityActionType::press));
+        CHECK_FALSE(graph->getZoomState());
+        CHECK(std::all_of(graphs.begin(), graphs.end(),
+                          [](const auto* candidate) { return candidate->isShowing(); }));
+    }
+}
+
+TEST_CASE("Legacy graph layout clears an unavailable distortion zoom",
+          "[graph][layout][legacy]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    GraphPanel panel(processor);
+    panel.setBounds(0, 0, 640, 360);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+
+    panel.toggleZoom(panel.getDistortionGraph());
+    REQUIRE(panel.getDistortionGraph()->getZoomState());
+    panel.setLayoutMode(GraphPanel::LayoutMode::Global);
+
+    CHECK_FALSE(panel.getDistortionGraph()->getZoomState());
+    CHECK(panel.getOscilloscope()->isShowing());
+    CHECK(panel.getVuPanel()->isShowing());
+    CHECK(panel.getWidthGraph()->isShowing());
 }

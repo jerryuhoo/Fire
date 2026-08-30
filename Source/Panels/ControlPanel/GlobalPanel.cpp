@@ -57,6 +57,7 @@ GlobalPanel::GlobalPanel(FireAudioProcessor& p,
     addAndMakeVisible(oscilloscope);
     addAndMakeVisible(vuPanel);
     addAndMakeVisible(widthGraph);
+    configureGraphInteractions();
 
     vuPanel.setFocusBandNum(-1);
 
@@ -160,7 +161,14 @@ void GlobalPanel::visibilityChanged()
     juce::Component::visibilityChanged();
 
     if (safeThis != nullptr && ! isShowing())
+    {
         dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
+        clearGraphZoom();
+        resized();
+    }
 }
 
 void GlobalPanel::enablementChanged()
@@ -641,15 +649,35 @@ void GlobalPanel::resized()
     }
     else if (graphSwitch.getToggleState())
     {
-        juce::FlexBox graphBox;
-        graphBox.flexDirection = juce::FlexBox::Direction::row;
-        graphBox.justifyContent = juce::FlexBox::JustifyContent::center;
+        if (zoomedGraph != nullptr)
+        {
+            for (auto* graph : { static_cast<GraphTemplate*>(&oscilloscope),
+                                 static_cast<GraphTemplate*>(&vuPanel),
+                                 static_cast<GraphTemplate*>(&widthGraph) })
+                graph->setVisible(graph == zoomedGraph);
 
-        graphBox.items.add(juce::FlexItem(oscilloscope).withFlex(1.0f));
-        graphBox.items.add(juce::FlexItem(vuPanel).withFlex(1.0f));
-        graphBox.items.add(juce::FlexItem(widthGraph).withFlex(1.0f));
+            zoomedGraph->setBounds(
+                knobsColumnArea.reduced(juce::roundToInt(2.0f * uiScale)));
+            zoomedGraph->toFront(false);
+        }
+        else
+        {
+            for (auto* graph : { static_cast<GraphTemplate*>(&oscilloscope),
+                                 static_cast<GraphTemplate*>(&vuPanel),
+                                 static_cast<GraphTemplate*>(&widthGraph) })
+                graph->setVisible(true);
 
-        graphBox.performLayout(knobsColumnArea.reduced(juce::roundToInt(2.0f * uiScale)));
+            juce::FlexBox graphBox;
+            graphBox.flexDirection = juce::FlexBox::Direction::row;
+            graphBox.justifyContent = juce::FlexBox::JustifyContent::center;
+
+            graphBox.items.add(juce::FlexItem(oscilloscope).withFlex(1.0f));
+            graphBox.items.add(juce::FlexItem(vuPanel).withFlex(1.0f));
+            graphBox.items.add(juce::FlexItem(widthGraph).withFlex(1.0f));
+
+            graphBox.performLayout(
+                knobsColumnArea.reduced(juce::roundToInt(2.0f * uiScale)));
+        }
     }
 
     invalidateChromeCache();
@@ -782,6 +810,55 @@ void GlobalPanel::invalidateChromeCache()
     repaint();
 }
 
+void GlobalPanel::configureGraphInteractions()
+{
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    const std::array<GraphTemplate*, 3> graphs {
+        &oscilloscope, &vuPanel, &widthGraph
+    };
+
+    for (auto* graph : graphs)
+    {
+        graph->setZoomRequestCallback([safeThis, graph]
+        {
+            if (safeThis != nullptr)
+                safeThis->toggleGraphZoom(graph);
+        });
+    }
+}
+
+void GlobalPanel::toggleGraphZoom(GraphTemplate* graph)
+{
+    const std::array<GraphTemplate*, 3> graphs {
+        &oscilloscope, &vuPanel, &widthGraph
+    };
+    if (graph == nullptr
+        || std::find(graphs.begin(), graphs.end(), graph) == graphs.end()
+        || ! graph->isShowing())
+        return;
+
+    if (zoomedGraph == graph)
+    {
+        graph->setZoomState(false);
+        zoomedGraph = nullptr;
+    }
+    else
+    {
+        clearGraphZoom();
+        zoomedGraph = graph;
+        zoomedGraph->setZoomState(true);
+    }
+
+    resized();
+}
+
+void GlobalPanel::clearGraphZoom() noexcept
+{
+    if (zoomedGraph != nullptr)
+        zoomedGraph->setZoomState(false);
+    zoomedGraph = nullptr;
+}
+
 void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 {
     const bool changesSlopeContext = clickedButton == &filterSwitch
@@ -793,6 +870,11 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 
     if (changesSlopeContext)
         invalidateSlopeInteractions();
+
+    if ((clickedButton == &filterSwitch && filterSwitch.getToggleState())
+        || (clickedButton == &downsampleSwitch && downsampleSwitch.getToggleState())
+        || (clickedButton == &graphSwitch && graphSwitch.getToggleState()))
+        clearGraphZoom();
 
     bool isSwitch = false;
     if (clickedButton == &filterSwitch && filterSwitch.getToggleState())

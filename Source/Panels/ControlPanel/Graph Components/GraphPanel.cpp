@@ -58,6 +58,12 @@ void GraphPanel::setLayoutMode(LayoutMode newMode)
 {
     if (currentLayoutMode != newMode)
     {
+        if (newMode == LayoutMode::Global && zoomedView == &distortionGraph)
+        {
+            zoomedView->setZoomState(false);
+            zoomedView = nullptr;
+        }
+
         currentLayoutMode = newMode;
 
         // Update visibility based on the new mode

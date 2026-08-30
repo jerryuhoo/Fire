@@ -161,9 +161,7 @@ void GraphTemplate::mouseUp(const juce::MouseEvent& e)
 
     // The owner may synchronously delete this graph. Invoke a retained copy as
     // the final operation and do not touch component state afterwards.
-    auto callback = onZoomRequested;
-    if (callback)
-        callback();
+    requestZoom();
 }
 
 void GraphTemplate::mouseEnter(const juce::MouseEvent& e)
@@ -182,6 +180,21 @@ void GraphTemplate::mouseExit(const juce::MouseEvent& e)
 {
     recoverMissingPointerUp(e);
     updateHoverState();
+}
+
+bool GraphTemplate::keyPressed(const juce::KeyPress& key)
+{
+    const bool isActivationKey = key.isKeyCode(juce::KeyPress::returnKey)
+                                 || key.isKeyCode(juce::KeyPress::spaceKey);
+    if (isActivationKey && canRequestZoom())
+    {
+        // The owner may synchronously delete this graph. Keep activation as the
+        // final operation, matching the owned pointer-release path.
+        requestZoom();
+        return true;
+    }
+
+    return juce::Component::keyPressed(key);
 }
 
 void GraphTemplate::visibilityChanged()
@@ -214,6 +227,22 @@ void GraphTemplate::parentHierarchyChanged()
 {
     rebuildVisibilityObservers();
     updateShowingState();
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+GraphTemplate::createAccessibilityHandler()
+{
+    juce::AccessibilityActions actions;
+    actions.addAction(
+        juce::AccessibilityActionType::press,
+        [safeThis = juce::Component::SafePointer<GraphTemplate>(this)]
+        {
+            if (safeThis != nullptr && safeThis->canRequestZoom())
+                safeThis->requestZoom();
+        });
+
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this, juce::AccessibilityRole::button, std::move(actions));
 }
 
 void GraphTemplate::setGraphIdentity(juce::String title, fire::ui::ModuleRole role)
@@ -335,6 +364,18 @@ void GraphTemplate::dismissPointerGesture() noexcept
     primaryPointerDown = false;
     pointerSourceIndex = -1;
     updateAnimationTargets();
+}
+
+bool GraphTemplate::canRequestZoom() const noexcept
+{
+    return onZoomRequested != nullptr && isEnabled() && isShowing();
+}
+
+void GraphTemplate::requestZoom()
+{
+    auto callback = onZoomRequested;
+    if (callback != nullptr)
+        callback();
 }
 
 void GraphTemplate::updateHoverState() noexcept

@@ -86,6 +86,7 @@ BandPanel::BandPanel(FireAudioProcessor& p,
     addAndMakeVisible(distortionGraph);
     addAndMakeVisible(vuPanel);
     addAndMakeVisible(widthGraph);
+    configureGraphInteractions();
 
     // Group components for visibility management after they've been created
     setupComponentGroups();
@@ -507,6 +508,12 @@ void BandPanel::resized()
     vuPanel.setBounds(graphColumnArea);
     widthGraph.setBounds(graphColumnArea);
 
+    if (zoomedGraph != nullptr && zoomedGraph->isVisible())
+    {
+        zoomedGraph->setBounds(knobsAreaRect.getUnion(graphAreaRect).reduced(2));
+        zoomedGraph->toFront(false);
+    }
+
     // --- Output card ---
     auto buttonArea = outputColumnArea.removeFromBottom(buttonAreaHeight);
     outputColumnArea.removeFromBottom(juce::jmin(controlGap, outputColumnArea.getHeight()));
@@ -586,6 +593,55 @@ void BandPanel::invalidateChromeCache()
 {
     chromeCacheDirty = true;
     repaint();
+}
+
+void BandPanel::configureGraphInteractions()
+{
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    const std::array<GraphTemplate*, 4> graphs {
+        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
+    };
+
+    for (auto* graph : graphs)
+    {
+        graph->setZoomRequestCallback([safeThis, graph]
+        {
+            if (safeThis != nullptr)
+                safeThis->toggleGraphZoom(graph);
+        });
+    }
+}
+
+void BandPanel::toggleGraphZoom(GraphTemplate* graph)
+{
+    const std::array<GraphTemplate*, 4> graphs {
+        &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
+    };
+    if (graph == nullptr
+        || std::find(graphs.begin(), graphs.end(), graph) == graphs.end()
+        || ! graph->isShowing())
+        return;
+
+    if (zoomedGraph == graph)
+    {
+        graph->setZoomState(false);
+        zoomedGraph = nullptr;
+    }
+    else
+    {
+        clearGraphZoom();
+        zoomedGraph = graph;
+        zoomedGraph->setZoomState(true);
+    }
+
+    resized();
+}
+
+void BandPanel::clearGraphZoom() noexcept
+{
+    if (zoomedGraph != nullptr)
+        zoomedGraph->setZoomState(false);
+    zoomedGraph = nullptr;
 }
 
 void BandPanel::setAnimatedModuleTarget(int moduleIndex)
@@ -746,7 +802,14 @@ void BandPanel::visibilityChanged()
     juce::Component::visibilityChanged();
 
     if (safeThis != nullptr && ! isShowing())
+    {
         dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
+        clearGraphZoom();
+        resized();
+    }
 }
 
 void BandPanel::updateAttachments()
@@ -815,6 +878,12 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 
 void BandPanel::buttonClicked(juce::Button* clickedButton)
 {
+    if ((clickedButton == &oscSwitch && oscSwitch.getToggleState())
+        || (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
+        || (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
+        || (clickedButton == &widthSwitch && widthSwitch.getToggleState()))
+        clearGraphZoom();
+
     bool isSwitch = false;
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
     {

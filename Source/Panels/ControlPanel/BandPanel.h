@@ -93,6 +93,9 @@ private:
     void updateDistortionModeVisibility();
     void rebuildChromeCache(float displayScale);
     void invalidateChromeCache();
+    void configureGraphInteractions();
+    void toggleGraphZoom(GraphTemplate* graph);
+    void clearGraphZoom() noexcept;
     void setAnimatedModuleTarget(int moduleIndex);
     juce::Rectangle<float> getModuleSelectionBounds(float modulePosition) const;
     juce::Colour getModuleSelectionColour() const;
@@ -165,6 +168,7 @@ private:
     DistortionGraph distortionGraph { processor };
     VUPanel vuPanel { processor };
     WidthGraph widthGraph { processor };
+    GraphTemplate* zoomedGraph = nullptr;
 
     // Distortion modes moved from PluginEditor
     std::array<ContextAwareComboBox, 4> distortionModes;

@@ -102,6 +102,9 @@ private:
     bool popupSessionActive = false;
     bool pointerInteractionActive = false;
     bool cancelPendingPointerRelease = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::function<void()> lifecycleReentrancyHookForTesting;
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(
         ModulationMatrixRoutingComboBox)

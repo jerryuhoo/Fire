@@ -285,20 +285,56 @@ void ModulationMatrixRoutingComboBox::mouseWheelMove(
 
 void ModulationMatrixRoutingComboBox::visibilityChanged()
 {
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
     juce::ComboBox::visibilityChanged();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (safeThis != nullptr && lifecycleReentrancyHookForTesting != nullptr)
+    {
+        auto hook = lifecycleReentrancyHookForTesting;
+        hook();
+    }
+#endif
+    if (safeThis == nullptr)
+        return;
+
     if (! isShowing())
         dismissTransientInteraction();
 }
 
 void ModulationMatrixRoutingComboBox::enablementChanged()
 {
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
     dismissTransientInteraction();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (safeThis != nullptr && lifecycleReentrancyHookForTesting != nullptr)
+    {
+        auto hook = lifecycleReentrancyHookForTesting;
+        hook();
+    }
+#endif
+    if (safeThis == nullptr)
+        return;
+
     juce::ComboBox::enablementChanged();
 }
 
 void ModulationMatrixRoutingComboBox::parentHierarchyChanged()
 {
+    const juce::Component::SafePointer<ModulationMatrixRoutingComboBox>
+        safeThis(this);
     juce::ComboBox::parentHierarchyChanged();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (safeThis != nullptr && lifecycleReentrancyHookForTesting != nullptr)
+    {
+        auto hook = lifecycleReentrancyHookForTesting;
+        hook();
+    }
+#endif
+    if (safeThis == nullptr)
+        return;
+
     dismissTransientInteraction();
 }
 

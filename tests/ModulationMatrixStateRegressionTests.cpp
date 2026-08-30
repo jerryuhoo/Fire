@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <initializer_list>
 #include <memory>
+#include <utility>
 #include <vector>
 
 struct ModulationMatrixRoutingComboBoxTestAccess
@@ -28,6 +29,19 @@ struct ModulationMatrixRoutingComboBoxTestAccess
         const ModulationMatrixRoutingComboBox& comboBox)
     {
         return comboBox.popupSessionRevision;
+    }
+
+    static void setLifecycleReentrancyHook(
+        ModulationMatrixRoutingComboBox& comboBox,
+        std::function<void()> hook)
+    {
+        comboBox.lifecycleReentrancyHookForTesting = std::move(hook);
+    }
+
+    static void dispatchParentHierarchyChanged(
+        ModulationMatrixRoutingComboBox& comboBox)
+    {
+        comboBox.parentHierarchyChanged();
     }
 };
 
@@ -1070,6 +1084,89 @@ TEST_CASE("Modulation matrix popup commit survives synchronous panel deletion",
     const auto routings = manager.getModulationRoutingsCopy();
     REQUIRE(routings.size() == 1);
     CHECK(routings[0].sourceLfoIndex == 1);
+}
+
+TEST_CASE("Modulation matrix routing combo enablement callback survives synchronous deletion",
+          "[ui][modulation-matrix][combo-box][lifecycle][enablement][reentrancy][lifetime][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component owner;
+    auto comboBox =
+        std::make_unique<ModulationMatrixRoutingComboBox>();
+    owner.addAndMakeVisible(*comboBox);
+
+    bool deletionCallbackCompleted = false;
+    auto* comboBoxToDelete = comboBox.get();
+    ModulationMatrixRoutingComboBoxTestAccess::setLifecycleReentrancyHook(
+        *comboBoxToDelete,
+        [&]
+        {
+            ModulationMatrixRoutingComboBoxTestAccess::
+                setLifecycleReentrancyHook(*comboBoxToDelete, {});
+            comboBox.reset();
+            deletionCallbackCompleted = true;
+        });
+
+    // Disabling the surviving owner propagates the lifecycle callback to its
+    // child while keeping JUCE's outer setEnabled() call itself alive.
+    owner.setEnabled(false);
+
+    CHECK(deletionCallbackCompleted);
+    CHECK(comboBox == nullptr);
+    CHECK_FALSE(owner.isEnabled());
+}
+
+TEST_CASE("Modulation matrix routing combo reparent callback survives synchronous panel deletion",
+          "[ui][modulation-matrix][combo-box][lifecycle][reparent][reentrancy][lifetime][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    juce::Component owner;
+    auto panel = std::make_unique<ModulationMatrixPanel>(processor);
+    panel->setBounds(0, 0, 760, 420);
+    owner.addAndMakeVisible(*panel);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(*panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* sourceMenu = findRoutingComboBox(*rows.front(), true);
+    REQUIRE(sourceMenu != nullptr);
+
+    // Complete the outer reparent operation before exercising deletion from
+    // the ComboBox callback itself. JUCE explicitly disallows deleting a
+    // parent while Component::internalHierarchyChanged() is still walking it.
+    owner.removeChildComponent(panel.get());
+    REQUIRE(owner.getNumChildComponents() == 0);
+
+    bool deletionCallbackCompleted = false;
+    ModulationMatrixRoutingComboBoxTestAccess::setLifecycleReentrancyHook(
+        *sourceMenu,
+        [&]
+        {
+            ModulationMatrixRoutingComboBoxTestAccess::
+                setLifecycleReentrancyHook(*sourceMenu, {});
+            panel.reset();
+            deletionCallbackCompleted = true;
+        });
+
+    ModulationMatrixRoutingComboBoxTestAccess::
+        dispatchParentHierarchyChanged(*sourceMenu);
+
+    CHECK(deletionCallbackCompleted);
+    CHECK(panel == nullptr);
+    CHECK(owner.getNumChildComponents() == 0);
 }
 
 TEST_CASE("Modulation matrix amount accepts only primary-button drags",

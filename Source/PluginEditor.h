@@ -33,6 +33,7 @@ struct DistortionGraphSourceEpochTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct EditorUpdateCheckLifecycleTestAccess;
 struct EditorHiddenSessionTestAccess;
+struct EditorBackgroundCacheTestAccess;
 struct SpectrumHostBypassPresentationTestAccess;
 #endif
 
@@ -131,6 +132,7 @@ private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct EditorUpdateCheckLifecycleTestAccess;
     friend struct EditorHiddenSessionTestAccess;
+    friend struct EditorBackgroundCacheTestAccess;
     friend struct SpectrumHostBypassPresentationTestAccess;
 #endif
 
@@ -157,7 +159,15 @@ private:
     juce::String valueEntryTargetParameterID;
 
     juce::Image backgroundCache;
+    static constexpr std::uint32_t backgroundCacheResizeDebounceMs = 100;
     float currentDisplayScale = 1.0f;
+    juce::Point<int> backgroundCacheLogicalSize;
+    float backgroundCacheDisplayScale = 0.0f;
+    std::uint32_t backgroundCacheRebuildRequestedAtMs = 0;
+    bool backgroundCacheRebuildPending = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::uint64_t backgroundCacheBuildCountForTesting = 0;
+#endif
 
     struct EmberParticle
     {
@@ -212,6 +222,8 @@ private:
     void updateWhenChangingFocus(int bandIndex);
     void updateMainPanelVisibility();
     void synchroniseHistorySourceForWorkspace(int workspace);
+    void requestBackgroundCacheRebuild();
+    void rebuildPendingBackgroundCache(std::uint32_t nowMs);
     void rebuildBackgroundCache();
     void initialiseHeaderEmbers();
     void advanceAnimations(float deltaSeconds);

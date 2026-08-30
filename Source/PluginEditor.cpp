@@ -556,6 +556,14 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
         currentDisplayScale = newDisplayScale;
         rebuildBackgroundCache();
     }
+    else
+    {
+        // A live resize keeps painting the previous complete cache, stretched
+        // to the current bounds, until the resize stream settles. If a paint
+        // arrives after the debounce deadline before the editor timer does,
+        // finish the pending rebuild here as well.
+        rebuildPendingBackgroundCache(juce::Time::getMillisecondCounter());
+    }
 
     if (! backgroundCache.isNull())
         g.drawImage(backgroundCache, getLocalBounds().toFloat());
@@ -696,7 +704,7 @@ void FireAudioProcessorEditor::resized()
                          zoomSize,
                          zoomSize);
 
-    rebuildBackgroundCache();
+    requestBackgroundCacheRebuild();
 }
 
 void FireAudioProcessorEditor::visibilityChanged()
@@ -865,30 +873,117 @@ void FireAudioProcessorEditor::enablementChanged()
         updateCheckEnabled = true;
 }
 
+void FireAudioProcessorEditor::requestBackgroundCacheRebuild()
+{
+    const auto logicalSize = juce::Point<int>(getWidth(), getHeight());
+    const auto displayScale = juce::jmax(1.0f, currentDisplayScale);
+
+    if (! backgroundCache.isNull()
+        && backgroundCacheLogicalSize == logicalSize
+        && std::abs(backgroundCacheDisplayScale - displayScale) <= 0.01f)
+    {
+        // resized() is also called manually when the spectrum zoom changes,
+        // even though the cached canvas/header geometry is unchanged.
+        backgroundCacheRebuildPending = false;
+        return;
+    }
+
+    backgroundCacheRebuildPending = true;
+    backgroundCacheRebuildRequestedAtMs = juce::Time::getMillisecondCounter();
+
+    // The first editor frame must have a complete background. Subsequent
+    // resize frames can safely stretch that complete image while coalescing
+    // the expensive physical-pixel allocation and redraw.
+    if (backgroundCache.isNull())
+        rebuildBackgroundCache();
+}
+
+void FireAudioProcessorEditor::rebuildPendingBackgroundCache(
+    std::uint32_t nowMs)
+{
+    if (! backgroundCacheRebuildPending)
+        return;
+
+    if (static_cast<std::uint32_t>(nowMs
+                                   - backgroundCacheRebuildRequestedAtMs)
+        < backgroundCacheResizeDebounceMs)
+        return;
+
+    rebuildBackgroundCache();
+}
+
 void FireAudioProcessorEditor::rebuildBackgroundCache()
 {
     if (getWidth() <= 0 || getHeight() <= 0)
         return;
 
     const auto displayScale = juce::jmax(1.0f, currentDisplayScale);
-    backgroundCache = juce::Image(juce::Image::ARGB,
-                                  juce::jmax(1, juce::roundToInt(getWidth() * displayScale)),
-                                  juce::jmax(1, juce::roundToInt(getHeight() * displayScale)),
-                                  true);
-    juce::Graphics cacheGraphics(backgroundCache);
-    cacheGraphics.addTransform(juce::AffineTransform::scale(displayScale));
-    fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
-    fire::ui::drawTechGrid(cacheGraphics, getLocalBounds().toFloat(),
-                           juce::jmax(20.0f, 28.0f * fireLookAndFeel.scale), 0.055f);
+    const auto logicalSize = juce::Point<int>(getWidth(), getHeight());
+    const auto pixelWidth = juce::jmax(
+        1, juce::roundToInt(getWidth() * displayScale));
+    const auto pixelHeight = juce::jmax(
+        1, juce::roundToInt(getHeight() * displayScale));
 
-    auto header = headerArea.toFloat();
-    juce::ColourGradient headerFill(fire::ui::colours::surface2, header.getX(), header.getY(),
-                                    fire::ui::colours::surface0, header.getRight(), header.getBottom(), false);
-    headerFill.addColour(0.56, fire::ui::colours::surface1);
-    cacheGraphics.setGradientFill(headerFill);
-    cacheGraphics.fillRect(header);
-    cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.82f));
-    cacheGraphics.drawHorizontalLine(headerArea.getBottom() - 1, 0.0f, static_cast<float>(getWidth()));
+    if (! backgroundCache.isNull()
+        && backgroundCacheLogicalSize == logicalSize
+        && std::abs(backgroundCacheDisplayScale - displayScale) <= 0.01f
+        && backgroundCache.getWidth() == pixelWidth
+        && backgroundCache.getHeight() == pixelHeight)
+    {
+        backgroundCacheRebuildPending = false;
+        return;
+    }
+
+    juce::Image newBackgroundCache(
+        juce::Image::ARGB, pixelWidth, pixelHeight, true);
+    if (newBackgroundCache.isNull())
+    {
+        // Preserve the previous complete image instead of replacing it with
+        // an empty cache under memory pressure. A later resize or DPI change
+        // will make another bounded attempt.
+        backgroundCacheRebuildPending = false;
+        return;
+    }
+
+    {
+        juce::Graphics cacheGraphics(newBackgroundCache);
+        cacheGraphics.addTransform(
+            juce::AffineTransform::scale(displayScale));
+        fire::ui::drawCanvas(cacheGraphics, getLocalBounds().toFloat());
+        fire::ui::drawTechGrid(
+            cacheGraphics,
+            getLocalBounds().toFloat(),
+            juce::jmax(20.0f, 28.0f * fireLookAndFeel.scale),
+            0.055f);
+
+        auto header = headerArea.toFloat();
+        juce::ColourGradient headerFill(
+            fire::ui::colours::surface2,
+            header.getX(),
+            header.getY(),
+            fire::ui::colours::surface0,
+            header.getRight(),
+            header.getBottom(),
+            false);
+        headerFill.addColour(0.56, fire::ui::colours::surface1);
+        cacheGraphics.setGradientFill(headerFill);
+        cacheGraphics.fillRect(header);
+        cacheGraphics.setColour(
+            fire::ui::colours::hairline.withAlpha(0.82f));
+        cacheGraphics.drawHorizontalLine(
+            headerArea.getBottom() - 1,
+            0.0f,
+            static_cast<float>(getWidth()));
+    }
+
+    backgroundCache = std::move(newBackgroundCache);
+    backgroundCacheLogicalSize = logicalSize;
+    backgroundCacheDisplayScale = displayScale;
+    backgroundCacheRebuildPending = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    ++backgroundCacheBuildCountForTesting;
+#endif
+    repaint();
 
     // Workspace tabs intentionally sit directly on the canvas.  Their short
     // active rail is enough hierarchy and avoids another framed container.
@@ -1122,6 +1217,12 @@ void FireAudioProcessorEditor::drawWorkspaceSelection(juce::Graphics& g)
 void FireAudioProcessorEditor::timerCallback()
 {
     const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(this);
+
+    // Coalesce a stream of native live-resize callbacks into one physical
+    // pixel cache rebuild after the final size has remained stable briefly.
+    // This runs before the hidden-editor early return so a resized detached
+    // editor is already crisp when its peer is shown again.
+    rebuildPendingBackgroundCache(juce::Time::getMillisecondCounter());
 
     // Some hosts minimise or detach their peer without changing this
     // component's own visible flag. Observe that boundary here too.

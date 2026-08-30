@@ -13,13 +13,14 @@
 #include <utility>
 
 //==============================================================================
-GraphTemplate::GraphTemplate()
+GraphTemplate::GraphTemplate() : animationTimer(*this)
 {
     setOpaque(false);
 }
 
 GraphTemplate::~GraphTemplate()
 {
+    animationTimer.stopTimer();
     for (auto* ancestor : visibilityAncestors)
         if (ancestor != nullptr)
             ancestor->removeComponentListener(this);
@@ -54,12 +55,21 @@ void GraphTemplate::paint(juce::Graphics& g)
     if (staticLayer.isValid())
         g.drawImage(staticLayer, logicalBounds.toFloat());
 
-    if (isMouseOn || mZoomState)
+    const auto hover = hoverAnimation.current;
+    const auto press = pressAnimation.current;
+    const auto focus = focusAnimation.current;
+    const auto disabled = disabledAnimation.current;
+    const auto emphasis = juce::jmax(mZoomState ? 1.0f : 0.0f,
+                                     juce::jmax(hover * 0.52f, focus * 0.78f));
+    if (emphasis > 0.001f)
     {
         const auto accent = getGraphAccent();
-        auto outline = getLocalBounds().toFloat().reduced(1.0f);
-        g.setColour(accent.withAlpha(mZoomState ? 0.78f : 0.36f));
-        g.drawRoundedRectangle(outline, fire::ui::Metrics::radius, mZoomState ? 1.5f : 1.0f);
+        auto outline = getLocalBounds().toFloat().reduced(1.0f + press * scale);
+        g.setColour(accent.withAlpha((0.24f + emphasis * 0.54f)
+                                     * (1.0f - disabled * 0.72f)));
+        g.drawRoundedRectangle(outline,
+                               fire::ui::Metrics::radius,
+                               1.0f + emphasis * 0.5f);
     }
 }
 
@@ -104,7 +114,9 @@ void GraphTemplate::setZoomRequestCallback(std::function<void()> callback)
 {
     dismissPointerGesture();
     onZoomRequested = std::move(callback);
+    setWantsKeyboardFocus(onZoomRequested != nullptr);
     updateHoverState();
+    updateAnimationTargets();
 }
 
 void GraphTemplate::mouseDown(const juce::MouseEvent& e)
@@ -123,7 +135,7 @@ void GraphTemplate::mouseDown(const juce::MouseEvent& e)
     primaryPointerDown = true;
     pointerSourceType = e.source.getType();
     pointerSourceIndex = e.source.getIndex();
-    repaint();
+    updateAnimationTargets();
 }
 
 void GraphTemplate::mouseDrag(const juce::MouseEvent& e)
@@ -183,6 +195,19 @@ void GraphTemplate::enablementChanged()
 {
     dismissPointerGesture();
     updateHoverState();
+    updateAnimationTargets();
+}
+
+void GraphTemplate::focusGained(FocusChangeType cause)
+{
+    juce::Component::focusGained(cause);
+    updateAnimationTargets();
+}
+
+void GraphTemplate::focusLost(FocusChangeType cause)
+{
+    juce::Component::focusLost(cause);
+    updateAnimationTargets();
 }
 
 void GraphTemplate::parentHierarchyChanged()
@@ -257,6 +282,7 @@ void GraphTemplate::updateShowingState()
             repaint();
         }
     }
+    updateAnimationTargets();
     graphShowingStateChanged(nowShowing);
 }
 
@@ -308,7 +334,7 @@ void GraphTemplate::dismissPointerGesture() noexcept
 
     primaryPointerDown = false;
     pointerSourceIndex = -1;
-    repaint();
+    updateAnimationTargets();
 }
 
 void GraphTemplate::updateHoverState() noexcept
@@ -319,8 +345,61 @@ void GraphTemplate::updateHoverState() noexcept
     if (isMouseOn != shouldShowHover)
     {
         isMouseOn = shouldShowHover;
-        repaint();
+        updateAnimationTargets();
     }
+}
+
+void GraphTemplate::updateAnimationTargets() noexcept
+{
+    const bool interactive = onZoomRequested != nullptr && isShowing();
+    if (! interactive)
+    {
+        animationTimer.stopTimer();
+        hoverAnimation.snapTo(0.0f);
+        pressAnimation.snapTo(0.0f);
+        focusAnimation.snapTo(0.0f);
+        disabledAnimation.snapTo(0.0f);
+        repaint();
+        return;
+    }
+
+    const bool enabled = isEnabled();
+    hoverAnimation.setTarget(enabled && isMouseOn ? 1.0f : 0.0f);
+    pressAnimation.setTarget(enabled && primaryPointerDown ? 1.0f : 0.0f);
+    focusAnimation.setTarget(enabled && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    disabledAnimation.setTarget(enabled ? 0.0f : 1.0f);
+    if (! animationsSettled() && ! animationTimer.isTimerRunning())
+        animationTimer.startTimerHz(60);
+}
+
+bool GraphTemplate::advanceAnimation(float deltaSeconds) noexcept
+{
+    auto changed = hoverAnimation.advance(deltaSeconds, 0.10f);
+    changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
+    changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
+    changed = disabledAnimation.advance(deltaSeconds, 0.13f) || changed;
+    return changed;
+}
+
+bool GraphTemplate::animationsSettled() const noexcept
+{
+    return hoverAnimation.isSettled() && pressAnimation.isSettled()
+        && focusAnimation.isSettled() && disabledAnimation.isSettled();
+}
+
+void GraphTemplate::animationTimerCallback()
+{
+    if (onZoomRequested == nullptr || ! isShowing())
+    {
+        updateAnimationTargets();
+        return;
+    }
+
+    updateAnimationTargets();
+    if (advanceAnimation(1.0f / 60.0f))
+        repaint();
+    if (animationsSettled())
+        animationTimer.stopTimer();
 }
 
 void GraphTemplate::rebuildStaticLayer(float displayScale)

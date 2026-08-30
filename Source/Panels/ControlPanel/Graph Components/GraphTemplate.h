@@ -41,6 +41,8 @@ public:
     void mouseExit(const juce::MouseEvent& e) override;
     void visibilityChanged() override;
     void enablementChanged() override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
     void parentHierarchyChanged() override;
 
 private:
@@ -58,6 +60,22 @@ private:
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
     bool primaryPointerDown = false;
+    fire::ui::DampedValue hoverAnimation;
+    fire::ui::DampedValue pressAnimation;
+    fire::ui::DampedValue focusAnimation;
+    fire::ui::DampedValue disabledAnimation;
+
+    class AnimationTimer final : public juce::Timer
+    {
+    public:
+        explicit AnimationTimer(GraphTemplate& ownerToUse) : owner(ownerToUse) {}
+
+    private:
+        void timerCallback() override { owner.animationTimerCallback(); }
+        GraphTemplate& owner;
+    };
+
+    AnimationTimer animationTimer;
 
     void rebuildStaticLayer(float displayScale);
     void rebuildVisibilityObservers();
@@ -70,6 +88,10 @@ private:
     void recoverMissingPointerUp(const juce::MouseEvent&) noexcept;
     void dismissPointerGesture() noexcept;
     void updateHoverState() noexcept;
+    void updateAnimationTargets() noexcept;
+    bool advanceAnimation(float deltaSeconds) noexcept;
+    bool animationsSettled() const noexcept;
+    void animationTimerCallback();
 
 protected:
     void setGraphIdentity(juce::String title, fire::ui::ModuleRole role);

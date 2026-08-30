@@ -16,6 +16,44 @@ struct GraphTemplateInputTestAccess
     {
         graph.pointerSourceIndex = index;
     }
+
+    static void setAnimationTargets(GraphTemplate& graph,
+                                    float hover,
+                                    float press,
+                                    float focus,
+                                    float disabled) noexcept
+    {
+        graph.hoverAnimation.setTarget(hover);
+        graph.pressAnimation.setTarget(press);
+        graph.focusAnimation.setTarget(focus);
+        graph.disabledAnimation.setTarget(disabled);
+    }
+
+    static bool advanceAnimation(GraphTemplate& graph,
+                                 float deltaSeconds) noexcept
+    {
+        return graph.advanceAnimation(deltaSeconds);
+    }
+
+    static float hover(const GraphTemplate& graph) noexcept
+    {
+        return graph.hoverAnimation.current;
+    }
+
+    static float press(const GraphTemplate& graph) noexcept
+    {
+        return graph.pressAnimation.current;
+    }
+
+    static float focus(const GraphTemplate& graph) noexcept
+    {
+        return graph.focusAnimation.current;
+    }
+
+    static float disabled(const GraphTemplate& graph) noexcept
+    {
+        return graph.disabledAnimation.current;
+    }
 };
 
 namespace
@@ -117,6 +155,10 @@ TEST_CASE("Graph zoom release cannot cross hidden or disabled lifecycle",
         juce::ModifierKeys::leftButtonModifier
     };
     graph.mouseDown(makeMouseEvent(graph, primary));
+    REQUIRE(GraphTemplateInputTestAccess::advanceAnimation(
+        graph, 1.0f / 60.0f));
+    CHECK(GraphTemplateInputTestAccess::press(graph) > 0.0f);
+    CHECK(GraphTemplateInputTestAccess::press(graph) < 1.0f);
     panel.setVisible(false);
     CHECK_FALSE(GraphTemplateInputTestAccess::hasActivePointer(graph));
     graph.mouseUp(makeMouseEvent(graph, {}));
@@ -126,6 +168,10 @@ TEST_CASE("Graph zoom release cannot cross hidden or disabled lifecycle",
     graph.mouseDown(makeMouseEvent(graph, primary));
     graph.setEnabled(false);
     CHECK_FALSE(GraphTemplateInputTestAccess::hasActivePointer(graph));
+    REQUIRE(GraphTemplateInputTestAccess::advanceAnimation(
+        graph, 1.0f / 60.0f));
+    CHECK(GraphTemplateInputTestAccess::disabled(graph) > 0.0f);
+    CHECK(GraphTemplateInputTestAccess::disabled(graph) < 1.0f);
     graph.mouseUp(makeMouseEvent(graph, {}));
     CHECK_FALSE(graph.getZoomState());
 }
@@ -146,4 +192,53 @@ TEST_CASE("Graph zoom callback tolerates synchronous graph deletion",
     graph->mouseDown(makeMouseEvent(*graph, primary));
     graph->mouseUp(makeMouseEvent(*graph, {}));
     CHECK(graph == nullptr);
+}
+
+TEST_CASE("Interactive graph presentation advances continuously and hidden-idle",
+          "[graph][animation][lifecycle][zoom]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component owner;
+    owner.setBounds(0, 0, 320, 180);
+    owner.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    owner.setVisible(true);
+
+    GraphTemplate graph;
+    owner.addAndMakeVisible(graph);
+    graph.setBounds(owner.getLocalBounds());
+    graph.setZoomRequestCallback([] {});
+
+    GraphTemplateInputTestAccess::setAnimationTargets(
+        graph, 1.0f, 1.0f, 1.0f, 1.0f);
+    REQUIRE(GraphTemplateInputTestAccess::advanceAnimation(
+        graph, 1.0f / 60.0f));
+    CHECK(GraphTemplateInputTestAccess::hover(graph) > 0.0f);
+    CHECK(GraphTemplateInputTestAccess::hover(graph) < 1.0f);
+    CHECK(GraphTemplateInputTestAccess::press(graph)
+          > GraphTemplateInputTestAccess::hover(graph));
+    CHECK(GraphTemplateInputTestAccess::focus(graph) > 0.0f);
+    CHECK(GraphTemplateInputTestAccess::disabled(graph) > 0.0f);
+
+    owner.setVisible(false);
+    CHECK(GraphTemplateInputTestAccess::hover(graph) == 0.0f);
+    CHECK(GraphTemplateInputTestAccess::press(graph) == 0.0f);
+    CHECK(GraphTemplateInputTestAccess::focus(graph) == 0.0f);
+    CHECK(GraphTemplateInputTestAccess::disabled(graph) == 0.0f);
+}
+
+TEST_CASE("Non-interactive graph presentation remains static",
+          "[graph][animation][non-interactive]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    GraphTemplate graph;
+    GraphTemplateInputTestAccess::setAnimationTargets(
+        graph, 1.0f, 1.0f, 1.0f, 1.0f);
+
+    // With no owner callback, lifecycle target refresh snaps every visual
+    // channel to neutral instead of creating a hidden Timer workload.
+    graph.setZoomRequestCallback({});
+    CHECK(GraphTemplateInputTestAccess::hover(graph) == 0.0f);
+    CHECK(GraphTemplateInputTestAccess::press(graph) == 0.0f);
+    CHECK(GraphTemplateInputTestAccess::focus(graph) == 0.0f);
+    CHECK(GraphTemplateInputTestAccess::disabled(graph) == 0.0f);
 }

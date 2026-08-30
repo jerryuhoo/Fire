@@ -19,12 +19,14 @@
 #include "FreqDividerGroup.h"
 #include "SoloButton.h"
 #include "SpectrumComponent.h"
+#include <array>
 #include <functional>
 #include <memory>
 #include <vector>
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct MultibandPointerTestAccess;
+struct MultibandTopologyAnimationTestAccess;
 #endif
 //==============================================================================
 /*
@@ -65,6 +67,7 @@ public:
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct MultibandPointerTestAccess;
+    friend struct MultibandTopologyAnimationTestAccess;
 #endif
 
     struct BandUIs
@@ -99,11 +102,30 @@ private:
     int hoveredBandIndex = -1;
     FocusChangedCallback focusChangedCallback;
 
+    struct DividerVisualState
+    {
+        float xPercent = 0.0f;
+        float opacity = 1.0f;
+    };
+
+    struct DividerVisualSnapshot
+    {
+        int lineCount = 0;
+        std::array<DividerVisualState, 3> dividers {};
+    };
+
+    struct RetiringDividerVisual
+    {
+        float xPercent = 0.0f;
+        fire::ui::DampedValue opacity;
+    };
+
     void setLineIndex();
     int sortLinesInternal(bool notifyFocusChange);
     void applyAuthoritativeBandCount(int requestedBandCount,
                                      bool forceFocusNotification,
-                                     bool publishCanonicalParameters);
+                                     bool publishCanonicalParameters,
+                                     const DividerVisualSnapshot* previousVisuals = nullptr);
     std::array<float, 3> getCanonicalCrossoverFrequencies(int requestedBandCount) const;
     void setDividerState(int dividerIndex,
                          bool enabled,
@@ -138,6 +160,14 @@ private:
     void updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside);
     void refreshHoveredBandFromMouse();
     void updateCloseButtonVisibility();
+    DividerVisualSnapshot captureDividerVisuals() const;
+    void reconcileDividerTopologyVisuals(const DividerVisualSnapshot& previous,
+                                         int newLineCount,
+                                         bool animate);
+    float takeRetiringDividerOpacity(float xPercent) noexcept;
+    void addRetiringDividerVisual(float xPercent, float opacity);
+    void clearRetiringDividerVisuals();
+    void paintRetiringDividerVisuals(juce::Graphics& g) const;
 
     struct CrossoverGestureSession;
     void beginCrossoverGesture();
@@ -148,6 +178,7 @@ private:
     int crossoverGestureDepth = 0;
 
     std::unique_ptr<FreqDividerGroup> freqDividerGroup[3];
+    std::vector<RetiringDividerVisual> retiringDividerVisuals;
 
     // Use vectors to manage attachments
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> multiEnableAttachments;

@@ -49,6 +49,9 @@ public:
 private:
     friend class Multiband;
 
+    void beginTopologyReveal(float initialAlpha);
+    void snapTopologyReveal(float alpha = 1.0f);
+    float getTopologyReveal() const noexcept;
     void visibilityChanged() override;
     std::uint64_t getVisibilityGeneration() const noexcept;
     void dismissIfHidden(std::uint64_t expectedGeneration);
@@ -76,6 +79,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> multiFreqAttachment;
     HiddenCallback hiddenCallback;
     std::uint64_t visibilityGeneration = 0;
+    fire::ui::DampedValue topologyRevealAnimation;
     
     FreqTextLabel freqTextLabel;
     

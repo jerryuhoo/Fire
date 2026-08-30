@@ -14,6 +14,10 @@
 
 namespace
 {
+constexpr float dividerVisualMatchTolerance = 0.0015f;
+constexpr float dividerRetirementResponseSeconds = 0.14f;
+constexpr size_t maxRetiringDividerVisuals = 6;
+
 bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
 {
     return event.mods.isLeftButtonDown()
@@ -80,6 +84,7 @@ private:
 Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : processor(p), stateComponent(sc)
 {
     setOpaque(false);
+    retiringDividerVisuals.reserve(maxRetiringDividerVisuals);
     bandUIs.resize(4);
     for (int i = 0; i < 4; ++i)
     {
@@ -242,6 +247,11 @@ void Multiband::paint(juce::Graphics& g)
     // divider, so the selected rail cannot stop short or spill into a neighbour.
     for (int band = 0; band <= lineNum; ++band)
         paintBandOverlay(g, band, getBandBounds(band), mousePos);
+
+    // Disabled divider components are hidden as soon as the processor commits
+    // the new topology. Paint their short-lived visual copies independently so
+    // the fade cannot delay DSP state or retain a pointer to an inactive slot.
+    paintRetiringDividerVisuals(g);
 }
 
 void Multiband::resized()
@@ -257,6 +267,7 @@ void Multiband::animationTick(float deltaSeconds)
     if (! isShowing())
         return;
 
+    const juce::Component::SafePointer<Multiband> safeThis(this);
     for (const auto& dividerGroup : freqDividerGroup)
     {
         if (dividerGroup == nullptr)
@@ -267,24 +278,70 @@ void Multiband::animationTick(float deltaSeconds)
             divider.repaint();
 
         dividerGroup->advanceAnimation(deltaSeconds);
+        if (safeThis == nullptr)
+            return;
     }
 
     for (auto& bandUI : bandUIs)
-        if (bandUI.closeButton != nullptr
-            && bandUI.closeButton->advanceAnimation(deltaSeconds))
-            bandUI.closeButton->repaint();
+    {
+        auto* const closeButton = bandUI.closeButton.get();
+        const juce::Component::SafePointer<CloseButton> safeCloseButton(
+            closeButton);
+        const bool closeButtonChanged = closeButton != nullptr
+                                             && closeButton->advanceAnimation(
+                                                 deltaSeconds);
+
+        if (safeThis == nullptr)
+            return;
+
+        if (closeButtonChanged && safeCloseButton != nullptr)
+            safeCloseButton->repaint();
+    }
+
+    bool topologyVisualChanged = false;
+    for (auto& visual : retiringDividerVisuals)
+    {
+        const auto previousOpacity = visual.opacity.current;
+        visual.opacity.advance(deltaSeconds,
+                               dividerRetirementResponseSeconds);
+        topologyVisualChanged = topologyVisualChanged
+                             || ! juce::approximatelyEqual(
+                                    previousOpacity,
+                                    visual.opacity.current);
+    }
+
+    const auto previousRetiringCount = retiringDividerVisuals.size();
+    retiringDividerVisuals.erase(
+        std::remove_if(retiringDividerVisuals.begin(),
+                       retiringDividerVisuals.end(),
+                       [](const RetiringDividerVisual& visual)
+                       {
+                           return visual.opacity.isSettled()
+                               && visual.opacity.current <= 0.001f;
+                       }),
+        retiringDividerVisuals.end());
+    topologyVisualChanged = topologyVisualChanged
+                         || retiringDividerVisuals.size()
+                                != previousRetiringCount;
+
+    if (topologyVisualChanged)
+        repaint();
 }
 
 void Multiband::dismissTransientUi()
 {
     clearPrimaryPointerState();
     hoveredBandIndex = -1;
+    clearRetiringDividerVisuals();
     juce::Component::SafePointer<Multiband> safeThis(this);
 
     for (const auto& dividerGroup : freqDividerGroup)
     {
         if (dividerGroup != nullptr)
+        {
+            dividerGroup->snapTopologyReveal();
             dividerGroup->dismissImmediately();
+        }
 
         if (safeThis == nullptr)
             return;
@@ -476,11 +533,17 @@ void Multiband::setDividerState(int dividerIndex,
 
 void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
                                             bool forceFocusNotification,
-                                            bool publishCanonicalParameters)
+                                            bool publishCanonicalParameters,
+                                            const DividerVisualSnapshot* previousVisuals)
 {
     const int newBandCount = juce::jlimit(1, 4, requestedBandCount);
     const int newLineCount = newBandCount - 1;
     const auto frequencies = getCanonicalCrossoverFrequencies(newBandCount);
+    const auto visualStateBeforeTopology = previousVisuals != nullptr
+                                             ? *previousVisuals
+                                             : captureDividerVisuals();
+    const bool topologyCountChanged =
+        visualStateBeforeTopology.lineCount != newLineCount;
 
     // End interactions while every group and callback is still alive. This
     // happens before ScopedValueSetter below because a host gesture-end
@@ -562,6 +625,18 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
         return;
 
     setLineRelatedBoundsByX();
+
+    if (safeThis == nullptr)
+        return;
+
+    if (topologyCountChanged)
+        // Only direct UI transactions provide a pre-APVTS snapshot. Preset or
+        // host restores may already have reused the fixed slots, so snapping
+        // those avoids animating a stale frequency identity.
+        reconcileDividerTopologyVisuals(visualStateBeforeTopology,
+                                        newLineCount,
+                                        previousVisuals != nullptr
+                                            && isShowing());
 
     if (safeThis == nullptr)
         return;
@@ -767,6 +842,12 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                 if (! juce::isPositiveAndBelow(splitBandIndex, lineNum + 1))
                     return;
 
+                // APVTS attachments update the fixed divider slots during the
+                // processor transaction. Capture the old visual identities
+                // first so the subsequent animation follows frequencies, not
+                // whichever slot happens to contain them after compaction.
+                const auto visualStateBeforeTopology = captureDividerVisuals();
+
                 const bool newBandIsOnLeft = localEvent.position.x
                                              < getBandBounds(splitBandIndex).getCentreX();
                 const int oldBandCount = lineNum + 1;
@@ -791,7 +872,8 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
                                                     focusAfterInsert);
                 safeThis->applyAuthoritativeBandCount(newBandCount,
                                                       false,
-                                                      false);
+                                                      false,
+                                                      &visualStateBeforeTopology);
 
                 if (safeThis == nullptr)
                     return;
@@ -1074,6 +1156,7 @@ void Multiband::buttonClicked(juce::Button* button)
             const int oldFocus = focusIndex;
             const int oldBandCount = lineNum + 1;
             const int newBandCount = oldBandCount - 1;
+            const auto visualStateBeforeTopology = captureDividerVisuals();
             int focusAfterDelete = oldFocus;
             if (deletedIndex < oldFocus
                 || (deletedIndex == oldFocus && oldFocus >= newBandCount))
@@ -1094,7 +1177,8 @@ void Multiband::buttonClicked(juce::Button* button)
                                                 focusAfterDelete);
             safeThis->applyAuthoritativeBandCount(newBandCount,
                                                   false,
-                                                  false);
+                                                  false,
+                                                  &visualStateBeforeTopology);
 
             if (safeThis == nullptr)
                 return;
@@ -1434,6 +1518,207 @@ void Multiband::updateCloseButtonVisibility()
         closeButton.setPresented(shouldShow);
         if (shouldShow)
             closeButton.toFront(false);
+    }
+}
+
+Multiband::DividerVisualSnapshot Multiband::captureDividerVisuals() const
+{
+    DividerVisualSnapshot snapshot;
+    snapshot.lineCount = juce::jlimit(0, 3, lineNum);
+    for (int divider = 0; divider < snapshot.lineCount; ++divider)
+    {
+        const auto& group = freqDividerGroup[static_cast<size_t>(divider)];
+        if (group == nullptr)
+            continue;
+
+        auto& visual = snapshot.dividers[static_cast<size_t>(divider)];
+        visual.xPercent = juce::jlimit(
+            0.0f, 1.0f, group->getVerticalLine().getXPercent());
+        visual.opacity = group->getTopologyReveal();
+    }
+    return snapshot;
+}
+
+void Multiband::reconcileDividerTopologyVisuals(
+    const DividerVisualSnapshot& previous,
+    int newLineCount,
+    bool animate)
+{
+    newLineCount = juce::jlimit(0, 3, newLineCount);
+    const int oldLineCount = juce::jlimit(0, 3, previous.lineCount);
+    std::array<bool, 3> oldVisualWasMatched {};
+
+    if (! animate)
+        clearRetiringDividerVisuals();
+
+    for (int divider = 0; divider < newLineCount; ++divider)
+    {
+        auto& group = *freqDividerGroup[static_cast<size_t>(divider)];
+        const auto xPercent = juce::jlimit(
+            0.0f, 1.0f, group.getVerticalLine().getXPercent());
+
+        int matchingOldVisual = -1;
+        float smallestDistance = dividerVisualMatchTolerance;
+        for (int oldDivider = 0; oldDivider < oldLineCount; ++oldDivider)
+        {
+            if (oldVisualWasMatched[static_cast<size_t>(oldDivider)])
+                continue;
+
+            const auto distance = std::abs(
+                previous.dividers[static_cast<size_t>(oldDivider)].xPercent
+                - xPercent);
+            if (distance <= smallestDistance)
+            {
+                smallestDistance = distance;
+                matchingOldVisual = oldDivider;
+            }
+        }
+
+        float initialOpacity = 0.0f;
+        if (matchingOldVisual >= 0)
+        {
+            oldVisualWasMatched[static_cast<size_t>(matchingOldVisual)] = true;
+            initialOpacity = previous.dividers[
+                static_cast<size_t>(matchingOldVisual)].opacity;
+        }
+
+        // Re-adding the same frequency while its removal is still fading
+        // reverses that visual from its current value instead of stacking two
+        // rails or flashing through zero.
+        const auto retiringOpacity = takeRetiringDividerOpacity(xPercent);
+        if (retiringOpacity >= 0.0f)
+            initialOpacity = juce::jmax(initialOpacity, retiringOpacity);
+
+        if (animate && initialOpacity < 0.999f)
+            group.beginTopologyReveal(initialOpacity);
+        else
+            group.snapTopologyReveal();
+    }
+
+    for (int divider = newLineCount; divider < 3; ++divider)
+        freqDividerGroup[static_cast<size_t>(divider)]->snapTopologyReveal();
+
+    if (animate)
+        for (int oldDivider = 0; oldDivider < oldLineCount; ++oldDivider)
+            if (! oldVisualWasMatched[static_cast<size_t>(oldDivider)])
+            {
+                const auto& oldVisual = previous.dividers[
+                    static_cast<size_t>(oldDivider)];
+                addRetiringDividerVisual(oldVisual.xPercent,
+                                         oldVisual.opacity);
+            }
+}
+
+float Multiband::takeRetiringDividerOpacity(float xPercent) noexcept
+{
+    auto closest = retiringDividerVisuals.end();
+    float smallestDistance = dividerVisualMatchTolerance;
+    for (auto candidate = retiringDividerVisuals.begin();
+         candidate != retiringDividerVisuals.end();
+         ++candidate)
+    {
+        const auto distance = std::abs(candidate->xPercent - xPercent);
+        if (distance <= smallestDistance)
+        {
+            smallestDistance = distance;
+            closest = candidate;
+        }
+    }
+
+    if (closest == retiringDividerVisuals.end())
+        return -1.0f;
+
+    const auto opacity = juce::jlimit(0.0f, 1.0f,
+                                      closest->opacity.current);
+    retiringDividerVisuals.erase(closest);
+    return opacity;
+}
+
+void Multiband::addRetiringDividerVisual(float xPercent, float opacity)
+{
+    if (! std::isfinite(xPercent) || ! std::isfinite(opacity)
+        || opacity <= 0.001f)
+        return;
+
+    xPercent = juce::jlimit(0.0f, 1.0f, xPercent);
+    opacity = juce::jlimit(0.0f, 1.0f, opacity);
+    for (auto& visual : retiringDividerVisuals)
+        if (std::abs(visual.xPercent - xPercent)
+            <= dividerVisualMatchTolerance)
+        {
+            visual.xPercent = xPercent;
+            visual.opacity.snapTo(juce::jmax(visual.opacity.current,
+                                             opacity));
+            visual.opacity.setTarget(0.0f);
+            return;
+        }
+
+    RetiringDividerVisual visual;
+    visual.xPercent = xPercent;
+    visual.opacity.snapTo(opacity);
+    visual.opacity.setTarget(0.0f);
+
+    if (retiringDividerVisuals.size() >= maxRetiringDividerVisuals)
+    {
+        const auto faintest = std::min_element(
+            retiringDividerVisuals.begin(),
+            retiringDividerVisuals.end(),
+            [](const RetiringDividerVisual& lhs,
+               const RetiringDividerVisual& rhs)
+            {
+                return lhs.opacity.current < rhs.opacity.current;
+            });
+        if (faintest != retiringDividerVisuals.end())
+            *faintest = visual;
+        return;
+    }
+
+    retiringDividerVisuals.push_back(visual);
+}
+
+void Multiband::clearRetiringDividerVisuals()
+{
+    if (retiringDividerVisuals.empty())
+        return;
+
+    retiringDividerVisuals.clear();
+    repaint();
+}
+
+void Multiband::paintRetiringDividerVisuals(juce::Graphics& g) const
+{
+    if (getWidth() <= 0 || getHeight() <= 0)
+        return;
+
+    const auto physicalScale = juce::jmax(
+        1.0f, g.getInternalContext().getPhysicalPixelScaleFactor());
+    const auto bounds = getLocalBounds().toFloat();
+    for (const auto& visual : retiringDividerVisuals)
+    {
+        const auto opacity = juce::jlimit(0.0f, 1.0f,
+                                          visual.opacity.current);
+        if (opacity <= 0.001f)
+            continue;
+
+        const auto centreX = fire::ui::pixelAligned(
+            visual.xPercent * bounds.getWidth(), physicalScale);
+        const auto lineWidth = (0.80f + 0.20f * opacity) / physicalScale;
+        g.setColour(fire::ui::colours::flame.withAlpha(0.46f * opacity));
+        g.fillRect(centreX - lineWidth * 0.5f,
+                   bounds.getY(),
+                   lineWidth,
+                   bounds.getHeight());
+
+        const auto handleRadius = 2.6f * (0.72f + 0.28f * opacity);
+        const juce::Rectangle<float> handle(
+            centreX - handleRadius,
+            bounds.getY() + 3.0f,
+            handleRadius * 2.0f,
+            handleRadius * 2.0f);
+        g.setColour(fire::ui::colours::surface1.withAlpha(0.96f * opacity));
+        g.fillEllipse(handle);
+        g.setColour(fire::ui::colours::flame.withAlpha(0.72f * opacity));
+        g.drawEllipse(handle.reduced(0.5f / physicalScale), lineWidth);
     }
 }
 

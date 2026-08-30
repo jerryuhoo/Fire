@@ -17,6 +17,7 @@
 FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor(p), freqTextLabel(verticalLine)
 {
     margin = getHeight() / 20.0f;
+    topologyRevealAnimation.snapTo(1.0f);
 
     // This ToggleButton is only an APVTS compatibility mirror. It is not a
     // user-facing command: the visible child controls own all interaction.
@@ -95,7 +96,43 @@ void FreqDividerGroup::setHiddenCallback(HiddenCallback callback)
 
 bool FreqDividerGroup::advanceAnimation(float deltaSeconds)
 {
-    return freqTextLabel.advanceAnimation(deltaSeconds);
+    const auto previousReveal = topologyRevealAnimation.current;
+    const bool topologyAnimationIsRunning =
+        topologyRevealAnimation.advance(deltaSeconds, 0.14f);
+    const auto reveal = juce::jlimit(0.0f, 1.0f,
+                                    topologyRevealAnimation.current);
+    const bool revealChanged = ! juce::approximatelyEqual(previousReveal,
+                                                           reveal);
+    if (revealChanged || ! juce::approximatelyEqual(getAlpha(), reveal))
+        setAlpha(reveal);
+
+    return freqTextLabel.advanceAnimation(deltaSeconds)
+        || topologyAnimationIsRunning
+        || revealChanged;
+}
+
+void FreqDividerGroup::beginTopologyReveal(float initialAlpha)
+{
+    const auto clampedAlpha = std::isfinite(initialAlpha)
+                                ? juce::jlimit(0.0f, 1.0f, initialAlpha)
+                                : 0.0f;
+    topologyRevealAnimation.snapTo(clampedAlpha);
+    topologyRevealAnimation.setTarget(1.0f);
+    setAlpha(clampedAlpha);
+}
+
+void FreqDividerGroup::snapTopologyReveal(float alpha)
+{
+    const auto clampedAlpha = std::isfinite(alpha)
+                                ? juce::jlimit(0.0f, 1.0f, alpha)
+                                : 1.0f;
+    topologyRevealAnimation.snapTo(clampedAlpha);
+    setAlpha(clampedAlpha);
+}
+
+float FreqDividerGroup::getTopologyReveal() const noexcept
+{
+    return juce::jlimit(0.0f, 1.0f, topologyRevealAnimation.current);
 }
 
 void FreqDividerGroup::dismissImmediately()

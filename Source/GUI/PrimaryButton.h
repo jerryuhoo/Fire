@@ -27,6 +27,29 @@ public:
 
 namespace fire::ui
 {
+class KeyboardFocusModalityState
+{
+public:
+    void notePointer() noexcept { lastInputWasKeyboard = false; }
+    void noteKeyboard() noexcept { lastInputWasKeyboard = true; }
+
+    void focusGained(juce::Component::FocusChangeType cause) noexcept
+    {
+        if (cause == juce::Component::focusChangedByMouseClick)
+            notePointer();
+        else if (cause == juce::Component::focusChangedByTabKey)
+            noteKeyboard();
+    }
+
+    void resetSession() noexcept { lastInputWasKeyboard = true; }
+    bool isKeyboardVisible() const noexcept { return lastInputWasKeyboard; }
+
+private:
+    // The first direct/programmatic focus is keyboard-visible. Once an actual
+    // input establishes modality, temporary direct focus transfers preserve it.
+    bool lastInputWasKeyboard = true;
+};
+
 // Keyboard and accessibility are user-input paths, so the button must still
 // belong to a live, visible peer when the command is dispatched.
 inline bool canActivateButton(const juce::Button& button) noexcept
@@ -252,7 +275,7 @@ public:
             // A pointer click may give the component keyboard focus, but that
             // must not leave a keyboard-navigation outline behind after the
             // pointer exits.
-            keyboardFocusVisible = false;
+            focusModality.notePointer();
             pointerSourceType = event.source.getType();
             pointerSourceIndex = event.source.getIndex();
             ButtonType::mouseDown(event);
@@ -349,9 +372,10 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override
     {
-        if (this->hasKeyboardFocus(true) && ! keyboardFocusVisible)
+        if (this->hasKeyboardFocus(true)
+            && ! focusModality.isKeyboardVisible())
         {
-            keyboardFocusVisible = true;
+            focusModality.noteKeyboard();
             updateAnimationTargets();
         }
 
@@ -427,7 +451,7 @@ public:
         ButtonType::focusGained(cause);
         if (safeThis != nullptr)
         {
-            keyboardFocusVisible = cause != juce::Component::focusChangedByMouseClick;
+            focusModality.focusGained(cause);
             updateAnimationTargets();
         }
     }
@@ -438,7 +462,6 @@ public:
         ButtonType::focusLost(cause);
         if (safeThis != nullptr)
         {
-            keyboardFocusVisible = false;
             updateAnimationTargets();
         }
     }
@@ -497,7 +520,7 @@ private:
         if (! this->isShowing())
         {
             stopTimer();
-            keyboardFocusVisible = false;
+            focusModality.resetSession();
             hoverAnimation = pressAnimation = focusAnimation = 0.0f;
             disabledAnimation = this->isEnabled() ? 0.0f : 1.0f;
             this->repaint();
@@ -505,7 +528,7 @@ private:
         }
 
         if (! this->isEnabled())
-            keyboardFocusVisible = false;
+            focusModality.resetSession();
 
         if (! animationsAtRest() || hasPresentedInteraction())
             startTimerHz(60);
@@ -517,14 +540,17 @@ private:
         return pointerGesture == PointerGesture::primary
             || this->getState() != juce::Button::buttonNormal
             || (this->isEnabled()
-                && (keyboardFocusVisible || this->isMouseOver(true)));
+                && ((focusModality.isKeyboardVisible()
+                     && this->hasKeyboardFocus(true))
+                    || this->isMouseOver(true)));
     }
 
     bool animationsAtRest() const noexcept
     {
         const auto hoverTarget = this->isEnabled() && this->isMouseOver(true) ? 1.0f : 0.0f;
         const auto pressTarget = this->isEnabled() && this->getState() == juce::Button::buttonDown ? 1.0f : 0.0f;
-        const auto focusTarget = this->isEnabled() && keyboardFocusVisible
+        const auto focusTarget = this->isEnabled()
+                                     && focusModality.isKeyboardVisible()
                                      && this->hasKeyboardFocus(true)
                                  ? 1.0f
                                  : 0.0f;
@@ -561,7 +587,7 @@ private:
         auto changed = approach(hoverAnimation, enabled && this->isMouseOver(true) ? 1.0f : 0.0f, 0.22f);
         changed = approach(pressAnimation, enabled && this->getState() == juce::Button::buttonDown ? 1.0f : 0.0f, 0.32f) || changed;
         changed = approach(focusAnimation,
-                           enabled && keyboardFocusVisible
+                           enabled && focusModality.isKeyboardVisible()
                                && this->hasKeyboardFocus(true)
                            ? 1.0f
                            : 0.0f,
@@ -578,7 +604,7 @@ private:
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
-    bool keyboardFocusVisible = false;
+    fire::ui::KeyboardFocusModalityState focusModality;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;
     float focusAnimation = 0.0f;

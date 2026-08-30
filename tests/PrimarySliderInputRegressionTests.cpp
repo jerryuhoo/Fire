@@ -44,7 +44,7 @@ struct PrimarySliderTestAccess
     static bool isKeyboardFocusVisible(
         const PrimarySlider& slider) noexcept
     {
-        return slider.keyboardFocusVisible;
+        return slider.focusModality.isKeyboardVisible();
     }
 };
 
@@ -210,6 +210,12 @@ TEST_CASE("PrimarySlider focus presentation follows keyboard modality",
     slider.focusGained(
         juce::Component::FocusChangeType::focusChangedByMouseClick);
     CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+    slider.focusLost(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
 
     slider.focusGained(
         juce::Component::FocusChangeType::focusChangedByTabKey);
@@ -226,6 +232,14 @@ TEST_CASE("PrimarySlider focus presentation follows keyboard modality",
     slider.focusLost(
         juce::Component::FocusChangeType::focusChangedDirectly);
     CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+
+    slider.keyPressed(juce::KeyPress { juce::KeyPress::rightKey });
+    REQUIRE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+    slider.focusLost(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    CHECK(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
 }
 
 TEST_CASE("PrimarySlider preserves accessible value semantics while showing",

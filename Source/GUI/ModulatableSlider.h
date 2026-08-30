@@ -12,6 +12,7 @@
 
 #include "GuardedSliderAccessibility.h"
 #include "InterfaceDefines.h"
+#include "PrimaryButton.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cstdint>
 #include <optional>
@@ -237,7 +238,7 @@ private:
     float focusAnimation = 0.0f;
     float modulationHandleHoverAnimation = 0.0f;
     float modulationHandlePressAnimation = 0.0f;
-    bool keyboardFocusVisible = false;
+    fire::ui::KeyboardFocusModalityState focusModality;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::uint64_t accessibilityHandlerCreationCountForTesting = 0;
 #endif

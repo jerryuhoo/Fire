@@ -83,7 +83,7 @@ public:
             // JUCE gives a Slider keyboard focus before dispatching the
             // matching mouseDown. Keep that focus for immediate arrow-key
             // input, but do not present it as keyboard-origin focus.
-            keyboardFocusVisible = false;
+            focusModality.notePointer();
             juce::Slider::mouseDown(event);
         }
 
@@ -168,9 +168,9 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override
     {
-        if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+        if (hasKeyboardFocus(true) && ! focusModality.isKeyboardVisible())
         {
-            keyboardFocusVisible = true;
+            focusModality.noteKeyboard();
             updateAnimationTargets();
         }
 
@@ -227,7 +227,7 @@ public:
         juce::Slider::focusGained(cause);
         if (safeThis)
         {
-            keyboardFocusVisible = cause != focusChangedByMouseClick;
+            focusModality.focusGained(cause);
             updateAnimationTargets();
         }
     }
@@ -238,7 +238,6 @@ public:
         juce::Slider::focusLost(cause);
         if (safeThis)
         {
-            keyboardFocusVisible = false;
             updateAnimationTargets();
         }
     }
@@ -355,7 +354,7 @@ private:
         if (! isShowing())
         {
             stopTimer();
-            keyboardFocusVisible = false;
+            focusModality.resetSession();
             hoverAnimation.snapTo(0.0f);
             pressAnimation.snapTo(0.0f);
             focusAnimation.snapTo(0.0f);
@@ -366,10 +365,11 @@ private:
 
         const auto interactive = isEnabled();
         if (! interactive)
-            keyboardFocusVisible = false;
+            focusModality.resetSession();
         hoverAnimation.setTarget(interactive && isMouseOver(true) ? 1.0f : 0.0f);
         pressAnimation.setTarget(interactive && hasActivePointerGesture() ? 1.0f : 0.0f);
-        focusAnimation.setTarget(interactive && keyboardFocusVisible
+        focusAnimation.setTarget(interactive
+                                     && focusModality.isKeyboardVisible()
                                      && hasKeyboardFocus(true)
                                  ? 1.0f
                                  : 0.0f);
@@ -421,7 +421,7 @@ private:
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
     std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
-    bool keyboardFocusVisible = false;
+    fire::ui::KeyboardFocusModalityState focusModality;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;
     fire::ui::DampedValue focusAnimation;

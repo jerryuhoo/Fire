@@ -483,7 +483,7 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
 
     // A pointer gesture keeps real focus so arrow keys remain immediately
     // available, but only subsequent keyboard input makes that focus visible.
-    keyboardFocusVisible = false;
+    focusModality.notePointer();
 
     if (onClickInAssignMode)
     {
@@ -656,9 +656,9 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
 
 bool ModulatableSlider::keyPressed(const juce::KeyPress& key)
 {
-    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    if (hasKeyboardFocus(true) && ! focusModality.isKeyboardVisible())
     {
-        keyboardFocusVisible = true;
+        focusModality.noteKeyboard();
         repaint();
     }
 
@@ -674,7 +674,7 @@ void ModulatableSlider::focusGained(FocusChangeType cause)
     if (! safeThis)
         return;
 
-    keyboardFocusVisible = cause != focusChangedByMouseClick;
+    focusModality.focusGained(cause);
     repaint();
 }
 
@@ -685,7 +685,6 @@ void ModulatableSlider::focusLost(FocusChangeType cause)
     if (! safeThis)
         return;
 
-    keyboardFocusVisible = false;
     repaint();
 }
 
@@ -740,7 +739,8 @@ bool ModulatableSlider::recoverMissingPointerUp(
 
 bool ModulatableSlider::shouldShowKeyboardFocus() const noexcept
 {
-    return isEnabled() && keyboardFocusVisible && hasKeyboardFocus(true);
+    return isEnabled() && focusModality.isKeyboardVisible()
+        && hasKeyboardFocus(true);
 }
 
 bool ModulatableSlider::shouldSuppressAssignmentDoubleClick(
@@ -855,7 +855,7 @@ bool ModulatableSlider::resetTransientPresentation()
     focusAnimation = 0.0f;
     modulationHandleHoverAnimation = 0.0f;
     modulationHandlePressAnimation = 0.0f;
-    keyboardFocusVisible = false;
+    focusModality.resetSession();
     if (! label.isVisible())
     {
         label.setVisible(true);

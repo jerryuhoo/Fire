@@ -38,7 +38,14 @@ struct PrimaryButtonTestAccess
     static bool isKeyboardFocusVisible(
         const PrimaryPointerButton<ButtonType>& button) noexcept
     {
-        return button.keyboardFocusVisible;
+        return button.focusModality.isKeyboardVisible();
+    }
+
+    template <typename ButtonType>
+    static bool hasPresentedInteraction(
+        const PrimaryPointerButton<ButtonType>& button) noexcept
+    {
+        return button.hasPresentedInteraction();
     }
 };
 
@@ -232,6 +239,17 @@ public:
     bool callbackCompleted = false;
 };
 } // namespace
+
+TEST_CASE("Primary button keyboard modality stays idle without actual focus",
+          "[header-button][ui][animation][focus][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimaryTextButton button { "Idle" };
+
+    REQUIRE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+    CHECK_FALSE(button.hasKeyboardFocus(true));
+    CHECK_FALSE(PrimaryButtonTestAccess::hasPresentedInteraction(button));
+}
 
 TEST_CASE("Primary buttons reject popup and auxiliary pointer gestures",
           "[header-button][ui][input][primary-button]")
@@ -687,7 +705,9 @@ TEST_CASE("Primary buttons clear settled hover and focus after peer detachment",
     juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
 
     CHECK(button.getState() == juce::Button::buttonNormal);
-    CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+    // Peer loss starts a fresh modality session. A later first direct focus is
+    // keyboard-visible, while the detached control itself paints no focus.
+    CHECK(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
     CHECK(button.getHoverAnimation() == 0.0f);
     CHECK(button.getPressAnimation() == 0.0f);
     CHECK(button.getFocusAnimation() == 0.0f);
@@ -929,6 +949,10 @@ TEST_CASE("Primary buttons distinguish pointer focus from keyboard focus",
 
         button.focusGained(juce::Component::focusChangedByMouseClick);
         CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+        button.focusLost(juce::Component::focusChangedDirectly);
+        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+        button.focusGained(juce::Component::focusChangedDirectly);
+        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
 
         // Keyboard use after a pointer-originated focus must reveal the focus
         // affordance again without delaying the command.
@@ -941,10 +965,13 @@ TEST_CASE("Primary buttons distinguish pointer focus from keyboard focus",
         endPointerGesture(button);
         CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
 
+        REQUIRE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::spaceKey }));
+        REQUIRE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+        button.focusLost(juce::Component::focusChangedDirectly);
+        CHECK(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
         button.focusGained(juce::Component::focusChangedDirectly);
         CHECK(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
-        button.focusLost(juce::Component::focusChangedDirectly);
-        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
     });
 }
 

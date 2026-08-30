@@ -117,7 +117,7 @@ struct ModulatableSliderInteractionTestAccess
     static bool isKeyboardFocusVisible(
         const ModulatableSlider& slider) noexcept
     {
-        return slider.keyboardFocusVisible;
+        return slider.focusModality.isKeyboardVisible();
     }
 
     static void setFocusAnimation(ModulatableSlider& slider,
@@ -1318,12 +1318,28 @@ TEST_CASE("Modulatable knob focus presentation follows keyboard modality",
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireLookAndFeel lookAndFeel;
+    juce::Component host;
     ModulatableSlider slider;
     slider.setLookAndFeel(&lookAndFeel);
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider.setRange(0.0, 1.0, 0.01);
     slider.setValue(0.5, juce::dontSendNotification);
     slider.setBounds(0, 0, 120, 120);
+    // This test isolates modality restoration. Production Slider keyboard
+    // reachability is covered separately from the focus-state machine.
+    slider.setWantsKeyboardFocus(true);
+    host.setBounds(0, 0, 120, 120);
+    host.addAndMakeVisible(slider);
+    host.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    host.setVisible(true);
+    const juce::ScopeGuard removePeer { [&host, &slider]
+    {
+        host.removeChildComponent(&slider);
+        host.removeFromDesktop();
+    } };
+    REQUIRE(slider.isShowing());
+    slider.grabKeyboardFocus();
+    REQUIRE(slider.hasKeyboardFocus(true));
 
     const auto idleFingerprint = renderFingerprint(slider);
     slider.focusGained(
@@ -1333,6 +1349,12 @@ TEST_CASE("Modulatable knob focus presentation follows keyboard modality",
 
     slider.focusGained(
         juce::Component::FocusChangeType::focusChangedByMouseClick);
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+    slider.focusLost(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedDirectly);
     CHECK_FALSE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
         slider));
 
@@ -1354,6 +1376,15 @@ TEST_CASE("Modulatable knob focus presentation follows keyboard modality",
     slider.focusLost(
         juce::Component::FocusChangeType::focusChangedDirectly);
     CHECK_FALSE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+    slider.keyPressed(juce::KeyPress { juce::KeyPress::rightKey });
+    REQUIRE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+    slider.focusLost(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    CHECK(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
         slider));
     slider.setLookAndFeel(nullptr);
 }

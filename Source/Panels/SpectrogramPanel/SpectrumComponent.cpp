@@ -88,10 +88,24 @@ void SpectrumComponent::timerCallback()
     if (newestGeneration != consumedGeneration)
     {
         const juce::ScopedLock locker(dataLock);
+        const bool spectralGridChanged =
+            pendingNumberOfBins != numberOfBins
+            || ! juce::approximatelyEqual(pendingBinWidth, mBinWidth);
         targetData = pendingData;
         numberOfBins = pendingNumberOfBins;
         mBinWidth = pendingBinWidth;
         consumedGeneration = pendingGeneration.load(std::memory_order_relaxed);
+
+        if (spectralGridChanged)
+        {
+            // Every array index now represents a different frequency. Neither
+            // an interpolated trace nor a held peak may cross that boundary.
+            displayData.fill(0.0f);
+            smoothedData.fill(0.0f);
+            resetPeakData();
+            isPeakLineVisible = false;
+        }
+
         interpolationActive = true;
         visualStateChanged = true;
     }

@@ -19,6 +19,8 @@
 #include <array>
 #include <cstdint>
 
+struct SpectrumComponentTestAccess;
+
 //==============================================================================
 class SpectrumComponent : public juce::Component,
                           public juce::AsyncUpdater,
@@ -38,6 +40,8 @@ public:
     void setSpecAlpha(const float alp);
 
 private:
+    friend struct SpectrumComponentTestAccess;
+
     void handleAsyncUpdate() override;
     void timerCallback() override;
 

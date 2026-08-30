@@ -9,11 +9,22 @@
 
 #pragma once
 
+#include "FireTheme.h"
 #include "PrimaryButton.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <optional>
 
 struct PrimarySliderTestAccess;
+
+class PrimarySliderAnimationState
+{
+public:
+    virtual ~PrimarySliderAnimationState() = default;
+    virtual float getHoverAnimation() const noexcept = 0;
+    virtual float getPressAnimation() const noexcept = 0;
+    virtual float getFocusAnimation() const noexcept = 0;
+    virtual float getDisabledAnimation() const noexcept = 0;
+};
 
 /** A Slider that accepts pointer drags and double-clicks only from a complete
     primary-button gesture owned by one MouseInputSource.
@@ -22,15 +33,23 @@ struct PrimarySliderTestAccess;
     its optional popup menu is disabled. This wrapper keeps keyboard and wheel
     behaviour unchanged while making pointer input deterministic.
 */
-class PrimarySlider : public juce::Slider
+class PrimarySlider : public juce::Slider,
+                      private juce::Timer,
+                      public PrimarySliderAnimationState
 {
 public:
     using juce::Slider::Slider;
 
     ~PrimarySlider() override
     {
+        stopTimer();
         dismissTransientInteraction();
     }
+
+    float getHoverAnimation() const noexcept override { return hoverAnimation.current; }
+    float getPressAnimation() const noexcept override { return pressAnimation.current; }
+    float getFocusAnimation() const noexcept override { return focusAnimation.current; }
+    float getDisabledAnimation() const noexcept override { return disabledAnimation.current; }
 
     void mouseDown(const juce::MouseEvent& event) override
     {
@@ -59,6 +78,9 @@ public:
 
         if (pointerGesture == PointerGesture::primary)
             juce::Slider::mouseDown(event);
+
+        if (safeThis)
+            updateAnimationTargets();
     }
 
     void mouseDrag(const juce::MouseEvent& event) override
@@ -68,24 +90,39 @@ public:
             return;
 
         lastAcceptedPointerEvent.emplace(event);
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::mouseDrag(event);
+        if (safeThis)
+            updateAnimationTargets();
     }
 
     void mouseEnter(const juce::MouseEvent& event) override
     {
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::mouseEnter(event);
+        if (! safeThis)
+            return;
+        updateAnimationTargets();
         recoverMissingPointerUp(event);
     }
 
     void mouseMove(const juce::MouseEvent& event) override
     {
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::mouseMove(event);
+        if (! safeThis)
+            return;
+        updateAnimationTargets();
         recoverMissingPointerUp(event);
     }
 
     void mouseExit(const juce::MouseEvent& event) override
     {
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::mouseExit(event);
+        if (! safeThis)
+            return;
+        updateAnimationTargets();
         recoverMissingPointerUp(event);
     }
 
@@ -97,11 +134,15 @@ public:
 
         const auto completedGesture = pointerGesture;
         clearPointerState();
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
 
         // Release modifiers are deliberately ignored after a pure primary
         // mouseDown; the matching source must always close Slider's drag.
         if (completedGesture == PointerGesture::primary)
             juce::Slider::mouseUp(event);
+
+        if (safeThis)
+            updateAnimationTargets();
     }
 
     void mouseDoubleClick(const juce::MouseEvent& event) override
@@ -121,8 +162,13 @@ public:
     {
         auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::visibilityChanged();
-        if (safeThis && ! isShowing())
-            dismissTransientInteraction();
+        if (safeThis)
+        {
+            if (! isShowing())
+                dismissTransientInteraction();
+            if (safeThis)
+                updateAnimationTargets();
+        }
     }
 
     void enablementChanged() override
@@ -130,7 +176,27 @@ public:
         auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::enablementChanged();
         if (safeThis)
+        {
             dismissTransientInteraction();
+            if (safeThis)
+                updateAnimationTargets();
+        }
+    }
+
+    void focusGained(juce::Component::FocusChangeType cause) override
+    {
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
+        juce::Slider::focusGained(cause);
+        if (safeThis)
+            updateAnimationTargets();
+    }
+
+    void focusLost(juce::Component::FocusChangeType cause) override
+    {
+        const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
+        juce::Slider::focusLost(cause);
+        if (safeThis)
+            updateAnimationTargets();
     }
 
     bool hasActivePointerGesture() const noexcept
@@ -213,6 +279,7 @@ private:
         pointerGesture = PointerGesture::none;
         pointerSourceIndex = -1;
         lastAcceptedPointerEvent.reset();
+        pressAnimation.setTarget(0.0f);
     }
 
     void finishActivePointerGesture()
@@ -232,9 +299,67 @@ private:
         }
     }
 
+    void updateAnimationTargets() noexcept
+    {
+        if (! isShowing())
+        {
+            stopTimer();
+            hoverAnimation.snapTo(0.0f);
+            pressAnimation.snapTo(0.0f);
+            focusAnimation.snapTo(0.0f);
+            disabledAnimation.snapTo(isEnabled() ? 0.0f : 1.0f);
+            repaint();
+            return;
+        }
+
+        const auto interactive = isEnabled();
+        hoverAnimation.setTarget(interactive && isMouseOver(true) ? 1.0f : 0.0f);
+        pressAnimation.setTarget(interactive && hasActivePointerGesture() ? 1.0f : 0.0f);
+        focusAnimation.setTarget(interactive && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+        disabledAnimation.setTarget(interactive ? 0.0f : 1.0f);
+        if (! animationsSettled() && ! isTimerRunning())
+            startTimerHz(60);
+        repaint();
+    }
+
+    bool animationsSettled() const noexcept
+    {
+        return hoverAnimation.isSettled() && pressAnimation.isSettled()
+            && focusAnimation.isSettled() && disabledAnimation.isSettled();
+    }
+
+    bool advanceAnimation(float deltaSeconds) noexcept
+    {
+        auto changed = hoverAnimation.advance(deltaSeconds, 0.10f);
+        changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
+        changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
+        changed = disabledAnimation.advance(deltaSeconds, 0.13f) || changed;
+        return changed;
+    }
+
+    void timerCallback() override
+    {
+        if (! isShowing())
+        {
+            updateAnimationTargets();
+            return;
+        }
+
+        updateAnimationTargets();
+        const auto changed = advanceAnimation(1.0f / 60.0f);
+        if (changed)
+            repaint();
+        if (animationsSettled())
+            stopTimer();
+    }
+
     PointerGesture pointerGesture = PointerGesture::none;
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
     std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
+    fire::ui::DampedValue hoverAnimation;
+    fire::ui::DampedValue pressAnimation;
+    fire::ui::DampedValue focusAnimation;
+    fire::ui::DampedValue disabledAnimation;
 };

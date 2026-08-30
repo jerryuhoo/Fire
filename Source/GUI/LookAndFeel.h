@@ -13,6 +13,7 @@
 #include "InterfaceDefines.h"
 #include "ModulatableSlider.h"
 #include "PrimaryButton.h"
+#include "PrimarySlider.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <algorithm>
 #include <cmath>
@@ -366,12 +367,18 @@ public:
 
         auto area = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                             static_cast<float>(width), static_cast<float>(height));
+        const auto animation = getSliderAnimation(slider);
         const auto centreY = area.getCentreY();
         const auto track = area.reduced(6.0f * scale, area.getHeight() * 0.42f);
-        g.setColour(colours::surface2);
+        g.setColour(colours::surface2.interpolatedWith(colours::raised,
+                                                       animation.focus * 0.52f));
         g.fillRoundedRectangle(track, track.getHeight() * 0.5f);
-        g.setColour(colours::hairline.withAlpha(0.8f));
-        g.drawRoundedRectangle(track, track.getHeight() * 0.5f, 1.0f);
+        g.setColour(colours::hairline.interpolatedWith(colours::ember,
+                                                       juce::jmax(animation.focus,
+                                                                  animation.hover * 0.36f))
+                        .withMultipliedAlpha(1.0f - 0.66f * animation.disabled));
+        g.drawRoundedRectangle(track, track.getHeight() * 0.5f,
+                               1.0f + animation.focus * 0.35f);
 
         const auto normalisedZero = slider.valueToProportionOfLength(0.0);
         const auto zeroX = area.getX() + static_cast<float>(normalisedZero) * area.getWidth();
@@ -381,11 +388,13 @@ public:
                                                                       juce::jmax(startX, sliderPos),
                                                                       track.getBottom());
         const auto valueColour = sliderPos < startX ? colours::signalCool : colours::ember;
-        g.setColour(valueColour.withAlpha(slider.isEnabled() ? 0.9f : 0.3f));
+        g.setColour(valueColour.withAlpha(0.9f - 0.6f * animation.disabled));
         g.fillRoundedRectangle(valueBounds, track.getHeight() * 0.5f);
 
-        g.setColour(colours::whiteHot.withMultipliedAlpha(slider.isEnabled() ? 1.0f : 0.35f));
-        g.fillEllipse(juce::Rectangle<float>(8.0f * scale, 8.0f * scale)
+        const auto thumbScale = 1.0f + animation.hover * 0.10f - animation.press * 0.08f;
+        g.setColour(colours::whiteHot.withMultipliedAlpha(1.0f - 0.65f * animation.disabled));
+        g.fillEllipse(juce::Rectangle<float>(8.0f * scale * thumbScale,
+                                             8.0f * scale * thumbScale)
                           .withCentre({ sliderPos, centreY }));
     }
 
@@ -790,6 +799,34 @@ private:
         float disabled = 0.0f;
     };
 
+    struct SliderAnimation
+    {
+        float hover = 0.0f;
+        float press = 0.0f;
+        float focus = 0.0f;
+        float disabled = 0.0f;
+    };
+
+    static SliderAnimation getSliderAnimation(const juce::Slider& slider) noexcept
+    {
+        // ModulatableSlider owns its existing main-body/handle animation.
+        // Check it first so this refactor never layers PrimarySlider state on
+        // top of its specialised interaction model.
+        if (const auto* modSlider = dynamic_cast<const ModulatableSlider*>(&slider))
+            return { modSlider->getHoverAnimation(), modSlider->getPressAnimation(),
+                     slider.hasKeyboardFocus(true) ? 1.0f : 0.0f,
+                     slider.isEnabled() ? 0.0f : 1.0f };
+
+        if (const auto* primary = dynamic_cast<const PrimarySliderAnimationState*>(&slider))
+            return { primary->getHoverAnimation(), primary->getPressAnimation(),
+                     primary->getFocusAnimation(), primary->getDisabledAnimation() };
+
+        return { slider.isMouseOverOrDragging() ? 1.0f : 0.0f,
+                 0.0f,
+                 slider.hasKeyboardFocus(true) ? 1.0f : 0.0f,
+                 slider.isEnabled() ? 0.0f : 1.0f };
+    }
+
     static ButtonAnimation getPrimaryButtonAnimation(const juce::Button& button,
                                                        bool highlighted,
                                                        bool down) noexcept
@@ -812,10 +849,11 @@ private:
     {
         using namespace fire::ui;
         const auto margin = juce::jmax(5.0f, 7.0f * scale);
-        const auto* modSlider = dynamic_cast<const ModulatableSlider*>(&slider);
-        const auto hoverAmount = modSlider != nullptr ? modSlider->getHoverAnimation()
-                                                      : (slider.isMouseOverOrDragging() ? 1.0f : 0.0f);
-        const auto pressAmount = modSlider != nullptr ? modSlider->getPressAnimation() : 0.0f;
+        const auto animation = getSliderAnimation(slider);
+        const auto hoverAmount = animation.hover;
+        const auto pressAmount = animation.press;
+        const auto focusAmount = animation.focus;
+        const auto disabledAmount = animation.disabled;
         bounds = bounds.reduced(margin + pressAmount * 0.8f * scale);
         const auto radius = juce::jmax(2.0f, juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f);
         bounds = juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(bounds.getCentre());
@@ -838,14 +876,18 @@ private:
         g.strokePath(track, juce::PathStrokeType(stroke + 2.0f * scale,
                                                 juce::PathStrokeType::curved,
                                                 juce::PathStrokeType::rounded));
-        g.setColour(colours::hairline.withAlpha(slider.isEnabled() ? 0.9f : 0.35f));
+        g.setColour(colours::hairline.interpolatedWith(accent, focusAmount * 0.52f)
+                        .withAlpha(0.9f - 0.55f * disabledAmount));
         g.strokePath(track, juce::PathStrokeType(stroke,
                                                 juce::PathStrokeType::curved,
                                                 juce::PathStrokeType::rounded));
 
-        if (hoverAmount > 0.01f && slider.isEnabled())
+        if ((hoverAmount > 0.01f || focusAmount > 0.01f)
+            && disabledAmount < 0.999f)
         {
-            g.setColour(accent.withAlpha(0.06f + hoverAmount * 0.08f));
+            g.setColour(accent.withAlpha((0.06f + hoverAmount * 0.08f
+                                          + focusAmount * 0.06f)
+                                         * (1.0f - disabledAmount)));
             g.strokePath(track, juce::PathStrokeType(stroke + 4.0f * scale,
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));

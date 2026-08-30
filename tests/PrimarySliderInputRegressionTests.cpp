@@ -16,6 +16,29 @@ struct PrimarySliderTestAccess
         slider.pointerSourceType = type;
         slider.pointerSourceIndex = index;
     }
+
+    static void setAnimationTargets(PrimarySlider& slider,
+                                    float hover,
+                                    float press,
+                                    float focus,
+                                    float disabled) noexcept
+    {
+        slider.hoverAnimation.setTarget(hover);
+        slider.pressAnimation.setTarget(press);
+        slider.focusAnimation.setTarget(focus);
+        slider.disabledAnimation.setTarget(disabled);
+    }
+
+    static bool advanceAnimation(PrimarySlider& slider,
+                                 float deltaSeconds) noexcept
+    {
+        return slider.advanceAnimation(deltaSeconds);
+    }
+
+    static void updateAnimationTargets(PrimarySlider& slider) noexcept
+    {
+        slider.updateAnimationTargets();
+    }
 };
 
 namespace
@@ -88,6 +111,32 @@ juce::Button* findSliderButton(juce::Slider& slider,
     return nullptr;
 }
 } // namespace
+
+TEST_CASE("PrimarySlider interaction presentation is continuous and hidden-idle",
+          "[primary-slider][ui][animation]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimarySlider slider;
+
+    PrimarySliderTestAccess::setAnimationTargets(slider, 1.0f, 1.0f, 1.0f, 1.0f);
+    REQUIRE(PrimarySliderTestAccess::advanceAnimation(slider, 1.0f / 60.0f));
+    CHECK(slider.getHoverAnimation() > 0.0f);
+    CHECK(slider.getHoverAnimation() < 1.0f);
+    CHECK(slider.getPressAnimation() > slider.getHoverAnimation());
+    CHECK(slider.getFocusAnimation() > 0.0f);
+    CHECK(slider.getDisabledAnimation() > 0.0f);
+
+    // An off-screen slider (including one hidden by any ancestor) must snap
+    // to an idle state rather than leaving a repaint timer alive.
+    PrimarySliderTestAccess::updateAnimationTargets(slider);
+    CHECK(slider.getHoverAnimation() == Catch::Approx(0.0f));
+    CHECK(slider.getPressAnimation() == Catch::Approx(0.0f));
+    CHECK(slider.getFocusAnimation() == Catch::Approx(0.0f));
+    CHECK(slider.getDisabledAnimation() == Catch::Approx(0.0f));
+
+    slider.setEnabled(false);
+    CHECK(slider.getDisabledAnimation() == Catch::Approx(1.0f));
+}
 
 TEST_CASE("PrimarySlider rejects auxiliary drags and double-clicks",
           "[primary-slider][ui][input]")

@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "../../GUI/GuardedSliderAccessibility.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../../GUI/PrimaryButton.h"
 #include "../../PluginProcessor.h"
@@ -197,6 +198,8 @@ private:
                                             bool notifyHost) noexcept;
         void completePointerDispatch();
         void updateAnimationTargets() noexcept;
+        std::unique_ptr<juce::AccessibilityHandler>
+        createAccessibilityHandler() override;
         bool animationsSettled() const noexcept;
         bool advanceAnimation(float deltaSeconds) noexcept;
         void timerCallback() override;

@@ -604,6 +604,13 @@ float ModulationMatrixRow::PrimaryButtonSlider::getDisabledAnimation() const noe
     return disabledAnimation.current;
 }
 
+std::unique_ptr<juce::AccessibilityHandler>
+ModulationMatrixRow::PrimaryButtonSlider::createAccessibilityHandler()
+{
+    return std::make_unique<fire::ui::GuardedSliderAccessibilityHandler>(
+        *this);
+}
+
 void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
     const juce::MouseEvent& event)
 {

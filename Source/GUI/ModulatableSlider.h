@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "GuardedSliderAccessibility.h"
 #include "InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <cstdint>
@@ -174,6 +175,8 @@ private:
                              const juce::MouseEvent& event);
     bool resetTransientPresentation();
     void lookAndFeelChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
     void attachValueLabelPopupForwarder();
     void detachValueLabelPopupForwarder();
 
@@ -215,6 +218,9 @@ private:
     float pressAnimation = 0.0f;
     float modulationHandleHoverAnimation = 0.0f;
     float modulationHandlePressAnimation = 0.0f;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::uint64_t accessibilityHandlerCreationCountForTesting = 0;
+#endif
 
     // Store the initial LFO amount when a drag starts for smoother interaction
     double initialLfoAmount = 0.0;

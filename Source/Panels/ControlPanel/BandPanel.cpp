@@ -943,14 +943,19 @@ void BandPanel::updateAttachments()
     {
         auto* slider = modulatableSliderComponents.at(paramInfo.name).get();
         auto paramID = ParameterIDAndName::getIDString(paramInfo.idBase, focusBandNum);
-        slider->parameterID = paramID;
         sliderAttachments[paramInfo.name].reset();
+        slider->parameterID = paramID;
         auto* parameter = processor.treeState.getParameter(paramID);
         jassert(parameter != nullptr && "Parameter not found!");
         if (parameter)
         {
             sliderAttachments[paramInfo.name] = std::make_unique<SliderAttachment>(processor.treeState, paramID, *slider);
         }
+
+        // The platform accessibility peer may cache a Slider value interface.
+        // Recreate it only after the shared control has been fully rebound so
+        // an old band's semantic target cannot leak into the new band.
+        slider->invalidateAccessibilityHandler();
     }
 
     // === Button Attachment Logic ===

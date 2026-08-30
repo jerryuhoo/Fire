@@ -2690,3 +2690,100 @@ TEST_CASE("Modulation matrix row controls expose distinct accessibility semantic
     for (auto* control : controls)
         CHECK(control->getAccessibilityHandler() == nullptr);
 }
+
+TEST_CASE("Cached modulation amount accessibility rejects stale value writes",
+          "[ui][modulation-matrix][accessibility][lifecycle][stale][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (int boundaryIndex = 0; boundaryIndex < 3; ++boundaryIndex)
+    {
+        const auto* boundaryName = boundaryIndex == 0 ? "hidden"
+                                 : boundaryIndex == 1 ? "disabled"
+                                                      : "peer detached";
+        DYNAMIC_SECTION(boundaryName)
+        {
+            FireAudioProcessor processor;
+            const auto targets = ParameterIDAndName::getAllModulatableTargets();
+            REQUIRE_FALSE(targets.empty());
+            const ModulationRouting routing {
+                0, targets.front().parameterID, 0.25f, true, false
+            };
+            auto& manager = processor.getLfoManager();
+            {
+                const juce::ScopedLock lock(manager.getLfoDataLock());
+                auto& routings = manager.getModulationRoutings();
+                routings.clear();
+                routings.add(routing);
+            }
+
+            juce::Component desktopHost;
+            ModulationMatrixRow row(
+                processor,
+                0,
+                routing,
+                makeRoutingEditSession(processor),
+                [](std::uint64_t, ModulationRouting) {});
+            desktopHost.setBounds(0, 0, 760, 80);
+            row.setBounds(0, 0, 760, 40);
+            desktopHost.addAndMakeVisible(row);
+            desktopHost.addToDesktop(
+                juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(row.isShowing());
+
+            auto* amountSlider = findAmountSlider(row);
+            REQUIRE(amountSlider != nullptr);
+            REQUIRE(amountSlider->isShowing());
+            SliderInteractionCapture capture;
+            amountSlider->addListener(&capture);
+
+            auto* handler = amountSlider->getAccessibilityHandler();
+            REQUIRE(handler != nullptr);
+            CHECK(handler->getRole() == juce::AccessibilityRole::slider);
+            CHECK(handler->getTitle() == "Modulation routing 1 amount");
+            CHECK(handler->getHelp() == amountSlider->getTooltip());
+            auto* value = handler->getValueInterface();
+            REQUIRE(value != nullptr);
+            CHECK_FALSE(value->isReadOnly());
+            CHECK(value->getCurrentValue() == Catch::Approx(0.25));
+            CHECK(value->getRange().getMinimumValue()
+                  == Catch::Approx(-1.0));
+            CHECK(value->getRange().getMaximumValue()
+                  == Catch::Approx(1.0));
+            CHECK(value->getRange().getInterval()
+                  == Catch::Approx(0.01));
+
+            if (boundaryIndex == 0)
+                amountSlider->setVisible(false);
+            else if (boundaryIndex == 1)
+                amountSlider->setEnabled(false);
+            else
+                desktopHost.removeFromDesktop();
+
+            if (boundaryIndex == 1)
+            {
+                REQUIRE_FALSE(amountSlider->isEnabled());
+                REQUIRE(amountSlider->isShowing());
+            }
+            else
+            {
+                REQUIRE_FALSE(amountSlider->isShowing());
+            }
+
+            value->setValue(0.8);
+            value->setValueAsString("-0.5");
+
+            CHECK(amountSlider->getValue() == Catch::Approx(0.25));
+            CHECK(capture.valueChangeCount == 0);
+            CHECK(capture.dragStartCount == 0);
+            CHECK(capture.dragEndCount == 0);
+            const auto liveRoutings = manager.getModulationRoutingsCopy();
+            REQUIRE(liveRoutings.size() == 1);
+            CHECK(liveRoutings[0].depth == Catch::Approx(0.25f));
+
+            amountSlider->removeListener(&capture);
+            desktopHost.removeFromDesktop();
+        }
+    }
+}

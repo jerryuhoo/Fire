@@ -98,6 +98,12 @@ struct ModulatableSliderInteractionTestAccess
                    : nullptr;
     }
 
+    static std::uint64_t getAccessibilityHandlerCreationCount(
+        const ModulatableSlider& slider) noexcept
+    {
+        return slider.accessibilityHandlerCreationCountForTesting;
+    }
+
     static void forwardValueLabelMouseDown(
         ModulatableSlider& slider,
         const juce::MouseEvent& event)
@@ -383,6 +389,152 @@ TEST_CASE("Modulatable slider titles preserve the advertised header hit target",
     CHECK(slider.getComponentAt(titleCentre) == &slider);
 
     slider.setLookAndFeel(nullptr);
+}
+
+TEST_CASE("Cached modulatable-slider accessibility rejects stale value writes",
+          "[modulatable-slider][ui][input][accessibility][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (int boundaryIndex = 0; boundaryIndex < 3; ++boundaryIndex)
+    {
+        const auto* boundaryName = boundaryIndex == 0 ? "hidden"
+                                 : boundaryIndex == 1 ? "disabled"
+                                                      : "peer detached";
+        DYNAMIC_SECTION(boundaryName)
+        {
+            ModulatableSlider slider;
+            slider.setBounds(0, 0, 120, 120);
+            slider.setRange(-1.0, 1.0, 0.1);
+            slider.setValue(0.2, juce::dontSendNotification);
+            slider.setLabel("Drive", fire::ui::colours::drive);
+            slider.setTooltip("Adjust the drive amount");
+            slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            slider.setVisible(true);
+            REQUIRE(slider.isShowing());
+
+            int valueChanges = 0;
+            int dragStarts = 0;
+            int dragEnds = 0;
+            slider.onValueChange = [&] { ++valueChanges; };
+            slider.onDragStart = [&] { ++dragStarts; };
+            slider.onDragEnd = [&] { ++dragEnds; };
+
+            auto* handler = slider.getAccessibilityHandler();
+            REQUIRE(handler != nullptr);
+            CHECK(handler->getRole() == juce::AccessibilityRole::slider);
+            CHECK(handler->getTitle() == "Drive");
+            CHECK(handler->getHelp() == slider.getTooltip());
+            auto* value = handler->getValueInterface();
+            REQUIRE(value != nullptr);
+            CHECK_FALSE(value->isReadOnly());
+            CHECK(value->getRange().getMinimumValue()
+                  == Catch::Approx(-1.0));
+            CHECK(value->getRange().getMaximumValue()
+                  == Catch::Approx(1.0));
+            CHECK(value->getRange().getInterval()
+                  == Catch::Approx(0.1));
+
+            value->setValue(0.6);
+            CHECK(slider.getValue() == Catch::Approx(0.6));
+            CHECK(valueChanges == 1);
+            CHECK(dragStarts == 1);
+            CHECK(dragEnds == 1);
+
+            slider.setValue(0.2, juce::dontSendNotification);
+            valueChanges = 0;
+            dragStarts = 0;
+            dragEnds = 0;
+
+            if (boundaryIndex == 0)
+                slider.setVisible(false);
+            else if (boundaryIndex == 1)
+                slider.setEnabled(false);
+            else
+                slider.removeFromDesktop();
+
+            if (boundaryIndex == 1)
+            {
+                REQUIRE_FALSE(slider.isEnabled());
+                REQUIRE(slider.isShowing());
+            }
+            else
+            {
+                REQUIRE_FALSE(slider.isShowing());
+            }
+
+            value->setValue(0.8);
+            value->setValueAsString("-0.7");
+
+            CHECK(slider.getValue() == Catch::Approx(0.2));
+            CHECK(valueChanges == 0);
+            CHECK(dragStarts == 0);
+            CHECK(dragEnds == 0);
+            slider.removeFromDesktop();
+        }
+    }
+}
+
+TEST_CASE("Band slider accessibility is recreated after parameter rebinding",
+          "[modulatable-slider][band-panel][ui][accessibility][rebind][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    BandPanel panel(processor, {}, {}, {}, {}, {});
+    panel.setBounds(0, 0, 1000, 300);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+    REQUIRE(panel.isShowing());
+
+    auto* drive = panel.getDriveKnob();
+    REQUIRE(drive != nullptr);
+    REQUIRE(drive->isShowing());
+    drive->invalidateAccessibilityHandler();
+    const auto creationCountBeforeQuery =
+        ModulatableSliderInteractionTestAccess::
+            getAccessibilityHandlerCreationCount(*drive);
+    auto* firstHandler = drive->getAccessibilityHandler();
+    REQUIRE(firstHandler != nullptr);
+    REQUIRE(firstHandler->getValueInterface() != nullptr);
+    const auto creationCountBeforeRebind =
+        ModulatableSliderInteractionTestAccess::
+            getAccessibilityHandlerCreationCount(*drive);
+    REQUIRE(creationCountBeforeRebind == creationCountBeforeQuery + 1);
+
+    auto* band0Parameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(DRIVE_ID, 0));
+    auto* band1Parameter = processor.treeState.getParameter(
+        ParameterIDAndName::getIDString(DRIVE_ID, 1));
+    REQUIRE(band0Parameter != nullptr);
+    REQUIRE(band1Parameter != nullptr);
+    const auto band0ValueBefore = band0Parameter->getValue();
+
+    panel.setFocusBandNum(1);
+    REQUIRE(panel.getFocusBandNum() == 1);
+    REQUIRE(drive->getParamID()
+            == ParameterIDAndName::getIDString(DRIVE_ID, 1));
+    CHECK(ModulatableSliderInteractionTestAccess::
+              getAccessibilityHandlerCreationCount(*drive)
+          == creationCountBeforeRebind);
+
+    auto* reboundHandler = drive->getAccessibilityHandler();
+    REQUIRE(reboundHandler != nullptr);
+    REQUIRE(ModulatableSliderInteractionTestAccess::
+                getAccessibilityHandlerCreationCount(*drive)
+            == creationCountBeforeRebind + 1);
+    auto* reboundValue = reboundHandler->getValueInterface();
+    REQUIRE(reboundValue != nullptr);
+
+    const auto newPlainValue = drive->getRange().getStart()
+                               + drive->getRange().getLength() * 0.73;
+    reboundValue->setValue(newPlainValue);
+
+    CHECK(band0Parameter->getValue() == Catch::Approx(band0ValueBefore));
+    CHECK(band1Parameter->getValue()
+          == Catch::Approx(
+              band1Parameter->convertTo0to1(
+                  static_cast<float>(drive->getValue()))));
+    panel.removeFromDesktop();
 }
 
 TEST_CASE("Hover value labels forward only popup gestures to modulatable sliders",

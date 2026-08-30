@@ -42,6 +42,16 @@ ModulatableSlider::~ModulatableSlider()
     detachValueLabelPopupForwarder();
 }
 
+std::unique_ptr<juce::AccessibilityHandler>
+ModulatableSlider::createAccessibilityHandler()
+{
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    ++accessibilityHandlerCreationCountForTesting;
+#endif
+    return std::make_unique<fire::ui::GuardedSliderAccessibilityHandler>(
+        *this);
+}
+
 void ModulatableSlider::ValueLabelPopupForwarder::mouseDown(
     const juce::MouseEvent& event)
 {

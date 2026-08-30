@@ -2601,7 +2601,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
         addAndMakeVisible(lfoSelectButtons[i].get());
         lfoSelectButtons[i]->setRadioGroupId(1);
         lfoSelectButtons[i]->getProperties().set("fireAnimatedSelection", true);
-        styleLfoSelectButton(*lfoSelectButtons[i], lfoColours[static_cast<size_t>(i)]);
+        styleLfoSelectButton(*lfoSelectButtons[i], fire::ui::lfoBankColour(i));
         lfoSelectButtons[i]->addListener(this);
     }
     lfoSelectButtons[0]->setToggleState(true, juce::dontSendNotification);
@@ -2833,8 +2833,8 @@ void LfoPanel::paintOverChildren(juce::Graphics& g)
         juce::jmap(blend, lowerBounds.getWidth(), upperBounds.getWidth()),
         juce::jmap(blend, lowerBounds.getHeight(), upperBounds.getHeight()))
                                .reduced(0.75f);
-    const auto colour = lfoColours[static_cast<size_t>(lowerIndex)].interpolatedWith(
-        lfoColours[static_cast<size_t>(upperIndex)], blend);
+    const auto colour = fire::ui::lfoBankColour(lowerIndex).interpolatedWith(
+        fire::ui::lfoBankColour(upperIndex), blend);
     const auto radius = juce::jmin(selectionBounds.getHeight() * 0.5f,
                                    fire::ui::Metrics::radius * scale);
 

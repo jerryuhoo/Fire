@@ -583,11 +583,14 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
                  && completedPopupParameterID.isNotEmpty())
         {
             menu.addSectionHeader("Assign modulation");
-            for (int lfoIndex = 0; lfoIndex < 4; ++lfoIndex)
-                menu.addItem(lfoIndex + 1,
-                             "LFO " + juce::String(lfoIndex + 1),
-                             true,
-                             isModulated && lfoSource == lfoIndex + 1);
+            for (int lfoIndex = 0; lfoIndex < fire::ui::lfoBankCount;
+                 ++lfoIndex)
+                menu.addColouredItem(
+                    lfoIndex + 1,
+                    "LFO " + juce::String(lfoIndex + 1),
+                    fire::ui::lfoBankColour(lfoIndex),
+                    true,
+                    isModulated && lfoSource == lfoIndex + 1);
 
             menu.showMenuAsync(fire::ui::prepareContextMenu(
                                    menu, *this, event.getScreenPosition()),

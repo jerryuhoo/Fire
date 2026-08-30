@@ -1101,6 +1101,12 @@ private:
         bounds = bounds.reduced(margin);
         const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
+        const auto hasValidSource = isValidLfoSourceNumber(slider.lfoSource);
+        const auto bankAccent = lfoBankColourForSource(slider.lfoSource);
+        const auto modulationAccent = slider.isBypassed
+                                          ? bankAccent.interpolatedWith(
+                                                colours::disabled, 0.68f)
+                                          : bankAccent;
 
         if (slider.assignModeGlowAlpha > 0.0f && slider.isEnabled())
         {
@@ -1122,8 +1128,8 @@ private:
             range.addCentredArc(centre.x, centre.y, modRadius, modRadius, 0.0f,
                                 startAngle + static_cast<float>(low) * (endAngle - startAngle),
                                 startAngle + static_cast<float>(high) * (endAngle - startAngle), true);
-            g.setColour((slider.isBypassed ? colours::disabled : colours::modulation)
-                            .withAlpha(slider.isBypassed ? 0.36f : 0.82f));
+            g.setColour(modulationAccent.withAlpha(slider.isBypassed ? 0.48f
+                                                                     : 0.82f));
             g.strokePath(range, juce::PathStrokeType(juce::jmax(1.0f, 1.7f * scale),
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
@@ -1137,8 +1143,13 @@ private:
                     centre.x + modRadius * std::sin(angle),
                     centre.y - modRadius * std::cos(angle)
                 };
-                g.setColour(colours::whiteHot);
-                g.fillEllipse(juce::Rectangle<float>(3.8f * scale, 3.8f * scale).withCentre(point));
+                const auto pointBounds = juce::Rectangle<float>(
+                                             3.8f * scale, 3.8f * scale)
+                                             .withCentre(point);
+                g.setColour(colours::canvas.withAlpha(0.88f));
+                g.fillEllipse(pointBounds.expanded(0.8f * scale));
+                g.setColour(bankAccent);
+                g.fillEllipse(pointBounds);
             }
         }
 
@@ -1150,7 +1161,11 @@ private:
                 0.0f, 1.0f, slider.getModulationHandlePressAnimation());
             auto handle = slider.getModulationHandleBounds()
                               .reduced(press * 0.65f * scale);
-            const auto accent = slider.isBypassed ? colours::disabled : colours::modulation;
+            const auto accent = modulationAccent;
+            const auto useDarkLabel = slider.isEnabled() && ! slider.isBypassed
+                                      && hasValidSource;
+            const auto labelColour = useDarkLabel ? colours::canvas
+                                                   : colours::textPrimary;
 
             if (slider.isEnabled() && (hover > 0.001f || press > 0.001f))
             {
@@ -1163,22 +1178,24 @@ private:
 
             g.setColour(colours::canvas.withAlpha(0.92f));
             g.fillEllipse(handle.expanded((1.0f + hover * 0.65f) * scale));
-            g.setColour(accent.brighter(hover * 0.12f)
-                            .interpolatedWith(colours::whiteHot,
-                                              press * 0.16f)
+            g.setColour(accent.brighter(hover * 0.12f + press * 0.06f)
                             .withAlpha(slider.isEnabled()
                                            ? 0.90f + hover * 0.08f
                                            : 0.35f));
             g.fillEllipse(handle);
             if (slider.isEnabled() && hover > 0.001f)
             {
-                g.setColour(colours::whiteHot.withAlpha(hover * 0.42f));
+                g.setColour(labelColour.withAlpha(hover * 0.42f));
                 g.drawEllipse(handle.reduced(0.4f * scale),
                               juce::jmax(0.8f, 1.0f * scale));
             }
-            g.setColour(colours::textPrimary.withMultipliedAlpha(slider.isEnabled() ? 1.0f : 0.4f));
+            g.setColour(labelColour.withMultipliedAlpha(slider.isEnabled()
+                                                            ? 0.96f
+                                                            : 0.72f));
             g.setFont(fire::ui::labelFont(juce::jmax(7.0f, handle.getHeight() * 0.48f)));
-            g.drawText(juce::String(slider.lfoSource), handle, juce::Justification::centred);
+            g.drawText(hasValidSource ? juce::String(slider.lfoSource) : "?",
+                       handle,
+                       juce::Justification::centred);
         }
     }
 

@@ -457,12 +457,6 @@ private:
     juce::Rectangle<int> leftColumnArea;
     juce::Rectangle<int> centerColumnArea;
     juce::Rectangle<int> rightColumnArea;
-    const std::array<juce::Colour, 4> lfoColours {
-        fire::ui::colours::modulation,
-        fire::ui::colours::signalCool,
-        fire::ui::colours::positive,
-        fire::ui::colours::gold
-    };
     fire::ui::DampedValue lfoSelectionPosition;
     enum class AssignFeedback
     {

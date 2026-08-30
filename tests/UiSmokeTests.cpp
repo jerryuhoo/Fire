@@ -7,6 +7,7 @@
 #include <catch2/catch_approx.hpp>
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <set>
 #include <vector>
@@ -474,6 +475,32 @@ TEST_CASE("Fire rotary value arcs preserve their configured solid colour",
         CHECK(accentPixels > 80);
         CHECK(warmGradientPixels == 0);
     }
+}
+
+TEST_CASE("LFO bank palette preserves its index contracts",
+          "[ui][theme][lfo][colour]")
+{
+    std::set<juce::uint32> distinctColours;
+    for (int index = 0; index < fire::ui::lfoBankCount; ++index)
+    {
+        const auto colour = fire::ui::lfoBankColour(index);
+        CHECK(colour == fire::ui::lfoBankColours[static_cast<size_t>(index)]);
+        CHECK(fire::ui::lfoBankColourForSource(index + 1) == colour);
+        distinctColours.insert(colour.getARGB());
+    }
+
+    CHECK(distinctColours.size()
+          == static_cast<size_t>(fire::ui::lfoBankCount));
+    CHECK(fire::ui::lfoBankColour(-1) == fire::ui::colours::disabled);
+    CHECK(fire::ui::lfoBankColour(fire::ui::lfoBankCount)
+          == fire::ui::colours::disabled);
+    CHECK(fire::ui::lfoBankColourForSource(0)
+          == fire::ui::colours::disabled);
+    CHECK(fire::ui::lfoBankColourForSource(
+              fire::ui::lfoBankCount + 1)
+          == fire::ui::colours::disabled);
+    CHECK(fire::ui::lfoBankColourForSource(std::numeric_limits<int>::min())
+          == fire::ui::colours::disabled);
 }
 
 TEST_CASE("Fire editor renders at supported scale extremes", "[ui][smoke]")

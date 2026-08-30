@@ -11,6 +11,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -1403,6 +1404,62 @@ TEST_CASE("Modulation handle hover and press feedback animate without changing i
     REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
     CHECK(slider.getModulationHandlePressAnimation() < pressBeforeRelease);
 
+    slider.setLookAndFeel(nullptr);
+}
+
+TEST_CASE("Modulation overlays follow the assigned LFO bank palette",
+          "[modulatable-slider][ui][modulation][render][colour]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    ModulatableSlider slider;
+    slider.setLookAndFeel(&lookAndFeel);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0);
+    slider.setValue(0.5, juce::dontSendNotification);
+    slider.setBounds(0, 0, 180, 180);
+    slider.isModulated = true;
+    slider.isBipolar = true;
+    slider.lfoAmount = 0.72;
+    slider.lfoValue = 0.38;
+
+    std::set<std::uint64_t> fingerprints;
+    for (int source = 1; source <= fire::ui::lfoBankCount; ++source)
+    {
+        slider.lfoSource = source;
+        juce::Image image(juce::Image::ARGB, 180, 180, true);
+        juce::Graphics graphics(image);
+        slider.paintEntireComponent(graphics, true);
+
+        const auto expected = fire::ui::lfoBankColourForSource(source);
+        int matchingPixels = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto pixel = image.getPixelAt(x, y);
+                const auto channelDistance =
+                    std::abs(static_cast<int>(pixel.getRed())
+                             - static_cast<int>(expected.getRed()))
+                    + std::abs(static_cast<int>(pixel.getGreen())
+                               - static_cast<int>(expected.getGreen()))
+                    + std::abs(static_cast<int>(pixel.getBlue())
+                               - static_cast<int>(expected.getBlue()));
+                if (pixel.getAlpha() >= 96 && channelDistance <= 36)
+                    ++matchingPixels;
+            }
+
+        CAPTURE(source, matchingPixels);
+        CHECK(matchingPixels > 24);
+        fingerprints.insert(renderFingerprint(slider));
+    }
+
+    CHECK(fingerprints.size()
+          == static_cast<size_t>(fire::ui::lfoBankCount));
+
+    slider.lfoSource = 0;
+    const auto unassignedFingerprint = renderFingerprint(slider);
+    slider.lfoSource = fire::ui::lfoBankCount + 1;
+    CHECK(renderFingerprint(slider) == unassignedFingerprint);
     slider.setLookAndFeel(nullptr);
 }
 

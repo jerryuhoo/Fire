@@ -15,6 +15,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <array>
 #include <cmath>
 
 namespace fire::ui
@@ -52,6 +53,44 @@ inline const juce::Colour filter { 0xffff5da8 };
 inline const juce::Colour loFi { 0xff9b6cff };
 inline const juce::Colour limiter { 0xff7f8cff };
 } // namespace colours
+
+inline constexpr int lfoBankCount = 4;
+
+// Keep every source-specific modulation affordance on the same ordered
+// palette. Model/routing indices are zero-based, while the small badges shown
+// on controls use the one-based source number exposed by ModulatableSlider.
+inline const std::array<juce::Colour, lfoBankCount> lfoBankColours {
+    colours::modulation,
+    colours::signalCool,
+    colours::positive,
+    colours::gold
+};
+
+inline bool isValidLfoBankIndex(int zeroBasedIndex) noexcept
+{
+    return zeroBasedIndex >= 0 && zeroBasedIndex < lfoBankCount;
+}
+
+inline bool isValidLfoSourceNumber(int oneBasedSource) noexcept
+{
+    return oneBasedSource >= 1 && oneBasedSource <= lfoBankCount;
+}
+
+inline juce::Colour lfoBankColour(int zeroBasedIndex) noexcept
+{
+    if (! isValidLfoBankIndex(zeroBasedIndex))
+        return colours::disabled;
+
+    return lfoBankColours[static_cast<size_t>(zeroBasedIndex)];
+}
+
+inline juce::Colour lfoBankColourForSource(int oneBasedSource) noexcept
+{
+    if (! isValidLfoSourceNumber(oneBasedSource))
+        return colours::disabled;
+
+    return lfoBankColour(oneBasedSource - 1);
+}
 
 struct Metrics
 {

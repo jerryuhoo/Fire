@@ -366,6 +366,44 @@ public:
     int dragEndCount = 0;
 };
 
+class DeleteMatrixPanelOnAmountDragEnd final : public juce::Slider::Listener
+{
+public:
+    DeleteMatrixPanelOnAmountDragEnd(
+        juce::Slider& sliderToObserve,
+        std::unique_ptr<ModulationMatrixPanel>& panelToDelete)
+        : slider(&sliderToObserve), panel(panelToDelete)
+    {
+        sliderToObserve.addListener(this);
+    }
+
+    ~DeleteMatrixPanelOnAmountDragEnd() override
+    {
+        if (slider != nullptr)
+            slider->removeListener(this);
+    }
+
+    void sliderValueChanged(juce::Slider*) override {}
+    void sliderDragStarted(juce::Slider*) override {}
+
+    void sliderDragEnded(juce::Slider*) override
+    {
+        ++dragEndCount;
+        if (deletionStarted)
+            return;
+
+        deletionStarted = true;
+        panel.reset();
+        callbackCompleted = true;
+    }
+
+    juce::Component::SafePointer<juce::Slider> slider;
+    std::unique_ptr<ModulationMatrixPanel>& panel;
+    int dragEndCount = 0;
+    bool deletionStarted = false;
+    bool callbackCompleted = false;
+};
+
 class ButtonClickCapture final : private juce::Button::Listener
 {
 public:
@@ -477,6 +515,44 @@ TEST_CASE("Modulation matrix host notifications may synchronously delete the pan
         CHECK(host.notificationCount == 1);
         CHECK(panel == nullptr);
         CHECK(manager.getModulationRoutingsCopy().size() == 2);
+    }
+
+    SECTION("add route while an amount gesture is active")
+    {
+        std::vector<ModulationMatrixRow*> rows;
+        collectMatrixRows(*panel, rows);
+        REQUIRE(rows.size() == 1);
+        auto* amountSlider = findAmountSlider(*rows.front());
+        auto* addButton = findTextButton(*panel, "+ ADD ROUTE");
+        REQUIRE(amountSlider != nullptr);
+        REQUIRE(addButton != nullptr);
+
+        NonParameterChangeCapture host(processor);
+        DeleteMatrixPanelOnAmountDragEnd deleteOnDragEnd(
+            *amountSlider, panel);
+        const auto downPosition =
+            amountSlider->getLocalBounds().toFloat().getCentre();
+        amountSlider->mouseDown(makeMouseEvent(
+            *amountSlider,
+            downPosition,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+            downPosition,
+            false));
+        REQUIRE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(
+            *rows.front()));
+        const auto notificationsBeforeAdd = host.notificationCount;
+
+        // Add invalidates the old rows and closes their pointer gestures before
+        // notifying the host. The drag-end listener deletes the complete panel
+        // from inside requestUiRebuild(), so buttonClicked() must use only the
+        // processor pointer captured before that lifecycle boundary.
+        addButton->triggerClick();
+
+        CHECK(deleteOnDragEnd.callbackCompleted);
+        CHECK(deleteOnDragEnd.dragEndCount == 1);
+        CHECK(panel == nullptr);
+        CHECK(manager.getModulationRoutingsCopy().size() == 2);
+        CHECK(host.notificationCount == notificationsBeforeAdd + 1);
     }
 
     SECTION("change source")

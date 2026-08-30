@@ -1451,10 +1451,10 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 
         // Adding changes the visible routing set. Mark every old row stale
         // before a synchronous host listener can re-enter this panel.
+        auto* const processorToNotify = &processor;
         requestUiRebuild();
-        auto& processorToNotify = processor;
         if (result.changed)
-            processorToNotify.lfoDataHasChanged();
+            processorToNotify->lfoDataHasChanged();
         return;
     }
 

@@ -144,6 +144,107 @@ public:
 private:
     friend struct SettingsComponentTestAccess;
 
+    /** Settings-page link chrome which consumes PrimaryPointerButton's shared
+        animation state instead of falling back to JUCE's abrupt hyperlink
+        darkening. The native HyperlinkButton remains in the inheritance chain,
+        preserving its URL, cursor, and hyperlink accessibility semantics.
+    */
+    class SettingsLinkButton : public PrimaryHyperlinkButton
+    {
+    public:
+        void setFont(const juce::Font& newFont,
+                     bool resizeToMatchComponentHeight,
+                     juce::Justification justificationType =
+                         juce::Justification::horizontallyCentred)
+        {
+            displayFont = newFont;
+            resizeFont = resizeToMatchComponentHeight;
+            juce::HyperlinkButton::setFont(newFont,
+                                            resizeToMatchComponentHeight,
+                                            justificationType);
+        }
+
+    private:
+        void paintButton(juce::Graphics& g, bool, bool) override
+        {
+            using namespace fire::ui;
+
+            const auto hover = getHoverAnimation();
+            const auto press = getPressAnimation();
+            const auto focus = getFocusAnimation();
+            const auto disabled = getDisabledAnimation();
+            const auto interactive = 1.0f - disabled;
+            auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+            const auto radius = juce::jmin(Metrics::radiusSmall,
+                                            bounds.getHeight() * 0.5f);
+            const auto emphasis = juce::jmax(hover, focus);
+
+            if (hover > 0.001f || press > 0.001f || focus > 0.001f)
+            {
+                auto wash = colours::surface2.interpolatedWith(colours::raised,
+                                                                press);
+                const auto washAlpha = juce::jlimit(
+                    0.0f,
+                    1.0f,
+                    (0.075f * hover + 0.105f * press + 0.055f * focus)
+                        * interactive);
+                g.setColour(wash.withAlpha(washAlpha));
+                g.fillRoundedRectangle(bounds, radius);
+            }
+
+            if (focus > 0.001f)
+            {
+                g.setColour(findColour(juce::HyperlinkButton::textColourId)
+                                .withAlpha(0.58f * focus * interactive));
+                g.drawRoundedRectangle(bounds.reduced(0.5f),
+                                       radius,
+                                       1.0f);
+            }
+
+            const auto font = resizeFont
+                                  ? displayFont.withHeight(
+                                        static_cast<float>(getHeight()) * 0.7f)
+                                  : displayFont;
+            auto textColour = findColour(
+                juce::HyperlinkButton::textColourId);
+            textColour = textColour.brighter(0.13f * hover)
+                             .darker(0.11f * press)
+                             .interpolatedWith(colours::textMuted,
+                                               disabled * 0.72f);
+            g.setColour(textColour);
+            g.setFont(font);
+            g.drawFittedText(getButtonText(),
+                             getLocalBounds().reduced(6, 1),
+                             getJustificationType().getOnlyHorizontalFlags()
+                                 | juce::Justification::verticallyCentred,
+                             1);
+
+            // A short signal rail identifies this as a link without JUCE's
+            // full-width default underline. It expands smoothly for hover and
+            // keyboard focus, matching the editor's other compact controls.
+            const auto measuredTextWidth = juce::GlyphArrangement::getStringWidth(
+                font, getButtonText());
+            const auto maximumRailWidth = juce::jmax(
+                0.0f,
+                juce::jmin(measuredTextWidth,
+                           bounds.getWidth() - 12.0f));
+            const auto railWidth = maximumRailWidth
+                                   * (0.24f + 0.76f * emphasis);
+            const auto railHeight = 1.0f + 0.35f * focus;
+            g.setColour(findColour(juce::HyperlinkButton::textColourId)
+                            .withAlpha((0.38f + 0.50f * emphasis)
+                                       * interactive));
+            g.fillRoundedRectangle(bounds.getCentreX() - railWidth * 0.5f,
+                                   bounds.getBottom() - railHeight,
+                                   railWidth,
+                                   railHeight,
+                                   railHeight * 0.5f);
+        }
+
+        juce::Font displayFont = fire::ui::bodyFont(14.0f);
+        bool resizeFont = false;
+    };
+
     template <typename PrimaryButtonType>
     class DialogSessionButton final : public PrimaryButtonType
     {
@@ -161,23 +262,6 @@ private:
             // This is the final operation because the callback may delete the
             // dialog, its editor, and this button.
             this->internalClickCallback(juce::ModifierKeys::currentModifiers);
-        }
-
-        bool keyPressed(const juce::KeyPress& key) override
-        {
-            if (key.isKeyCode(juce::KeyPress::returnKey)
-                || key.isKeyCode(juce::KeyPress::spaceKey))
-            {
-                if (! canActivateInCurrentDialog())
-                    return false;
-
-                // Match native button keyboard expectations without posting a
-                // command into a later settings-dialog session.
-                this->internalClickCallback(key.getModifiers());
-                return true;
-            }
-
-            return PrimaryButtonType::keyPressed(key);
         }
 
     private:
@@ -202,7 +286,7 @@ private:
     FireLookAndFeel fireLookAndFeel;
     juce::Label versionLabel;
     juce::Label authorLabel;
-    DialogSessionButton<PrimaryHyperlinkButton> companyLabel;
+    DialogSessionButton<SettingsLinkButton> companyLabel;
 
     DialogSessionButton<PrimaryToggleButton> autoUpdateToggle;
 };

@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -184,6 +185,26 @@ void prepareSettings(SettingsComponent& settings)
     settings.setVisible(true);
     SettingsComponentTestAccess::disableCompanyLaunch(settings);
 }
+
+std::uint64_t renderFingerprint(juce::Component& component)
+{
+    juce::Image image(juce::Image::ARGB,
+                      component.getWidth(),
+                      component.getHeight(),
+                      true);
+    juce::Graphics graphics(image);
+    component.paintEntireComponent(graphics, true);
+
+    std::uint64_t fingerprint = 1469598103934665603ull;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            fingerprint ^= image.getPixelAt(x, y).getARGB();
+            fingerprint *= 1099511628211ull;
+        }
+
+    return fingerprint;
+}
 } // namespace
 
 TEST_CASE("Settings controls retain native roles behind primary-only input",
@@ -208,6 +229,43 @@ TEST_CASE("Settings controls retain native roles behind primary-only input",
     REQUIRE(autoUpdateAccessibility != nullptr);
     CHECK(companyAccessibility->getRole() == juce::AccessibilityRole::hyperlink);
     CHECK(autoUpdateAccessibility->getRole() == juce::AccessibilityRole::toggleButton);
+}
+
+TEST_CASE("Settings company link renders animated Fire keyboard feedback",
+          "[ui][settings][settings-button][hyperlink][animation][focus]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    TestPropertiesFile properties;
+    SettingsComponent settings(properties);
+    prepareSettings(settings);
+
+    auto& company = SettingsComponentTestAccess::companyButton(settings);
+    juce::Component::unfocusAllComponents();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+    const auto restingFingerprint = renderFingerprint(company);
+    CHECK(company.getFocusAnimation() < 0.01f);
+
+    company.grabKeyboardFocus();
+    REQUIRE(company.hasKeyboardFocus(true));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+    CHECK(company.getFocusAnimation() > 0.95f);
+    CHECK(renderFingerprint(company) != restingFingerprint);
+
+    // A pointer-acquired focus must remove the keyboard-only outline while
+    // retaining the same native hyperlink control and URL behaviour.
+    static_cast<juce::Component&>(company).focusGained(
+        juce::Component::focusChangedByMouseClick);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(600);
+    CHECK(company.getFocusAnimation() < 0.01f);
+    CHECK(renderFingerprint(company) == restingFingerprint);
+
+    // The first keyboard activation after pointer focus must restore the
+    // keyboard-only outline through PrimaryPointerButton's synchronous path.
+    REQUIRE(static_cast<juce::Component&>(company).keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+    CHECK(company.getFocusAnimation() > 0.95f);
+    CHECK(renderFingerprint(company) != restingFingerprint);
 }
 
 TEST_CASE("Settings layout remains usable at its minimum and narrow tall sizes",

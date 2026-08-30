@@ -37,6 +37,18 @@ struct BandToggleButtonPointerTestAccess
     }
 
     template <typename ButtonType>
+    static float focus(const ButtonType& button)
+    {
+        return button.focusAnimation.current;
+    }
+
+    template <typename ButtonType>
+    static bool isKeyboardFocusVisible(const ButtonType& button)
+    {
+        return button.keyboardFocusVisible;
+    }
+
+    template <typename ButtonType>
     static float enabled(const ButtonType& button)
     {
         return button.enabledAnimation.current;
@@ -55,9 +67,12 @@ struct BandToggleButtonPointerTestAccess
     }
 
     template <typename ButtonType>
-    static void notifyFocusGained(ButtonType& button)
+    static void notifyFocusGained(
+        ButtonType& button,
+        juce::Component::FocusChangeType cause =
+            juce::Component::focusChangedDirectly)
     {
-        button.focusGained(juce::Component::focusChangedDirectly);
+        button.focusGained(cause);
     }
 
     template <typename ButtonType>
@@ -303,6 +318,53 @@ TEST_CASE("Band toggle interaction visuals transition and reset when hidden",
         button.setVisible(false);
         CHECK(BandToggleButtonPointerTestAccess::hover(button) == 0.0f);
         CHECK(BandToggleButtonPointerTestAccess::press(button) == 0.0f);
+    });
+}
+
+TEST_CASE("Band toggle focus presentation follows keyboard modality",
+          "[band-toggle][multiband][ui][input][focus][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    forEachShowingBandToggle([leftButton](auto& button)
+    {
+        auto& component = static_cast<juce::Component&>(button);
+        button.grabKeyboardFocus();
+        REQUIRE(button.hasKeyboardFocus(true));
+
+        BandToggleButtonPointerTestAccess::notifyFocusGained(
+            button, juce::Component::focusChangedByMouseClick);
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(
+            button));
+
+        BandToggleButtonPointerTestAccess::notifyFocusGained(
+            button, juce::Component::focusChangedByTabKey);
+        CHECK(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(button));
+        BandToggleButtonPointerTestAccess::notifyFocusLost(button);
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(
+            button));
+
+        BandToggleButtonPointerTestAccess::notifyFocusGained(
+            button, juce::Component::focusChangedDirectly);
+        REQUIRE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(button));
+        component.mouseDown(makeMouseEvent(button, leftButton));
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(
+            button));
+        component.mouseUp(makeMouseEvent(button, {}));
+
+        REQUIRE(component.keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(button));
+
+        BandToggleButtonPointerTestAccess::advance(button, 1.0f / 60.0f);
+        CHECK(BandToggleButtonPointerTestAccess::focus(button) > 0.0f);
+        button.setVisible(false);
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(
+            button));
+        CHECK(BandToggleButtonPointerTestAccess::focus(button) == 0.0f);
     });
 }
 

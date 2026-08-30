@@ -62,6 +62,7 @@ private:
 
     bool isEntered = false;
     bool primaryPointerDown = false;
+    bool keyboardFocusVisible = false;
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;

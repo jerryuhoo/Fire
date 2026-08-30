@@ -208,6 +208,8 @@ void DraggableButton::mouseDown(const juce::MouseEvent& event)
         if (! isPointerSource(event))
             return;
 
+        keyboardFocusVisible = false;
+
         // A fresh down from the owner is a lifecycle boundary when a host
         // omitted the previous mouseUp.
         dismissTransientInteraction();
@@ -215,6 +217,12 @@ void DraggableButton::mouseDown(const juce::MouseEvent& event)
         if (safeThis == nullptr)
             return;
     }
+    else
+    {
+        keyboardFocusVisible = false;
+    }
+
+    updateAnimationTargets();
 
     if (! mState || ! isEnabled() || ! onDrag
         || ! isPrimaryPointerDown(event))
@@ -254,6 +262,12 @@ void DraggableButton::mouseUp(const juce::MouseEvent& event)
 
 bool DraggableButton::keyPressed(const juce::KeyPress& key)
 {
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        updateAnimationTargets();
+    }
+
     if (! canAcceptKeyboardOrAccessibilityInput())
         return juce::Component::keyPressed(key);
 
@@ -428,7 +442,9 @@ void DraggableButton::updateAnimationTargets() noexcept
 
     hoverAnimation.setTarget(isEntered || primaryDragActive ? 1.0f : 0.0f);
     pressAnimation.setTarget(primaryDragActive ? 1.0f : 0.0f);
-    focusAnimation.setTarget(hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    focusAnimation.setTarget(keyboardFocusVisible && hasKeyboardFocus(true)
+                                 ? 1.0f
+                                 : 0.0f);
     startAnimationIfNeeded();
 }
 
@@ -475,6 +491,7 @@ bool DraggableButton::hasPresentedInteraction() const noexcept
 void DraggableButton::clearInteractionPresentation() noexcept
 {
     stopTimer();
+    keyboardFocusVisible = false;
     hoverAnimation.snapTo(0.0f);
     pressAnimation.snapTo(0.0f);
     focusAnimation.snapTo(0.0f);
@@ -482,13 +499,23 @@ void DraggableButton::clearInteractionPresentation() noexcept
 
 void DraggableButton::focusGained(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<DraggableButton> safeThis(this);
     juce::Component::focusGained(cause);
+    if (safeThis == nullptr)
+        return;
+
+    keyboardFocusVisible = cause != focusChangedByMouseClick;
     updateAnimationTargets();
 }
 
 void DraggableButton::focusLost(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<DraggableButton> safeThis(this);
     juce::Component::focusLost(cause);
+    if (safeThis == nullptr)
+        return;
+
+    keyboardFocusVisible = false;
     updateAnimationTargets();
 }
 

@@ -54,6 +54,24 @@ struct DraggableButtonPointerTestAccess
     {
         return button.focusAnimation.current;
     }
+
+    static bool isKeyboardFocusVisible(
+        const DraggableButton& button) noexcept
+    {
+        return button.keyboardFocusVisible;
+    }
+
+    static void notifyFocusGained(
+        DraggableButton& button,
+        juce::Component::FocusChangeType cause)
+    {
+        button.focusGained(cause);
+    }
+
+    static void notifyFocusLost(DraggableButton& button)
+    {
+        button.focusLost(juce::Component::focusChangedDirectly);
+    }
 };
 
 struct FilterControlTestAccess
@@ -934,6 +952,52 @@ TEST_CASE("Filter graph node interaction feedback fades continuously and clears 
     CHECK(press() == 0.0f);
     CHECK(focus() == 0.0f);
     CHECK(dragFinishes == 1);
+}
+
+TEST_CASE("Filter graph node focus presentation follows keyboard modality",
+          "[filter-control][ui][input][focus][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    DraggableButton node;
+    node.setBounds(0, 0, 24, 24);
+    node.onDrag = [](DraggableButton&, const juce::MouseEvent&) {};
+    node.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    node.setVisible(true);
+    REQUIRE(node.isShowing());
+
+    node.grabKeyboardFocus();
+    REQUIRE(node.hasKeyboardFocus(true));
+    DraggableButtonPointerTestAccess::notifyFocusGained(
+        node, juce::Component::focusChangedByMouseClick);
+    CHECK_FALSE(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+
+    DraggableButtonPointerTestAccess::notifyFocusGained(
+        node, juce::Component::focusChangedByTabKey);
+    CHECK(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+    DraggableButtonPointerTestAccess::notifyFocusLost(node);
+    CHECK_FALSE(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+
+    DraggableButtonPointerTestAccess::notifyFocusGained(
+        node, juce::Component::focusChangedDirectly);
+    REQUIRE(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+    const auto centre = node.getLocalBounds().toFloat().getCentre();
+    node.mouseDown(makeMouseEvent(
+        node,
+        centre,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+        centre));
+    CHECK_FALSE(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+    node.mouseUp(makeMouseEvent(node, centre, {}, centre));
+
+    REQUIRE(node.keyPressed(juce::KeyPress { juce::KeyPress::rightKey }));
+    CHECK(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+    DraggableButtonPointerTestAccess::advanceAnimation(
+        node, 1.0f / 60.0f);
+    CHECK(DraggableButtonPointerTestAccess::focusAnimation(node) > 0.0f);
+
+    node.setVisible(false);
+    CHECK_FALSE(DraggableButtonPointerTestAccess::isKeyboardFocusVisible(node));
+    CHECK(DraggableButtonPointerTestAccess::focusAnimation(node) == 0.0f);
 }
 
 TEST_CASE("Filter graph nodes keep a primary drag owned by one pointer source",

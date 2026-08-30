@@ -142,6 +142,8 @@ void SoloButton::mouseDown(const juce::MouseEvent& event)
     if (safeThis == nullptr)
         return;
 
+    keyboardFocusVisible = false;
+    updateAnimationTargets();
     primaryPointerDown = isPrimaryPointerDown(event);
 
     if (primaryPointerDown)
@@ -176,6 +178,12 @@ void SoloButton::mouseUp(const juce::MouseEvent& event)
 
 bool SoloButton::keyPressed(const juce::KeyPress& key)
 {
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        updateAnimationTargets();
+    }
+
     if (key.isKeyCode(juce::KeyPress::returnKey)
         || key.isKeyCode(juce::KeyPress::spaceKey))
     {
@@ -226,6 +234,7 @@ void SoloButton::visibilityChanged()
             return;
 
         isEntered = false;
+        keyboardFocusVisible = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
         focusAnimation.snapTo(0.0f);
@@ -261,8 +270,11 @@ void SoloButton::focusGained(FocusChangeType cause)
     const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::focusGained(cause);
 
-    if (safeThis != nullptr)
-        updateAnimationTargets();
+    if (safeThis == nullptr)
+        return;
+
+    keyboardFocusVisible = cause != focusChangedByMouseClick;
+    updateAnimationTargets();
 }
 
 void SoloButton::focusLost(FocusChangeType cause)
@@ -270,8 +282,11 @@ void SoloButton::focusLost(FocusChangeType cause)
     const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::focusLost(cause);
 
-    if (safeThis != nullptr)
-        updateAnimationTargets();
+    if (safeThis == nullptr)
+        return;
+
+    keyboardFocusVisible = false;
+    updateAnimationTargets();
 }
 
 void SoloButton::buttonStateChanged()
@@ -290,6 +305,7 @@ void SoloButton::timerCallback()
             return;
 
         isEntered = false;
+        keyboardFocusVisible = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
         focusAnimation.snapTo(0.0f);
@@ -307,9 +323,14 @@ void SoloButton::timerCallback()
 void SoloButton::updateAnimationTargets() noexcept
 {
     const bool interactive = isEnabled() && isVisibleInHierarchy(*this);
+    if (! interactive)
+        keyboardFocusVisible = false;
     hoverAnimation.setTarget(interactive && (isEntered || isDown()) ? 1.0f : 0.0f);
     pressAnimation.setTarget(interactive && isDown() ? 1.0f : 0.0f);
-    focusAnimation.setTarget(interactive && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    focusAnimation.setTarget(interactive && keyboardFocusVisible
+                                 && hasKeyboardFocus(true)
+                             ? 1.0f
+                             : 0.0f);
     enabledAnimation.setTarget(isEnabled() ? 1.0f : 0.0f);
     startAnimationIfNeeded();
 }

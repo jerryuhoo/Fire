@@ -1832,6 +1832,146 @@ TEST_CASE("LFO edit gestures ignore foreign pointer drag and release events",
     }
 }
 
+TEST_CASE("LFO editor recovers omitted releases only from the owning pointer",
+          "[lfo][editor][input][gesture][recovery][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto data = makeLfoData({
+        { 0.0f, 0.20f }, { 0.35f, 0.70f },
+        { 0.70f, 0.35f }, { 1.0f, 0.80f }
+    });
+
+    SECTION("a second input source cannot complete an owned point edit")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        const auto downPosition =
+            LfoEditorTestAccess::pointScreenPosition(editor, 1);
+        const auto dragPosition =
+            downPosition + juce::Point<float> { 24.0f, -18.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, downPosition, leftButton));
+        editor.mouseDrag(makeMouseEvent(
+            editor, dragPosition, leftButton, downPosition, true));
+        REQUIRE(publicationCount == 1);
+        REQUIRE(LfoEditorTestAccess::isPointInteraction(editor));
+
+        // Model an interleaved hover from source 0 while the accepted down is
+        // owned by source 1. It must not recover or steal that edit.
+        makeTrackedPointerIndexForeign(editor, source);
+        editor.mouseMove(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(publicationCount == 1);
+        CHECK(LfoEditorTestAccess::isPointInteraction(editor));
+        CHECK(LfoEditorTestAccess::isPrimaryPointerGesture(editor));
+
+        // The first same-source hover without the primary button is the missing
+        // release boundary and performs the normal final Point publication.
+        restoreTrackedPointerSource(editor, source);
+        editor.mouseMove(makeMouseEvent(
+            editor, dragPosition, {}, downPosition, true));
+        CHECK(publicationCount == 2);
+        CHECK_FALSE(LfoEditorTestAccess::isPointInteraction(editor));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(LfoEditorTestAccess::interactionStateIsValid(editor));
+    }
+
+    SECTION("an owned brush edit completes on a same-source exit")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        editor.setGridDivisions(4, 4);
+        editor.setCurrentBrush(LfoPresetShape::SineConvex);
+        editor.setEditMode(LfoEditMode::BrushPaint);
+        int publicationCount = 0;
+        editor.onDataChanged = [&](const LfoData&) { ++publicationCount; };
+
+        const juce::Point<float> downPosition { 150.0f, 25.0f };
+        editor.mouseDown(makeMouseEvent(
+            editor, downPosition, leftButton));
+        REQUIRE(publicationCount == 1);
+        REQUIRE(LfoEditorTestAccess::isBrushing(editor));
+
+        editor.mouseExit(makeMouseEvent(
+            editor, downPosition, {}, downPosition, true));
+        CHECK(publicationCount == 1);
+        CHECK_FALSE(LfoEditorTestAccess::isBrushing(editor));
+        CHECK(LfoEditorTestAccess::lastBrushCell(editor)
+              == juce::Point<int>(-1, -1));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK(LfoEditorTestAccess::interactionStateIsValid(editor));
+    }
+
+    SECTION("popup and rejected downs recover as cancellation without a menu")
+    {
+        LfoEditor editor;
+        prepareEditor(editor);
+        editor.setDataToDisplay(data);
+        int menuLaunchCount = 0;
+        LfoEditorTestAccess::setContextMenuLaunchHook(
+            editor, [&] { ++menuLaunchCount; });
+        const juce::Point<float> position { 200.0f, 100.0f };
+        const auto popupButton = juce::ModifierKeys {
+            juce::ModifierKeys::rightButtonModifier
+        };
+        const auto rejectedButtons = juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier
+            | juce::ModifierKeys::middleButtonModifier
+        };
+
+        editor.mouseDown(makeMouseEvent(editor, position, popupButton));
+        REQUIRE(LfoEditorTestAccess::isPopupPointerGesture(editor));
+        editor.mouseEnter(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(menuLaunchCount == 0);
+
+        editor.mouseDown(makeMouseEvent(editor, position, rejectedButtons));
+        REQUIRE(LfoEditorTestAccess::isRejectedPointerGesture(editor));
+        editor.mouseMove(makeMouseEvent(editor, position));
+        CHECK(LfoEditorTestAccess::hasNoPointerGesture(editor));
+        CHECK_FALSE(
+            LfoEditorTestAccess::hasActiveContextMenuSession(editor));
+        CHECK(menuLaunchCount == 0);
+    }
+
+    SECTION("a recovered Point publication may delete the editor")
+    {
+        auto editor = std::make_unique<LfoEditor>();
+        prepareEditor(*editor);
+        editor->setDataToDisplay(data);
+        const auto downPosition =
+            LfoEditorTestAccess::pointScreenPosition(*editor, 1);
+        const auto dragPosition =
+            downPosition + juce::Point<float> { 24.0f, -18.0f };
+        int publicationCount = 0;
+        editor->onDataChanged = [&](const LfoData&)
+        {
+            if (++publicationCount == 2)
+                editor.reset();
+        };
+        auto* const rawEditor = editor.get();
+
+        rawEditor->mouseDown(makeMouseEvent(
+            *rawEditor, downPosition, leftButton));
+        rawEditor->mouseDrag(makeMouseEvent(
+            *rawEditor, dragPosition, leftButton, downPosition, true));
+        REQUIRE(publicationCount == 1);
+
+        rawEditor->mouseMove(makeMouseEvent(
+            *rawEditor, dragPosition, {}, downPosition, true));
+        CHECK(publicationCount == 2);
+        CHECK(editor == nullptr);
+    }
+}
+
 TEST_CASE("LFO editor lifecycle boundaries cancel pointer state without publishing",
           "[lfo][editor][input][gesture][lifecycle][regression]")
 {

@@ -69,6 +69,7 @@ public:
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
     void mouseDoubleClick(const juce::MouseEvent& event) override;
+    void mouseEnter(const juce::MouseEvent& event) override;
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
     bool keyPressed(const juce::KeyPress& key) override;
@@ -142,6 +143,7 @@ private:
     static bool isStandalonePopupDown(
         const juce::MouseEvent& event) noexcept;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    bool recoverMissingPointerUp(const juce::MouseEvent& event);
     void beginPointerGesture(PointerGesture gesture,
                              const juce::MouseEvent& event) noexcept;
     void clearPointerGesture() noexcept;

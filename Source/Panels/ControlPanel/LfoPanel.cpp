@@ -1163,8 +1163,20 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
     }
 }
 
+void LfoEditor::mouseEnter(const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<LfoEditor> safeThis(this);
+    juce::Component::mouseEnter(event);
+    if (safeThis != nullptr)
+        recoverMissingPointerUp(event);
+}
+
 void LfoEditor::mouseMove(const juce::MouseEvent& event)
 {
+    const juce::Component::SafePointer<LfoEditor> safeThis(this);
+    if (! recoverMissingPointerUp(event) || safeThis == nullptr)
+        return;
+
     // Find if the mouse is currently hovering over any point
     int newHoveredIndex = -1;
     for (int i = 0; i < activeLfoData.points.size(); ++i)
@@ -1194,12 +1206,51 @@ void LfoEditor::mouseMove(const juce::MouseEvent& event)
 
 void LfoEditor::mouseExit(const juce::MouseEvent& event)
 {
+    const juce::Component::SafePointer<LfoEditor> safeThis(this);
+    juce::Component::mouseExit(event);
+    if (safeThis == nullptr || ! recoverMissingPointerUp(event))
+        return;
+
     // When the mouse leaves the component, clear any hovered state and repaint
     if (hoveredPointIndex != -1)
     {
         hoveredPointIndex = -1;
         updateAnimationTargets();
     }
+}
+
+bool LfoEditor::recoverMissingPointerUp(const juce::MouseEvent& event)
+{
+    if (activePointerGesture == PointerGesture::none
+        || ! isPointerSource(event))
+        return true;
+
+    const bool owningButtonStillDown =
+        activePointerGesture == PointerGesture::primary
+            ? event.mods.isLeftButtonDown()
+            : event.mods.isAnyMouseButtonDown();
+    if (owningButtonStillDown)
+        return true;
+
+    if (activePointerGesture == PointerGesture::primary)
+    {
+        // A host/window-manager capture change can omit mouseUp. Complete an
+        // owned edit through the normal release path so Point/Brush state and
+        // the final Point publication keep exactly the same semantics. The
+        // callback may synchronously delete this editor.
+        const juce::Component::SafePointer<LfoEditor> safeThis(this);
+        mouseUp(event);
+        return safeThis != nullptr;
+    }
+
+    // Popup and rejected downs have no edit to complete. A hover event without
+    // their owning buttons is only a cancellation boundary; routing it through
+    // mouseUp would incorrectly open a context menu after the physical release
+    // was already lost.
+    clearPointerGesture();
+    clearPrimaryDoubleClickAuthorization();
+    repaint();
+    return true;
 }
 
 void LfoEditor::visibilityChanged()

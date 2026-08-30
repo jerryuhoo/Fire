@@ -3,6 +3,7 @@
 #include "Panels/ControlPanel/Graph Components/WidthGraph.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include <cstdint>
 
@@ -132,6 +133,7 @@ namespace
 constexpr double sampleRate = 48000.0;
 constexpr int blockSize = 64;
 constexpr int capturedSamplesPerBlock = 7;
+constexpr int capturedSamplesAcrossTwoBlocks = 13;
 constexpr std::uint64_t sourceMask = 0x7u;
 
 void processHistoryBlock(FireAudioProcessor& processor, float value)
@@ -141,6 +143,21 @@ void processHistoryBlock(FireAudioProcessor& processor, float value)
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
             buffer.setSample(channel, sample, value);
+
+    juce::MidiBuffer midi;
+    processor.processBlock(buffer, midi);
+}
+
+void processHistoryRampBlock(FireAudioProcessor& processor,
+                             int numSamples,
+                             int firstSample)
+{
+    juce::AudioBuffer<float> buffer(2, numSamples);
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            buffer.setSample(channel,
+                             sample,
+                             static_cast<float>(firstSample + sample) / 128.0f);
 
     juce::MidiBuffer midi;
     processor.processBlock(buffer, midi);
@@ -192,8 +209,38 @@ TEST_CASE("History source requests publish one epoch-tagged snapshot",
     FireAudioProcessor::HistorySnapshot accumulatedA;
     REQUIRE(processor.copyHistorySnapshot(accumulatedA));
     CHECK(accumulatedA.sourceToken == firstAToken);
-    CHECK(accumulatedA.left.size() == capturedSamplesPerBlock * 2);
+    CHECK(accumulatedA.left.size() == capturedSamplesAcrossTwoBlocks);
     CHECK(accumulatedA.generation > firstA.generation);
+}
+
+TEST_CASE("History decimation is independent of host block partitioning",
+          "[processor][history][partitioning][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor singleBlockProcessor;
+    FireAudioProcessor splitBlockProcessor;
+    singleBlockProcessor.prepareToPlay(sampleRate, blockSize * 2);
+    splitBlockProcessor.prepareToPlay(sampleRate, blockSize * 2);
+
+    processHistoryRampBlock(singleBlockProcessor, blockSize * 2, 0);
+    processHistoryRampBlock(splitBlockProcessor, blockSize, 0);
+    processHistoryRampBlock(splitBlockProcessor, blockSize, blockSize);
+
+    FireAudioProcessor::HistorySnapshot singleBlock;
+    FireAudioProcessor::HistorySnapshot splitBlocks;
+    REQUIRE(singleBlockProcessor.copyHistorySnapshot(singleBlock));
+    REQUIRE(splitBlockProcessor.copyHistorySnapshot(splitBlocks));
+    REQUIRE(singleBlock.left.size() == capturedSamplesAcrossTwoBlocks);
+    REQUIRE(splitBlocks.left.size() == singleBlock.left.size());
+    REQUIRE(splitBlocks.right.size() == singleBlock.right.size());
+
+    for (int sample = 0; sample < singleBlock.left.size(); ++sample)
+    {
+        CHECK(splitBlocks.left[sample]
+              == Catch::Approx(singleBlock.left[sample]).margin(1.0e-6f));
+        CHECK(splitBlocks.right[sample]
+              == Catch::Approx(singleBlock.right[sample]).margin(1.0e-6f));
+    }
 }
 
 TEST_CASE("History A to B to A cannot reuse the first A ring buffer",

@@ -3033,6 +3033,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     }
     historyWritePosition.store(0, std::memory_order_relaxed);
     historySamplesAvailable.store(0, std::memory_order_relaxed);
+    historySamplesUntilCapture = 0;
     activeHistorySourceToken = historySourceRequestToken.load(
         std::memory_order_acquire);
     publishedHistorySourceToken.store(activeHistorySourceToken,
@@ -4222,6 +4223,7 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 void FireAudioProcessor::performReset()
 {
     spectrumProcessor.reset();
+    historySamplesUntilCapture = 0;
     synchroniseMultibandTopologyResetState();
     resetMultibandProcessingState(
         &activeMultibandTopologySnapshot.callbackContext);
@@ -5548,6 +5550,7 @@ void FireAudioProcessor::captureHistorySamples()
         activeHistorySourceToken = requestedSourceToken;
         historyWritePosition.store(0, std::memory_order_relaxed);
         historySamplesAvailable.store(0, std::memory_order_relaxed);
+        historySamplesUntilCapture = 0;
     }
 
     int writePosition = historyWritePosition.load(std::memory_order_relaxed);
@@ -5562,7 +5565,9 @@ void FireAudioProcessor::captureHistorySamples()
                                 ? sourceBuffer->getReadPointer(1)
                                 : left;
 
-        for (int sample = 0; sample < sourceBuffer->getNumSamples(); sample += 10)
+        int sample = historySamplesUntilCapture;
+        for (; sample < sourceBuffer->getNumSamples();
+             sample += historyDecimationFactor)
         {
             const auto index = static_cast<size_t>(writePosition);
             historyArrayL[index].store(left[sample], std::memory_order_relaxed);
@@ -5570,6 +5575,8 @@ void FireAudioProcessor::captureHistorySamples()
             writePosition = (writePosition + 1) % historyLength;
             ++capturedSamples;
         }
+
+        historySamplesUntilCapture = sample - sourceBuffer->getNumSamples();
     }
 
     samplesAvailable = juce::jmin(historyLength,

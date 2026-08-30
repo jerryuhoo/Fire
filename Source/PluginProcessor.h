@@ -905,6 +905,7 @@ private:
 
     // Oscilloscope
     static constexpr int historyLength = 400;
+    static constexpr int historyDecimationFactor = 10;
     static constexpr std::uint64_t historySourceMask = 0x7u;
     static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
                   "History source publication must remain RT-safe");
@@ -912,6 +913,9 @@ private:
     std::array<std::atomic<float>, historyLength> historyArrayR {};
     std::atomic<int> historyWritePosition { 0 };
     std::atomic<int> historySamplesAvailable { 0 };
+    // Audio-thread-only phase. Keeping it across callbacks makes the history
+    // sampling interval independent of the host's block partitioning.
+    int historySamplesUntilCapture = 0;
     // The message thread advances the epoch whenever the normalised source
     // changes. Keeping epoch and source in one atomic prevents the audio
     // thread from ever pairing one request's source with another's identity.

@@ -1385,6 +1385,7 @@ ModulationMatrixPanel::ModulationMatrixPanel(FireAudioProcessor& p) : processor(
     processor.addChangeListener(this);
     addAndMakeVisible(header);
     addAndMakeVisible(viewport);
+    viewport.setScrollBarsShown(true, false);
     viewport.setViewedComponent(&contentComponent, false);
     addAndMakeVisible(addButton);
     addButton.addListener(this);
@@ -1438,9 +1439,16 @@ void ModulationMatrixPanel::resized()
     bounds.removeFromTop(4);
     viewport.setBounds(bounds);
 
-    // Set the size of the content that will be scrolled.
-    contentComponent.setBounds(0, 0, viewport.getMaximumVisibleWidth(),
-                               juce::jmax(viewport.getHeight(), static_cast<int>(rows.size()) * 44));
+    // Setting a taller content component can make the vertical scrollbar
+    // appear, which reduces the available width synchronously. Apply the
+    // resulting width once more so rows never extend underneath that bar.
+    // Horizontal scrolling is intentionally disabled for this column layout.
+    const auto contentHeight =
+        juce::jmax(viewport.getHeight(), static_cast<int>(rows.size()) * 44);
+    for (int layoutPass = 0; layoutPass < 2; ++layoutPass)
+        contentComponent.setBounds(0, 0,
+                                   viewport.getMaximumVisibleWidth(),
+                                   contentHeight);
 
     // Layout the rows inside the content component.
     juce::FlexBox flex;

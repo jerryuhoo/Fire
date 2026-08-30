@@ -121,6 +121,20 @@ void collectMatrixRows(juce::Component& component,
             collectMatrixRows(*child, rows);
 }
 
+juce::Viewport* findViewport(juce::Component& component)
+{
+    if (auto* viewport = dynamic_cast<juce::Viewport*>(&component))
+        return viewport;
+
+    for (int childIndex = 0; childIndex < component.getNumChildComponents();
+         ++childIndex)
+        if (auto* child = component.getChildComponent(childIndex))
+            if (auto* viewport = findViewport(*child))
+                return viewport;
+
+    return nullptr;
+}
+
 std::shared_ptr<ModulationRoutingEditSession> makeRoutingEditSession(
     FireAudioProcessor& processor)
 {
@@ -493,6 +507,51 @@ void beginButtonPointerGesture(juce::Button& button,
                        false));
 }
 } // namespace
+
+TEST_CASE("Modulation matrix viewport stays width-stable at first overflow",
+          "[ui][modulation-matrix][viewport][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto& manager = processor.getLfoManager();
+
+    const auto setRoutingCount = [&manager](int count)
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        for (int index = 0; index < count; ++index)
+            routings.add({});
+        manager.advanceModulationRoutingRevisionLocked();
+    };
+
+    ModulationMatrixPanel panel { processor };
+    panel.setBounds(0, 0, 760, 420);
+    auto* viewport = findViewport(panel);
+    REQUIRE(viewport != nullptr);
+    auto* content = viewport->getViewedComponent();
+    REQUIRE(content != nullptr);
+
+    const auto rowsThatFit = viewport->getHeight() / 44;
+    REQUIRE(rowsThatFit > 0);
+    setRoutingCount(rowsThatFit);
+    panel.buildUiFromProcessorState();
+
+    CHECK_FALSE(viewport->getVerticalScrollBar().isVisible());
+    CHECK_FALSE(viewport->isHorizontalScrollBarShown());
+    CHECK_FALSE(viewport->getHorizontalScrollBar().isVisible());
+    CHECK(content->getWidth() == viewport->getMaximumVisibleWidth());
+
+    setRoutingCount(rowsThatFit + 1);
+    panel.buildUiFromProcessorState();
+
+    CHECK(viewport->getVerticalScrollBar().isVisible());
+    CHECK_FALSE(viewport->isHorizontalScrollBarShown());
+    CHECK_FALSE(viewport->getHorizontalScrollBar().isVisible());
+    CHECK(content->getWidth() == viewport->getMaximumVisibleWidth());
+    CHECK(viewport->getMaximumVisibleWidth()
+          == viewport->getWidth() - viewport->getScrollBarThickness());
+}
 
 TEST_CASE("Modulation routing edits stop at the shared capacity",
           "[modulation-matrix][state][capacity][regression]")

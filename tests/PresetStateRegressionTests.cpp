@@ -899,6 +899,82 @@ TEST_CASE("Duplicate preset display names keep their relative-path identity",
     CHECK(presets.getCurrentPresetId() == folderAPresetID);
 }
 
+TEST_CASE("Preset identity preserves legal leading filename spaces",
+          "[preset][filesystem][identity][whitespace][duplicates][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    FireAudioProcessor plainPreset;
+    FireAudioProcessor spacedPreset;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    setPlainParameter(plainPreset, driveID, 19.0f);
+    setPlainParameter(spacedPreset, driveID, 71.0f);
+    writePresetFile(
+        plainPreset,
+        temporaryDirectory.directory.getChildFile("Twin.fire"),
+        "Twin");
+    writePresetFile(
+        spacedPreset,
+        temporaryDirectory.directory.getChildFile(" Twin.fire"),
+        " Twin");
+
+    FireAudioProcessor processor;
+    state::StatePresets presets {
+        processor, temporaryDirectory.directory.getFullPathName()
+    };
+    juce::ComboBox menu;
+    presets.setPresetAndFolderNames(menu);
+    REQUIRE(presets.getNumPresets() == 2);
+
+    int plainPresetID = 0;
+    int spacedPresetID = 0;
+    for (int id = 1; id <= presets.getNumPresets(); ++id)
+    {
+        REQUIRE(presets.loadPreset(presets.comboBoxIdToTagNameMap[id]));
+        const auto key = presets.getCurrentPresetKey();
+        if (key == "Twin.fire")
+        {
+            plainPresetID = id;
+            CHECK(getPlainParameter(processor, driveID)
+                  == Catch::Approx(19.0f));
+        }
+        else if (key == " Twin.fire")
+        {
+            spacedPresetID = id;
+            CHECK(getPlainParameter(processor, driveID)
+                  == Catch::Approx(71.0f));
+        }
+    }
+
+    REQUIRE(plainPresetID > 0);
+    REQUIRE(spacedPresetID > 0);
+    REQUIRE(plainPresetID != spacedPresetID);
+
+    presets.setCurrentPresetId(spacedPresetID);
+    REQUIRE(presets.loadPreset(
+        presets.comboBoxIdToTagNameMap[spacedPresetID]));
+    REQUIRE(presets.getCurrentPresetKey() == " Twin.fire");
+
+    presets.scanAllPresets();
+    juce::ComboBox rescannedMenu;
+    presets.setPresetAndFolderNames(rescannedMenu);
+
+    CHECK(presets.getCurrentPresetKey() == " Twin.fire");
+    CHECK(presets.getCurrentPresetId() > 0);
+    CHECK(getPlainParameter(processor, driveID) == Catch::Approx(71.0f));
+
+    // Host-state restoration must retain the same exact path identity before
+    // the menu has been rebuilt.
+    presets.setCurrentPresetKey(" Twin.fire");
+    juce::ComboBox restoredMenu;
+    presets.setPresetAndFolderNames(restoredMenu);
+    CHECK(presets.getCurrentPresetKey() == " Twin.fire");
+    CHECK(presets.getCurrentPresetId() > 0);
+}
+
 TEST_CASE("Preset UI synchronisation reflects restored identity without reloading live state",
           "[preset][state][ui][identity][headless]")
 {

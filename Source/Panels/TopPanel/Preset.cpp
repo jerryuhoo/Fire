@@ -708,7 +708,10 @@ namespace state
 
     juce::String StatePresets::normalisePresetKey(juce::String key)
     {
-        key = key.trim().replaceCharacter('\\', '/');
+        // Relative paths are stable identities, so preserve legal leading and
+        // trailing spaces exactly. Trimming here makes distinct on-disk files
+        // such as "Preset.fire" and " Preset.fire" alias one another.
+        key = key.replaceCharacter('\\', '/');
         while (key.startsWith("./"))
             key = key.substring(2);
         while (key.contains("//"))
@@ -717,7 +720,7 @@ namespace state
         // A key is always relative to the configured preset root. Reject
         // traversal and absolute paths rather than allowing identity to escape
         // that root when it arrives from a host state.
-        if (key.isEmpty() || juce::File::isAbsolutePath(key))
+        if (key.trim().isEmpty() || juce::File::isAbsolutePath(key))
             return {};
 
         const auto segments = juce::StringArray::fromTokens(key, "/", {});

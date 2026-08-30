@@ -35,6 +35,7 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+    bool keyPressed(const juce::KeyPress& key) override;
     void setState(const bool state);
     void dismissTransientInteraction();
     void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
@@ -54,6 +55,16 @@ private:
     int pointerSourceIndex = -1;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
     void recoverMissingPointerUp(const juce::MouseEvent& event);
+    bool performKeyboardMove(juce::Point<float> localPosition);
+    bool setAccessibleFrequency(double frequency);
+    double getAccessibleFrequency() const noexcept;
+    bool canAcceptKeyboardOrAccessibilityInput() const noexcept;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+    void enablementChanged() override;
+    void visibilityChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
     juce::Colour getColour();
     bool mState = true;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DraggableButton)

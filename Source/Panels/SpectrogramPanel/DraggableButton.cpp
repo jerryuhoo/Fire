@@ -12,6 +12,9 @@
 
 namespace
 {
+constexpr double minimumFilterFrequency = 20.0;
+constexpr double maximumFilterFrequency = 20000.0;
+
 bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
 {
     return event.mods.isLeftButtonDown()
@@ -19,12 +22,74 @@ bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
         && ! event.mods.isRightButtonDown()
         && ! event.mods.isMiddleButtonDown();
 }
+
+class CallbackFrequencyValueInterface final
+    : public juce::AccessibilityValueInterface
+{
+public:
+    using Getter = std::function<double()>;
+    using Setter = std::function<void(double)>;
+    using ReadOnlyGetter = std::function<bool()>;
+
+    CallbackFrequencyValueInterface(Getter getterToUse,
+                                    Setter setterToUse,
+                                    ReadOnlyGetter readOnlyGetterToUse)
+        : getter(std::move(getterToUse)),
+          setter(std::move(setterToUse)),
+          readOnlyGetter(std::move(readOnlyGetterToUse))
+    {
+    }
+
+    bool isReadOnly() const override
+    {
+        return readOnlyGetter == nullptr || readOnlyGetter();
+    }
+
+    double getCurrentValue() const override
+    {
+        return getter != nullptr ? getter() : minimumFilterFrequency;
+    }
+
+    juce::String getCurrentValueAsString() const override
+    {
+        return juce::String(juce::roundToInt(getCurrentValue())) + " Hz";
+    }
+
+    void setValue(double newValue) override
+    {
+        if (! isReadOnly() && setter != nullptr)
+            setter(newValue);
+    }
+
+    void setValueAsString(const juce::String& newValue) override
+    {
+        auto frequency = newValue.getDoubleValue();
+        if (newValue.containsIgnoreCase("khz"))
+            frequency *= 1000.0;
+        setValue(frequency);
+    }
+
+    AccessibleValueRange getRange() const override
+    {
+        return { { minimumFilterFrequency, maximumFilterFrequency }, 1.0 };
+    }
+
+private:
+    Getter getter;
+    Setter setter;
+    ReadOnlyGetter readOnlyGetter;
+};
 } // namespace
 
 //==============================================================================
 DraggableButton::DraggableButton()
 {
     setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(true);
+    setTitle("Filter node frequency");
+    setHelpText("Use the arrow keys to adjust frequency and gain. "
+                "Use Page Up and Page Down to adjust resonance.");
 }
 
 DraggableButton::~DraggableButton()
@@ -35,11 +100,15 @@ void DraggableButton::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
     const auto accent = getColour();
+    const bool hasVisibleFocus = mState && isEnabled()
+                              && hasKeyboardFocus(true);
 
     if (mState)
     {
-        g.setColour(accent.withAlpha(isEntered ? 0.20f : 0.11f));
-        g.fillEllipse(bounds.expanded(isEntered ? 0.0f : -0.5f));
+        g.setColour(accent.withAlpha(hasVisibleFocus ? 0.25f
+                                                    : isEntered ? 0.20f : 0.11f));
+        g.fillEllipse(bounds.expanded((isEntered || hasVisibleFocus) ? 0.0f
+                                                                     : -0.5f));
     }
 
     juce::ColourGradient metal(fire::ui::colours::raised.brighter(isEntered ? 0.10f : 0.04f),
@@ -54,6 +123,12 @@ void DraggableButton::paint(juce::Graphics& g)
     const auto core = bounds.reduced(bounds.getWidth() * (isEntered ? 0.34f : 0.38f));
     g.setColour(mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
     g.fillEllipse(core);
+
+    if (hasVisibleFocus)
+    {
+        g.setColour(fire::ui::colours::ember.withAlpha(0.92f));
+        g.drawEllipse(bounds.reduced(1.0f), 1.5f);
+    }
 }
 
 void DraggableButton::resized()
@@ -129,7 +204,8 @@ void DraggableButton::mouseDown(const juce::MouseEvent& event)
             return;
     }
 
-    if (! mState || ! onDrag || ! isPrimaryPointerDown(event))
+    if (! mState || ! isEnabled() || ! onDrag
+        || ! isPrimaryPointerDown(event))
         return;
 
     primaryDragActive = true;
@@ -163,6 +239,47 @@ void DraggableButton::mouseUp(const juce::MouseEvent& event)
     dismissTransientInteraction();
 }
 
+bool DraggableButton::keyPressed(const juce::KeyPress& key)
+{
+    if (! canAcceptKeyboardOrAccessibilityInput())
+        return juce::Component::keyPressed(key);
+
+    const auto modifiers = key.getModifiers();
+    if (modifiers.isCommandDown() || modifiers.isCtrlDown()
+        || modifiers.isAltDown())
+        return juce::Component::keyPressed(key);
+
+    if (key.isKeyCode(juce::KeyPress::pageUpKey)
+        || key.isKeyCode(juce::KeyPress::pageDownKey))
+    {
+        if (! onQValueChanged)
+            return juce::Component::keyPressed(key);
+
+        const auto qDelta = key.isKeyCode(juce::KeyPress::pageUpKey)
+                              ? 0.04f : -0.04f;
+        auto qValueCallback = onQValueChanged;
+
+        // The parameter callback may synchronously remove this control.
+        qValueCallback(qDelta);
+        return true;
+    }
+
+    const auto step = modifiers.isShiftDown() ? 1.0f : 4.0f;
+    auto position = getLocalBounds().toFloat().getCentre();
+    if (key.isKeyCode(juce::KeyPress::leftKey))
+        position.x -= step;
+    else if (key.isKeyCode(juce::KeyPress::rightKey))
+        position.x += step;
+    else if (key.isKeyCode(juce::KeyPress::upKey))
+        position.y -= step;
+    else if (key.isKeyCode(juce::KeyPress::downKey))
+        position.y += step;
+    else
+        return juce::Component::keyPressed(key);
+
+    return performKeyboardMove(position);
+}
+
 void DraggableButton::dismissTransientInteraction()
 {
     if (! primaryDragActive)
@@ -175,6 +292,158 @@ void DraggableButton::dismissTransientInteraction()
         auto finishedCallback = onDragFinished;
         finishedCallback();
     }
+}
+
+bool DraggableButton::performKeyboardMove(juce::Point<float> localPosition)
+{
+    if (! canAcceptKeyboardOrAccessibilityInput() || ! onDrag)
+        return false;
+
+    const auto source = juce::Desktop::getInstance().getMainMouseSource();
+    const auto now = juce::Time::getCurrentTime();
+    const juce::MouseEvent keyboardMove(source,
+                                        localPosition,
+                                        {},
+                                        0.0f,
+                                        0.0f,
+                                        0.0f,
+                                        0.0f,
+                                        0.0f,
+                                        this,
+                                        this,
+                                        now,
+                                        localPosition,
+                                        now,
+                                        1,
+                                        true);
+    auto dragCallback = onDrag;
+    juce::Component::SafePointer<DraggableButton> safeThis(this);
+    dragCallback(*this, keyboardMove);
+
+    if (safeThis == nullptr)
+        return true;
+
+    auto finishedCallback = safeThis->onDragFinished;
+
+    // A keyboard nudge is one complete host gesture. The finish callback may
+    // synchronously delete the control, so it is the final component action.
+    if (finishedCallback)
+        finishedCallback();
+
+    return true;
+}
+
+bool DraggableButton::setAccessibleFrequency(double frequency)
+{
+    if (! canAcceptKeyboardOrAccessibilityInput() || getParentComponent() == nullptr
+        || getParentWidth() <= 0 || ! std::isfinite(frequency))
+        return false;
+
+    frequency = juce::jlimit(minimumFilterFrequency,
+                             maximumFilterFrequency,
+                             frequency);
+    if (juce::approximatelyEqual(frequency, getAccessibleFrequency()))
+        return true;
+
+    const auto normalisedX = static_cast<float>(
+        juce::mapFromLog10(frequency,
+                           minimumFilterFrequency,
+                           maximumFilterFrequency));
+    const auto targetInParent = juce::Point<float> {
+        normalisedX * static_cast<float>(getParentWidth()),
+        getBounds().toFloat().getCentreY()
+    };
+    return performKeyboardMove(targetInParent - getPosition().toFloat());
+}
+
+double DraggableButton::getAccessibleFrequency() const noexcept
+{
+    if (getParentComponent() == nullptr || getParentWidth() <= 0)
+        return minimumFilterFrequency;
+
+    const auto normalisedX = juce::jlimit(
+        0.0f,
+        1.0f,
+        getBounds().toFloat().getCentreX()
+            / static_cast<float>(getParentWidth()));
+    return juce::mapToLog10(static_cast<double>(normalisedX),
+                            minimumFilterFrequency,
+                            maximumFilterFrequency);
+}
+
+bool DraggableButton::canAcceptKeyboardOrAccessibilityInput() const noexcept
+{
+    return mState && isEnabled() && isShowing() && ! primaryDragActive;
+}
+
+void DraggableButton::focusGained(FocusChangeType cause)
+{
+    juce::Component::focusGained(cause);
+    repaint();
+}
+
+void DraggableButton::focusLost(FocusChangeType cause)
+{
+    juce::Component::focusLost(cause);
+    repaint();
+}
+
+void DraggableButton::enablementChanged()
+{
+    juce::Component::enablementChanged();
+    isEntered = isEntered && isEnabled();
+    repaint();
+
+    if (! isEnabled())
+        dismissTransientInteraction();
+}
+
+void DraggableButton::visibilityChanged()
+{
+    juce::Component::visibilityChanged();
+    if (isVisible())
+    {
+        repaint();
+        return;
+    }
+
+    isEntered = false;
+    repaint();
+
+    // The drag-finished callback may synchronously destroy the owner.
+    dismissTransientInteraction();
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+DraggableButton::createAccessibilityHandler()
+{
+    const juce::Component::SafePointer<DraggableButton> safeThis(this);
+    auto valueInterface = std::make_unique<CallbackFrequencyValueInterface>(
+        [safeThis]
+        {
+            return safeThis != nullptr
+                     ? safeThis->getAccessibleFrequency()
+                     : minimumFilterFrequency;
+        },
+        [safeThis](double frequency)
+        {
+            if (safeThis != nullptr)
+                safeThis->setAccessibleFrequency(frequency);
+        },
+        [safeThis]
+        {
+            return safeThis == nullptr
+                || ! safeThis->canAcceptKeyboardOrAccessibilityInput()
+                || ! safeThis->onDrag;
+        });
+
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this,
+        juce::AccessibilityRole::slider,
+        juce::AccessibilityActions {},
+        juce::AccessibilityHandler::Interfaces {
+            std::move(valueInterface)
+        });
 }
 
 bool DraggableButton::isPointerSource(
@@ -201,7 +470,7 @@ void DraggableButton::mouseWheelMove(const juce::MouseEvent& event, const juce::
 {
     juce::ignoreUnused(event);
 
-    if (mState && onQValueChanged)
+    if (mState && isEnabled() && onQValueChanged)
     {
         auto qValueCallback = onQValueChanged;
         qValueCallback(wheel.deltaY);

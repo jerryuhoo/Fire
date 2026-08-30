@@ -37,6 +37,7 @@ public:
     float getVisibilityAnimation() const noexcept { return visibilityAnimation.current; }
     float getHoverAnimation() const noexcept { return hoverAnimation.current; }
     float getPressAnimation() const noexcept { return pressAnimation.current; }
+    float getFocusAnimation() const noexcept { return focusAnimation.current; }
     bool isPresented() const noexcept { return presentationTarget; }
     bool keyPressed(const juce::KeyPress&) override;
     void triggerClick() override;
@@ -56,6 +57,8 @@ private:
     void mouseUp(const juce::MouseEvent&) override;
     void visibilityChanged() override;
     void enablementChanged() override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
     std::unique_ptr<juce::AccessibilityHandler>
     createAccessibilityHandler() override;
     void updateInteractionTargets() noexcept;
@@ -65,12 +68,14 @@ private:
 
     bool presentationTarget = false;
     bool primaryPointerDown = false;
+    bool keyboardFocusVisible = false;
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
     fire::ui::DampedValue visibilityAnimation;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;
+    fire::ui::DampedValue focusAnimation;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CloseButton)
 };

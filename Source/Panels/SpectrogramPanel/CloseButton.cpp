@@ -37,6 +37,7 @@ CloseButton::CloseButton()
     visibilityAnimation.snapTo(0.0f);
     hoverAnimation.snapTo(0.0f);
     pressAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
     setInterceptsMouseClicks(false, false);
     juce::Component::setVisible(false);
 }
@@ -49,7 +50,7 @@ void CloseButton::paintButton(juce::Graphics& g, bool, bool)
 
     const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
     const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
-    const auto focus = hasKeyboardFocus(true) ? 1.0f : 0.0f;
+    const auto focus = juce::jlimit(0.0f, 1.0f, focusAnimation.current);
     const auto shortestSide = static_cast<float>(juce::jmin(getWidth(), getHeight()));
     if (shortestSide < 4.0f)
         return;
@@ -125,6 +126,7 @@ void CloseButton::setPresented(bool shouldBePresented, bool animate)
         visibilityAnimation.snapTo(shouldBePresented ? 1.0f : 0.0f);
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
+        focusAnimation.snapTo(0.0f);
     }
 
     if (shouldBePresented)
@@ -146,6 +148,7 @@ void CloseButton::setPresented(bool shouldBePresented, bool animate)
         // keyboard focus immediately: the tile remains visible during its
         // fade, but Space/Return must no longer be able to delete a band.
         setInterceptsMouseClicks(false, false);
+        keyboardFocusVisible = false;
         dismissPointerGesture();
 
         if (safeThis == nullptr)
@@ -177,6 +180,7 @@ bool CloseButton::advanceAnimation(float deltaSeconds)
     const auto visibilityChanged = visibilityAnimation.advance(deltaSeconds, 0.11f);
     const auto hoverChanged = hoverAnimation.advance(deltaSeconds, 0.10f);
     const auto pressChanged = pressAnimation.advance(deltaSeconds, 0.065f);
+    const auto focusChanged = focusAnimation.advance(deltaSeconds, 0.11f);
 
     if (! presentationTarget
         && visibilityAnimation.isSettled(0.001f, 0.01f)
@@ -191,7 +195,7 @@ bool CloseButton::advanceAnimation(float deltaSeconds)
             return true;
     }
 
-    return visibilityChanged || hoverChanged || pressChanged;
+    return visibilityChanged || hoverChanged || pressChanged || focusChanged;
 }
 
 void CloseButton::mouseEnter(const juce::MouseEvent& event)
@@ -245,6 +249,11 @@ void CloseButton::mouseDown(const juce::MouseEvent& event)
             return;
     }
 
+    // Pointer focus is intentionally not rendered as a persistent keyboard
+    // outline. This also handles a click while the tile already owns focus.
+    keyboardFocusVisible = false;
+    updateInteractionTargets();
+
     // JUCE Button accepts every mouse button by default. A secondary click on
     // a destructive affordance must never delete a band; on macOS this also
     // covers Ctrl-click through isPopupMenu().
@@ -278,6 +287,12 @@ void CloseButton::mouseUp(const juce::MouseEvent& event)
 
 bool CloseButton::keyPressed(const juce::KeyPress& key)
 {
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        updateInteractionTargets();
+    }
+
     if (key.isKeyCode(juce::KeyPress::returnKey)
         || key.isKeyCode(juce::KeyPress::spaceKey))
     {
@@ -319,8 +334,18 @@ void CloseButton::visibilityChanged()
     const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::visibilityChanged();
 
-    if (safeThis != nullptr && ! isVisible())
+    if (safeThis == nullptr)
+        return;
+
+    if (! isVisible())
+    {
+        keyboardFocusVisible = false;
+        focusAnimation.snapTo(0.0f);
         dismissPointerGesture();
+    }
+
+    if (safeThis != nullptr)
+        updateInteractionTargets();
 }
 
 void CloseButton::enablementChanged()
@@ -328,8 +353,39 @@ void CloseButton::enablementChanged()
     const juce::Component::SafePointer<CloseButton> safeThis(this);
     juce::Button::enablementChanged();
 
-    if (safeThis != nullptr && ! isEnabled())
+    if (safeThis == nullptr)
+        return;
+
+    if (! isEnabled())
+    {
+        keyboardFocusVisible = false;
         dismissPointerGesture();
+    }
+
+    if (safeThis != nullptr)
+        updateInteractionTargets();
+}
+
+void CloseButton::focusGained(FocusChangeType cause)
+{
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
+    juce::Button::focusGained(cause);
+    if (safeThis == nullptr)
+        return;
+
+    keyboardFocusVisible = cause != focusChangedByMouseClick;
+    updateInteractionTargets();
+}
+
+void CloseButton::focusLost(FocusChangeType cause)
+{
+    const juce::Component::SafePointer<CloseButton> safeThis(this);
+    juce::Button::focusLost(cause);
+    if (safeThis == nullptr)
+        return;
+
+    keyboardFocusVisible = false;
+    updateInteractionTargets();
 }
 
 void CloseButton::dismissPointerGesture() noexcept
@@ -364,6 +420,9 @@ void CloseButton::updateInteractionTargets() noexcept
 {
     const bool pressed = presentationTarget && isEnabled() && isDown();
     const bool hovered = presentationTarget && isEnabled() && isOver();
+    const bool focused = presentationTarget && isEnabled()
+                         && keyboardFocusVisible && hasKeyboardFocus(true);
     hoverAnimation.setTarget(hovered || pressed ? 1.0f : 0.0f);
     pressAnimation.setTarget(pressed ? 1.0f : 0.0f);
+    focusAnimation.setTarget(focused ? 1.0f : 0.0f);
 }

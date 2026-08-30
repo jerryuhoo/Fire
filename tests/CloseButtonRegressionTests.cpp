@@ -208,6 +208,53 @@ TEST_CASE("Band delete tile scales and animates without changing its hit geometr
     }
 }
 
+TEST_CASE("Band delete focus feedback follows keyboard modality",
+          "[close-button][multiband][ui][animation][focus][input]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component host;
+    juce::Component focusSink;
+    CloseButton button;
+    host.setBounds(0, 0, 96, 48);
+    button.setBounds(0,
+                     0,
+                     CloseButton::minimumHitTargetSize,
+                     CloseButton::minimumHitTargetSize);
+    focusSink.setBounds(48, 0, 24, 24);
+    focusSink.setWantsKeyboardFocus(true);
+    host.addAndMakeVisible(button);
+    host.addAndMakeVisible(focusSink);
+    button.setPresented(true, false);
+    host.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    host.setVisible(true);
+    focusSink.grabKeyboardFocus();
+    REQUIRE_FALSE(button.hasKeyboardFocus(true));
+    settleAnimation(button);
+    const auto restingFingerprint = renderFingerprint(button);
+
+    button.grabKeyboardFocus();
+    REQUIRE(button.hasKeyboardFocus(true));
+    settleAnimation(button);
+    CHECK(button.getFocusAnimation() == Catch::Approx(1.0f).margin(0.001f));
+    const auto keyboardFingerprint = renderFingerprint(button);
+    CHECK(keyboardFingerprint != restingFingerprint);
+
+    auto& component = static_cast<juce::Component&>(button);
+    component.mouseDown(makeMouseEvent(
+        button,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    component.mouseUp(makeMouseEvent(button, {}));
+    component.mouseExit(makeMouseEvent(button, {}));
+    settleAnimation(button);
+    CHECK(button.getFocusAnimation() == Catch::Approx(0.0f).margin(0.001f));
+    CHECK(renderFingerprint(button) == restingFingerprint);
+
+    REQUIRE_FALSE(component.keyPressed(juce::KeyPress { 'x' }));
+    settleAnimation(button);
+    CHECK(button.getFocusAnimation() == Catch::Approx(1.0f).margin(0.001f));
+    CHECK(renderFingerprint(button) == keyboardFingerprint);
+}
+
 TEST_CASE("Band deletion requires a primary click",
           "[close-button][multiband][ui][input]")
 {

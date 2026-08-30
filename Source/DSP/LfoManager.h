@@ -235,10 +235,10 @@ public:
     AssignmentResult assignLfoToTarget(
         int sourceLfoIndex,
         const juce::String& targetParameterID);
-    void clearModulationForTarget(const juce::String& targetParameterID);
-    void invertModulationDepth(const juce::String& targetParameterID);
+    bool clearModulationForTarget(const juce::String& targetParameterID);
+    bool invertModulationDepth(const juce::String& targetParameterID);
     void onLfoShapeChanged(int lfoIndex);
-    void toggleBypassForRouting(const juce::String& targetParameterID);
+    bool toggleBypassForRouting(const juce::String& targetParameterID);
     juce::CriticalSection& getLfoDataLock() { return dataAccessLock; }
 private:
     struct LfoParameterPointers

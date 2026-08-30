@@ -200,10 +200,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     auto bypassCallback = [this](const juce::String& parameterID)
     {
-        processor.getLfoManager().toggleBypassForRouting(parameterID);
+        if (! processor.toggleModulationBypassForParameter(parameterID))
+            return;
+
         modulationSnapshotFramesRemaining = 0;
         updateModulationStates();
-        processor.lfoDataHasChanged();
     };
 
     // Use the new helper function to get all sliders and assign the callback in a single loop

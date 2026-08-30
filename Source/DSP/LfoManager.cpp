@@ -1157,8 +1157,11 @@ LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
     return AssignmentResult::changed;
 }
 
-void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
+bool LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
 {
+    if (targetParameterID.isEmpty())
+        return false;
+
     const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
@@ -1174,13 +1177,18 @@ void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)
             routing.isBypassed = false;
             if (! haveSameModulationRoutingState(routing, previousRouting))
                 advanceModulationRoutingRevisionLocked();
-            return; // Exit after finding and clearing
+            return true; // Exit after finding and clearing
         }
     }
+
+    return false;
 }
 
-void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
+bool LfoManager::invertModulationDepth(const juce::String& targetParameterID)
 {
+    if (targetParameterID.isEmpty())
+        return false;
+
     const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
@@ -1194,14 +1202,20 @@ void LfoManager::invertModulationDepth(const juce::String& targetParameterID)
             {
                 routing.depth = newDepth;
                 advanceModulationRoutingRevisionLocked();
+                return true;
             }
-            return;
+            return false;
         }
     }
+
+    return false;
 }
 
-void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
+bool LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
 {
+    if (targetParameterID.isEmpty())
+        return false;
+
     const juce::ScopedLock sl(dataAccessLock);
     for (auto& routing : modulationRoutings)
     {
@@ -1209,9 +1223,11 @@ void LfoManager::toggleBypassForRouting(const juce::String& targetParameterID)
         {
             routing.isBypassed = ! routing.isBypassed;
             advanceModulationRoutingRevisionLocked();
-            return; // Assuming one routing per target for now
+            return true; // Assuming one routing per target for now
         }
     }
+
+    return false;
 }
 
 std::uint64_t LfoManager::setLfoData(int index, const LfoData& newData)

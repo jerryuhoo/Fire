@@ -553,6 +553,92 @@ TEST_CASE("Modulation matrix viewport stays width-stable at first overflow",
           == viewport->getWidth() - viewport->getScrollBarThickness());
 }
 
+TEST_CASE("Modulation commands publish only when routing state changes",
+          "[modulation-matrix][state][notification][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto& manager = processor.getLfoManager();
+    NonParameterChangeCapture host(processor);
+    const juce::String target { "notification_target" };
+
+    const auto initialRevision = manager.getModulationRoutingRevision();
+    CHECK_FALSE(processor.clearModulationForParameter(target));
+    CHECK_FALSE(processor.invertModulationDepthForParameter(target));
+    CHECK_FALSE(processor.toggleModulationBypassForParameter(target));
+    CHECK_FALSE(processor.clearModulationForParameter({}));
+    CHECK_FALSE(processor.invertModulationDepthForParameter({}));
+    CHECK_FALSE(processor.toggleModulationBypassForParameter({}));
+    CHECK(manager.getModulationRoutingRevision() == initialRevision);
+    CHECK(host.notificationCount == 0);
+
+    REQUIRE(processor.assignLfoToTarget(1, target)
+            == LfoManager::AssignmentResult::changed);
+    REQUIRE(host.notificationCount == 1);
+    host.notificationCount = 0;
+
+    processor.setModulationDepth(target, 0.0f);
+    REQUIRE(host.notificationCount == 1);
+    host.notificationCount = 0;
+    const auto zeroDepthRevision = manager.getModulationRoutingRevision();
+
+    CHECK_FALSE(processor.invertModulationDepthForParameter(target));
+    CHECK(manager.getModulationRoutingRevision() == zeroDepthRevision);
+    CHECK(host.notificationCount == 0);
+
+    REQUIRE(processor.toggleModulationBypassForParameter(target));
+    CHECK(manager.getModulationRoutingRevision() == zeroDepthRevision + 1);
+    CHECK(host.notificationCount == 1);
+    {
+        const auto routings = manager.getModulationRoutingsCopy();
+        const auto routing = std::find_if(
+            routings.begin(), routings.end(),
+            [&target](const auto& candidate)
+            {
+                return candidate.targetParameterID == target;
+            });
+        REQUIRE(routing != routings.end());
+        CHECK(routing->isBypassed);
+    }
+
+    host.notificationCount = 0;
+    processor.setModulationDepth(target, 0.4f);
+    REQUIRE(host.notificationCount == 1);
+    host.notificationCount = 0;
+    const auto positiveDepthRevision = manager.getModulationRoutingRevision();
+
+    REQUIRE(processor.invertModulationDepthForParameter(target));
+    CHECK(manager.getModulationRoutingRevision()
+          == positiveDepthRevision + 1);
+    CHECK(host.notificationCount == 1);
+    {
+        const auto routings = manager.getModulationRoutingsCopy();
+        const auto routing = std::find_if(
+            routings.begin(), routings.end(),
+            [&target](const auto& candidate)
+            {
+                return candidate.targetParameterID == target;
+            });
+        REQUIRE(routing != routings.end());
+        CHECK(routing->depth == Catch::Approx(-0.4f));
+    }
+
+    host.notificationCount = 0;
+    const auto invertedDepthRevision = manager.getModulationRoutingRevision();
+    REQUIRE(processor.clearModulationForParameter(target));
+    CHECK(manager.getModulationRoutingRevision()
+          == invertedDepthRevision + 1);
+    CHECK(host.notificationCount == 1);
+
+    host.notificationCount = 0;
+    const auto clearedRevision = manager.getModulationRoutingRevision();
+    CHECK_FALSE(processor.clearModulationForParameter(target));
+    CHECK_FALSE(processor.invertModulationDepthForParameter(target));
+    CHECK_FALSE(processor.toggleModulationBypassForParameter(target));
+    CHECK(manager.getModulationRoutingRevision() == clearedRevision);
+    CHECK(host.notificationCount == 0);
+}
+
 TEST_CASE("Modulation routing edits stop at the shared capacity",
           "[modulation-matrix][state][capacity][regression]")
 {

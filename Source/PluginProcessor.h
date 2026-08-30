@@ -419,8 +419,10 @@ public:
     void setModulationDepth(const juce::String& targetParameterID, float newDepth);
     void toggleBipolarMode(const juce::String& targetParameterID);
     void resetModulation(const juce::String& targetParameterID);
-    void clearModulationForParameter(const juce::String& targetParameterID);
-    void invertModulationDepthForParameter(const juce::String& targetParameterID);
+    bool clearModulationForParameter(const juce::String& targetParameterID);
+    bool invertModulationDepthForParameter(const juce::String& targetParameterID);
+    bool toggleModulationBypassForParameter(
+        const juce::String& targetParameterID);
 
     LfoManager::AssignmentResult assignLfoToTarget(
         int sourceLfoIndex,

@@ -8359,9 +8359,11 @@ LfoManager::AssignmentResult FireAudioProcessor::assignLfoToTarget(
     return result;
 }
 
-void FireAudioProcessor::clearModulationForParameter(const juce::String& targetParameterID)
+bool FireAudioProcessor::clearModulationForParameter(
+    const juce::String& targetParameterID)
 {
-    lfoManager->clearModulationForTarget(targetParameterID);
+    if (! lfoManager->clearModulationForTarget(targetParameterID))
+        return false;
 
     if (auto* editor = getActiveEditor())
     {
@@ -8371,12 +8373,27 @@ void FireAudioProcessor::clearModulationForParameter(const juce::String& targetP
         }
     }
     lfoDataHasChanged();
+    return true;
 }
 
-void FireAudioProcessor::invertModulationDepthForParameter(const juce::String& targetParameterID)
+bool FireAudioProcessor::invertModulationDepthForParameter(
+    const juce::String& targetParameterID)
 {
-    lfoManager->invertModulationDepth(targetParameterID);
+    if (! lfoManager->invertModulationDepth(targetParameterID))
+        return false;
+
     lfoDataHasChanged();
+    return true;
+}
+
+bool FireAudioProcessor::toggleModulationBypassForParameter(
+    const juce::String& targetParameterID)
+{
+    if (! lfoManager->toggleBypassForRouting(targetParameterID))
+        return false;
+
+    lfoDataHasChanged();
+    return true;
 }
 
 bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml)

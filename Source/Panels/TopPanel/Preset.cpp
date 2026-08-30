@@ -1655,6 +1655,8 @@ namespace state
         nextButton.setTitle("Next preset");
         styleHeaderButton(savePresetButton, fire::ui::colours::positive);
         savePresetButton.setComponentID("header_action");
+        savePresetButton.setTitle("Save preset");
+        savePresetButton.setTooltip("Save preset");
         savePresetButton.setColour(juce::TextButton::textColourOffId,
                                    fire::ui::colours::positive.withAlpha(0.86f));
         //deletePresetButton.setColour(TextButton::textColourOffId, COLOUR1);

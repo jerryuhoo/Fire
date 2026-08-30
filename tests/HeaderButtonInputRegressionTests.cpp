@@ -762,6 +762,61 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
     REQUIRE(zoom != nullptr);
     CHECK(zoom->getTitle() == "Toggle spectrum zoom");
     CHECK(zoom->getTooltip() == "Toggle spectrum zoom");
+    REQUIRE(zoom->isToggleable());
+
+    auto* zoomAccessibility = zoom->getAccessibilityHandler();
+    REQUIRE(zoomAccessibility != nullptr);
+    REQUIRE(zoomAccessibility->getValueInterface() != nullptr);
+    CHECK(zoomAccessibility->getCurrentState().isCheckable());
+    CHECK_FALSE(zoomAccessibility->getCurrentState().isChecked());
+
+    REQUIRE(zoom->keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    CHECK(zoom->getToggleState());
+    CHECK(zoomAccessibility->getCurrentState().isChecked());
+
+    REQUIRE(zoom->keyPressed(
+        juce::KeyPress { juce::KeyPress::spaceKey }));
+    CHECK_FALSE(zoom->getToggleState());
+    CHECK_FALSE(zoomAccessibility->getCurrentState().isChecked());
+
+    const auto checkButtonDescription =
+        [&editor](const juce::String& componentID,
+                  const juce::String& buttonText,
+                  const juce::String& expectedTitle,
+                  const juce::String& expectedTooltip)
+    {
+        auto* button = findHeaderButton(*editor, componentID, buttonText);
+        REQUIRE(button != nullptr);
+        CHECK(button->getTitle() == expectedTitle);
+        CHECK(button->getTooltip() == expectedTooltip);
+        REQUIRE(button->getAccessibilityHandler() != nullptr);
+        CHECK(button->getAccessibilityHandler()->getTitle()
+              == expectedTitle);
+        CHECK(button->getAccessibilityHandler()->getHelp()
+              == expectedTooltip);
+    };
+
+    checkButtonDescription("header_hq",
+                           "HQ",
+                           "High-quality oversampling",
+                           "High-quality oversampling");
+    checkButtonDescription("workspace_tab",
+                           "BAND LAB",
+                           "Band processing workspace",
+                           "Edit multiband processing");
+    checkButtonDescription("workspace_tab",
+                           "MOD FORGE",
+                           "LFO modulation workspace",
+                           "Edit and assign LFO modulation");
+    checkButtonDescription("workspace_tab",
+                           "MASTER LAB",
+                           "Master processing workspace",
+                           "Edit global processing and filters");
+    checkButtonDescription("header_action",
+                           "Save",
+                           "Save preset",
+                           "Save preset");
 
     const auto leftButton = juce::ModifierKeys {
         juce::ModifierKeys::leftButtonModifier

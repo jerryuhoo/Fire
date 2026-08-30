@@ -382,6 +382,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     hqButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     hqButton.setButtonText("HQ");
     hqButton.setComponentID("header_hq");
+    hqButton.setTitle("High-quality oversampling");
     hqButton.setTooltip("High-quality oversampling");
 
     // Window Left Button
@@ -396,6 +397,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowLeftButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
     windowLeftButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     windowLeftButton.setComponentID("workspace_tab");
+    windowLeftButton.setTitle("Band processing workspace");
+    windowLeftButton.setTooltip("Edit multiband processing");
     windowLeftButton.getProperties().set("fireAnimatedSelection", true);
     windowLeftButton.addListener(this);
 
@@ -411,6 +414,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowRightButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::flame);
     windowRightButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     windowRightButton.setComponentID("workspace_tab");
+    windowRightButton.setTitle("Master processing workspace");
+    windowRightButton.setTooltip("Edit global processing and filters");
     windowRightButton.getProperties().set("fireAnimatedSelection", true);
     windowRightButton.addListener(this);
 
@@ -426,6 +431,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     windowLfoButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
     windowLfoButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     windowLfoButton.setComponentID("workspace_tab");
+    windowLfoButton.setTitle("LFO modulation workspace");
+    windowLfoButton.setTooltip("Edit and assign LFO modulation");
     windowLfoButton.getProperties().set("fireAnimatedSelection", true);
     windowLfoButton.addListener(this);
 
@@ -448,7 +455,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     // zoom button
     addAndMakeVisible(zoomButton);
-    zoomButton.setClickingTogglesState(false);
+    zoomButton.setClickingTogglesState(true);
     zoomButton.addListener(this);
     zoomButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0.withAlpha(0.85f));
     zoomButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
@@ -1583,10 +1590,8 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
     }
     if (clickedButton == &zoomButton)
     {
-        // Since setClickingTogglesState is false, we manually toggle the state.
-        // This flips the state from its previous value.
-        zoomButton.setToggleState(! zoomButton.getToggleState(), juce::dontSendNotification);
-
+        // The button owns its toggle transition, so pointer, keyboard and
+        // accessibility activation all expose the same checked state.
         const bool isNowZoomed = zoomButton.getToggleState();
 
         // Define all components that are hidden when zoomed.

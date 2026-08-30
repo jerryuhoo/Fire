@@ -83,6 +83,7 @@ private:
     HiddenCallback hiddenCallback;
     std::uint64_t visibilityGeneration = 0;
     fire::ui::DampedValue topologyRevealAnimation;
+    bool keyboardFocusWasVisible = false;
     
     FreqTextLabel freqTextLabel;
     

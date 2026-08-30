@@ -63,6 +63,10 @@ public:
     void dismissTransientInteraction();
     float getHoverAnimation() const noexcept { return hoverAnimation.current; }
     float getPressAnimation() const noexcept { return pressAnimation.current; }
+    bool hasVisibleKeyboardFocus() const noexcept
+    {
+        return shouldShowKeyboardFocus();
+    }
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:

@@ -101,6 +101,14 @@ void FreqDividerGroup::setHiddenCallback(HiddenCallback callback)
 
 bool FreqDividerGroup::advanceAnimation(float deltaSeconds)
 {
+    const bool keyboardFocusIsVisible =
+        verticalLine.hasVisibleKeyboardFocus();
+    if (keyboardFocusIsVisible != keyboardFocusWasVisible)
+    {
+        keyboardFocusWasVisible = keyboardFocusIsVisible;
+        updateLabelFade();
+    }
+
     const auto previousReveal = topologyRevealAnimation.current;
     const bool topologyAnimationIsRunning =
         topologyRevealAnimation.advance(deltaSeconds, 0.14f);
@@ -143,6 +151,7 @@ float FreqDividerGroup::getTopologyReveal() const noexcept
 void FreqDividerGroup::dismissImmediately()
 {
     juce::Component::SafePointer<FreqDividerGroup> safeThis(this);
+    keyboardFocusWasVisible = false;
     freqTextLabel.dismissImmediately();
 
     if (safeThis == nullptr)
@@ -360,6 +369,7 @@ void FreqDividerGroup::updateLabelFade()
 {
     const bool shouldShow = getToggleState()
                          && (verticalLine.isMouseOverOrDragging()
+                             || verticalLine.hasVisibleKeyboardFocus()
                              || freqTextLabel.isMouseOverCustom());
     freqTextLabel.setFade(true, shouldShow);
 }

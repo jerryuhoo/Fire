@@ -87,6 +87,16 @@ struct VerticalLinePointerTestAccess
         divider.pointerSourceType = sourceType;
         divider.pointerSourceIndex = sourceIndex;
     }
+
+    static void gainKeyboardFocus(VerticalLine& divider)
+    {
+        divider.focusGained(juce::Component::focusChangedByTabKey);
+    }
+
+    static void loseKeyboardFocus(VerticalLine& divider)
+    {
+        divider.focusLost(juce::Component::focusChangedDirectly);
+    }
 };
 
 namespace
@@ -2515,6 +2525,80 @@ TEST_CASE("Frequency labels animate on the shared UI clock and stay edge-safe",
     CHECK(gestureEnds == 0);
     CHECK(lifecycleChild->getAlpha() == Catch::Approx(0.0f));
     CHECK_FALSE(lifecycleLabel.isVisible());
+}
+
+TEST_CASE("Crossover keyboard focus reveals its exact frequency label",
+          "[multiband][divider][ui][keyboard][focus][frequency-label][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1500.0f, 3000.0f, 7000.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    auto* dividerGroup = findDescendant<FreqDividerGroup>(*multiband);
+    REQUIRE(dividerGroup != nullptr);
+    auto* frequencyText = findDescendant<FreqTextLabel>(*dividerGroup);
+    REQUIRE(frequencyText != nullptr);
+    auto* label = findDescendant<juce::Label>(*frequencyText);
+    REQUIRE(label != nullptr);
+    auto& divider = dividerGroup->getVerticalLine();
+
+    frequencyText->setFade(true, false);
+    for (int frame = 0; frame < 120; ++frame)
+        dividerGroup->advanceAnimation(1.0f / 60.0f);
+    REQUIRE_FALSE(frequencyText->isVisible());
+
+    divider.grabKeyboardFocus();
+    REQUIRE(divider.hasKeyboardFocus(true));
+    VerticalLinePointerTestAccess::gainKeyboardFocus(divider);
+    REQUIRE(divider.hasVisibleKeyboardFocus());
+    CHECK(dividerGroup->advanceAnimation(1.0f / 60.0f));
+    CHECK(frequencyText->isVisible());
+    CHECK(label->getAlpha() > 0.0f);
+
+    for (int frame = 0; frame < 120; ++frame)
+        dividerGroup->advanceAnimation(1.0f / 60.0f);
+    CHECK(label->getAlpha() == Catch::Approx(1.0f).margin(0.002f));
+
+    // An accepted pointer gesture retains actual focus for immediate arrow
+    // use, but its pointer-origin focus must not pin the value bubble open.
+    const auto position = divider.getLocalBounds().toFloat().getCentre();
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    static_cast<juce::Component&>(divider).mouseDown(
+        makeMouseEvent(divider, position, primary));
+    CHECK_FALSE(divider.hasVisibleKeyboardFocus());
+    static_cast<juce::Component&>(divider).mouseUp(
+        makeMouseEvent(divider, position));
+    static_cast<juce::Component&>(divider).mouseExit(
+        makeMouseEvent(divider, { -1.0f, -1.0f }));
+    for (int frame = 0; frame < 120; ++frame)
+        dividerGroup->advanceAnimation(1.0f / 60.0f);
+    CHECK(divider.hasKeyboardFocus(true));
+    CHECK_FALSE(divider.hasVisibleKeyboardFocus());
+    CHECK_FALSE(frequencyText->isVisible());
+
+    REQUIRE(divider.keyPressed(
+        juce::KeyPress { juce::KeyPress::rightKey }));
+    REQUIRE(divider.hasVisibleKeyboardFocus());
+    dividerGroup->advanceAnimation(1.0f / 60.0f);
+    CHECK(frequencyText->isVisible());
+    CHECK(label->getAlpha() > 0.0f);
+
+    VerticalLinePointerTestAccess::loseKeyboardFocus(divider);
+    CHECK_FALSE(divider.hasVisibleKeyboardFocus());
+    for (int frame = 0; frame < 120; ++frame)
+        dividerGroup->advanceAnimation(1.0f / 60.0f);
+    CHECK_FALSE(frequencyText->isVisible());
 }
 
 TEST_CASE("Band move/reset parameter contract covers every per-band processor parameter",

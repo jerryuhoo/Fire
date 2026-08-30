@@ -123,7 +123,7 @@ void VerticalLine::paint(juce::Graphics& g)
     const auto bounds = getLocalBounds().toFloat();
     const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
     const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
-    const auto focus = isEnabled() && hasKeyboardFocus(true) ? 1.0f : 0.0f;
+    const auto focus = shouldShowKeyboardFocus() ? 1.0f : 0.0f;
     const auto emphasis = juce::jlimit(0.0f, 1.0f,
                                        juce::jmax(hover + press * 0.35f,
                                                   focus * 0.86f));
@@ -168,9 +168,8 @@ void VerticalLine::paint(juce::Graphics& g)
     if (focus > 0.0f)
     {
         g.setColour(fire::ui::colours::ember.withAlpha(0.78f));
-        g.drawRoundedRectangle(bounds.reduced(0.75f / physicalScale),
-                               2.0f / physicalScale,
-                               1.25f / physicalScale);
+        g.drawEllipse(handle.expanded(2.5f / physicalScale),
+                      1.25f / physicalScale);
     }
 }
 
@@ -241,6 +240,11 @@ void VerticalLine::mouseDown (const juce::MouseEvent& e)
             return;
     }
 
+    // JUCE deliberately keeps actual keyboard focus after a pointer click so
+    // the arrow keys remain available. Only suppress its focus-visible
+    // presentation for an accepted pointer gesture; rejected popup/mixed or
+    // foreign pointer events must leave a keyboard-origin focus cue intact.
+    keyboardFocusVisible = false;
     primaryDragActive = true;
     pointerSourceType = e.source.getType();
     pointerSourceIndex = e.source.getIndex();
@@ -267,6 +271,13 @@ bool VerticalLine::keyPressed(const juce::KeyPress& key)
                        || key.isKeyCode(juce::KeyPress::downKey);
     if (! increase && ! decrease)
         return juce::Component::keyPressed(key);
+
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        updateAnimationTargets();
+        repaint();
+    }
 
     const auto step = modifiers.isShiftDown() ? 0.001f : 0.01f;
     const auto targetX = juce::jlimit(0.0f,
@@ -309,6 +320,7 @@ void VerticalLine::dismissTransientInteraction()
     isEntered = false;
     primaryDragActive = false;
     pointerSourceIndex = -1;
+    keyboardFocusVisible = false;
 
     // Hosts may keep an editor object alive after hiding its window. If that
     // happens during a drag, no later mouseUp is guaranteed, so close the
@@ -331,7 +343,7 @@ void VerticalLine::dismissTransientInteraction()
 void VerticalLine::updateAnimationTargets() noexcept
 {
     const bool isPressed = parameterGestureDepth > 0;
-    hoverAnimation.setTarget(isEntered || isPressed || hasKeyboardFocus(true)
+    hoverAnimation.setTarget(isEntered || isPressed || shouldShowKeyboardFocus()
                                  ? 1.0f : 0.0f);
     pressAnimation.setTarget(isPressed ? 1.0f : 0.0f);
 }
@@ -339,6 +351,11 @@ void VerticalLine::updateAnimationTargets() noexcept
 bool VerticalLine::canAcceptKeyboardOrAccessibilityInput() const noexcept
 {
     return isEnabled() && isShowing() && ! primaryDragActive;
+}
+
+bool VerticalLine::shouldShowKeyboardFocus() const noexcept
+{
+    return isEnabled() && keyboardFocusVisible && hasKeyboardFocus(true);
 }
 
 bool VerticalLine::setValueFromUserInput(double newValue)
@@ -386,6 +403,13 @@ bool VerticalLine::setValueFromUserInput(double newValue)
 void VerticalLine::focusGained(FocusChangeType cause)
 {
     juce::Slider::focusGained(cause);
+
+    // A mouse focus is made focus-visible only if the user subsequently uses
+    // the keyboard. Direct and Tab focus must remain visibly discoverable for
+    // keyboard and assistive-technology users.
+    if (cause != focusChangedByMouseClick)
+        keyboardFocusVisible = true;
+
     updateAnimationTargets();
     repaint();
 }
@@ -393,6 +417,7 @@ void VerticalLine::focusGained(FocusChangeType cause)
 void VerticalLine::focusLost(FocusChangeType cause)
 {
     juce::Slider::focusLost(cause);
+    keyboardFocusVisible = false;
     updateAnimationTargets();
     repaint();
 }
@@ -400,6 +425,10 @@ void VerticalLine::focusLost(FocusChangeType cause)
 void VerticalLine::enablementChanged()
 {
     juce::Slider::enablementChanged();
+
+    if (! isEnabled())
+        keyboardFocusVisible = false;
+
     updateAnimationTargets();
     repaint();
 
@@ -419,6 +448,25 @@ void VerticalLine::visibilityChanged()
 
     // A hidden divider cannot receive the matching release/key notification.
     dismissTransientInteraction();
+}
+
+void VerticalLine::parentHierarchyChanged()
+{
+    const juce::Component::SafePointer<VerticalLine> safeThis(this);
+    juce::Slider::parentHierarchyChanged();
+    if (safeThis == nullptr)
+        return;
+
+    if (! isShowing())
+    {
+        // Detaching a plugin editor can leave its component tree visible but
+        // peerless. Do not revive stale focus/drag presentation on reattach.
+        dismissTransientInteraction();
+        return;
+    }
+
+    updateAnimationTargets();
+    repaint();
 }
 
 std::unique_ptr<juce::AccessibilityHandler>

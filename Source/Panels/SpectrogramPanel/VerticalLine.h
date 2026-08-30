@@ -73,12 +73,14 @@ private:
     bool isEntered = false;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
     bool canAcceptKeyboardOrAccessibilityInput() const noexcept;
+    bool shouldShowKeyboardFocus() const noexcept;
     bool setValueFromUserInput(double newValue);
     void updateAnimationTargets() noexcept;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void enablementChanged() override;
     void visibilityChanged() override;
+    void parentHierarchyChanged() override;
     std::unique_ptr<juce::AccessibilityHandler>
     createAccessibilityHandler() override;
 
@@ -101,6 +103,7 @@ private:
     UserPositionChangeCallback userPositionChange;
     int parameterGestureDepth = 0;
     bool primaryDragActive = false;
+    bool keyboardFocusVisible = false;
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;

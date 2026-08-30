@@ -5,6 +5,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <memory>
 
 namespace
@@ -30,6 +31,84 @@ juce::KeyPress shiftedKey(int keyCode)
     return { keyCode,
              juce::ModifierKeys { juce::ModifierKeys::shiftModifier },
              0 };
+}
+
+juce::MouseEvent makeDividerMouseEvent(
+    juce::Component& component,
+    juce::ModifierKeys modifiers,
+    juce::Point<float> position = {})
+{
+    if (position == juce::Point<float> {})
+        position = component.getLocalBounds().toFloat().getCentre();
+
+    const auto time = juce::Time::getCurrentTime();
+    return { juce::Desktop::getInstance().getMainMouseSource(),
+             position,
+             modifiers,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             0.0f,
+             &component,
+             &component,
+             time,
+             position,
+             time,
+             1,
+             false };
+}
+
+void settleDividerAnimation(VerticalLine& divider)
+{
+    for (int frame = 0; frame < 180; ++frame)
+        divider.advanceAnimation(1.0f / 60.0f);
+}
+
+juce::Image renderDivider(VerticalLine& divider)
+{
+    juce::Image image(juce::Image::ARGB,
+                      juce::jmax(1, divider.getWidth()),
+                      juce::jmax(1, divider.getHeight()),
+                      true);
+    juce::Graphics graphics(image);
+    divider.paintEntireComponent(graphics, true);
+    return image;
+}
+
+std::uint64_t imageFingerprint(const juce::Image& image)
+{
+    std::uint64_t fingerprint = 1469598103934665603ull;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            fingerprint ^= image.getPixelAt(x, y).getARGB();
+            fingerprint *= 1099511628211ull;
+        }
+
+    return fingerprint;
+}
+
+int dividerOuterEdgeAlpha(const juce::Image& image)
+{
+    int total = 0;
+    for (int y = 16; y < image.getHeight() - 16; ++y)
+        for (const auto x : { 0, 1,
+                              image.getWidth() - 2,
+                              image.getWidth() - 1 })
+            total += image.getPixelAt(x, y).getAlpha();
+
+    return total;
+}
+
+int imageAlphaIn(const juce::Image& image, juce::Rectangle<int> area)
+{
+    int total = 0;
+    for (int y = area.getY(); y < area.getBottom(); ++y)
+        for (int x = area.getX(); x < area.getRight(); ++x)
+            total += image.getPixelAt(x, y).getAlpha();
+
+    return total;
 }
 } // namespace
 
@@ -308,6 +387,115 @@ TEST_CASE("Crossover accessible edits remain balanced during synchronous deletio
     CHECK(beginCount == 1);
     CHECK(changeCount == 1);
     CHECK(endCount == 1);
+}
+
+TEST_CASE("Crossover focus presentation follows keyboard and pointer modality",
+          "[multiband][divider][ui][input][focus][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ShowingDesktopHost host(120, 240);
+    VerticalLine divider;
+    host.addAndMakeVisible(divider);
+    divider.setBounds(48, 0, 24, 220);
+    divider.setRange(20.0, 20000.0, 1.0);
+    divider.setValue(1000.0, juce::dontSendNotification);
+    divider.setXPercent(transformToLog(1000.0));
+
+    settleDividerAnimation(divider);
+    const auto idleImage = renderDivider(divider);
+    const auto idleFingerprint = imageFingerprint(idleImage);
+
+    REQUIRE(divider.getMouseClickGrabsKeyboardFocus());
+    divider.grabKeyboardFocus();
+    REQUIRE(divider.hasKeyboardFocus(true));
+    settleDividerAnimation(divider);
+    const auto keyboardFocusImage = renderDivider(divider);
+    const auto keyboardFocusFingerprint = imageFingerprint(keyboardFocusImage);
+
+    // Keyboard/direct focus remains clearly visible around the line handle,
+    // but never outlines the full 24-pixel pointer hit target.
+    CHECK(keyboardFocusFingerprint != idleFingerprint);
+    const auto handleArea = juce::Rectangle<int>(0, 0,
+                                                  divider.getWidth(), 16);
+    CHECK(imageAlphaIn(keyboardFocusImage, handleArea)
+          > imageAlphaIn(idleImage, handleArea));
+    CHECK(dividerOuterEdgeAlpha(keyboardFocusImage) == 0);
+
+    // Rejected pointer gestures must not change a keyboard-origin focus cue.
+    for (const auto modifiers : {
+             juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier },
+             juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier
+                                  | juce::ModifierKeys::rightButtonModifier } })
+    {
+        static_cast<juce::Component&>(divider).mouseDown(
+            makeDividerMouseEvent(divider, modifiers));
+        settleDividerAnimation(divider);
+        CHECK(imageFingerprint(renderDivider(divider))
+              == keyboardFocusFingerprint);
+    }
+
+    divider.setPointerGestureAdmissionCallback(
+        [](juce::MouseInputSource::InputSourceType, int) { return false; });
+    static_cast<juce::Component&>(divider).mouseDown(
+        makeDividerMouseEvent(
+            divider,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    settleDividerAnimation(divider);
+    CHECK(imageFingerprint(renderDivider(divider))
+          == keyboardFocusFingerprint);
+    divider.setPointerGestureAdmissionCallback({});
+
+    // An accepted drag keeps actual focus for immediate arrow-key use, while
+    // its pointer presentation settles completely back to the idle drawing.
+    static_cast<juce::Component&>(divider).mouseDown(
+        makeDividerMouseEvent(
+            divider,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    CHECK(divider.hasKeyboardFocus(true));
+    CHECK(imageFingerprint(renderDivider(divider))
+          != keyboardFocusFingerprint);
+    static_cast<juce::Component&>(divider).mouseUp(
+        makeDividerMouseEvent(divider, {}));
+    static_cast<juce::Component&>(divider).mouseExit(
+        makeDividerMouseEvent(divider, {}, { -1.0f, -1.0f }));
+    settleDividerAnimation(divider);
+
+    CHECK(divider.hasKeyboardFocus(true));
+    CHECK(divider.getHoverAnimation()
+          == Catch::Approx(0.0f).margin(0.001f));
+    CHECK(divider.getPressAnimation()
+          == Catch::Approx(0.0f).margin(0.001f));
+    CHECK(imageFingerprint(renderDivider(divider)) == idleFingerprint);
+
+    CHECK(divider.keyPressed(
+        juce::KeyPress { juce::KeyPress::rightKey }));
+    settleDividerAnimation(divider);
+    CHECK(imageFingerprint(renderDivider(divider))
+          == keyboardFocusFingerprint);
+
+    divider.setEnabled(false);
+    CHECK(divider.getHoverAnimation() == 0.0f);
+    CHECK(divider.getPressAnimation() == 0.0f);
+
+    divider.setEnabled(true);
+    divider.giveAwayKeyboardFocus();
+    divider.grabKeyboardFocus();
+    settleDividerAnimation(divider);
+    REQUIRE(divider.getHoverAnimation() > 0.0f);
+
+    divider.setVisible(false);
+    CHECK(divider.getHoverAnimation() == 0.0f);
+    CHECK(divider.getPressAnimation() == 0.0f);
+
+    divider.setVisible(true);
+    divider.giveAwayKeyboardFocus();
+    divider.grabKeyboardFocus();
+    settleDividerAnimation(divider);
+    REQUIRE(divider.getHoverAnimation() > 0.0f);
+    host.removeChildComponent(&divider);
+    CHECK_FALSE(divider.isShowing());
+    CHECK(divider.getHoverAnimation() == 0.0f);
+    CHECK(divider.getPressAnimation() == 0.0f);
 }
 
 TEST_CASE("Rejected crossover keyboard publication restores its visual position",

@@ -39,6 +39,7 @@ public:
     void parameterGestureChanged(int, bool) override {}
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void visibilityChanged() override;
+    void dismissTransientInteraction();
 
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS

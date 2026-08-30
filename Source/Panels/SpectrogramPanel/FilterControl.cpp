@@ -354,26 +354,29 @@ void FilterControl::visibilityChanged()
         routingStateDirty.store(true, std::memory_order_release);
     }
     else
-    {
-        juce::Component::SafePointer<FilterControl> safeThis(this);
-        draggableLowButton.dismissTransientInteraction();
+        dismissTransientInteraction();
+}
 
-        if (safeThis == nullptr)
-            return;
+void FilterControl::dismissTransientInteraction()
+{
+    juce::Component::SafePointer<FilterControl> safeThis(this);
+    draggableLowButton.dismissTransientInteraction();
 
-        draggablePeakButton.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
 
-        if (safeThis == nullptr)
-            return;
+    draggablePeakButton.dismissTransientInteraction();
 
-        draggableHighButton.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
 
-        if (safeThis == nullptr)
-            return;
+    draggableHighButton.dismissTransientInteraction();
 
-        dragTooltipVisible = false;
-        finishDragParameterGestures();
-    }
+    if (safeThis == nullptr)
+        return;
+
+    dragTooltipVisible = false;
+    finishDragParameterGestures();
 }
 
 void FilterControl::resized()

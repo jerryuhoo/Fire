@@ -1,5 +1,6 @@
 #include <Panels/ControlPanel/GlobalPanel.h>
 #include <Panels/SpectrogramPanel/FilterControl.h>
+#include <PluginEditor.h>
 #include <PluginProcessor.h>
 
 #include <catch2/catch_approx.hpp>
@@ -32,6 +33,22 @@ struct FilterControlTestAccess
     static DraggableButton& lowButton(FilterControl& control)
     {
         return control.draggableLowButton;
+    }
+
+    static DraggableButton& peakButton(FilterControl& control)
+    {
+        return control.draggablePeakButton;
+    }
+
+    static DraggableButton& highButton(FilterControl& control)
+    {
+        return control.draggableHighButton;
+    }
+
+    static bool hasTransientState(const FilterControl& control)
+    {
+        return control.dragGestureSession != nullptr
+            || control.dragTooltipVisible;
     }
 
     static void updateButtonStates(FilterControl& control)
@@ -218,6 +235,43 @@ private:
     bool released = false;
 };
 
+class EditorReleaseOnGestureEnd final : public juce::AudioProcessorListener
+{
+public:
+    EditorReleaseOnGestureEnd(FireAudioProcessor& processorToObserve,
+                              const juce::String& parameterID,
+                              std::unique_ptr<FireAudioProcessorEditor>& editorToRelease)
+        : processor(processorToObserve), editor(editorToRelease)
+    {
+        auto* parameter = processor.treeState.getParameter(parameterID);
+        REQUIRE(parameter != nullptr);
+        targetParameterIndex = parameter->getParameterIndex();
+        processor.addListener(this);
+    }
+
+    ~EditorReleaseOnGestureEnd() override { processor.removeListener(this); }
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override {}
+    void audioProcessorChanged(juce::AudioProcessor*,
+                               const juce::AudioProcessorListener::ChangeDetails&) override {}
+    void audioProcessorParameterChangeGestureBegin(juce::AudioProcessor*, int) override {}
+    void audioProcessorParameterChangeGestureEnd(juce::AudioProcessor*, int index) override
+    {
+        if (index == targetParameterIndex && editor != nullptr)
+        {
+            released = true;
+            editor.reset();
+        }
+    }
+
+    bool didRelease() const noexcept { return released; }
+
+private:
+    FireAudioProcessor& processor;
+    std::unique_ptr<FireAudioProcessorEditor>& editor;
+    int targetParameterIndex = -1;
+    bool released = false;
+};
+
 void checkBalanced(const GestureEvents& events)
 {
     CHECK(events.beginCount == 1);
@@ -242,6 +296,14 @@ void checkInactive(const GestureEvents& events)
     CHECK(events.maximumDepth == 0);
     CHECK_FALSE(events.valueOutsideGesture);
     CHECK(events.order.empty());
+}
+
+void checkClosedExactlyOnce(const GestureEvents& events)
+{
+    if (events.beginCount == 0)
+        checkInactive(events);
+    else
+        checkBalanced(events);
 }
 
 void setPlainParameter(FireAudioProcessor& processor,
@@ -274,6 +336,18 @@ juce::MouseEvent makeMouseEvent(juce::Component& component,
              time,
              1,
              false };
+}
+
+template <typename ComponentType>
+ComponentType* findDescendant(juce::Component& root)
+{
+    if (auto* match = dynamic_cast<ComponentType*>(&root))
+        return match;
+    for (auto* child : root.getChildren())
+        if (child != nullptr)
+            if (auto* match = findDescendant<ComponentType>(*child))
+                return match;
+    return nullptr;
 }
 } // namespace
 
@@ -894,4 +968,132 @@ TEST_CASE("Filter graph disable survives control release from a host callback",
     checkBalanced(capture.forParameter(0));
     checkBalanced(capture.forParameter(1));
     checkBalanced(capture.forParameter(2));
+}
+
+TEST_CASE("Editor lifecycle boundaries close every filter node gesture exactly once",
+          "[filter-control][ui][automation][gesture][lifecycle][editor]")
+{
+    struct NodeCase
+    {
+        int node = 0;
+        std::array<juce::String, 3> parameters;
+    };
+    const std::array<NodeCase, 3> cases {{
+        { 0, { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID } },
+        { 1, { BAND_ID, PEAK_FREQ_ID, PEAK_GAIN_ID } },
+        { 2, { HIGH_ID, HIGHCUT_FREQ_ID, HIGHCUT_GAIN_ID } }
+    }};
+
+    for (const auto& nodeCase : cases)
+    {
+        DYNAMIC_SECTION("node " << nodeCase.node << " editor hide")
+        {
+            juce::ScopedJuceInitialiser_GUI gui;
+            FireAudioProcessor processor;
+            processor.hasUpdateCheckBeenPerformed = true;
+            setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+            auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+            setPlainParameter(processor, nodeCase.parameters[0], 0.0f);
+            editor->setVisible(true);
+            auto* control = findDescendant<FilterControl>(*editor);
+            REQUIRE(control != nullptr);
+            control->setBounds(0, 0, 1000, 400);
+            FilterControlTestAccess::updateButtonStates(*control);
+            auto* button = nodeCase.node == 0 ? &FilterControlTestAccess::lowButton(*control)
+                         : nodeCase.node == 1 ? &FilterControlTestAccess::peakButton(*control)
+                                              : &FilterControlTestAccess::highButton(*control);
+            GestureCapture capture(processor, { nodeCase.parameters[0], nodeCase.parameters[1],
+                                                nodeCase.parameters[2] });
+            const auto position = button->getLocalBounds().toFloat().getCentre();
+            button->mouseDown(makeMouseEvent(*button, position,
+                juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }, position));
+            const auto dragPosition = juce::Point<float> { 700.0f, 100.0f }
+                                    - button->getPosition().toFloat();
+            button->mouseDrag(makeMouseEvent(*button, dragPosition,
+                juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }, position));
+            REQUIRE(FilterControlTestAccess::hasTransientState(*control));
+
+            editor->setVisible(false);
+            CHECK_FALSE(FilterControlTestAccess::hasTransientState(*control));
+            CHECK_FALSE(DraggableButtonPointerTestAccess::hasPrimaryDrag(*button));
+            for (size_t parameter = 0; parameter < 3; ++parameter)
+                checkClosedExactlyOnce(capture.forParameter(parameter));
+
+            editor->setVisible(false);
+            button->mouseUp(makeMouseEvent(*button, position, {}, position));
+            for (size_t parameter = 0; parameter < 3; ++parameter)
+                CHECK(capture.forParameter(parameter).endCount == 1);
+        }
+
+        DYNAMIC_SECTION("node " << nodeCase.node << " editor disable")
+        {
+            juce::ScopedJuceInitialiser_GUI gui;
+            FireAudioProcessor processor;
+            processor.hasUpdateCheckBeenPerformed = true;
+            setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+            auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+            setPlainParameter(processor, nodeCase.parameters[0], 0.0f);
+            editor->setVisible(true);
+            auto* control = findDescendant<FilterControl>(*editor);
+            REQUIRE(control != nullptr);
+            control->setBounds(0, 0, 1000, 400);
+            FilterControlTestAccess::updateButtonStates(*control);
+            auto* button = nodeCase.node == 0 ? &FilterControlTestAccess::lowButton(*control)
+                         : nodeCase.node == 1 ? &FilterControlTestAccess::peakButton(*control)
+                                              : &FilterControlTestAccess::highButton(*control);
+            GestureCapture capture(processor, { nodeCase.parameters[0], nodeCase.parameters[1],
+                                                nodeCase.parameters[2] });
+            const auto position = button->getLocalBounds().toFloat().getCentre();
+            button->mouseDown(makeMouseEvent(*button, position,
+                juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }, position));
+            const auto dragPosition = juce::Point<float> { 700.0f, 100.0f }
+                                    - button->getPosition().toFloat();
+            button->mouseDrag(makeMouseEvent(*button, dragPosition,
+                juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }, position));
+            REQUIRE(FilterControlTestAccess::hasTransientState(*control));
+
+            editor->setEnabled(false);
+            CHECK_FALSE(FilterControlTestAccess::hasTransientState(*control));
+            for (size_t parameter = 0; parameter < 3; ++parameter)
+                checkClosedExactlyOnce(capture.forParameter(parameter));
+
+            editor->setEnabled(false);
+            button->mouseUp(makeMouseEvent(*button, position, {}, position));
+            for (size_t parameter = 0; parameter < 3; ++parameter)
+                CHECK(capture.forParameter(parameter).endCount == 1);
+        }
+    }
+}
+
+TEST_CASE("Editor hide survives deletion from a filter gesture-end callback",
+          "[filter-control][ui][automation][gesture][lifecycle][editor][deletion]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    setPlainParameter(processor, LOW_ID, 0.0f);
+    editor->setVisible(true);
+    auto* control = findDescendant<FilterControl>(*editor);
+    REQUIRE(control != nullptr);
+    control->setBounds(0, 0, 1000, 400);
+    FilterControlTestAccess::updateButtonStates(*control);
+    auto& button = FilterControlTestAccess::lowButton(*control);
+    const auto position = button.getLocalBounds().toFloat().getCentre();
+    GestureCapture capture(processor, { LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID });
+    button.mouseDown(makeMouseEvent(button, position,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }, position));
+    const auto dragPosition = juce::Point<float> { 700.0f, 100.0f }
+                            - button.getPosition().toFloat();
+    button.mouseDrag(makeMouseEvent(button, dragPosition,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }, position));
+    EditorReleaseOnGestureEnd releaseOnEnd(processor, LOWCUT_FREQ_ID, editor);
+
+    editor->setVisible(false);
+    CHECK(releaseOnEnd.didRelease());
+    CHECK(editor == nullptr);
+    checkClosedExactlyOnce(capture.forParameter(0));
+    checkClosedExactlyOnce(capture.forParameter(1));
+    checkClosedExactlyOnce(capture.forParameter(2));
 }

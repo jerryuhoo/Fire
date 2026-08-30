@@ -485,6 +485,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
             slider->dismissTransientInteraction();
     bandPanel.dismissTransientInteraction();
     globalPanel.dismissTransientInteraction();
+    filterControl.dismissTransientInteraction();
     lfoPanel.dismissTransientInteraction();
     lfoPanel.dismissModulationMatrixDialog();
     stateComponent.dismissSettingsDialog();
@@ -674,6 +675,10 @@ void FireAudioProcessorEditor::visibilityChanged()
         if (safeThis == nullptr)
             return;
 
+        filterControl.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
         lfoPanel.dismissTransientInteraction();
         if (safeThis == nullptr)
             return;
@@ -718,6 +723,10 @@ void FireAudioProcessorEditor::enablementChanged()
         if (isLfoAssignMode)
             exitAssignMode(false);
         lfoPanel.clearAssignFeedback();
+
+        filterControl.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
 
         // Disabling is a session boundary even if the same editor is enabled
         // again before a worker or alert callback arrives.
@@ -978,6 +987,10 @@ void FireAudioProcessorEditor::timerCallback()
             return;
 
         globalPanel.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
+        filterControl.dismissTransientInteraction();
         if (safeThis == nullptr)
             return;
 

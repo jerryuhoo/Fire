@@ -14,9 +14,12 @@
 #include "ModulatableSlider.h"
 #include "PrimaryButton.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
-class FireLookAndFeel final : public juce::LookAndFeel_V4
+class FireLookAndFeel final : public juce::LookAndFeel_V4,
+                              private juce::Timer
 {
 public:
     float scale = 1.0f;
@@ -99,7 +102,7 @@ public:
     void drawComboBox(juce::Graphics& g,
                       int width,
                       int height,
-                      bool,
+                      bool isButtonDown,
                       int,
                       int,
                       int,
@@ -107,10 +110,14 @@ public:
                       juce::ComboBox& box) override
     {
         using namespace fire::ui;
+        auto& animation = getComboBoxAnimation(box, isButtonDown);
+        const auto hover = animation.hover.current;
+        const auto press = animation.press.current;
+        const auto focus = animation.focus.current;
+        const auto disabled = animation.disabled.current;
         auto bounds = juce::Rectangle<float>(0.5f, 0.5f,
                                               static_cast<float>(width) - 1.0f,
                                               static_cast<float>(height) - 1.0f);
-        const auto focused = box.hasKeyboardFocus(true) || box.isPopupActive();
         const auto isHeaderPreset = box.getComponentID() == "header_preset";
 
         if (isHeaderPreset)
@@ -118,17 +125,20 @@ public:
             // The preset selector lives in a visually dense toolbar.  A flat
             // hover/focus wash keeps it discoverable without putting another
             // framed card inside the header.
-            if (focused || box.isMouseOver())
+            const auto washAmount = juce::jmax(focus, hover * 0.64f) * (1.0f - disabled);
+            if (washAmount > 0.001f)
             {
-                g.setColour((focused ? colours::raised : colours::surface2)
-                                .withAlpha(focused ? 0.72f : 0.48f));
+                auto wash = colours::surface2.interpolatedWith(colours::raised, focus)
+                                .darker(0.10f * press);
+                g.setColour(wash
+                                .withAlpha(0.72f * washAmount));
                 g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
             }
 
-            g.setColour((focused ? colours::flame : colours::hairline)
-                            .withAlpha(focused ? 0.72f : 0.42f));
-            const auto lineWidth = focused ? bounds.getWidth() * 0.32f
-                                           : bounds.getWidth() * 0.18f;
+            const auto emphasis = juce::jmax(focus, hover * 0.55f);
+            g.setColour(colours::hairline.interpolatedWith(colours::flame, emphasis)
+                            .withAlpha((0.42f + 0.30f * emphasis) * (1.0f - 0.65f * disabled)));
+            const auto lineWidth = bounds.getWidth() * (0.18f + 0.14f * emphasis);
             g.fillRoundedRectangle(bounds.getCentreX() - lineWidth * 0.5f,
                                    bounds.getBottom() - 1.0f,
                                    lineWidth,
@@ -137,9 +147,32 @@ public:
         }
         else
         {
-            drawGlassPill(g, bounds,
-                          box.findColour(juce::ComboBox::focusedOutlineColourId),
-                          focused, box.isMouseOver(), false);
+            const auto radius = juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius);
+            auto base = colours::surface1.interpolatedWith(colours::raised, focus * 0.72f);
+            base = base.brighter(0.06f * hover).darker(0.10f * press);
+            base = base.interpolatedWith(colours::surface0, disabled * 0.48f);
+            juce::ColourGradient fill(base.brighter(0.05f), bounds.getX(), bounds.getY(),
+                                      base.darker(0.12f), bounds.getX(), bounds.getBottom(), false);
+            g.setGradientFill(fill);
+            g.fillRoundedRectangle(bounds, radius);
+
+            const auto emphasis = juce::jmax(focus, hover * 0.42f);
+            auto edge = box.findColour(juce::ComboBox::outlineColourId)
+                            .interpolatedWith(box.findColour(juce::ComboBox::focusedOutlineColourId),
+                                              emphasis);
+            g.setColour(edge.withMultipliedAlpha(1.0f - 0.68f * disabled));
+            g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f + 0.35f * focus);
+
+            if (focus > 0.001f)
+            {
+                g.setColour(box.findColour(juce::ComboBox::focusedOutlineColourId)
+                                .withAlpha(0.92f * focus * (1.0f - disabled)));
+                g.fillRoundedRectangle(bounds.getX() + 1.0f,
+                                       bounds.getY() + bounds.getHeight() * 0.24f,
+                                       2.0f,
+                                       bounds.getHeight() * 0.52f,
+                                       1.0f);
+            }
         }
 
         auto arrowArea = bounds.removeFromRight(juce::jmax(18.0f * scale, bounds.getHeight() * 0.82f));
@@ -150,7 +183,7 @@ public:
         arrow.lineTo(centre.x, centre.y + halfWidth * 0.55f);
         arrow.lineTo(centre.x + halfWidth, centre.y - halfWidth * 0.35f);
         g.setColour(box.findColour(juce::ComboBox::arrowColourId)
-                        .withMultipliedAlpha(box.isEnabled() ? 0.9f : 0.3f));
+                        .withMultipliedAlpha(0.9f - 0.6f * disabled));
         g.strokePath(arrow, juce::PathStrokeType(1.5f * scale,
                                                 juce::PathStrokeType::curved,
                                                 juce::PathStrokeType::rounded));
@@ -646,6 +679,109 @@ public:
     }
 
 private:
+    struct ComboBoxAnimation
+    {
+        juce::Component::SafePointer<juce::ComboBox> box;
+        fire::ui::DampedValue hover;
+        fire::ui::DampedValue press;
+        fire::ui::DampedValue focus;
+        fire::ui::DampedValue disabled;
+        bool pressTarget = false;
+    };
+
+    ComboBoxAnimation& getComboBoxAnimation(juce::ComboBox& box,
+                                             bool isButtonDown)
+    {
+        auto found = std::find_if(comboBoxAnimations.begin(), comboBoxAnimations.end(),
+                                  [&box](const auto& state)
+                                  {
+                                      return state.box.getComponent() == &box;
+                                  });
+        if (found == comboBoxAnimations.end())
+        {
+            ComboBoxAnimation state;
+            state.box = &box;
+            const auto interactive = box.isEnabled() && box.isShowing();
+            state.hover.snapTo(interactive && box.isMouseOver(true) ? 1.0f : 0.0f);
+            state.press.snapTo(interactive && isButtonDown ? 1.0f : 0.0f);
+            state.focus.snapTo(interactive
+                                   && (box.hasKeyboardFocus(true) || box.isPopupActive())
+                               ? 1.0f : 0.0f);
+            state.disabled.snapTo(box.isEnabled() ? 0.0f : 1.0f);
+            state.pressTarget = isButtonDown;
+            comboBoxAnimations.push_back(std::move(state));
+            return comboBoxAnimations.back();
+        }
+
+        found->pressTarget = isButtonDown;
+        updateComboBoxTargets(*found);
+        startComboBoxTimerIfNeeded();
+        return *found;
+    }
+
+    static void updateComboBoxTargets(ComboBoxAnimation& state) noexcept
+    {
+        auto* box = state.box.getComponent();
+        if (box == nullptr)
+            return;
+
+        const auto interactive = box->isEnabled() && box->isShowing();
+        state.hover.setTarget(interactive && box->isMouseOver(true) ? 1.0f : 0.0f);
+        state.press.setTarget(interactive && state.pressTarget ? 1.0f : 0.0f);
+        state.focus.setTarget(interactive
+                                  && (box->hasKeyboardFocus(true) || box->isPopupActive())
+                              ? 1.0f : 0.0f);
+        state.disabled.setTarget(box->isEnabled() ? 0.0f : 1.0f);
+    }
+
+    static bool isComboBoxAnimationSettled(const ComboBoxAnimation& state) noexcept
+    {
+        return state.hover.isSettled() && state.press.isSettled()
+            && state.focus.isSettled() && state.disabled.isSettled();
+    }
+
+    void startComboBoxTimerIfNeeded()
+    {
+        if (! isTimerRunning()
+            && std::any_of(comboBoxAnimations.begin(), comboBoxAnimations.end(),
+                           [](const auto& state)
+                           {
+                               return state.box != nullptr
+                                   && state.box->isShowing()
+                                   && ! isComboBoxAnimationSettled(state);
+                           }))
+            startTimerHz(60);
+    }
+
+    void timerCallback() override
+    {
+        auto anyAnimating = false;
+        for (auto iterator = comboBoxAnimations.begin(); iterator != comboBoxAnimations.end();)
+        {
+            auto* box = iterator->box.getComponent();
+            if (box == nullptr || ! box->isShowing())
+            {
+                iterator = comboBoxAnimations.erase(iterator);
+                continue;
+            }
+
+            updateComboBoxTargets(*iterator);
+            auto changed = iterator->hover.advance(1.0f / 60.0f, 0.10f);
+            changed = iterator->press.advance(1.0f / 60.0f, 0.065f) || changed;
+            changed = iterator->focus.advance(1.0f / 60.0f, 0.11f) || changed;
+            changed = iterator->disabled.advance(1.0f / 60.0f, 0.13f) || changed;
+            if (changed)
+                box->repaint();
+            anyAnimating = anyAnimating || ! isComboBoxAnimationSettled(*iterator);
+            ++iterator;
+        }
+
+        if (! anyAnimating)
+            stopTimer();
+    }
+
+    std::vector<ComboBoxAnimation> comboBoxAnimations;
+
     struct ButtonAnimation
     {
         float hover = 0.0f;

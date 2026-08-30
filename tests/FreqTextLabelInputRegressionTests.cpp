@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
 struct PrimaryEditableLabelTestAccess
@@ -457,16 +458,88 @@ TEST_CASE("Frequency label editing preserves keyboard and accessibility entry",
         FrequencyLabelFixture fixture;
         auto* label = fixture.getEditableLabel();
         REQUIRE(label != nullptr);
+        label->setTooltip("Enter a crossover frequency");
 
         auto* handler = label->getAccessibilityHandler();
         REQUIRE(handler != nullptr);
         CHECK(handler->getRole() == juce::AccessibilityRole::editableText);
+        CHECK(handler->getTitle() == label->getText());
+        CHECK(handler->getHelp() == label->getTooltip());
+        auto* value = handler->getValueInterface();
+        REQUIRE(value != nullptr);
+        CHECK(value->isReadOnly());
+        CHECK(value->getCurrentValueAsString() == label->getText());
         REQUIRE(handler->getActions().contains(
             juce::AccessibilityActionType::press));
 
         CHECK(handler->getActions().invoke(
             juce::AccessibilityActionType::press));
         CHECK(label->isBeingEdited());
+        CHECK_FALSE(handler->getCurrentState().isFocusable());
+    }
+}
+
+TEST_CASE("Cached frequency-label accessibility rejects stale lifecycle actions",
+          "[frequency-label][ui][input][accessibility][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    const auto cacheAccessibility = [](FrequencyLabelFixture& fixture)
+    {
+        auto* label = fixture.getEditableLabel();
+        REQUIRE(label != nullptr);
+        auto* handler = label->getAccessibilityHandler();
+        REQUIRE(handler != nullptr);
+        REQUIRE(handler->getActions().contains(
+            juce::AccessibilityActionType::press));
+        return std::pair { label, handler };
+    };
+
+    SECTION("hidden label")
+    {
+        FrequencyLabelFixture fixture;
+        const auto [label, handler] = cacheAccessibility(fixture);
+
+        label->setVisible(false);
+        REQUIRE_FALSE(label->isShowing());
+        REQUIRE(handler->getActions().invoke(
+            juce::AccessibilityActionType::press));
+
+        CHECK_FALSE(label->isBeingEdited());
+    }
+
+    SECTION("disabled label")
+    {
+        FrequencyLabelFixture fixture;
+        const auto [label, handler] = cacheAccessibility(fixture);
+
+        label->setEnabled(false);
+        REQUIRE_FALSE(label->isEnabled());
+        REQUIRE(handler->getActions().invoke(
+            juce::AccessibilityActionType::press));
+
+        CHECK_FALSE(label->isBeingEdited());
+    }
+
+    SECTION("detached peer")
+    {
+        PrimaryEditableLabel label({}, "1 kHz");
+        label.setBounds(0, 0, 90, 24);
+        label.setEditable(true);
+        label.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        label.setVisible(true);
+        auto* handler = label.getAccessibilityHandler();
+        REQUIRE(handler != nullptr);
+        REQUIRE(handler->getActions().contains(
+            juce::AccessibilityActionType::press));
+
+        label.removeFromDesktop();
+        REQUIRE(label.isVisible());
+        REQUIRE_FALSE(label.isShowing());
+        REQUIRE(handler->getActions().invoke(
+            juce::AccessibilityActionType::press));
+
+        CHECK_FALSE(label.isBeingEdited());
     }
 }
 

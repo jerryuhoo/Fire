@@ -15,12 +15,82 @@
 
 struct PrimaryEditableLabelTestAccess;
 
+namespace fire::ui
+{
+class GuardedLabelValueInterface final
+    : public juce::AccessibilityTextValueInterface
+{
+public:
+    explicit GuardedLabelValueInterface(juce::Label& labelToWrap)
+        : label(labelToWrap)
+    {
+    }
+
+    bool isReadOnly() const override { return true; }
+
+    juce::String getCurrentValueAsString() const override
+    {
+        return label.getText();
+    }
+
+    void setValueAsString(const juce::String&) override {}
+
+private:
+    juce::Label& label;
+};
+
+class GuardedLabelAccessibilityHandler final
+    : public juce::AccessibilityHandler
+{
+public:
+    explicit GuardedLabelAccessibilityHandler(juce::Label& labelToWrap)
+        : juce::AccessibilityHandler(
+              labelToWrap,
+              labelToWrap.isEditable()
+                  ? juce::AccessibilityRole::editableText
+                  : juce::AccessibilityRole::label,
+              makeActions(labelToWrap),
+              { std::make_unique<GuardedLabelValueInterface>(labelToWrap) }),
+          label(labelToWrap)
+    {
+    }
+
+    juce::String getTitle() const override { return label.getText(); }
+    juce::String getHelp() const override { return label.getTooltip(); }
+
+    juce::AccessibleState getCurrentState() const override
+    {
+        if (label.isBeingEdited())
+            return {}; // allow focus to pass through to the TextEditor
+
+        return juce::AccessibilityHandler::getCurrentState();
+    }
+
+private:
+    static juce::AccessibilityActions makeActions(juce::Label& label)
+    {
+        if (! label.isEditable())
+            return {};
+
+        return juce::AccessibilityActions().addAction(
+            juce::AccessibilityActionType::press,
+            [&label]
+            {
+                if (label.isEnabled() && label.isShowing())
+                    label.showEditor();
+            });
+    }
+
+    juce::Label& label;
+};
+} // namespace fire::ui
+
 /** An editable Label that opens only from a complete primary-pointer click.
 
     JUCE's Label starts single-click editing from mouseUp alone. This wrapper
     owns the corresponding mouseDown source, rejects auxiliary or mixed-button
     gestures, and invalidates delayed releases at lifecycle boundaries while
-    leaving keyboard and accessibility entry to Label.
+    retaining guarded keyboard and accessibility entry.
 */
 class PrimaryEditableLabel final : public juce::Label
 {
@@ -45,6 +115,13 @@ public:
 
 private:
     friend struct PrimaryEditableLabelTestAccess;
+
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override
+    {
+        return std::make_unique<fire::ui::GuardedLabelAccessibilityHandler>(
+            *this);
+    }
 
     enum class PointerGesture
     {

@@ -284,7 +284,8 @@ public:
         else
         {
             const auto radius = juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius);
-            auto base = colours::surface1.interpolatedWith(colours::raised, focus * 0.72f);
+            auto base = box.findColour(juce::ComboBox::backgroundColourId)
+                            .interpolatedWith(colours::raised, focus * 0.72f);
             base = base.brighter(0.06f * hover).darker(0.10f * press);
             base = base.interpolatedWith(colours::surface0, disabled * 0.48f);
             juce::ColourGradient fill(base.brighter(0.05f), bounds.getX(), bounds.getY(),

@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstdint>
 
 namespace
@@ -64,7 +65,111 @@ std::uint64_t imageFingerprint(const juce::Image& image)
 
     return fingerprint;
 }
+
+juce::Image renderIdleComboBox(FireLookAndFeel& lookAndFeel,
+                               juce::Colour background,
+                               const juce::String& componentID = {})
+{
+    constexpr int width = 180;
+    constexpr int height = 32;
+    juce::ComboBox comboBox;
+    comboBox.setBounds(0, 0, width, height);
+    comboBox.setComponentID(componentID);
+    comboBox.setColour(juce::ComboBox::backgroundColourId, background);
+    comboBox.setLookAndFeel(&lookAndFeel);
+
+    juce::Image image(juce::Image::ARGB, width, height, true);
+    juce::Graphics graphics(image);
+    lookAndFeel.drawComboBox(graphics,
+                             width,
+                             height,
+                             false,
+                             0,
+                             0,
+                             0,
+                             0,
+                             comboBox);
+    comboBox.setLookAndFeel(nullptr);
+    return image;
+}
+
+juce::Colour expectedIdleComboInterior(juce::Colour background,
+                                       int sampleY,
+                                       int height)
+{
+    const auto top = 0.5f;
+    const auto bottom = static_cast<float>(height) - 0.5f;
+    const auto sampleCentreY = static_cast<float>(sampleY) + 0.5f;
+    const auto position = juce::jlimit(
+        0.0,
+        1.0,
+        static_cast<double>((sampleCentreY - top) / (bottom - top)));
+    const juce::ColourGradient gradient(background.brighter(0.05f),
+                                         0.0f,
+                                         top,
+                                         background.darker(0.12f),
+                                         0.0f,
+                                         bottom,
+                                         false);
+    return gradient.getColourAtPosition(position);
+}
+
+int colourChannelError(juce::Colour actual, juce::Colour expected)
+{
+    return std::abs(static_cast<int>(actual.getRed())
+                    - static_cast<int>(expected.getRed()))
+         + std::abs(static_cast<int>(actual.getGreen())
+                    - static_cast<int>(expected.getGreen()))
+         + std::abs(static_cast<int>(actual.getBlue())
+                    - static_cast<int>(expected.getBlue()))
+         + std::abs(static_cast<int>(actual.getAlpha())
+                    - static_cast<int>(expected.getAlpha()));
+}
 } // namespace
+
+TEST_CASE("Fire ComboBoxes honour their configured idle background colour",
+          "[ui][combo-box][theme][background][pixels]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    constexpr int sampleX = 54;
+    constexpr int sampleY = 16;
+
+    const auto firstBackground = fire::ui::colours::surface0;
+    const auto secondBackground = juce::Colour { 0xff26384c };
+    const auto firstImage = renderIdleComboBox(lookAndFeel,
+                                                firstBackground);
+    const auto secondImage = renderIdleComboBox(lookAndFeel,
+                                                 secondBackground);
+    const auto firstInterior = firstImage.getPixelAt(sampleX, sampleY);
+    const auto secondInterior = secondImage.getPixelAt(sampleX, sampleY);
+
+    CHECK(firstInterior != secondInterior);
+    CHECK(imageFingerprint(firstImage) != imageFingerprint(secondImage));
+    CHECK(colourChannelError(
+              firstInterior,
+              expectedIdleComboInterior(firstBackground,
+                                        sampleY,
+                                        firstImage.getHeight()))
+          <= 4);
+    CHECK(colourChannelError(
+              secondInterior,
+              expectedIdleComboInterior(secondBackground,
+                                        sampleY,
+                                        secondImage.getHeight()))
+          <= 4);
+
+    // The compact preset selector intentionally uses its separate flat header
+    // treatment. Its output must remain independent of the regular control's
+    // backgroundColourId.
+    const auto firstHeader = renderIdleComboBox(lookAndFeel,
+                                                 firstBackground,
+                                                 "header_preset");
+    const auto secondHeader = renderIdleComboBox(lookAndFeel,
+                                                  secondBackground,
+                                                  "header_preset");
+    CHECK(imageFingerprint(firstHeader) == imageFingerprint(secondHeader));
+}
 
 TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
           "[ui][popup-menu][theme][anchor]")

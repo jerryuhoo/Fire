@@ -67,6 +67,14 @@ public:
     bool advanceAnimation(float deltaSeconds) noexcept;
     float getHoverAnimation() const noexcept { return hoverAnimation; }
     float getPressAnimation() const noexcept { return pressAnimation; }
+    float getModulationHandleHoverAnimation() const noexcept
+    {
+        return modulationHandleHoverAnimation;
+    }
+    float getModulationHandlePressAnimation() const noexcept
+    {
+        return modulationHandlePressAnimation;
+    }
     bool isModulated = false;
     bool isBipolar = true;
     bool isBypassed = false;
@@ -205,6 +213,8 @@ private:
     std::uint64_t contextMenuRevision = 0;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;
+    float modulationHandleHoverAnimation = 0.0f;
+    float modulationHandlePressAnimation = 0.0f;
 
     // Store the initial LFO amount when a drag starts for smoother interaction
     double initialLfoAmount = 0.0;

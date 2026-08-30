@@ -1006,12 +1006,38 @@ private:
 
         if (slider.isModulated)
         {
-            auto handle = slider.getModulationHandleBounds();
+            const auto hover = juce::jlimit(
+                0.0f, 1.0f, slider.getModulationHandleHoverAnimation());
+            const auto press = juce::jlimit(
+                0.0f, 1.0f, slider.getModulationHandlePressAnimation());
+            auto handle = slider.getModulationHandleBounds()
+                              .reduced(press * 0.65f * scale);
             const auto accent = slider.isBypassed ? colours::disabled : colours::modulation;
+
+            if (slider.isEnabled() && (hover > 0.001f || press > 0.001f))
+            {
+                const auto haloExpansion = (1.5f + hover * 2.5f
+                                             + press * 1.0f) * scale;
+                g.setColour(accent.withAlpha(0.10f + hover * 0.20f
+                                              + press * 0.12f));
+                g.fillEllipse(handle.expanded(haloExpansion));
+            }
+
             g.setColour(colours::canvas.withAlpha(0.92f));
-            g.fillEllipse(handle.expanded(1.0f));
-            g.setColour(accent.withAlpha(slider.isEnabled() ? 0.95f : 0.35f));
+            g.fillEllipse(handle.expanded((1.0f + hover * 0.65f) * scale));
+            g.setColour(accent.brighter(hover * 0.12f)
+                            .interpolatedWith(colours::whiteHot,
+                                              press * 0.16f)
+                            .withAlpha(slider.isEnabled()
+                                           ? 0.90f + hover * 0.08f
+                                           : 0.35f));
             g.fillEllipse(handle);
+            if (slider.isEnabled() && hover > 0.001f)
+            {
+                g.setColour(colours::whiteHot.withAlpha(hover * 0.42f));
+                g.drawEllipse(handle.reduced(0.4f * scale),
+                              juce::jmax(0.8f, 1.0f * scale));
+            }
             g.setColour(colours::textPrimary.withMultipliedAlpha(slider.isEnabled() ? 1.0f : 0.4f));
             g.setFont(fire::ui::labelFont(juce::jmax(7.0f, handle.getHeight() * 0.48f)));
             g.drawText(juce::String(slider.lfoSource), handle, juce::Justification::centred);

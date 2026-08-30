@@ -9,6 +9,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -74,6 +75,8 @@ struct ModulatableSliderInteractionTestAccess
     {
         slider.hoverAnimation = 0.75f;
         slider.pressAnimation = 0.65f;
+        slider.modulationHandleHoverAnimation = 0.55f;
+        slider.modulationHandlePressAnimation = 0.45f;
     }
 
     static juce::Label* getForwardedValueLabel(
@@ -143,6 +146,26 @@ juce::MouseEvent makeMouseEvent(juce::Component& component,
 const juce::ModifierKeys primaryButton {
     juce::ModifierKeys::leftButtonModifier
 };
+
+std::uint64_t renderFingerprint(ModulatableSlider& slider)
+{
+    juce::Image image(juce::Image::ARGB,
+                      juce::jmax(1, slider.getWidth()),
+                      juce::jmax(1, slider.getHeight()),
+                      true);
+    juce::Graphics graphics(image);
+    slider.paintEntireComponent(graphics, true);
+
+    std::uint64_t fingerprint = 1469598103934665603ull;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            fingerprint ^= image.getPixelAt(x, y).getARGB();
+            fingerprint *= 1099511628211ull;
+        }
+
+    return fingerprint;
+}
 
 std::vector<juce::ModifierKeys> rejectedPointerModifiers()
 {
@@ -1094,6 +1117,8 @@ TEST_CASE("Dismiss resets slider hover, editor and animation presentation exactl
     CHECK_FALSE(slider.isModHandleMouseOver);
     CHECK(slider.getHoverAnimation() == 0.0f);
     CHECK(slider.getPressAnimation() == 0.0f);
+    CHECK(slider.getModulationHandleHoverAnimation() == 0.0f);
+    CHECK(slider.getModulationHandlePressAnimation() == 0.0f);
     CHECK(slider.getTextBoxPosition() == juce::Slider::NoTextBox);
     CHECK(hoverEnds == 2);
 
@@ -1105,6 +1130,63 @@ TEST_CASE("Dismiss resets slider hover, editor and animation presentation exactl
 
     slider.dismissTransientInteraction();
     CHECK(hoverEnds == 2);
+}
+
+TEST_CASE("Modulation handle hover and press feedback animate without changing its hit target",
+          "[modulatable-slider][ui][hover][animation][render]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    ModulatableSlider slider;
+    slider.setLookAndFeel(&lookAndFeel);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setBounds(0, 0, 120, 120);
+    slider.isModulated = true;
+    slider.lfoSource = 2;
+
+    const auto handle = slider.getModulationHandleBounds();
+    const auto centre = handle.getCentre();
+    REQUIRE(slider.hitTest(juce::roundToInt(centre.x),
+                           juce::roundToInt(centre.y)));
+    const auto idleFingerprint = renderFingerprint(slider);
+
+    slider.mouseEnter(makeMouseEvent(slider, centre));
+    REQUIRE(slider.isModHandleMouseOver);
+    REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
+    const auto partialHover = slider.getModulationHandleHoverAnimation();
+    REQUIRE(partialHover > 0.0f);
+    REQUIRE(partialHover < 1.0f);
+
+    for (int frame = 0; frame < 90; ++frame)
+        slider.advanceAnimation(1.0f / 60.0f);
+    CHECK(slider.getModulationHandleHoverAnimation()
+          == Catch::Approx(1.0f).margin(0.001f));
+    const auto hoverFingerprint = renderFingerprint(slider);
+
+    slider.mouseDown(makeMouseEvent(slider, centre, primaryButton));
+    REQUIRE(ModulatableSliderInteractionTestAccess::isModulationGesture(
+        slider));
+    REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
+    REQUIRE(slider.getModulationHandlePressAnimation() > 0.0f);
+    for (int frame = 0; frame < 90; ++frame)
+        slider.advanceAnimation(1.0f / 60.0f);
+    CHECK(slider.getModulationHandlePressAnimation()
+          == Catch::Approx(1.0f).margin(0.001f));
+    const auto pressFingerprint = renderFingerprint(slider);
+
+    CAPTURE(idleFingerprint, hoverFingerprint, pressFingerprint);
+    CHECK(idleFingerprint != hoverFingerprint);
+    CHECK(hoverFingerprint != pressFingerprint);
+    CHECK(slider.hitTest(juce::roundToInt(centre.x),
+                         juce::roundToInt(centre.y)));
+
+    slider.mouseUp(makeMouseEvent(slider, centre));
+    const auto pressBeforeRelease =
+        slider.getModulationHandlePressAnimation();
+    REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
+    CHECK(slider.getModulationHandlePressAnimation() < pressBeforeRelease);
+
+    slider.setLookAndFeel(nullptr);
 }
 
 TEST_CASE("Slider lifecycle boundaries finish gestures and tolerate synchronous deletion",

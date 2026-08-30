@@ -196,23 +196,47 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
     deltaSeconds = juce::jlimit(0.0f, 0.05f, deltaSeconds);
     const auto oldHover = hoverAnimation;
     const auto oldPress = pressAnimation;
+    const auto oldHandleHover = modulationHandleHoverAnimation;
+    const auto oldHandlePress = modulationHandlePressAnimation;
     const auto hoverTarget = isMouseOverMainSlider() && isEnabled() ? 1.0f : 0.0f;
     const auto pressTarget = (isDraggingMainSlider || (isMouseButtonDown() && ! isModHandleMouseDown))
                                  && isEnabled()
                              ? 1.0f
                              : 0.0f;
+    const auto handleHoverTarget = isModulated && isModHandleMouseOver
+                                       && isEnabled()
+                                   ? 1.0f
+                                   : 0.0f;
+    const auto handlePressTarget = isModulated && isModHandleMouseDown
+                                       && isEnabled()
+                                   ? 1.0f
+                                   : 0.0f;
     const auto hoverStep = juce::jmin(1.0f, deltaSeconds * 10.0f);
     const auto pressStep = juce::jmin(1.0f, deltaSeconds * 16.0f);
+    const auto handleHoverStep = juce::jmin(1.0f, deltaSeconds * 12.0f);
+    const auto handlePressStep = juce::jmin(1.0f, deltaSeconds * 18.0f);
     hoverAnimation += (hoverTarget - hoverAnimation) * hoverStep;
     pressAnimation += (pressTarget - pressAnimation) * pressStep;
+    modulationHandleHoverAnimation +=
+        (handleHoverTarget - modulationHandleHoverAnimation)
+        * handleHoverStep;
+    modulationHandlePressAnimation +=
+        (handlePressTarget - modulationHandlePressAnimation)
+        * handlePressStep;
 
     if (std::abs(hoverAnimation - hoverTarget) < 0.002f)
         hoverAnimation = hoverTarget;
     if (std::abs(pressAnimation - pressTarget) < 0.002f)
         pressAnimation = pressTarget;
+    if (std::abs(modulationHandleHoverAnimation - handleHoverTarget) < 0.002f)
+        modulationHandleHoverAnimation = handleHoverTarget;
+    if (std::abs(modulationHandlePressAnimation - handlePressTarget) < 0.002f)
+        modulationHandlePressAnimation = handlePressTarget;
 
     return std::abs(oldHover - hoverAnimation) > 0.001f
-           || std::abs(oldPress - pressAnimation) > 0.001f;
+           || std::abs(oldPress - pressAnimation) > 0.001f
+           || std::abs(oldHandleHover - modulationHandleHoverAnimation) > 0.001f
+           || std::abs(oldHandlePress - modulationHandlePressAnimation) > 0.001f;
 }
 
 // New/updated mouse handlers
@@ -702,6 +726,8 @@ bool ModulatableSlider::resetTransientPresentation()
                                      || isModHandleMouseOver
                                      || hoverAnimation != 0.0f
                                      || pressAnimation != 0.0f
+                                     || modulationHandleHoverAnimation != 0.0f
+                                     || modulationHandlePressAnimation != 0.0f
                                      || ! label.isVisible()
                                      || getTextBoxPosition() != juce::Slider::NoTextBox;
     if (timerWasRunning)
@@ -709,6 +735,8 @@ bool ModulatableSlider::resetTransientPresentation()
     isModHandleMouseOver = false;
     hoverAnimation = 0.0f;
     pressAnimation = 0.0f;
+    modulationHandleHoverAnimation = 0.0f;
+    modulationHandlePressAnimation = 0.0f;
     if (! label.isVisible())
     {
         label.setVisible(true);

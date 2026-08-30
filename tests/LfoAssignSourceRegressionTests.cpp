@@ -90,6 +90,7 @@ TEST_CASE("Changing LFO selection updates the pending Assign source",
     assignButton->triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
     REQUIRE(assignButton->getToggleState());
+    CHECK(assignButton->getButtonText() == "Assign LFO 1");
     CHECK(countActiveRoutings(processor.getLfoManager().getModulationRoutingsCopy()) == 0);
 
     lfoFourButton->triggerClick();
@@ -99,6 +100,7 @@ TEST_CASE("Changing LFO selection updates the pending Assign source",
     // It must neither finish the interaction nor create a routing by itself.
     REQUIRE(lfoFourButton->getToggleState());
     REQUIRE(assignButton->getToggleState());
+    CHECK(assignButton->getButtonText() == "Assign LFO 4");
     CHECK(countActiveRoutings(processor.getLfoManager().getModulationRoutingsCopy()) == 0);
 
     auto* target = bandPanel->getDriveKnob();
@@ -111,6 +113,7 @@ TEST_CASE("Changing LFO selection updates the pending Assign source",
     const auto routings = processor.getLfoManager().getModulationRoutingsCopy();
     CHECK(countActiveRoutings(routings) == 1);
     REQUIRE_FALSE(assignButton->getToggleState());
+    CHECK(assignButton->getButtonText() == "LFO 4 Assigned");
 
     const ModulationRouting* assignedRouting = nullptr;
     for (const auto& routing : routings)
@@ -123,4 +126,39 @@ TEST_CASE("Changing LFO selection updates the pending Assign source",
     for (const auto& routing : routings)
         if (routing.targetParameterID.isNotEmpty())
             CHECK(routing.sourceLfoIndex != 0);
+}
+
+TEST_CASE("Assign mode reports cancellation and cannot survive editor hiding",
+          "[ui][lfo][assign][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->setVisible(true);
+    auto* lfoPanel = findDescendant<LfoPanel>(*editor);
+    REQUIRE(lfoPanel != nullptr);
+    auto* assignButton = findButtonWithText(*lfoPanel, "Assign");
+    REQUIRE(assignButton != nullptr);
+
+    assignButton->triggerClick();
+    REQUIRE(assignButton->getToggleState());
+    assignButton->triggerClick();
+    CHECK_FALSE(assignButton->getToggleState());
+    CHECK(assignButton->getButtonText() == "Assign Cancelled");
+
+    assignButton->triggerClick();
+    REQUIRE(assignButton->getToggleState());
+    editor->setVisible(false);
+    CHECK_FALSE(assignButton->getToggleState());
+    CHECK(assignButton->getButtonText() == "Assign");
+
+    editor->setVisible(true);
+    assignButton->triggerClick();
+    REQUIRE(assignButton->getToggleState());
+    editor->setEnabled(false);
+    CHECK_FALSE(assignButton->getToggleState());
+    CHECK(assignButton->getButtonText() == "Assign");
 }

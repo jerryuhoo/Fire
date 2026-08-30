@@ -337,6 +337,10 @@ public:
 
     /** Called by the editor's shared UI clock. */
     void animationTick(float deltaSeconds = 1.0f / 60.0f);
+    void showAssignArmed(int lfoIndex);
+    void showAssignCompleted(int lfoIndex);
+    void showAssignCancelled();
+    void clearAssignFeedback();
 
     void setScale(float newScale);
     void setOnDataChangedCallback(std::function<void()> callback);
@@ -440,6 +444,9 @@ private:
         fire::ui::colours::gold
     };
     fire::ui::DampedValue lfoSelectionPosition;
+    enum class AssignFeedback { idle, armed, completed, cancelled };
+    AssignFeedback assignFeedback = AssignFeedback::idle;
+    float assignFeedbackSecondsRemaining = 0.0f;
     juce::Rectangle<int> separatorLine;
     juce::Rectangle<int> topRowArea;
 

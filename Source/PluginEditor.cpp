@@ -110,7 +110,7 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             // --- Enter assignment mode ---
             isLfoAssignMode = true;
             lfoSourceForAssignment = lfoIndex;
-            lfoPanel.assignButton.setToggleState(true, juce::dontSendNotification);
+            lfoPanel.showAssignArmed(lfoIndex);
 
             // Define the callback function to be executed when a slider is clicked.
             auto sliderClickCallback = [this](const juce::String& parameterID)
@@ -123,7 +123,8 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                     // This callback runs on the message thread, so complete the
                     // one-shot assignment interaction here instead of relying on
                     // a broad parameter-listener notification.
-                    exitAssignMode();
+                    exitAssignMode(false);
+                    lfoPanel.showAssignCompleted(sourceLfoIndex);
                     modulationSnapshotFramesRemaining = 0;
 
                     const juce::Component::SafePointer<FireAudioProcessorEditor>
@@ -145,7 +146,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     lfoPanel.onCurrentLfoChanged = [this](int lfoIndex)
     {
         if (isLfoAssignMode)
+        {
             lfoSourceForAssignment = lfoIndex;
+            lfoPanel.showAssignArmed(lfoIndex);
+        }
     };
 
     lfoPanel.setOnDataChangedCallback([this]
@@ -264,7 +268,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
             modulationSnapshotFramesRemaining = 0;
             if (isLfoAssignMode)
-                exitAssignMode();
+                exitAssignMode(false);
+
+            lfoPanel.showAssignCompleted(lfoIndex);
 
             const juce::Component::SafePointer<FireAudioProcessorEditor>
                 safeThis(this);
@@ -647,6 +653,10 @@ void FireAudioProcessorEditor::visibilityChanged()
     }
     else
     {
+        if (isLfoAssignMode)
+            exitAssignMode(false);
+        lfoPanel.clearAssignFeedback();
+
         for (auto* slider : allModulatableSliders)
         {
             if (slider != nullptr)
@@ -705,6 +715,10 @@ void FireAudioProcessorEditor::enablementChanged()
 
     if (! isEnabled())
     {
+        if (isLfoAssignMode)
+            exitAssignMode(false);
+        lfoPanel.clearAssignFeedback();
+
         // Disabling is a session boundary even if the same editor is enabled
         // again before a worker or alert callback arrives.
         invalidateUpdateCheckSessionForDisable();
@@ -1676,13 +1690,16 @@ void FireAudioProcessorEditor::invalidateUpdateCheckSessionForDestruction()
     pendingUpdateResult = {};
 }
 
-void FireAudioProcessorEditor::exitAssignMode()
+void FireAudioProcessorEditor::exitAssignMode(bool showCancellationFeedback)
 {
     if (! isLfoAssignMode)
         return;
 
     isLfoAssignMode = false;
-    lfoPanel.assignButton.setToggleState(false, juce::dontSendNotification);
+    if (showCancellationFeedback)
+        lfoPanel.showAssignCancelled();
+    else
+        lfoPanel.clearAssignFeedback();
 
     // Iterate through all modulatable sliders, clear their callback functions and stop flashing.
     for (auto* slider : bandPanel.getModulatableSliders())

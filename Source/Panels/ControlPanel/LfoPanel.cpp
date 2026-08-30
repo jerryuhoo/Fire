@@ -2482,8 +2482,20 @@ void LfoPanel::animationTick(float deltaSeconds)
 
     if (! isShowing())
     {
+        if (assignFeedback == AssignFeedback::completed
+            || assignFeedback == AssignFeedback::cancelled)
+            clearAssignFeedback();
         lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
         return;
+    }
+
+    if ((assignFeedback == AssignFeedback::completed
+         || assignFeedback == AssignFeedback::cancelled)
+        && std::isfinite(deltaSeconds) && deltaSeconds > 0.0f)
+    {
+        assignFeedbackSecondsRemaining -= juce::jmin(deltaSeconds, 0.1f);
+        if (assignFeedbackSecondsRemaining <= 0.0f)
+            clearAssignFeedback();
     }
 
     const auto previousSelectionPosition = lfoSelectionPosition.current;
@@ -2502,6 +2514,39 @@ void LfoPanel::animationTick(float deltaSeconds)
         // If the DAW is stopped, pass a special value (-1.0f) to hide the playhead.
         lfoEditor.setPlayheadPosition(-1.0f);
     }
+}
+
+void LfoPanel::showAssignArmed(int lfoIndex)
+{
+    assignFeedback = AssignFeedback::armed;
+    assignFeedbackSecondsRemaining = 0.0f;
+    assignButton.setButtonText("Assign LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1));
+    assignButton.setToggleState(true, juce::dontSendNotification);
+}
+
+void LfoPanel::showAssignCompleted(int lfoIndex)
+{
+    assignFeedback = AssignFeedback::completed;
+    assignFeedbackSecondsRemaining = 1.1f;
+    assignButton.setButtonText("LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1)
+                               + " Assigned");
+    assignButton.setToggleState(false, juce::dontSendNotification);
+}
+
+void LfoPanel::showAssignCancelled()
+{
+    assignFeedback = AssignFeedback::cancelled;
+    assignFeedbackSecondsRemaining = 0.85f;
+    assignButton.setButtonText("Assign Cancelled");
+    assignButton.setToggleState(false, juce::dontSendNotification);
+}
+
+void LfoPanel::clearAssignFeedback()
+{
+    assignFeedback = AssignFeedback::idle;
+    assignFeedbackSecondsRemaining = 0.0f;
+    assignButton.setButtonText("Assign");
+    assignButton.setToggleState(false, juce::dontSendNotification);
 }
 
 void LfoPanel::buttonClicked(juce::Button* button)

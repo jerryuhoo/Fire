@@ -259,7 +259,7 @@ private:
     // combobox changed and set knob enable/disable
     void comboBoxChanged(juce::ComboBox* combobox) override;
 
-    void exitAssignMode();
+    void exitAssignMode(bool showCancellationFeedback = true);
 
     void updateModulationStates();
     const std::vector<ModulatableSlider*>& getAllModulatableSliders() const noexcept;

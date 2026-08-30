@@ -1,11 +1,14 @@
 #include <GUI/ModulatableSlider.h>
 #include <GUI/ValuePopup.h>
+#include <Panels/ControlPanel/BandPanel.h>
 #include <PluginEditor.h>
 #include <PluginProcessor.h>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <memory>
 
 namespace
 {
@@ -17,6 +20,49 @@ struct EndpointCase
     bool bipolar = true;
     bool bypassed = false;
 };
+
+template <typename ComponentType>
+ComponentType* findDescendant(juce::Component& root)
+{
+    if (auto* match = dynamic_cast<ComponentType*>(&root))
+        return match;
+
+    for (int index = 0; index < root.getNumChildComponents(); ++index)
+        if (auto* child = root.getChildComponent(index))
+            if (auto* match = findDescendant<ComponentType>(*child))
+                return match;
+
+    return nullptr;
+}
+
+ValuePopup* findValuePopup(FireAudioProcessorEditor& editor)
+{
+    for (auto* child : editor.getChildren())
+        if (auto* popup = dynamic_cast<ValuePopup*>(child))
+            return popup;
+
+    return nullptr;
+}
+
+ModulatableSlider* findSlider(BandPanel& panel,
+                              const juce::String& parameterID)
+{
+    for (auto* slider : panel.getModulatableSliders())
+        if (slider != nullptr && slider->getParamID() == parameterID)
+            return slider;
+
+    return nullptr;
+}
+
+juce::Rectangle<int> handleBoundsInEditor(
+    FireAudioProcessorEditor& editor,
+    ModulatableSlider& slider)
+{
+    return editor.getLocalArea(
+        &slider,
+        slider.getModulationHandleVisualBounds()
+            .getSmallestIntegerContainer());
+}
 
 void setPlainParameter(FireAudioProcessor& processor,
                        const juce::String& parameterID,
@@ -51,18 +97,18 @@ juce::String displayedEndpointText(FireAudioProcessorEditor& editor,
     ModulatableSlider slider;
     slider.parameterID = parameterID;
     slider.setBounds(0, 0, 80, 80);
+    editor.addAndMakeVisible(slider);
     editor.showValuePopupForSlider(&slider);
 
-    ValuePopup* popup = nullptr;
-    for (auto* child : editor.getChildren())
-        if (auto* candidate = dynamic_cast<ValuePopup*>(child))
-            popup = candidate;
+    auto* popup = findValuePopup(editor);
 
     REQUIRE(popup != nullptr);
     REQUIRE(popup->getNumChildComponents() == 1);
     auto* label = dynamic_cast<juce::Label*>(popup->getChildComponent(0));
     REQUIRE(label != nullptr);
-    return label->getText();
+    const auto text = label->getText();
+    editor.hideValuePopup();
+    return text;
 }
 
 void configureRouting(FireAudioProcessor& processor,
@@ -162,4 +208,88 @@ TEST_CASE("Bypassed modulation popup preserves its editable configured endpoint"
 
     CHECK(displayedEndpointText(editor, testCase.parameterID)
           == expectedEndpointText(processor, testCase));
+}
+
+TEST_CASE("Modulation value popup follows handle geometry and owner lifecycle",
+          "[ui][modulation][value-popup][layout][scale][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    const auto outputID = ParameterIDAndName::getIDString(OUTPUT_ID, 0);
+    REQUIRE(processor.assignLfoToTarget(0, driveID)
+            == LfoManager::AssignmentResult::changed);
+    REQUIRE(processor.assignLfoToTarget(1, outputID)
+            == LfoManager::AssignmentResult::changed);
+
+    FireAudioProcessorEditor editor(processor);
+    editor.setBounds(0, 0, 1000, 500);
+    auto* bandPanel = findDescendant<BandPanel>(editor);
+    auto* popup = findValuePopup(editor);
+    REQUIRE(bandPanel != nullptr);
+    REQUIRE(popup != nullptr);
+
+    auto* drive = findSlider(*bandPanel, driveID);
+    auto* output = findSlider(*bandPanel, outputID);
+    REQUIRE(drive != nullptr);
+    REQUIRE(output != nullptr);
+
+    for (auto* slider : { drive, output })
+    {
+        editor.showValuePopupForSlider(slider);
+        REQUIRE(popup->isVisible());
+        const auto handle = handleBoundsInEditor(editor, *slider);
+        CHECK(std::abs(popup->getBounds().getCentreX()
+                       - handle.getCentreX())
+              <= 1);
+        CHECK(popup->getBottom() < handle.getY());
+        CHECK(popup->getWidth() == 80);
+        CHECK(popup->getHeight() == 20);
+    }
+
+    editor.showValuePopupForSlider(drive);
+    editor.setBounds(0, 0, 2000, 1000);
+    REQUIRE(popup->isVisible());
+    const auto resizedDriveHandle = handleBoundsInEditor(editor, *drive);
+    CHECK(std::abs(popup->getBounds().getCentreX()
+                   - resizedDriveHandle.getCentreX())
+          <= 1);
+    CHECK(popup->getBottom() < resizedDriveHandle.getY());
+    CHECK(popup->getWidth() == 160);
+    CHECK(popup->getHeight() == 40);
+    REQUIRE(popup->getNumChildComponents() == 1);
+    auto* popupLabel = dynamic_cast<juce::Label*>(popup->getChildComponent(0));
+    REQUIRE(popupLabel != nullptr);
+    CHECK(popupLabel->getFont().getHeight() == Catch::Approx(24.0f));
+
+    editor.setBounds(0, 0, 1000, 500);
+    ModulatableSlider boundarySlider;
+    boundarySlider.parameterID = PEAK_FREQ_ID;
+    boundarySlider.setBounds(editor.getWidth() - 40, -55, 80, 80);
+    editor.addAndMakeVisible(boundarySlider);
+    editor.showValuePopupForSlider(&boundarySlider);
+    REQUIRE(popup->isVisible());
+    const auto boundaryHandle =
+        handleBoundsInEditor(editor, boundarySlider);
+    CHECK(popup->getY() > boundaryHandle.getBottom());
+    CHECK(editor.getLocalBounds().contains(popup->getBounds()));
+
+    ModulatableSlider invalidSlider;
+    invalidSlider.parameterID = "missing_parameter";
+    invalidSlider.setBounds(100, 100, 80, 80);
+    editor.addAndMakeVisible(invalidSlider);
+    editor.showValuePopupForSlider(&invalidSlider);
+    CHECK_FALSE(popup->isVisible());
+
+    auto transientOwner = std::make_unique<ModulatableSlider>();
+    transientOwner->parameterID = PEAK_FREQ_ID;
+    transientOwner->setBounds(100, 100, 80, 80);
+    editor.addAndMakeVisible(*transientOwner);
+    editor.showValuePopupForSlider(transientOwner.get());
+    REQUIRE(popup->isVisible());
+    transientOwner.reset();
+    editor.resized();
+    CHECK_FALSE(popup->isVisible());
 }

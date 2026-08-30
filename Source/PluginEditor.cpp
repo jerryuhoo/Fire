@@ -767,6 +767,13 @@ void FireAudioProcessorEditor::resized()
                          zoomSize,
                          zoomSize);
 
+    if (valuePopup.isVisible())
+    {
+        if (auto* owner = valuePopupOwner.getComponent();
+            owner == nullptr || ! updateValuePopupContentAndBounds(owner))
+            hideValuePopup();
+    }
+
     requestBackgroundCacheRebuild();
 }
 
@@ -919,6 +926,7 @@ void FireAudioProcessorEditor::enablementChanged()
     if (! isEnabled())
     {
         tooltipWindow.hideTip();
+        hideValuePopup();
         if (isLfoAssignMode)
             exitAssignMode(false);
         lfoPanel.clearAssignFeedback();
@@ -2213,25 +2221,50 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
 
 void FireAudioProcessorEditor::showValuePopupForSlider(ModulatableSlider* slider)
 {
+    valuePopupOwner = slider;
+    if (! updateValuePopupContentAndBounds(slider))
+    {
+        hideValuePopup();
+        return;
+    }
+
     valuePopup.setVisible(true);
-    updateValuePopupForSlider(slider);
 }
 
 void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slider)
 {
-    if (! slider)
+    if (slider == nullptr || valuePopupOwner.getComponent() != slider
+        || ! valuePopup.isVisible())
         return;
 
-    auto paramID = slider->getParamID();
+    if (! updateValuePopupContentAndBounds(slider))
+        hideValuePopup();
+}
+
+bool FireAudioProcessorEditor::updateValuePopupContentAndBounds(
+    ModulatableSlider* slider)
+{
+    if (slider == nullptr || ! isParentOf(slider))
+        return false;
+
+    for (auto* component = static_cast<juce::Component*>(slider);
+         component != this;
+         component = component->getParentComponent())
+    {
+        if (component == nullptr || ! component->isVisible())
+            return false;
+    }
+
+    const auto paramID = slider->getParamID();
     auto* param = processor.treeState.getParameter(paramID);
-    if (! param)
-        return;
+    if (param == nullptr)
+        return false;
 
     // --- LOGIC FOR EXTREME VALUE DISPLAY ---
     // 1. Get the parameter's base value in its real-world units (e.g., -6.0f for -6dB)
     auto* rawValue = processor.treeState.getRawParameterValue(paramID);
     if (rawValue == nullptr)
-        return;
+        return false;
 
     float baseValue = rawValue->load();
 
@@ -2260,27 +2293,59 @@ void FireAudioProcessorEditor::updateValuePopupForSlider(ModulatableSlider* slid
     float finalNormalizedValue = param->convertTo0to1(extremeValue);
     valuePopup.setText(param->getText(finalNormalizedValue, 0));
 
-    // --- FIX FOR VISIBILITY (remains the same) ---
-    // 5. Get slider's absolute screen bounds
-    auto sliderBounds = slider->getScreenBounds();
+    const auto visualBounds =
+        slider->getModulationHandleVisualBounds().getSmallestIntegerContainer();
+    if (visualBounds.isEmpty())
+        return false;
 
-    // 6. Convert the screen coordinates to be local to this editor component
-    auto localBounds = getLocalArea(nullptr, sliderBounds);
+    const auto handleBounds = getLocalArea(slider, visualBounds);
+    const auto safeScale = std::isfinite(fireLookAndFeel.scale)
+                               ? juce::jmax(0.1f, fireLookAndFeel.scale)
+                               : 1.0f;
+    const auto edgeInset = juce::jmax(1, juce::roundToInt(4.0f * safeScale));
+    auto safeBounds = getLocalBounds().reduced(edgeInset);
+    if (safeBounds.isEmpty())
+        return false;
 
-    int popupWidth = 80;
-    int popupHeight = 20;
+    const auto requestedWidth = juce::jmax(1, juce::roundToInt(80.0f * safeScale));
+    const auto requestedHeight = juce::jmax(1, juce::roundToInt(20.0f * safeScale));
+    const auto popupWidth = juce::jmin(requestedWidth, safeBounds.getWidth());
+    const auto popupHeight = juce::jmin(requestedHeight, safeBounds.getHeight());
+    const auto popupGap = juce::jmax(1, juce::roundToInt(7.0f * safeScale));
 
-    // 7. Set the popup's bounds using the converted local coordinates
-    const auto popupBounds = juce::Rectangle<int>(localBounds.getCentreX() - popupWidth / 2,
-                                                   localBounds.getY() - popupHeight,
-                                                   popupWidth,
-                                                   popupHeight)
-                                 .constrainedWithin(getLocalBounds());
-    valuePopup.setBounds(popupBounds);
+    const auto preferredX = handleBounds.getCentreX() - popupWidth / 2;
+    const auto popupX = juce::jlimit(safeBounds.getX(),
+                                    safeBounds.getRight() - popupWidth,
+                                    preferredX);
+    const auto aboveY = handleBounds.getY() - popupGap - popupHeight;
+    const auto belowY = handleBounds.getBottom() + popupGap;
+
+    int popupY = aboveY;
+    if (aboveY < safeBounds.getY())
+    {
+        if (belowY + popupHeight <= safeBounds.getBottom())
+        {
+            popupY = belowY;
+        }
+        else
+        {
+            const auto roomAbove = handleBounds.getY() - safeBounds.getY();
+            const auto roomBelow = safeBounds.getBottom() - handleBounds.getBottom();
+            popupY = roomBelow > roomAbove ? belowY : aboveY;
+        }
+    }
+
+    popupY = juce::jlimit(safeBounds.getY(),
+                         safeBounds.getBottom() - popupHeight,
+                         popupY);
+    valuePopup.setUiScale(safeScale);
+    valuePopup.setBounds(popupX, popupY, popupWidth, popupHeight);
+    return true;
 }
 
 void FireAudioProcessorEditor::hideValuePopup()
 {
+    valuePopupOwner = nullptr;
     valuePopup.setVisible(false);
 }
 

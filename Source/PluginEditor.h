@@ -156,6 +156,7 @@ private:
     state::StateComponent stateComponent;
 
     ValuePopup valuePopup;
+    juce::Component::SafePointer<ModulatableSlider> valuePopupOwner;
     ValueEntryPopup valueEntryPopup;
     juce::String valueEntryTargetParameterID;
 
@@ -292,6 +293,7 @@ private:
 
     void exitAssignMode(bool showCancellationFeedback = true);
 
+    bool updateValuePopupContentAndBounds(ModulatableSlider* slider);
     void updateModulationStates();
     const std::vector<ModulatableSlider*>& getAllModulatableSliders() const noexcept;
     void refreshModulationSnapshot();

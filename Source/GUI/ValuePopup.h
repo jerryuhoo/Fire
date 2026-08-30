@@ -26,9 +26,11 @@ public:
 
     // Sets the text to be displayed in the popup.
     void setText(const juce::String& text);
+    void setUiScale(float newScale);
 
 private:
     juce::Label valueLabel;
+    float uiScale = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ValuePopup)
 };

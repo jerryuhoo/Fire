@@ -60,8 +60,7 @@ void FreqDividerGroup::resized()
     const float uiScale = juce::jlimit(0.75f, 2.0f, getWidth() / 100.0f);
     margin = 7.5f * uiScale;
     size = 15.0f * uiScale;
-    const int lineHitWidth = juce::jmax(
-        16, juce::roundToInt(getWidth() / 10.0f));
+    const int lineHitWidth = getVerticalLineHitWidth(getWidth());
     verticalLine.setBounds(0, 0, lineHitWidth, getHeight());
     width = verticalLine.getWidth() * 0.5f;
     freqTextLabel.setScale(uiScale);
@@ -77,6 +76,11 @@ void FreqDividerGroup::resized()
                                     juce::jmax(0, getHeight() - labelHeight),
                                     juce::roundToInt(getHeight() / 5.0f + margin));
     freqTextLabel.setBounds(labelX, labelY, labelWidth, labelHeight);
+}
+
+int FreqDividerGroup::getVerticalLineHitWidth(int groupWidth) noexcept
+{
+    return juce::jmax(16, juce::roundToInt(groupWidth / 10.0f));
 }
 
 void FreqDividerGroup::setDeleteState(bool deleteState)

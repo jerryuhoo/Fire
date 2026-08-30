@@ -917,6 +917,73 @@ TEST_CASE("Crossover mouse and text edits bracket host automation gestures",
     }
 }
 
+TEST_CASE("Crossover hit targets remain centred at default and doubled UI sizes",
+          "[multiband][divider][ui][layout][scale][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1000.0f, 0.0f, 0.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+
+    const auto checkLayoutAfterDrag = [&](int editorWidth,
+                                          int editorHeight,
+                                          float targetXPercent)
+    {
+        editor->setBounds(0, 0, editorWidth, editorHeight);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        auto* multiband = findDescendant<Multiband>(*editor);
+        REQUIRE(multiband != nullptr);
+        REQUIRE(multiband->getWidth() > 0);
+        const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+        REQUIRE(dividerGroups[0] != nullptr);
+
+        multiband->dragLines(targetXPercent, 0);
+
+        auto& divider = dividerGroups[0]->getVerticalLine();
+        const float actualCentre =
+            static_cast<float>(dividerGroups[0]->getX())
+            + divider.getBounds().toFloat().getCentreX();
+        const float authoritativeCentre =
+            divider.getXPercent() * static_cast<float>(multiband->getWidth());
+        const float requestedCentre =
+            targetXPercent * static_cast<float>(multiband->getWidth());
+
+        CAPTURE(editorWidth,
+                editorHeight,
+                multiband->getWidth(),
+                dividerGroups[0]->getWidth(),
+                divider.getWidth(),
+                targetXPercent,
+                divider.getXPercent(),
+                requestedCentre,
+                authoritativeCentre,
+                actualCentre);
+
+        // Integer-Hz parameter snapping may move the requested position by a
+        // fraction of a pixel, while integer component bounds can contribute at
+        // most another half pixel. The enlarged hit target must nevertheless
+        // remain centred on the authoritative rail instead of shifting it by
+        // half the difference between the old and new hit widths.
+        CHECK(actualCentre
+              == Catch::Approx(authoritativeCentre).margin(0.51f));
+        CHECK(actualCentre == Catch::Approx(requestedCentre).margin(1.0f));
+
+        const float centreBeforeRelayout = actualCentre;
+        multiband->setLineRelatedBoundsByX();
+        const float centreAfterRelayout =
+            static_cast<float>(dividerGroups[0]->getX())
+            + divider.getBounds().toFloat().getCentreX();
+        CHECK(centreAfterRelayout
+              == Catch::Approx(centreBeforeRelayout).margin(0.001f));
+    };
+
+    checkLayoutAfterDrag(1000, 500, 0.42f);
+    checkLayoutAfterDrag(2000, 1000, 0.64f);
+}
+
 TEST_CASE("Crossover text gestures survive synchronous editor teardown",
           "[multiband][ui][automation][gesture][lifecycle]")
 {

@@ -1060,12 +1060,21 @@ void Multiband::endCrossoverGesture()
 void Multiband::setLineRelatedBoundsByX()
 {
     // set line frequecny and position according to current x percentage of the width
+    const int dividerGroupWidth = getWidth() / 10;
+    const float dividerCentreOffset =
+        FreqDividerGroup::getVerticalLineHitWidth(dividerGroupWidth) * 0.5f;
     for (int i = 0; i < lineNum; i++)
     {
         if (freqDividerGroup[i]->getToggleState())
         {
             float xPercent = freqDividerGroup[i]->getVerticalLine().getXPercent();
-            freqDividerGroup[i]->setBounds(xPercent * getWidth() - getWidth() / 200, 0, getWidth() / 10.0f, getHeight());
+            const int groupX = juce::roundToInt(
+                xPercent * static_cast<float>(getWidth())
+                - dividerCentreOffset);
+            freqDividerGroup[i]->setBounds(groupX,
+                                           0,
+                                           dividerGroupWidth,
+                                           getHeight());
         }
     }
 

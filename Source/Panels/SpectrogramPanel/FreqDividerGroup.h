@@ -49,6 +49,7 @@ public:
 private:
     friend class Multiband;
 
+    static int getVerticalLineHitWidth(int groupWidth) noexcept;
     void beginTopologyReveal(float initialAlpha);
     void snapTopologyReveal(float alpha = 1.0f);
     float getTopologyReveal() const noexcept;

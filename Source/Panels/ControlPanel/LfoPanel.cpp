@@ -2251,6 +2251,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     // --- Setup Brush Selector ---
     addAndMakeVisible(brushSelector);
+    brushSelector.setTitle("LFO brush shape");
+    brushSelector.setTooltip("Choose the shape painted by Brush Mode");
+    brushSelector.setHelpText(brushSelector.getTooltip());
     brushSelector.addItem("Saw Up", (int) LfoPresetShape::SawUp);
     brushSelector.addItem("Saw Down", (int) LfoPresetShape::SawDown);
     brushSelector.addItem("Sine Convex", (int) LfoPresetShape::SineConvex);
@@ -2280,6 +2283,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     styleButton(syncButton, true);
 
     addAndMakeVisible(rateSlider);
+    rateSlider.setTitle("LFO rate");
+    rateSlider.setTooltip("Set the selected LFO rate");
+    rateSlider.setHelpText(rateSlider.getTooltip());
     rateSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     rateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
     rateSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);
@@ -2297,6 +2303,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     rateLabel.setJustificationType(juce::Justification::centred);
 
     addAndMakeVisible(gridXSlider);
+    gridXSlider.setTitle("Horizontal grid divisions");
+    gridXSlider.setTooltip("Set the LFO editor's horizontal grid divisions");
+    gridXSlider.setHelpText(gridXSlider.getTooltip());
     gridXSlider.setSliderStyle(juce::Slider::IncDecButtons);
     gridXSlider.setRange(2, 16, 1);
     gridXSlider.setValue(4);
@@ -2310,6 +2319,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
     gridXLabel.setText("X", juce::dontSendNotification);
 
     addAndMakeVisible(gridYSlider);
+    gridYSlider.setTitle("Vertical grid divisions");
+    gridYSlider.setTooltip("Set the LFO editor's vertical grid divisions");
+    gridYSlider.setHelpText(gridYSlider.getTooltip());
     gridYSlider.setSliderStyle(juce::Slider::IncDecButtons);
     gridYSlider.setRange(2, 16, 1);
     gridYSlider.setValue(4);
@@ -2331,6 +2343,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     // Initialize the smooth slider and label.
     addAndMakeVisible(lfoSmoothSlider);
+    lfoSmoothSlider.setTitle("LFO smoothness");
+    lfoSmoothSlider.setTooltip("Smooth the selected LFO shape");
+    lfoSmoothSlider.setHelpText(lfoSmoothSlider.getTooltip());
     lfoSmoothSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     lfoSmoothSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
     lfoSmoothSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);
@@ -2348,6 +2363,9 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
 
     // Initialize the phase slider and label.
     addAndMakeVisible(lfoPhaseSlider);
+    lfoPhaseSlider.setTitle("LFO phase");
+    lfoPhaseSlider.setTooltip("Offset the selected LFO phase");
+    lfoPhaseSlider.setHelpText(lfoPhaseSlider.getTooltip());
     lfoPhaseSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     lfoPhaseSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, TEXTBOX_WIDTH, TEXTBOX_HEIGHT);
     lfoPhaseSlider.setColour(juce::Slider::rotarySliderFillColourId, fire::ui::colours::modulation);

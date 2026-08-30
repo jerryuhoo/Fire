@@ -132,6 +132,25 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
     addAndMakeVisible(draggablePeakButton);
     addAndMakeVisible(draggableHighButton);
 
+    const auto describeNode = [](DraggableButton& button,
+                                 const juce::String& title,
+                                 const juce::String& tooltip)
+    {
+        button.setTitle(title);
+        button.setTooltip(tooltip);
+        button.setHelpText(tooltip + ". Use arrow keys to adjust frequency "
+                           "and gain; use Page Up or Page Down for resonance");
+    };
+    describeNode(draggableLowButton,
+                 "Low-cut filter frequency",
+                 "Adjust low-cut frequency and gain");
+    describeNode(draggablePeakButton,
+                 "Peak filter frequency",
+                 "Adjust peak-filter frequency and gain");
+    describeNode(draggableHighButton,
+                 "High-cut filter frequency",
+                 "Adjust high-cut frequency and gain");
+
     draggableLowButton.onDrag = [this](DraggableButton& button, const juce::MouseEvent& event)
     {
         handleFilterDrag(button, event, LOW_ID, LOWCUT_FREQ_ID, LOWCUT_GAIN_ID);
@@ -445,7 +464,8 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
     point.x = juce::jlimit(0.0f, maximumX, point.x);
     point.y = juce::jlimit(0.0f, static_cast<float>(getHeight()), point.y);
 
-    const auto buttonSize = juce::jlimit(12.0f, 20.0f, getWidth() * 0.015f);
+    const auto buttonSize = juce::jlimit(20.0f, 24.0f,
+                                         getWidth() * 0.02f);
     juce::Component::SafePointer<FilterControl> safeThis(this);
     button.setBounds(juce::Rectangle<float>(buttonSize, buttonSize)
                          .withCentre(point)
@@ -579,7 +599,8 @@ void FilterControl::setDraggableButtonBounds()
         || lowGain == nullptr || peakGain == nullptr || highGain == nullptr)
         return;
 
-    const auto buttonSize = juce::jlimit(12.0f, 20.0f, getWidth() * 0.015f);
+    const auto buttonSize = juce::jlimit(20.0f, 24.0f,
+                                         getWidth() * 0.02f);
     const auto maximumFrequency =
         maximumUsableDisplayFrequency(processor.getSampleRate());
     const auto pointForValues = [this, maximumFrequency](float frequency, float gain)

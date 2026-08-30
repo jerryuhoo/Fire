@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
 struct DraggableButtonPointerTestAccess
@@ -462,6 +463,8 @@ TEST_CASE("Filter graph drags and Q wheel changes bracket host gestures",
     GlobalPanel panel(processor, {}, {}, {}, {}, {});
     FilterControl control(processor, panel);
     control.setBounds(0, 0, 1000, 400);
+    control.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    control.setVisible(true);
     auto& lowButton = FilterControlTestAccess::lowButton(control);
     REQUIRE_FALSE(lowButton.getBounds().isEmpty());
 
@@ -596,6 +599,52 @@ TEST_CASE("Filter graph nodes reject popup and auxiliary pointer drags",
             juce::ModifierKeys { juce::ModifierKeys::ctrlModifier });
     }
 #endif
+}
+
+TEST_CASE("Filter graph nodes expose distinct names and usable hit targets",
+          "[filter-control][ui][accessibility][layout][hit-test]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    FilterControl control(processor, panel);
+    control.setBounds(0, 0, 1000, 400);
+    control.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    control.setVisible(true);
+
+    const std::array<std::pair<DraggableButton*, juce::String>, 3> nodes {{
+        { &FilterControlTestAccess::lowButton(control),
+          "Low-cut filter frequency" },
+        { &FilterControlTestAccess::peakButton(control),
+          "Peak filter frequency" },
+        { &FilterControlTestAccess::highButton(control),
+          "High-cut filter frequency" }
+    }};
+
+    for (const auto& [node, expectedTitle] : nodes)
+    {
+        REQUIRE(node != nullptr);
+        CHECK(node->getWidth() >= 20);
+        CHECK(node->getHeight() >= 20);
+        CHECK(node->getTitle() == expectedTitle);
+        REQUIRE_FALSE(node->getTooltip().isEmpty());
+
+        auto* accessibility = node->getAccessibilityHandler();
+        REQUIRE(accessibility != nullptr);
+        CHECK(accessibility->getRole() == juce::AccessibilityRole::slider);
+        CHECK(accessibility->getTitle() == expectedTitle);
+        CHECK(accessibility->getHelp().containsIgnoreCase("arrow"));
+    }
+
+    control.setBounds(0, 0, 320, 160);
+    for (const auto& [node, expectedTitle] : nodes)
+    {
+        juce::ignoreUnused(expectedTitle);
+        CHECK(node->getWidth() >= 20);
+        CHECK(node->getHeight() >= 20);
+    }
 }
 
 TEST_CASE("Filter graph nodes keep a primary drag owned by one pointer source",
@@ -1003,6 +1052,8 @@ TEST_CASE("Filter graph Q wheel survives control release from a host callback",
     GlobalPanel panel(processor, {}, {}, {}, {}, {});
     auto control = std::make_unique<FilterControl>(processor, panel);
     control->setBounds(0, 0, 1000, 400);
+    control->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    control->setVisible(true);
     auto* lowButton = &FilterControlTestAccess::lowButton(*control);
     REQUIRE_FALSE(lowButton->getBounds().isEmpty());
 

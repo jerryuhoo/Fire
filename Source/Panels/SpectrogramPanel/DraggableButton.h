@@ -20,7 +20,8 @@ struct DraggableButtonPointerTestAccess;
 //==============================================================================
 /*
 */
-class DraggableButton : public juce::Component
+class DraggableButton : public juce::Component,
+                        public juce::SettableTooltipClient
 {
 public:
     DraggableButton();

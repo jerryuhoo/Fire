@@ -95,7 +95,7 @@ struct ModulationMatrixRowTestAccess
     static bool isAmountKeyboardFocusVisible(
         const ModulationMatrixRow& row) noexcept
     {
-        return row.amountSlider.keyboardFocusVisible;
+        return row.amountSlider.focusModality.isKeyboardVisible();
     }
 
     static const ModulationMatrixRoutingComboBox& getSourceMenu(
@@ -1933,12 +1933,18 @@ TEST_CASE("Modulation matrix amount distinguishes pointer and keyboard focus",
     auto* amountSlider = findAmountSlider(row);
     REQUIRE(amountSlider != nullptr);
     REQUIRE(amountSlider->isShowing());
+    REQUIRE(amountSlider->getWantsKeyboardFocus());
+    REQUIRE(amountSlider->getMouseClickGrabsKeyboardFocus());
     amountSlider->grabKeyboardFocus();
     REQUIRE(amountSlider->hasKeyboardFocus(true));
     amountSlider->focusGained(juce::Component::focusChangedByTabKey);
     CHECK(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
 
     amountSlider->focusGained(juce::Component::focusChangedByMouseClick);
+    CHECK_FALSE(
+        ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+    amountSlider->focusLost(juce::Component::focusChangedDirectly);
+    amountSlider->focusGained(juce::Component::focusChangedDirectly);
     CHECK_FALSE(
         ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
 
@@ -1966,11 +1972,13 @@ TEST_CASE("Modulation matrix amount distinguishes pointer and keyboard focus",
     CHECK_FALSE(
         ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
 
+    amountSlider->focusLost(juce::Component::focusChangedDirectly);
+    CHECK_FALSE(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+    amountSlider->keyPressed(juce::KeyPress { juce::KeyPress::escapeKey });
+    REQUIRE(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+    amountSlider->focusLost(juce::Component::focusChangedDirectly);
     amountSlider->focusGained(juce::Component::focusChangedDirectly);
     CHECK(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
-    amountSlider->focusLost(juce::Component::focusChangedDirectly);
-    CHECK_FALSE(
-        ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
 }
 
 TEST_CASE("Modulation matrix row dismissal closes amount and button gestures",

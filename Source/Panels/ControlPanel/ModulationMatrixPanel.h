@@ -169,6 +169,7 @@ private:
                                       public PrimarySliderAnimationState
     {
     public:
+        PrimaryButtonSlider();
         ~PrimaryButtonSlider() override;
         float getHoverAnimation() const noexcept override;
         float getPressAnimation() const noexcept override;
@@ -215,7 +216,7 @@ private:
         int pointerSourceIndex = -1;
         std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
         bool primaryGestureInProgress = false;
-        bool keyboardFocusVisible = false;
+        fire::ui::KeyboardFocusModalityState focusModality;
         bool pointerDispatchInProgress = false;
         bool rebuildAfterPointerDispatch = false;
         bool notifyHostAfterPointerDispatch = false;

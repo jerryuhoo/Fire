@@ -40,7 +40,18 @@ class PrimarySlider : public juce::Slider,
                       public PrimarySliderAnimationState
 {
 public:
-    using juce::Slider::Slider;
+    PrimarySlider() { initialiseKeyboardInteraction(); }
+    explicit PrimarySlider(const juce::String& componentName)
+        : juce::Slider(componentName)
+    {
+        initialiseKeyboardInteraction();
+    }
+    PrimarySlider(juce::Slider::SliderStyle style,
+                  juce::Slider::TextEntryBoxPosition textBoxPosition)
+        : juce::Slider(style, textBoxPosition)
+    {
+        initialiseKeyboardInteraction();
+    }
 
     ~PrimarySlider() override
     {
@@ -282,6 +293,12 @@ public:
 
 private:
     friend struct PrimarySliderTestAccess;
+
+    void initialiseKeyboardInteraction() noexcept
+    {
+        setWantsKeyboardFocus(true);
+        setMouseClickGrabsKeyboardFocus(true);
+    }
 
     std::unique_ptr<juce::AccessibilityHandler>
     createAccessibilityHandler() override

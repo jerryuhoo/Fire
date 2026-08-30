@@ -202,6 +202,8 @@ TEST_CASE("PrimarySlider focus presentation follows keyboard modality",
     slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     slider.setVisible(true);
     REQUIRE(slider.isShowing());
+    REQUIRE(slider.getWantsKeyboardFocus());
+    REQUIRE(slider.getMouseClickGrabsKeyboardFocus());
 
     slider.focusGained(
         juce::Component::FocusChangeType::focusChangedDirectly);

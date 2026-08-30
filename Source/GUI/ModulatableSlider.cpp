@@ -21,6 +21,9 @@ constexpr float modulationHandleMinimumHitDiameter = 20.0f;
 
 ModulatableSlider::ModulatableSlider()
 {
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(true);
+
     // Default values
     parameterID = "";
     lfoSource = 0;

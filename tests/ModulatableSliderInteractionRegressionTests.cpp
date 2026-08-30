@@ -1325,9 +1325,8 @@ TEST_CASE("Modulatable knob focus presentation follows keyboard modality",
     slider.setRange(0.0, 1.0, 0.01);
     slider.setValue(0.5, juce::dontSendNotification);
     slider.setBounds(0, 0, 120, 120);
-    // This test isolates modality restoration. Production Slider keyboard
-    // reachability is covered separately from the focus-state machine.
-    slider.setWantsKeyboardFocus(true);
+    REQUIRE(slider.getWantsKeyboardFocus());
+    REQUIRE(slider.getMouseClickGrabsKeyboardFocus());
     host.setBounds(0, 0, 120, 120);
     host.addAndMakeVisible(slider);
     host.addToDesktop(juce::ComponentPeer::windowIsTemporary);

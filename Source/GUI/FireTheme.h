@@ -71,6 +71,11 @@ inline juce::PopupMenu::Options prepareContextMenu(
     juce::Component& target,
     juce::Point<int> screenPosition)
 {
+    // JUCE chooses the MenuWindow opacity, peer flags and initial metrics
+    // before attaching it to an optional parent component. Bind the target
+    // theme up front so those decisions cannot fall back to the stock UI.
+    menu.setLookAndFeel(&target.getLookAndFeel());
+
     auto options = juce::PopupMenu::Options()
                        .withTargetComponent(target)
                        .withTargetScreenArea(
@@ -82,18 +87,7 @@ inline juce::PopupMenu::Options prepareContextMenu(
 
     if (auto* topLevel = target.getTopLevelComponent();
         topLevel != nullptr && topLevel != &target)
-    {
-        // A child MenuWindow inherits the editor theme without borrowing a
-        // raw LookAndFeel pointer that could outlive the editor instance.
-        menu.setLookAndFeel(nullptr);
         options = options.withParentComponent(topLevel);
-    }
-    else
-    {
-        // Desktop menus have no parent from which to inherit a theme. The
-        // deletion check above keeps their lifetime tied to the target.
-        menu.setLookAndFeel(&target.getLookAndFeel());
-    }
 
     return options;
 }

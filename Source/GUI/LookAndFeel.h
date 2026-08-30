@@ -128,6 +128,27 @@ public:
 
     juce::Font getPopupMenuFont() override { return fire::ui::bodyFont(13.0f * scale); }
 
+    int getPopupMenuBorderSize() override
+    {
+        // drawPopupMenuBackground already owns the rounded hairline. A
+        // parented JUCE MenuWindow otherwise draws an additional square
+        // resizable frame around that surface.
+        return 0;
+    }
+
+    void preparePopupMenuWindow(juce::Component& menuWindow) override
+    {
+        auto* parent = menuWindow.getParentComponent();
+        if (parent != nullptr && &parent->getLookAndFeel() == this)
+        {
+            // The explicit theme was needed while JUCE constructed the menu.
+            // Once it is parented, inherit the same theme instead so a host
+            // closing the editor cannot leave a live weak reference that
+            // trips LookAndFeel's destruction assertion.
+            menuWindow.setLookAndFeel(nullptr);
+        }
+    }
+
     juce::Rectangle<int> getTooltipBounds(const juce::String& text,
                                           juce::Point<int> screenPosition,
                                           juce::Rectangle<int> parentArea) override

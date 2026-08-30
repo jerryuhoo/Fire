@@ -5,6 +5,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
+
 namespace
 {
 juce::MouseEvent makePopupMouseEvent(juce::Component& component,
@@ -49,6 +51,19 @@ void dismissMenus()
     juce::PopupMenu::dismissAllActiveMenus();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 }
+
+std::uint64_t imageFingerprint(const juce::Image& image)
+{
+    std::uint64_t fingerprint = 1469598103934665603ull;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            fingerprint ^= image.getPixelAt(x, y).getARGB();
+            fingerprint *= 1099511628211ull;
+        }
+
+    return fingerprint;
+}
 } // namespace
 
 TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
@@ -81,6 +96,68 @@ TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
         CHECK_FALSE(options.hasWatchedComponentBeenDeleted());
         CHECK_FALSE(lookAndFeel.findColour(
             juce::PopupMenu::backgroundColourId).isOpaque());
+        CHECK(lookAndFeel.getPopupMenuBorderSize() == 0);
+    }
+
+    SECTION("Fire owns the complete rounded menu surface")
+    {
+        juce::Image background(juce::Image::ARGB, 180, 84, true);
+        juce::Graphics backgroundGraphics(background);
+        lookAndFeel.drawPopupMenuBackground(
+            backgroundGraphics, background.getWidth(), background.getHeight());
+
+        CHECK(background.getPixelAt(0, 0).getAlpha() == 0);
+        CHECK(background.getPixelAt(background.getWidth() / 2,
+                                    background.getHeight() / 2).getAlpha() > 0);
+
+        juce::Image idleItem(juce::Image::ARGB, 180, 34, true);
+        juce::Graphics idleGraphics(idleItem);
+        lookAndFeel.drawPopupMenuItem(idleGraphics,
+                                      idleItem.getBounds(),
+                                      false,
+                                      true,
+                                      false,
+                                      false,
+                                      false,
+                                      "Assign modulation",
+                                      {},
+                                      nullptr,
+                                      nullptr);
+
+        juce::Image highlightedItem(juce::Image::ARGB, 180, 34, true);
+        juce::Graphics highlightedGraphics(highlightedItem);
+        lookAndFeel.drawPopupMenuItem(highlightedGraphics,
+                                      highlightedItem.getBounds(),
+                                      false,
+                                      true,
+                                      true,
+                                      false,
+                                      false,
+                                      "Assign modulation",
+                                      {},
+                                      nullptr,
+                                      nullptr);
+
+        CHECK(imageFingerprint(highlightedItem)
+              != imageFingerprint(idleItem));
+        CHECK(highlightedItem.getPixelAt(8, highlightedItem.getHeight() / 2)
+                  .getAlpha() > 0);
+    }
+
+    SECTION("parented menus release their explicit theme after construction")
+    {
+        juce::Component simulatedMenuWindow;
+        root.addAndMakeVisible(simulatedMenuWindow);
+        simulatedMenuWindow.setLookAndFeel(&lookAndFeel);
+        REQUIRE(&simulatedMenuWindow.getLookAndFeel() == &lookAndFeel);
+
+        lookAndFeel.preparePopupMenuWindow(simulatedMenuWindow);
+        root.setLookAndFeel(nullptr);
+        CHECK(&simulatedMenuWindow.getLookAndFeel()
+              == &juce::LookAndFeel::getDefaultLookAndFeel());
+
+        root.setLookAndFeel(&lookAndFeel);
+        CHECK(&simulatedMenuWindow.getLookAndFeel() == &lookAndFeel);
     }
 
     SECTION("slider assignment menu is an editor-owned themed child")

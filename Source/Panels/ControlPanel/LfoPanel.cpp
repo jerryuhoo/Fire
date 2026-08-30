@@ -409,8 +409,8 @@ void LfoEditor::handleContextMenuResult(
                 return;
             activeLfoData = context.sourceData;
             activeDataContext = context.dataContext;
-            clearAllPoints();
-            publishCurrentData();
+            if (clearAllPoints())
+                publishCurrentData();
             return;
         case CommandIDs::copy:
             if (context.copyWasEnabled)
@@ -420,8 +420,8 @@ void LfoEditor::handleContextMenuResult(
             if (! context.pasteWasEnabled
                 || ! context.clipboardData.has_value())
                 return;
-            setDataToDisplay(*context.clipboardData, context.dataContext);
-            publishCurrentData();
+            if (replaceShape(*context.clipboardData, context.dataContext))
+                publishCurrentData();
             return;
         case CommandIDs::invertX:
             if (! context.invertWasEnabled)
@@ -2035,8 +2035,8 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
         && (key.isKeyCode(juce::KeyPress::deleteKey)
             || key.isKeyCode(juce::KeyPress::backspaceKey)))
     {
-        deleteSelectedPoints();
-        publishActiveData();
+        if (deleteSelectedPoints())
+            publishActiveData();
         return true;
     }
     return false;
@@ -2049,22 +2049,27 @@ LfoEditor::createAccessibilityHandler()
     return std::make_unique<LfoEditorAccessibilityHandler>(*this);
 }
 
-void LfoEditor::deleteSelectedPoints()
+bool LfoEditor::deleteSelectedPoints()
 {
     if (! dataIsActive || selectedPointIndices.empty())
-        return;
+        return false;
 
     auto indicesToDelete = selectedPointIndices;
     cancelAllInteraction();
     std::sort(indicesToDelete.rbegin(), indicesToDelete.rend());
+    bool shapeChanged = false;
     for (int index : indicesToDelete)
     {
         if (isValidPointIndex(index)
             && index > 0
             && index < static_cast<int>(activeLfoData.points.size()) - 1)
+        {
             removePoint(index);
+            shapeChanged = true;
+        }
     }
     repaint();
+    return shapeChanged;
 }
 
 //==============================================================================
@@ -2562,6 +2567,7 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             return;
         }
 
+        const bool shapeChanged = resultingRevision != context.revision;
         if (! lfoEditor.updateDataContextRevision(context,
                                                    resultingRevision))
         {
@@ -2577,10 +2583,15 @@ LfoPanel::LfoPanel(FireAudioProcessor& p) : processor(p)
             lfoEditor.setSmoothness(
                 smoothness->load(std::memory_order_relaxed));
 
-        // Notify the main editor that a change has occurred (e.g., to mark preset as dirty)
-        auto callback = onDataChanged;
-        if (callback)
-            callback();
+        // An accepted compare-and-set can be a shape no-op. In that case the
+        // revision is deliberately unchanged, so do not emit a host state
+        // notification or mark the current preset dirty.
+        if (shapeChanged)
+        {
+            auto callback = onDataChanged;
+            if (callback)
+                callback();
+        }
     };
 
     // Create UI Components
@@ -3729,14 +3740,22 @@ void LfoEditor::selectAllPoints()
     repaint();
 }
 
-void LfoEditor::clearAllPoints()
+bool LfoEditor::clearAllPoints()
 {
     if (! dataIsActive)
-        return;
+        return false;
 
+    const auto oldPoints = activeLfoData.points;
+    const auto oldCurvatures = activeLfoData.curvatures;
+    const auto smoothness = activeLfoData.smoothness;
     cancelAllInteraction();
     activeLfoData.resetToDefault();
     repaint();
+    const bool shapeChanged = activeLfoData.points != oldPoints
+                           || activeLfoData.curvatures != oldCurvatures;
+    if (! shapeChanged)
+        activeLfoData.smoothness = smoothness;
+    return shapeChanged;
 }
 
 void LfoEditor::copyShape()
@@ -3751,14 +3770,34 @@ bool LfoEditor::canPasteShape() const noexcept
     return dataIsActive && lfoClipboard.has_value();
 }
 
+bool LfoEditor::replaceShape(const LfoData& replacement,
+                             DataContext dataContext)
+{
+    if (! dataIsActive)
+        return false;
+
+    const auto oldPoints = activeLfoData.points;
+    const auto oldCurvatures = activeLfoData.curvatures;
+    const auto smoothness = activeLfoData.smoothness;
+    setDataToDisplay(replacement, dataContext);
+
+    const bool shapeChanged = activeLfoData.points != oldPoints
+                           || activeLfoData.curvatures != oldCurvatures;
+    // Smoothness is an APVTS parameter. Preserve the editor's authoritative
+    // value when an identical paste has no manager publication through which
+    // LfoPanel could restore it. A real paste retains its existing behaviour.
+    if (! shapeChanged)
+        activeLfoData.smoothness = smoothness;
+    return shapeChanged;
+}
+
 bool LfoEditor::pasteShape()
 {
     if (! canPasteShape())
         return false;
 
     const auto context = activeDataContext;
-    setDataToDisplay(*lfoClipboard, context);
-    return true;
+    return replaceShape(*lfoClipboard, context);
 }
 
 void LfoEditor::invertShape(bool invertX, bool invertY)

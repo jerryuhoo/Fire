@@ -178,7 +178,7 @@ private:
     juce::Point<float> toNormalized(juce::Point<int> localPoint);
     juce::Point<float> fromNormalized(juce::Point<float> normalizedPoint);
 
-    void deleteSelectedPoints();
+    bool deleteSelectedPoints();
     bool canAcceptPointKeyboardInput() const noexcept;
     bool selectAdjacentPoint(bool moveBackwards);
     bool nudgeSelectedPoints(juce::Point<float> requestedDelta);
@@ -256,9 +256,10 @@ private:
 #endif
 
     void selectAllPoints();
-    void clearAllPoints();
+    bool clearAllPoints();
     void copyShape();
     bool canPasteShape() const noexcept;
+    bool replaceShape(const LfoData& replacement, DataContext dataContext);
     bool pasteShape();
     void invertShape(bool invertX, bool invertY);
 };

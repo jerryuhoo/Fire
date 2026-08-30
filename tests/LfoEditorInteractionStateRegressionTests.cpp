@@ -188,6 +188,11 @@ struct LfoEditorTestAccess
         editor.addPoint(point);
     }
 
+    static void publishActiveData(LfoEditor& editor)
+    {
+        editor.publishActiveData();
+    }
+
     static void invertHorizontally(LfoEditor& editor)
     {
         editor.invertShape(true, false);
@@ -489,6 +494,38 @@ struct ScopedLfoClipboardReset
     ~ScopedLfoClipboardReset() { lfoClipboard.reset(); }
 };
 
+class NonParameterChangeCapture final
+    : public juce::AudioProcessorListener
+{
+public:
+    explicit NonParameterChangeCapture(
+        FireAudioProcessor& processorToObserve)
+        : processor(processorToObserve)
+    {
+        processor.addListener(this);
+    }
+
+    ~NonParameterChangeCapture() override
+    {
+        processor.removeListener(this);
+    }
+
+    void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override
+    {
+    }
+
+    void audioProcessorChanged(
+        juce::AudioProcessor*,
+        const juce::AudioProcessorListener::ChangeDetails& details) override
+    {
+        if (details.nonParameterStateChanged)
+            ++notificationCount;
+    }
+
+    FireAudioProcessor& processor;
+    int notificationCount = 0;
+};
+
 struct DeletingLfoCallbackState
 {
     int liveCallbackInstances = 0;
@@ -785,6 +822,170 @@ TEST_CASE("LFO deletion shortcuts use the delivered key event",
     {
         checkDeletionKey(juce::KeyPress::backspaceKey);
     }
+}
+
+TEST_CASE("No-op LFO shape commands do not publish editor data",
+          "[lfo][editor][command][noop][regression]")
+{
+    ScopedLfoClipboardReset resetClipboard;
+    LfoEditor editor;
+    prepareEditor(editor);
+
+    LfoData defaultShape;
+    defaultShape.smoothness = 0.63f;
+    editor.setDataToDisplay(defaultShape);
+
+    int publicationCount = 0;
+    editor.onDataChanged = [&](const LfoData&)
+    {
+        ++publicationCount;
+    };
+
+    SECTION("Delete on the fixed first endpoint")
+    {
+        LfoEditorTestAccess::selectPoint(editor, 0);
+        CHECK(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::deleteKey }));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), defaultShape);
+    }
+
+    SECTION("Backspace on the fixed last endpoint")
+    {
+        LfoEditorTestAccess::selectPoint(editor, 1);
+        CHECK(editor.keyPressed(
+            juce::KeyPress { juce::KeyPress::backspaceKey }));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), defaultShape);
+    }
+
+    SECTION("Clear on the default shape")
+    {
+        auto handler =
+            LfoEditorTestAccess::createContextMenuResultHandler(editor);
+        handler(LfoEditor::CommandIDs::clear);
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), defaultShape);
+    }
+
+    SECTION("Keyboard paste of the identical shape")
+    {
+        auto identicalShape = defaultShape;
+        identicalShape.smoothness = 0.12f;
+        lfoClipboard = identicalShape;
+
+        CHECK(editor.keyPressed(commandKey('v')));
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), defaultShape);
+    }
+
+    SECTION("Context-menu paste of the identical shape")
+    {
+        auto identicalShape = defaultShape;
+        identicalShape.smoothness = 0.12f;
+        lfoClipboard = identicalShape;
+        auto handler =
+            LfoEditorTestAccess::createContextMenuResultHandler(editor);
+
+        handler(LfoEditor::CommandIDs::paste);
+        CHECK(publicationCount == 0);
+        checkSameLfoData(LfoEditorTestAccess::data(editor), defaultShape);
+    }
+
+    SECTION("A genuinely different paste still publishes once")
+    {
+        auto differentShape = makeLfoData({
+            { 0.0f, 0.15f }, { 0.45f, 0.85f }, { 1.0f, 0.25f }
+        });
+        differentShape.curvatures = { -0.35f, 0.70f };
+        differentShape.smoothness = 0.21f;
+        lfoClipboard = differentShape;
+
+        CHECK(editor.keyPressed(commandKey('v')));
+        CHECK(publicationCount == 1);
+        checkSameLfoData(LfoEditorTestAccess::data(editor),
+                         differentShape);
+    }
+}
+
+TEST_CASE("No-op LFO commands do not notify the host or dirty the preset",
+          "[lfo][editor][panel][host][noop][transaction][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedLfoClipboardReset resetClipboard;
+    FireAudioProcessor processor;
+
+    const auto smoothnessID =
+        ParameterIDAndName::getIDString(LFO_SMOOTH_ID, 0);
+    auto* smoothnessParameter =
+        processor.treeState.getParameter(smoothnessID);
+    REQUIRE(smoothnessParameter != nullptr);
+    constexpr float authoritativeSmoothness = 0.63f;
+    smoothnessParameter->setValueNotifyingHost(
+        smoothnessParameter->convertTo0to1(authoritativeSmoothness));
+
+    LfoData defaultShape;
+    defaultShape.smoothness = authoritativeSmoothness;
+    processor.getLfoManager().setLfoData(0, defaultShape);
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+
+    NonParameterChangeCapture hostChanges(processor);
+    int dirtyCount = 0;
+    panel.setOnDataChangedCallback([&]
+    {
+        ++dirtyCount;
+        processor.lfoDataHasChanged();
+    });
+
+    const auto initialSnapshot =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+
+    LfoEditorTestAccess::selectPoint(*editor, 0);
+    CHECK(editor->keyPressed(
+        juce::KeyPress { juce::KeyPress::deleteKey }));
+
+    LfoEditorTestAccess::selectPoint(*editor, 1);
+    CHECK(editor->keyPressed(
+        juce::KeyPress { juce::KeyPress::backspaceKey }));
+
+    auto clearHandler =
+        LfoEditorTestAccess::createContextMenuResultHandler(*editor);
+    clearHandler(LfoEditor::CommandIDs::clear);
+
+    auto identicalShape = defaultShape;
+    identicalShape.smoothness = 0.12f;
+    lfoClipboard = identicalShape;
+    CHECK(editor->keyPressed(commandKey('v')));
+
+    // The panel also guards against any accidental accepted no-op
+    // publication by comparing the manager's resulting revision.
+    LfoEditorTestAccess::publishActiveData(*editor);
+
+    const auto afterNoOps =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    CHECK(afterNoOps.revision == initialSnapshot.revision);
+    CHECK(dirtyCount == 0);
+    CHECK(hostChanges.notificationCount == 0);
+    checkSameLfoData(afterNoOps.data, initialSnapshot.data);
+    checkSameLfoData(LfoEditorTestAccess::data(*editor),
+                     initialSnapshot.data);
+
+    LfoEditorTestAccess::addPoint(*editor, { 0.5f, 0.8f });
+    LfoEditorTestAccess::publishActiveData(*editor);
+
+    const auto changedSnapshot =
+        processor.getLfoManager().getLfoDataSnapshot(0);
+    CHECK(changedSnapshot.revision != initialSnapshot.revision);
+    CHECK(changedSnapshot.data.points.size() == 3);
+    CHECK(editor->getDataContext().revision == changedSnapshot.revision);
+    CHECK(dirtyCount == 1);
+    CHECK(hostChanges.notificationCount == 1);
+    checkSameLfoData(LfoEditorTestAccess::data(*editor),
+                     changedSnapshot.data);
 }
 
 TEST_CASE("LFO editor exposes its control-point keyboard state to accessibility",

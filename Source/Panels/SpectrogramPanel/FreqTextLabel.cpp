@@ -10,8 +10,8 @@
 
 #include "FreqTextLabel.h"
 #include "../../Utility/AudioHelpers.h"
-#include <cerrno>
-#include <cstdlib>
+#include "../../Utility/StrictNumberParser.h"
+#include <cmath>
 #include <optional>
 
 namespace
@@ -39,12 +39,8 @@ std::optional<double> parseFrequencyText(juce::String text)
     if (text.isEmpty())
         return std::nullopt;
 
-    const char* parseBegin = text.toRawUTF8();
-    char* parseEnd = nullptr;
-    errno = 0;
-    const double parsedValue = std::strtod(parseBegin, &parseEnd);
-    if (parseEnd == parseBegin || *parseEnd != '\0' || errno == ERANGE
-        || ! std::isfinite(parsedValue))
+    double parsedValue = 0.0;
+    if (! fire::utility::parseStrictFiniteDouble(text, parsedValue))
         return std::nullopt;
 
     const double frequency = parsedValue * multiplier;

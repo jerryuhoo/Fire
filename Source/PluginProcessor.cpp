@@ -10,9 +10,8 @@
 #include "PluginProcessor.h"
 #include "DSP/DistortionLogic.h"
 #include "PluginEditor.h"
-#include <cerrno>
+#include "Utility/StrictNumberParser.h"
 #include <cmath>
-#include <cstdlib>
 #include <limits>
 #include <utility>
 
@@ -26,20 +25,7 @@ namespace
 {
 bool parseStrictFiniteDouble(const juce::String& textToParse, double& result) noexcept
 {
-    const auto trimmed = textToParse.trim();
-    if (trimmed.isEmpty())
-        return false;
-
-    const auto utf8 = trimmed.toRawUTF8();
-    char* end = nullptr;
-    errno = 0;
-    const auto parsed = std::strtod(utf8, &end);
-    if (end == utf8 || end == nullptr || *end != '\0'
-        || errno == ERANGE || ! std::isfinite(parsed))
-        return false;
-
-    result = parsed;
-    return true;
+    return fire::utility::parseStrictFiniteDouble(textToParse, result);
 }
 
 bool parseStrictNonNegativeIntegerAttribute(const juce::XmlElement& xml,

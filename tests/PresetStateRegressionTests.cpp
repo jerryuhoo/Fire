@@ -1,6 +1,7 @@
 #include "../Source/PluginProcessor.h"
 #include "../Source/PluginEditor.h"
 #include "../Source/Panels/TopPanel/Preset.h"
+#include "helpers/ScopedNumericLocale.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -2245,6 +2246,52 @@ TEST_CASE("Invalid numeric preset attributes fall back safely",
     state::loadStateFromXml(malformedPreset, processor);
 
     CHECK(mix->getValue() == Catch::Approx(expectedDefault));
+}
+
+TEST_CASE("Preset and host state keep dot-decimal syntax under comma locales",
+          "[preset][state][host][locale][roundtrip]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor source;
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+    setPlainParameter(source, driveID, 37.25f);
+    source.assignLfoToTarget(2, driveID);
+    source.setModulationDepth(driveID, -0.375f);
+
+    juce::XmlElement preset { "WINGSFIRE" };
+    state::saveStateToXml(source, preset);
+    juce::MemoryBlock hostState;
+    source.getStateInformation(hostState);
+    REQUIRE(hostState.getSize() > 0);
+
+    fire::test::ScopedCommaNumericLocale numericLocale;
+    if (! numericLocale.activate())
+        SKIP("No comma-decimal LC_NUMERIC locale is installed");
+
+    FireAudioProcessor presetRestored;
+    REQUIRE(state::loadStateFromXml(preset, presetRestored));
+    CHECK(getPlainParameter(presetRestored, driveID)
+          == Catch::Approx(37.25f));
+    const auto presetRoutings =
+        presetRestored.getLfoManager().getModulationRoutingsCopy();
+    const auto* presetRouting = findRouting(
+        presetRoutings, driveID);
+    REQUIRE(presetRouting != nullptr);
+    CHECK(presetRouting->sourceLfoIndex == 2);
+    CHECK(presetRouting->depth == Catch::Approx(-0.375f));
+
+    FireAudioProcessor hostRestored;
+    hostRestored.setStateInformation(
+        hostState.getData(), static_cast<int>(hostState.getSize()));
+    CHECK(getPlainParameter(hostRestored, driveID)
+          == Catch::Approx(37.25f));
+    const auto hostRoutings =
+        hostRestored.getLfoManager().getModulationRoutingsCopy();
+    const auto* hostRouting = findRouting(
+        hostRoutings, driveID);
+    REQUIRE(hostRouting != nullptr);
+    CHECK(hostRouting->sourceLfoIndex == 2);
+    CHECK(hostRouting->depth == Catch::Approx(-0.375f));
 }
 
 TEST_CASE("Versioned presets reject incomplete snapshots atomically",

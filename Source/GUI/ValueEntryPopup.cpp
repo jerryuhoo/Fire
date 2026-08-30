@@ -1,23 +1,14 @@
 #include "ValueEntryPopup.h"
 #include "InterfaceDefines.h"
-#include <cerrno>
+#include "../Utility/StrictNumberParser.h"
 #include <cmath>
-#include <cstdlib>
 
 namespace
 {
 bool parseStrictFiniteDouble(const juce::String& text, double& value) noexcept
 {
-    const auto trimmed = text.trim();
-    if (trimmed.isEmpty())
-        return false;
-
-    const auto first = trimmed.toRawUTF8();
-    char* last = nullptr;
-    errno = 0;
-    const auto parsed = std::strtod(first, &last);
-    if (last == first || last == nullptr || *last != '\0'
-        || errno == ERANGE || ! std::isfinite(parsed)
+    double parsed = 0.0;
+    if (! fire::utility::parseStrictFiniteDouble(text, parsed)
         || ! std::isfinite(static_cast<float>(parsed)))
         return false;
 

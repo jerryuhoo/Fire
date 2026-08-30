@@ -3,6 +3,7 @@
 #include <GUI/ValueEntryPopup.h>
 #include <PluginEditor.h>
 #include <PluginProcessor.h>
+#include "helpers/ScopedNumericLocale.h"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -276,6 +277,35 @@ TEST_CASE("Value entry popup rejects incomplete and non-finite numbers",
           == fire::ui::colours::hairline);
     CHECK_FALSE(popup.isVisible());
     CHECK(ValueEntryPopupTestAccess::text(popup).isEmpty());
+}
+
+TEST_CASE("Value entry popup keeps dot-decimal syntax under comma locales",
+          "[ui][modulation][value-entry][validation][locale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    fire::test::ScopedCommaNumericLocale numericLocale;
+    if (! numericLocale.activate())
+        SKIP("No comma-decimal LC_NUMERIC locale is installed");
+
+    ValueEntryPopup popup;
+    double acceptedValue = 0.0;
+    int acceptedCount = 0;
+    popup.onOk = [&](double value)
+    {
+        acceptedValue = value;
+        ++acceptedCount;
+    };
+
+    ValueEntryPopupTestAccess::open(popup);
+    ValueEntryPopupTestAccess::setText(popup, "6.25");
+    REQUIRE(ValueEntryPopupTestAccess::submit(popup));
+    CHECK(acceptedCount == 1);
+    CHECK(acceptedValue == Catch::Approx(6.25));
+
+    ValueEntryPopupTestAccess::open(popup);
+    ValueEntryPopupTestAccess::setText(popup, "6,25");
+    CHECK_FALSE(ValueEntryPopupTestAccess::submit(popup));
+    CHECK(acceptedCount == 1);
 }
 
 TEST_CASE("Value entry popup completes each session at most once",

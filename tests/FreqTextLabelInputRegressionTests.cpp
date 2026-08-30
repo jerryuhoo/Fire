@@ -1,7 +1,9 @@
 #include <Panels/SpectrogramPanel/FreqTextLabel.h>
+#include "helpers/ScopedNumericLocale.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -20,6 +22,18 @@ struct PrimaryEditableLabelTestAccess
     {
         label.pointerSourceType = type;
         label.pointerSourceIndex = index;
+    }
+
+    static bool commitEditorText(PrimaryEditableLabel& label,
+                                 const juce::String& text)
+    {
+        auto* editor = label.getCurrentTextEditor();
+        if (editor == nullptr)
+            return false;
+
+        editor->setText(text, false);
+        label.textEditorReturnKeyPressed(*editor);
+        return true;
     }
 };
 
@@ -309,6 +323,55 @@ TEST_CASE("Frequency label single and double click edit modes keep JUCE semantic
 
         CHECK_FALSE(label->isBeingEdited());
     }
+}
+
+TEST_CASE("Frequency labels keep dot-decimal syntax under comma locales",
+          "[frequency-label][ui][input][validation][locale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    fire::test::ScopedCommaNumericLocale numericLocale;
+    if (! numericLocale.activate())
+        SKIP("No comma-decimal LC_NUMERIC locale is installed");
+
+    VerticalLine divider;
+    divider.setRange(40.0, 10024.0, 1.0);
+    divider.setValue(1000.0, juce::dontSendNotification);
+    auto frequencyLabel = std::make_unique<FreqTextLabel>(divider);
+    juce::Component desktopHost;
+    desktopHost.setBounds(0, 0, 140, 64);
+    desktopHost.setVisible(false);
+    desktopHost.addAndMakeVisible(*frequencyLabel);
+    frequencyLabel->setBounds(0, 0, 90, 24);
+    frequencyLabel->setFreq(1000);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+
+    int editCalls = 0;
+    float lastNormalisedFrequency = 0.0f;
+    divider.setParameterGestureCallbacks(
+        [] {},
+        [] { return std::make_shared<int>(0); },
+        [] {});
+    frequencyLabel->setFrequencyEditCallback(
+        [&](float normalisedFrequency)
+        {
+            ++editCalls;
+            lastNormalisedFrequency = normalisedFrequency;
+        });
+
+    auto* label = dynamic_cast<PrimaryEditableLabel*>(
+        findDescendant<juce::Label>(*frequencyLabel));
+    REQUIRE(label != nullptr);
+    label->showEditor();
+    REQUIRE(PrimaryEditableLabelTestAccess::commitEditorText(
+        *label, "2.5 kHz"));
+    CHECK(editCalls == 1);
+    CHECK(std::isfinite(lastNormalisedFrequency));
+
+    label->showEditor();
+    REQUIRE(PrimaryEditableLabelTestAccess::commitEditorText(
+        *label, "2,5 kHz"));
+    CHECK(editCalls == 1);
 }
 
 TEST_CASE("Frequency label lifecycle focus loss discards hidden or disabled text",

@@ -10,8 +10,8 @@
 
 #include "Preset.h"
 #include "../../PluginProcessor.h"
-#include <cerrno>
-#include <cstdlib>
+#include "../../Utility/StrictNumberParser.h"
+#include <cmath>
 #include <limits>
 #include <utility>
 
@@ -34,19 +34,7 @@ void deleteDialogSynchronously(
 
 bool parseStrictDouble(const juce::String& text, double& result) noexcept
 {
-    const auto trimmed = text.trim();
-    if (trimmed.isEmpty())
-        return false;
-
-    const auto utf8 = trimmed.toRawUTF8();
-    char* end = nullptr;
-    errno = 0;
-    const auto parsed = std::strtod(utf8, &end);
-    if (end == utf8 || end == nullptr || *end != '\0' || errno == ERANGE || ! std::isfinite(parsed))
-        return false;
-
-    result = parsed;
-    return true;
+    return fire::utility::parseStrictFiniteDouble(text, result);
 }
 
 float readNormalisedAttribute(const juce::XmlElement& xml,

@@ -1159,8 +1159,8 @@ private:
                 0.0f, 1.0f, slider.getModulationHandleHoverAnimation());
             const auto press = juce::jlimit(
                 0.0f, 1.0f, slider.getModulationHandlePressAnimation());
-            auto handle = slider.getModulationHandleBounds()
-                              .reduced(press * 0.65f * scale);
+            auto handle = slider.getModulationHandleVisualBounds();
+            handle = handle.expanded(handle.getWidth() * 0.08f * hover);
             const auto accent = modulationAccent;
             const auto useDarkLabel = slider.isEnabled() && ! slider.isBypassed
                                       && hasValidSource;

@@ -9,6 +9,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <set>
@@ -48,6 +49,13 @@ struct ModulatableSliderInteractionTestAccess
     {
         return slider.activePointerGesture
                == ModulatableSlider::PointerGesture::popupMenu;
+    }
+
+    static bool popupTargetsModulationHandle(
+        const ModulatableSlider& slider) noexcept
+    {
+        return slider.popupMenuTarget
+               == ModulatableSlider::PopupMenuTarget::modulationHandle;
     }
 
     static juce::String getPopupTargetParameterID(
@@ -1350,8 +1358,69 @@ TEST_CASE("Modulatable knob focus presentation follows keyboard modality",
     slider.setLookAndFeel(nullptr);
 }
 
+TEST_CASE("Modulation handle geometry follows the rotary endpoint at every knob size",
+          "[modulatable-slider][ui][modulation][geometry][hit-test][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    lookAndFeel.scale = 1.25f;
+    const auto endAngle = juce::MathConstants<float>::pi * 1.5f;
+
+    const auto checkGeometry = [&](int componentSize,
+                                   const juce::String& componentID)
+    {
+        ModulatableSlider slider;
+        slider.setLookAndFeel(&lookAndFeel);
+        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        slider.setRotaryParameters(juce::MathConstants<float>::pi * 0.25f,
+                                   endAngle,
+                                   true);
+        slider.setComponentID(componentID);
+        slider.setBounds(0, 0, componentSize, componentSize);
+        slider.isModulated = true;
+
+        const auto visual = slider.getModulationHandleVisualBounds();
+        const auto hit = slider.getModulationHandleHitBounds();
+        const auto rotaryBounds =
+            lookAndFeel.getSliderLayout(slider).sliderBounds.toFloat();
+        const auto dialBounds = rotaryBounds.reduced(
+            juce::jmax(5.0f, 7.0f * lookAndFeel.scale));
+        const auto dialRadius =
+            juce::jmin(dialBounds.getWidth(), dialBounds.getHeight()) * 0.5f;
+        const auto expectedRadius = dialRadius + visual.getWidth() * 0.5f;
+        const juce::Point<float> expectedCentre {
+            dialBounds.getCentreX() + expectedRadius * std::sin(endAngle),
+            dialBounds.getCentreY() - expectedRadius * std::cos(endAngle)
+        };
+
+        CAPTURE(componentSize, componentID);
+        CHECK(visual.getWidth()
+              == Catch::Approx(12.0f * lookAndFeel.scale));
+        CHECK(visual.getHeight() == Catch::Approx(visual.getWidth()));
+        CHECK(hit.getWidth() >= 20.0f * lookAndFeel.scale);
+        CHECK(hit.getHeight() == Catch::Approx(hit.getWidth()));
+        CHECK(hit.contains(visual));
+        CHECK(hit.getCentreX() == Catch::Approx(expectedCentre.x).margin(0.001));
+        CHECK(hit.getCentreY() == Catch::Approx(expectedCentre.y).margin(0.001));
+        CHECK(visual.getCentreX() < dialBounds.getCentreX());
+
+        slider.setLookAndFeel(nullptr);
+        return visual.getWidth();
+    };
+
+    const auto smallVisualSize = checkGeometry(82, {});
+    const auto driveVisualSize = checkGeometry(200, "drive");
+    CHECK(driveVisualSize == Catch::Approx(smallVisualSize));
+
+    ModulatableSlider unlaidOutSlider;
+    unlaidOutSlider.setLookAndFeel(&lookAndFeel);
+    CHECK(unlaidOutSlider.getModulationHandleVisualBounds().isEmpty());
+    CHECK(unlaidOutSlider.getModulationHandleHitBounds().isEmpty());
+    unlaidOutSlider.setLookAndFeel(nullptr);
+}
+
 TEST_CASE("Modulation handle hover and press feedback animate without changing its hit target",
-          "[modulatable-slider][ui][hover][animation][render]")
+          "[modulatable-slider][ui][hover][animation][render][hit-test]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireLookAndFeel lookAndFeel;
@@ -1362,26 +1431,35 @@ TEST_CASE("Modulation handle hover and press feedback animate without changing i
     slider.isModulated = true;
     slider.lfoSource = 2;
 
-    const auto handle = slider.getModulationHandleBounds();
-    const auto centre = handle.getCentre();
-    REQUIRE(slider.hitTest(juce::roundToInt(centre.x),
-                           juce::roundToInt(centre.y)));
+    const auto idleVisual = slider.getModulationHandleVisualBounds();
+    const auto idleHit = slider.getModulationHandleHitBounds();
+    const juce::Point<float> hitOnlyPoint {
+        idleHit.getCentreX(), idleHit.getBottom() - 1.0f
+    };
+    REQUIRE(idleHit.contains(hitOnlyPoint));
+    REQUIRE_FALSE(idleVisual.contains(hitOnlyPoint));
+    REQUIRE(slider.hitTest(juce::roundToInt(hitOnlyPoint.x),
+                           juce::roundToInt(hitOnlyPoint.y)));
     const auto idleFingerprint = renderFingerprint(slider);
 
-    slider.mouseEnter(makeMouseEvent(slider, centre));
+    slider.mouseEnter(makeMouseEvent(slider, hitOnlyPoint));
     REQUIRE(slider.isModHandleMouseOver);
     REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
     const auto partialHover = slider.getModulationHandleHoverAnimation();
     REQUIRE(partialHover > 0.0f);
     REQUIRE(partialHover < 1.0f);
+    CHECK(slider.getModulationHandleVisualBounds() == idleVisual);
+    CHECK(slider.getModulationHandleHitBounds() == idleHit);
 
     for (int frame = 0; frame < 90; ++frame)
         slider.advanceAnimation(1.0f / 60.0f);
     CHECK(slider.getModulationHandleHoverAnimation()
           == Catch::Approx(1.0f).margin(0.001f));
+    CHECK(slider.getModulationHandleVisualBounds() == idleVisual);
+    CHECK(slider.getModulationHandleHitBounds() == idleHit);
     const auto hoverFingerprint = renderFingerprint(slider);
 
-    slider.mouseDown(makeMouseEvent(slider, centre, primaryButton));
+    slider.mouseDown(makeMouseEvent(slider, hitOnlyPoint, primaryButton));
     REQUIRE(ModulatableSliderInteractionTestAccess::isModulationGesture(
         slider));
     REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
@@ -1390,19 +1468,36 @@ TEST_CASE("Modulation handle hover and press feedback animate without changing i
         slider.advanceAnimation(1.0f / 60.0f);
     CHECK(slider.getModulationHandlePressAnimation()
           == Catch::Approx(1.0f).margin(0.001f));
+    CHECK(slider.getModulationHandleVisualBounds() == idleVisual);
+    CHECK(slider.getModulationHandleHitBounds() == idleHit);
     const auto pressFingerprint = renderFingerprint(slider);
 
     CAPTURE(idleFingerprint, hoverFingerprint, pressFingerprint);
     CHECK(idleFingerprint != hoverFingerprint);
     CHECK(hoverFingerprint != pressFingerprint);
-    CHECK(slider.hitTest(juce::roundToInt(centre.x),
-                         juce::roundToInt(centre.y)));
+    CHECK(slider.hitTest(juce::roundToInt(hitOnlyPoint.x),
+                         juce::roundToInt(hitOnlyPoint.y)));
 
-    slider.mouseUp(makeMouseEvent(slider, centre));
+    slider.mouseUp(makeMouseEvent(slider, hitOnlyPoint));
     const auto pressBeforeRelease =
         slider.getModulationHandlePressAnimation();
     REQUIRE(slider.advanceAnimation(1.0f / 60.0f));
     CHECK(slider.getModulationHandlePressAnimation() < pressBeforeRelease);
+
+    int resetCount = 0;
+    slider.onModulationReset = [&] { ++resetCount; };
+    slider.mouseDoubleClick(makeMouseEvent(
+        slider, hitOnlyPoint, primaryButton, {}, false, 2));
+    CHECK(resetCount == 1);
+
+    slider.mouseDown(makeMouseEvent(
+        slider,
+        hitOnlyPoint,
+        juce::ModifierKeys { juce::ModifierKeys::rightButtonModifier }));
+    REQUIRE(ModulatableSliderInteractionTestAccess::isPopupSequence(slider));
+    CHECK(ModulatableSliderInteractionTestAccess::popupTargetsModulationHandle(
+        slider));
+    slider.dismissTransientInteraction();
 
     slider.setLookAndFeel(nullptr);
 }

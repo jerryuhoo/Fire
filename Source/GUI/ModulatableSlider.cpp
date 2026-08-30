@@ -12,6 +12,13 @@
 #include "LookAndFeel.h"
 #include <cmath>
 
+namespace
+{
+constexpr float modulationHandleVisualDiameter = 12.0f;
+constexpr float modulationHandleHoverGrowth = 0.16f;
+constexpr float modulationHandleMinimumHitDiameter = 20.0f;
+} // namespace
+
 ModulatableSlider::ModulatableSlider()
 {
     // Default values
@@ -151,7 +158,8 @@ bool ModulatableSlider::hitTest(int x, int y)
         return true;
     }
 
-    if (isModulated && getModulationHandleBounds().contains((float) x, (float) y))
+    if (isModulated
+        && getModulationHandleHitBounds().contains((float) x, (float) y))
     {
         return true;
     }
@@ -159,16 +167,45 @@ bool ModulatableSlider::hitTest(int x, int y)
     return false;
 }
 
-juce::Rectangle<float> ModulatableSlider::getModulationHandleBounds() const
+juce::Rectangle<float>
+ModulatableSlider::getModulationHandleVisualBounds() const
 {
-    auto bounds = getRotarySliderBounds().reduced(juce::jmax(5.0f, 7.0f * getUiScale()));
-    auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) / 2.0f;
-    float handleSize = radius * 0.4f;
+    auto bounds = getRotarySliderBounds();
+    if (bounds.isEmpty())
+        return {};
 
-    float handleCenterX = bounds.getCentreX() + (radius * 0.85f);
-    float handleCenterY = bounds.getCentreY() + (radius * 0.85f);
+    bounds = bounds.reduced(juce::jmax(5.0f, 7.0f * getUiScale()));
+    if (bounds.isEmpty())
+        return {};
 
-    return juce::Rectangle<float>(handleSize, handleSize).withCentre({ handleCenterX, handleCenterY });
+    const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
+    const auto handleSize =
+        modulationHandleVisualDiameter * getUiScale();
+    const auto handleRadius = radius + handleSize * 0.5f;
+    const auto endAngle = getRotaryParameters().endAngleRadians;
+    const auto centre = bounds.getCentre();
+    const juce::Point<float> handleCentre {
+        centre.x + handleRadius * std::sin(endAngle),
+        centre.y - handleRadius * std::cos(endAngle)
+    };
+
+    return juce::Rectangle<float>(handleSize, handleSize)
+        .withCentre(handleCentre);
+}
+
+juce::Rectangle<float>
+ModulatableSlider::getModulationHandleHitBounds() const
+{
+    const auto visualBounds = getModulationHandleVisualBounds();
+    if (visualBounds.isEmpty())
+        return {};
+
+    const auto hitSize = juce::jmax(
+        modulationHandleMinimumHitDiameter * getUiScale(),
+        modulationHandleVisualDiameter
+            * (1.0f + modulationHandleHoverGrowth) * getUiScale());
+    return juce::Rectangle<float>(hitSize, hitSize)
+        .withCentre(visualBounds.getCentre());
 }
 
 float ModulatableSlider::getUiScale() const noexcept
@@ -268,7 +305,7 @@ void ModulatableSlider::mouseMove(const juce::MouseEvent& event)
         return;
 
     const bool isOverHandleNow = isModulated
-        && getModulationHandleBounds().contains(event.getPosition().toFloat());
+        && getModulationHandleHitBounds().contains(event.getPosition().toFloat());
 
     if (isOverHandleNow != isModHandleMouseOver)
     {
@@ -353,7 +390,9 @@ void ModulatableSlider::mouseDoubleClick(const juce::MouseEvent& event)
         return;
 
     // Check if the double-click is on the modulation handle
-    if (isModulated && getModulationHandleBounds().contains(event.getPosition().toFloat()))
+    if (isModulated
+        && getModulationHandleHitBounds().contains(
+            event.getPosition().toFloat()))
     {
         repaint();
         auto callback = onModulationReset;
@@ -421,7 +460,7 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
         if (isPopupDown)
         {
             popupMenuTarget = isModulated
-                                      && getModulationHandleBounds().contains(
+                                      && getModulationHandleHitBounds().contains(
                                           event.getPosition().toFloat())
                                   ? PopupMenuTarget::modulationHandle
                                   : PopupMenuTarget::mainSlider;
@@ -448,7 +487,8 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
     }
 
     const bool isOnModulationHandle = isModulated
-        && getModulationHandleBounds().contains(event.getPosition().toFloat());
+        && getModulationHandleHitBounds().contains(
+            event.getPosition().toFloat());
 
     // Test the actual mouse-down position rather than relying on the last
     // mouseMove event. A fast click can otherwise start a main-slider drag

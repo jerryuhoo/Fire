@@ -42,7 +42,17 @@ public:
     // void paint(juce::Graphics& g) override;
     bool hitTest(int x, int y) override;
 
-    juce::Rectangle<float> getModulationHandleBounds() const;
+    /** The idle painted badge geometry. Interaction feedback may enlarge this
+        visually, but must never change the pointer target. */
+    juce::Rectangle<float> getModulationHandleVisualBounds() const;
+    /** The pointer target for every modulation-handle input path. */
+    juce::Rectangle<float> getModulationHandleHitBounds() const;
+    /** Kept for source compatibility; painting code should request the visual
+        bounds and input code should request the hit bounds explicitly. */
+    juce::Rectangle<float> getModulationHandleBounds() const
+    {
+        return getModulationHandleVisualBounds();
+    }
 
     // LFO properties
     int lfoSource;

@@ -80,6 +80,21 @@ struct ValueEntryPopupTestAccess
         return popup.okButton.isDown();
     }
 
+    static juce::Button& okButton(ValueEntryPopup& popup)
+    {
+        return popup.okButton;
+    }
+
+    static void forceOkButtonDown(ValueEntryPopup& popup)
+    {
+        popup.okButton.setState(juce::Button::buttonDown);
+    }
+
+    static void resetTransientState(ValueEntryPopup& popup)
+    {
+        popup.resetTransientState();
+    }
+
     static void moveOk(ValueEntryPopup& popup,
                        juce::ModifierKeys modifiers = {})
     {
@@ -163,6 +178,49 @@ ComponentType* findDescendant(juce::Component& root)
 
     return nullptr;
 }
+
+class DeletePopupOnVisibility final : public juce::ComponentListener
+{
+public:
+    explicit DeletePopupOnVisibility(
+        std::unique_ptr<ValueEntryPopup>& popupToDelete,
+        bool deleteWhenVisible = false)
+        : popup(popupToDelete), expectedVisibility(deleteWhenVisible)
+    {
+    }
+
+    void componentVisibilityChanged(juce::Component& component) override
+    {
+        if (popup != nullptr && component.isVisible() == expectedVisibility)
+            popup.reset();
+    }
+
+private:
+    std::unique_ptr<ValueEntryPopup>& popup;
+    bool expectedVisibility = false;
+};
+
+class DeletePopupOnButtonState final : public juce::Button::Listener
+{
+public:
+    DeletePopupOnButtonState(juce::Button& buttonToWatch,
+                             std::unique_ptr<ValueEntryPopup>& popupToDelete)
+        : popup(popupToDelete)
+    {
+        buttonToWatch.addListener(this);
+    }
+
+    void buttonClicked(juce::Button*) override {}
+
+    void buttonStateChanged(juce::Button*) override
+    {
+        if (popup != nullptr)
+            popup.reset();
+    }
+
+private:
+    std::unique_ptr<ValueEntryPopup>& popup;
+};
 } // namespace
 
 TEST_CASE("Value entry popup rejects incomplete and non-finite numbers",
@@ -537,6 +595,59 @@ TEST_CASE("Value entry button Return is synchronous across popup sessions",
     CHECK(acceptedCount == 1);
     CHECK(popup.isVisible());
     CHECK(ValueEntryPopupTestAccess::text(popup) == "8.5");
+}
+
+TEST_CASE("Value entry lifecycle callbacks may delete the popup synchronously",
+          "[ui][modulation][value-entry][lifecycle][self-delete][reentrant]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("submit stops when the hide notification deletes the popup")
+    {
+        auto popup = std::make_unique<ValueEntryPopup>();
+        auto* const rawPopup = popup.get();
+        int acceptedCount = 0;
+        rawPopup->onOk = [&](double) { ++acceptedCount; };
+        ValueEntryPopupTestAccess::open(*rawPopup);
+        ValueEntryPopupTestAccess::setText(*rawPopup, "7.5");
+
+        DeletePopupOnVisibility deleteOnHide(popup);
+        rawPopup->addComponentListener(&deleteOnHide);
+
+        CHECK(ValueEntryPopupTestAccess::submit(*rawPopup));
+        CHECK(popup == nullptr);
+        CHECK(acceptedCount == 0);
+    }
+
+    SECTION("dismiss stops when the hide notification deletes the popup")
+    {
+        auto popup = std::make_unique<ValueEntryPopup>();
+        auto* const rawPopup = popup.get();
+        int cancelledCount = 0;
+        rawPopup->onCancel = [&] { ++cancelledCount; };
+        ValueEntryPopupTestAccess::open(*rawPopup);
+
+        DeletePopupOnVisibility deleteOnHide(popup);
+        rawPopup->addComponentListener(&deleteOnHide);
+
+        rawPopup->dismissSession();
+        CHECK(popup == nullptr);
+        CHECK(cancelledCount == 0);
+    }
+
+    SECTION("transient reset stops when button dismissal deletes the popup")
+    {
+        auto popup = std::make_unique<ValueEntryPopup>();
+        auto* const rawPopup = popup.get();
+        ValueEntryPopupTestAccess::forceOkButtonDown(*rawPopup);
+        REQUIRE(ValueEntryPopupTestAccess::okIsDown(*rawPopup));
+
+        DeletePopupOnButtonState deleteOnStateChange(
+            ValueEntryPopupTestAccess::okButton(*rawPopup), popup);
+        ValueEntryPopupTestAccess::resetTransientState(*rawPopup);
+
+        CHECK(popup == nullptr);
+    }
 }
 
 TEST_CASE("Value entry keyboard completion may delete its popup",

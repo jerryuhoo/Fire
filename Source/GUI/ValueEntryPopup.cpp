@@ -140,11 +140,17 @@ void ValueEntryPopup::focusOfChildComponentChanged(FocusChangeType)
 
 void ValueEntryPopup::visibilityChanged()
 {
+    const juce::Component::SafePointer<ValueEntryPopup> safeThis(this);
+
     if (isVisible())
     {
         if (! completingSession)
         {
             resetTransientState();
+
+            if (safeThis == nullptr || ! isVisible())
+                return;
+
             sessionActive = true;
         }
 
@@ -176,23 +182,45 @@ bool ValueEntryPopup::submitEditorText()
     if (! sessionActive || completingSession)
         return false;
 
+    const juce::Component::SafePointer<ValueEntryPopup> safeThis(this);
+
     double value = 0.0;
     if (! parseStrictFiniteDouble(editor.getText(), value))
     {
         setInputError(true);
+
+        if (safeThis == nullptr)
+            return false;
+
         editor.selectAll();
+
+        if (safeThis == nullptr)
+            return false;
+
         if (editor.isShowing())
             editor.grabKeyboardFocus();
         return false;
     }
 
     setInputError(false);
+
+    if (safeThis == nullptr)
+        return false;
+
     auto callback = onOk;
 
     completingSession = true;
     sessionActive = false;
     setVisible(false);
+
+    if (safeThis == nullptr)
+        return true;
+
     resetTransientState();
+
+    if (safeThis == nullptr)
+        return true;
+
     completingSession = false;
 
     if (callback)
@@ -206,12 +234,21 @@ void ValueEntryPopup::cancelSession()
     if (! sessionActive || completingSession)
         return;
 
+    const juce::Component::SafePointer<ValueEntryPopup> safeThis(this);
     auto callback = onCancel;
 
     completingSession = true;
     sessionActive = false;
     setVisible(false);
+
+    if (safeThis == nullptr)
+        return;
+
     resetTransientState();
+
+    if (safeThis == nullptr)
+        return;
+
     completingSession = false;
 
     if (callback)
@@ -220,9 +257,23 @@ void ValueEntryPopup::cancelSession()
 
 void ValueEntryPopup::resetTransientState()
 {
+    const juce::Component::SafePointer<ValueEntryPopup> safeThis(this);
+
     okButton.dismissPointerGesture();
+
+    if (safeThis == nullptr)
+        return;
+
     cancelButton.dismissPointerGesture();
+
+    if (safeThis == nullptr)
+        return;
+
     editor.setText({}, juce::dontSendNotification);
+
+    if (safeThis == nullptr)
+        return;
+
     setInputError(false);
 }
 
@@ -234,12 +285,22 @@ void ValueEntryPopup::cancelIfFocusLeftPopup()
 
 void ValueEntryPopup::setInputError(bool shouldShowError)
 {
+    const juce::Component::SafePointer<ValueEntryPopup> safeThis(this);
+
     editor.setColour(juce::TextEditor::outlineColourId,
                      shouldShowError ? fire::ui::colours::danger
                                      : fire::ui::colours::hairline);
+
+    if (safeThis == nullptr)
+        return;
+
     editor.setColour(juce::TextEditor::focusedOutlineColourId,
                      shouldShowError ? fire::ui::colours::danger
                                      : fire::ui::colours::ember);
+
+    if (safeThis == nullptr)
+        return;
+
     editor.repaint();
 }
 

@@ -10,6 +10,7 @@
 #include "FilterControl.h"
 #include "../../GUI/InterfaceDefines.h"
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -17,6 +18,30 @@ constexpr double minimumDisplayFrequency = 20.0;
 constexpr double maximumDisplayFrequency = 20000.0;
 constexpr double minimumDisplayDecibels = -24.0;
 constexpr double maximumDisplayDecibels = 24.0;
+
+double maximumUsableDisplayFrequency(double sampleRate) noexcept
+{
+    if (! std::isfinite(sampleRate) || sampleRate <= 0.0)
+        return maximumDisplayFrequency;
+
+    const float nyquist = static_cast<float>(sampleRate * 0.5);
+    return juce::jmin(maximumDisplayFrequency,
+                      static_cast<double>(std::nextafter(nyquist, 0.0f)));
+}
+
+float frequencyToDisplayX(double frequency, int width) noexcept
+{
+    if (width <= 0)
+        return 0.0f;
+
+    frequency = juce::jlimit(minimumDisplayFrequency,
+                             maximumDisplayFrequency,
+                             frequency);
+    return static_cast<float>(width)
+         * static_cast<float>(juce::mapFromLog10(frequency,
+                                                 minimumDisplayFrequency,
+                                                 maximumDisplayFrequency));
+}
 
 bool isFilterModulationTarget(const juce::String& parameterID)
 {
@@ -411,7 +436,13 @@ void FilterControl::handleFilterDrag(DraggableButton& button,
 
     const auto relativeEvent = event.getEventRelativeTo(this);
     auto point = relativeEvent.position.toFloat();
-    point.x = juce::jlimit(0.0f, static_cast<float>(getWidth()), point.x);
+    const auto maximumFrequency =
+        maximumUsableDisplayFrequency(processor.getSampleRate());
+    if (maximumFrequency <= minimumDisplayFrequency)
+        return;
+
+    const auto maximumX = frequencyToDisplayX(maximumFrequency, getWidth());
+    point.x = juce::jlimit(0.0f, maximumX, point.x);
     point.y = juce::jlimit(0.0f, static_cast<float>(getHeight()), point.y);
 
     const auto buttonSize = juce::jlimit(12.0f, 20.0f, getWidth() * 0.015f);
@@ -549,20 +580,20 @@ void FilterControl::setDraggableButtonBounds()
         return;
 
     const auto buttonSize = juce::jlimit(12.0f, 20.0f, getWidth() * 0.015f);
-    const auto pointForValues = [this](float frequency, float gain)
+    const auto maximumFrequency =
+        maximumUsableDisplayFrequency(processor.getSampleRate());
+    const auto pointForValues = [this, maximumFrequency](float frequency, float gain)
     {
         frequency = juce::jlimit(static_cast<float>(minimumDisplayFrequency),
-                                 static_cast<float>(maximumDisplayFrequency),
+                                 static_cast<float>(juce::jmax(minimumDisplayFrequency,
+                                                               maximumFrequency)),
                                  frequency);
         gain = juce::jlimit(static_cast<float>(minimumDisplayDecibels),
                             static_cast<float>(maximumDisplayDecibels),
                             gain);
 
         return juce::Point<float> {
-            static_cast<float>(getWidth())
-                * static_cast<float>(juce::mapFromLog10(static_cast<double>(frequency),
-                                                        minimumDisplayFrequency,
-                                                        maximumDisplayFrequency)),
+            frequencyToDisplayX(static_cast<double>(frequency), getWidth()),
             juce::jmap(gain,
                        static_cast<float>(maximumDisplayDecibels),
                        static_cast<float>(minimumDisplayDecibels),
@@ -590,7 +621,10 @@ void FilterControl::updateChain()
     if (sampleRate <= 0.0)
         return;
 
-    const auto maximumFilterFrequency = juce::jmax(20.0f, static_cast<float>(sampleRate * 0.5));
+    const auto maximumFilterFrequency =
+        static_cast<float>(maximumUsableDisplayFrequency(sampleRate));
+    if (maximumFilterFrequency <= static_cast<float>(minimumDisplayFrequency))
+        return;
     chainSettings.lowCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, chainSettings.lowCutFreq);
     chainSettings.peakFreq = juce::jlimit(20.0f, maximumFilterFrequency, chainSettings.peakFreq);
     chainSettings.highCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, chainSettings.highCutFreq);
@@ -627,7 +661,7 @@ void FilterControl::updateResponseCurve()
 {
     const auto pointCount = getCurvePointCount();
     const auto sampleRate = processor.getSampleRate();
-    const auto maximumFrequency = juce::jmin(maximumDisplayFrequency, sampleRate * 0.5);
+    const auto maximumFrequency = maximumUsableDisplayFrequency(sampleRate);
     if (pointCount == 0 || sampleRate <= 0.0 || maximumFrequency <= minimumDisplayFrequency)
     {
         responseCurve.clear();
@@ -692,6 +726,7 @@ void FilterControl::updateResponseCurve()
     responseCurve.preallocateSpace(pointCount * 3 + 8);
     responseFillCurve.preallocateSpace(pointCount * 3 + 16);
 
+    const auto curveRight = frequencyToDisplayX(maximumFrequency, getWidth());
     const auto firstY = mapMagnitudeToY(responseMagnitudes.front());
     responseCurve.startNewSubPath(0.0f, firstY);
     responseFillCurve.startNewSubPath(0.0f, static_cast<float>(getHeight()));
@@ -700,13 +735,13 @@ void FilterControl::updateResponseCurve()
     for (int i = 1; i < pointCount; ++i)
     {
         const auto x = static_cast<float>(i) / static_cast<float>(pointCount - 1)
-                     * static_cast<float>(getWidth());
+                     * curveRight;
         const auto y = mapMagnitudeToY(responseMagnitudes[static_cast<size_t>(i)]);
         responseCurve.lineTo(x, y);
         responseFillCurve.lineTo(x, y);
     }
 
-    responseFillCurve.lineTo(static_cast<float>(getWidth()), static_cast<float>(getHeight()));
+    responseFillCurve.lineTo(curveRight, static_cast<float>(getHeight()));
     responseFillCurve.closeSubPath();
 }
 
@@ -734,7 +769,10 @@ void FilterControl::updateLfoChain(const ModulatedFilterValues& modulatedValues)
     if (sampleRate <= 0.0)
         return;
 
-    const auto maximumFilterFrequency = juce::jmax(20.0f, static_cast<float>(sampleRate * 0.5));
+    const auto maximumFilterFrequency =
+        static_cast<float>(maximumUsableDisplayFrequency(sampleRate));
+    if (maximumFilterFrequency <= static_cast<float>(minimumDisplayFrequency))
+        return;
     settings.lowCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, settings.lowCutFreq);
     settings.peakFreq = juce::jlimit(20.0f, maximumFilterFrequency, settings.peakFreq);
     settings.highCutFreq = juce::jlimit(20.0f, maximumFilterFrequency, settings.highCutFreq);
@@ -763,7 +801,7 @@ void FilterControl::updateLfoResponseCurve()
 {
     const auto pointCount = getCurvePointCount();
     const auto sampleRate = processor.getSampleRate();
-    const auto maximumFrequency = juce::jmin(maximumDisplayFrequency, sampleRate * 0.5);
+    const auto maximumFrequency = maximumUsableDisplayFrequency(sampleRate);
     if (! isAnimationActive || pointCount == 0 || sampleRate <= 0.0
         || maximumFrequency <= minimumDisplayFrequency)
     {
@@ -825,11 +863,12 @@ void FilterControl::updateLfoResponseCurve()
 
     lfoResponseCurve.clear();
     lfoResponseCurve.preallocateSpace(pointCount * 3 + 8);
+    const auto curveRight = frequencyToDisplayX(maximumFrequency, getWidth());
     lfoResponseCurve.startNewSubPath(0.0f, mapMagnitudeToY(lfoMagnitudes.front()));
     for (int i = 1; i < pointCount; ++i)
     {
         const auto x = static_cast<float>(i) / static_cast<float>(pointCount - 1)
-                     * static_cast<float>(getWidth());
+                     * curveRight;
         lfoResponseCurve.lineTo(x, mapMagnitudeToY(lfoMagnitudes[static_cast<size_t>(i)]));
     }
 }

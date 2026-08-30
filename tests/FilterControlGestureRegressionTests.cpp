@@ -8,6 +8,7 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -64,6 +65,11 @@ struct FilterControlTestAccess
     static double responseSampleRate(const FilterControl& control)
     {
         return control.responseSampleRate;
+    }
+
+    static float responseCurveRight(const FilterControl& control)
+    {
+        return control.responseCurve.getBounds().getRight();
     }
 };
 
@@ -387,6 +393,62 @@ TEST_CASE("Filter response follows prepare and runtime sample-rate changes",
     control.animationTick();
     CHECK(FilterControlTestAccess::responseSampleRate(control) == 96000.0);
     CHECK(FilterControlTestAccess::hasResponseCurve(control));
+}
+
+TEST_CASE("Low sample-rate filter response stays on the fixed spectrum axis",
+          "[filter-control][ui][sample-rate][nyquist][layout][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    setPlainParameter(processor, HIGHCUT_FREQ_ID, 20000.0f);
+    processor.setRateAndBufferSizeDetails(32000.0, 64);
+    processor.prepareToPlay(32000.0, 64);
+
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    FilterControl control(processor, panel);
+    control.setBounds(0, 0, 1000, 400);
+
+    REQUIRE(FilterControlTestAccess::hasResponseCurve(control));
+    const auto safeNyquist = std::nextafter(16000.0f, 0.0f);
+    const auto expectedRight = 1000.0f * static_cast<float>(
+        juce::mapFromLog10(static_cast<double>(safeNyquist),
+                           20.0,
+                           20000.0));
+    const auto curveRight = FilterControlTestAccess::responseCurveRight(control);
+    const auto nodeCentre = FilterControlTestAccess::highButton(control)
+                                .getBounds()
+                                .toFloat()
+                                .getCentreX();
+
+    CHECK(curveRight == Catch::Approx(expectedRight).margin(0.5f));
+    CHECK(nodeCentre == Catch::Approx(expectedRight).margin(1.0f));
+    CHECK(curveRight < 980.0f);
+
+    auto& highButton = FilterControlTestAccess::highButton(control);
+    const auto downPosition = highButton.getLocalBounds().toFloat().getCentre();
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    highButton.mouseDown(makeMouseEvent(highButton,
+                                        downPosition,
+                                        leftButton,
+                                        downPosition));
+    const auto beyondNyquist = juce::Point<float> { 1200.0f, 200.0f }
+                             - highButton.getPosition().toFloat();
+    highButton.mouseDrag(makeMouseEvent(highButton,
+                                        beyondNyquist,
+                                        leftButton,
+                                        downPosition));
+    const auto* highFrequency =
+        processor.treeState.getRawParameterValue(HIGHCUT_FREQ_ID);
+    REQUIRE(highFrequency != nullptr);
+    CHECK(highFrequency->load() <= 16000.0f);
+    CHECK(highFrequency->load() >= 15999.0f);
+    highButton.mouseUp(makeMouseEvent(highButton,
+                                      beyondNyquist,
+                                      {},
+                                      downPosition));
 }
 
 TEST_CASE("Filter graph drags and Q wheel changes bracket host gestures",

@@ -268,8 +268,14 @@ void BandPanel::createComboBoxes()
     {
         const auto parameterID = ParameterIDAndName::getIDString(
             MODE_ID, static_cast<int>(i));
+        const auto bandNumber = juce::String(static_cast<int>(i) + 1);
         auto* const parameter = processor.treeState.getParameter(parameterID);
         jassert(parameter != nullptr);
+
+        distortionModes[i].setTitle("Band " + bandNumber
+                                    + " distortion mode");
+        distortionModes[i].setTooltip("Select the distortion mode for band "
+                                      + bandNumber);
 
         distortionModes[i].configurePopupSession(
             [this]

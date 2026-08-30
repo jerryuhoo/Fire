@@ -329,12 +329,16 @@ void GlobalPanel::createButtons()
 void GlobalPanel::createComboBoxes()
 {
     addAndMakeVisible(lowcutSlopeMode);
+    lowcutSlopeMode.setTitle("Low-cut filter slope");
+    lowcutSlopeMode.setTooltip("Select the low-cut filter slope");
     lowcutSlopeMode.addItem("12 db", 1);
     lowcutSlopeMode.addItem("24 db", 2);
     lowcutSlopeMode.addItem("36 db", 3);
     lowcutSlopeMode.addItem("48 db", 4);
 
     addAndMakeVisible(highcutSlopeMode);
+    highcutSlopeMode.setTitle("High-cut filter slope");
+    highcutSlopeMode.setTooltip("Select the high-cut filter slope");
     highcutSlopeMode.addItem("12 db", 1);
     highcutSlopeMode.addItem("24 db", 2);
     highcutSlopeMode.addItem("36 db", 3);

@@ -905,8 +905,14 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 {
     setOpaque(false);
     setLookAndFeel(&fireLookAndFeel);
+    const auto routingNumber = juce::String(index + 1);
+    const auto routingName = "Modulation routing " + routingNumber;
+
     // SOURCE MENU
     addAndMakeVisible(sourceMenu);
+    sourceMenu.setTitle(routingName + " source");
+    sourceMenu.setTooltip("Select the LFO source for modulation routing "
+                          + routingNumber);
     for (int i = 1; i <= 4; ++i)
         sourceMenu.addItem("LFO " + juce::String(i), i);
     sourceMenu.setSelectedId(routing.sourceLfoIndex + 1, juce::dontSendNotification);
@@ -917,6 +923,9 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
     // AMOUNT SLIDER
     addAndMakeVisible(amountSlider);
+    amountSlider.setTitle(routingName + " amount");
+    amountSlider.setTooltip("Set the modulation depth for modulation routing "
+                            + routingNumber);
     amountSlider.setRange(-1.0, 1.0, 0.01);
     amountSlider.setValue(routing.depth, juce::dontSendNotification);
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -932,6 +941,9 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
     // BIPOLAR BUTTON
     addAndMakeVisible(bipolarButton);
+    bipolarButton.setTitle(routingName + " polarity");
+    bipolarButton.setTooltip("Switch modulation routing " + routingNumber
+                             + " between bipolar and unipolar");
     bipolarButton.setComponentID("rounded");
     bipolarButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     bipolarButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
@@ -945,6 +957,9 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
     // BYPASS BUTTON
     addAndMakeVisible(bypassButton);
+    bypassButton.setTitle(routingName + " bypass");
+    bypassButton.setTooltip("Turn bypass on or off for modulation routing "
+                            + routingNumber);
     bypassButton.setComponentID("rounded");
     bypassButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     bypassButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
@@ -958,6 +973,9 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
     // === DESTINATION MENU ===
     addAndMakeVisible(destinationMenu);
+    destinationMenu.setTitle(routingName + " destination");
+    destinationMenu.setTooltip("Select the destination for modulation routing "
+                               + routingNumber);
 
     // 1. get all possible modulation targets
     allPossibleTargets = ParameterIDAndName::getAllModulatableTargets();
@@ -1014,6 +1032,8 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
 
     // REMOVE BUTTON
     addAndMakeVisible(removeButton);
+    removeButton.setTitle("Remove modulation routing " + routingNumber);
+    removeButton.setTooltip("Remove modulation routing " + routingNumber);
     removeButton.setComponentID("remove_button");
     removeButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     removeButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::danger);

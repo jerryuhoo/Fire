@@ -1845,3 +1845,108 @@ TEST_CASE("Control-panel bulk lifecycle changes survive synchronous panel destru
         CHECK(panel == nullptr);
     }
 }
+
+TEST_CASE("Control-panel routing menus expose stable accessibility semantics",
+          "[control-panel][ui][accessibility][combo-box][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("Band distortion modes")
+    {
+        FireAudioProcessor processor;
+        BandPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1000, 500);
+        panel.setSwitch(1, true);
+
+        std::array<int, 4> selectedIds {};
+        for (size_t modeIndex = 0; modeIndex < selectedIds.size(); ++modeIndex)
+        {
+            auto& modeBox = BandPanelModeTestAccess::getModeBox(
+                panel, modeIndex);
+            selectedIds[modeIndex] = modeBox.getSelectedId();
+            CHECK(modeBox.getAccessibilityHandler() == nullptr);
+        }
+
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+
+        for (size_t modeIndex = 0; modeIndex < selectedIds.size(); ++modeIndex)
+        {
+            CAPTURE(modeIndex);
+            auto& modeBox = BandPanelModeTestAccess::getModeBox(
+                panel, modeIndex);
+            const auto bandNumber = juce::String(
+                static_cast<int>(modeIndex) + 1);
+            const auto expectedTitle = "Band " + bandNumber
+                                     + " distortion mode";
+            const auto expectedHelp = "Select the distortion mode for band "
+                                    + bandNumber;
+
+            CHECK(modeBox.getTitle() == expectedTitle);
+            CHECK(modeBox.getTooltip() == expectedHelp);
+            CHECK(modeBox.getSelectedId() == selectedIds[modeIndex]);
+
+            auto* accessibility = modeBox.getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+            CHECK(accessibility->getRole()
+                  == juce::AccessibilityRole::comboBox);
+            CHECK(accessibility->getTitle() == expectedTitle);
+            CHECK(accessibility->getHelp() == expectedHelp);
+        }
+
+        panel.removeFromDesktop();
+        for (size_t modeIndex = 0; modeIndex < selectedIds.size(); ++modeIndex)
+            CHECK(BandPanelModeTestAccess::getModeBox(panel, modeIndex)
+                      .getAccessibilityHandler()
+                  == nullptr);
+    }
+
+    SECTION("Global filter slopes")
+    {
+        FireAudioProcessor processor;
+        GlobalPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1000, 500);
+
+        auto& lowCut = GlobalPanelSlopeTestAccess::getSlopeBox(panel, true);
+        auto& highCut = GlobalPanelSlopeTestAccess::getSlopeBox(panel, false);
+        const auto lowCutSelection = lowCut.getSelectedId();
+        const auto highCutSelection = highCut.getSelectedId();
+        CHECK(lowCut.getAccessibilityHandler() == nullptr);
+        CHECK(highCut.getAccessibilityHandler() == nullptr);
+
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+
+        const std::array<ContextAwareComboBox*, 2> slopeBoxes {
+            &lowCut, &highCut
+        };
+        const std::array<juce::String, 2> expectedTitles {
+            "Low-cut filter slope", "High-cut filter slope"
+        };
+        const std::array<juce::String, 2> expectedHelp {
+            "Select the low-cut filter slope",
+            "Select the high-cut filter slope"
+        };
+
+        for (size_t slopeIndex = 0; slopeIndex < slopeBoxes.size(); ++slopeIndex)
+        {
+            CAPTURE(slopeIndex);
+            auto& slopeBox = *slopeBoxes[slopeIndex];
+            CHECK(slopeBox.getTitle() == expectedTitles[slopeIndex]);
+            CHECK(slopeBox.getTooltip() == expectedHelp[slopeIndex]);
+
+            auto* accessibility = slopeBox.getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+            CHECK(accessibility->getRole()
+                  == juce::AccessibilityRole::comboBox);
+            CHECK(accessibility->getTitle() == expectedTitles[slopeIndex]);
+            CHECK(accessibility->getHelp() == expectedHelp[slopeIndex]);
+        }
+
+        CHECK(lowCut.getSelectedId() == lowCutSelection);
+        CHECK(highCut.getSelectedId() == highCutSelection);
+        panel.removeFromDesktop();
+        CHECK(lowCut.getAccessibilityHandler() == nullptr);
+        CHECK(highCut.getAccessibilityHandler() == nullptr);
+    }
+}

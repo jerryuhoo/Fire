@@ -6,6 +6,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <initializer_list>
 #include <memory>
 #include <utility>
@@ -2269,4 +2270,119 @@ TEST_CASE("Modulation matrix ignores empty rows while a structural rebuild is pe
     rows.clear();
     collectMatrixRows(panel, rows);
     CHECK(rows.size() == static_cast<size_t>(liveRoutings.size()));
+}
+
+TEST_CASE("Modulation matrix row controls expose distinct accessibility semantics",
+          "[ui][modulation-matrix][accessibility][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    juce::Component desktopHost;
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
+    desktopHost.setBounds(0, 0, 760, 80);
+    row.setBounds(0, 0, 760, 40);
+    desktopHost.addAndMakeVisible(row);
+
+    auto* sourceMenu = findRoutingComboBox(row, true);
+    auto* destinationMenu = findRoutingComboBox(row, false);
+    auto* amountSlider = findAmountSlider(row);
+    auto* polarityButton = findTextButton(row, "Bi");
+    auto* bypassButton = findTextButton(row, "Off");
+    auto* removeButton = dynamic_cast<juce::TextButton*>(
+        row.findChildWithID("remove_button"));
+    REQUIRE(sourceMenu != nullptr);
+    REQUIRE(destinationMenu != nullptr);
+    REQUIRE(amountSlider != nullptr);
+    REQUIRE(polarityButton != nullptr);
+    REQUIRE(bypassButton != nullptr);
+    REQUIRE(removeButton != nullptr);
+
+    const std::array<juce::Component*, 6> controls {
+        sourceMenu,
+        destinationMenu,
+        amountSlider,
+        polarityButton,
+        bypassButton,
+        removeButton
+    };
+    for (auto* control : controls)
+    {
+        REQUIRE(control != nullptr);
+        CHECK(control->getAccessibilityHandler() == nullptr);
+    }
+
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+
+    const std::array<juce::String, 6> expectedTitles {
+        "Modulation routing 1 source",
+        "Modulation routing 1 destination",
+        "Modulation routing 1 amount",
+        "Modulation routing 1 polarity",
+        "Modulation routing 1 bypass",
+        "Remove modulation routing 1"
+    };
+    const std::array<juce::String, 6> expectedHelp {
+        "Select the LFO source for modulation routing 1",
+        "Select the destination for modulation routing 1",
+        "Set the modulation depth for modulation routing 1",
+        "Switch modulation routing 1 between bipolar and unipolar",
+        "Turn bypass on or off for modulation routing 1",
+        "Remove modulation routing 1"
+    };
+    const std::array<juce::AccessibilityRole, 6> expectedRoles {
+        juce::AccessibilityRole::comboBox,
+        juce::AccessibilityRole::comboBox,
+        juce::AccessibilityRole::slider,
+        juce::AccessibilityRole::button,
+        juce::AccessibilityRole::button,
+        juce::AccessibilityRole::button
+    };
+
+    for (size_t controlIndex = 0; controlIndex < controls.size(); ++controlIndex)
+    {
+        CAPTURE(controlIndex);
+        auto& control = *controls[controlIndex];
+        CHECK(control.getTitle() == expectedTitles[controlIndex]);
+        auto* tooltipClient = dynamic_cast<juce::TooltipClient*>(&control);
+        REQUIRE(tooltipClient != nullptr);
+        CHECK(tooltipClient->getTooltip() == expectedHelp[controlIndex]);
+
+        auto* accessibility = control.getAccessibilityHandler();
+        REQUIRE(accessibility != nullptr);
+        CHECK(accessibility->getRole() == expectedRoles[controlIndex]);
+        CHECK(accessibility->getTitle() == expectedTitles[controlIndex]);
+        CHECK(accessibility->getHelp() == expectedHelp[controlIndex]);
+    }
+
+    const auto liveRoutings = manager.getModulationRoutingsCopy();
+    REQUIRE(liveRoutings.size() == 1);
+    CHECK(liveRoutings[0].sourceLfoIndex == routing.sourceLfoIndex);
+    CHECK(liveRoutings[0].targetParameterID == routing.targetParameterID);
+    CHECK(liveRoutings[0].depth == Catch::Approx(routing.depth));
+    CHECK(liveRoutings[0].isBipolar == routing.isBipolar);
+    CHECK(liveRoutings[0].isBypassed == routing.isBypassed);
+
+    desktopHost.removeFromDesktop();
+    for (auto* control : controls)
+        CHECK(control->getAccessibilityHandler() == nullptr);
 }

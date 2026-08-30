@@ -423,6 +423,59 @@ TEST_CASE("Safe Drive dial maps the DSP reduction ratio to the requested value",
     CHECK(driveStroke > ordinaryStroke * 2.0f);
 }
 
+TEST_CASE("Fire rotary value arcs preserve their configured solid colour",
+          "[ui][theme][rotary][render][colour]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    const juce::Colour accent { 0xff26d5cf };
+
+    auto renderDial = [&](bool drive)
+    {
+        juce::Slider slider;
+        slider.setLookAndFeel(&lookAndFeel);
+        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        slider.setRange(0.0, 1.0);
+        slider.setValue(0.82, juce::dontSendNotification);
+        slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
+        slider.setComponentID(drive ? "drive" : "ordinary");
+        slider.setBounds(0, 0, 260, 260);
+
+        lookAndFeel.reductionPercent = drive ? 0.52f : 1.0f;
+        juce::Image image(juce::Image::ARGB, 260, 260, true);
+        juce::Graphics graphics(image);
+        slider.paintEntireComponent(graphics, true);
+        slider.setLookAndFeel(nullptr);
+        return image;
+    };
+
+    for (const bool drive : { false, true })
+    {
+        const auto image = renderDial(drive);
+        int accentPixels = 0;
+        int warmGradientPixels = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+            {
+                const auto pixel = image.getPixelAt(x, y);
+                if (pixel.getAlpha() < 96)
+                    continue;
+
+                if (pixel.getGreen() > pixel.getRed() + 55
+                    && pixel.getBlue() > pixel.getRed() + 55)
+                    ++accentPixels;
+
+                if (pixel.getRed() > pixel.getGreen() + 45
+                    && pixel.getGreen() > pixel.getBlue() + 28)
+                    ++warmGradientPixels;
+            }
+
+        CAPTURE(drive, accentPixels, warmGradientPixels);
+        CHECK(accentPixels > 80);
+        CHECK(warmGradientPixels == 0);
+    }
+}
+
 TEST_CASE("Fire editor renders at supported scale extremes", "[ui][smoke]")
 {
     FireAudioProcessor processor;

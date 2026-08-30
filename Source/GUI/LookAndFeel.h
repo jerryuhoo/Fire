@@ -1044,10 +1044,8 @@ private:
             juce::Path valueArc;
             valueArc.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
                                    startAngle, safeEnd, true);
-            juce::ColourGradient heat(accent, bounds.getX(), bounds.getBottom(),
-                                      colours::gold, bounds.getRight(), bounds.getY(), false);
-            heat.addColour(0.55, colours::flame);
-            g.setGradientFill(heat);
+            const auto enabledOpacity = 1.0f - 0.65f * disabledAmount;
+            g.setColour(accent.withMultipliedAlpha(enabledOpacity));
             g.strokePath(valueArc, juce::PathStrokeType(stroke,
                                                        juce::PathStrokeType::curved,
                                                        juce::PathStrokeType::rounded));
@@ -1057,12 +1055,8 @@ private:
                 juce::Path reducedArc;
                 reducedArc.addCentredArc(centre.x, centre.y, trackRadius, trackRadius, 0.0f,
                                          safeEnd, valueAngle, true);
-                juce::ColourGradient reducedHeat(accent.withMultipliedAlpha(0.32f),
-                                                  bounds.getX(), bounds.getBottom(),
-                                                  colours::gold.withAlpha(0.32f),
-                                                  bounds.getRight(), bounds.getY(), false);
-                reducedHeat.addColour(0.55, colours::flame.withAlpha(0.32f));
-                g.setGradientFill(reducedHeat);
+                g.setColour(accent.withMultipliedAlpha(0.32f
+                                                        * enabledOpacity));
                 g.strokePath(reducedArc, juce::PathStrokeType(stroke,
                                                              juce::PathStrokeType::curved,
                                                              juce::PathStrokeType::rounded));

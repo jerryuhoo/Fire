@@ -138,6 +138,104 @@ TEST_CASE("PrimarySlider interaction presentation is continuous and hidden-idle"
     CHECK(slider.getDisabledAnimation() == Catch::Approx(1.0f));
 }
 
+TEST_CASE("PrimarySlider preserves accessible value semantics while showing",
+          "[primary-slider][ui][input][accessibility]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimarySlider slider;
+    slider.setBounds(0, 0, 120, 30);
+    slider.setRange(0.0, 1.0, 0.1);
+    slider.setValue(0.2, juce::dontSendNotification);
+    slider.setTooltip("Adjust the test value");
+    slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    slider.setVisible(true);
+    REQUIRE(slider.isShowing());
+
+    SliderInteractionCapture capture;
+    slider.addListener(&capture);
+    auto* handler = slider.getAccessibilityHandler();
+    REQUIRE(handler != nullptr);
+    CHECK(handler->getRole() == juce::AccessibilityRole::slider);
+    CHECK(handler->getHelp() == slider.getTooltip());
+    auto* value = handler->getValueInterface();
+    REQUIRE(value != nullptr);
+    CHECK_FALSE(value->isReadOnly());
+    CHECK(value->getCurrentValue() == Catch::Approx(0.2));
+    CHECK(value->getRange().getMinimumValue() == Catch::Approx(0.0));
+    CHECK(value->getRange().getMaximumValue() == Catch::Approx(1.0));
+    CHECK(value->getRange().getInterval() == Catch::Approx(0.1));
+
+    value->setValue(0.8);
+    CHECK(slider.getValue() == Catch::Approx(0.8));
+    CHECK(capture.valueChanges == 1);
+    CHECK(capture.dragStarts == 1);
+    CHECK(capture.dragEnds == 1);
+
+    value->setValueAsString("0.4");
+    CHECK(slider.getValue() == Catch::Approx(0.4));
+    CHECK(capture.valueChanges == 2);
+    CHECK(capture.dragStarts == 2);
+    CHECK(capture.dragEnds == 2);
+
+    slider.removeFromDesktop();
+}
+
+TEST_CASE("Cached PrimarySlider accessibility rejects stale value writes",
+          "[primary-slider][ui][input][accessibility][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (int boundaryIndex = 0; boundaryIndex < 3; ++boundaryIndex)
+    {
+        const auto* boundaryName = boundaryIndex == 0 ? "hidden"
+                                 : boundaryIndex == 1 ? "disabled"
+                                                      : "peer detached";
+        DYNAMIC_SECTION(boundaryName)
+        {
+            PrimarySlider slider;
+            slider.setBounds(0, 0, 120, 30);
+            slider.setRange(0.0, 1.0, 0.1);
+            slider.setValue(0.2, juce::dontSendNotification);
+            slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            slider.setVisible(true);
+            REQUIRE(slider.isShowing());
+
+            SliderInteractionCapture capture;
+            slider.addListener(&capture);
+            auto* handler = slider.getAccessibilityHandler();
+            REQUIRE(handler != nullptr);
+            auto* value = handler->getValueInterface();
+            REQUIRE(value != nullptr);
+
+            if (boundaryIndex == 0)
+                slider.setVisible(false);
+            else if (boundaryIndex == 1)
+                slider.setEnabled(false);
+            else
+                slider.removeFromDesktop();
+
+            if (boundaryIndex == 1)
+            {
+                REQUIRE_FALSE(slider.isEnabled());
+                REQUIRE(slider.isShowing());
+            }
+            else
+            {
+                REQUIRE_FALSE(slider.isShowing());
+            }
+
+            value->setValue(0.8);
+            value->setValueAsString("0.9");
+
+            CHECK(slider.getValue() == Catch::Approx(0.2));
+            CHECK(capture.valueChanges == 0);
+            CHECK(capture.dragStarts == 0);
+            CHECK(capture.dragEnds == 0);
+            slider.removeFromDesktop();
+        }
+    }
+}
+
 TEST_CASE("PrimarySlider rejects auxiliary drags and double-clicks",
           "[primary-slider][ui][input]")
 {

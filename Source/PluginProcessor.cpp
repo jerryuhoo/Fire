@@ -3229,14 +3229,17 @@ FireAudioProcessor::captureSerializableMainStateSnapshot() const
 {
     auto lfoSnapshot = lfoManager->captureSerializableStateSnapshot();
     auto presetIdentity = statePresets.getCurrentPresetIdentity();
+    const auto currentEditorSize = getSavedEditorSize();
+    const auto savedEditorSize = normaliseEditorSize(currentEditorSize.width,
+                                                     currentEditorSize.height);
     return {
         std::move(lfoSnapshot.parameterState),
         std::move(lfoSnapshot.lfoData),
         std::move(lfoSnapshot.routings),
         presetIdentity.id,
         std::move(presetIdentity.key),
-        editorWidth.load(std::memory_order_relaxed),
-        editorHeight.load(std::memory_order_relaxed),
+        savedEditorSize.width,
+        savedEditorSize.height,
         stateAB.captureSerializableStateSnapshot()
     };
 }
@@ -5127,18 +5130,15 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                                                   statePresets.getNumPresets(),
                                                   xmlCurrentState->getIntAttribute("currentPresetID", 0))
                                    : 0;
-    const int restoredEditorWidth = xmlCurrentState != nullptr
-                                        ? juce::jlimit(static_cast<int>(INIT_WIDTH),
-                                                       2000,
-                                                       xmlCurrentState->getIntAttribute(
-                                                           "editorWidth", static_cast<int>(INIT_WIDTH)))
-                                        : editorWidth.load(std::memory_order_relaxed);
-    const int restoredEditorHeight = xmlCurrentState != nullptr
-                                         ? juce::jlimit(static_cast<int>(INIT_HEIGHT),
-                                                        1000,
-                                                        xmlCurrentState->getIntAttribute(
-                                                            "editorHeight", static_cast<int>(INIT_HEIGHT)))
-                                         : editorHeight.load(std::memory_order_relaxed);
+    const auto currentEditorSize = getSavedEditorSize();
+    const auto restoredEditorSize = xmlCurrentState != nullptr
+                                        ? normaliseEditorSize(
+                                              xmlCurrentState->getIntAttribute(
+                                                  "editorWidth", static_cast<int>(INIT_WIDTH)),
+                                              xmlCurrentState->getIntAttribute(
+                                                  "editorHeight", static_cast<int>(INIT_HEIGHT)))
+                                        : normaliseEditorSize(currentEditorSize.width,
+                                                              currentEditorSize.height);
 
     // Commit only after the complete chunk has passed validation. Keep the
     // audio thread on its previous coherent multiband snapshot until the APVTS
@@ -5156,8 +5156,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
                 statePresets.setCurrentPresetKey(presetKey);
             else
                 statePresets.setCurrentPresetId(legacyPresetID);
-            editorWidth.store(restoredEditorWidth, std::memory_order_relaxed);
-            editorHeight.store(restoredEditorHeight, std::memory_order_relaxed);
+            setSavedEditorSize(restoredEditorSize.width,
+                               restoredEditorSize.height);
         }
 
         lfoManager->replaceLfoDataAndRoutings(loadedLfoData,
@@ -5846,24 +5846,98 @@ bool FireAudioProcessor::processFFT(float* tempFFTData, int bufferSize)
     return spectrumProcessor.doProcessing(tempFFTData, bufferSize);
 }
 
-int FireAudioProcessor::getSavedWidth() const
+std::uint64_t FireAudioProcessor::packEditorSize(const int width,
+                                                 const int height) noexcept
 {
-    return editorWidth.load(std::memory_order_relaxed);
+    return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(width)) << 32u)
+           | static_cast<std::uint32_t>(height);
 }
 
-int FireAudioProcessor::getSavedHeight() const
+FireAudioProcessor::SavedEditorSize
+FireAudioProcessor::unpackEditorSize(const std::uint64_t packedSize) noexcept
 {
-    return editorHeight.load(std::memory_order_relaxed);
+    return {
+        static_cast<int>(static_cast<std::uint32_t>(packedSize >> 32u)),
+        static_cast<int>(static_cast<std::uint32_t>(packedSize))
+    };
 }
 
-void FireAudioProcessor::setSavedWidth(const int width)
+FireAudioProcessor::SavedEditorSize
+FireAudioProcessor::normaliseEditorSize(const int width, const int height) noexcept
 {
-    editorWidth.store(width, std::memory_order_relaxed);
+    constexpr int minimumWidth = static_cast<int>(INIT_WIDTH);
+    constexpr int minimumHeight = static_cast<int>(INIT_HEIGHT);
+    constexpr int maximumWidth = 2000;
+    constexpr int maximumHeight = 1000;
+
+    const auto constrainedWidth = juce::jlimit(minimumWidth,
+                                                maximumWidth,
+                                                width);
+    const auto constrainedHeight = juce::jlimit(minimumHeight,
+                                                 maximumHeight,
+                                                 height);
+
+    // Editor layout scale is determined by its smaller axis. Preserve that
+    // effective scale when repairing legacy or torn non-2:1 state, rather
+    // than unexpectedly enlarging the restored window.
+    const auto normalisedHeight = juce::jmin(constrainedHeight,
+                                              constrainedWidth / 2);
+    return { normalisedHeight * 2, normalisedHeight };
 }
 
-void FireAudioProcessor::setSavedHeight(const int height)
+void FireAudioProcessor::setSavedEditorSize(const int width,
+                                            const int height) noexcept
 {
-    editorHeight.store(height, std::memory_order_relaxed);
+    const auto normalisedSize = normaliseEditorSize(width, height);
+    editorSize.store(packEditorSize(normalisedSize.width,
+                                    normalisedSize.height),
+                     std::memory_order_relaxed);
+}
+
+FireAudioProcessor::SavedEditorSize
+FireAudioProcessor::getSavedEditorSize() const noexcept
+{
+    return unpackEditorSize(editorSize.load(std::memory_order_relaxed));
+}
+
+void FireAudioProcessor::setSavedWidth(const int width) noexcept
+{
+    auto current = editorSize.load(std::memory_order_relaxed);
+    for (;;)
+    {
+        const auto currentSize = unpackEditorSize(current);
+        const auto desired = packEditorSize(width, currentSize.height);
+        if (editorSize.compare_exchange_weak(current,
+                                             desired,
+                                             std::memory_order_relaxed,
+                                             std::memory_order_relaxed))
+            return;
+    }
+}
+
+void FireAudioProcessor::setSavedHeight(const int height) noexcept
+{
+    auto current = editorSize.load(std::memory_order_relaxed);
+    for (;;)
+    {
+        const auto currentSize = unpackEditorSize(current);
+        const auto desired = packEditorSize(currentSize.width, height);
+        if (editorSize.compare_exchange_weak(current,
+                                             desired,
+                                             std::memory_order_relaxed,
+                                             std::memory_order_relaxed))
+            return;
+    }
+}
+
+int FireAudioProcessor::getSavedWidth() const noexcept
+{
+    return getSavedEditorSize().width;
+}
+
+int FireAudioProcessor::getSavedHeight() const noexcept
+{
+    return getSavedEditorSize().height;
 }
 
 bool FireAudioProcessor::getBypassedState() const noexcept

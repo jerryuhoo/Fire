@@ -3,7 +3,10 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <memory>
+#include <thread>
+#include <vector>
 
 namespace
 {
@@ -243,4 +246,100 @@ TEST_CASE("Unversioned host states retain legacy missing-section migration",
         CHECK(shape.points[0] == (juce::Point<float> { 0.0f, 0.0f }));
         CHECK(shape.points[1] == (juce::Point<float> { 1.0f, 0.0f }));
     }
+}
+
+TEST_CASE("Concurrent editor resizes serialize coherent size pairs",
+          "[state][host][editor-size][concurrency]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    constexpr FireAudioProcessor::SavedEditorSize compact { 1200, 600 };
+    constexpr FireAudioProcessor::SavedEditorSize expanded { 1800, 900 };
+
+    processor.setSavedEditorSize(compact.width, compact.height);
+    processor.setSavedWidth(1300);
+    CHECK(processor.getSavedEditorSize().width == 1300);
+    CHECK(processor.getSavedEditorSize().height == compact.height);
+    processor.setSavedHeight(650);
+    CHECK(processor.getSavedEditorSize().width == 1300);
+    CHECK(processor.getSavedEditorSize().height == 650);
+    processor.setSavedEditorSize(compact.width, compact.height);
+
+    std::atomic<bool> startWriter { false };
+    std::atomic<bool> stopWriter { false };
+    std::thread writer([&]
+    {
+        while (! startWriter.load(std::memory_order_acquire))
+            std::this_thread::yield();
+
+        while (! stopWriter.load(std::memory_order_acquire))
+        {
+            processor.setSavedEditorSize(compact.width, compact.height);
+            processor.setSavedEditorSize(expanded.width, expanded.height);
+        }
+    });
+
+    std::vector<FireAudioProcessor::SavedEditorSize> savedSizes;
+    savedSizes.reserve(256);
+    {
+        const juce::ScopeGuard stopAndJoinWriter { [&]
+        {
+            stopWriter.store(true, std::memory_order_release);
+            writer.join();
+        } };
+
+        startWriter.store(true, std::memory_order_release);
+        for (int iteration = 0; iteration < 256; ++iteration)
+        {
+            const auto state = serialiseHostState(processor);
+            const auto xml = parseHostState(state);
+            const auto* otherState = xml->getChildByName("otherState");
+            REQUIRE(otherState != nullptr);
+            savedSizes.push_back({
+                otherState->getIntAttribute("editorWidth"),
+                otherState->getIntAttribute("editorHeight")
+            });
+        }
+    }
+
+    REQUIRE(savedSizes.size() == 256);
+    for (const auto& savedSize : savedSizes)
+    {
+        CAPTURE(savedSize.width, savedSize.height);
+        const bool isCompact = savedSize.width == compact.width
+                               && savedSize.height == compact.height;
+        const bool isExpanded = savedSize.width == expanded.width
+                                && savedSize.height == expanded.height;
+        CHECK((isCompact || isExpanded));
+    }
+}
+
+TEST_CASE("Legacy mismatched editor dimensions restore to a valid aspect ratio",
+          "[state][host][editor-size][legacy]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor source;
+    auto legacyState = parseHostState(serialiseHostState(source));
+    legacyState->removeAttribute("stateFormatVersion");
+    legacyState->removeAttribute("savedParameterCount");
+
+    auto* otherState = legacyState->getChildByName("otherState");
+    REQUIRE(otherState != nullptr);
+    otherState->setAttribute("editorWidth", 1800);
+    otherState->setAttribute("editorHeight", 600);
+
+    FireAudioProcessor restored;
+    loadHostState(restored, *legacyState);
+
+    const auto restoredSize = restored.getSavedEditorSize();
+    CHECK(restoredSize.width == 1200);
+    CHECK(restoredSize.height == 600);
+    CHECK(restoredSize.width == restoredSize.height * 2);
+
+    const auto roundTrippedState = parseHostState(serialiseHostState(restored));
+    const auto* roundTrippedOtherState =
+        roundTrippedState->getChildByName("otherState");
+    REQUIRE(roundTrippedOtherState != nullptr);
+    CHECK(roundTrippedOtherState->getIntAttribute("editorWidth") == 1200);
+    CHECK(roundTrippedOtherState->getIntAttribute("editorHeight") == 600);
 }

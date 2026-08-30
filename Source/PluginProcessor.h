@@ -460,10 +460,19 @@ public:
     bool processFFT(float* tempFFTData, int bufferSize);
 
     // save size
-    void setSavedWidth(const int width);
-    void setSavedHeight(const int height);
-    int getSavedWidth() const;
-    int getSavedHeight() const;
+    struct SavedEditorSize
+    {
+        int width = static_cast<int>(INIT_WIDTH);
+        int height = static_cast<int>(INIT_HEIGHT);
+    };
+
+    static SavedEditorSize normaliseEditorSize(int width, int height) noexcept;
+    void setSavedEditorSize(int width, int height) noexcept;
+    SavedEditorSize getSavedEditorSize() const noexcept;
+    void setSavedWidth(int width) noexcept;
+    void setSavedHeight(int height) noexcept;
+    int getSavedWidth() const noexcept;
+    int getSavedHeight() const noexcept;
 
     // bypass
     bool getBypassedState() const noexcept;
@@ -1105,9 +1114,14 @@ private:
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 4>
         bandSoloGainSmoothers;
 
-    // Save size
-    std::atomic<int> editorWidth { static_cast<int>(INIT_WIDTH) };
-    std::atomic<int> editorHeight { static_cast<int>(INIT_HEIGHT) };
+    // Save size. Width and height must be published as one snapshot because
+    // host state capture is allowed to run concurrently with editor resizing.
+    static std::uint64_t packEditorSize(int width, int height) noexcept;
+    static SavedEditorSize unpackEditorSize(std::uint64_t packedSize) noexcept;
+    std::atomic<std::uint64_t> editorSize {
+        packEditorSize(static_cast<int>(INIT_WIDTH),
+                       static_cast<int>(INIT_HEIGHT))
+    };
 
     // bypass state
     std::atomic<bool> isBypassed { false };

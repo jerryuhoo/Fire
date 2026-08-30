@@ -3083,16 +3083,14 @@ TEST_CASE("Cross-thread host saves do not wait for an active topology writer",
     setPlainParameter(subject, NUM_BANDS_ID, 2.0f);
     subject.assignLfoToTarget(0, oldTarget);
     subject.statePresets.setCurrentPresetKey("Factory/Old.fire");
-    subject.setSavedWidth(1210);
-    subject.setSavedHeight(710);
+    subject.setSavedEditorSize(1200, 600);
 
     subject.beginMultibandTopologyEdit();
     setPlainParameter(subject, NUM_BANDS_ID, 1.0f);
     subject.clearModulationForParameter(oldTarget);
     subject.assignLfoToTarget(1, stagedTarget);
     subject.statePresets.setCurrentPresetKey("Factory/Staged.fire");
-    subject.setSavedWidth(1510);
-    subject.setSavedHeight(810);
+    subject.setSavedEditorSize(1600, 800);
 
     juce::WaitableEvent workerStarted;
     juce::WaitableEvent saveCompleted;
@@ -3120,8 +3118,8 @@ TEST_CASE("Cross-thread host saves do not wait for an active topology writer",
     CHECK(countRoutingsForTarget(routings, oldTarget) == 1);
     CHECK(countRoutingsForTarget(routings, stagedTarget) == 0);
     CHECK(restored.statePresets.getCurrentPresetKey() == "Factory/Old.fire");
-    CHECK(restored.getSavedWidth() == 1210);
-    CHECK(restored.getSavedHeight() == 710);
+    CHECK(restored.getSavedWidth() == 1200);
+    CHECK(restored.getSavedHeight() == 600);
 }
 
 TEST_CASE("Topology writers drain readers which observed the prior generation",

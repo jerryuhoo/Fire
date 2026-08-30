@@ -471,10 +471,14 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
     // set resize
     setResizable(true, true);
-    setSize(processor.getSavedWidth(), processor.getSavedHeight());
+    const auto rawSavedEditorSize = processor.getSavedEditorSize();
+    const auto savedEditorSize = FireAudioProcessor::normaliseEditorSize(
+        rawSavedEditorSize.width,
+        rawSavedEditorSize.height);
     // resize limit
     setResizeLimits(INIT_WIDTH, INIT_HEIGHT, 2000, 1000); // set resize limits
     getConstrainer()->setFixedAspectRatio(2); // set fixed resize rate
+    setSize(savedEditorSize.width, savedEditorSize.height);
 
     multiband.resortAndRedrawLines();
 
@@ -640,8 +644,7 @@ void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
 
 void FireAudioProcessorEditor::resized()
 {
-    processor.setSavedHeight(getHeight());
-    processor.setSavedWidth(getWidth());
+    processor.setSavedEditorSize(getWidth(), getHeight());
 
     const float scale = juce::jmin(getHeight() / (float) INIT_HEIGHT, getWidth() / (float) INIT_WIDTH);
     fireLookAndFeel.scale = scale;

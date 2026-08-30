@@ -55,6 +55,12 @@ void DistortionGraph::visibilityChanged()
         updateDistortionCurve();
 }
 
+void DistortionGraph::graphShowingStateChanged(bool isNowShowing)
+{
+    if (isNowShowing && curveDirty)
+        updateDistortionCurve();
+}
+
 void DistortionGraph::setState(int newMode,
                                float newRec,
                                float newMix,

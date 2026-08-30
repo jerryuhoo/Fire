@@ -34,6 +34,8 @@ public:
 private:
     friend struct DistortionGraphSourceEpochTestAccess;
 
+    void graphShowingStateChanged(bool isNowShowing) override;
+
     int mode = 0;
     float rec = 0.0f;
     float mix = 1.0f;

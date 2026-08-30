@@ -24,6 +24,16 @@ struct DistortionGraphSourceEpochTestAccess
     {
         return editor.bandPanel.getDistortionGraph()->drive;
     }
+
+    static bool curveIsDirty(const DistortionGraph& graph)
+    {
+        return graph.curveDirty;
+    }
+
+    static juce::Rectangle<float> curveBounds(const DistortionGraph& graph)
+    {
+        return graph.distortionCurve.getBounds();
+    }
 };
 
 namespace
@@ -150,4 +160,40 @@ TEST_CASE("Hidden editors drain distortion telemetry without presenting it",
 
     DistortionGraphValues drainedValues;
     CHECK_FALSE(processor.getLatestDistortionGraphValues(drainedValues));
+}
+
+TEST_CASE("Distortion graph rebuilds a curve resized behind a hidden ancestor",
+          "[ui][graph][visibility][resize][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    juce::Component desktopHost;
+    DistortionGraph graph(processor);
+
+    desktopHost.setVisible(false);
+    desktopHost.setBounds(0, 0, 640, 360);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.addAndMakeVisible(graph);
+    graph.setBounds(10, 10, 240, 140);
+
+    desktopHost.setVisible(true);
+    REQUIRE(graph.isShowing());
+    REQUIRE_FALSE(
+        DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
+    const auto initialCurveBounds =
+        DistortionGraphSourceEpochTestAccess::curveBounds(graph);
+    REQUIRE_FALSE(initialCurveBounds.isEmpty());
+
+    desktopHost.setVisible(false);
+    REQUIRE_FALSE(graph.isShowing());
+    graph.setBounds(10, 10, 400, 220);
+    REQUIRE(DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
+    CHECK(DistortionGraphSourceEpochTestAccess::curveBounds(graph)
+          == initialCurveBounds);
+
+    desktopHost.setVisible(true);
+    REQUIRE(graph.isShowing());
+    CHECK_FALSE(DistortionGraphSourceEpochTestAccess::curveIsDirty(graph));
+    CHECK(DistortionGraphSourceEpochTestAccess::curveBounds(graph).getWidth()
+          > initialCurveBounds.getWidth());
 }

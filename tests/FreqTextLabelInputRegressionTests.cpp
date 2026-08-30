@@ -274,6 +274,42 @@ TEST_CASE("Frequency labels recover missing releases across lifecycle boundaries
 
         CHECK_FALSE(label->isBeingEdited());
     }
+
+    SECTION("detaching from the peer cancels editing and a pending release")
+    {
+        juce::Component desktopHost;
+        PrimaryEditableLabel label({}, "1 kHz");
+        desktopHost.setBounds(0, 0, 140, 64);
+        desktopHost.setVisible(false);
+        desktopHost.addAndMakeVisible(label);
+        label.setBounds(0, 0, 90, 24);
+        label.setEditable(true);
+        desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        desktopHost.setVisible(true);
+
+        beginPointerGesture(label, primary);
+        REQUIRE(PrimaryEditableLabelTestAccess::hasPrimaryGesture(label));
+        label.showEditor();
+        auto* editor = label.getCurrentTextEditor();
+        REQUIRE(editor != nullptr);
+        juce::Component::SafePointer<juce::TextEditor> editorLifetime(editor);
+        editor->setText("2 kHz", false);
+
+        desktopHost.removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+        CHECK_FALSE(PrimaryEditableLabelTestAccess::hasPrimaryGesture(label));
+        CHECK_FALSE(label.isBeingEdited());
+        CHECK(editorLifetime == nullptr);
+        CHECK(label.getText() == "1 kHz");
+
+        desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        REQUIRE(label.isShowing());
+        endPointerGesture(label);
+
+        CHECK_FALSE(label.isBeingEdited());
+        CHECK(label.getText() == "1 kHz");
+    }
 }
 
 TEST_CASE("Frequency label single and double click edit modes keep JUCE semantics",
@@ -411,9 +447,14 @@ TEST_CASE("Frequency label lifecycle focus loss discards hidden or disabled text
         }
         else
         {
+            juce::Component::SafePointer<juce::TextEditor> editorLifetime(
+                editor);
             fixture.frequencyLabel.setEnabled(false);
-            REQUIRE(label->isBeingEdited());
-            static_cast<juce::Component&>(*editor).focusLost(
+
+            REQUIRE_FALSE(label->isBeingEdited());
+            REQUIRE(editorLifetime == nullptr);
+            fixture.frequencyLabel.setEnabled(true);
+            static_cast<juce::Component&>(*label).focusLost(
                 juce::Component::focusChangedDirectly);
         }
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);

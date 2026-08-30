@@ -92,7 +92,8 @@ private:
     gestures, and invalidates delayed releases at lifecycle boundaries while
     retaining guarded keyboard and accessibility entry.
 */
-class PrimaryEditableLabel final : public juce::Label
+class PrimaryEditableLabel final : public juce::Label,
+                                   private juce::Timer
 {
 public:
     PrimaryEditableLabel(const juce::String& componentName = {},
@@ -105,6 +106,11 @@ public:
         // from changing focus without affecting pointer, Tab, or
         // accessibility entry.
         setMouseClickGrabsKeyboardFocus(false);
+    }
+
+    ~PrimaryEditableLabel() override
+    {
+        stopTimer();
     }
 
     void dismissPointerGesture() noexcept
@@ -162,6 +168,7 @@ private:
                              : PointerGesture::rejected;
         pointerSourceType = event.source.getType();
         pointerSourceIndex = event.source.getIndex();
+        startLifecycleMonitor();
 
         if (pointerGesture == PointerGesture::primary)
             juce::Label::mouseDown(event);
@@ -284,8 +291,33 @@ private:
         const juce::Component::SafePointer<PrimaryEditableLabel> safeThis(this);
         juce::Label::enablementChanged();
 
-        if (safeThis != nullptr)
-            dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        dismissPointerGesture();
+
+        // Disabling an editable Label is a cancellation boundary just like
+        // hiding it. hideEditor may synchronously delete the owner through
+        // onEditorHide, so keep it last.
+        if (! isEnabled() && isBeingEdited())
+            hideEditor(true);
+    }
+
+    void parentHierarchyChanged() override
+    {
+        const juce::Component::SafePointer<PrimaryEditableLabel> safeThis(this);
+        juce::Label::parentHierarchyChanged();
+
+        if (safeThis == nullptr || isShowing())
+            return;
+
+        dismissPointerGesture();
+
+        // Losing the peer invalidates both an in-flight click and editor text
+        // from the old UI context. onEditorHide may synchronously delete this
+        // Label, so no component access may follow hideEditor.
+        if (isBeingEdited())
+            hideEditor(true);
     }
 
     void textEditorFocusLost(juce::TextEditor& editor) override
@@ -302,6 +334,42 @@ private:
         // Preserve JUCE's normal focus-loss commit semantics. This may notify
         // listeners and synchronously delete the Label, so it stays last.
         juce::Label::textEditorFocusLost(editor);
+    }
+
+    void editorShown(juce::TextEditor* editor) override
+    {
+        const juce::Component::SafePointer<PrimaryEditableLabel> safeThis(this);
+        juce::Label::editorShown(editor);
+
+        if (safeThis != nullptr)
+            startLifecycleMonitor();
+    }
+
+    void timerCallback() override
+    {
+        if (isShowing())
+        {
+            if (pointerGesture == PointerGesture::none
+                && ! completedDoubleClick.has_value()
+                && ! isBeingEdited())
+                stopTimer();
+
+            return;
+        }
+
+        const juce::Component::SafePointer<PrimaryEditableLabel> safeThis(this);
+        dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        stopTimer();
+
+        // Component::removeFromDesktop does not emit a hierarchy callback.
+        // Poll only while a click or editor is active so a lost top-level
+        // peer still becomes an immediate cancellation boundary. hideEditor
+        // may delete this Label through onEditorHide and must remain last.
+        if (isBeingEdited())
+            hideEditor(true);
     }
 
     bool isCompletePrimaryDown(const juce::MouseEvent& event) const noexcept
@@ -355,6 +423,13 @@ private:
     {
         pointerGesture = PointerGesture::none;
         pointerSourceIndex = -1;
+    }
+
+    void startLifecycleMonitor()
+    {
+        constexpr int lifecyclePollIntervalMs = 10;
+        if (! isTimerRunning())
+            startTimer(lifecyclePollIntervalMs);
     }
 
     PointerGesture pointerGesture = PointerGesture::none;

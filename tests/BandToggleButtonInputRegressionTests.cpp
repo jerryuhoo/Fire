@@ -49,6 +49,18 @@ struct BandToggleButtonPointerTestAccess
     }
 
     template <typename ButtonType>
+    static bool isEntered(const ButtonType& button)
+    {
+        return button.isEntered;
+    }
+
+    template <typename ButtonType>
+    static bool isLifecycleTimerRunning(const ButtonType& button)
+    {
+        return button.isTimerRunning();
+    }
+
+    template <typename ButtonType>
     static float enabled(const ButtonType& button)
     {
         return button.enabledAnimation.current;
@@ -247,6 +259,28 @@ void checkHiddenTimerCallbackMayDeleteButton()
 
     CHECK(button == nullptr);
 }
+
+template <typename ButtonType>
+void checkParentHierarchyCallbackMayDeleteButton()
+{
+    juce::Component desktopHost;
+    desktopHost.setBounds(0, 0, 80, 48);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+
+    auto button = std::make_unique<ButtonType>();
+    button->setBounds(0, 0, 24, 24);
+    desktopHost.addAndMakeVisible(*button);
+    auto* rawButton = button.get();
+    rawButton->setState(juce::Button::buttonDown);
+    REQUIRE(rawButton->isDown());
+    rawButton->onStateChange = [&button] { button.reset(); };
+
+    desktopHost.removeChildComponent(rawButton);
+
+    CHECK(button == nullptr);
+    desktopHost.removeFromDesktop();
+}
 } // namespace
 
 TEST_CASE("Band toggles reject popup and auxiliary mouse gestures",
@@ -366,6 +400,120 @@ TEST_CASE("Band toggle focus presentation follows keyboard modality",
             button));
         CHECK(BandToggleButtonPointerTestAccess::focus(button) == 0.0f);
     });
+}
+
+TEST_CASE("Band toggles clear settled interactions at hierarchy and peer boundaries",
+          "[band-toggle][multiband][ui][input][animation][lifecycle][peer][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto settleAnimations = [](auto& button)
+    {
+        for (int frame = 0; frame < 90; ++frame)
+            BandToggleButtonPointerTestAccess::runTimerCallback(button);
+    };
+    const auto checkPresentationCleared = [](const auto& button)
+    {
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::hasPrimaryPointer(button));
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::isEntered(button));
+        CHECK_FALSE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(
+            button));
+        CHECK_FALSE(button.isDown());
+        CHECK(BandToggleButtonPointerTestAccess::hover(button) == 0.0f);
+        CHECK(BandToggleButtonPointerTestAccess::press(button) == 0.0f);
+        CHECK(BandToggleButtonPointerTestAccess::focus(button) == 0.0f);
+    };
+
+    SECTION("removing the button from its parent clears synchronously")
+    {
+        forEachBandToggle([&](auto& button)
+        {
+            juce::Component desktopHost;
+            desktopHost.setBounds(0, 0, 80, 48);
+            desktopHost.addAndMakeVisible(button);
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+
+            auto& component = static_cast<juce::Component&>(button);
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+            desktopHost.removeChildComponent(&button);
+
+            REQUIRE_FALSE(button.isShowing());
+            checkPresentationCleared(button);
+            desktopHost.removeFromDesktop();
+        });
+    }
+
+    SECTION("a settled primary press survives only until the peer-loss watch")
+    {
+        forEachBandToggle([&](auto& button)
+        {
+            juce::Component desktopHost;
+            desktopHost.setBounds(0, 0, 80, 48);
+            desktopHost.addAndMakeVisible(button);
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto& component = static_cast<juce::Component&>(button);
+            component.mouseDown(makeMouseEvent(button, leftButton));
+            REQUIRE(button.isDown());
+            settleAnimations(button);
+            REQUIRE(BandToggleButtonPointerTestAccess::isLifecycleTimerRunning(
+                button));
+
+            desktopHost.removeFromDesktop();
+            REQUIRE_FALSE(button.isShowing());
+            BandToggleButtonPointerTestAccess::runTimerCallback(button);
+            checkPresentationCleared(button);
+
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+            component.mouseUp(makeMouseEvent(button, {}));
+            CHECK(clickCount == 0);
+            desktopHost.removeFromDesktop();
+        });
+    }
+
+    SECTION("settled hover and keyboard focus keep a peer-loss watch")
+    {
+        forEachBandToggle([&](auto& button)
+        {
+            juce::Component desktopHost;
+            desktopHost.setBounds(0, 0, 80, 48);
+            desktopHost.addAndMakeVisible(button);
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+
+            auto& component = static_cast<juce::Component&>(button);
+            component.mouseEnter(makeMouseEvent(button, {}));
+            button.grabKeyboardFocus();
+            REQUIRE(button.hasKeyboardFocus(true));
+            BandToggleButtonPointerTestAccess::notifyFocusGained(
+                button, juce::Component::focusChangedByTabKey);
+            settleAnimations(button);
+            REQUIRE(BandToggleButtonPointerTestAccess::isEntered(button));
+            REQUIRE(BandToggleButtonPointerTestAccess::isKeyboardFocusVisible(
+                button));
+            REQUIRE(BandToggleButtonPointerTestAccess::hover(button) == 1.0f);
+            REQUIRE(BandToggleButtonPointerTestAccess::focus(button) == 1.0f);
+            REQUIRE(BandToggleButtonPointerTestAccess::isLifecycleTimerRunning(
+                button));
+
+            desktopHost.removeFromDesktop();
+            REQUIRE_FALSE(button.isShowing());
+            BandToggleButtonPointerTestAccess::runTimerCallback(button);
+            checkPresentationCleared(button);
+        });
+    }
 }
 
 TEST_CASE("Band toggles pair only accepted primary mouse gestures",
@@ -774,6 +922,12 @@ TEST_CASE("Band toggle lifecycle callbacks stop after synchronous deletion",
     {
         checkHiddenTimerCallbackMayDeleteButton<SoloButton>();
         checkHiddenTimerCallbackMayDeleteButton<EnableButton>();
+    }
+
+    SECTION("parent hierarchy cleanup")
+    {
+        checkParentHierarchyCallbackMayDeleteButton<SoloButton>();
+        checkParentHierarchyCallbackMayDeleteButton<EnableButton>();
     }
 
     SECTION("direct gesture dismissal")

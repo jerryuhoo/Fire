@@ -47,6 +47,7 @@ private:
 #endif
 
     void visibilityChanged() override;
+    void parentHierarchyChanged() override;
     void enablementChanged() override;
     void focusGained(FocusChangeType) override;
     void focusLost(FocusChangeType) override;
@@ -57,6 +58,9 @@ private:
     void updateAnimationTargets() noexcept;
     void startAnimationIfNeeded() noexcept;
     bool advanceAnimation(float deltaSeconds) noexcept;
+    bool animationsSettled() const noexcept;
+    bool hasPresentedInteraction() const noexcept;
+    void clearInteractionPresentation() noexcept;
     void recoverMissingPointerUp(const juce::MouseEvent& event);
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
 

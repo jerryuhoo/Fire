@@ -246,6 +246,28 @@ void SoloButton::visibilityChanged()
     }
 }
 
+void SoloButton::parentHierarchyChanged()
+{
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
+    juce::ToggleButton::parentHierarchyChanged();
+
+    if (safeThis == nullptr)
+        return;
+
+    if (! isShowing())
+    {
+        dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        clearInteractionPresentation();
+        repaint();
+        return;
+    }
+
+    updateAnimationTargets();
+}
+
 void SoloButton::enablementChanged()
 {
     const juce::Component::SafePointer<SoloButton> safeThis(this);
@@ -296,7 +318,7 @@ void SoloButton::buttonStateChanged()
 
 void SoloButton::timerCallback()
 {
-    if (! isVisibleInHierarchy(*this))
+    if (! isShowing())
     {
         const juce::Component::SafePointer<SoloButton> safeThis(this);
         dismissPointerGesture();
@@ -304,20 +326,23 @@ void SoloButton::timerCallback()
         if (safeThis == nullptr)
             return;
 
-        isEntered = false;
-        keyboardFocusVisible = false;
-        hoverAnimation.snapTo(0.0f);
-        pressAnimation.snapTo(0.0f);
-        focusAnimation.snapTo(0.0f);
-        stopTimer();
+        clearInteractionPresentation();
         repaint();
         return;
     }
 
     if (advanceAnimation(1.0f / 60.0f))
         repaint();
-    else
-        stopTimer();
+
+    if (animationsSettled())
+    {
+        if (primaryPointerDown)
+            startTimerHz(60);
+        else if (hasPresentedInteraction())
+            startTimer(100);
+        else
+            stopTimer();
+    }
 }
 
 void SoloButton::updateAnimationTargets() noexcept
@@ -337,10 +362,17 @@ void SoloButton::updateAnimationTargets() noexcept
 
 void SoloButton::startAnimationIfNeeded() noexcept
 {
-    if (isVisibleInHierarchy(*this)
-        && (! hoverAnimation.isSettled() || ! pressAnimation.isSettled()
-            || ! focusAnimation.isSettled() || ! enabledAnimation.isSettled()))
+    if (! isShowing())
+        return;
+
+    if (! animationsSettled() || primaryPointerDown)
+    {
         startTimerHz(60);
+        return;
+    }
+
+    if (hasPresentedInteraction() && ! isTimerRunning())
+        startTimer(100);
 }
 
 bool SoloButton::advanceAnimation(float deltaSeconds) noexcept
@@ -350,6 +382,35 @@ bool SoloButton::advanceAnimation(float deltaSeconds) noexcept
     changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
     changed = enabledAnimation.advance(deltaSeconds, 0.13f) || changed;
     return changed;
+}
+
+bool SoloButton::animationsSettled() const noexcept
+{
+    return hoverAnimation.isSettled() && pressAnimation.isSettled()
+        && focusAnimation.isSettled() && enabledAnimation.isSettled();
+}
+
+bool SoloButton::hasPresentedInteraction() const noexcept
+{
+    return isEnabled()
+        && (primaryPointerDown || isEntered || isDown()
+            || keyboardFocusVisible
+            || hoverAnimation.current > 0.001f
+            || pressAnimation.current > 0.001f
+            || focusAnimation.current > 0.001f
+            || hoverAnimation.target > 0.001f
+            || pressAnimation.target > 0.001f
+            || focusAnimation.target > 0.001f);
+}
+
+void SoloButton::clearInteractionPresentation() noexcept
+{
+    stopTimer();
+    isEntered = false;
+    keyboardFocusVisible = false;
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
 }
 
 void SoloButton::dismissPointerGesture() noexcept

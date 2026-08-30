@@ -261,6 +261,28 @@ void EnableButton::visibilityChanged()
     }
 }
 
+void EnableButton::parentHierarchyChanged()
+{
+    const juce::Component::SafePointer<EnableButton> safeThis(this);
+    juce::ToggleButton::parentHierarchyChanged();
+
+    if (safeThis == nullptr)
+        return;
+
+    if (! isShowing())
+    {
+        dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        clearInteractionPresentation();
+        repaint();
+        return;
+    }
+
+    updateAnimationTargets();
+}
+
 void EnableButton::enablementChanged()
 {
     const juce::Component::SafePointer<EnableButton> safeThis(this);
@@ -311,7 +333,7 @@ void EnableButton::buttonStateChanged()
 
 void EnableButton::timerCallback()
 {
-    if (! isVisibleInHierarchy(*this))
+    if (! isShowing())
     {
         const juce::Component::SafePointer<EnableButton> safeThis(this);
         dismissPointerGesture();
@@ -319,20 +341,23 @@ void EnableButton::timerCallback()
         if (safeThis == nullptr)
             return;
 
-        isEntered = false;
-        keyboardFocusVisible = false;
-        hoverAnimation.snapTo(0.0f);
-        pressAnimation.snapTo(0.0f);
-        focusAnimation.snapTo(0.0f);
-        stopTimer();
+        clearInteractionPresentation();
         repaint();
         return;
     }
 
     if (advanceAnimation(1.0f / 60.0f))
         repaint();
-    else
-        stopTimer();
+
+    if (animationsSettled())
+    {
+        if (primaryPointerDown)
+            startTimerHz(60);
+        else if (hasPresentedInteraction())
+            startTimer(100);
+        else
+            stopTimer();
+    }
 }
 
 void EnableButton::updateAnimationTargets() noexcept
@@ -352,10 +377,17 @@ void EnableButton::updateAnimationTargets() noexcept
 
 void EnableButton::startAnimationIfNeeded() noexcept
 {
-    if (isVisibleInHierarchy(*this)
-        && (! hoverAnimation.isSettled() || ! pressAnimation.isSettled()
-            || ! focusAnimation.isSettled() || ! enabledAnimation.isSettled()))
+    if (! isShowing())
+        return;
+
+    if (! animationsSettled() || primaryPointerDown)
+    {
         startTimerHz(60);
+        return;
+    }
+
+    if (hasPresentedInteraction() && ! isTimerRunning())
+        startTimer(100);
 }
 
 bool EnableButton::advanceAnimation(float deltaSeconds) noexcept
@@ -365,6 +397,35 @@ bool EnableButton::advanceAnimation(float deltaSeconds) noexcept
     changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
     changed = enabledAnimation.advance(deltaSeconds, 0.13f) || changed;
     return changed;
+}
+
+bool EnableButton::animationsSettled() const noexcept
+{
+    return hoverAnimation.isSettled() && pressAnimation.isSettled()
+        && focusAnimation.isSettled() && enabledAnimation.isSettled();
+}
+
+bool EnableButton::hasPresentedInteraction() const noexcept
+{
+    return isEnabled()
+        && (primaryPointerDown || isEntered || isDown()
+            || keyboardFocusVisible
+            || hoverAnimation.current > 0.001f
+            || pressAnimation.current > 0.001f
+            || focusAnimation.current > 0.001f
+            || hoverAnimation.target > 0.001f
+            || pressAnimation.target > 0.001f
+            || focusAnimation.target > 0.001f);
+}
+
+void EnableButton::clearInteractionPresentation() noexcept
+{
+    stopTimer();
+    isEntered = false;
+    keyboardFocusVisible = false;
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
 }
 
 void EnableButton::dismissPointerGesture() noexcept

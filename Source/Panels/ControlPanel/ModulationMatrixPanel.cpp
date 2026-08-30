@@ -530,18 +530,39 @@ void ModulationMatrixHeader::resized()
 ModulationMatrixRow::PrimaryButtonSlider::~PrimaryButtonSlider()
 {
     dismissTransientInteraction();
+    stopTimer();
+}
+
+float ModulationMatrixRow::PrimaryButtonSlider::getHoverAnimation() const noexcept
+{
+    return hoverAnimation.current;
+}
+
+float ModulationMatrixRow::PrimaryButtonSlider::getPressAnimation() const noexcept
+{
+    return pressAnimation.current;
+}
+
+float ModulationMatrixRow::PrimaryButtonSlider::getFocusAnimation() const noexcept
+{
+    return focusAnimation.current;
+}
+
+float ModulationMatrixRow::PrimaryButtonSlider::getDisabledAnimation() const noexcept
+{
+    return disabledAnimation.current;
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
     const juce::MouseEvent& event)
 {
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
     if (primaryGestureInProgress)
     {
         if (! isPointerSource(event))
             return;
 
-        const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
-        finishActivePointerGesture();
+        finishActivePointerGesture(&event);
         if (safeThis == nullptr)
             return;
     }
@@ -557,7 +578,15 @@ void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
     pointerSourceType = event.source.getType();
     pointerSourceIndex = event.source.getIndex();
     lastAcceptedPointerEvent.emplace(event);
+    updateAnimationTargets();
+
+    pointerDispatchInProgress = true;
     juce::Slider::mouseDown(event);
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    completePointerDispatch();
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::mouseDrag(
@@ -567,7 +596,50 @@ void ModulationMatrixRow::PrimaryButtonSlider::mouseDrag(
         return;
 
     lastAcceptedPointerEvent.emplace(event);
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    pointerDispatchInProgress = true;
     juce::Slider::mouseDrag(event);
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    completePointerDispatch();
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::mouseEnter(
+    const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::mouseEnter(event);
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    recoverMissingPointerUp(event);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::mouseMove(
+    const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::mouseMove(event);
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    recoverMissingPointerUp(event);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::mouseExit(
+    const juce::MouseEvent& event)
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::mouseExit(event);
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    recoverMissingPointerUp(event);
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::mouseUp(
@@ -576,17 +648,18 @@ void ModulationMatrixRow::PrimaryButtonSlider::mouseUp(
     if (! primaryGestureInProgress || ! isPointerSource(event))
         return;
 
-    primaryGestureInProgress = false;
-    pointerSourceIndex = -1;
-    lastAcceptedPointerEvent.reset();
-    juce::Slider::mouseUp(event);
+    finishActivePointerGesture(&event);
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::visibilityChanged()
 {
     const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
     juce::Slider::visibilityChanged();
-    if (safeThis != nullptr && ! isShowing())
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    if (! isShowing())
         dismissTransientInteraction();
 }
 
@@ -594,7 +667,11 @@ void ModulationMatrixRow::PrimaryButtonSlider::enablementChanged()
 {
     const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
     juce::Slider::enablementChanged();
-    if (safeThis != nullptr)
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    if (! isEnabled())
         dismissTransientInteraction();
 }
 
@@ -602,8 +679,30 @@ void ModulationMatrixRow::PrimaryButtonSlider::parentHierarchyChanged()
 {
     const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
     juce::Slider::parentHierarchyChanged();
-    if (safeThis != nullptr && ! isShowing())
+    if (safeThis == nullptr)
+        return;
+
+    updateAnimationTargets();
+    if (! isShowing())
         dismissTransientInteraction();
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::focusGained(
+    juce::Component::FocusChangeType cause)
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::focusGained(cause);
+    if (safeThis != nullptr)
+        updateAnimationTargets();
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::focusLost(
+    juce::Component::FocusChangeType cause)
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::focusLost(cause);
+    if (safeThis != nullptr)
+        updateAnimationTargets();
 }
 
 bool ModulationMatrixRow::PrimaryButtonSlider::isPointerSource(
@@ -613,18 +712,127 @@ bool ModulationMatrixRow::PrimaryButtonSlider::isPointerSource(
         && event.source.getIndex() == pointerSourceIndex;
 }
 
-void ModulationMatrixRow::PrimaryButtonSlider::finishActivePointerGesture()
+void ModulationMatrixRow::PrimaryButtonSlider::recoverMissingPointerUp(
+    const juce::MouseEvent& event)
 {
-    auto releaseEvent = std::move(lastAcceptedPointerEvent);
+    if (primaryGestureInProgress
+        && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        finishActivePointerGesture(&event);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::finishActivePointerGesture(
+    const juce::MouseEvent* releaseEventOverride)
+{
+    std::optional<juce::MouseEvent> releaseEvent;
+    if (releaseEventOverride != nullptr)
+        releaseEvent.emplace(*releaseEventOverride);
+    else if (lastAcceptedPointerEvent.has_value())
+        releaseEvent.emplace(*lastAcceptedPointerEvent);
+
     const auto wasActive = primaryGestureInProgress;
     primaryGestureInProgress = false;
     pointerSourceIndex = -1;
     lastAcceptedPointerEvent.reset();
+    pressAnimation.setTarget(0.0f);
+    updateAnimationTargets();
 
-    // Slider::mouseUp may synchronously delete this row through a listener, so
-    // gesture completion must remain the final operation.
-    if (wasActive && releaseEvent.has_value())
+    if (! wasActive || ! releaseEvent.has_value())
+        return;
+
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    pointerDispatchInProgress = true;
+    // A value listener may request a host notification here. Keep it deferred
+    // until Slider has finished using its Pimpl, then make it the final action.
+    if (releaseEvent.has_value())
         juce::Slider::mouseUp(*releaseEvent);
+    if (safeThis == nullptr)
+        return;
+
+    completePointerDispatch();
+}
+
+bool ModulationMatrixRow::PrimaryButtonSlider::deferPointerDispatchCompletion(
+    bool requestRebuild,
+    bool notifyHost) noexcept
+{
+    if (! pointerDispatchInProgress)
+        return false;
+
+    rebuildAfterPointerDispatch = rebuildAfterPointerDispatch || requestRebuild;
+    notifyHostAfterPointerDispatch = notifyHostAfterPointerDispatch || notifyHost;
+    return true;
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::completePointerDispatch()
+{
+    jassert(pointerDispatchInProgress);
+    pointerDispatchInProgress = false;
+    const auto requestRebuild = rebuildAfterPointerDispatch;
+    const auto notifyHost = notifyHostAfterPointerDispatch;
+    rebuildAfterPointerDispatch = false;
+    notifyHostAfterPointerDispatch = false;
+    auto completion = onPointerDispatchComplete;
+
+    // The completion can synchronously delete this Slider through a host
+    // listener. It must therefore remain the final operation in this method.
+    if ((requestRebuild || notifyHost) && completion)
+        completion(requestRebuild, notifyHost);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::updateAnimationTargets() noexcept
+{
+    if (! isShowing())
+    {
+        stopTimer();
+        hoverAnimation.snapTo(0.0f);
+        pressAnimation.snapTo(0.0f);
+        focusAnimation.snapTo(0.0f);
+        disabledAnimation.snapTo(isEnabled() ? 0.0f : 1.0f);
+        repaint();
+        return;
+    }
+
+    const auto interactive = isEnabled();
+    hoverAnimation.setTarget(interactive && isMouseOver(true) ? 1.0f : 0.0f);
+    pressAnimation.setTarget(interactive && primaryGestureInProgress ? 1.0f : 0.0f);
+    focusAnimation.setTarget(interactive && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    disabledAnimation.setTarget(interactive ? 0.0f : 1.0f);
+    if (! animationsSettled() && ! isTimerRunning())
+        startTimerHz(60);
+    repaint();
+}
+
+bool ModulationMatrixRow::PrimaryButtonSlider::animationsSettled() const noexcept
+{
+    return hoverAnimation.isSettled() && pressAnimation.isSettled()
+        && focusAnimation.isSettled() && disabledAnimation.isSettled();
+}
+
+bool ModulationMatrixRow::PrimaryButtonSlider::advanceAnimation(
+    float deltaSeconds) noexcept
+{
+    auto changed = hoverAnimation.advance(deltaSeconds, 0.10f);
+    changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
+    changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
+    changed = disabledAnimation.advance(deltaSeconds, 0.13f) || changed;
+    return changed;
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::timerCallback()
+{
+    if (! isShowing())
+    {
+        updateAnimationTargets();
+        return;
+    }
+
+    updateAnimationTargets();
+    const auto changed = advanceAnimation(1.0f / 60.0f);
+    if (changed)
+        repaint();
+    if (animationsSettled())
+        stopTimer();
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::dismissTransientInteraction()
@@ -664,6 +872,11 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
     amountSlider.setColour(juce::Slider::trackColourId, fire::ui::colours::modulation);
     amountSlider.setScrollWheelEnabled(false);
+    amountSlider.onPointerDispatchComplete =
+        [this](bool requestRebuild, bool notifyHost)
+        {
+            completeAmountPointerDispatch(requestRebuild, notifyHost);
+        };
     amountSlider.addListener(this);
 
     // BIPOLAR BUTTON
@@ -904,6 +1117,9 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
     {
         if (isParentRebuildPending())
         {
+            if (amountSlider.deferPointerDispatchCompletion(true, false))
+                return;
+
             requestParentRebuild();
             return;
         }
@@ -911,6 +1127,9 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
         auto editSession = routingEditSession;
         if (editSession == nullptr)
         {
+            if (amountSlider.deferPointerDispatchCompletion(true, false))
+                return;
+
             requestParentRebuild();
             return;
         }
@@ -925,6 +1144,9 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
             replacementRouting);
         if (! result.accepted)
         {
+            if (amountSlider.deferPointerDispatchCompletion(true, false))
+                return;
+
             requestParentRebuild();
             return;
         }
@@ -933,8 +1155,12 @@ void ModulationMatrixRow::sliderValueChanged(juce::Slider* slider)
         expectedRouting = result.routing;
         if (result.changed)
         {
+            if (amountSlider.deferPointerDispatchCompletion(false, true))
+                return;
+
             auto& processorToNotify = processor;
             processorToNotify.lfoDataHasChanged();
+            return;
         }
     }
 }
@@ -1051,6 +1277,31 @@ void ModulationMatrixRow::requestParentRebuild()
 {
     if (auto* panel = findParentComponentOfClass<ModulationMatrixPanel>())
         panel->requestUiRebuild();
+}
+
+void ModulationMatrixRow::completeAmountPointerDispatch(
+    bool requestRebuild,
+    bool notifyHost)
+{
+    auto* processorToNotify = &processor;
+    if (requestRebuild)
+    {
+        const juce::Component::SafePointer<ModulationMatrixRow> safeThis(this);
+        requestParentRebuild();
+
+        if (safeThis == nullptr)
+        {
+            if (notifyHost)
+                processorToNotify->lfoDataHasChanged();
+            return;
+        }
+    }
+
+    // requestParentRebuild() dismisses transient controls and may
+    // synchronously delete this row. The processor outlives its editor, so use
+    // the captured processor pointer and do not touch row members afterwards.
+    if (notifyHost)
+        processorToNotify->lfoDataHasChanged();
 }
 
 //==============================================================================
@@ -1201,7 +1452,11 @@ void ModulationMatrixPanel::buttonClicked(juce::Button* button)
 
 void ModulationMatrixPanel::buildUiFromProcessorState()
 {
+    const juce::Component::SafePointer<ModulationMatrixPanel> safePanel(this);
     dismissTransientInteractions();
+    if (safePanel == nullptr)
+        return;
+
     rows.clear();
     contentComponent.removeAllChildren();
 
@@ -1259,8 +1514,10 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
 
 void ModulationMatrixPanel::requestUiRebuild()
 {
+    const juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
     dismissTransientInteractions();
-    triggerAsyncUpdate();
+    if (safeThis != nullptr)
+        triggerAsyncUpdate();
 }
 
 bool ModulationMatrixPanel::isUiRebuildPending() const noexcept

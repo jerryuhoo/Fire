@@ -159,29 +159,61 @@ public:
 private:
     friend struct ModulationMatrixRowTestAccess;
 
-    class PrimaryButtonSlider final : public juce::Slider
+    class PrimaryButtonSlider final : public juce::Slider,
+                                      private juce::Timer,
+                                      public PrimarySliderAnimationState
     {
     public:
         ~PrimaryButtonSlider() override;
+        float getHoverAnimation() const noexcept override;
+        float getPressAnimation() const noexcept override;
+        float getFocusAnimation() const noexcept override;
+        float getDisabledAnimation() const noexcept override;
         void mouseDown(const juce::MouseEvent& event) override;
         void mouseDrag(const juce::MouseEvent& event) override;
+        void mouseEnter(const juce::MouseEvent& event) override;
+        void mouseMove(const juce::MouseEvent& event) override;
+        void mouseExit(const juce::MouseEvent& event) override;
         void mouseUp(const juce::MouseEvent& event) override;
         void visibilityChanged() override;
         void enablementChanged() override;
         void parentHierarchyChanged() override;
+        void focusGained(juce::Component::FocusChangeType cause) override;
+        void focusLost(juce::Component::FocusChangeType cause) override;
         void dismissTransientInteraction();
 
     private:
+        friend class ModulationMatrixRow;
         friend struct ModulationMatrixRowTestAccess;
 
         bool isPointerSource(const juce::MouseEvent& event) const noexcept;
-        void finishActivePointerGesture();
+        void recoverMissingPointerUp(const juce::MouseEvent& event);
+        void finishActivePointerGesture(
+            const juce::MouseEvent* releaseEvent = nullptr);
+        bool deferPointerDispatchCompletion(bool requestRebuild,
+                                            bool notifyHost) noexcept;
+        void completePointerDispatch();
+        void updateAnimationTargets() noexcept;
+        bool animationsSettled() const noexcept;
+        bool advanceAnimation(float deltaSeconds) noexcept;
+        void timerCallback() override;
+
+        using PointerDispatchCompletion =
+            std::function<void(bool requestRebuild, bool notifyHost)>;
+        PointerDispatchCompletion onPointerDispatchComplete;
 
         juce::MouseInputSource::InputSourceType pointerSourceType =
             juce::MouseInputSource::mouse;
         int pointerSourceIndex = -1;
         std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
         bool primaryGestureInProgress = false;
+        bool pointerDispatchInProgress = false;
+        bool rebuildAfterPointerDispatch = false;
+        bool notifyHostAfterPointerDispatch = false;
+        fire::ui::DampedValue hoverAnimation;
+        fire::ui::DampedValue pressAnimation;
+        fire::ui::DampedValue focusAnimation;
+        fire::ui::DampedValue disabledAnimation;
     };
 
     void buttonClicked(juce::Button* button) override;
@@ -197,6 +229,8 @@ private:
         const ModulationMatrixRoutingComboBox::EditContext& context);
     bool isParentRebuildPending();
     void requestParentRebuild();
+    void completeAmountPointerDispatch(bool requestRebuild,
+                                       bool notifyHost);
 
     FireAudioProcessor& processor;
     FireLookAndFeel fireLookAndFeel;

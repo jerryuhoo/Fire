@@ -47,6 +47,35 @@ struct ModulationMatrixRowTestAccess
     {
         return row.amountSlider.primaryGestureInProgress;
     }
+
+    static bool isAmountPointerDispatchInProgress(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.amountSlider.pointerDispatchInProgress;
+    }
+
+    static void setAmountAnimationTargets(ModulationMatrixRow& row,
+                                          float hover,
+                                          float press,
+                                          float focus,
+                                          float disabled) noexcept
+    {
+        row.amountSlider.hoverAnimation.setTarget(hover);
+        row.amountSlider.pressAnimation.setTarget(press);
+        row.amountSlider.focusAnimation.setTarget(focus);
+        row.amountSlider.disabledAnimation.setTarget(disabled);
+    }
+
+    static bool advanceAmountAnimation(ModulationMatrixRow& row,
+                                       float deltaSeconds) noexcept
+    {
+        return row.amountSlider.advanceAnimation(deltaSeconds);
+    }
+
+    static void updateAmountAnimationTargets(ModulationMatrixRow& row) noexcept
+    {
+        row.amountSlider.updateAnimationTargets();
+    }
 };
 
 namespace
@@ -189,8 +218,11 @@ class DeleteMatrixPanelOnHostNotification final
 public:
     DeleteMatrixPanelOnHostNotification(
         FireAudioProcessor& processorToObserve,
-        std::unique_ptr<ModulationMatrixPanel>& panelToDelete)
-        : processor(processorToObserve), panel(panelToDelete)
+        std::unique_ptr<ModulationMatrixPanel>& panelToDelete,
+        const ModulationMatrixRow* amountRowToObserve = nullptr)
+        : processor(processorToObserve),
+          panel(panelToDelete),
+          amountRow(amountRowToObserve)
     {
         processor.addListener(this);
     }
@@ -212,14 +244,20 @@ public:
             return;
 
         ++notificationCount;
+        if (amountRow != nullptr)
+            notificationArrivedAfterPointerDispatch =
+                ! ModulationMatrixRowTestAccess::
+                    isAmountPointerDispatchInProgress(*amountRow);
         panel.reset();
         callbackCompleted = true;
     }
 
     FireAudioProcessor& processor;
     std::unique_ptr<ModulationMatrixPanel>& panel;
+    const ModulationMatrixRow* amountRow = nullptr;
     int notificationCount = 0;
     bool callbackCompleted = false;
+    bool notificationArrivedAfterPointerDispatch = false;
 };
 
 class EditSliderOnHostNotification final
@@ -307,6 +345,24 @@ public:
 
     int valueChangeCount = 0;
     int dragStartCount = 0;
+    int dragEndCount = 0;
+};
+
+class EditAmountOnDragEnd final : public juce::Slider::Listener
+{
+public:
+    void sliderValueChanged(juce::Slider*) override {}
+    void sliderDragStarted(juce::Slider*) override {}
+
+    void sliderDragEnded(juce::Slider* slider) override
+    {
+        ++dragEndCount;
+        slider->setValue(juce::jlimit(-1.0,
+                                     1.0,
+                                     slider->getValue() + 0.17),
+                         juce::sendNotificationSync);
+    }
+
     int dragEndCount = 0;
 };
 
@@ -448,6 +504,51 @@ TEST_CASE("Modulation matrix host notifications may synchronously delete the pan
         CHECK(routings[0].sourceLfoIndex == 1);
     }
 
+    SECTION("drag amount")
+    {
+        std::vector<ModulationMatrixRow*> rows;
+        collectMatrixRows(*panel, rows);
+        REQUIRE(rows.size() == 1);
+        auto* amountSlider = findAmountSlider(*rows.front());
+        REQUIRE(amountSlider != nullptr);
+        REQUIRE(amountSlider->getWidth() > 80);
+
+        const auto downPosition = juce::Point<float> {
+            4.0f, amountSlider->getLocalBounds().toFloat().getCentreY()
+        };
+        const auto dragPosition = juce::Point<float> {
+            static_cast<float>(amountSlider->getWidth() - 70), downPosition.y
+        };
+        const auto primary = juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier };
+        amountSlider->mouseDown(makeMouseEvent(*amountSlider,
+                                               downPosition,
+                                               primary,
+                                               downPosition,
+                                               false));
+        const auto depthAfterDown =
+            manager.getModulationRoutingsCopy().getReference(0).depth;
+        DeleteMatrixPanelOnHostNotification host(
+            processor, panel, rows.front());
+
+        // The host deletes the complete panel from lfoDataHasChanged(). The
+        // notification must run only after JUCE's Slider::mouseDrag has
+        // finished accessing its Pimpl.
+        amountSlider->mouseDrag(makeMouseEvent(*amountSlider,
+                                               dragPosition,
+                                               primary,
+                                               downPosition,
+                                               true));
+
+        CHECK(host.callbackCompleted);
+        CHECK(host.notificationCount == 1);
+        CHECK(host.notificationArrivedAfterPointerDispatch);
+        CHECK(panel == nullptr);
+        const auto routings = manager.getModulationRoutingsCopy();
+        REQUIRE(routings.size() == 1);
+        CHECK(routings[0].depth != Catch::Approx(depthAfterDown));
+    }
+
     SECTION("remove route")
     {
         std::vector<ModulationMatrixRow*> rows;
@@ -509,6 +610,62 @@ TEST_CASE("Modulation matrix invalidates shifted rows before host notification",
     REQUIRE(liveRoutings.size() == 2);
     CHECK(liveRoutings[0].depth == Catch::Approx(0.5f));
     CHECK(liveRoutings[1].depth == Catch::Approx(0.5f));
+}
+
+TEST_CASE("Modulation matrix rebuild entry points survive deletion during dismissal",
+          "[ui][modulation-matrix][lifetime][dismissal][reentrancy][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        auto& routings = manager.getModulationRoutings();
+        routings.clear();
+        routings.add(routing);
+    }
+
+    auto panel = std::make_unique<ModulationMatrixPanel>(processor);
+    panel->setBounds(0, 0, 760, 420);
+    std::vector<ModulationMatrixRow*> rows;
+    collectMatrixRows(*panel, rows);
+    REQUIRE(rows.size() == 1);
+    auto* amountSlider = findAmountSlider(*rows.front());
+    REQUIRE(amountSlider != nullptr);
+    const auto position = amountSlider->getLocalBounds().toFloat().getCentre();
+    amountSlider->mouseDown(makeMouseEvent(
+        *amountSlider,
+        position,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+        position,
+        false));
+    REQUIRE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(*rows.front()));
+
+    EditAmountOnDragEnd editOnDismissal;
+    amountSlider->addListener(&editOnDismissal);
+    DeleteMatrixPanelOnHostNotification host(
+        processor, panel, rows.front());
+
+    SECTION("queued rebuild")
+    {
+        panel->requestUiRebuild();
+    }
+
+    SECTION("immediate rebuild")
+    {
+        panel->buildUiFromProcessorState();
+    }
+
+    CHECK(editOnDismissal.dragEndCount == 1);
+    CHECK(host.callbackCompleted);
+    CHECK(host.notificationCount == 1);
+    CHECK(host.notificationArrivedAfterPointerDispatch);
+    CHECK(panel == nullptr);
 }
 
 TEST_CASE("Modulation matrix routing menus reject auxiliary and mixed pointer input",
@@ -955,6 +1112,34 @@ TEST_CASE("Modulation matrix amount accepts only primary-button drags",
               == Catch::Approx(static_cast<float>(amountSlider->getValue())));
     }
 
+    SECTION("a move without the owning button recovers a missing mouseUp")
+    {
+        const auto primary = juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier };
+        amountSlider->mouseDown(makeMouseEvent(*amountSlider,
+                                               downPosition,
+                                               primary,
+                                               downPosition,
+                                               false));
+        amountSlider->mouseDrag(makeMouseEvent(*amountSlider,
+                                               dragPosition,
+                                               primary,
+                                               downPosition,
+                                               true));
+        REQUIRE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(row));
+        REQUIRE(sliderCapture.dragEndCount == 0);
+
+        amountSlider->mouseMove(makeMouseEvent(*amountSlider,
+                                               dragPosition,
+                                               {},
+                                               downPosition,
+                                               true));
+
+        CHECK_FALSE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(row));
+        CHECK(sliderCapture.dragEndCount == 1);
+        CHECK(amountSlider->getThumbBeingDragged() == -1);
+    }
+
     SECTION("a foreign MouseInputSource cannot drag or release the owner gesture")
     {
         const auto primary = juce::ModifierKeys {
@@ -1009,6 +1194,51 @@ TEST_CASE("Modulation matrix amount accepts only primary-button drags",
     }
 
     amountSlider->removeListener(&sliderCapture);
+}
+
+TEST_CASE("Modulation matrix amount uses continuous shared slider feedback",
+          "[ui][modulation-matrix][amount-slider][animation]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
+    auto* amountSlider = findAmountSlider(row);
+    REQUIRE(amountSlider != nullptr);
+    auto* animation =
+        dynamic_cast<PrimarySliderAnimationState*>(amountSlider);
+    REQUIRE(animation != nullptr);
+
+    ModulationMatrixRowTestAccess::setAmountAnimationTargets(
+        row, 1.0f, 1.0f, 1.0f, 1.0f);
+    REQUIRE(ModulationMatrixRowTestAccess::advanceAmountAnimation(
+        row, 1.0f / 60.0f));
+    CHECK(animation->getHoverAnimation() > 0.0f);
+    CHECK(animation->getHoverAnimation() < 1.0f);
+    CHECK(animation->getPressAnimation() > animation->getHoverAnimation());
+    CHECK(animation->getFocusAnimation() > 0.0f);
+    CHECK(animation->getDisabledAnimation() > 0.0f);
+
+    // A row hidden directly or through an ancestor must not retain animated
+    // hover/focus state or an off-screen timer.
+    ModulationMatrixRowTestAccess::updateAmountAnimationTargets(row);
+    CHECK(animation->getHoverAnimation() == Catch::Approx(0.0f));
+    CHECK(animation->getPressAnimation() == Catch::Approx(0.0f));
+    CHECK(animation->getFocusAnimation() == Catch::Approx(0.0f));
+    CHECK(animation->getDisabledAnimation() == Catch::Approx(0.0f));
+
+    amountSlider->setEnabled(false);
+    CHECK(animation->getDisabledAnimation() == Catch::Approx(1.0f));
 }
 
 TEST_CASE("Modulation matrix row dismissal closes amount and button gestures",

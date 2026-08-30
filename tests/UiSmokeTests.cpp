@@ -1181,6 +1181,11 @@ TEST_CASE("Settings dialog closes synchronously with its owning UI",
         auto* newDialog = StateComponentDialogTestAccess::getDialog(*stateComponent);
         REQUIRE(newDialog != nullptr);
         REQUIRE(newDialog->isCurrentlyModal(false));
+        REQUIRE(newDialog->getConstrainer() != nullptr);
+        CHECK(newDialog->getConstrainer()->getMinimumWidth()
+              == SettingsComponent::minimumDialogWidth);
+        CHECK(newDialog->getConstrainer()->getMinimumHeight()
+              == SettingsComponent::minimumDialogHeight);
         juce::Component::SafePointer<juce::DialogWindow> safeNewDialog(newDialog);
         juce::Component::SafePointer<juce::Component> safeNewContent(
             newDialog->getContentComponent());
@@ -1190,6 +1195,42 @@ TEST_CASE("Settings dialog closes synchronously with its owning UI",
         CHECK(safeNewContent == nullptr);
         CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
         editor->removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("dialog factory may synchronously destroy its owner")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto component = std::make_unique<state::StateComponent>(
+            processor.stateAB, processor.statePresets, processor.treeState);
+        component->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        component->setVisible(true);
+
+        int factoryCalls = 0;
+        juce::Component::SafePointer<juce::DialogWindow> safeReturnedDialog;
+        juce::Component::SafePointer<juce::Component> safeReturnedContent;
+        StateComponentDialogTestAccess::setDialogFactory(
+            *component,
+            [&]
+            {
+                ++factoryCalls;
+                auto* dialog = createSettingsDialog(processor);
+                safeReturnedDialog = dialog;
+                safeReturnedContent = dialog->getContentComponent();
+                component.reset();
+                return dialog;
+            });
+
+        auto* componentAtLaunch = component.get();
+        REQUIRE(componentAtLaunch != nullptr);
+        StateComponentDialogTestAccess::showDialog(*componentAtLaunch);
+
+        CHECK(factoryCalls == 1);
+        CHECK(component == nullptr);
+        CHECK(safeReturnedDialog == nullptr);
+        CHECK(safeReturnedContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 

@@ -22,6 +22,16 @@ constexpr int maximumPresetFolderDepth = 16;
 constexpr int maximumPresetCount = 4096;
 constexpr int maximumPresetRoutings = 128;
 
+void deleteDialogSynchronously(
+    juce::Component::SafePointer<juce::DialogWindow> dialog) noexcept
+{
+    if (dialog == nullptr)
+        return;
+
+    dialog->exitModalState(0);
+    dialog.deleteAndZero();
+}
+
 bool parseStrictDouble(const juce::String& text, double& result) noexcept
 {
     const auto trimmed = text.trim();
@@ -2677,12 +2687,14 @@ namespace state
 
     void StateComponent::showSettingsDialog()
     {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+
         // PopupMenu results are delivered asynchronously. A host may hide the
         // editor after the click but before this callback reaches us.
-        if (! isShowing())
+        if (! safeThis->isShowing())
             return;
 
-        if (auto* existingDialog = settingsDialog.getComponent())
+        if (auto* existingDialog = safeThis->settingsDialog.getComponent())
         {
             if (existingDialog->isShowing()
                 && existingDialog->isCurrentlyModal(false))
@@ -2693,33 +2705,62 @@ namespace state
 
             // A title-bar close leaves the auto-delete queued until the modal
             // manager's next update. Remove that stale window before reopening.
-            dismissSettingsDialog();
+            safeThis->dismissSettingsDialog();
+            if (safeThis == nullptr)
+                return;
         }
+
+        juce::Component::SafePointer<juce::DialogWindow> launchedDialog;
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
-        if (settingsDialogFactoryForTesting)
+        // Copy the callable before invoking it: test launchers deliberately
+        // exercise hosts which destroy the editor while a dialog is opening.
+        auto dialogFactory = safeThis->settingsDialogFactoryForTesting;
+        if (dialogFactory)
         {
-            settingsDialog = settingsDialogFactoryForTesting();
+            launchedDialog = dialogFactory();
+        }
+        else
+#endif
+        {
+            auto& processor = static_cast<FireAudioProcessor&>(
+                safeThis->procStatePresets.getProcessor());
+            auto settingsPanel = std::make_unique<SettingsComponent>(
+                processor.getAppSettings());
+
+            juce::DialogWindow::LaunchOptions options;
+            options.content.setOwned(settingsPanel.release());
+            options.content->setSize(400, 300);
+            options.dialogTitle = "Settings";
+            options.dialogBackgroundColour = COLOUR6;
+            options.escapeKeyTriggersCloseButton = true;
+            options.useNativeTitleBar = true;
+            options.resizable = true;
+            options.componentToCentreAround = safeThis.getComponent();
+            launchedDialog = options.launchAsync();
+        }
+
+        // launchAsync(), or a host callback reached while it runs, may destroy
+        // this StateComponent before returning. Keep the returned auto-delete
+        // window local until it is fully configured so no member of a deleted
+        // owner is written and an orphaned dialog cannot outlive the processor.
+        if (safeThis == nullptr)
+        {
+            deleteDialogSynchronously(launchedDialog);
             return;
         }
-#endif
 
-        auto& processor = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
-        auto settingsPanel = std::make_unique<SettingsComponent>(processor.getAppSettings());
+        if (launchedDialog == nullptr)
+            return;
 
-        juce::DialogWindow::LaunchOptions options;
-        options.content.setOwned(settingsPanel.release());
-        options.content->setSize(400, 300);
-        options.dialogTitle = "Settings";
-        options.dialogBackgroundColour = COLOUR6;
-        options.escapeKeyTriggersCloseButton = true;
-        options.useNativeTitleBar = true;
-        options.resizable = true;
-        options.componentToCentreAround = this;
-        settingsDialog = options.launchAsync();
+        StateComponent::configureSettingsDialogResizeLimits(*launchedDialog);
+        if (safeThis == nullptr)
+        {
+            deleteDialogSynchronously(launchedDialog);
+            return;
+        }
 
-        if (auto* dialog = settingsDialog.getComponent())
-            configureSettingsDialogResizeLimits(*dialog);
+        safeThis->settingsDialog = launchedDialog;
     }
 
     void StateComponent::configureSettingsDialogResizeLimits(
@@ -2805,11 +2846,7 @@ namespace state
         auto dialog = settingsDialog;
         settingsDialog = nullptr;
 
-        if (dialog != nullptr)
-        {
-            dialog->exitModalState(0);
-            dialog.deleteAndZero();
-        }
+        deleteDialogSynchronously(dialog);
     }
 
 } // namespace state

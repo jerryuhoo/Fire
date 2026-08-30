@@ -5809,17 +5809,26 @@ int FireAudioProcessor::getFFTSize() const noexcept
 bool FireAudioProcessor::popLatestFFTFrames(float* processedDestination,
                                             int processedDestinationSize,
                                             float* originalDestination,
-                                            int originalDestinationSize) noexcept
+                                            int originalDestinationSize,
+                                            std::uint64_t minimumCaptureEpoch) noexcept
 {
     return spectrumProcessor.popLatestFramePair(processedDestination,
                                                  processedDestinationSize,
                                                  originalDestination,
-                                                 originalDestinationSize);
+                                                 originalDestinationSize,
+                                                 minimumCaptureEpoch);
+}
+
+std::uint64_t FireAudioProcessor::requestFreshFFTFrameEpoch() noexcept
+{
+    return spectrumProcessor.requestFreshCaptureEpoch();
 }
 
 void FireAudioProcessor::pushDataPairToFFT(const juce::AudioBuffer<float>& processedBuffer,
                                            const juce::AudioBuffer<float>& originalBuffer)
 {
+    spectrumProcessor.beginInputBlock();
+
     if (processedBuffer.getNumChannels() <= 0 || originalBuffer.getNumChannels() <= 0)
         return;
 

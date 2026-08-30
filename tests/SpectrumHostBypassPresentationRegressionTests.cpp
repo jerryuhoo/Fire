@@ -63,6 +63,25 @@ struct SpectrumHostBypassPresentationTestAccess final
             && editor.originalSpectrum.awaitingFreshFrame;
     }
 
+    static bool presentationIsSuspended(
+        const FireAudioProcessorEditor& editor)
+    {
+        return editor.spectrumPresentationSuspended;
+    }
+
+    static std::uint64_t requiredCaptureEpoch(
+        const FireAudioProcessorEditor& editor)
+    {
+        return editor.requiredFftCaptureEpoch;
+    }
+
+    static std::uint64_t processedPendingGeneration(
+        const FireAudioProcessorEditor& editor)
+    {
+        return editor.processedSpectrum.pendingGeneration.load(
+            std::memory_order_acquire);
+    }
+
     static juce::Point<int> spectrumCentre(
         const FireAudioProcessorEditor& editor)
     {
@@ -209,4 +228,76 @@ TEST_CASE("A visible timer restores spectra suspended by a peer-detach fallback"
     CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::processedSpectrumIsBypassed(editor));
     CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::originalSpectrumIsBypassed(editor));
     CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(editor));
+}
+
+TEST_CASE("Editor reattachment discards FFT frames completed while hidden",
+          "[ui][editor][spectrum][lifecycle][freshness][hidden][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    processor.setRateAndBufferSizeDetails(48000.0, 512);
+    processor.prepareToPlay(48000.0, 512);
+    FireAudioProcessorEditor editor(processor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        editor.removeFromDesktop();
+    } };
+    REQUIRE(editor.isShowing());
+
+    editor.setVisible(false);
+    REQUIRE_FALSE(editor.isShowing());
+    REQUIRE(SpectrumHostBypassPresentationTestAccess::presentationIsSuspended(
+        editor));
+    REQUIRE(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(
+        editor));
+
+    juce::AudioBuffer<float> hiddenFrame(
+        1, SpectrumProcessor::fftSize);
+    for (int sample = 0; sample < hiddenFrame.getNumSamples(); ++sample)
+        hiddenFrame.setSample(0, sample, 9.0f);
+    processor.pushDataPairToFFT(hiddenFrame, hiddenFrame);
+
+    // No audio is published after the peer becomes visible. The hidden frame
+    // must therefore leave both traces waiting rather than masquerading as a
+    // post-reattachment update and remaining on screen indefinitely.
+    editor.setVisible(true);
+    REQUIRE(editor.isShowing());
+    REQUIRE_FALSE(
+        SpectrumHostBypassPresentationTestAccess::presentationIsSuspended(
+            editor));
+    const auto visibleCaptureEpoch =
+        SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor);
+    REQUIRE(visibleCaptureEpoch > 0);
+    editor.timerCallback();
+    SpectrumHostBypassPresentationTestAccess::tickSpectra(editor);
+
+    CHECK(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(
+        editor));
+    REQUIRE_FALSE(
+        SpectrumHostBypassPresentationTestAccess::presentationIsSuspended(
+            editor));
+    REQUIRE(
+        SpectrumHostBypassPresentationTestAccess::requiredCaptureEpoch(editor)
+        == visibleCaptureEpoch);
+
+    juce::AudioBuffer<float> visibleFrame(
+        1, SpectrumProcessor::fftSize);
+    for (int sample = 0; sample < visibleFrame.getNumSamples(); ++sample)
+        visibleFrame.setSample(0, sample, 4.0f);
+    const auto pendingGenerationBeforeVisibleFrame =
+        SpectrumHostBypassPresentationTestAccess::processedPendingGeneration(
+            editor);
+    processor.pushDataPairToFFT(visibleFrame, visibleFrame);
+    editor.timerCallback();
+    REQUIRE(
+        SpectrumHostBypassPresentationTestAccess::processedPendingGeneration(
+            editor)
+        > pendingGenerationBeforeVisibleFrame);
+    SpectrumHostBypassPresentationTestAccess::tickSpectra(editor);
+
+    CHECK_FALSE(SpectrumHostBypassPresentationTestAccess::spectraAwaitFreshFrames(
+        editor));
 }

@@ -1053,6 +1053,15 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
 void FireAudioProcessorEditor::synchroniseSpectrumHostBypassState(
     bool animateTransition)
 {
+    if (spectrumPresentationSuspended && isShowing())
+    {
+        // Ask the audio producer for a new capture epoch. Any completed or
+        // in-flight hidden-session publication carries an older epoch and is
+        // rejected by the consumer until the next audio block starts fresh.
+        requiredFftCaptureEpoch = processor.requestFreshFFTFrameEpoch();
+        spectrumPresentationSuspended = false;
+    }
+
     const auto presentationEpoch =
         processor.getHostBypassPresentationEpoch();
     const bool isBypassed = processor.getBypassedState();
@@ -1102,6 +1111,7 @@ void FireAudioProcessorEditor::suspendSpectrumPresentation()
     // published after reattachment before either spectrum can reappear.
     processedSpectrum.setHostBypassed(true, false);
     originalSpectrum.setHostBypassed(true, false);
+    spectrumPresentationSuspended = true;
 
     // Some hosts detach and later restore the peer without delivering a
     // visibilityChanged() callback in either direction.  Mark the cached
@@ -1466,7 +1476,8 @@ void FireAudioProcessorEditor::timerCallback()
         if (processor.popLatestFFTFrames(processedFftFrame.data(),
                                          static_cast<int>(processedFftFrame.size()),
                                          originalFftFrame.data(),
-                                         static_cast<int>(originalFftFrame.size())))
+                                         static_cast<int>(originalFftFrame.size()),
+                                         requiredFftCaptureEpoch))
         {
             const auto fftBufferSize = static_cast<int>(processedFftFrame.size());
             if (! processor.processFFT(processedFftFrame.data(), fftBufferSize)

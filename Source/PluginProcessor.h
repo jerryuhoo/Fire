@@ -452,7 +452,9 @@ public:
     bool popLatestFFTFrames(float* processedDestination,
                             int processedDestinationSize,
                             float* originalDestination,
-                            int originalDestinationSize) noexcept;
+                            int originalDestinationSize,
+                            std::uint64_t minimumCaptureEpoch = 0) noexcept;
+    std::uint64_t requestFreshFFTFrameEpoch() noexcept;
     void pushDataPairToFFT(const juce::AudioBuffer<float>& processedBuffer,
                            const juce::AudioBuffer<float>& originalBuffer);
     bool processFFT(float* tempFFTData, int bufferSize);

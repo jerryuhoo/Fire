@@ -555,6 +555,70 @@ TEST_CASE("Spectrum reset separates audio epochs and discards stale frames",
         original.data(), static_cast<int>(original.size())));
 }
 
+TEST_CASE("Spectrum capture epochs reject hidden and in-flight publications",
+          "[fft][threading][presentation][lifecycle][regression]")
+{
+    const auto verifyFreshFrame = [](SpectrumProcessor& spectrum,
+                                     std::uint64_t requiredEpoch,
+                                     float value)
+    {
+        std::array<float, SpectrumProcessor::fftBufferSize> processed {};
+        std::array<float, SpectrumProcessor::fftBufferSize> original {};
+        spectrum.beginInputBlock();
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+            spectrum.pushNextSamplePairIntoFifo(value, value + 10.0f);
+        REQUIRE(spectrum.popLatestFramePair(
+            processed.data(), static_cast<int>(processed.size()),
+            original.data(), static_cast<int>(original.size()),
+            requiredEpoch));
+        CHECK(processed.front() == Catch::Approx(value));
+        CHECK(processed[SpectrumProcessor::fftSize - 1]
+              == Catch::Approx(value));
+        CHECK(original.front() == Catch::Approx(value + 10.0f));
+    };
+
+    SECTION("a completed hidden frame is older than the request")
+    {
+        SpectrumProcessor spectrum;
+        std::array<float, SpectrumProcessor::fftBufferSize> processed {};
+        std::array<float, SpectrumProcessor::fftBufferSize> original {};
+        spectrum.beginInputBlock();
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+            spectrum.pushNextSamplePairIntoFifo(3.0f, 13.0f);
+        REQUIRE(spectrum.hasCompleteFrame());
+
+        const auto requiredEpoch = spectrum.requestFreshCaptureEpoch();
+        CHECK_FALSE(spectrum.popLatestFramePair(
+            processed.data(), static_cast<int>(processed.size()),
+            original.data(), static_cast<int>(original.size()),
+            requiredEpoch));
+        verifyFreshFrame(spectrum, requiredEpoch, 7.0f);
+    }
+
+    SECTION("a producer already inside its block cannot race the request")
+    {
+        SpectrumProcessor spectrum;
+        std::array<float, SpectrumProcessor::fftBufferSize> processed {};
+        std::array<float, SpectrumProcessor::fftBufferSize> original {};
+        spectrum.beginInputBlock();
+        for (int sample = 0; sample < SpectrumProcessor::fftSize / 2; ++sample)
+            spectrum.pushNextSamplePairIntoFifo(5.0f, 15.0f);
+
+        const auto requiredEpoch = spectrum.requestFreshCaptureEpoch();
+        for (int sample = SpectrumProcessor::fftSize / 2;
+             sample < SpectrumProcessor::fftSize;
+             ++sample)
+            spectrum.pushNextSamplePairIntoFifo(5.0f, 15.0f);
+        REQUIRE(spectrum.hasCompleteFrame());
+        CHECK_FALSE(spectrum.popLatestFramePair(
+            processed.data(), static_cast<int>(processed.size()),
+            original.data(), static_cast<int>(original.size()),
+            requiredEpoch));
+
+        verifyFreshFrame(spectrum, requiredEpoch, 9.0f);
+    }
+}
+
 TEST_CASE("Host bypass invalidates completed and partial pre-bypass FFT windows",
           "[processor][fft][host-bypass][freshness][lifecycle][regression]")
 {

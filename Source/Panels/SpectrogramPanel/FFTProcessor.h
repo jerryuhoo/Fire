@@ -32,6 +32,31 @@ public:
         fftBufferSize = 2 * fftSize
     };
 
+    /** Applies a pending message-thread freshness request at one audio block
+        boundary. This is lock-free and must run before samples are pushed. */
+    void beginInputBlock() noexcept
+    {
+        const auto requestedEpoch =
+            requestedCaptureEpoch.load(std::memory_order_acquire);
+        if (requestedEpoch == activeCaptureEpoch)
+            return;
+
+        // The audio thread owns fifoIndex and activeCaptureEpoch. Clearing the
+        // publication here also prevents a partially hidden window from being
+        // completed in the new presentation session.
+        publishedState.store(0, std::memory_order_release);
+        fifoIndex = 0;
+        activeCaptureEpoch = requestedEpoch;
+    }
+
+    /** Requests a frame that begins no earlier than the next audio block. */
+    std::uint64_t requestFreshCaptureEpoch() noexcept
+    {
+        return requestedCaptureEpoch.fetch_add(
+                   1, std::memory_order_acq_rel)
+               + 1;
+    }
+
     void pushNextSamplePairIntoFifo (float processedSample, float originalSample) noexcept
     {
         const auto index = static_cast<size_t>(fifoIndex++);
@@ -65,6 +90,8 @@ public:
         ++publicationGeneration;
         publishedState.store(0, std::memory_order_release);
         fifoIndex = 0;
+        activeCaptureEpoch =
+            requestedCaptureEpoch.load(std::memory_order_acquire);
         // The next complete frame overwrites every FIFO slot before publish,
         // so no audio-thread clearing is required here.
     }
@@ -83,7 +110,8 @@ public:
     bool popLatestFramePair (float* processedDestination,
                              int processedDestinationSize,
                              float* originalDestination,
-                             int originalDestinationSize) noexcept
+                             int originalDestinationSize,
+                             std::uint64_t minimumCaptureEpoch = 0) noexcept
     {
         if (processedDestination == nullptr || processedDestinationSize < fftBufferSize
             || originalDestination == nullptr || originalDestinationSize < fftBufferSize)
@@ -107,9 +135,19 @@ public:
                 continue;
             }
 
+            const auto& newestFrame = frameStorage[static_cast<size_t>(newestFrameIndex)];
+            if (newestFrame.captureEpoch < minimumCaptureEpoch)
+            {
+                // This publication completed in a hidden presentation epoch.
+                // Consume it, but leave any later publication for the next
+                // message-thread poll.
+                lastConsumedState = state;
+                readerFrameIndex.store(-1, std::memory_order_release);
+                return false;
+            }
+
             juce::FloatVectorOperations::clear(processedDestination, processedDestinationSize);
             juce::FloatVectorOperations::clear(originalDestination, originalDestinationSize);
-            const auto& newestFrame = frameStorage[static_cast<size_t>(newestFrameIndex)];
             std::copy_n(newestFrame.processed.data(), fftSize, processedDestination);
             std::copy_n(newestFrame.original.data(), fftSize, originalDestination);
 
@@ -141,6 +179,7 @@ private:
     {
         std::array<float, fftSize> processed {};
         std::array<float, fftSize> original {};
+        std::uint64_t captureEpoch = 0;
     };
 
     static int decodeFrameIndex(std::uint64_t state) noexcept
@@ -172,6 +211,7 @@ private:
         auto& destination = frameStorage[static_cast<size_t>(destinationIndex)];
         std::copy (processedFifo.begin(), processedFifo.end(), destination.processed.begin());
         std::copy (originalFifo.begin(), originalFifo.end(), destination.original.begin());
+        destination.captureEpoch = activeCaptureEpoch;
 
         const auto generation = ++publicationGeneration;
         const auto newState = (generation << 2u)
@@ -185,8 +225,10 @@ private:
     std::array<FramePair, frameStorageSize> frameStorage {};
     std::atomic<std::uint64_t> publishedState { 0 };
     std::atomic<int> readerFrameIndex { -1 };
+    std::atomic<std::uint64_t> requestedCaptureEpoch { 0 };
     std::uint64_t lastConsumedState = 0; // Message-thread owned.
     std::uint64_t publicationGeneration = 0; // Audio-thread owned.
+    std::uint64_t activeCaptureEpoch = 0; // Audio-thread owned.
     int nextWriteIndex = 0; // Audio-thread owned.
     juce::dsp::FFT forwardFFT;
     juce::dsp::WindowingFunction<float> window;

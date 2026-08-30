@@ -186,7 +186,9 @@ private:
     int animationFrame = 0;
     bool lastBypassedState = false;
     std::uint64_t lastHostBypassPresentationEpoch = 0;
+    std::uint64_t requiredFftCaptureEpoch = 0;
     bool spectrumBypassPresentationInitialised = false;
+    bool spectrumPresentationSuspended = true;
     fire::ui::DampedValue hostBypassIndicatorOpacity;
     bool hiddenUiCleanupComplete = false;
     bool provisionalUiCleanupComplete = false;

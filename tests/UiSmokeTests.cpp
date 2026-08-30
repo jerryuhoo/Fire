@@ -561,6 +561,7 @@ TEST_CASE("Fire multiband selection renders after adding dividers", "[ui][smoke]
 {
     FireAudioProcessor processor;
     processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
 
     constexpr std::array<float, 3> crossoverFrequencies { 200.0f, 1200.0f, 6000.0f };
     for (int index = 0; index < static_cast<int>(crossoverFrequencies.size()); ++index)
@@ -572,9 +573,18 @@ TEST_CASE("Fire multiband selection renders after adding dividers", "[ui][smoke]
                           ParameterIDAndName::getIDString(LINE_STATE_ID, index),
                           1.0f);
     }
+    setParameterValue(processor, NUM_BANDS_ID, 4.0f);
 
-    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+    editor->timerCallback();
+
+    auto* multiband = findComponentOfType<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    int visibleDividerCount = 0;
+    for (auto* child : multiband->getChildren())
+        if (dynamic_cast<FreqDividerGroup*>(child) != nullptr
+            && child->isVisible())
+            ++visibleDividerCount;
+    REQUIRE(visibleDividerCount == 3);
 
     const auto image = renderEditorAtSize(*editor, 1000, 500);
     checkRenderedEditor(image, 1000, 500);

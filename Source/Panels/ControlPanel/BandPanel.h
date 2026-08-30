@@ -109,6 +109,7 @@ private:
     void createButtons();
     void createComboBoxes(); // New function
     void setupComponentGroups();
+    void updateIconButtonSemantics();
 
     void setVisibility(juce::Array<juce::Component*>& components, bool isVisible);
     void updateDistortionGraphFromParameters();

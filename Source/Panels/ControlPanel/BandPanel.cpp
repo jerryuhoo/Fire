@@ -262,6 +262,34 @@ void BandPanel::createButtons()
     widthBypassButton.toFront(false);
 }
 
+void BandPanel::updateIconButtonSemantics()
+{
+    const auto bandNumber = juce::String(focusBandNum + 1);
+    const auto setSemantics = [&bandNumber](juce::Button& button,
+                                            const juce::String& function,
+                                            const juce::String& help)
+    {
+        button.setTitle("Band " + bandNumber + " " + function);
+        button.setTooltip(help + " for band " + bandNumber);
+    };
+
+    setSemantics(driveBypassButton,
+                 "Drive power",
+                 "Enable or bypass Drive processing");
+    setSemantics(shapeBypassButton,
+                 "Shape power",
+                 "Enable or bypass Shape processing");
+    setSemantics(compressorBypassButton,
+                 "Compressor power",
+                 "Enable or bypass Compressor processing");
+    setSemantics(widthBypassButton,
+                 "Stereo power",
+                 "Enable or bypass Stereo processing");
+    setSemantics(dcFilterButton,
+                 "DC filter",
+                 "Enable or disable the DC filter");
+}
+
 void BandPanel::createComboBoxes()
 {
     for (size_t i = 0; i < distortionModes.size(); ++i)
@@ -978,6 +1006,8 @@ void BandPanel::visibilityChanged()
 
 void BandPanel::updateAttachments()
 {
+    updateIconButtonSemantics();
+
     for (const auto& paramInfo : ParameterIDAndName::getModulatableParameterInfo())
     {
         auto* slider = modulatableSliderComponents.at(paramInfo.name).get();

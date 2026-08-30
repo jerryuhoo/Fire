@@ -111,6 +111,18 @@ struct GlobalPanelSlopeTestAccess
                                         : &panel.graphSwitch;
         button->setToggleState(true, juce::sendNotificationSync);
     }
+
+    static std::array<juce::Button*, 5> getIconButtons(
+        GlobalPanel& panel)
+    {
+        REQUIRE(panel.filterBypassButton != nullptr);
+        REQUIRE(panel.downsampleBypassButton != nullptr);
+        return { panel.filterBypassButton.get(),
+                 panel.downsampleBypassButton.get(),
+                 &panel.filterLowCutButton,
+                 &panel.filterPeakButton,
+                 &panel.filterHighCutButton };
+    }
 };
 
 namespace
@@ -2042,5 +2054,138 @@ TEST_CASE("Control-panel routing menus expose stable accessibility semantics",
         panel.removeFromDesktop();
         CHECK(lowCut.getAccessibilityHandler() == nullptr);
         CHECK(highCut.getAccessibilityHandler() == nullptr);
+    }
+}
+
+TEST_CASE("Control-panel icon buttons expose complete accessibility semantics",
+          "[control-panel][ui][accessibility][button][tooltip][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    const auto checkEmptyTextButtons = [](juce::Component& panel,
+                                          size_t expectedCount)
+    {
+        size_t emptyTextButtonCount = 0;
+        for (auto* button : collectDirectButtons(panel))
+        {
+            REQUIRE(button != nullptr);
+            if (! button->getButtonText().trim().isEmpty())
+                continue;
+
+            ++emptyTextButtonCount;
+            CAPTURE(button->getComponentID());
+            CHECK_FALSE(button->getTitle().trim().isEmpty());
+            CHECK_FALSE(button->getTooltip().trim().isEmpty());
+
+            auto* accessibility = button->getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+            CHECK(accessibility->getTitle() == button->getTitle());
+            CHECK(accessibility->getHelp() == button->getTooltip());
+        }
+
+        CHECK(emptyTextButtonCount == expectedCount);
+    };
+
+    SECTION("Band controls follow their rebound band")
+    {
+        FireAudioProcessor processor;
+        BandPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1000, 500);
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+
+        const std::array<juce::Button*, 5> buttons {
+            &panel.driveBypassButton,
+            &panel.shapeBypassButton,
+            &panel.compressorBypassButton,
+            &panel.widthBypassButton,
+            &panel.dcFilterButton
+        };
+        const std::array<juce::String, 5> functions {
+            "Drive power",
+            "Shape power",
+            "Compressor power",
+            "Stereo power",
+            "DC filter"
+        };
+        const std::array<juce::String, 5> helpPrefixes {
+            "Enable or bypass Drive processing",
+            "Enable or bypass Shape processing",
+            "Enable or bypass Compressor processing",
+            "Enable or bypass Stereo processing",
+            "Enable or disable the DC filter"
+        };
+
+        for (const auto bandIndex : { 0, 2 })
+        {
+            panel.setFocusBandNum(bandIndex, true);
+            const auto bandNumber = juce::String(bandIndex + 1);
+
+            for (size_t buttonIndex = 0;
+                 buttonIndex < buttons.size();
+                 ++buttonIndex)
+            {
+                auto& button = *buttons[buttonIndex];
+                CAPTURE(bandIndex, buttonIndex);
+                CHECK(button.getButtonText().isEmpty());
+                CHECK(button.getTitle()
+                      == "Band " + bandNumber + " "
+                           + functions[buttonIndex]);
+                CHECK(button.getTooltip()
+                      == helpPrefixes[buttonIndex] + " for band "
+                           + bandNumber);
+
+                auto* accessibility = button.getAccessibilityHandler();
+                REQUIRE(accessibility != nullptr);
+                CHECK(accessibility->getTitle() == button.getTitle());
+                CHECK(accessibility->getHelp() == button.getTooltip());
+            }
+        }
+
+        checkEmptyTextButtons(panel, buttons.size());
+    }
+
+    SECTION("Global power and filter-type controls")
+    {
+        FireAudioProcessor processor;
+        GlobalPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1000, 500);
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+
+        const auto buttons =
+            GlobalPanelSlopeTestAccess::getIconButtons(panel);
+        const std::array<juce::String, 5> titles {
+            "Global filter power",
+            "Global Lo-Fi power",
+            "Low-cut filter type",
+            "Band-pass filter type",
+            "High-cut filter type"
+        };
+        const std::array<juce::String, 5> help {
+            "Enable or bypass the global filter",
+            "Enable or bypass global Lo-Fi processing",
+            "Select the low-cut filter type",
+            "Select the band-pass filter type",
+            "Select the high-cut filter type"
+        };
+
+        for (size_t buttonIndex = 0;
+             buttonIndex < buttons.size();
+             ++buttonIndex)
+        {
+            auto& button = *buttons[buttonIndex];
+            CAPTURE(buttonIndex);
+            CHECK(button.getButtonText().isEmpty());
+            CHECK(button.getTitle() == titles[buttonIndex]);
+            CHECK(button.getTooltip() == help[buttonIndex]);
+
+            auto* accessibility = button.getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+            CHECK(accessibility->getTitle() == titles[buttonIndex]);
+            CHECK(accessibility->getHelp() == help[buttonIndex]);
+        }
+
+        checkEmptyTextButtons(panel, buttons.size());
     }
 }

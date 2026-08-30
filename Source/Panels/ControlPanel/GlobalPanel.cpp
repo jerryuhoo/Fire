@@ -321,6 +321,30 @@ void GlobalPanel::createButtons()
     filterPeakButton.setComponentID("band_pass");
     filterHighCutButton.setComponentID("high_cut");
 
+    const auto setSemantics = [](juce::Button& button,
+                                 const juce::String& title,
+                                 const juce::String& help)
+    {
+        button.setTitle(title);
+        button.setTooltip(help);
+    };
+
+    setSemantics(*filterBypassButton,
+                 "Global filter power",
+                 "Enable or bypass the global filter");
+    setSemantics(*downsampleBypassButton,
+                 "Global Lo-Fi power",
+                 "Enable or bypass global Lo-Fi processing");
+    setSemantics(filterLowCutButton,
+                 "Low-cut filter type",
+                 "Select the low-cut filter type");
+    setSemantics(filterPeakButton,
+                 "Band-pass filter type",
+                 "Select the band-pass filter type");
+    setSemantics(filterHighCutButton,
+                 "High-cut filter type",
+                 "Select the high-cut filter type");
+
     filterLowCutButton.setRadioGroupId(filterModeButtons);
     filterPeakButton.setRadioGroupId(filterModeButtons);
     filterHighCutButton.setRadioGroupId(filterModeButtons);

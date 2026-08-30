@@ -479,4 +479,12 @@ TEST_CASE("Legacy graph layout clears an unavailable distortion zoom",
     CHECK(panel.getOscilloscope()->isShowing());
     CHECK(panel.getVuPanel()->isShowing());
     CHECK(panel.getWidthGraph()->isShowing());
+
+    // A hidden Band-only graph cannot be selected programmatically while the
+    // legacy panel is in Global mode, otherwise every visible graph is hidden.
+    panel.toggleZoom(panel.getDistortionGraph());
+    CHECK_FALSE(panel.getDistortionGraph()->getZoomState());
+    CHECK(panel.getOscilloscope()->isShowing());
+    CHECK(panel.getVuPanel()->isShowing());
+    CHECK(panel.getWidthGraph()->isShowing());
 }

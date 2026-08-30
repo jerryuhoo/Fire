@@ -84,6 +84,17 @@ void GraphPanel::paint(juce::Graphics& g)
 
 void GraphPanel::toggleZoom(GraphTemplate* viewToToggle)
 {
+    if (viewToToggle != nullptr)
+    {
+        const bool isOwnedView = viewToToggle == &oscilloscope
+                                 || viewToToggle == &vuPanel
+                                 || viewToToggle == &distortionGraph
+                                 || viewToToggle == &widthGraph;
+        if (! isOwnedView
+            || (viewToToggle != zoomedView && ! viewToToggle->isVisible()))
+            return;
+    }
+
     // If we clicked the currently zoomed view, un-zoom it.
     if (viewToToggle != nullptr && viewToToggle == zoomedView)
     {

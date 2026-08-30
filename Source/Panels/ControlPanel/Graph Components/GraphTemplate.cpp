@@ -12,10 +12,39 @@
 
 #include <utility>
 
+namespace
+{
+class GraphAccessibilityHandler final : public juce::AccessibilityHandler
+{
+public:
+    GraphAccessibilityHandler(GraphTemplate& graphToUse,
+                              juce::AccessibilityActions actions)
+        : juce::AccessibilityHandler(graphToUse,
+                                     juce::AccessibilityRole::button,
+                                     std::move(actions)),
+          graph(graphToUse)
+    {
+    }
+
+    juce::AccessibleState getCurrentState() const override
+    {
+        auto state = juce::AccessibilityHandler::getCurrentState()
+                         .withExpandable();
+        return graph.getZoomState() ? state.withExpanded()
+                                    : state.withCollapsed();
+    }
+
+private:
+    GraphTemplate& graph;
+};
+} // namespace
+
 //==============================================================================
 GraphTemplate::GraphTemplate() : animationTimer(*this)
 {
     setOpaque(false);
+    setTitle(graphTitle + " graph");
+    setHelpText("Activate to expand or restore this graph.");
 }
 
 GraphTemplate::~GraphTemplate()
@@ -108,6 +137,14 @@ void GraphTemplate::setZoomState(bool zoomState)
 
     mZoomState = zoomState;
     repaint();
+
+    // Expanded/collapsed is exposed through getCurrentState(). JUCE has no
+    // dedicated state-changed event, and changing the zoom also changes the
+    // surrounding accessible layout, so a structure notification is the
+    // closest matching public event.
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(
+            juce::AccessibilityEvent::structureChanged);
 }
 
 void GraphTemplate::setZoomRequestCallback(std::function<void()> callback)
@@ -241,14 +278,15 @@ GraphTemplate::createAccessibilityHandler()
                 safeThis->requestZoom();
         });
 
-    return std::make_unique<juce::AccessibilityHandler>(
-        *this, juce::AccessibilityRole::button, std::move(actions));
+    return std::make_unique<GraphAccessibilityHandler>(*this,
+                                                       std::move(actions));
 }
 
 void GraphTemplate::setGraphIdentity(juce::String title, fire::ui::ModuleRole role)
 {
     graphTitle = std::move(title);
     graphRole = role;
+    setTitle(graphTitle + " graph");
     staticLayer = {};
     staticLayerBounds = {};
     staticLayerScale = 0.0f;

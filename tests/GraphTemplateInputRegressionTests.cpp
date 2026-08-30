@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -117,6 +118,37 @@ juce::Button* findDirectButton(juce::Component& owner,
             button != nullptr && button->getButtonText() == text)
             return button;
     return nullptr;
+}
+
+struct DirectComponentState
+{
+    juce::Component* component = nullptr;
+    bool visible = false;
+    bool enabled = false;
+    bool wantsKeyboardFocus = false;
+};
+
+std::vector<DirectComponentState> captureDirectComponentStates(
+    juce::Component& owner)
+{
+    std::vector<DirectComponentState> result;
+    result.reserve(static_cast<size_t>(owner.getNumChildComponents()));
+    for (int index = 0; index < owner.getNumChildComponents(); ++index)
+    {
+        auto* component = owner.getChildComponent(index);
+        result.push_back({ component,
+                           component->isVisible(),
+                           component->isEnabled(),
+                           component->getWantsKeyboardFocus() });
+    }
+    return result;
+}
+
+bool isStandardInteractiveControl(const juce::Component& component)
+{
+    return dynamic_cast<const juce::Button*>(&component) != nullptr
+           || dynamic_cast<const juce::Slider*>(&component) != nullptr
+           || dynamic_cast<const juce::ComboBox*>(&component) != nullptr;
 }
 } // namespace
 
@@ -314,21 +346,70 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         panel.setVisible(true);
         panel.resized();
 
+        // Shape has both an interactive mode control and DC switch in the
+        // workspace that the enlarged transfer graph covers.
+        auto* shapeButton = findDirectButton(panel, "Shape");
+        REQUIRE(shapeButton != nullptr);
+        shapeButton->triggerClick();
+
         auto graphs = directGraphs(panel);
         auto visible = std::find_if(graphs.begin(), graphs.end(),
                                     [](const auto* graph) { return graph->isShowing(); });
         REQUIRE(visible != graphs.end());
         auto* graph = *visible;
         const auto normalBounds = graph->getBounds();
+        const auto normalStates = captureDirectComponentStates(panel);
+
+        auto* handler = graph->getAccessibilityHandler();
+        REQUIRE(handler != nullptr);
+        CHECK_FALSE(handler->getTitle().trim().isEmpty());
+        const auto initialAccessibleState = handler->getCurrentState();
+        CHECK(initialAccessibleState.isExpandable());
+        CHECK(initialAccessibleState.isCollapsed());
+        CHECK_FALSE(initialAccessibleState.isExpanded());
 
         graph->mouseDown(makeMouseEvent(*graph, primary));
         graph->mouseUp(makeMouseEvent(*graph, {}));
         CHECK(graph->getZoomState());
         CHECK(graph->getWidth() > normalBounds.getWidth());
+        const auto expandedAccessibleState = handler->getCurrentState();
+        CHECK(expandedAccessibleState.isExpandable());
+        CHECK(expandedAccessibleState.isExpanded());
+        CHECK_FALSE(expandedAccessibleState.isCollapsed());
+
+        int hiddenInteractiveWorkspaceControls = 0;
+        for (const auto& state : normalStates)
+        {
+            auto* component = state.component;
+            if (component == graph || ! state.visible
+                || ! state.wantsKeyboardFocus
+                || ! isStandardInteractiveControl(*component)
+                || component->getBounds().isEmpty()
+                || ! graph->getBounds().contains(component->getBounds()))
+                continue;
+
+            ++hiddenInteractiveWorkspaceControls;
+            CHECK_FALSE(component->isVisible());
+            CHECK_FALSE(component->isShowing());
+        }
+        REQUIRE(hiddenInteractiveWorkspaceControls > 0);
 
         REQUIRE(graph->keyPressed(juce::KeyPress { juce::KeyPress::spaceKey }));
         CHECK_FALSE(graph->getZoomState());
         CHECK(graph->getBounds() == normalBounds);
+        const auto restoredAccessibleState = handler->getCurrentState();
+        CHECK(restoredAccessibleState.isExpandable());
+        CHECK(restoredAccessibleState.isCollapsed());
+        CHECK_FALSE(restoredAccessibleState.isExpanded());
+
+        for (const auto& state : normalStates)
+        {
+            CAPTURE(state.component->getTitle(), state.component->getName());
+            CHECK(state.component->isVisible() == state.visible);
+            CHECK(state.component->isEnabled() == state.enabled);
+            CHECK(state.component->getWantsKeyboardFocus()
+                  == state.wantsKeyboardFocus);
+        }
     }
 
     SECTION("global graph zoom hides and restores its siblings")
@@ -348,7 +429,10 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         REQUIRE(std::all_of(graphs.begin(), graphs.end(),
                             [](const auto* graph) { return graph->isShowing(); }));
         auto* graph = graphs.front();
+        auto* preHiddenSibling = graphs.back();
+        preHiddenSibling->setVisible(false);
         const auto normalBounds = graph->getBounds();
+        const auto normalStates = captureDirectComponentStates(panel);
 
         graph->mouseDown(makeMouseEvent(*graph, primary));
         graph->mouseUp(makeMouseEvent(*graph, {}));
@@ -357,14 +441,23 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         CHECK(std::count_if(graphs.begin(), graphs.end(),
                             [](const auto* candidate) { return candidate->isShowing(); })
               == 1);
+        CHECK_FALSE(graphs[1]->isVisible());
+        CHECK_FALSE(preHiddenSibling->isVisible());
 
         auto* handler = graph->getAccessibilityHandler();
         REQUIRE(handler != nullptr);
         REQUIRE(handler->getActions().invoke(
             juce::AccessibilityActionType::press));
         CHECK_FALSE(graph->getZoomState());
-        CHECK(std::all_of(graphs.begin(), graphs.end(),
-                          [](const auto* candidate) { return candidate->isShowing(); }));
+
+        for (const auto& state : normalStates)
+        {
+            CAPTURE(state.component->getTitle(), state.component->getName());
+            CHECK(state.component->isVisible() == state.visible);
+            CHECK(state.component->isEnabled() == state.enabled);
+            CHECK(state.component->getWantsKeyboardFocus()
+                  == state.wantsKeyboardFocus);
+        }
     }
 }
 

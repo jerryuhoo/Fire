@@ -96,6 +96,8 @@ private:
     void configureGraphInteractions();
     void toggleGraphZoom(GraphTemplate* graph);
     void clearGraphZoom() noexcept;
+    void hideComponentsObscuredByZoom(const GraphTemplate& graph);
+    void restoreComponentsObscuredByZoom() noexcept;
     void setAnimatedModuleTarget(int moduleIndex);
     juce::Rectangle<float> getModuleSelectionBounds(float modulePosition) const;
     juce::Colour getModuleSelectionColour() const;
@@ -169,6 +171,8 @@ private:
     VUPanel vuPanel { processor };
     WidthGraph widthGraph { processor };
     GraphTemplate* zoomedGraph = nullptr;
+    std::vector<juce::Component::SafePointer<juce::Component>>
+        componentsHiddenForGraphZoom;
 
     // Distortion modes moved from PluginEditor
     std::array<ContextAwareComboBox, 4> distortionModes;

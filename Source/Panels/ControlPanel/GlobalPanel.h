@@ -83,6 +83,8 @@ private:
     void configureGraphInteractions();
     void toggleGraphZoom(GraphTemplate* graph);
     void clearGraphZoom() noexcept;
+    void hideComponentsObscuredByZoom(const GraphTemplate& graph);
+    void restoreComponentsObscuredByZoom() noexcept;
     void updateSelectionTarget(bool snap);
     juce::TextButton* getSelectedSwitch() noexcept;
     void invalidateSlopeInteractions() noexcept;
@@ -152,6 +154,8 @@ private:
     VUPanel vuPanel { processor };
     WidthGraph widthGraph { processor };
     GraphTemplate* zoomedGraph = nullptr;
+    std::vector<juce::Component::SafePointer<juce::Component>>
+        componentsHiddenForGraphZoom;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GlobalPanel)
 };

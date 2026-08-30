@@ -167,7 +167,8 @@ void GlobalPanel::visibilityChanged()
             return;
 
         clearGraphZoom();
-        resized();
+        if (safeThis != nullptr)
+            safeThis->resized();
     }
 }
 
@@ -651,22 +652,12 @@ void GlobalPanel::resized()
     {
         if (zoomedGraph != nullptr)
         {
-            for (auto* graph : { static_cast<GraphTemplate*>(&oscilloscope),
-                                 static_cast<GraphTemplate*>(&vuPanel),
-                                 static_cast<GraphTemplate*>(&widthGraph) })
-                graph->setVisible(graph == zoomedGraph);
-
             zoomedGraph->setBounds(
                 knobsColumnArea.reduced(juce::roundToInt(2.0f * uiScale)));
             zoomedGraph->toFront(false);
         }
         else
         {
-            for (auto* graph : { static_cast<GraphTemplate*>(&oscilloscope),
-                                 static_cast<GraphTemplate*>(&vuPanel),
-                                 static_cast<GraphTemplate*>(&widthGraph) })
-                graph->setVisible(true);
-
             juce::FlexBox graphBox;
             graphBox.flexDirection = juce::FlexBox::Direction::row;
             graphBox.justifyContent = juce::FlexBox::JustifyContent::center;
@@ -829,6 +820,7 @@ void GlobalPanel::configureGraphInteractions()
 
 void GlobalPanel::toggleGraphZoom(GraphTemplate* graph)
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     const std::array<GraphTemplate*, 3> graphs {
         &oscilloscope, &vuPanel, &widthGraph
     };
@@ -839,28 +831,96 @@ void GlobalPanel::toggleGraphZoom(GraphTemplate* graph)
 
     if (zoomedGraph == graph)
     {
-        graph->setZoomState(false);
-        zoomedGraph = nullptr;
-    }
-    else
-    {
         clearGraphZoom();
-        zoomedGraph = graph;
-        zoomedGraph->setZoomState(true);
+        if (safeThis != nullptr)
+            safeThis->resized();
+        return;
     }
 
+    clearGraphZoom();
+    if (safeThis == nullptr)
+        return;
+
+    zoomedGraph = graph;
+    zoomedGraph->setZoomState(true);
+    if (safeThis == nullptr)
+        return;
+
     resized();
+    if (safeThis != nullptr)
+        safeThis->hideComponentsObscuredByZoom(*graph);
 }
 
 void GlobalPanel::clearGraphZoom() noexcept
 {
-    if (zoomedGraph != nullptr)
-        zoomedGraph->setZoomState(false);
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    auto* graph = zoomedGraph;
     zoomedGraph = nullptr;
+    if (graph != nullptr)
+        graph->setZoomState(false);
+
+    if (safeThis != nullptr)
+        safeThis->restoreComponentsObscuredByZoom();
+}
+
+void GlobalPanel::hideComponentsObscuredByZoom(const GraphTemplate& graph)
+{
+    jassert(componentsHiddenForGraphZoom.empty());
+    const auto cover = graph.getBounds();
+    std::vector<juce::Component::SafePointer<juce::Component>> components;
+
+    for (int index = 0; index < getNumChildComponents(); ++index)
+    {
+        auto* component = getChildComponent(index);
+        if (component == &graph || component == nullptr
+            || component->getBounds().isEmpty()
+            || ! cover.contains(component->getBounds())
+            || ! component->isVisible())
+            continue;
+
+        components.emplace_back(component);
+    }
+
+    componentsHiddenForGraphZoom = components;
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    for (auto& component : components)
+    {
+        if (component != nullptr)
+            component->setVisible(false);
+        if (safeThis == nullptr)
+            return;
+    }
+
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(
+            juce::AccessibilityEvent::structureChanged);
+}
+
+void GlobalPanel::restoreComponentsObscuredByZoom() noexcept
+{
+    if (componentsHiddenForGraphZoom.empty())
+        return;
+
+    auto components = std::move(componentsHiddenForGraphZoom);
+    componentsHiddenForGraphZoom.clear();
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+
+    for (auto& component : components)
+    {
+        if (component != nullptr && component->getParentComponent() == this)
+            component->setVisible(true);
+        if (safeThis == nullptr)
+            return;
+    }
+
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(
+            juce::AccessibilityEvent::structureChanged);
 }
 
 void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     const bool changesSlopeContext = clickedButton == &filterSwitch
                                      || clickedButton == &downsampleSwitch
                                      || clickedButton == &graphSwitch
@@ -874,7 +934,11 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
     if ((clickedButton == &filterSwitch && filterSwitch.getToggleState())
         || (clickedButton == &downsampleSwitch && downsampleSwitch.getToggleState())
         || (clickedButton == &graphSwitch && graphSwitch.getToggleState()))
+    {
         clearGraphZoom();
+        if (safeThis == nullptr)
+            return;
+    }
 
     bool isSwitch = false;
     if (clickedButton == &filterSwitch && filterSwitch.getToggleState())

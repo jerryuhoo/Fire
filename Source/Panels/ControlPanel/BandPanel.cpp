@@ -614,6 +614,7 @@ void BandPanel::configureGraphInteractions()
 
 void BandPanel::toggleGraphZoom(GraphTemplate* graph)
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     const std::array<GraphTemplate*, 4> graphs {
         &oscilloscope, &distortionGraph, &vuPanel, &widthGraph
     };
@@ -624,24 +625,91 @@ void BandPanel::toggleGraphZoom(GraphTemplate* graph)
 
     if (zoomedGraph == graph)
     {
-        graph->setZoomState(false);
-        zoomedGraph = nullptr;
-    }
-    else
-    {
         clearGraphZoom();
-        zoomedGraph = graph;
-        zoomedGraph->setZoomState(true);
+        if (safeThis != nullptr)
+            safeThis->resized();
+        return;
     }
 
+    clearGraphZoom();
+    if (safeThis == nullptr)
+        return;
+
+    zoomedGraph = graph;
+    zoomedGraph->setZoomState(true);
+    if (safeThis == nullptr)
+        return;
+
     resized();
+    if (safeThis != nullptr)
+        safeThis->hideComponentsObscuredByZoom(*graph);
 }
 
 void BandPanel::clearGraphZoom() noexcept
 {
-    if (zoomedGraph != nullptr)
-        zoomedGraph->setZoomState(false);
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    auto* graph = zoomedGraph;
     zoomedGraph = nullptr;
+    if (graph != nullptr)
+        graph->setZoomState(false);
+
+    if (safeThis != nullptr)
+        safeThis->restoreComponentsObscuredByZoom();
+}
+
+void BandPanel::hideComponentsObscuredByZoom(const GraphTemplate& graph)
+{
+    jassert(componentsHiddenForGraphZoom.empty());
+    const auto cover = graph.getBounds();
+    std::vector<juce::Component::SafePointer<juce::Component>> components;
+
+    for (int index = 0; index < getNumChildComponents(); ++index)
+    {
+        auto* component = getChildComponent(index);
+        if (component == &graph || component == nullptr
+            || component->getBounds().isEmpty()
+            || ! cover.contains(component->getBounds())
+            || ! component->isVisible())
+            continue;
+
+        components.emplace_back(component);
+    }
+
+    componentsHiddenForGraphZoom = components;
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    for (auto& component : components)
+    {
+        if (component != nullptr)
+            component->setVisible(false);
+        if (safeThis == nullptr)
+            return;
+    }
+
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(
+            juce::AccessibilityEvent::structureChanged);
+}
+
+void BandPanel::restoreComponentsObscuredByZoom() noexcept
+{
+    if (componentsHiddenForGraphZoom.empty())
+        return;
+
+    auto components = std::move(componentsHiddenForGraphZoom);
+    componentsHiddenForGraphZoom.clear();
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+
+    for (auto& component : components)
+    {
+        if (component != nullptr && component->getParentComponent() == this)
+            component->setVisible(true);
+        if (safeThis == nullptr)
+            return;
+    }
+
+    if (auto* handler = getAccessibilityHandler())
+        handler->notifyAccessibilityEvent(
+            juce::AccessibilityEvent::structureChanged);
 }
 
 void BandPanel::setAnimatedModuleTarget(int moduleIndex)
@@ -808,7 +876,8 @@ void BandPanel::visibilityChanged()
             return;
 
         clearGraphZoom();
-        resized();
+        if (safeThis != nullptr)
+            safeThis->resized();
     }
 }
 
@@ -878,11 +947,16 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 
 void BandPanel::buttonClicked(juce::Button* clickedButton)
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     if ((clickedButton == &oscSwitch && oscSwitch.getToggleState())
         || (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
         || (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
         || (clickedButton == &widthSwitch && widthSwitch.getToggleState()))
+    {
         clearGraphZoom();
+        if (safeThis == nullptr)
+            return;
+    }
 
     bool isSwitch = false;
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())

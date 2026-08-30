@@ -21,6 +21,11 @@ struct SettingsComponentTestAccess;
 class SettingsComponent : public juce::Component
 {
 public:
+    static constexpr int minimumContentWidth = 300;
+    static constexpr int minimumContentHeight = 250;
+    static constexpr int minimumDialogWidth = 340;
+    static constexpr int minimumDialogHeight = 300;
+
     SettingsComponent(juce::PropertiesFile& props)
         : appProperties(props)
     {
@@ -104,7 +109,13 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced(28);
+        // The dialog constrainer prevents the production window from becoming
+        // smaller than this layout. Keep the component itself defensive for
+        // tests and unusual embedders: proportional outer padding preserves
+        // useful controls before the preferred 28 px inset is available.
+        const int horizontalInset = juce::jlimit(12, 28, getWidth() / 10);
+        const int verticalInset = juce::jlimit(12, 28, getHeight() / 9);
+        auto bounds = getLocalBounds().reduced(horizontalInset, verticalInset);
         const auto logoHeight = juce::roundToInt(bounds.getHeight() * 0.30f);
         auto logoArea = bounds.removeFromTop(logoHeight);
         fireGlyphArea = logoArea.withSizeKeepingCentre(juce::jmin(logoHeight, 72),

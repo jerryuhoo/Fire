@@ -351,6 +351,8 @@ PluginProcessor).
         void invalidatePresetMenuSession() noexcept;
         void handlePresetMenuResult(int result);
         void showSettingsDialog();
+        static void configureSettingsDialogResizeLimits(
+            juce::DialogWindow& dialog);
         float getPresetMenuScale() const noexcept;
         juce::PopupMenu::Options createPresetMenuOptions(float menuScale);
         void setPreviousPreset();

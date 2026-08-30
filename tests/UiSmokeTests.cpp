@@ -70,6 +70,11 @@ struct StateComponentDialogTestAccess final
     {
         component.settingsDialogFactoryForTesting = std::move(factory);
     }
+
+    static void configureSettingsResizeLimits(juce::DialogWindow& dialog)
+    {
+        state::StateComponent::configureSettingsDialogResizeLimits(dialog);
+    }
 };
 
 namespace
@@ -1219,4 +1224,31 @@ TEST_CASE("Fire settings dialog uses the shared visual language", "[ui][smoke]")
     const auto image = settings.createComponentSnapshot(settings.getLocalBounds(), true, 1.0f);
     checkRenderedEditor(image, 420, 300);
     writeSnapshotIfRequested(image, "fire-settings.png");
+}
+
+TEST_CASE("Settings dialog enforces its usable resize floor",
+          "[ui][settings][dialog][resize][layout]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    juce::DialogWindow dialog(
+        "Settings", fire::ui::colours::canvas, true, false);
+    dialog.setContentOwned(
+        new SettingsComponent(processor.getAppSettings()), false);
+    dialog.setBounds(0, 0, 400, 300);
+    StateComponentDialogTestAccess::configureSettingsResizeLimits(dialog);
+
+    REQUIRE(dialog.getConstrainer() != nullptr);
+    CHECK(dialog.getConstrainer()->getMinimumWidth()
+          == SettingsComponent::minimumDialogWidth);
+    CHECK(dialog.getConstrainer()->getMinimumHeight()
+          == SettingsComponent::minimumDialogHeight);
+
+    dialog.setBoundsConstrained({ 0, 0, 40, 40 });
+    CHECK(dialog.getWidth() >= SettingsComponent::minimumDialogWidth);
+    CHECK(dialog.getHeight() >= SettingsComponent::minimumDialogHeight);
+    auto* content = dynamic_cast<SettingsComponent*>(dialog.getContentComponent());
+    REQUIRE(content != nullptr);
+    CHECK(content->getWidth() >= SettingsComponent::minimumContentWidth);
+    CHECK(content->getHeight() >= SettingsComponent::minimumContentHeight);
 }

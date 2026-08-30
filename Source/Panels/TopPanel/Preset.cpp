@@ -2717,6 +2717,21 @@ namespace state
         options.resizable = true;
         options.componentToCentreAround = this;
         settingsDialog = options.launchAsync();
+
+        if (auto* dialog = settingsDialog.getComponent())
+            configureSettingsDialogResizeLimits(*dialog);
+    }
+
+    void StateComponent::configureSettingsDialogResizeLimits(
+        juce::DialogWindow& dialog)
+    {
+        // LaunchOptions makes the window resizable but does not install a
+        // lower bound. Without one the fixed-height rows can be reduced to
+        // empty rectangles, leaving visible settings clipped or stacked.
+        dialog.setResizeLimits(SettingsComponent::minimumDialogWidth,
+                               SettingsComponent::minimumDialogHeight,
+                               4096,
+                               4096);
     }
 
     void StateComponent::setChangedState(bool state)

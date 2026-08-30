@@ -25,6 +25,20 @@ struct SettingsComponentTestAccess
     {
         component.companyLabel.setURL({});
     }
+
+    static std::array<juce::Rectangle<int>, 4> controlBounds(
+        const SettingsComponent& component)
+    {
+        return { component.versionLabel.getBounds(),
+                 component.authorLabel.getBounds(),
+                 component.companyLabel.getBounds(),
+                 component.autoUpdateToggle.getBounds() };
+    }
+
+    static juce::Rectangle<int> glyphBounds(const SettingsComponent& component)
+    {
+        return component.fireGlyphArea;
+    }
 };
 
 namespace
@@ -194,6 +208,59 @@ TEST_CASE("Settings controls retain native roles behind primary-only input",
     REQUIRE(autoUpdateAccessibility != nullptr);
     CHECK(companyAccessibility->getRole() == juce::AccessibilityRole::hyperlink);
     CHECK(autoUpdateAccessibility->getRole() == juce::AccessibilityRole::toggleButton);
+}
+
+TEST_CASE("Settings layout remains usable at its minimum and narrow tall sizes",
+          "[ui][settings][layout][resize][scale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    TestPropertiesFile properties;
+    SettingsComponent settings(properties);
+
+    const std::array<juce::Rectangle<int>, 3> sizes {
+        juce::Rectangle<int>(0, 0,
+                             SettingsComponent::minimumContentWidth,
+                             SettingsComponent::minimumContentHeight),
+        juce::Rectangle<int>(0, 0,
+                             SettingsComponent::minimumContentWidth,
+                             420),
+        juce::Rectangle<int>(0, 0, 450, 280)
+    };
+
+    for (const auto bounds : sizes)
+    {
+        CAPTURE(bounds.toString());
+        settings.setBounds(bounds);
+        const auto localBounds = settings.getLocalBounds();
+        const auto glyph = SettingsComponentTestAccess::glyphBounds(settings);
+        const auto controls = SettingsComponentTestAccess::controlBounds(settings);
+
+        REQUIRE_FALSE(glyph.isEmpty());
+        CHECK(localBounds.contains(glyph));
+        for (size_t index = 0; index < controls.size(); ++index)
+        {
+            CAPTURE(index, controls[index].toString());
+            REQUIRE_FALSE(controls[index].isEmpty());
+            CHECK(localBounds.contains(controls[index]));
+            if (index > 0)
+            {
+                CHECK(controls[index - 1].getBottom()
+                      <= controls[index].getY());
+                CHECK_FALSE(controls[index - 1].intersects(controls[index]));
+            }
+        }
+
+        CHECK(glyph.getBottom() <= controls.front().getY());
+
+        // Exercise non-default rendering scale without changing logical hit
+        // bounds or forcing a second layout policy.
+        const auto scaledSnapshot = settings.createComponentSnapshot(
+            localBounds, true, 1.5f);
+        CHECK(scaledSnapshot.getWidth()
+              == juce::roundToInt(static_cast<float>(bounds.getWidth()) * 1.5f));
+        CHECK(scaledSnapshot.getHeight()
+              == juce::roundToInt(static_cast<float>(bounds.getHeight()) * 1.5f));
+    }
 }
 
 TEST_CASE("Settings controls reject popup and auxiliary pointer gestures",

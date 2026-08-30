@@ -363,6 +363,11 @@ public:
                               bool down) override
     {
         using namespace fire::ui;
+        const auto animation = getPrimaryButtonAnimation(button, highlighted, down);
+        const auto hoverAmount = animation.hover;
+        const auto pressAmount = animation.press;
+        const auto focusAmount = animation.focus;
+        const auto disabledAmount = animation.disabled;
         auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
         const auto id = button.getComponentID();
         const auto isHeaderControl = id.startsWith("header_") || id == "workspace_tab";
@@ -388,17 +393,20 @@ public:
             // Header controls are intentionally borderless.  State is conveyed
             // by a quiet surface wash and a short accent rail instead of by a
             // stack of outlines around every control.
-            if (button.isEnabled())
+            if (disabledAmount < 1.0f)
             {
                 if (visuallySelected)
                 {
                     g.setColour(accent.withAlpha(id == "workspace_tab" ? 0.075f : 0.11f));
                     g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
                 }
-                else if (highlighted || down)
+                else if (hoverAmount > 0.001f || pressAmount > 0.001f || focusAmount > 0.001f)
                 {
-                    g.setColour((down ? colours::raised : colours::surface2)
-                                    .withAlpha(down ? 0.78f : 0.56f));
+                    auto wash = colours::surface2.interpolatedWith(colours::raised, pressAmount);
+                    g.setColour(wash.withAlpha((0.56f * hoverAmount
+                                                + 0.72f * pressAmount
+                                                + 0.34f * focusAmount)
+                                               * (1.0f - disabledAmount)));
                     g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
                 }
             }
@@ -415,9 +423,9 @@ public:
                                        0.75f * scale);
             }
 
-            if (! button.isEnabled())
+            if (disabledAmount > 0.001f)
             {
-                g.setColour(colours::canvas.withAlpha(0.42f));
+                g.setColour(colours::canvas.withAlpha(0.42f * disabledAmount));
                 g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
             }
 
@@ -430,10 +438,8 @@ public:
         }
 
         auto base = backgroundColour;
-        if (highlighted && button.isEnabled() && ! base.isTransparent())
-            base = base.brighter(0.06f);
-        if (down && button.isEnabled() && ! base.isTransparent())
-            base = base.darker(0.10f);
+        if (! base.isTransparent())
+            base = base.brighter(0.06f * hoverAmount).darker(0.10f * pressAmount);
 
         const auto radius = juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius);
         if (! base.isTransparent())
@@ -441,27 +447,28 @@ public:
             g.setColour(base);
             g.fillRoundedRectangle(bounds, radius);
         }
-        else if (visuallySelected || (highlighted && button.isEnabled()))
+        else if (visuallySelected || hoverAmount > 0.001f || focusAmount > 0.001f)
         {
             // Preserve an explicitly transparent button background while still
             // giving selected/hovered tabs a restrained energy wash.
-            const auto alpha = visuallySelected ? 0.11f : 0.055f;
+            const auto alpha = visuallySelected ? 0.11f
+                                                 : 0.055f * hoverAmount + 0.045f * focusAmount;
             g.setColour(accent.withAlpha(alpha));
             g.fillRoundedRectangle(bounds, radius);
         }
 
-        if (visuallySelected || (highlighted && button.isEnabled()))
+        if (visuallySelected || hoverAmount > 0.001f || focusAmount > 0.001f)
         {
             auto outline = visuallySelected
                                ? accent.withAlpha(0.54f)
-                               : colours::hairline.withAlpha(0.48f);
+                               : colours::hairline.withAlpha(0.48f * juce::jmax(hoverAmount, focusAmount));
             g.setColour(outline);
             g.drawRoundedRectangle(bounds.reduced(0.5f), radius, 1.0f);
         }
 
-        if (! button.isEnabled())
+        if (disabledAmount > 0.001f)
         {
-            g.setColour(colours::canvas.withAlpha(0.45f));
+            g.setColour(colours::canvas.withAlpha(0.45f * disabledAmount));
             g.fillRoundedRectangle(bounds, juce::jmin(bounds.getHeight() * 0.5f, Metrics::radius));
         }
 
@@ -480,6 +487,9 @@ public:
                         bool down) override
     {
         using namespace fire::ui;
+        const auto animation = getPrimaryButtonAnimation(button, highlighted, down);
+        highlighted = animation.hover > 0.001f;
+        down = animation.press > 0.001f;
         const auto id = button.getComponentID();
         if (id == "zoom" || id == "slider_up_arrow" || id == "slider_down_arrow"
             || id == "left_arrow" || id == "right_arrow"
@@ -497,7 +507,7 @@ public:
             cross.lineTo(area.getBottomRight());
             cross.startNewSubPath(area.getTopRight());
             cross.lineTo(area.getBottomLeft());
-            g.setColour(colours::danger.withAlpha(highlighted ? 1.0f : 0.68f));
+            g.setColour(colours::danger.withAlpha(0.68f + 0.32f * animation.hover));
             g.strokePath(cross, juce::PathStrokeType(1.8f * scale,
                                                     juce::PathStrokeType::curved,
                                                     juce::PathStrokeType::rounded));
@@ -506,12 +516,9 @@ public:
 
         auto colour = button.findColour(button.getToggleState() ? juce::TextButton::textColourOnId
                                                                 : juce::TextButton::textColourOffId);
-        if (! button.isEnabled())
-            colour = colours::textMuted.withAlpha(0.45f);
-        else if (highlighted)
-            colour = colour.brighter(0.14f);
-        if (down)
-            colour = colour.darker(0.08f);
+        colour = colour.brighter(0.14f * animation.hover)
+                       .darker(0.08f * animation.press)
+                       .interpolatedWith(colours::textMuted.withAlpha(0.45f), animation.disabled);
 
         g.setColour(colour);
         g.setFont(getTextButtonFont(button, button.getHeight()));
@@ -568,7 +575,25 @@ public:
                           bool down) override
     {
         using namespace fire::ui;
+        const auto animation = getPrimaryButtonAnimation(button, highlighted, down);
+        highlighted = animation.hover > 0.001f;
+        down = animation.press > 0.001f;
         const auto text = button.getButtonText();
+
+        if (animation.hover > 0.001f || animation.press > 0.001f
+            || animation.focus > 0.001f)
+        {
+            auto bounds = button.getLocalBounds().toFloat().reduced(0.5f);
+            auto accent = button.findColour(juce::ToggleButton::tickColourId);
+            g.setColour(accent.withAlpha((0.035f * animation.hover
+                                          + 0.065f * animation.press
+                                          + 0.025f * animation.focus)
+                                         * (1.0f - animation.disabled)));
+            g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
+            g.setColour(accent.withAlpha(0.42f * animation.focus
+                                         * (1.0f - animation.disabled)));
+            g.drawRoundedRectangle(bounds, Metrics::radiusSmall * scale, 1.0f);
+        }
 
         if (button.getComponentID() == "flat_toggle")
         {
@@ -605,8 +630,9 @@ public:
 
             auto textColour = button.findColour(juce::ToggleButton::textColourId)
                                   .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.35f);
-            if (highlighted && button.isEnabled())
-                textColour = textColour.brighter(0.12f);
+            textColour = textColour.brighter(0.12f * animation.hover)
+                                   .interpolatedWith(colours::textMuted.withAlpha(0.35f),
+                                                     animation.disabled);
 
             g.setColour(textColour);
             g.setFont(bodyFont(juce::jlimit(9.0f, juce::jmax(9.0f, 14.0f * scale),
@@ -620,6 +646,26 @@ public:
     }
 
 private:
+    struct ButtonAnimation
+    {
+        float hover = 0.0f;
+        float press = 0.0f;
+        float focus = 0.0f;
+        float disabled = 0.0f;
+    };
+
+    static ButtonAnimation getPrimaryButtonAnimation(const juce::Button& button,
+                                                       bool highlighted,
+                                                       bool down) noexcept
+    {
+        if (const auto* animated = dynamic_cast<const PrimaryButtonAnimationState*>(&button))
+            return { animated->getHoverAnimation(), animated->getPressAnimation(),
+                     animated->getFocusAnimation(), animated->getDisabledAnimation() };
+        return { highlighted ? 1.0f : 0.0f, down ? 1.0f : 0.0f,
+                 button.hasKeyboardFocus(true) ? 1.0f : 0.0f,
+                 button.isEnabled() ? 0.0f : 1.0f };
+    }
+
     void drawDial(juce::Graphics& g,
                   juce::Rectangle<float> bounds,
                   float sliderPos,

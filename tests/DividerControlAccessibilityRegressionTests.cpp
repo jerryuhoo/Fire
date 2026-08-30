@@ -339,6 +339,32 @@ TEST_CASE("Crossover keyboard and accessibility edits use balanced topology gest
     CHECK(endCount == 3);
     CHECK(gestureDepth == 0);
 
+    value->setValueAsString("3.5 kHz");
+    CHECK(divider.getValue() == Catch::Approx(3500.0));
+    CHECK(divider.getXPercent()
+          == Catch::Approx(transformToLog(3500.0)).margin(0.0001));
+    CHECK(beginCount == 4);
+    CHECK(changeCount == 4);
+    CHECK(endCount == 4);
+    CHECK(gestureDepth == 0);
+
+    const auto valueBeforeInvalidText = divider.getValue();
+    const auto xBeforeInvalidText = divider.getXPercent();
+    for (const auto& invalidText : {
+             juce::String { "garbage" },
+             juce::String { "1kHzjunk" },
+             juce::String { "2 kHz trailing" },
+             juce::String { "NaN Hz" } })
+        value->setValueAsString(invalidText);
+
+    CHECK(divider.getValue() == Catch::Approx(valueBeforeInvalidText));
+    CHECK(divider.getXPercent()
+          == Catch::Approx(xBeforeInvalidText).margin(0.0001));
+    CHECK(beginCount == 4);
+    CHECK(changeCount == 4);
+    CHECK(endCount == 4);
+    CHECK(gestureDepth == 0);
+
     host.removeFromDesktop();
     REQUIRE_FALSE(divider.isShowing());
     CHECK(value->isReadOnly());
@@ -347,9 +373,9 @@ TEST_CASE("Crossover keyboard and accessibility edits use balanced topology gest
     CHECK(divider.getValue() == Catch::Approx(detachedValue));
     CHECK_FALSE(divider.keyPressed(
         juce::KeyPress { juce::KeyPress::rightKey }));
-    CHECK(beginCount == 3);
-    CHECK(changeCount == 3);
-    CHECK(endCount == 3);
+    CHECK(beginCount == 4);
+    CHECK(changeCount == 4);
+    CHECK(endCount == 4);
 }
 
 TEST_CASE("Crossover accessible edits remain balanced during synchronous deletion",

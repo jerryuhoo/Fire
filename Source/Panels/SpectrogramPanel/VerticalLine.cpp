@@ -10,6 +10,7 @@
 
 #include "VerticalLine.h"
 #include "Multiband.h"
+#include "../../Utility/StrictNumberParser.h"
 
 namespace
 {
@@ -68,10 +69,9 @@ public:
 
     void setValueAsString(const juce::String& newValue) override
     {
-        auto value = newValue.getDoubleValue();
-        if (newValue.containsIgnoreCase("khz"))
-            value *= 1000.0;
-        setValue(value);
+        double frequency = 0.0;
+        if (fire::utility::parseStrictFrequency(newValue, frequency))
+            setValue(frequency);
     }
 
     AccessibleValueRange getRange() const override

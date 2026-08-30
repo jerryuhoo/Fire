@@ -961,6 +961,29 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 
+    SECTION("direct panel disable")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        LfoPanel panel(processor);
+        panel.setVisible(true);
+
+        auto* dialog = installModulationMatrixDialog(panel, processor);
+        REQUIRE(dialog != nullptr);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        panel.setEnabled(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()
+                  ->getNumModalComponents()
+              == 0);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
     SECTION("panel destruction")
     {
         FireAudioProcessor processor;
@@ -1003,6 +1026,35 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         CHECK(safeDialog == nullptr);
         CHECK(safeContent == nullptr);
         CHECK(juce::ModalComponentManager::getInstance()->getNumModalComponents() == 0);
+        editor->removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    SECTION("host editor disable")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+        editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor->setVisible(true);
+        selectWorkspace(*editor, "MOD FORGE");
+
+        auto* lfoPanel = findComponentOfType<LfoPanel>(*editor);
+        REQUIRE(lfoPanel != nullptr);
+        auto* dialog = installModulationMatrixDialog(
+            *lfoPanel, processor, editor.get());
+        REQUIRE(dialog != nullptr);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        juce::Component::SafePointer<juce::Component> safeContent(
+            dialog->getContentComponent());
+
+        editor->setEnabled(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK(safeContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()
+                  ->getNumModalComponents()
+              == 0);
         editor->removeFromDesktop();
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }

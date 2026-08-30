@@ -3031,7 +3031,12 @@ void LfoPanel::enablementChanged()
     juce::Component::enablementChanged();
 
     if (safeThis != nullptr && ! isEnabled())
+    {
         dismissTransientInteraction();
+
+        if (safeThis != nullptr)
+            dismissModulationMatrixDialog();
+    }
 }
 
 void LfoPanel::setOnDataChangedCallback(std::function<void()> callback)

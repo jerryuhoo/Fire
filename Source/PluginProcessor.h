@@ -422,7 +422,9 @@ public:
     void clearModulationForParameter(const juce::String& targetParameterID);
     void invertModulationDepthForParameter(const juce::String& targetParameterID);
 
-    void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
+    LfoManager::AssignmentResult assignLfoToTarget(
+        int sourceLfoIndex,
+        const juce::String& targetParameterID);
 
     struct HistorySnapshot
     {

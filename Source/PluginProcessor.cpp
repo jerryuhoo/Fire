@@ -8286,9 +8286,14 @@ float FireAudioProcessor::getBandOutputPeakLevel(int band, int channel) const
     return 0.0f;
 }
 
-void FireAudioProcessor::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
+LfoManager::AssignmentResult FireAudioProcessor::assignLfoToTarget(
+    int sourceLfoIndex,
+    const juce::String& targetParameterID)
 {
-    lfoManager->assignLfoToTarget(sourceLfoIndex, targetParameterID);
+    const auto result =
+        lfoManager->assignLfoToTarget(sourceLfoIndex, targetParameterID);
+    if (result != LfoManager::AssignmentResult::changed)
+        return result;
 
     // When the modulation assignment changes, notify the active editor to update its UI
     if (auto* editor = getActiveEditor())
@@ -8302,6 +8307,7 @@ void FireAudioProcessor::assignLfoToTarget(int sourceLfoIndex, const juce::Strin
         }
     }
     lfoDataHasChanged();
+    return result;
 }
 
 void FireAudioProcessor::clearModulationForParameter(const juce::String& targetParameterID)

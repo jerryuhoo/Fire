@@ -5,6 +5,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <utility>
+
 namespace
 {
 template <typename ComponentType>
@@ -64,6 +67,42 @@ int countActiveRoutings(const juce::Array<ModulationRouting>& routings)
             ++activeCount;
 
     return activeCount;
+}
+
+juce::ComboBox* selectCleanPreset(FireAudioProcessorEditor& editor)
+{
+    auto* stateComponent = findDescendant<state::StateComponent>(editor);
+    if (stateComponent == nullptr)
+        return nullptr;
+
+    auto* presetBox = stateComponent->getPresetBox();
+    if (presetBox == nullptr)
+        return nullptr;
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    presetBox->clear(juce::dontSendNotification);
+    presetBox->addItem("Clean Preset", 1);
+    presetBox->setSelectedId(1, juce::dontSendNotification);
+    return presetBox;
+}
+
+void fillModulationRoutingCapacity(FireAudioProcessor& processor)
+{
+    juce::Array<ModulationRouting> fullRoutings;
+    fullRoutings.ensureStorageAllocated(
+        LfoManager::maximumModulationRoutings);
+    for (int index = 0; index < LfoManager::maximumModulationRoutings;
+         ++index)
+    {
+        ModulationRouting routing;
+        routing.sourceLfoIndex = index % 4;
+        routing.targetParameterID =
+            "full_assignment_target_" + juce::String(index);
+        fullRoutings.add(std::move(routing));
+    }
+
+    REQUIRE(processor.getLfoManager().replaceLfoDataAndRoutings(
+        std::array<LfoData, 4> {}, fullRoutings));
 }
 } // namespace
 
@@ -126,6 +165,87 @@ TEST_CASE("Changing LFO selection updates the pending Assign source",
     for (const auto& routing : routings)
         if (routing.targetParameterID.isNotEmpty())
             CHECK(routing.sourceLfoIndex != 0);
+}
+
+TEST_CASE("LFO assignment feedback reflects unchanged and full results",
+          "[ui][lfo][assign][feedback][capacity][dirty][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("Assign mode reports an existing route without dirtying preset")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        const auto targetParameterID =
+            ParameterIDAndName::getIDString(DRIVE_ID, 0);
+        REQUIRE(processor.assignLfoToTarget(0, targetParameterID)
+                == LfoManager::AssignmentResult::changed);
+
+        FireAudioProcessorEditor editor(processor);
+        editor.setBounds(0, 0, 1000, 500);
+        auto* lfoPanel = findDescendant<LfoPanel>(editor);
+        auto* bandPanel = findDescendant<BandPanel>(editor);
+        REQUIRE(lfoPanel != nullptr);
+        REQUIRE(bandPanel != nullptr);
+        auto* assignButton = findButtonWithText(*lfoPanel, "Assign");
+        auto* target = bandPanel->getDriveKnob();
+        auto* presetBox = selectCleanPreset(editor);
+        REQUIRE(assignButton != nullptr);
+        REQUIRE(target != nullptr);
+        REQUIRE(presetBox != nullptr);
+        REQUIRE(target->getParamID() == targetParameterID);
+        REQUIRE(presetBox->getSelectedId() == 1);
+
+        const auto revisionBefore =
+            processor.getLfoManager().getModulationRoutingRevision();
+        assignButton->triggerClick();
+        REQUIRE(assignButton->getToggleState());
+        target->mouseDown(makeLeftMouseDown(*target));
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+
+        CHECK_FALSE(assignButton->getToggleState());
+        CHECK(assignButton->getButtonText()
+              == "LFO 1 Already Assigned");
+        CHECK(processor.getLfoManager().getModulationRoutingRevision()
+              == revisionBefore);
+        CHECK(presetBox->getSelectedId() == 1);
+        CHECK(presetBox->getText() == "Clean Preset");
+    }
+
+    SECTION("right-click assignment reports capacity without dirtying preset")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        fillModulationRoutingCapacity(processor);
+
+        FireAudioProcessorEditor editor(processor);
+        editor.setBounds(0, 0, 1000, 500);
+        auto* lfoPanel = findDescendant<LfoPanel>(editor);
+        auto* bandPanel = findDescendant<BandPanel>(editor);
+        REQUIRE(lfoPanel != nullptr);
+        REQUIRE(bandPanel != nullptr);
+        auto* assignButton = findButtonWithText(*lfoPanel, "Assign");
+        auto* target = bandPanel->getDriveKnob();
+        auto* presetBox = selectCleanPreset(editor);
+        REQUIRE(assignButton != nullptr);
+        REQUIRE(target != nullptr);
+        REQUIRE(presetBox != nullptr);
+        REQUIRE(target->onLfoAssignmentRequested != nullptr);
+
+        const auto revisionBefore =
+            processor.getLfoManager().getModulationRoutingRevision();
+        target->onLfoAssignmentRequested(2, target->getParamID());
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
+
+        CHECK(assignButton->getButtonText() == "Mod Matrix Full");
+        CHECK(processor.getLfoManager().getModulationRoutingRevision()
+              == revisionBefore);
+        CHECK(countActiveRoutings(
+                  processor.getLfoManager().getModulationRoutingsCopy())
+              == LfoManager::maximumModulationRoutings);
+        CHECK(presetBox->getSelectedId() == 1);
+        CHECK(presetBox->getText() == "Clean Preset");
+    }
 }
 
 TEST_CASE("Assign mode reports cancellation and cannot survive editor hiding",

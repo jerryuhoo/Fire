@@ -341,6 +341,8 @@ public:
     void animationTick(float deltaSeconds = 1.0f / 60.0f);
     void showAssignArmed(int lfoIndex);
     void showAssignCompleted(int lfoIndex);
+    void showAssignUnchanged(int lfoIndex);
+    void showAssignCapacityReached();
     void showAssignCancelled();
     void clearAssignFeedback();
 
@@ -447,7 +449,15 @@ private:
         fire::ui::colours::gold
     };
     fire::ui::DampedValue lfoSelectionPosition;
-    enum class AssignFeedback { idle, armed, completed, cancelled };
+    enum class AssignFeedback
+    {
+        idle,
+        armed,
+        completed,
+        unchanged,
+        capacityReached,
+        cancelled
+    };
     AssignFeedback assignFeedback = AssignFeedback::idle;
     float assignFeedbackSecondsRemaining = 0.0f;
     juce::Rectangle<int> separatorLine;

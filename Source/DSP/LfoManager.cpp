@@ -1097,12 +1097,14 @@ float LfoManager::getLfoOutput(int lfoIndex) const
     return 0.0f;
 }
 
-void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID)
+LfoManager::AssignmentResult LfoManager::assignLfoToTarget(
+    int sourceLfoIndex,
+    const juce::String& targetParameterID)
 {
     if (! juce::isPositiveAndBelow(sourceLfoIndex, 4) || targetParameterID.isEmpty())
     {
         jassertfalse;
-        return;
+        return AssignmentResult::invalidRequest;
     }
 
     const juce::ScopedLock sl(dataAccessLock);
@@ -1116,8 +1118,9 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
             {
                 routing.sourceLfoIndex = sourceLfoIndex;
                 advanceModulationRoutingRevisionLocked();
+                return AssignmentResult::changed;
             }
-            return; // Assignment complete.
+            return AssignmentResult::unchanged;
         }
     }
 
@@ -1132,13 +1135,13 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
                 routing.depth = 0.5f; // Set a sensible default depth.
             routing.isBypassed = false;
             advanceModulationRoutingRevisionLocked();
-            return; // Assignment complete.
+            return AssignmentResult::changed;
         }
     }
 
     // 3. If all existing slots are full, dynamically add a new one.
     if (modulationRoutings.size() >= maximumModulationRoutings)
-        return;
+        return AssignmentResult::capacityReached;
 
     // Step 1: Add a new, default-constructed ModulationRouting object to the array.
     modulationRoutings.add({});
@@ -1151,6 +1154,7 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
     newRouting.targetParameterID = targetParameterID;
     newRouting.depth = 0.5f; // Set a sensible default depth.
     advanceModulationRoutingRevisionLocked();
+    return AssignmentResult::changed;
 }
 
 void LfoManager::clearModulationForTarget(const juce::String& targetParameterID)

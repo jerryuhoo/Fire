@@ -2696,8 +2696,8 @@ void LfoPanel::animationTick(float deltaSeconds)
         return;
     }
 
-    if ((assignFeedback == AssignFeedback::completed
-         || assignFeedback == AssignFeedback::cancelled)
+    if (assignFeedback != AssignFeedback::idle
+        && assignFeedback != AssignFeedback::armed
         && std::isfinite(deltaSeconds) && deltaSeconds > 0.0f)
     {
         assignFeedbackSecondsRemaining -= juce::jmin(deltaSeconds, 0.1f);
@@ -2737,6 +2737,24 @@ void LfoPanel::showAssignCompleted(int lfoIndex)
     assignFeedbackSecondsRemaining = 1.1f;
     assignButton.setButtonText("LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1)
                                + " Assigned");
+    assignButton.setToggleState(false, juce::dontSendNotification);
+}
+
+void LfoPanel::showAssignUnchanged(int lfoIndex)
+{
+    assignFeedback = AssignFeedback::unchanged;
+    assignFeedbackSecondsRemaining = 1.1f;
+    assignButton.setButtonText(
+        "LFO " + juce::String(juce::jlimit(0, 3, lfoIndex) + 1)
+        + " Already Assigned");
+    assignButton.setToggleState(false, juce::dontSendNotification);
+}
+
+void LfoPanel::showAssignCapacityReached()
+{
+    assignFeedback = AssignFeedback::capacityReached;
+    assignFeedbackSecondsRemaining = 1.1f;
+    assignButton.setButtonText("Mod Matrix Full");
     assignButton.setToggleState(false, juce::dontSendNotification);
 }
 

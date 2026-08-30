@@ -27,6 +27,14 @@ class LfoManager
 public:
     static constexpr int maximumModulationRoutings = 128;
 
+    enum class AssignmentResult
+    {
+        changed,
+        unchanged,
+        capacityReached,
+        invalidRequest
+    };
+
     LfoManager(juce::AudioProcessorValueTreeState& apvts);
 
     void prepare(const juce::dsp::ProcessSpec& spec);
@@ -224,7 +232,9 @@ public:
     bool isDawPlaying() const { return isPlaying.load(std::memory_order_relaxed); }
     const juce::StringArray& getLfoRateSyncDivisions() const;
     float getLfoOutput(int lfoIndex) const;
-    void assignLfoToTarget(int sourceLfoIndex, const juce::String& targetParameterID);
+    AssignmentResult assignLfoToTarget(
+        int sourceLfoIndex,
+        const juce::String& targetParameterID);
     void clearModulationForTarget(const juce::String& targetParameterID);
     void invertModulationDepth(const juce::String& targetParameterID);
     void onLfoShapeChanged(int lfoIndex);

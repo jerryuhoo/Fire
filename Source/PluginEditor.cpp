@@ -16,6 +16,31 @@
 #include <array>
 #include <utility>
 
+namespace
+{
+void showLfoAssignmentResult(
+    LfoPanel& panel,
+    int lfoIndex,
+    LfoManager::AssignmentResult result)
+{
+    switch (result)
+    {
+        case LfoManager::AssignmentResult::changed:
+            panel.showAssignCompleted(lfoIndex);
+            break;
+        case LfoManager::AssignmentResult::unchanged:
+            panel.showAssignUnchanged(lfoIndex);
+            break;
+        case LfoManager::AssignmentResult::capacityReached:
+            panel.showAssignCapacityReached();
+            break;
+        case LfoManager::AssignmentResult::invalidRequest:
+            panel.showAssignCancelled();
+            break;
+    }
+}
+} // namespace
+
 FireAudioProcessorEditor::UpdateCheckThread::UpdateCheckThread(FireAudioProcessorEditor& ownerToUse)
     : juce::Thread("Fire update check"),
       owner(ownerToUse),
@@ -115,23 +140,31 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
             // Define the callback function to be executed when a slider is clicked.
             auto sliderClickCallback = [this](const juce::String& parameterID)
             {
-                // This callback now does only one thing: tell the processor to assign the LFO.
-                // It no longer handles any UI state changes.
                 if (isLfoAssignMode) // Check again just in case.
                 {
                     const auto sourceLfoIndex = lfoSourceForAssignment;
+                    const juce::Component::SafePointer<
+                        FireAudioProcessorEditor> safeThis(this);
                     // This callback runs on the message thread, so complete the
                     // one-shot assignment interaction here instead of relying on
                     // a broad parameter-listener notification.
                     exitAssignMode(false);
-                    lfoPanel.showAssignCompleted(sourceLfoIndex);
-                    modulationSnapshotFramesRemaining = 0;
+                    if (safeThis == nullptr)
+                        return;
 
-                    const juce::Component::SafePointer<FireAudioProcessorEditor>
-                        safeThis(this);
-                    processor.assignLfoToTarget(sourceLfoIndex, parameterID);
+                    const auto result = processor.assignLfoToTarget(
+                        sourceLfoIndex, parameterID);
                     if (safeThis != nullptr)
-                        safeThis->updateModulationStates();
+                    {
+                        showLfoAssignmentResult(safeThis->lfoPanel,
+                                                sourceLfoIndex,
+                                                result);
+                        if (result == LfoManager::AssignmentResult::changed)
+                        {
+                            safeThis->modulationSnapshotFramesRemaining = 0;
+                            safeThis->updateModulationStates();
+                        }
+                    }
                 }
             };
 
@@ -266,17 +299,26 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                 || targetParameterID.isEmpty())
                 return;
 
-            modulationSnapshotFramesRemaining = 0;
-            if (isLfoAssignMode)
-                exitAssignMode(false);
-
-            lfoPanel.showAssignCompleted(lfoIndex);
-
             const juce::Component::SafePointer<FireAudioProcessorEditor>
                 safeThis(this);
-            processor.assignLfoToTarget(lfoIndex, targetParameterID);
+            if (isLfoAssignMode)
+                exitAssignMode(false);
+            if (safeThis == nullptr)
+                return;
+
+            const auto result =
+                processor.assignLfoToTarget(lfoIndex, targetParameterID);
             if (safeThis != nullptr)
-                safeThis->updateModulationStates();
+            {
+                showLfoAssignmentResult(safeThis->lfoPanel,
+                                        lfoIndex,
+                                        result);
+                if (result == LfoManager::AssignmentResult::changed)
+                {
+                    safeThis->modulationSnapshotFramesRemaining = 0;
+                    safeThis->updateModulationStates();
+                }
+            }
         };
 
         slider->onBypassToggled = [bypassCallback](const juce::String& targetParameterID)

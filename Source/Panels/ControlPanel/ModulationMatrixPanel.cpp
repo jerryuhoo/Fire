@@ -914,19 +914,27 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     setLookAndFeel(&fireLookAndFeel);
     const auto routingNumber = juce::String(index + 1);
     const auto routingName = "Modulation routing " + routingNumber;
+    const auto sourceColour =
+        fire::ui::lfoBankColour(routing.sourceLfoIndex);
 
     // SOURCE MENU
     addAndMakeVisible(sourceMenu);
     sourceMenu.setTitle(routingName + " source");
     sourceMenu.setTooltip("Select the LFO source for modulation routing "
                           + routingNumber);
-    for (int i = 1; i <= 4; ++i)
-        sourceMenu.addItem("LFO " + juce::String(i), i);
+    for (int sourceNumber = 1;
+         sourceNumber <= fire::ui::lfoBankCount;
+         ++sourceNumber)
+        sourceMenu.getRootMenu()->addColouredItem(
+            sourceNumber,
+            "LFO " + juce::String(sourceNumber),
+            fire::ui::lfoBankColourForSource(sourceNumber));
     sourceMenu.setSelectedId(routing.sourceLfoIndex + 1, juce::dontSendNotification);
     sourceMenu.addListener(this);
     sourceMenu.setColour(juce::ComboBox::backgroundColourId, fire::ui::colours::surface0);
-    sourceMenu.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::modulation.withAlpha(0.45f));
-    sourceMenu.setColour(juce::ComboBox::textColourId, fire::ui::colours::modulation);
+    sourceMenu.setColour(juce::ComboBox::outlineColourId,
+                         sourceColour.withAlpha(0.45f));
+    sourceMenu.setColour(juce::ComboBox::textColourId, sourceColour);
 
     // AMOUNT SLIDER
     addAndMakeVisible(amountSlider);
@@ -937,7 +945,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     amountSlider.setValue(routing.depth, juce::dontSendNotification);
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     amountSlider.setTextBoxStyle(juce::Slider::TextBoxRight, false, 60, 20);
-    amountSlider.setColour(juce::Slider::trackColourId, fire::ui::colours::modulation);
+    amountSlider.setColour(juce::Slider::trackColourId, sourceColour);
     amountSlider.setScrollWheelEnabled(false);
     amountSlider.onPointerDispatchComplete =
         [this](bool requestRebuild, bool notifyHost)
@@ -954,7 +962,7 @@ ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
     bipolarButton.setComponentID("rounded");
     bipolarButton.setColour(juce::TextButton::buttonColourId, fire::ui::colours::surface0);
     bipolarButton.setColour(juce::TextButton::buttonOnColourId, fire::ui::colours::surface2);
-    bipolarButton.setColour(juce::TextButton::textColourOnId, fire::ui::colours::modulation);
+    bipolarButton.setColour(juce::TextButton::textColourOnId, sourceColour);
     bipolarButton.setColour(juce::TextButton::textColourOffId, fire::ui::colours::textMuted);
     bipolarButton.setColour(juce::ComboBox::outlineColourId, fire::ui::colours::hairline);
     bipolarButton.setClickingTogglesState(true);

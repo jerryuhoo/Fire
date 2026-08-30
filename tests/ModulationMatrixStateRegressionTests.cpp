@@ -91,6 +91,42 @@ struct ModulationMatrixRowTestAccess
     {
         row.amountSlider.updateAnimationTargets();
     }
+
+    static const ModulationMatrixRoutingComboBox& getSourceMenu(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.sourceMenu;
+    }
+
+    static const juce::Slider& getAmountSlider(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.amountSlider;
+    }
+
+    static const juce::TextButton& getBipolarButton(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.bipolarButton;
+    }
+
+    static const ModulationMatrixRoutingComboBox& getDestinationMenu(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.destinationMenu;
+    }
+
+    static const juce::TextButton& getBypassButton(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.bypassButton;
+    }
+
+    static const juce::TextButton& getRemoveButton(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.removeButton;
+    }
 };
 
 namespace
@@ -2660,6 +2696,97 @@ TEST_CASE("Modulation matrix ignores empty rows while a structural rebuild is pe
     rows.clear();
     collectMatrixRows(panel, rows);
     CHECK(rows.size() == static_cast<size_t>(liveRoutings.size()));
+}
+
+TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
+          "[ui][modulation-matrix][theme][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+
+    for (int sourceIndex = 0;
+         sourceIndex < fire::ui::lfoBankCount;
+         ++sourceIndex)
+    {
+        CAPTURE(sourceIndex);
+        const ModulationRouting routing {
+            sourceIndex, {}, 0.25f, true, false
+        };
+        const ModulationMatrixRow row(
+            processor,
+            0,
+            routing,
+            makeRoutingEditSession(processor),
+            [](std::uint64_t, ModulationRouting) {});
+        const auto sourceColour = fire::ui::lfoBankColour(sourceIndex);
+
+        const auto& sourceMenu =
+            ModulationMatrixRowTestAccess::getSourceMenu(row);
+        CHECK(sourceMenu.getSelectedId() == sourceIndex + 1);
+        CHECK(sourceMenu.getText() == "LFO " + juce::String(sourceIndex + 1));
+        CHECK(sourceMenu.findColour(juce::ComboBox::textColourId)
+              == sourceColour);
+        CHECK(sourceMenu.findColour(juce::ComboBox::outlineColourId)
+              == sourceColour.withAlpha(0.45f));
+
+        const auto* sourceItems = sourceMenu.getRootMenu();
+        REQUIRE(sourceItems != nullptr);
+        CHECK(sourceItems->getNumItems() == fire::ui::lfoBankCount);
+        int sourceItemIndex = 0;
+        for (juce::PopupMenu::MenuItemIterator iterator(*sourceItems);
+             iterator.next();)
+        {
+            const auto& item = iterator.getItem();
+            CAPTURE(sourceItemIndex);
+            REQUIRE(sourceItemIndex < fire::ui::lfoBankCount);
+            CHECK(item.itemID == sourceItemIndex + 1);
+            CHECK(item.text == "LFO " + juce::String(sourceItemIndex + 1));
+            CHECK(item.colour
+                  == fire::ui::lfoBankColour(sourceItemIndex));
+            ++sourceItemIndex;
+        }
+        CHECK(sourceItemIndex == fire::ui::lfoBankCount);
+
+        const auto& amountSlider =
+            ModulationMatrixRowTestAccess::getAmountSlider(row);
+        CHECK(amountSlider.findColour(juce::Slider::trackColourId)
+              == sourceColour);
+
+        const auto& bipolarButton =
+            ModulationMatrixRowTestAccess::getBipolarButton(row);
+        CHECK(bipolarButton.getToggleState());
+        CHECK(bipolarButton.findColour(juce::TextButton::textColourOnId)
+              == sourceColour);
+
+        const auto& destinationMenu =
+            ModulationMatrixRowTestAccess::getDestinationMenu(row);
+        CHECK(destinationMenu.findColour(juce::ComboBox::textColourId)
+              == fire::ui::colours::textPrimary);
+        CHECK(destinationMenu.findColour(juce::ComboBox::outlineColourId)
+              == fire::ui::colours::hairline);
+
+        const auto& bypassButton =
+            ModulationMatrixRowTestAccess::getBypassButton(row);
+        CHECK(bypassButton.findColour(juce::TextButton::textColourOnId)
+              == fire::ui::colours::danger);
+        CHECK(bypassButton.findColour(juce::TextButton::textColourOffId)
+              == fire::ui::colours::positive);
+
+        const auto& removeButton =
+            ModulationMatrixRowTestAccess::getRemoveButton(row);
+        CHECK(removeButton.findColour(juce::TextButton::textColourOnId)
+              == fire::ui::colours::danger);
+        CHECK(removeButton.findColour(juce::TextButton::textColourOffId)
+              == fire::ui::colours::danger);
+    }
+
+    ModulationMatrixPanel panel { processor };
+    auto* addButton = findTextButton(panel, "+ ADD ROUTE");
+    REQUIRE(addButton != nullptr);
+    CHECK(addButton->findColour(juce::TextButton::textColourOnId)
+          == fire::ui::colours::modulation);
+    CHECK(addButton->findColour(juce::TextButton::textColourOffId)
+          == fire::ui::colours::modulation);
 }
 
 TEST_CASE("Modulation matrix row controls expose distinct accessibility semantics",

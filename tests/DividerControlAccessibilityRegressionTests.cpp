@@ -114,8 +114,18 @@ TEST_CASE("Filter graph nodes support guarded keyboard and accessible frequency 
     CHECK(button.getBounds() == detachedBounds);
     CHECK_FALSE(button.keyPressed(
         juce::KeyPress { juce::KeyPress::leftKey }));
+    juce::MouseWheelDetails wheel;
+    wheel.deltaY = 0.5f;
+    const auto eventTime = juce::Time::getCurrentTime();
+    const auto eventPosition = button.getLocalBounds().toFloat().getCentre();
+    const juce::MouseEvent wheelEvent(
+        juce::Desktop::getInstance().getMainMouseSource(),
+        eventPosition, {}, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        &button, &button, eventTime, eventPosition, eventTime, 1, false);
+    button.mouseWheelMove(wheelEvent, wheel);
     CHECK(dragCount == 3);
     CHECK(finishCount == 3);
+    CHECK(qCount == 1);
 }
 
 TEST_CASE("Filter graph keyboard nudges tolerate synchronous control deletion",

@@ -470,7 +470,7 @@ void DraggableButton::mouseWheelMove(const juce::MouseEvent& event, const juce::
 {
     juce::ignoreUnused(event);
 
-    if (mState && isEnabled() && onQValueChanged)
+    if (canAcceptKeyboardOrAccessibilityInput() && onQValueChanged)
     {
         auto qValueCallback = onQValueChanged;
         qValueCallback(wheel.deltaY);

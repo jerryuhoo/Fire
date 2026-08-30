@@ -60,6 +60,12 @@ struct SpectrumComponentTestAccess
         return component.isTimerRunning();
     }
 
+    static void setInterpolationFactor(SpectrumComponent& component,
+                                       float factor)
+    {
+        component.interpolationFactor = factor;
+    }
+
     static juce::Rectangle<int> peakPillBounds(
         const SpectrumComponent& component)
     {
@@ -374,6 +380,96 @@ TEST_CASE("Host bypass fades and clears spectra before a fresh-frame resume",
     CHECK(SpectrumComponentTestAccess::displayedMagnitude(spectrum,
                                                            oldProbeBin)
           == Catch::Approx(0.0f));
+}
+
+TEST_CASE("Host bypass opacity is applied to every rendered spectrum style",
+          "[spectrum][ui][host-bypass][animation][render][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const auto style : { 1, 2 })
+    {
+        DYNAMIC_SECTION("style " << style)
+        {
+            SpectrumComponent spectrum { style, false };
+            spectrum.setBounds(0, 0, 800, 300);
+            spectrum.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            spectrum.setVisible(true);
+            const juce::ScopeGuard cleanup { [&]
+            {
+                spectrum.removeFromDesktop();
+            } };
+            REQUIRE(spectrum.isShowing());
+
+            constexpr int numBins = 64;
+            constexpr int probeBin = 12;
+            std::array<float, numBins> frame {};
+            frame[probeBin] = 100.0f;
+            spectrum.updateSpectrum(frame.data(), numBins, 10.0f);
+            for (int tick = 0; tick < 120; ++tick)
+                SpectrumComponentTestAccess::tick(spectrum);
+
+            REQUIRE(SpectrumComponentTestAccess::presentationOpacity(spectrum)
+                    == Catch::Approx(1.0f));
+            const auto fullAlpha = renderedAlphaSum(spectrum,
+                                                     spectrum.getLocalBounds());
+            REQUIRE(fullAlpha > 0u);
+
+            spectrum.setHostBypassed(true);
+            for (int tick = 0; tick < 4; ++tick)
+                SpectrumComponentTestAccess::tick(spectrum);
+
+            const auto fadeOutOpacity =
+                SpectrumComponentTestAccess::presentationOpacity(spectrum);
+            REQUIRE(fadeOutOpacity > 0.0f);
+            REQUIRE(fadeOutOpacity < 1.0f);
+            REQUIRE(SpectrumComponentTestAccess::hasSpectrumPath(spectrum));
+            const auto fadingOutAlpha = renderedAlphaSum(
+                spectrum, spectrum.getLocalBounds());
+            CHECK(fadingOutAlpha > 0u);
+            CHECK(fadingOutAlpha < fullAlpha);
+
+            for (int tick = 0; tick < 180; ++tick)
+                SpectrumComponentTestAccess::tick(spectrum);
+
+            REQUIRE(SpectrumComponentTestAccess::presentationOpacity(spectrum)
+                    == Catch::Approx(0.0f));
+            CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) == 0u);
+
+            spectrum.setHostBypassed(false);
+            // Install the fresh frame completely on its zero-opacity consume
+            // tick. The next rendered change is therefore presentation fade
+            // alone, not a confounding spectrum-geometry interpolation.
+            SpectrumComponentTestAccess::setInterpolationFactor(spectrum,
+                                                                  1.0f);
+            spectrum.updateSpectrum(frame.data(), numBins, 10.0f);
+            SpectrumComponentTestAccess::tick(spectrum);
+
+            REQUIRE_FALSE(
+                SpectrumComponentTestAccess::isAwaitingFreshFrame(spectrum));
+            REQUIRE(SpectrumComponentTestAccess::presentationOpacity(spectrum)
+                    == Catch::Approx(0.0f));
+            CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds()) == 0u);
+
+            SpectrumComponentTestAccess::tick(spectrum);
+            const auto fadeInOpacity =
+                SpectrumComponentTestAccess::presentationOpacity(spectrum);
+            REQUIRE(fadeInOpacity > 0.0f);
+            REQUIRE(fadeInOpacity < 1.0f);
+            const auto fadingInAlpha = renderedAlphaSum(
+                spectrum, spectrum.getLocalBounds());
+            CHECK(fadingInAlpha > 0u);
+            CHECK(fadingInAlpha < fullAlpha);
+
+            for (int tick = 0; tick < 180; ++tick)
+                SpectrumComponentTestAccess::tick(spectrum);
+
+            REQUIRE(SpectrumComponentTestAccess::presentationOpacity(spectrum)
+                    == Catch::Approx(1.0f));
+            CHECK(renderedAlphaSum(spectrum, spectrum.getLocalBounds())
+                  == fullAlpha);
+        }
+    }
 }
 
 TEST_CASE("A rapid host-bypass reversal never fades the retained frame back in",

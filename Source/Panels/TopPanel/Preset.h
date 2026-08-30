@@ -267,6 +267,9 @@ PluginProcessor).
             bool popupSessionActive = false;
             bool pointerInteractionActive = false;
             bool cancelPendingPointerRelease = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+            std::function<void()> popupCloserForTesting;
+#endif
         };
 
         class ManualUpdateCheckThread final : public juce::Thread

@@ -157,6 +157,18 @@ struct StateComponentPresetBoxTestAccess
     {
         component.setNextPreset();
     }
+
+    static void setPopupCloser(state::StateComponent& component,
+                               std::function<void()> closer)
+    {
+        component.presetBox.popupCloserForTesting = std::move(closer);
+    }
+
+    static void notifyParentHierarchyChanged(
+        state::StateComponent& component)
+    {
+        component.presetBox.parentHierarchyChanged();
+    }
 };
 
 struct StateComponentSaveChooserTestAccess
@@ -2044,6 +2056,30 @@ TEST_CASE("Disabling preset controls synchronously closes settings",
             StateComponentSessionBoundaryTestAccess::hasSettingsDialog(
                 component));
     }
+}
+
+TEST_CASE("Preset box hierarchy dismissal tolerates synchronous owner deletion",
+          "[preset][ui][preset-box][lifecycle][reentrancy][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto component = std::make_unique<state::StateComponent>(
+        processor.stateAB, processor.statePresets, processor.treeState);
+
+    int closeCount = 0;
+    StateComponentPresetBoxTestAccess::setPopupCloser(
+        *component,
+        [&component, &closeCount]
+        {
+            ++closeCount;
+            component.reset();
+        });
+
+    StateComponentPresetBoxTestAccess::notifyParentHierarchyChanged(
+        *component);
+
+    CHECK(component == nullptr);
+    CHECK(closeCount == 1);
 }
 
 TEST_CASE("Preset box accepts only deliberate input in its current lifecycle",

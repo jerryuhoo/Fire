@@ -1438,6 +1438,17 @@ namespace state
 
     void StateComponent::PresetComboBox::closePopupWindow() noexcept
     {
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (popupCloserForTesting != nullptr)
+        {
+            // Move the callback off the component before invoking it: the
+            // popup close path is allowed to synchronously destroy this box.
+            std::function<void()> closer;
+            closer.swap(popupCloserForTesting);
+            closer();
+            return;
+        }
+#endif
         juce::ComboBox::hidePopup();
     }
 
@@ -1462,25 +1473,40 @@ namespace state
 
     void StateComponent::PresetComboBox::visibilityChanged()
     {
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
         juce::Component::visibilityChanged();
+        if (safeThis == nullptr)
+            return;
+
         if (! isShowing())
             dismissTransientInteraction();
     }
 
     void StateComponent::PresetComboBox::enablementChanged()
     {
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
+        juce::ComboBox::enablementChanged();
+        if (safeThis == nullptr)
+            return;
+
+        // Keep dismissal last: closing a native popup may synchronously tear
+        // down the owning editor and therefore this ComboBox.
         if (! isEnabled())
             dismissTransientInteraction();
-
-        juce::ComboBox::enablementChanged();
     }
 
     void StateComponent::PresetComboBox::parentHierarchyChanged()
     {
-        if (! isShowing())
-            dismissTransientInteraction();
+        const juce::Component::SafePointer<PresetComboBox> safeThis(this);
 
         juce::ComboBox::parentHierarchyChanged();
+        if (safeThis == nullptr)
+            return;
+
+        // This must remain the final operation for the same reason as the
+        // enablement callback above.
+        if (! isShowing())
+            dismissTransientInteraction();
     }
 
     std::function<void(int)>
@@ -1530,8 +1556,8 @@ namespace state
     {
         if (! isShowing() || ! isEnabled())
         {
-            dismissTransientInteraction();
             popupRequestArmed = false;
+            dismissTransientInteraction();
             return;
         }
 

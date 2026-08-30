@@ -47,11 +47,13 @@ public:
     using ParameterChangeCallback = std::function<ParameterGestureToken()>;
     using PointerGestureAdmissionCallback = std::function<bool(
         juce::MouseInputSource::InputSourceType, int)>;
+    using UserPositionChangeCallback = std::function<void(float)>;
     void setParameterGestureCallbacks (ParameterGestureCallback gestureBegin,
                                        ParameterChangeCallback parameterChange,
                                        ParameterGestureCallback gestureEnd);
     void setPointerGestureAdmissionCallback(
         PointerGestureAdmissionCallback callback);
+    void setUserPositionChangeCallback(UserPositionChangeCallback callback);
     void beginParameterGesture();
     void endParameterGesture();
     void setValueAsPartOfGesture (double newValue,
@@ -61,6 +63,7 @@ public:
     void dismissTransientInteraction();
     float getHoverAnimation() const noexcept { return hoverAnimation.current; }
     float getPressAnimation() const noexcept { return pressAnimation.current; }
+    bool keyPressed(const juce::KeyPress& key) override;
 
 private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -69,7 +72,15 @@ private:
 
     bool isEntered = false;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+    bool canAcceptKeyboardOrAccessibilityInput() const noexcept;
+    bool setValueFromUserInput(double newValue);
     void updateAnimationTargets() noexcept;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
+    void enablementChanged() override;
+    void visibilityChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
 
     void mouseUp (const juce::MouseEvent& e) override;
     void mouseEnter (const juce::MouseEvent& e) override;
@@ -87,6 +98,7 @@ private:
     ParameterChangeCallback parameterChange;
     ParameterGestureCallback parameterGestureEnd;
     PointerGestureAdmissionCallback pointerGestureAdmission;
+    UserPositionChangeCallback userPositionChange;
     int parameterGestureDepth = 0;
     bool primaryDragActive = false;
     juce::MouseInputSource::InputSourceType pointerSourceType =

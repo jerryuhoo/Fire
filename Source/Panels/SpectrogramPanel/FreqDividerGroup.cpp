@@ -19,11 +19,11 @@ FreqDividerGroup::FreqDividerGroup(FireAudioProcessor& p, int index) : processor
     margin = getHeight() / 20.0f;
     topologyRevealAnimation.snapTo(1.0f);
 
-    // This ToggleButton is only an APVTS compatibility mirror. It is not a
-    // user-facing command: the visible child controls own all interaction.
+    // This ToggleButton is only an APVTS compatibility mirror. Its ignored
+    // accessibility role keeps the parent out of the tree without suppressing
+    // the visible frequency label and divider controls beneath it.
     setWantsKeyboardFocus(false);
     setMouseClickGrabsKeyboardFocus(false);
-    setAccessible(false);
 
     addAndMakeVisible(verticalLine);
 
@@ -225,6 +225,12 @@ VerticalLine& FreqDividerGroup::getVerticalLine()
 
 void FreqDividerGroup::buttonClicked(juce::Button* button)
 {
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+FreqDividerGroup::createAccessibilityHandler()
+{
+    return createIgnoredAccessibilityHandler(*this);
 }
 
 void FreqDividerGroup::clicked(const juce::ModifierKeys& modifiers)

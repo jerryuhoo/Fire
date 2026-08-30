@@ -121,6 +121,11 @@ Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : process
             {
                 return admitDividerPointerGesture(i, sourceType, sourceIndex);
             });
+        freqDividerGroup[i]->getVerticalLine().setUserPositionChangeCallback(
+            [this, i](float xPercent)
+            {
+                dragLines(xPercent, i);
+            });
         freqDividerGroup[i]->setFrequencyEditCallback([this, i](float xPercent)
         {
             dragLines(xPercent, i);

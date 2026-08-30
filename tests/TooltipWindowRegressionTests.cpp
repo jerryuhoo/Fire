@@ -44,27 +44,69 @@ TEST_CASE("Editor-owned tooltips expose help using the Fire theme",
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->setVisible(true);
 
-    auto* tooltip = findDescendant<juce::TooltipWindow>(*editor);
+    auto* tooltip = findDescendant<FireTooltipWindow>(*editor);
     auto* hqButton = findButtonWithText(*editor, "HQ");
     REQUIRE(tooltip != nullptr);
     REQUIRE(hqButton != nullptr);
 
     CHECK(tooltip->getParentComponent() == editor.get());
     CHECK(&tooltip->getLookAndFeel() == &editor->getLookAndFeel());
+    CHECK(tooltip->getConfiguredDelayMilliseconds() == 900);
+    CHECK_FALSE(tooltip->isOpaque());
     CHECK(hqButton->getTooltip() == "High-quality oversampling");
     CHECK(tooltip->findColour(juce::TooltipWindow::backgroundColourId)
           == fire::ui::colours::surface1);
     CHECK(tooltip->findColour(juce::TooltipWindow::textColourId)
           == fire::ui::colours::textPrimary);
     CHECK(tooltip->findColour(juce::TooltipWindow::outlineColourId)
-          == fire::ui::colours::flame.withAlpha(0.62f));
+          == fire::ui::colours::hairline.withAlpha(0.78f));
+
+    auto* fireLookAndFeel = dynamic_cast<FireLookAndFeel*>(
+        &editor->getLookAndFeel());
+    REQUIRE(fireLookAndFeel != nullptr);
+    const auto tooltipText = hqButton->getTooltip();
+    const auto parentArea = editor->getLocalBounds();
+    const auto anchor = parentArea.getCentre();
+    fireLookAndFeel->scale = 1.0f;
+    const auto oneXBounds = fireLookAndFeel->getTooltipBounds(
+        tooltipText, anchor, parentArea);
+    fireLookAndFeel->scale = 2.0f;
+    const auto twoXBounds = fireLookAndFeel->getTooltipBounds(
+        tooltipText, anchor, parentArea);
+    CHECK(twoXBounds.getWidth() > oneXBounds.getWidth());
+    CHECK(twoXBounds.getHeight() > oneXBounds.getHeight());
+    CHECK(parentArea.contains(oneXBounds));
+    CHECK(parentArea.contains(twoXBounds));
+    fireLookAndFeel->scale = 1.0f;
 
     REQUIRE_FALSE(tooltip->isVisible());
     tooltip->displayTip(editor->localPointToGlobal(hqButton->getBounds().getCentre()),
                         hqButton->getTooltip());
     CHECK(tooltip->isVisible());
     CHECK(editor->getLocalBounds().contains(tooltip->getBounds()));
-    tooltip->hideTip();
+
+    juce::Image tooltipImage(juce::Image::ARGB,
+                             tooltip->getWidth(),
+                             tooltip->getHeight(),
+                             true);
+    juce::Graphics tooltipGraphics(tooltipImage);
+    tooltip->paintEntireComponent(tooltipGraphics, true);
+
+    // The neutral Fire card has truly transparent rounded corners rather
+    // than JUCE's opaque square backing or the previous bright orange frame.
+    CHECK(tooltipImage.getPixelAt(0, 0).getAlpha() == 0);
+    CHECK(tooltipImage.getPixelAt(tooltipImage.getWidth() / 2,
+                                  tooltipImage.getHeight() / 2).getAlpha() > 0);
+    const auto edgePixel = tooltipImage.getPixelAt(
+        0, tooltipImage.getHeight() / 2);
+    CHECK(edgePixel.getRed() < fire::ui::colours::flame.getRed() / 2);
+    CHECK(edgePixel.getBlue() >= edgePixel.getRed());
+
+    editor->setVisible(false);
+    CHECK_FALSE(tooltip->isVisible());
+
+    editor->setVisible(true);
     CHECK_FALSE(tooltip->isVisible());
 }

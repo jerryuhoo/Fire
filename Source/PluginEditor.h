@@ -11,6 +11,7 @@
 #pragma once
 
 #include "GUI/InterfaceDefines.h"
+#include "GUI/FireTooltipWindow.h"
 #include "GUI/LookAndFeel.h"
 #include "GUI/PrimaryButton.h"
 #include "GUI/ValueEntryPopup.h"
@@ -214,7 +215,7 @@ private:
 
     // create own knob style
     FireLookAndFeel fireLookAndFeel;
-    juce::TooltipWindow tooltipWindow { this, 550 };
+    FireTooltipWindow tooltipWindow { *this };
 
     bool isLfoAssignMode = false;
     int lfoSourceForAssignment = 0;

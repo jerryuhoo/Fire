@@ -35,6 +35,22 @@ inline float headerInteractionWashAlpha(float hover,
                         (0.56f * hover + 0.72f * press + 0.34f * focus)
                             * (1.0f - disabled));
 }
+
+inline juce::TextLayout createTooltipTextLayout(const juce::String& text,
+                                                float scale,
+                                                juce::Colour colour)
+{
+    scale = std::isfinite(scale) ? juce::jlimit(0.75f, 2.5f, scale) : 1.0f;
+
+    juce::AttributedString attributedText;
+    attributedText.setJustification(juce::Justification::centred);
+    attributedText.setWordWrap(juce::AttributedString::byWord);
+    attributedText.append(text, bodyFont(12.5f * scale), colour);
+
+    juce::TextLayout layout;
+    layout.createLayoutWithBalancedLineLengths(attributedText, 340.0f * scale);
+    return layout;
+}
 } // namespace fire::ui
 
 class FireLookAndFeel final : public juce::LookAndFeel_V4,
@@ -80,7 +96,8 @@ public:
 
         setColour(juce::TooltipWindow::backgroundColourId, colours::surface1);
         setColour(juce::TooltipWindow::textColourId, colours::textPrimary);
-        setColour(juce::TooltipWindow::outlineColourId, colours::flame.withAlpha(0.62f));
+        setColour(juce::TooltipWindow::outlineColourId,
+                  colours::hairline.withAlpha(0.78f));
 
         setColour(juce::TextEditor::backgroundColourId, colours::surface0);
         setColour(juce::TextEditor::textColourId, colours::textPrimary);
@@ -110,6 +127,84 @@ public:
     }
 
     juce::Font getPopupMenuFont() override { return fire::ui::bodyFont(13.0f * scale); }
+
+    juce::Rectangle<int> getTooltipBounds(const juce::String& text,
+                                          juce::Point<int> screenPosition,
+                                          juce::Rectangle<int> parentArea) override
+    {
+        const auto safeScale = std::isfinite(scale)
+                                   ? juce::jlimit(0.75f, 2.5f, scale)
+                                   : 1.0f;
+        const auto layout = fire::ui::createTooltipTextLayout(
+            text,
+            safeScale,
+            findColour(juce::TooltipWindow::textColourId));
+        const auto horizontalPadding = 11.0f * safeScale;
+        const auto verticalPadding = 6.5f * safeScale;
+        const auto width = juce::roundToInt(std::ceil(
+            layout.getWidth() + horizontalPadding * 2.0f));
+        const auto height = juce::roundToInt(std::ceil(
+            layout.getHeight() + verticalPadding * 2.0f));
+        const auto horizontalGap = juce::roundToInt(16.0f * safeScale);
+        const auto verticalGap = juce::roundToInt(8.0f * safeScale);
+
+        return juce::Rectangle<int>(
+                   screenPosition.x > parentArea.getCentreX()
+                       ? screenPosition.x - width - horizontalGap
+                       : screenPosition.x + horizontalGap,
+                   screenPosition.y > parentArea.getCentreY()
+                       ? screenPosition.y - height - verticalGap
+                       : screenPosition.y + verticalGap,
+                   width,
+                   height)
+            .constrainedWithin(parentArea);
+    }
+
+    void drawTooltip(juce::Graphics& g,
+                     const juce::String& text,
+                     int width,
+                     int height) override
+    {
+        using namespace fire::ui;
+        if (width <= 0 || height <= 0)
+            return;
+
+        const auto safeScale = std::isfinite(scale)
+                                   ? juce::jlimit(0.75f, 2.5f, scale)
+                                   : 1.0f;
+        auto bounds = juce::Rectangle<float>(0.5f,
+                                              0.5f,
+                                              static_cast<float>(width) - 1.0f,
+                                              static_cast<float>(height) - 1.0f);
+        const auto radius = juce::jmin(Metrics::radiusSmall * safeScale + 1.0f,
+                                       bounds.getHeight() * 0.5f);
+        const auto background = findColour(
+            juce::TooltipWindow::backgroundColourId);
+        juce::ColourGradient fill(background.brighter(0.025f),
+                                  bounds.getX(),
+                                  bounds.getY(),
+                                  background.darker(0.18f),
+                                  bounds.getX(),
+                                  bounds.getBottom(),
+                                  false);
+        g.setGradientFill(fill);
+        g.fillRoundedRectangle(bounds, radius);
+
+        g.setColour(findColour(juce::TooltipWindow::outlineColourId));
+        g.drawRoundedRectangle(bounds, radius, 1.0f);
+
+        const auto layout = createTooltipTextLayout(
+            text,
+            safeScale,
+            findColour(juce::TooltipWindow::textColourId));
+        layout.draw(g,
+                    juce::Rectangle<float>(0.0f,
+                                            0.0f,
+                                            static_cast<float>(width),
+                                            static_cast<float>(height))
+                        .reduced(11.0f * safeScale,
+                                 6.5f * safeScale));
+    }
 
     juce::Font getLabelFont(juce::Label& label) override
     {

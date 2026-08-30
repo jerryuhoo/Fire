@@ -556,6 +556,7 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
     lfoPanel.dismissTransientInteraction();
     lfoPanel.dismissModulationMatrixDialog();
     stateComponent.dismissSettingsDialog();
+    tooltipWindow.hideTip();
     hideValuePopup();
     valueEntryPopup.dismissSession();
 
@@ -831,6 +832,7 @@ void FireAudioProcessorEditor::visibilityChanged()
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         ++hiddenUiCleanupCountForTesting;
 #endif
+        tooltipWindow.hideTip();
         suspendSpectrumPresentation();
         if (isLfoAssignMode)
             exitAssignMode(false);
@@ -916,6 +918,7 @@ void FireAudioProcessorEditor::enablementChanged()
 
     if (! isEnabled())
     {
+        tooltipWindow.hideTip();
         if (isLfoAssignMode)
             exitAssignMode(false);
         lfoPanel.clearAssignFeedback();
@@ -1379,6 +1382,7 @@ void FireAudioProcessorEditor::timerCallback()
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         ++hiddenUiCleanupCountForTesting;
 #endif
+        tooltipWindow.hideTip();
         suspendSpectrumPresentation();
 
         // Unlike a workspace change, a detached/minimised editor peer ends

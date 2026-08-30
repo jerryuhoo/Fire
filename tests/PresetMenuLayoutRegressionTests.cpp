@@ -142,3 +142,23 @@ TEST_CASE("Preset menu options watch their owner for deletion",
     stateComponent.reset();
     CHECK(options.hasWatchedComponentBeenDeleted());
 }
+
+TEST_CASE("Preset browser exposes a descriptive accessible identity",
+          "[preset][ui][accessibility]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    state::StateComponent stateComponent(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    stateComponent.setBounds(0, 0, 520, 64);
+    stateComponent.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    stateComponent.setVisible(true);
+    auto* presetBox = stateComponent.getPresetBox();
+    REQUIRE(presetBox != nullptr);
+    CHECK(presetBox->getTitle() == "Preset browser");
+    CHECK(presetBox->getTooltip() == "Select a preset");
+
+    auto* accessibility = presetBox->getAccessibilityHandler();
+    REQUIRE(accessibility != nullptr);
+    CHECK(accessibility->getTitle() == "Preset browser");
+}

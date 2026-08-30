@@ -565,6 +565,8 @@ TEST_CASE("Cached band toggle accessibility actions reject peer detachment",
         CHECK(accessibility->getRole()
               == juce::AccessibilityRole::toggleButton);
         CHECK(accessibility->getValueInterface() != nullptr);
+        CHECK_FALSE(accessibility->getTitle().isEmpty());
+        CHECK_FALSE(accessibility->getHelp().isEmpty());
         REQUIRE(accessibility->getActions().contains(
             juce::AccessibilityActionType::press));
         REQUIRE(accessibility->getActions().contains(

@@ -1605,6 +1605,8 @@ namespace state
         addAndMakeVisible(presetBox);
 
         presetBox.setComponentID("header_preset");
+        presetBox.setTitle("Preset browser");
+        presetBox.setTooltip("Select a preset");
         presetBox.setJustificationType(juce::Justification::centred);
         presetBox.setColour(juce::ComboBox::textColourId, fire::ui::colours::textPrimary);
         presetBox.setColour(juce::ComboBox::arrowColourId, fire::ui::colours::flame);

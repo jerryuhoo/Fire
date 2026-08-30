@@ -358,6 +358,12 @@ TEST_CASE("Modulatable slider titles preserve the advertised header hit target",
     slider.setLookAndFeel(&lookAndFeel);
     slider.setBounds(0, 0, 120, 120);
     slider.setVisible(true);
+    slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    slider.setLabel("Drive", fire::ui::colours::drive);
+
+    auto* accessibility = slider.getAccessibilityHandler();
+    REQUIRE(accessibility != nullptr);
+    CHECK(accessibility->getTitle() == "Drive");
 
     juce::Label* title = nullptr;
     for (auto* child : slider.getChildren())

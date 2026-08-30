@@ -930,6 +930,7 @@ void ModulatableSlider::setLabel(const juce::String& text, juce::Colour colour)
 {
     label.setText(text, juce::dontSendNotification);
     label.setColour(juce::Label::textColourId, colour);
+    setTitle(text);
 }
 
 void ModulatableSlider::resized()

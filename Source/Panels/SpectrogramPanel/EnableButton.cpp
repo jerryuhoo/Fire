@@ -35,6 +35,8 @@ bool isVisibleInHierarchy(const juce::Component& component) noexcept
 //==============================================================================
 EnableButton::EnableButton()
 {
+    setTitle("Band enabled");
+    setTooltip("Enable or bypass this band");
     hoverAnimation.snapTo(0.0f);
     pressAnimation.snapTo(0.0f);
     focusAnimation.snapTo(0.0f);

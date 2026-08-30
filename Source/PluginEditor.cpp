@@ -650,10 +650,21 @@ void FireAudioProcessorEditor::visibilityChanged()
 
     if (isShowing())
     {
+        hiddenUiCleanupComplete = false;
         synchroniseHistorySourceForWorkspace(activeWorkspace);
     }
     else
     {
+        if (hiddenUiCleanupComplete)
+            return;
+
+        // Closing or detaching the peer is a session boundary. Perform the
+        // potentially broad transient-state cleanup once for that boundary,
+        // rather than repeating it on every 60 Hz timer tick while hidden.
+        hiddenUiCleanupComplete = true;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        ++hiddenUiCleanupCountForTesting;
+#endif
         if (isLfoAssignMode)
             exitAssignMode(false);
         lfoPanel.clearAssignFeedback();
@@ -999,6 +1010,16 @@ void FireAudioProcessorEditor::timerCallback()
                 == UpdateCheckVisibilityState::hidden;
         }
 
+        if (hiddenUiCleanupComplete)
+            return;
+
+        // A host may detach the peer without delivering visibilityChanged().
+        // The timer owns the same one-shot cleanup fallback for that case.
+        hiddenUiCleanupComplete = true;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        ++hiddenUiCleanupCountForTesting;
+#endif
+
         // Unlike a workspace change, a detached/minimised editor peer ends
         // the visible UI session even when the host leaves this Component's
         // own visible flag set. visibilityChanged() is therefore not
@@ -1084,6 +1105,10 @@ void FireAudioProcessorEditor::timerCallback()
         multiband.dismissTransientUi();
         return;
     }
+
+    // A reattached peer begins a new visible session. The next hide/detach
+    // must therefore be allowed to run one cleanup pass again.
+    hiddenUiCleanupComplete = false;
 
     if (hasLatestDistortionGraphValues)
     {

@@ -32,6 +32,7 @@
 struct DistortionGraphSourceEpochTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct EditorUpdateCheckLifecycleTestAccess;
+struct EditorHiddenSessionTestAccess;
 #endif
 
 struct Version
@@ -127,6 +128,7 @@ private:
     friend struct MeterFreshnessTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct EditorUpdateCheckLifecycleTestAccess;
+    friend struct EditorHiddenSessionTestAccess;
 #endif
 
     class UpdateCheckThread final : public juce::Thread
@@ -170,6 +172,10 @@ private:
     float headerEnergy = 0.0f;
     int animationFrame = 0;
     bool lastBypassedState = false;
+    bool hiddenUiCleanupComplete = false;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    std::uint64_t hiddenUiCleanupCountForTesting = 0;
+#endif
 
     MeterValues cachedMeterValues;
     std::uint64_t meterPacketGeneration = 0;

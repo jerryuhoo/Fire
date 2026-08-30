@@ -77,6 +77,15 @@ struct StateComponentDialogTestAccess final
     }
 };
 
+struct EditorHiddenSessionTestAccess final
+{
+    static std::uint64_t cleanupCount(
+        const FireAudioProcessorEditor& editor) noexcept
+    {
+        return editor.hiddenUiCleanupCountForTesting;
+    }
+};
+
 namespace
 {
 struct ParameterGestureRecorder final : juce::AudioProcessorParameter::Listener
@@ -1264,6 +1273,47 @@ TEST_CASE("Settings dialog closes synchronously with its owning UI",
         CHECK_FALSE(StateComponentDialogTestAccess::hasDialog(component));
         CHECK(factoryCalls == 0);
     }
+}
+
+TEST_CASE("Hidden editor transient cleanup runs once per peer session",
+          "[ui][editor][hidden][lifecycle][performance][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+
+    REQUIRE_FALSE(editor->isShowing());
+    const auto initialCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+
+    editor->timerCallback();
+    const auto firstHiddenCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(firstHiddenCleanupCount == initialCleanupCount + 1);
+
+    editor->timerCallback();
+    CHECK(EditorHiddenSessionTestAccess::cleanupCount(*editor)
+          == firstHiddenCleanupCount);
+
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    REQUIRE(editor->isShowing());
+    editor->timerCallback();
+    const auto visibleCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(visibleCleanupCount == firstHiddenCleanupCount);
+
+    editor->removeFromDesktop();
+    REQUIRE_FALSE(editor->isShowing());
+    editor->timerCallback();
+    const auto detachedCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(detachedCleanupCount == visibleCleanupCount + 1);
+
+    editor->timerCallback();
+    CHECK(EditorHiddenSessionTestAccess::cleanupCount(*editor)
+          == detachedCleanupCount);
 }
 
 TEST_CASE("Fire settings dialog uses the shared visual language", "[ui][smoke]")

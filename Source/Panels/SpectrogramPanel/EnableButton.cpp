@@ -227,6 +227,10 @@ void EnableButton::visibilityChanged()
     if (! isVisible())
     {
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
+
         isEntered = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
@@ -244,24 +248,36 @@ void EnableButton::enablementChanged()
     const juce::Component::SafePointer<EnableButton> safeThis(this);
     juce::ToggleButton::enablementChanged();
 
-    if (safeThis != nullptr)
+    if (safeThis == nullptr)
+        return;
+
+    if (! isEnabled())
     {
-        if (! isEnabled())
-            dismissPointerGesture();
-        updateAnimationTargets();
+        dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
     }
+
+    updateAnimationTargets();
 }
 
 void EnableButton::focusGained(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<EnableButton> safeThis(this);
     juce::ToggleButton::focusGained(cause);
-    updateAnimationTargets();
+
+    if (safeThis != nullptr)
+        updateAnimationTargets();
 }
 
 void EnableButton::focusLost(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<EnableButton> safeThis(this);
     juce::ToggleButton::focusLost(cause);
-    updateAnimationTargets();
+
+    if (safeThis != nullptr)
+        updateAnimationTargets();
 }
 
 void EnableButton::buttonStateChanged()
@@ -273,7 +289,12 @@ void EnableButton::timerCallback()
 {
     if (! isVisibleInHierarchy(*this))
     {
+        const juce::Component::SafePointer<EnableButton> safeThis(this);
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
+
         isEntered = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);

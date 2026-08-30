@@ -212,6 +212,10 @@ void SoloButton::visibilityChanged()
     if (! isVisible())
     {
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
+
         isEntered = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
@@ -229,24 +233,36 @@ void SoloButton::enablementChanged()
     const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::enablementChanged();
 
-    if (safeThis != nullptr)
+    if (safeThis == nullptr)
+        return;
+
+    if (! isEnabled())
     {
-        if (! isEnabled())
-            dismissPointerGesture();
-        updateAnimationTargets();
+        dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
     }
+
+    updateAnimationTargets();
 }
 
 void SoloButton::focusGained(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::focusGained(cause);
-    updateAnimationTargets();
+
+    if (safeThis != nullptr)
+        updateAnimationTargets();
 }
 
 void SoloButton::focusLost(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<SoloButton> safeThis(this);
     juce::ToggleButton::focusLost(cause);
-    updateAnimationTargets();
+
+    if (safeThis != nullptr)
+        updateAnimationTargets();
 }
 
 void SoloButton::buttonStateChanged()
@@ -258,7 +274,12 @@ void SoloButton::timerCallback()
 {
     if (! isVisibleInHierarchy(*this))
     {
+        const juce::Component::SafePointer<SoloButton> safeThis(this);
         dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
+
         isEntered = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);

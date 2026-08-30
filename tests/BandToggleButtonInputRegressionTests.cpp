@@ -47,6 +47,30 @@ struct BandToggleButtonPointerTestAccess
     {
         button.advanceAnimation(seconds);
     }
+
+    template <typename ButtonType>
+    static void notifyEnablementChanged(ButtonType& button)
+    {
+        button.enablementChanged();
+    }
+
+    template <typename ButtonType>
+    static void notifyFocusGained(ButtonType& button)
+    {
+        button.focusGained(juce::Component::focusChangedDirectly);
+    }
+
+    template <typename ButtonType>
+    static void notifyFocusLost(ButtonType& button)
+    {
+        button.focusLost(juce::Component::focusChangedDirectly);
+    }
+
+    template <typename ButtonType>
+    static void runTimerCallback(ButtonType& button)
+    {
+        button.timerCallback();
+    }
 };
 
 namespace
@@ -157,6 +181,43 @@ void checkStateCallbackMayDeleteButton()
     REQUIRE(rawButton->isDown());
     rawButton->onStateChange = [&button] { button.reset(); };
     component.mouseExit(makeMouseEvent(*rawButton, {}));
+
+    CHECK(button == nullptr);
+}
+
+template <typename ButtonType, typename Callback>
+void checkLifecycleStateCallbackMayDeleteButton(Callback&& callback)
+{
+    auto button = std::make_unique<ButtonType>();
+    button->setBounds(0, 0, 24, 24);
+    button->setVisible(true);
+    auto* rawButton = button.get();
+
+    rawButton->setState(juce::Button::buttonDown);
+    REQUIRE(rawButton->isDown());
+    rawButton->onStateChange = [&button] { button.reset(); };
+
+    callback(*rawButton);
+
+    CHECK(button == nullptr);
+}
+
+template <typename ButtonType>
+void checkHiddenTimerCallbackMayDeleteButton()
+{
+    juce::Component hiddenParent;
+    hiddenParent.setVisible(false);
+
+    auto button = std::make_unique<ButtonType>();
+    button->setBounds(0, 0, 24, 24);
+    hiddenParent.addAndMakeVisible(*button);
+    auto* rawButton = button.get();
+
+    rawButton->setState(juce::Button::buttonDown);
+    REQUIRE(rawButton->isDown());
+    rawButton->onStateChange = [&button] { button.reset(); };
+
+    BandToggleButtonPointerTestAccess::runTimerCallback(*rawButton);
 
     CHECK(button == nullptr);
 }
@@ -539,6 +600,76 @@ TEST_CASE("Band toggle callbacks may synchronously delete their control",
     {
         checkStateCallbackMayDeleteButton<SoloButton>();
         checkStateCallbackMayDeleteButton<EnableButton>();
+    }
+}
+
+TEST_CASE("Band toggle lifecycle callbacks stop after synchronous deletion",
+          "[band-toggle][multiband][ui][animation][lifecycle][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("visibility change")
+    {
+        checkLifecycleStateCallbackMayDeleteButton<SoloButton>(
+            [](auto& button) { button.setVisible(false); });
+        checkLifecycleStateCallbackMayDeleteButton<EnableButton>(
+            [](auto& button) { button.setVisible(false); });
+    }
+
+    SECTION("enablement change")
+    {
+        checkLifecycleStateCallbackMayDeleteButton<SoloButton>(
+            [](auto& button)
+            {
+                BandToggleButtonPointerTestAccess::notifyEnablementChanged(button);
+            });
+        checkLifecycleStateCallbackMayDeleteButton<EnableButton>(
+            [](auto& button)
+            {
+                BandToggleButtonPointerTestAccess::notifyEnablementChanged(button);
+            });
+    }
+
+    SECTION("focus gained")
+    {
+        checkLifecycleStateCallbackMayDeleteButton<SoloButton>(
+            [](auto& button)
+            {
+                BandToggleButtonPointerTestAccess::notifyFocusGained(button);
+            });
+        checkLifecycleStateCallbackMayDeleteButton<EnableButton>(
+            [](auto& button)
+            {
+                BandToggleButtonPointerTestAccess::notifyFocusGained(button);
+            });
+    }
+
+    SECTION("focus lost")
+    {
+        checkLifecycleStateCallbackMayDeleteButton<SoloButton>(
+            [](auto& button)
+            {
+                BandToggleButtonPointerTestAccess::notifyFocusLost(button);
+            });
+        checkLifecycleStateCallbackMayDeleteButton<EnableButton>(
+            [](auto& button)
+            {
+                BandToggleButtonPointerTestAccess::notifyFocusLost(button);
+            });
+    }
+
+    SECTION("ancestor-hidden timer cleanup")
+    {
+        checkHiddenTimerCallbackMayDeleteButton<SoloButton>();
+        checkHiddenTimerCallbackMayDeleteButton<EnableButton>();
+    }
+
+    SECTION("direct gesture dismissal")
+    {
+        checkLifecycleStateCallbackMayDeleteButton<SoloButton>(
+            [](auto& button) { button.dismissPointerGesture(); });
+        checkLifecycleStateCallbackMayDeleteButton<EnableButton>(
+            [](auto& button) { button.dismissPointerGesture(); });
     }
 }
 

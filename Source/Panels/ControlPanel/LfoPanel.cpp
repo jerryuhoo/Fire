@@ -2737,14 +2737,38 @@ void LfoPanel::dismissTransientInteraction()
     // listeners, while LFO editing cancellation is deliberately callback-free.
     lfoEditor.dismissTransientInteraction();
 
+    if (safeThis == nullptr)
+        return;
+
     for (auto& button : lfoSelectButtons)
+    {
         if (button != nullptr)
             button->dismissPointerGesture();
+
+        if (safeThis == nullptr)
+            return;
+    }
+
     editModeButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+
     brushModeButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+
     assignButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+
     matrixButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+
     syncButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+
     brushSelector.dismissTransientInteraction();
 
     if (safeThis == nullptr)
@@ -3037,33 +3061,57 @@ void LfoPanel::setScale(float newScale)
 
 void LfoPanel::setEditMode(LfoEditMode newMode)
 {
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+
     // Invalidate before changing visibility or editor behaviour. Re-entering
     // the same mode is deliberately a new session so an old result also fails
     // across Brush -> Point -> Brush ABA transitions.
     brushSelector.setInteractionAvailable(
         newMode == LfoEditMode::BrushPaint);
 
+    if (safeThis == nullptr)
+        return;
+
     if (newMode == LfoEditMode::PointEdit)
     {
         // 2. Set the toggle state of the mode buttons
         editModeButton.setToggleState(true, juce::dontSendNotification);
+        if (safeThis == nullptr)
+            return;
+
         brushModeButton.setToggleState(false, juce::dontSendNotification);
+        if (safeThis == nullptr)
+            return;
 
         // 3. Hide the brush selector UI
         brushSelector.setVisible(false);
+        if (safeThis == nullptr)
+            return;
     }
     else // newMode == LfoEditMode::BrushPaint
     {
         // 2. Set the toggle state of the mode buttons
         editModeButton.setToggleState(false, juce::dontSendNotification);
+        if (safeThis == nullptr)
+            return;
+
         brushModeButton.setToggleState(true, juce::dontSendNotification);
+        if (safeThis == nullptr)
+            return;
 
         // 3. Show the brush selector UI
         brushSelector.setVisible(true);
+        if (safeThis == nullptr)
+            return;
 
         // 4. Ensure a valid brush is selected when entering brush mode
         if (brushSelector.getSelectedId() == 0) // Check if nothing is selected
+        {
             brushSelector.setSelectedId(1, juce::dontSendNotification);
+
+            if (safeThis == nullptr)
+                return;
+        }
     }
 
     // 5. IMPORTANT: Tell the LfoEditor view to change its behavior

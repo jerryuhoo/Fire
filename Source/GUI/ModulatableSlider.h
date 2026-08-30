@@ -47,6 +47,9 @@ public:
     juce::Rectangle<float> getModulationHandleVisualBounds() const;
     /** The pointer target for every modulation-handle input path. */
     juce::Rectangle<float> getModulationHandleHitBounds() const;
+    /** The header area occupied by JUCE's temporary value text box when the
+        pointer enters this control. */
+    juce::Rectangle<int> getValueDisplayBounds() const;
     /** Kept for source compatibility; painting code should request the visual
         bounds and input code should request the hit bounds explicitly. */
     juce::Rectangle<float> getModulationHandleBounds() const

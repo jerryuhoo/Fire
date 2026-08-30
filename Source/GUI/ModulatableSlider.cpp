@@ -230,6 +230,18 @@ juce::Rectangle<int> ModulatableSlider::getHeaderBounds() const
     return header;
 }
 
+juce::Rectangle<int> ModulatableSlider::getValueDisplayBounds() const
+{
+    const auto header = getHeaderBounds();
+    if (header.isEmpty())
+        return {};
+
+    const auto valueWidth = juce::jmin(
+        header.getWidth(),
+        juce::jmax(1, juce::roundToInt(TEXTBOX_WIDTH * getUiScale())));
+    return header.withSizeKeepingCentre(valueWidth, header.getHeight());
+}
+
 // New helper function
 bool ModulatableSlider::isMouseOverMainSlider() const
 {

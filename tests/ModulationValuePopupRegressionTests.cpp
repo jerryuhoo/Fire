@@ -54,14 +54,13 @@ ModulatableSlider* findSlider(BandPanel& panel,
     return nullptr;
 }
 
-juce::Rectangle<int> handleBoundsInEditor(
+juce::Rectangle<int> valueDisplayBoundsInEditor(
     FireAudioProcessorEditor& editor,
     ModulatableSlider& slider)
 {
     return editor.getLocalArea(
         &slider,
-        slider.getModulationHandleVisualBounds()
-            .getSmallestIntegerContainer());
+        slider.getValueDisplayBounds());
 }
 
 void setPlainParameter(FireAudioProcessor& processor,
@@ -210,7 +209,7 @@ TEST_CASE("Bypassed modulation popup preserves its editable configured endpoint"
           == expectedEndpointText(processor, testCase));
 }
 
-TEST_CASE("Modulation value popup follows handle geometry and owner lifecycle",
+TEST_CASE("Modulation value popup stays above the knob value display",
           "[ui][modulation][value-popup][layout][scale][lifecycle][regression]")
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -240,11 +239,15 @@ TEST_CASE("Modulation value popup follows handle geometry and owner lifecycle",
     {
         editor.showValuePopupForSlider(slider);
         REQUIRE(popup->isVisible());
-        const auto handle = handleBoundsInEditor(editor, *slider);
+        const auto valueDisplay = valueDisplayBoundsInEditor(editor, *slider);
         CHECK(std::abs(popup->getBounds().getCentreX()
-                       - handle.getCentreX())
+                       - valueDisplay.getCentreX())
               <= 1);
-        CHECK(popup->getBottom() < handle.getY());
+        CHECK(popup->getBottom() < valueDisplay.getY());
+        const auto rotaryBounds = editor.getLocalArea(
+            slider,
+            slider->getLookAndFeel().getSliderLayout(*slider).sliderBounds);
+        CHECK_FALSE(popup->getBounds().intersects(rotaryBounds));
         CHECK(popup->getWidth() == 80);
         CHECK(popup->getHeight() == 20);
     }
@@ -252,11 +255,12 @@ TEST_CASE("Modulation value popup follows handle geometry and owner lifecycle",
     editor.showValuePopupForSlider(drive);
     editor.setBounds(0, 0, 2000, 1000);
     REQUIRE(popup->isVisible());
-    const auto resizedDriveHandle = handleBoundsInEditor(editor, *drive);
+    const auto resizedDriveValueDisplay =
+        valueDisplayBoundsInEditor(editor, *drive);
     CHECK(std::abs(popup->getBounds().getCentreX()
-                   - resizedDriveHandle.getCentreX())
+                   - resizedDriveValueDisplay.getCentreX())
           <= 1);
-    CHECK(popup->getBottom() < resizedDriveHandle.getY());
+    CHECK(popup->getBottom() < resizedDriveValueDisplay.getY());
     CHECK(popup->getWidth() == 160);
     CHECK(popup->getHeight() == 40);
     REQUIRE(popup->getNumChildComponents() == 1);
@@ -267,14 +271,21 @@ TEST_CASE("Modulation value popup follows handle geometry and owner lifecycle",
     editor.setBounds(0, 0, 1000, 500);
     ModulatableSlider boundarySlider;
     boundarySlider.parameterID = PEAK_FREQ_ID;
-    boundarySlider.setBounds(editor.getWidth() - 40, -55, 80, 80);
+    boundarySlider.setBounds(editor.getWidth() - 40, 120, 80, 80);
     editor.addAndMakeVisible(boundarySlider);
     editor.showValuePopupForSlider(&boundarySlider);
     REQUIRE(popup->isVisible());
-    const auto boundaryHandle =
-        handleBoundsInEditor(editor, boundarySlider);
-    CHECK(popup->getY() > boundaryHandle.getBottom());
+    const auto boundaryValueDisplay =
+        valueDisplayBoundsInEditor(editor, boundarySlider);
+    CHECK(popup->getBottom() < boundaryValueDisplay.getY());
     CHECK(editor.getLocalBounds().contains(popup->getBounds()));
+
+    ModulatableSlider topBoundarySlider;
+    topBoundarySlider.parameterID = PEAK_FREQ_ID;
+    topBoundarySlider.setBounds(100, 0, 80, 80);
+    editor.addAndMakeVisible(topBoundarySlider);
+    editor.showValuePopupForSlider(&topBoundarySlider);
+    CHECK_FALSE(popup->isVisible());
 
     ModulatableSlider invalidSlider;
     invalidSlider.parameterID = "missing_parameter";

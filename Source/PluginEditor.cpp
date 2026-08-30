@@ -2293,12 +2293,12 @@ bool FireAudioProcessorEditor::updateValuePopupContentAndBounds(
     float finalNormalizedValue = param->convertTo0to1(extremeValue);
     valuePopup.setText(param->getText(finalNormalizedValue, 0));
 
-    const auto visualBounds =
-        slider->getModulationHandleVisualBounds().getSmallestIntegerContainer();
-    if (visualBounds.isEmpty())
+    const auto valueDisplayBounds = slider->getValueDisplayBounds();
+    if (valueDisplayBounds.isEmpty())
         return false;
 
-    const auto handleBounds = getLocalArea(slider, visualBounds);
+    const auto valueDisplayBoundsInEditor =
+        getLocalArea(slider, valueDisplayBounds);
     const auto safeScale = std::isfinite(fireLookAndFeel.scale)
                                ? juce::jmax(0.1f, fireLookAndFeel.scale)
                                : 1.0f;
@@ -2311,33 +2311,21 @@ bool FireAudioProcessorEditor::updateValuePopupContentAndBounds(
     const auto requestedHeight = juce::jmax(1, juce::roundToInt(20.0f * safeScale));
     const auto popupWidth = juce::jmin(requestedWidth, safeBounds.getWidth());
     const auto popupHeight = juce::jmin(requestedHeight, safeBounds.getHeight());
-    const auto popupGap = juce::jmax(1, juce::roundToInt(7.0f * safeScale));
+    const auto popupGap = juce::jmax(1, juce::roundToInt(5.0f * safeScale));
 
-    const auto preferredX = handleBounds.getCentreX() - popupWidth / 2;
+    const auto preferredX = valueDisplayBoundsInEditor.getCentreX()
+                            - popupWidth / 2;
     const auto popupX = juce::jlimit(safeBounds.getX(),
                                     safeBounds.getRight() - popupWidth,
                                     preferredX);
-    const auto aboveY = handleBounds.getY() - popupGap - popupHeight;
-    const auto belowY = handleBounds.getBottom() + popupGap;
+    const auto popupY = valueDisplayBoundsInEditor.getY()
+                        - popupGap - popupHeight;
 
-    int popupY = aboveY;
-    if (aboveY < safeBounds.getY())
-    {
-        if (belowY + popupHeight <= safeBounds.getBottom())
-        {
-            popupY = belowY;
-        }
-        else
-        {
-            const auto roomAbove = handleBounds.getY() - safeBounds.getY();
-            const auto roomBelow = safeBounds.getBottom() - handleBounds.getBottom();
-            popupY = roomBelow > roomAbove ? belowY : aboveY;
-        }
-    }
+    // Falling back below the header puts the endpoint directly over the dial,
+    // which is more disruptive than omitting it in an impossible edge layout.
+    if (popupY < safeBounds.getY())
+        return false;
 
-    popupY = juce::jlimit(safeBounds.getY(),
-                         safeBounds.getBottom() - popupHeight,
-                         popupY);
     valuePopup.setUiScale(safeScale);
     valuePopup.setBounds(popupX, popupY, popupWidth, popupHeight);
     return true;

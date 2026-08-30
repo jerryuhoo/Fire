@@ -20,7 +20,6 @@ namespace
 constexpr juce::int64 maximumPresetFileBytes = 4 * 1024 * 1024;
 constexpr int maximumPresetFolderDepth = 16;
 constexpr int maximumPresetCount = 4096;
-constexpr int maximumPresetRoutings = 128;
 
 void deleteDialogSynchronously(
     juce::Component::SafePointer<juce::DialogWindow> dialog) noexcept
@@ -135,7 +134,8 @@ bool isValidRoutingState(const juce::XmlElement& routingState,
                          const juce::AudioProcessor& processor) noexcept
 {
     if (! routingState.hasTagName("MODULATION_STATE")
-        || routingState.getNumChildElements() > maximumPresetRoutings)
+        || routingState.getNumChildElements()
+               > LfoManager::maximumModulationRoutings)
         return false;
 
     juce::StringArray seenTargets;
@@ -450,7 +450,8 @@ namespace state
             for (auto* routingXml : modMatrixState->getChildIterator())
             {
                 if (! routingXml->hasTagName("ROUTING")
-                    || routingsToLoad.size() >= maximumPresetRoutings)
+                    || routingsToLoad.size()
+                           >= LfoManager::maximumModulationRoutings)
                     continue;
 
                 auto routing = ModulationRouting::readFromXml(*routingXml);

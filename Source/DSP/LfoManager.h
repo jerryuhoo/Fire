@@ -25,6 +25,8 @@
 class LfoManager
 {
 public:
+    static constexpr int maximumModulationRoutings = 128;
+
     LfoManager(juce::AudioProcessorValueTreeState& apvts);
 
     void prepare(const juce::dsp::ProcessSpec& spec);
@@ -212,7 +214,7 @@ public:
         const LfoData& newData,
         std::uint64_t expectedRevision,
         std::uint64_t& resultingRevision);
-    void replaceLfoDataAndRoutings(
+    bool replaceLfoDataAndRoutings(
         const std::array<LfoData, 4>& newLfoData,
         juce::Array<ModulationRouting> newRoutings);
 
@@ -229,8 +231,6 @@ public:
     void toggleBypassForRouting(const juce::String& targetParameterID);
     juce::CriticalSection& getLfoDataLock() { return dataAccessLock; }
 private:
-    static constexpr size_t maxRuntimeRoutings = 128;
-
     struct LfoParameterPointers
     {
         std::atomic<float>* syncMode = nullptr;
@@ -272,7 +272,7 @@ private:
                      bool readLiveRoutingBaseValues,
                      juce::int64 playheadSampleOffset);
     bool captureRuntimeRoutings(
-        std::array<RuntimeRouting, maxRuntimeRoutings>& destination,
+        std::array<RuntimeRouting, maximumModulationRoutings>& destination,
         size_t& destinationCount) const;
     bool refreshRuntimeStateIfAvailable();
     void updatePublishedRoutingState() noexcept;
@@ -299,9 +299,9 @@ private:
     std::uint64_t modulationRoutingRevision = 0;
 
     // Fixed-capacity, audio-thread-owned snapshots avoid per-block allocation and UI lock waits.
-    std::array<RuntimeRouting, maxRuntimeRoutings> runtimeRoutings {};
-    std::array<RuntimeRouting, maxRuntimeRoutings> candidateRuntimeRoutings {};
-    std::array<RuntimeModulatedValue, maxRuntimeRoutings> modulatedValues {};
+    std::array<RuntimeRouting, maximumModulationRoutings> runtimeRoutings {};
+    std::array<RuntimeRouting, maximumModulationRoutings> candidateRuntimeRoutings {};
+    std::array<RuntimeModulatedValue, maximumModulationRoutings> modulatedValues {};
     size_t runtimeRoutingCount = 0;
     size_t candidateRuntimeRoutingCount = 0;
     size_t modulatedValueCount = 0;

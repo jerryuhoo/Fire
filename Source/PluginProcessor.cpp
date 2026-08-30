@@ -114,7 +114,6 @@ constexpr double safePeakHoldSeconds = 0.05;
 constexpr double safePeakReleaseSeconds = 0.05;
 constexpr int hostStateFormatVersion = 1;
 constexpr int oldestWrappedHostParameterCount = 19;
-constexpr int maximumStateModulationRoutings = 128;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 std::atomic<HostBypassDenormalStateHook>
     hostBypassDenormalStateHookForTesting { nullptr };
@@ -245,7 +244,7 @@ bool isValidVersionedHostRoutingState(
 {
     if (! routingState.hasTagName("MODULATION_STATE")
         || routingState.getNumChildElements()
-               > maximumStateModulationRoutings)
+               > LfoManager::maximumModulationRoutings)
     {
         return false;
     }
@@ -5102,7 +5101,8 @@ void FireAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
     {
         for (auto* routingXml : modMatrixState->getChildIterator())
         {
-            if (loadedRoutings.size() >= maximumStateModulationRoutings)
+            if (loadedRoutings.size()
+                >= LfoManager::maximumModulationRoutings)
                 break;
             if (! routingXml->hasTagName("ROUTING"))
                 continue;
@@ -8337,14 +8337,14 @@ bool FireAudioProcessor::isCurrentStateEquivalentToPreset(const juce::XmlElement
         if (! areLfoShapesEquivalent(currentLfoData[i], expectedLfoData[i]))
             return false;
 
-    constexpr int maximumPresetRoutings = 128;
     juce::Array<ModulationRouting> expectedRoutings;
     if (const auto* routingState = presetXml.getChildByName("MODULATION_STATE"))
     {
         for (auto* routingXml : routingState->getChildIterator())
         {
             if (! routingXml->hasTagName("ROUTING")
-                || expectedRoutings.size() >= maximumPresetRoutings)
+                || expectedRoutings.size()
+                       >= LfoManager::maximumModulationRoutings)
                 continue;
 
             auto routing = ModulationRouting::readFromXml(*routingXml);

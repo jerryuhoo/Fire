@@ -494,6 +494,251 @@ void beginButtonPointerGesture(juce::Button& button,
 }
 } // namespace
 
+TEST_CASE("Modulation routing edits stop at the shared capacity",
+          "[modulation-matrix][state][capacity][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto& manager = processor.getLfoManager();
+
+    SECTION("revision-aware add and the matrix button stop at capacity")
+    {
+        auto state = manager.getModulationRoutingStateSnapshot();
+        while (state.routings.size()
+               < LfoManager::maximumModulationRoutings)
+        {
+            const auto result =
+                manager.addEmptyModulationRoutingIfRevisionMatches(
+                    state.revision);
+            REQUIRE(result.accepted);
+            REQUIRE(result.changed);
+            state = manager.getModulationRoutingStateSnapshot();
+        }
+
+        REQUIRE(state.routings.size()
+                == LfoManager::maximumModulationRoutings);
+        const auto fullRevision = state.revision;
+        const auto rejectedAdd =
+            manager.addEmptyModulationRoutingIfRevisionMatches(fullRevision);
+        CHECK(rejectedAdd.accepted);
+        CHECK_FALSE(rejectedAdd.changed);
+        CHECK(rejectedAdd.revision == fullRevision);
+        CHECK(manager.getModulationRoutingsCopy().size()
+              == LfoManager::maximumModulationRoutings);
+
+        ModulationMatrixPanel panel { processor };
+        panel.setBounds(0, 0, 760, 420);
+        auto* addButton = findTextButton(panel, "+ ADD ROUTE");
+        REQUIRE(addButton != nullptr);
+        CHECK_FALSE(addButton->isEnabled());
+
+        addButton->triggerClick();
+        CHECK(manager.getModulationRoutingsCopy().size()
+              == LfoManager::maximumModulationRoutings);
+        CHECK(manager.getModulationRoutingRevision() == fullRevision);
+    }
+
+    SECTION("assign reuses existing capacity and never appends past it")
+    {
+        juce::Array<ModulationRouting> fullRoutings;
+        fullRoutings.ensureStorageAllocated(
+            LfoManager::maximumModulationRoutings);
+        for (int i = 0; i < LfoManager::maximumModulationRoutings; ++i)
+        {
+            ModulationRouting routing;
+            routing.sourceLfoIndex = i % 4;
+            routing.targetParameterID = "capacity_target_" + juce::String(i);
+            fullRoutings.add(std::move(routing));
+        }
+        fullRoutings.getReference(fullRoutings.size() - 1)
+            .targetParameterID.clear();
+
+        REQUIRE(manager.replaceLfoDataAndRoutings(
+            std::array<LfoData, 4> {}, fullRoutings));
+        const auto initialRevision = manager.getModulationRoutingRevision();
+
+        manager.assignLfoToTarget(2, "capacity_reused_target");
+        auto state = manager.getModulationRoutingStateSnapshot();
+        REQUIRE(state.routings.size()
+                == LfoManager::maximumModulationRoutings);
+        CHECK(state.routings.getLast().targetParameterID
+              == "capacity_reused_target");
+        CHECK(state.routings.getLast().sourceLfoIndex == 2);
+        CHECK(state.revision == initialRevision + 1);
+
+        manager.assignLfoToTarget(3, fullRoutings[0].targetParameterID);
+        state = manager.getModulationRoutingStateSnapshot();
+        REQUIRE(state.routings.size()
+                == LfoManager::maximumModulationRoutings);
+        CHECK(state.routings[0].sourceLfoIndex == 3);
+        CHECK(state.revision == initialRevision + 2);
+
+        manager.assignLfoToTarget(2, "capacity_overflow_target");
+        state = manager.getModulationRoutingStateSnapshot();
+        CHECK(state.routings.size()
+              == LfoManager::maximumModulationRoutings);
+        CHECK(state.revision == initialRevision + 2);
+        CHECK(std::none_of(
+            state.routings.begin(),
+            state.routings.end(),
+            [](const auto& routing)
+            {
+                return routing.targetParameterID
+                       == "capacity_overflow_target";
+            }));
+    }
+
+    SECTION("oversized replacement is rejected as one transaction")
+    {
+        const auto before = manager.getModulationRoutingStateSnapshot();
+        const auto shapesBefore = manager.getLfoDataCopy();
+        REQUIRE(shapesBefore.size() == 4);
+
+        juce::Array<ModulationRouting> oversized;
+        for (int i = 0;
+             i <= LfoManager::maximumModulationRoutings;
+             ++i)
+            oversized.add({});
+
+        std::array<LfoData, 4> replacementShapes;
+        replacementShapes[0].points[0].y = 0.75f;
+        CHECK_FALSE(manager.replaceLfoDataAndRoutings(
+            replacementShapes, std::move(oversized)));
+
+        const auto after = manager.getModulationRoutingStateSnapshot();
+        CHECK(after.revision == before.revision);
+        CHECK(after.routings.size() == before.routings.size());
+        const auto shapesAfter = manager.getLfoDataCopy();
+        REQUIRE(shapesAfter.size() == shapesBefore.size());
+        CHECK(shapesAfter[0].points == shapesBefore[0].points);
+    }
+}
+
+TEST_CASE("Host state at the routing capacity remains loadable",
+          "[modulation-matrix][state][host][capacity][regression]")
+{
+    FireAudioProcessor source;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const auto target = targets.front().parameterID;
+    source.assignLfoToTarget(2, target);
+    source.setModulationDepth(target, -0.375f);
+
+    auto& sourceManager = source.getLfoManager();
+    auto routingState = sourceManager.getModulationRoutingStateSnapshot();
+    while (routingState.routings.size()
+           < LfoManager::maximumModulationRoutings)
+    {
+        const auto result =
+            sourceManager.addEmptyModulationRoutingIfRevisionMatches(
+                routingState.revision);
+        REQUIRE(result.accepted);
+        REQUIRE(result.changed);
+        routingState = sourceManager.getModulationRoutingStateSnapshot();
+    }
+
+    juce::MemoryBlock stateBlock;
+    source.getStateInformation(stateBlock);
+    auto xml = juce::AudioProcessor::getXmlFromBinary(
+        stateBlock.getData(), static_cast<int>(stateBlock.getSize()));
+    REQUIRE(xml != nullptr);
+    const auto* savedRoutings = xml->getChildByName("MODULATION_STATE");
+    REQUIRE(savedRoutings != nullptr);
+    REQUIRE(savedRoutings->getNumChildElements()
+            == LfoManager::maximumModulationRoutings);
+
+    FireAudioProcessor restored;
+    restored.setStateInformation(
+        stateBlock.getData(), static_cast<int>(stateBlock.getSize()));
+    const auto restoredRoutings =
+        restored.getLfoManager().getModulationRoutingsCopy();
+    const auto restoredRouting = std::find_if(
+        restoredRoutings.begin(),
+        restoredRoutings.end(),
+        [&target](const auto& routing)
+        {
+            return routing.targetParameterID == target;
+        });
+    REQUIRE(restoredRouting != restoredRoutings.end());
+    CHECK(restoredRouting->sourceLfoIndex == 2);
+    CHECK(restoredRouting->depth == Catch::Approx(-0.375f));
+}
+
+TEST_CASE("Preset routing validation uses the shared capacity boundary",
+          "[modulation-matrix][preset][state][capacity][regression]")
+{
+    FireAudioProcessor source;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE(targets.size() >= 2);
+    const auto restoredTarget = targets[0].parameterID;
+    const auto baselineTarget = targets[1].parameterID;
+    source.assignLfoToTarget(1, restoredTarget);
+    source.setModulationDepth(restoredTarget, 0.625f);
+
+    juce::XmlElement preset { "WINGSFIRE" };
+    state::saveStateToXml(source, preset);
+    auto* routingState = preset.getChildByName("MODULATION_STATE");
+    REQUIRE(routingState != nullptr);
+    REQUIRE(routingState->getNumChildElements() == 1);
+    while (routingState->getNumChildElements()
+           < LfoManager::maximumModulationRoutings)
+    {
+        auto* emptyRouting =
+            routingState->createNewChildElement("ROUTING");
+        ModulationRouting{}.writeToXml(*emptyRouting);
+    }
+
+    FireAudioProcessor restored;
+    REQUIRE(state::loadStateFromXml(preset, restored));
+    const auto exactBoundaryRoutings =
+        restored.getLfoManager().getModulationRoutingsCopy();
+    const auto restoredRouting = std::find_if(
+        exactBoundaryRoutings.begin(),
+        exactBoundaryRoutings.end(),
+        [&restoredTarget](const auto& routing)
+        {
+            return routing.targetParameterID == restoredTarget;
+        });
+    REQUIRE(restoredRouting != exactBoundaryRoutings.end());
+    CHECK(restoredRouting->sourceLfoIndex == 1);
+    CHECK(restoredRouting->depth == Catch::Approx(0.625f));
+
+    auto oversizedPreset = std::make_unique<juce::XmlElement>(preset);
+    REQUIRE(oversizedPreset != nullptr);
+    auto* oversizedRoutingState =
+        oversizedPreset->getChildByName("MODULATION_STATE");
+    REQUIRE(oversizedRoutingState != nullptr);
+    auto* overflowRouting =
+        oversizedRoutingState->createNewChildElement("ROUTING");
+    ModulationRouting{}.writeToXml(*overflowRouting);
+    REQUIRE(oversizedRoutingState->getNumChildElements()
+            == LfoManager::maximumModulationRoutings + 1);
+
+    restored.clearModulationForParameter(restoredTarget);
+    restored.assignLfoToTarget(3, baselineTarget);
+    const auto baselineRevision =
+        restored.getLfoManager().getModulationRoutingRevision();
+    CHECK_FALSE(state::loadStateFromXml(*oversizedPreset, restored));
+    const auto rejectedRoutings =
+        restored.getLfoManager().getModulationRoutingsCopy();
+    CHECK(restored.getLfoManager().getModulationRoutingRevision()
+          == baselineRevision);
+    CHECK(std::any_of(
+        rejectedRoutings.begin(),
+        rejectedRoutings.end(),
+        [&baselineTarget](const auto& routing)
+        {
+            return routing.targetParameterID == baselineTarget;
+        }));
+    CHECK(std::none_of(
+        rejectedRoutings.begin(),
+        rejectedRoutings.end(),
+        [&restoredTarget](const auto& routing)
+        {
+            return routing.targetParameterID == restoredTarget;
+        }));
+}
+
 TEST_CASE("Modulation matrix host notifications may synchronously delete the panel",
           "[ui][modulation-matrix][lifetime][reentrancy][regression]")
 {

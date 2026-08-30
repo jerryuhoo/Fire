@@ -448,7 +448,7 @@ void LfoManager::abortAudioThreadStateCapture() noexcept
 // =============================================================================
 
 bool LfoManager::captureRuntimeRoutings(
-    std::array<RuntimeRouting, maxRuntimeRoutings>& destination,
+    std::array<RuntimeRouting, maximumModulationRoutings>& destination,
     size_t& destinationCount) const
 {
     destinationCount = 0;
@@ -951,8 +951,11 @@ LfoManager::addEmptyModulationRoutingIfRevisionMatches(
     if (modulationRoutingRevision != expectedRevision)
         return result;
 
-    modulationRoutings.add({});
     result.accepted = true;
+    if (modulationRoutings.size() >= maximumModulationRoutings)
+        return result;
+
+    modulationRoutings.add({});
     result.changed = true;
     result.revision = advanceModulationRoutingRevisionLocked();
     result.routing = modulationRoutings.getReference(
@@ -1134,6 +1137,8 @@ void LfoManager::assignLfoToTarget(int sourceLfoIndex, const juce::String& targe
     }
 
     // 3. If all existing slots are full, dynamically add a new one.
+    if (modulationRoutings.size() >= maximumModulationRoutings)
+        return;
 
     // Step 1: Add a new, default-constructed ModulationRouting object to the array.
     modulationRoutings.add({});
@@ -1278,10 +1283,13 @@ bool LfoManager::setLfoDataIfRevisionMatches(
     return true;
 }
 
-void LfoManager::replaceLfoDataAndRoutings(
+bool LfoManager::replaceLfoDataAndRoutings(
     const std::array<LfoData, 4>& newLfoData,
     juce::Array<ModulationRouting> newRoutings)
 {
+    if (newRoutings.size() > maximumModulationRoutings)
+        return false;
+
     auto safeLfoData = newLfoData;
     for (size_t i = 0; i < safeLfoData.size(); ++i)
     {
@@ -1318,4 +1326,6 @@ void LfoManager::replaceLfoDataAndRoutings(
         // every serialised field is byte-for-byte identical.
         advanceModulationRoutingRevisionLocked();
     }
+
+    return true;
 }

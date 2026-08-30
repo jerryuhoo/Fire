@@ -1535,6 +1535,9 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
     // must not happen while the shared routing lock is held.
     const auto routingState =
         processor.getLfoManager().getModulationRoutingStateSnapshot();
+    addButton.setEnabled(
+        routingState.routings.size()
+        < LfoManager::maximumModulationRoutings);
     routingEditSession = std::make_shared<ModulationRoutingEditSession>();
     routingEditSession->revision = routingState.revision;
     const auto editSession = routingEditSession;

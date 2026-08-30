@@ -14,6 +14,16 @@ static juce::Rectangle<int> makeNormalised(const juce::Point<int>& p1,
                                                     juce::jmax(p1.y, p2.y));
 }
 
+static bool isVisibleInHierarchy(const juce::Component& component) noexcept
+{
+    for (auto* current = &component; current != nullptr;
+         current = current->getParentComponent())
+        if (! current->isVisible())
+            return false;
+
+    return true;
+}
+
 //==============================================================================
 // LfoEditor Implementation
 //==============================================================================
@@ -22,6 +32,8 @@ LfoEditor::LfoEditor()
 {
     setWantsKeyboardFocus(true);
     setOpaque(true);
+    pointHoverAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
 }
 
 LfoEditor::~LfoEditor()
@@ -85,6 +97,8 @@ void LfoEditor::cancelPointAndCurveInteraction() noexcept
     draggingPointIndex = -1;
     editingCurveIndex = -1;
     hoveredPointIndex = -1;
+    animatedPointIndex = -1;
+    pointHoverAnimation.snapTo(0.0f);
     initialCurvature = 0.0f;
     initialDragY = 0;
     dragAnchor = {};
@@ -404,8 +418,22 @@ void LfoEditor::paint(juce::Graphics& g)
     if (! gridCache.isNull())
         g.drawImage(gridCache, getLocalBounds().toFloat());
 
+    const auto drawFocusRing = [&]
+    {
+        const auto focus = juce::jlimit(0.0f, 1.0f, focusAnimation.current);
+        if (focus > 0.001f)
+        {
+            auto focusBounds = getLocalBounds().toFloat().reduced(1.25f);
+            g.setColour(fire::ui::colours::gold.withAlpha(0.38f * focus));
+            g.drawRoundedRectangle(focusBounds, 3.0f, 1.25f);
+        }
+    };
+
     if (! dataIsActive || activeLfoData.points.size() < 2)
+    {
+        drawFocusRing();
         return;
+    }
 
     const auto signature = getWavePathSignature();
     if (signature != cachedWavePathSignature)
@@ -444,19 +472,22 @@ void LfoEditor::paint(juce::Graphics& g)
     for (int i = 0; i < activeLfoData.points.size(); ++i)
     {
         bool isSelected = std::find(selectedPointIndices.begin(), selectedPointIndices.end(), i) != selectedPointIndices.end();
-        bool isHovered = (i == hoveredPointIndex);
+        const bool isHovered = (i == animatedPointIndex);
+        const auto hover = isHovered
+                         ? juce::jlimit(0.0f, 1.0f, pointHoverAnimation.current)
+                         : 0.0f;
 
         auto localPoint = fromNormalized(activeLfoData.points[i]);
 
-        float currentPointRadius = pointRadius;
+        float currentPointRadius = getPointVisualRadius();
         juce::Colour currentPointColour = isSelected ? fire::ui::colours::whiteHot
                                                      : fire::ui::colours::modulation;
 
         // Apply hover effect (enlarge and make transparent) to both selected and unselected points.
-        if (isHovered)
+        if (hover > 0.0f)
         {
-            currentPointRadius *= 1.5f;
-            currentPointColour = currentPointColour.brighter(0.18f);
+            currentPointRadius *= 1.0f + hover * 0.5f;
+            currentPointColour = currentPointColour.brighter(0.18f * hover);
         }
         // If dragging a selection, make them slightly larger but keep them solid for clarity.
         else if (isSelected && (draggingState == DraggingState::Selection || draggingState == DraggingState::Point))
@@ -469,7 +500,7 @@ void LfoEditor::paint(juce::Graphics& g)
                                      .withCentre(localPoint);
         g.setColour(fire::ui::colours::canvas.withAlpha(0.95f));
         g.fillEllipse(pointBounds);
-        g.setColour(currentPointColour.withAlpha(isHovered ? 1.0f : 0.88f));
+        g.setColour(currentPointColour.withAlpha(0.88f + hover * 0.12f));
         g.drawEllipse(pointBounds.reduced(0.5f), isSelected ? 2.0f : 1.3f);
         if (isSelected)
             g.fillEllipse(pointBounds.reduced(currentPointRadius * 0.50f));
@@ -506,6 +537,8 @@ void LfoEditor::paint(juce::Graphics& g)
         g.setColour(fire::ui::colours::modulation.withAlpha(0.62f));
         g.drawVerticalLine(juce::roundToInt(getWidth() * phaseOffsetPosition), 0.0f, (float) getHeight());
     }
+
+    drawFocusRing();
 }
 
 void LfoEditor::resized()
@@ -734,7 +767,8 @@ void LfoEditor::mouseDown(const juce::MouseEvent& event)
     int clickedPointIndex = -1;
     for (size_t i = 0; i < activeLfoData.points.size(); ++i)
     {
-        if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
+        if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat())
+            < getPointVisualRadius() * 1.5f)
         {
             clickedPointIndex = (int) i;
             break;
@@ -1096,7 +1130,8 @@ void LfoEditor::mouseDoubleClick(const juce::MouseEvent& event)
     {
         for (size_t i = 1; i < activeLfoData.points.size() - 1; ++i)
         {
-            if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat()) < pointRadius * 1.5f)
+            if (fromNormalized(activeLfoData.points[i]).getDistanceFrom(event.position.toFloat())
+                < getPointVisualRadius() * 1.5f)
             {
                 removePoint((int) i);
                 publishActiveData();
@@ -1123,7 +1158,8 @@ void LfoEditor::mouseMove(const juce::MouseEvent& event)
     {
         auto pointScreen = fromNormalized(activeLfoData.points[i]);
 
-        if (pointScreen.getDistanceFrom(event.getPosition().toFloat()) < 5.0f)
+        if (pointScreen.getDistanceFrom(event.getPosition().toFloat())
+            < getPointVisualRadius())
         {
             newHoveredIndex = i;
             break;
@@ -1134,7 +1170,12 @@ void LfoEditor::mouseMove(const juce::MouseEvent& event)
     if (newHoveredIndex != hoveredPointIndex)
     {
         hoveredPointIndex = newHoveredIndex;
-        repaint(); // Force a repaint to show the highlight/size change
+        if (newHoveredIndex != -1)
+        {
+            animatedPointIndex = newHoveredIndex;
+            pointHoverAnimation.snapTo(0.0f);
+        }
+        updateAnimationTargets();
     }
 }
 
@@ -1144,7 +1185,7 @@ void LfoEditor::mouseExit(const juce::MouseEvent& event)
     if (hoveredPointIndex != -1)
     {
         hoveredPointIndex = -1;
-        repaint(); // Force a repaint to remove the highlight/size change
+        updateAnimationTargets();
     }
 }
 
@@ -1154,7 +1195,12 @@ void LfoEditor::visibilityChanged()
     juce::Component::visibilityChanged();
 
     if (safeThis != nullptr && ! isShowing())
+    {
         dismissTransientInteraction();
+        focusAnimation.snapTo(0.0f);
+        stopTimer();
+        repaint();
+    }
 }
 
 void LfoEditor::enablementChanged()
@@ -1163,7 +1209,71 @@ void LfoEditor::enablementChanged()
     juce::Component::enablementChanged();
 
     if (safeThis != nullptr && ! isEnabled())
+    {
         dismissTransientInteraction();
+        focusAnimation.setTarget(0.0f);
+        startAnimationIfNeeded();
+    }
+}
+
+void LfoEditor::focusGained(FocusChangeType cause)
+{
+    juce::Component::focusGained(cause);
+    focusAnimation.setTarget(isEnabled() && isVisibleInHierarchy(*this) ? 1.0f : 0.0f);
+    startAnimationIfNeeded();
+}
+
+void LfoEditor::focusLost(FocusChangeType cause)
+{
+    juce::Component::focusLost(cause);
+    focusAnimation.setTarget(0.0f);
+    startAnimationIfNeeded();
+}
+
+void LfoEditor::timerCallback()
+{
+    if (! isVisibleInHierarchy(*this))
+    {
+        cancelPointAndCurveInteraction();
+        focusAnimation.snapTo(0.0f);
+        stopTimer();
+        repaint();
+        return;
+    }
+
+    bool changed = pointHoverAnimation.advance(1.0f / 60.0f, 0.09f);
+    changed = focusAnimation.advance(1.0f / 60.0f, 0.12f) || changed;
+
+    if (pointHoverAnimation.isSettled() && hoveredPointIndex == -1
+        && pointHoverAnimation.current <= 0.001f)
+        animatedPointIndex = -1;
+
+    if (changed)
+        repaint();
+    else
+        stopTimer();
+}
+
+void LfoEditor::updateAnimationTargets() noexcept
+{
+    const bool interactive = isEnabled() && isVisibleInHierarchy(*this);
+    pointHoverAnimation.setTarget(interactive && hoveredPointIndex != -1 ? 1.0f : 0.0f);
+    if (! interactive)
+        focusAnimation.setTarget(0.0f);
+    startAnimationIfNeeded();
+}
+
+void LfoEditor::startAnimationIfNeeded() noexcept
+{
+    if (isVisibleInHierarchy(*this)
+        && (! pointHoverAnimation.isSettled() || ! focusAnimation.isSettled()))
+        startTimerHz(60);
+}
+
+float LfoEditor::getPointVisualRadius() const noexcept
+{
+    const auto shortSide = static_cast<float>(juce::jmin(getWidth(), getHeight()));
+    return juce::jlimit(5.0f, 9.0f, shortSide * 0.03f);
 }
 
 void LfoEditor::addPoint(juce::Point<float> newPoint)

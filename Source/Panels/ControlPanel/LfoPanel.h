@@ -12,6 +12,7 @@
 
 #include "../../DSP/LfoData.h"
 #include "../../GUI/PrimarySlider.h"
+#include "../../GUI/FireTheme.h"
 #include "../../Utility/Parameters.h" // Include for LfoEditMode and LfoPresetShape
 #include "ModulationMatrixPanel.h"
 #include "juce_audio_processors/juce_audio_processors.h"
@@ -33,7 +34,8 @@ inline std::optional<LfoData> lfoClipboard;
 //  It holds a pointer to the data it should display and modify.
 //  It is told which editing mode to be in by the LfoPanel.
 //
-class LfoEditor : public juce::Component
+class LfoEditor : public juce::Component,
+                  private juce::Timer
 {
 public:
     struct DataContext
@@ -72,6 +74,8 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     void visibilityChanged() override;
     void enablementChanged() override;
+    void focusGained(FocusChangeType) override;
+    void focusLost(FocusChangeType) override;
 
     void setGridDivisions(int horizontal, int vertical);
     void setPlayheadPosition(float position);
@@ -129,6 +133,10 @@ private:
     bool validatePointDragInteractionOrCancel() noexcept;
     void cancelPointAndCurveInteraction() noexcept;
     void cancelAllInteraction() noexcept;
+    void timerCallback() override;
+    void updateAnimationTargets() noexcept;
+    void startAnimationIfNeeded() noexcept;
+    float getPointVisualRadius() const noexcept;
     static bool isCompletePrimaryDown(
         const juce::MouseEvent& event) noexcept;
     static bool isStandalonePopupDown(
@@ -186,6 +194,9 @@ private:
     int draggingPointIndex = -1;
     int editingCurveIndex = -1; // This is the new name for draggedCurvatureIndex
     int hoveredPointIndex = -1;
+    int animatedPointIndex = -1;
+    fire::ui::DampedValue pointHoverAnimation;
+    fire::ui::DampedValue focusAnimation;
     float initialCurvature = 0.0f;
     int initialDragY = 0;
 
@@ -195,7 +206,6 @@ private:
     float phaseOffsetPosition = -1.0f;
 
     const int maxPoints = 64;
-    const float pointRadius = 6.0f;
 
     std::vector<int> selectedPointIndices;
     juce::Rectangle<int> selectionRectangle;

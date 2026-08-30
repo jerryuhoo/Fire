@@ -10,6 +10,41 @@
 
 struct LfoEditorTestAccess
 {
+    static int hoveredPoint(const LfoEditor& editor) noexcept
+    {
+        return editor.hoveredPointIndex;
+    }
+
+    static float hoverAmount(const LfoEditor& editor) noexcept
+    {
+        return editor.pointHoverAnimation.current;
+    }
+
+    static float focusAmount(const LfoEditor& editor) noexcept
+    {
+        return editor.focusAnimation.current;
+    }
+
+    static float pointHitRadius(const LfoEditor& editor) noexcept
+    {
+        return editor.getPointVisualRadius();
+    }
+
+    static bool animationIsRunning(const LfoEditor& editor) noexcept
+    {
+        return editor.isTimerRunning();
+    }
+
+    static void tickAnimation(LfoEditor& editor)
+    {
+        editor.timerCallback();
+    }
+
+    static void focusGained(LfoEditor& editor)
+    {
+        editor.focusGained(juce::Component::focusChangedDirectly);
+    }
+
     static void setTrackedPointerSource(
         LfoEditor& editor,
         juce::MouseInputSource::InputSourceType type,
@@ -2239,4 +2274,51 @@ TEST_CASE("LFO clear mode switch and data replacement fully cancel transient sta
     REQUIRE(LfoEditorTestAccess::pointCount(editor) == 4);
     REQUIRE(LfoEditorTestAccess::interactionStateIsValid(editor));
     CHECK(hasValidLfoTopology(LfoEditorTestAccess::data(editor)));
+}
+
+TEST_CASE("LFO editor point hover and focus feedback animate only while visible",
+          "[lfo][editor][ui][animation]")
+{
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.setVisible(true);
+    editor.setDataToDisplay(makeLfoData({ { 0.0f, 0.2f }, { 1.0f, 0.8f } }));
+
+    const auto point = LfoEditorTestAccess::pointScreenPosition(editor, 0);
+    editor.mouseMove(makeMouseEvent(editor, point));
+    REQUIRE(LfoEditorTestAccess::hoveredPoint(editor) == 0);
+    REQUIRE(LfoEditorTestAccess::animationIsRunning(editor));
+    LfoEditorTestAccess::tickAnimation(editor);
+    CHECK(LfoEditorTestAccess::hoverAmount(editor) > 0.0f);
+    CHECK(LfoEditorTestAccess::hoverAmount(editor) < 1.0f);
+
+    LfoEditorTestAccess::focusGained(editor);
+    LfoEditorTestAccess::tickAnimation(editor);
+    CHECK(LfoEditorTestAccess::focusAmount(editor) > 0.0f);
+
+    editor.setVisible(false);
+    CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(editor));
+    CHECK(LfoEditorTestAccess::hoveredPoint(editor) == -1);
+    CHECK(LfoEditorTestAccess::hoverAmount(editor) == 0.0f);
+}
+
+TEST_CASE("LFO editor point hit radius follows its visual scale",
+          "[lfo][editor][ui][scale]")
+{
+    LfoEditor editor;
+    editor.setDataToDisplay(makeLfoData({ { 0.5f, 0.5f }, { 1.0f, 0.8f } }));
+
+    editor.setBounds(0, 0, 240, 120);
+    const auto compactRadius = LfoEditorTestAccess::pointHitRadius(editor);
+    editor.setBounds(0, 0, 800, 400);
+    const auto largeRadius = LfoEditorTestAccess::pointHitRadius(editor);
+    REQUIRE(largeRadius > compactRadius);
+
+    const auto point = LfoEditorTestAccess::pointScreenPosition(editor, 0);
+    editor.mouseMove(makeMouseEvent(editor,
+                                    point + juce::Point<float>(largeRadius * 0.9f, 0.0f)));
+    CHECK(LfoEditorTestAccess::hoveredPoint(editor) == 0);
+    editor.mouseMove(makeMouseEvent(editor,
+                                    point + juce::Point<float>(largeRadius * 1.1f, 0.0f)));
+    CHECK(LfoEditorTestAccess::hoveredPoint(editor) == -1);
 }

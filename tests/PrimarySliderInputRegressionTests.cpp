@@ -421,6 +421,108 @@ TEST_CASE("PrimarySlider closes a gesture when pointer release is lost",
     CHECK(slider.getValue() == Catch::Approx(recoveredValue));
 }
 
+TEST_CASE("PrimarySlider closes a gesture when its desktop peer is detached",
+          "[primary-slider][ui][input][gesture][lifecycle][peer][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component desktopHost;
+    PrimarySlider slider;
+    desktopHost.setBounds(0, 0, 160, 160);
+    desktopHost.addAndMakeVisible(slider);
+    slider.setBounds(0, 0, 120, 120);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0);
+    slider.setValue(0.5, juce::dontSendNotification);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    REQUIRE(slider.isShowing());
+
+    SliderInteractionCapture capture;
+    slider.addListener(&capture);
+
+    const auto downPosition = slider.getLocalBounds().toFloat().getCentre();
+    const auto dragPosition = downPosition
+                            + juce::Point<float> { 30.0f, -20.0f };
+    const juce::ModifierKeys primary {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    slider.mouseDown(makeMouseEvent(slider, downPosition, primary));
+    slider.mouseDrag(makeMouseEvent(
+        slider, dragPosition, primary, downPosition, true));
+    REQUIRE(slider.hasActivePointerGesture());
+    REQUIRE(capture.dragStarts == 1);
+    REQUIRE(capture.dragEnds == 0);
+
+    // Keep the gesture held beyond the visual press transition. Peer-loss
+    // recovery must not depend on an animation that happens to still be moving.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(500);
+    REQUIRE(slider.hasActivePointerGesture());
+    REQUIRE(capture.dragEnds == 0);
+
+    desktopHost.removeFromDesktop();
+
+    CHECK_FALSE(slider.isShowing());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 1);
+    const auto detachedValue = slider.getValue();
+
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    REQUIRE(slider.isShowing());
+    slider.mouseUp(makeMouseEvent(
+        slider, dragPosition, {}, downPosition, true));
+
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 1);
+    CHECK(slider.getValue() == Catch::Approx(detachedValue));
+    desktopHost.removeFromDesktop();
+}
+
+TEST_CASE("PrimarySlider closes a gesture when removed from its parent",
+          "[primary-slider][ui][input][gesture][lifecycle][hierarchy][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component desktopHost;
+    PrimarySlider slider;
+    desktopHost.setBounds(0, 0, 160, 160);
+    desktopHost.addAndMakeVisible(slider);
+    slider.setBounds(0, 0, 120, 120);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0);
+    slider.setValue(0.5, juce::dontSendNotification);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    REQUIRE(slider.isShowing());
+
+    SliderInteractionCapture capture;
+    slider.addListener(&capture);
+
+    const auto downPosition = slider.getLocalBounds().toFloat().getCentre();
+    const juce::ModifierKeys primary {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    slider.mouseDown(makeMouseEvent(slider, downPosition, primary));
+    REQUIRE(slider.hasActivePointerGesture());
+    REQUIRE(capture.dragStarts == 1);
+
+    desktopHost.removeChildComponent(&slider);
+
+    CHECK_FALSE(slider.isShowing());
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 1);
+    const auto detachedValue = slider.getValue();
+
+    desktopHost.addAndMakeVisible(slider);
+    REQUIRE(slider.isShowing());
+    slider.mouseUp(makeMouseEvent(slider, downPosition));
+
+    CHECK_FALSE(slider.hasActivePointerGesture());
+    CHECK(capture.dragEnds == 1);
+    CHECK(slider.getValue() == Catch::Approx(detachedValue));
+    desktopHost.removeFromDesktop();
+}
+
 TEST_CASE("Fire IncDec slider arrows accept only primary clicks",
           "[primary-slider][ui][input][incdec]")
 {

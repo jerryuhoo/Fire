@@ -192,6 +192,23 @@ public:
         }
     }
 
+    void parentHierarchyChanged() override
+    {
+        auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
+        juce::Slider::parentHierarchyChanged();
+        if (! safeThis)
+            return;
+
+        if (! isShowing())
+        {
+            dismissTransientInteraction();
+            if (! safeThis)
+                return;
+        }
+
+        updateAnimationTargets();
+    }
+
     void enablementChanged() override
     {
         auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
@@ -357,7 +374,8 @@ private:
                                  ? 1.0f
                                  : 0.0f);
         disabledAnimation.setTarget(interactive ? 0.0f : 1.0f);
-        if (! animationsSettled() && ! isTimerRunning())
+        if ((! animationsSettled() || hasActivePointerGesture())
+            && ! isTimerRunning())
             startTimerHz(60);
         repaint();
     }
@@ -381,6 +399,11 @@ private:
     {
         if (! isShowing())
         {
+            auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
+            dismissTransientInteraction();
+            if (! safeThis)
+                return;
+
             updateAnimationTargets();
             return;
         }
@@ -389,7 +412,7 @@ private:
         const auto changed = advanceAnimation(1.0f / 60.0f);
         if (changed)
             repaint();
-        if (animationsSettled())
+        if (animationsSettled() && ! hasActivePointerGesture())
             stopTimer();
     }
 

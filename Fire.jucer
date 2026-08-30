@@ -103,6 +103,10 @@
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
       <GROUP id="{A397A229-19FD-F110-6940-6CC5C037D4D0}" name="GUI">
+        <FILE id="cACb01" name="ContextAwareComboBox.cpp" compile="1" resource="0"
+              file="Source/GUI/ContextAwareComboBox.cpp"/>
+        <FILE id="cACb02" name="ContextAwareComboBox.h" compile="0" resource="0"
+              file="Source/GUI/ContextAwareComboBox.h"/>
         <FILE id="rznrv4" name="InterfaceDefines.h" compile="0" resource="0"
               file="Source/GUI/InterfaceDefines.h"/>
         <FILE id="NKA4fO" name="LookAndFeel.h" compile="0" resource="0" file="Source/GUI/LookAndFeel.h"/>

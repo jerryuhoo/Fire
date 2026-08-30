@@ -118,6 +118,35 @@ endif ()
 # If you want to appease the CMake gods and avoid globs, manually add files like so:
 # set(SourceFiles Source/PluginEditor.h Source/PluginProcessor.h Source/PluginEditor.cpp Source/PluginProcessor.cpp)
 file(GLOB_RECURSE SourceFiles CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Source/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/Source/*.h")
+
+# CMake discovers implementation files automatically, while the Projucer project
+# requires each one to be listed explicitly.  Keep the two build frontends in
+# lockstep so an implementation cannot compile in CI but fail to link in Xcode.
+set(FireJucerManifest "${CMAKE_CURRENT_SOURCE_DIR}/Fire.jucer")
+if (EXISTS "${FireJucerManifest}")
+    file(READ "${FireJucerManifest}" FireJucerContents)
+    set(FireJucerMissingSources)
+
+    foreach (SourceFile IN LISTS SourceFiles)
+        if (SourceFile MATCHES "\\.cpp$")
+            file(RELATIVE_PATH RelativeSourceFile "${CMAKE_CURRENT_SOURCE_DIR}" "${SourceFile}")
+            file(TO_CMAKE_PATH "${RelativeSourceFile}" RelativeSourceFile)
+            string(FIND "${FireJucerContents}" "file=\"${RelativeSourceFile}\"" SourceFilePosition)
+
+            if (SourceFilePosition EQUAL -1)
+                list(APPEND FireJucerMissingSources "${RelativeSourceFile}")
+            endif ()
+        endif ()
+    endforeach ()
+
+    if (FireJucerMissingSources)
+        list(JOIN FireJucerMissingSources "\n  " FireJucerMissingSourcesText)
+        message(FATAL_ERROR
+            "Fire.jucer is missing implementation files required by Xcode:\n"
+            "  ${FireJucerMissingSourcesText}")
+    endif ()
+endif ()
+
 target_sources(SharedCode INTERFACE ${SourceFiles})
 
 # Adds a BinaryData target for embedding assets into the binary

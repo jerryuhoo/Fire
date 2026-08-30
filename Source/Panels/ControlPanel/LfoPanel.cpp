@@ -2134,6 +2134,8 @@ bool LfoBrushSelector::isContextCurrent(
 
 bool LfoBrushSelector::keyPressed(const juce::KeyPress& key)
 {
+    noteKeyboardInteraction();
+
     const bool movesBackward = key == juce::KeyPress::upKey
                                || key == juce::KeyPress::leftKey;
     const bool movesForward = key == juce::KeyPress::downKey
@@ -2183,6 +2185,8 @@ void LfoBrushSelector::mouseDown(const juce::MouseEvent& event)
     const auto generation = interactionContextGeneration;
     if (! isContextCurrent(generation) || ! isCompletePrimaryDown(event))
         return;
+
+    notePointerInteraction();
 
     // Let an already-queued showPopup() consume its captured generation before
     // accepting another physical opener.

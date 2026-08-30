@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../GUI/GuardedSliderAccessibility.h"
+#include "../../GUI/FocusAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../../GUI/PrimaryButton.h"
 #include "../../PluginProcessor.h"
@@ -29,7 +30,7 @@ struct ModulationRoutingEditSession
     std::uint64_t revision = 0;
 };
 
-class ModulationMatrixRoutingComboBox final : public juce::ComboBox
+class ModulationMatrixRoutingComboBox final : public FocusAwareComboBox
 {
 public:
     ModulationMatrixRoutingComboBox() = default;

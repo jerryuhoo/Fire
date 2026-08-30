@@ -13,6 +13,7 @@
 #define STATE_H_INCLUDED
 
 #include "../../GUI/InterfaceDefines.h"
+#include "../../GUI/FocusAwareComboBox.h"
 #include "../../GUI/LookAndFeel.h"
 #include "../../GUI/PrimaryButton.h"
 #include "../../GUI/SettingsComponent.h"
@@ -215,7 +216,7 @@ PluginProcessor).
         friend struct ::StateComponentSessionBoundaryTestAccess;
 #endif
 
-        class PresetComboBox final : public juce::ComboBox
+        class PresetComboBox final : public FocusAwareComboBox
         {
         public:
             void dismissTransientInteraction() noexcept;

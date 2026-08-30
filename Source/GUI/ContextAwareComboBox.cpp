@@ -58,6 +58,8 @@ bool ContextAwareComboBox::isContextCurrent(
 
 bool ContextAwareComboBox::keyPressed(const juce::KeyPress& key)
 {
+    noteKeyboardInteraction();
+
     const bool movesBackward = key == juce::KeyPress::upKey
                                || key == juce::KeyPress::leftKey;
     const bool movesForward = key == juce::KeyPress::downKey
@@ -124,6 +126,8 @@ void ContextAwareComboBox::mouseDown(const juce::MouseEvent& event)
 {
     if (! isEnabled() || ! isCompletePrimaryDown(event))
         return;
+
+    notePointerInteraction();
 
     // A previous showPopup() may still be queued with another generation.
     // Classify that request before accepting any later physical press.

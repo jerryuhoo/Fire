@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../DSP/LfoData.h"
+#include "../../GUI/FocusAwareComboBox.h"
 #include "../../GUI/PrimarySlider.h"
 #include "../../GUI/FireTheme.h"
 #include "../../Utility/Parameters.h" // Include for LfoEditMode and LfoPresetShape
@@ -271,7 +272,7 @@ private:
     result from a popup opened before a mode/data/LFO switch can otherwise
     select a brush in the replacement session.
 */
-class LfoBrushSelector final : public juce::ComboBox
+class LfoBrushSelector final : public FocusAwareComboBox
 {
 public:
     using SelectionCallback = std::function<void(LfoPresetShape)>;

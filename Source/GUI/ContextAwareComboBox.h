@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "FocusAwareComboBox.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include <cstdint>
@@ -16,7 +17,7 @@
 struct ContextAwareComboBoxTestAccess;
 
 //==============================================================================
-class ContextAwareComboBox final : public juce::ComboBox
+class ContextAwareComboBox final : public FocusAwareComboBox
 {
 public:
     using GenerationProvider = std::function<std::uint64_t()>;

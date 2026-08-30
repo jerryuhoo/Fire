@@ -67,6 +67,8 @@ bool ModulationMatrixRoutingComboBox::isPopupContextCurrent(
 bool ModulationMatrixRoutingComboBox::keyPressed(
     const juce::KeyPress& key)
 {
+    noteKeyboardInteraction();
+
     const bool movesBackward = key == juce::KeyPress::upKey
                                || key == juce::KeyPress::leftKey;
     const bool movesForward = key == juce::KeyPress::downKey
@@ -137,6 +139,8 @@ void ModulationMatrixRoutingComboBox::mouseDown(
         || ! isShowing()
         || ! isCompletePrimaryDown(event))
         return;
+
+    notePointerInteraction();
 
     if (popupRequestArmed && ! isPopupActive())
         return;

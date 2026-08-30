@@ -1232,6 +1232,8 @@ namespace state
     bool StateComponent::PresetComboBox::keyPressed(
         const juce::KeyPress& key)
     {
+        noteKeyboardInteraction();
+
         const bool movesBackward = key == juce::KeyPress::upKey
                                    || key == juce::KeyPress::leftKey;
         const bool movesForward = key == juce::KeyPress::downKey
@@ -1300,6 +1302,8 @@ namespace state
             || ! isCompletePrimaryDown(event)
             || popupRequestArmed || isPopupActive())
             return;
+
+        notePointerInteraction();
 
         const juce::Component::SafePointer<PresetComboBox> safeThis(this);
         if (pointerInteractionActive)

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "FireTheme.h"
+#include "FocusAwareComboBox.h"
 #include "InterfaceDefines.h"
 #include "ModulatableSlider.h"
 #include "PrimaryButton.h"
@@ -861,9 +862,16 @@ private:
             const auto interactive = box.isEnabled() && box.isShowing();
             state.hover.snapTo(interactive && box.isMouseOver(true) ? 1.0f : 0.0f);
             state.press.snapTo(interactive && isButtonDown ? 1.0f : 0.0f);
-            state.focus.snapTo(interactive
-                                   && (box.hasKeyboardFocus(true) || box.isPopupActive())
-                               ? 1.0f : 0.0f);
+            const auto focusVisible =
+                [&box]
+                {
+                    if (auto* focusAware =
+                            dynamic_cast<FocusAwareComboBox*>(&box))
+                        return focusAware->shouldShowInteractionFocus();
+
+                    return box.hasKeyboardFocus(true) || box.isPopupActive();
+                }();
+            state.focus.snapTo(interactive && focusVisible ? 1.0f : 0.0f);
             state.disabled.snapTo(box.isEnabled() ? 0.0f : 1.0f);
             state.pressTarget = isButtonDown;
             comboBoxAnimations.push_back(std::move(state));
@@ -885,9 +893,16 @@ private:
         const auto interactive = box->isEnabled() && box->isShowing();
         state.hover.setTarget(interactive && box->isMouseOver(true) ? 1.0f : 0.0f);
         state.press.setTarget(interactive && state.pressTarget ? 1.0f : 0.0f);
-        state.focus.setTarget(interactive
-                                  && (box->hasKeyboardFocus(true) || box->isPopupActive())
-                              ? 1.0f : 0.0f);
+        const auto focusVisible =
+            [box]
+            {
+                if (auto* focusAware =
+                        dynamic_cast<FocusAwareComboBox*>(box))
+                    return focusAware->shouldShowInteractionFocus();
+
+                return box->hasKeyboardFocus(true) || box->isPopupActive();
+            }();
+        state.focus.setTarget(interactive && focusVisible ? 1.0f : 0.0f);
         state.disabled.setTarget(box->isEnabled() ? 0.0f : 1.0f);
     }
 

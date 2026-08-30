@@ -2308,8 +2308,9 @@ void FireAudioProcessorEditor::refreshModulationSnapshot()
 
         for (int routingIndex = 0; routingIndex < modulationRoutingSnapshot.size(); ++routingIndex)
         {
-            if (modulationRoutingSnapshot.getReference(routingIndex).targetParameterID
-                == slider->getParamID())
+            const auto& routing = modulationRoutingSnapshot.getReference(routingIndex);
+            if (routing.targetParameterID == slider->getParamID()
+                && juce::isPositiveAndBelow(routing.sourceLfoIndex, 4))
             {
                 modulationRoutingIndexBySlider[sliderIndex] = routingIndex;
                 break;
@@ -2340,8 +2341,11 @@ void FireAudioProcessorEditor::applyModulationSnapshot()
                 matchedRouting = &modulationRoutingSnapshot.getReference(routingIndex);
         }
 
-        const bool isModulated = matchedRouting != nullptr;
-        const int sourceIndex = isModulated ? juce::jlimit(0, 3, matchedRouting->sourceLfoIndex) : 0;
+        const int sourceIndex = matchedRouting != nullptr
+                                    ? matchedRouting->sourceLfoIndex
+                                    : -1;
+        const bool isModulated = juce::isPositiveAndBelow(
+            sourceIndex, static_cast<int>(lfoOutputs.size()));
         const float rawLfo = isModulated ? lfoOutputs[static_cast<size_t>(sourceIndex)] : 0.0f;
         const double displayLfo = isModulated && matchedRouting->isBipolar
                                       ? static_cast<double>(rawLfo * 2.0f - 1.0f)

@@ -3,6 +3,7 @@
 #include <Panels/ControlPanel/BandPanel.h>
 #include <Panels/ControlPanel/LfoPanel.h>
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -165,6 +166,98 @@ TEST_CASE("Changing LFO selection updates the pending Assign source",
     for (const auto& routing : routings)
         if (routing.targetParameterID.isNotEmpty())
             CHECK(routing.sourceLfoIndex != 0);
+}
+
+TEST_CASE("Editor modulation snapshots reject invalid LFO source indices",
+          "[ui][lfo][snapshot][invalid-source][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto targetParameterID =
+        ParameterIDAndName::getIDString(DRIVE_ID, 0);
+
+    SECTION("An invalid source is not presented as LFO 1 or LFO 4")
+    {
+        for (const int invalidSource : { -1, 4 })
+        {
+            DYNAMIC_SECTION("source index " << invalidSource)
+            {
+                FireAudioProcessor processor;
+                processor.hasUpdateCheckBeenPerformed = true;
+
+                ModulationRouting invalidRouting;
+                invalidRouting.sourceLfoIndex = invalidSource;
+                invalidRouting.targetParameterID = targetParameterID;
+                invalidRouting.depth = 0.75f;
+                invalidRouting.isBipolar = false;
+                invalidRouting.isBypassed = true;
+
+                juce::Array<ModulationRouting> routings;
+                routings.add(invalidRouting);
+                REQUIRE(processor.getLfoManager().replaceLfoDataAndRoutings(
+                    std::array<LfoData, 4> {}, routings));
+
+                const auto processorInfo =
+                    processor.getModulationInfoForParameter(targetParameterID);
+                REQUIRE_FALSE(processorInfo.isModulated);
+
+                FireAudioProcessorEditor editor(processor);
+                auto* bandPanel = findDescendant<BandPanel>(editor);
+                REQUIRE(bandPanel != nullptr);
+                auto* drive = bandPanel->getDriveKnob();
+                REQUIRE(drive != nullptr);
+                REQUIRE(drive->getParamID() == targetParameterID);
+
+                CHECK_FALSE(drive->isModulated);
+                CHECK(drive->lfoSource == 0);
+                CHECK(drive->lfoAmount == Catch::Approx(0.0));
+                CHECK(drive->lfoValue == Catch::Approx(0.0));
+                CHECK(drive->isBipolar);
+                CHECK_FALSE(drive->isBypassed);
+            }
+        }
+    }
+
+    SECTION("An invalid first route does not hide a later valid route")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+
+        ModulationRouting invalidRouting;
+        invalidRouting.sourceLfoIndex = -1;
+        invalidRouting.targetParameterID = targetParameterID;
+        invalidRouting.depth = -0.8f;
+        invalidRouting.isBypassed = true;
+
+        ModulationRouting validRouting;
+        validRouting.sourceLfoIndex = 2;
+        validRouting.targetParameterID = targetParameterID;
+        validRouting.depth = 0.37f;
+        validRouting.isBipolar = false;
+
+        juce::Array<ModulationRouting> routings;
+        routings.add(invalidRouting);
+        routings.add(validRouting);
+        REQUIRE(processor.getLfoManager().replaceLfoDataAndRoutings(
+            std::array<LfoData, 4> {}, routings));
+
+        const auto processorInfo =
+            processor.getModulationInfoForParameter(targetParameterID);
+        REQUIRE(processorInfo.isModulated);
+        REQUIRE(processorInfo.sourceLfoIndex == 3);
+
+        FireAudioProcessorEditor editor(processor);
+        auto* bandPanel = findDescendant<BandPanel>(editor);
+        REQUIRE(bandPanel != nullptr);
+        auto* drive = bandPanel->getDriveKnob();
+        REQUIRE(drive != nullptr);
+        REQUIRE(drive->getParamID() == targetParameterID);
+
+        CHECK(drive->isModulated);
+        CHECK(drive->lfoSource == 3);
+        CHECK(drive->lfoAmount == Catch::Approx(0.37f));
+        CHECK_FALSE(drive->isBipolar);
+        CHECK_FALSE(drive->isBypassed);
+    }
 }
 
 TEST_CASE("LFO assignment feedback reflects unchanged and full results",

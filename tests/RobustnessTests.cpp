@@ -502,6 +502,59 @@ TEST_CASE("Spectrum frames are published as complete newest-only snapshots", "[f
     CHECK_FALSE(spectrum.doProcessing(undersized.data(), static_cast<int>(undersized.size())));
 }
 
+TEST_CASE("Spectrum reset separates audio epochs and discards stale frames",
+          "[fft][threading][reset][lifecycle][regression]")
+{
+    SpectrumProcessor spectrum;
+    std::array<float, SpectrumProcessor::fftBufferSize> processed {};
+    std::array<float, SpectrumProcessor::fftBufferSize> original {};
+
+    for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+        spectrum.pushNextSamplePairIntoFifo(1.0f, 11.0f);
+    REQUIRE(spectrum.popLatestFramePair(
+        processed.data(), static_cast<int>(processed.size()),
+        original.data(), static_cast<int>(original.size())));
+
+    for (int epoch = 0; epoch < 5; ++epoch)
+    {
+        const float staleValue = static_cast<float>(20 + epoch);
+        for (int sample = 0; sample < SpectrumProcessor::fftSize / 2; ++sample)
+            spectrum.pushNextSamplePairIntoFifo(staleValue,
+                                                staleValue + 100.0f);
+
+        spectrum.reset();
+        CHECK_FALSE(spectrum.hasCompleteFrame());
+        CHECK_FALSE(spectrum.popLatestFramePair(
+            processed.data(), static_cast<int>(processed.size()),
+            original.data(), static_cast<int>(original.size())));
+
+        const float currentValue = static_cast<float>(2 + epoch);
+        for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+            spectrum.pushNextSamplePairIntoFifo(currentValue,
+                                                currentValue + 10.0f);
+
+        REQUIRE(spectrum.popLatestFramePair(
+            processed.data(), static_cast<int>(processed.size()),
+            original.data(), static_cast<int>(original.size())));
+        CHECK(processed.front() == Catch::Approx(currentValue));
+        CHECK(processed[SpectrumProcessor::fftSize - 1]
+              == Catch::Approx(currentValue));
+        CHECK(original.front() == Catch::Approx(currentValue + 10.0f));
+        CHECK(original[SpectrumProcessor::fftSize - 1]
+              == Catch::Approx(currentValue + 10.0f));
+    }
+
+    // A complete frame published immediately before reset must not survive it.
+    for (int sample = 0; sample < SpectrumProcessor::fftSize; ++sample)
+        spectrum.pushNextSamplePairIntoFifo(99.0f, 199.0f);
+    REQUIRE(spectrum.hasCompleteFrame());
+    spectrum.reset();
+    CHECK_FALSE(spectrum.hasCompleteFrame());
+    CHECK_FALSE(spectrum.popLatestFramePair(
+        processed.data(), static_cast<int>(processed.size()),
+        original.data(), static_cast<int>(original.size())));
+}
+
 TEST_CASE("Sample-accurate bipolar modulation matches block modulation depth", "[lfo][modulation]")
 {
     const std::array<float, 1> lfo { 1.0f };

@@ -3023,6 +3023,7 @@ void FireAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
             + 2);
 
     lfoManager->prepare(spec);
+    spectrumProcessor.reset();
 
     historyPublicationSequence.fetch_add(1, std::memory_order_acq_rel);
     for (int i = 0; i < historyLength; ++i)
@@ -4220,6 +4221,7 @@ void FireAudioProcessor::synchroniseMultibandTopologyResetState() noexcept
 
 void FireAudioProcessor::performReset()
 {
+    spectrumProcessor.reset();
     synchroniseMultibandTopologyResetState();
     resetMultibandProcessingState(
         &activeMultibandTopologySnapshot.callbackContext);

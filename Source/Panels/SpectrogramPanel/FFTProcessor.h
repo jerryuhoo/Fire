@@ -56,6 +56,19 @@ public:
         return true;
     }
 
+    /** Starts a new audio epoch without publishing a partial or stale frame. */
+    void reset() noexcept
+    {
+        // Invalidate publication first. A reader that already claimed the old
+        // slot may finish copying it, but its post-copy state check will reject
+        // the frame while the producer leaves that claimed slot untouched.
+        ++publicationGeneration;
+        publishedState.store(0, std::memory_order_release);
+        fifoIndex = 0;
+        // The next complete frame overwrites every FIFO slot before publish,
+        // so no audio-thread clearing is required here.
+    }
+
     bool hasCompleteFrame() const noexcept
     {
         const auto state = publishedState.load(std::memory_order_acquire);
@@ -99,6 +112,15 @@ public:
             const auto& newestFrame = frameStorage[static_cast<size_t>(newestFrameIndex)];
             std::copy_n(newestFrame.processed.data(), fftSize, processedDestination);
             std::copy_n(newestFrame.original.data(), fftSize, originalDestination);
+
+            // Reset or a newer publication may have won while this frame was
+            // copied. The claimed slot is coherent, but no longer belongs to
+            // the current epoch/newest-only contract.
+            if (publishedState.load(std::memory_order_acquire) != state)
+            {
+                readerFrameIndex.store(-1, std::memory_order_release);
+                continue;
+            }
 
             lastConsumedState = state;
             readerFrameIndex.store(-1, std::memory_order_release);
@@ -151,7 +173,7 @@ private:
         std::copy (processedFifo.begin(), processedFifo.end(), destination.processed.begin());
         std::copy (originalFifo.begin(), originalFifo.end(), destination.original.begin());
 
-        const auto generation = (currentState >> 2u) + 1u;
+        const auto generation = ++publicationGeneration;
         const auto newState = (generation << 2u)
                               | static_cast<std::uint64_t>(destinationIndex + 1);
         publishedState.store(newState, std::memory_order_release);
@@ -164,6 +186,7 @@ private:
     std::atomic<std::uint64_t> publishedState { 0 };
     std::atomic<int> readerFrameIndex { -1 };
     std::uint64_t lastConsumedState = 0; // Message-thread owned.
+    std::uint64_t publicationGeneration = 0; // Audio-thread owned.
     int nextWriteIndex = 0; // Audio-thread owned.
     juce::dsp::FFT forwardFFT;
     juce::dsp::WindowingFunction<float> window;

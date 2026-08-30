@@ -350,6 +350,10 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
     updateWhenChangingFocus(multiband.getFocusIndex());
     addAndMakeVisible(filterControl);
 
+    // The processor may already be host-bypassed when an editor is opened.
+    // Establish that state without ever painting a retained analyser frame.
+    synchroniseSpectrumHostBypassState(false);
+
     // Listen to ALL relevant buttons
     for (int i = 0; i < 4; ++i)
         multiband.getEnableButton(i).addListener(this);
@@ -562,6 +566,63 @@ void FireAudioProcessorEditor::paint(juce::Graphics& g)
     drawAnimatedHeader(g);
 }
 
+void FireAudioProcessorEditor::paintOverChildren(juce::Graphics& g)
+{
+    const auto opacity = juce::jlimit(0.0f,
+                                      1.0f,
+                                      hostBypassIndicatorOpacity.current);
+    if (opacity <= 0.001f || spectrumCardArea.isEmpty())
+        return;
+
+    const juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(spectrumCardArea);
+    g.setOpacity(opacity);
+
+    const auto scale = fireLookAndFeel.scale;
+    const auto spectrumBounds = spectrumCardArea.reduced(1).toFloat();
+    g.setColour(fire::ui::colours::canvas.withAlpha(0.16f));
+    g.fillRoundedRectangle(spectrumBounds,
+                           fire::ui::Metrics::radius * scale);
+
+    const auto pillWidth = juce::jmin(spectrumBounds.getWidth()
+                                          - 16.0f * scale,
+                                      148.0f * scale);
+    const auto pillHeight = juce::jmin(spectrumBounds.getHeight()
+                                           - 8.0f * scale,
+                                       30.0f * scale);
+    if (pillWidth <= 0.0f || pillHeight <= 0.0f)
+        return;
+
+    auto pill = juce::Rectangle<float>(pillWidth, pillHeight)
+                    .withCentre(spectrumBounds.getCentre());
+    fire::ui::drawGlassPill(g,
+                            pill,
+                            fire::ui::colours::flame,
+                            true,
+                            false,
+                            false);
+
+    const auto dotRadius = juce::jmax(1.5f, 2.25f * scale);
+    const auto dotCentre = juce::Point<float>(pill.getX() + 15.0f * scale,
+                                               pill.getCentreY());
+    g.setColour(fire::ui::colours::flame.withAlpha(0.92f));
+    g.fillEllipse(juce::Rectangle<float>(dotRadius * 2.0f,
+                                          dotRadius * 2.0f)
+                      .withCentre(dotCentre));
+
+    auto textArea = pill.reduced(12.0f * scale, 2.0f * scale)
+                        .withTrimmedLeft(12.0f * scale);
+    g.setFont(fire::ui::labelFont(juce::jlimit(9.0f,
+                                               12.0f,
+                                               10.5f * scale))
+                  .withExtraKerningFactor(0.08f));
+    g.setColour(fire::ui::colours::textPrimary);
+    g.drawText("HOST BYPASS",
+               textArea,
+               juce::Justification::centred,
+               false);
+}
+
 void FireAudioProcessorEditor::resized()
 {
     processor.setSavedHeight(getHeight());
@@ -651,6 +712,10 @@ void FireAudioProcessorEditor::visibilityChanged()
     if (isShowing())
     {
         hiddenUiCleanupComplete = false;
+        // A hidden peer may have crossed an entire bypass session without an
+        // editor timer tick. Reattach from a clear frame and synchronise the
+        // final processor state before any retained path can be painted.
+        synchroniseSpectrumHostBypassState(false);
         synchroniseHistorySourceForWorkspace(activeWorkspace);
     }
     else
@@ -665,6 +730,7 @@ void FireAudioProcessorEditor::visibilityChanged()
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         ++hiddenUiCleanupCountForTesting;
 #endif
+        suspendSpectrumPresentation();
         if (isLfoAssignMode)
             exitAssignMode(false);
         lfoPanel.clearAssignFeedback();
@@ -846,6 +912,69 @@ void FireAudioProcessorEditor::advanceAnimations(float deltaSeconds)
 
     if (workspaceSelection.advance(deltaSeconds, 0.07f))
         repaint(navigationArea);
+
+    if (hostBypassIndicatorOpacity.advance(deltaSeconds, 0.10f))
+        repaint(spectrumCardArea);
+}
+
+void FireAudioProcessorEditor::synchroniseSpectrumHostBypassState(
+    bool animateTransition)
+{
+    const auto presentationEpoch =
+        processor.getHostBypassPresentationEpoch();
+    const bool isBypassed = processor.getBypassedState();
+    const bool stateChanged = ! spectrumBypassPresentationInitialised
+                           || isBypassed != lastBypassedState;
+    const bool epochChanged =
+        spectrumBypassPresentationInitialised
+        && presentationEpoch != lastHostBypassPresentationEpoch;
+
+    // The timer polls this helper at 60 Hz. A steady visible session needs no
+    // component mutation or broad spectrum repaint. Non-animated calls are
+    // still forced because they also restore a presentation suspended while
+    // the editor peer was hidden.
+    if (! stateChanged && ! epochChanged && animateTransition)
+        return;
+
+    // A complete host-bypass session may begin and end between two UI ticks.
+    // Its monotonic processor epoch is therefore authoritative even when the
+    // sampled boolean stayed false.  Drive a zero-duration logical entry
+    // before the normal exit state so retained paths cannot interpolate into
+    // the first post-bypass frame.
+    if (epochChanged && ! lastBypassedState && ! isBypassed)
+    {
+        processedSpectrum.setHostBypassed(true, animateTransition);
+        originalSpectrum.setHostBypassed(true, animateTransition);
+    }
+
+    processedSpectrum.setHostBypassed(isBypassed, animateTransition);
+    originalSpectrum.setHostBypassed(isBypassed, animateTransition);
+
+    if (animateTransition)
+        hostBypassIndicatorOpacity.setTarget(isBypassed ? 1.0f : 0.0f);
+    else
+        hostBypassIndicatorOpacity.snapTo(isBypassed ? 1.0f : 0.0f);
+
+    spectrumBypassPresentationInitialised = true;
+    lastBypassedState = isBypassed;
+    lastHostBypassPresentationEpoch = presentationEpoch;
+    if (stateChanged || epochChanged)
+        multiband.repaint();
+    repaint(spectrumCardArea);
+}
+
+void FireAudioProcessorEditor::suspendSpectrumPresentation()
+{
+    // Hidden editors do not animate. Clear immediately and require a frame
+    // published after reattachment before either spectrum can reappear.
+    processedSpectrum.setHostBypassed(true, false);
+    originalSpectrum.setHostBypassed(true, false);
+
+    // Some hosts detach and later restore the peer without delivering a
+    // visibilityChanged() callback in either direction.  Mark the cached
+    // presentation state dirty so the first visible timer tick cannot take
+    // the steady-state fast path and leave both spectra rejecting updates.
+    spectrumBypassPresentationInitialised = false;
 }
 
 void FireAudioProcessorEditor::drawAnimatedHeader(juce::Graphics& g)
@@ -1019,6 +1148,7 @@ void FireAudioProcessorEditor::timerCallback()
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         ++hiddenUiCleanupCountForTesting;
 #endif
+        suspendSpectrumPresentation();
 
         // Unlike a workspace change, a detached/minimised editor peer ends
         // the visible UI session even when the host leaves this Component's
@@ -1167,12 +1297,8 @@ void FireAudioProcessorEditor::timerCallback()
         bandPanel.updateDriveMeter();
     }
 
-    const bool isBypassed = processor.getBypassedState();
-    if (isBypassed != lastBypassedState)
-    {
-        multiband.repaint();
-        lastBypassedState = isBypassed;
-    }
+    synchroniseSpectrumHostBypassState(true);
+    const bool isBypassed = lastBypassedState;
 
     if (! isBypassed && spectrumCardArea.intersects(getLocalBounds()))
     {

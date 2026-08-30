@@ -4355,10 +4355,29 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
         hook(juce::FloatVectorOperations::areDenormalsDisabled());
 #endif
 
-    isBypassed.store(true, std::memory_order_relaxed);
+    isBypassed.store(true, std::memory_order_release);
 
     if (needsReset.exchange(false, std::memory_order_acq_rel))
         performReset();
+
+    if (! hostBypassSessionActive)
+    {
+        // Host bypass does not publish analyser data. Invalidate both the last
+        // completed frame and any partially accumulated pre-bypass window at
+        // the audio-thread epoch boundary, so the UI cannot mistake either for
+        // the first frame after processing resumes. SpectrumProcessor::reset()
+        // is allocation-free and its publication protocol already tolerates a
+        // concurrent message-thread reader.
+        spectrumProcessor.reset();
+        hostBypassPresentationEpoch.fetch_add(1,
+                                               std::memory_order_release);
+
+        // Keep the audible raw tap fixed for the complete host-bypass session.
+        // The hidden wet graph may finish an HQ transition meanwhile, but a
+        // delayed dry signal must never expose that fractional-tap switch.
+        hostBypassSessionHqMode = activeHqMode;
+        hostBypassSessionActive = true;
+    }
 
     // Treat a non-finite host sample as silence before it can enter any
     // recursive filter, detector, oversampler or latency-compensation state.
@@ -4376,15 +4395,6 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
         calculateAndStoreLevels(buffer, mOutputLeftRMSGlobal, mOutputRightRMSGlobal, mOutputLeftPeakGlobal, mOutputRightPeakGlobal);
         publishMeterValues(false);
         return;
-    }
-
-    if (! hostBypassSessionActive)
-    {
-        // Keep the audible raw tap fixed for the complete host-bypass session.
-        // The hidden wet graph may finish an HQ transition meanwhile, but a
-        // delayed dry signal must never expose that fractional-tap switch.
-        hostBypassSessionHqMode = activeHqMode;
-        hostBypassSessionActive = true;
     }
 
     // The host hears only latency-matched raw audio. In parallel, render a
@@ -4445,7 +4455,7 @@ void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
 
 void FireAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    isBypassed.store(false, std::memory_order_relaxed);
+    isBypassed.store(false, std::memory_order_release);
     hostBypassSessionActive = false;
 
     if (needsReset.exchange(false, std::memory_order_acq_rel))
@@ -5861,9 +5871,14 @@ void FireAudioProcessor::setSavedHeight(const int height)
     editorHeight.store(height, std::memory_order_relaxed);
 }
 
-bool FireAudioProcessor::getBypassedState() const
+bool FireAudioProcessor::getBypassedState() const noexcept
 {
-    return isBypassed.load(std::memory_order_relaxed);
+    return isBypassed.load(std::memory_order_acquire);
+}
+
+std::uint64_t FireAudioProcessor::getHostBypassPresentationEpoch() const noexcept
+{
+    return hostBypassPresentationEpoch.load(std::memory_order_acquire);
 }
 
 // drive lookandfeel

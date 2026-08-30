@@ -555,6 +555,58 @@ TEST_CASE("Spectrum reset separates audio epochs and discards stale frames",
         original.data(), static_cast<int>(original.size())));
 }
 
+TEST_CASE("Host bypass invalidates completed and partial pre-bypass FFT windows",
+          "[processor][fft][host-bypass][freshness][lifecycle][regression]")
+{
+    FireAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 512);
+
+    std::array<float, SpectrumProcessor::fftBufferSize> processed {};
+    std::array<float, SpectrumProcessor::fftBufferSize> original {};
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> emptyBuffer;
+
+    juce::AudioBuffer<float> completedFrame(1, SpectrumProcessor::fftSize);
+    for (int sample = 0; sample < completedFrame.getNumSamples(); ++sample)
+        completedFrame.setSample(0, sample, 3.0f);
+    processor.pushDataPairToFFT(completedFrame, completedFrame);
+
+    // Even a zero-sized host callback is an analyser epoch boundary. The UI
+    // can observe bypass before a later non-empty callback, so delaying reset
+    // until audio arrives would leave this completed frame replayable.
+    processor.processBlockBypassed(emptyBuffer, midi);
+    CHECK_FALSE(processor.popLatestFFTFrames(
+        processed.data(), static_cast<int>(processed.size()),
+        original.data(), static_cast<int>(original.size())));
+
+    // End the first bypass session, begin a normal partial window, then enter
+    // bypass again. The first complete frame after resume must contain only
+    // the new epoch rather than half pre-bypass and half resumed samples.
+    processor.processBlock(emptyBuffer, midi);
+    juce::AudioBuffer<float> partialFrame(1,
+                                           SpectrumProcessor::fftSize / 2);
+    for (int sample = 0; sample < partialFrame.getNumSamples(); ++sample)
+        partialFrame.setSample(0, sample, 7.0f);
+    processor.pushDataPairToFFT(partialFrame, partialFrame);
+    processor.processBlockBypassed(emptyBuffer, midi);
+    processor.processBlock(emptyBuffer, midi);
+
+    juce::AudioBuffer<float> resumedFrame(1, SpectrumProcessor::fftSize);
+    for (int sample = 0; sample < resumedFrame.getNumSamples(); ++sample)
+        resumedFrame.setSample(0, sample, 11.0f);
+    processor.pushDataPairToFFT(resumedFrame, resumedFrame);
+
+    REQUIRE(processor.popLatestFFTFrames(
+        processed.data(), static_cast<int>(processed.size()),
+        original.data(), static_cast<int>(original.size())));
+    CHECK(processed.front() == Catch::Approx(11.0f));
+    CHECK(processed[SpectrumProcessor::fftSize - 1]
+          == Catch::Approx(11.0f));
+    CHECK(original.front() == Catch::Approx(11.0f));
+    CHECK(original[SpectrumProcessor::fftSize - 1]
+          == Catch::Approx(11.0f));
+}
+
 TEST_CASE("Sample-accurate bipolar modulation matches block modulation depth", "[lfo][modulation]")
 {
     const std::array<float, 1> lfo { 1.0f };

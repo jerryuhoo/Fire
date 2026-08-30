@@ -464,7 +464,8 @@ public:
     int getSavedHeight() const;
 
     // bypass
-    bool getBypassedState() const;
+    bool getBypassedState() const noexcept;
+    std::uint64_t getHostBypassPresentationEpoch() const noexcept;
 
     // VU meters
     float getRealtimeModulatedThreshold(int bandIndex) const;
@@ -1108,6 +1109,7 @@ private:
 
     // bypass state
     std::atomic<bool> isBypassed { false };
+    std::atomic<std::uint64_t> hostBypassPresentationEpoch { 0 };
     bool hostBypassSessionActive = false;
     bool hostBypassSessionHqMode = false;
 

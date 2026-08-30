@@ -35,6 +35,7 @@ SpectrumComponent::SpectrumComponent(int style, bool drawPeak)
 {
     setOpaque(false);
     setInterceptsMouseClicks(false, false);
+    presentationOpacity.snapTo(1.0f);
 }
 
 SpectrumComponent::~SpectrumComponent()
@@ -51,9 +52,19 @@ void SpectrumComponent::updateSpectrum(const float* newData, int numBins, float 
     if (newData == nullptr || numBins <= 0 || ! std::isfinite(binWidth) || binWidth <= 0.0f)
         return;
 
+    // The editor normally stops publishing while host-bypassed, but retain
+    // the guard here because this method is intentionally thread-safe. An
+    // update already copying when bypass begins is invalidated when the
+    // message thread advances consumedGeneration at that boundary.
+    if (! acceptingSpectrumUpdates.load(std::memory_order_acquire))
+        return;
+
     const auto binsToCopy = juce::jlimit(0, static_cast<int>(pendingData.size()), numBins);
     {
         const juce::ScopedLock locker(dataLock);
+        if (! acceptingSpectrumUpdates.load(std::memory_order_acquire))
+            return;
+
         std::copy_n(newData, binsToCopy, pendingData.begin());
         if (binsToCopy < static_cast<int>(pendingData.size()))
             std::fill(pendingData.begin() + binsToCopy, pendingData.end(), 0.0f);
@@ -83,31 +94,37 @@ void SpectrumComponent::timerCallback()
         return;
     }
 
-    bool visualStateChanged = false;
+    bool visualStateChanged = presentationOpacity.advance(1.0f / 60.0f, 0.11f);
     const auto newestGeneration = pendingGeneration.load(std::memory_order_acquire);
-    if (newestGeneration != consumedGeneration)
+
+    if (hostBypassed)
     {
-        const juce::ScopedLock locker(dataLock);
-        const bool spectralGridChanged =
-            pendingNumberOfBins != numberOfBins
-            || ! juce::approximatelyEqual(pendingBinWidth, mBinWidth);
-        targetData = pendingData;
-        numberOfBins = pendingNumberOfBins;
-        mBinWidth = pendingBinWidth;
-        consumedGeneration = pendingGeneration.load(std::memory_order_relaxed);
-
-        if (spectralGridChanged)
+        if (presentationOpacity.isSettled()
+            && presentationOpacity.current <= 0.001f
+            && ! renderedDataIsClear)
         {
-            // Every array index now represents a different frequency. Neither
-            // an interpolated trace nor a held peak may cross that boundary.
-            displayData.fill(0.0f);
-            smoothedData.fill(0.0f);
-            resetPeakData();
-            isPeakLineVisible = false;
+            resetRenderedData();
+            visualStateChanged = true;
         }
-
-        interpolationActive = true;
-        visualStateChanged = true;
+    }
+    else if (newestGeneration != consumedGeneration)
+    {
+        // A fast bypass toggle may deliver a fresh FFT frame before the old
+        // trace has completed its fade. Keep only the newest pending frame and
+        // consume it at the zero-opacity boundary; the old path can therefore
+        // never reverse direction or blend into the resumed frame.
+        const bool mayConsume = ! awaitingFreshFrame
+                             || (presentationOpacity.isSettled()
+                                 && presentationOpacity.current <= 0.001f);
+        if (mayConsume && consumePendingFrame(awaitingFreshFrame))
+        {
+            if (awaitingFreshFrame)
+            {
+                awaitingFreshFrame = false;
+                presentationOpacity.setTarget(1.0f);
+            }
+            visualStateChanged = true;
+        }
     }
 
     bool stillInterpolating = false;
@@ -133,7 +150,8 @@ void SpectrumComponent::timerCallback()
         visualStateChanged = true;
     }
 
-    if (mDrawPeak && mouseOver && visualStateChanged)
+    if (mDrawPeak && mouseOver && visualStateChanged
+        && ! hostBypassed && ! renderedDataIsClear)
     {
         for (int i = 0; i < numberOfBins; ++i)
             maxData[static_cast<size_t>(i)] = juce::jmax(maxData[static_cast<size_t>(i)],
@@ -177,7 +195,8 @@ void SpectrumComponent::rebuildPaths()
     geometryDirty = false;
 
     const auto bounds = getLocalBounds().toFloat();
-    if (bounds.isEmpty() || numberOfBins < 2 || mBinWidth <= 0.0f)
+    if (renderedDataIsClear || bounds.isEmpty()
+        || numberOfBins < 2 || mBinWidth <= 0.0f)
         return;
 
     spectrumLinePath.preallocateSpace(juce::jmax(64, getWidth() * 4));
@@ -300,8 +319,12 @@ void SpectrumComponent::rebuildPaths()
 void SpectrumComponent::paint(juce::Graphics& g)
 {
     const auto bounds = getLocalBounds().toFloat();
-    if (bounds.isEmpty() || spectrumLinePath.isEmpty())
+    const auto opacity = juce::jlimit(0.0f, 1.0f, presentationOpacity.current);
+    if (bounds.isEmpty() || spectrumLinePath.isEmpty() || opacity <= 0.001f)
         return;
+
+    const juce::Graphics::ScopedSaveState state(g);
+    g.setOpacity(opacity);
 
     if (mStyle == 1)
     {
@@ -392,6 +415,99 @@ void SpectrumComponent::setSpecAlpha(float alpha)
     }
 }
 
+void SpectrumComponent::setHostBypassed(bool shouldBeBypassed, bool animate)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
+    if (hostBypassed == shouldBeBypassed)
+    {
+        // A hidden editor may be reattached while an earlier fade was paused.
+        // Its first visible frame must already be clear when the caller asks
+        // for a non-animated synchronisation of the same bypass state.
+        if (shouldBeBypassed && ! animate)
+        {
+            presentationOpacity.snapTo(0.0f);
+            resetRenderedData();
+            repaint();
+            updateAnimationTimer();
+        }
+        return;
+    }
+
+    hostBypassed = shouldBeBypassed;
+    if (shouldBeBypassed)
+        acceptingSpectrumUpdates.store(false, std::memory_order_release);
+
+    // Reject every generation published before this presentation boundary.
+    // Holding the same lock as updateSpectrum() also closes an update that
+    // passed the atomic admission check immediately before bypass began.
+    {
+        const juce::ScopedLock locker(dataLock);
+        consumedGeneration = pendingGeneration.load(std::memory_order_relaxed);
+    }
+
+    if (! shouldBeBypassed)
+        acceptingSpectrumUpdates.store(true, std::memory_order_release);
+
+    awaitingFreshFrame = true;
+    presentationOpacity.setTarget(0.0f);
+
+    if (! animate || ! isShowing()
+        || (shouldBeBypassed && presentationOpacity.isSettled()
+            && presentationOpacity.current <= 0.001f))
+    {
+        presentationOpacity.snapTo(0.0f);
+        resetRenderedData();
+    }
+
+    repaint();
+    updateAnimationTimer();
+}
+
+void SpectrumComponent::resetRenderedData()
+{
+    targetData.fill(0.0f);
+    displayData.fill(0.0f);
+    smoothedData.fill(0.0f);
+    resetPeakData();
+    isPeakLineVisible = false;
+    interpolationActive = false;
+    spectrumLinePath.clear();
+    spectrumFillPath.clear();
+    peakLinePath.clear();
+    geometryDirty = false;
+    renderedDataIsClear = true;
+}
+
+bool SpectrumComponent::consumePendingFrame(bool startFromSilence)
+{
+    const juce::ScopedLock locker(dataLock);
+    const auto generation = pendingGeneration.load(std::memory_order_relaxed);
+    if (generation == consumedGeneration)
+        return false;
+
+    const bool spectralGridChanged =
+        pendingNumberOfBins != numberOfBins
+        || ! juce::approximatelyEqual(pendingBinWidth, mBinWidth);
+
+    if (startFromSilence || spectralGridChanged)
+    {
+        // Every array index now represents a different frequency. Neither an
+        // interpolated trace nor a held peak may cross that boundary. The same
+        // reset is mandatory at host-bypass resume even when the grid itself
+        // did not change.
+        resetRenderedData();
+    }
+
+    targetData = pendingData;
+    numberOfBins = pendingNumberOfBins;
+    mBinWidth = pendingBinWidth;
+    consumedGeneration = generation;
+    interpolationActive = true;
+    renderedDataIsClear = false;
+    return true;
+}
+
 void SpectrumComponent::mouseEnter(const juce::MouseEvent& event)
 {
     const auto relativeEvent = event.getEventRelativeTo(this);
@@ -465,7 +581,10 @@ void SpectrumComponent::updateAnimationTimer()
 {
     const bool hasPendingFrame = pendingGeneration.load(std::memory_order_acquire) != consumedGeneration;
     const bool peakIsDecaying = mDrawPeak && isPeakLineVisible && ! mouseOver;
-    if (isShowing() && (hasPendingFrame || interpolationActive || peakIsDecaying))
+    const bool opacityIsAnimating = ! presentationOpacity.isSettled();
+    const bool canPresentPendingFrame = hasPendingFrame && ! hostBypassed;
+    if (isShowing() && (canPresentPendingFrame || interpolationActive
+                        || peakIsDecaying || opacityIsAnimating))
     {
         if (! isTimerRunning())
             startTimerHz(60);

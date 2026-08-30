@@ -33,6 +33,7 @@ struct DistortionGraphSourceEpochTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct EditorUpdateCheckLifecycleTestAccess;
 struct EditorHiddenSessionTestAccess;
+struct SpectrumHostBypassPresentationTestAccess;
 #endif
 
 struct Version
@@ -111,6 +112,7 @@ public:
 
     //==============================================================================
     void paint(juce::Graphics& g) override;
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
     void visibilityChanged() override;
     void enablementChanged() override;
@@ -129,6 +131,7 @@ private:
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct EditorUpdateCheckLifecycleTestAccess;
     friend struct EditorHiddenSessionTestAccess;
+    friend struct SpectrumHostBypassPresentationTestAccess;
 #endif
 
     class UpdateCheckThread final : public juce::Thread
@@ -172,6 +175,9 @@ private:
     float headerEnergy = 0.0f;
     int animationFrame = 0;
     bool lastBypassedState = false;
+    std::uint64_t lastHostBypassPresentationEpoch = 0;
+    bool spectrumBypassPresentationInitialised = false;
+    fire::ui::DampedValue hostBypassIndicatorOpacity;
     bool hiddenUiCleanupComplete = false;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::uint64_t hiddenUiCleanupCountForTesting = 0;
@@ -207,6 +213,8 @@ private:
     void rebuildBackgroundCache();
     void initialiseHeaderEmbers();
     void advanceAnimations(float deltaSeconds);
+    void synchroniseSpectrumHostBypassState(bool animateTransition);
+    void suspendSpectrumPresentation();
     void drawAnimatedHeader(juce::Graphics& g);
     void drawWorkspaceSelection(juce::Graphics& g);
     void selectWorkspace(int targetWorkspace, bool animateSelection);

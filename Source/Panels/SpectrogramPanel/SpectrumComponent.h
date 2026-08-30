@@ -20,6 +20,9 @@
 #include <cstdint>
 
 struct SpectrumComponentTestAccess;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct SpectrumHostBypassPresentationTestAccess;
+#endif
 
 //==============================================================================
 class SpectrumComponent : public juce::Component,
@@ -39,8 +42,21 @@ public:
 
     void setSpecAlpha(const float alp);
 
+    /**
+        Starts or ends the host-bypass presentation transition.
+
+        This must be called on the message thread. Entering bypass fades the
+        current trace to silence before discarding it. Leaving bypass keeps the
+        trace hidden until updateSpectrum() publishes a newer frame, so a
+        retained pre-bypass path can never flash back onto the analyser.
+    */
+    void setHostBypassed(bool shouldBeBypassed, bool animate = true);
+
 private:
     friend struct SpectrumComponentTestAccess;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct SpectrumHostBypassPresentationTestAccess;
+#endif
 
     void handleAsyncUpdate() override;
     void timerCallback() override;
@@ -52,6 +68,8 @@ private:
     void visibilityChanged() override;
 
     void resetPeakData();
+    void resetRenderedData();
+    bool consumePendingFrame(bool startFromSilence);
     void setMouseOverSpectrum(bool shouldBeOver);
     void rebuildPaths();
     void updateAnimationTimer();
@@ -77,6 +95,16 @@ private:
     float interpolationFactor = 0.2f;
     bool interpolationActive = false;
     bool geometryDirty = true;
+    bool renderedDataIsClear = true;
+
+    // Host-bypass is a presentation epoch as well as an opacity animation.
+    // Updates that race with entry are rejected by acceptingSpectrumUpdates;
+    // consumedGeneration is snapped at each boundary so only a post-resume
+    // generation may release the hidden trace.
+    std::atomic<bool> acceptingSpectrumUpdates { true };
+    bool hostBypassed = false;
+    bool awaitingFreshFrame = false;
+    fire::ui::DampedValue presentationOpacity;
 
     juce::Path spectrumLinePath;
     juce::Path spectrumFillPath;

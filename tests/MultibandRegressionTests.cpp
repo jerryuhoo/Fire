@@ -2175,6 +2175,8 @@ TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
     auto* multiband = findDescendant<Multiband>(*editor);
@@ -2266,6 +2268,31 @@ TEST_CASE("Interactive crossover cascades publish only strictly ordered tuples",
 
         checkThreeParameterCascade();
         CHECK(label->getText() == "2.5 kHz");
+    }
+
+    SECTION("keyboard nudges use the same ordered cross-divider cascade")
+    {
+        auto& source = dividerGroups[0]->getVerticalLine();
+        source.grabKeyboardFocus();
+        REQUIRE(source.hasKeyboardFocus(true));
+        CHECK(source.keyPressed(
+            juce::KeyPress { juce::KeyPress::rightKey }));
+
+        checkThreeParameterCascade();
+    }
+
+    SECTION("accessible values use the same ordered cross-divider cascade")
+    {
+        auto& source = dividerGroups[0]->getVerticalLine();
+        auto* accessibility = source.getAccessibilityHandler();
+        REQUIRE(accessibility != nullptr);
+        auto* value = accessibility->getValueInterface();
+        REQUIRE(value != nullptr);
+        REQUIRE_FALSE(value->isReadOnly());
+
+        value->setValue(2500.0);
+
+        checkThreeParameterCascade();
     }
 
     SECTION("invalid text restores the old display without publication")
@@ -3970,6 +3997,8 @@ TEST_CASE("Divider compatibility toggles reject user commands but follow automat
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     auto* multiband = findDescendant<Multiband>(*editor);
     REQUIRE(multiband != nullptr);
@@ -3988,8 +4017,12 @@ TEST_CASE("Divider compatibility toggles reject user commands but follow automat
 
     CHECK_FALSE(dividerGroup.getWantsKeyboardFocus());
     CHECK_FALSE(dividerGroup.getMouseClickGrabsKeyboardFocus());
-    CHECK_FALSE(dividerGroup.isAccessible());
-    CHECK(dividerGroup.getAccessibilityHandler() == nullptr);
+    CHECK(dividerGroup.isAccessible());
+    auto* groupAccessibility = dividerGroup.getAccessibilityHandler();
+    REQUIRE(groupAccessibility != nullptr);
+    CHECK(groupAccessibility->getRole() == juce::AccessibilityRole::ignored);
+    CHECK(dividerGroup.getVerticalLine().isAccessible());
+    CHECK(dividerGroup.getVerticalLine().getAccessibilityHandler() != nullptr);
 
     const auto checkStillActive = [&]
     {

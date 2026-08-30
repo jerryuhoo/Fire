@@ -2302,6 +2302,38 @@ TEST_CASE("LFO editor point hover and focus feedback animate only while visible"
     CHECK(LfoEditorTestAccess::hoverAmount(editor) == 0.0f);
 }
 
+TEST_CASE("LFO editor discards focus animation when its workspace ancestor hides",
+          "[lfo][editor][ui][animation][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 1000, 500);
+    panel.setVisible(true);
+
+    auto* editor = findLfoEditor(panel);
+    REQUIRE(editor != nullptr);
+    editor->setDataToDisplay(
+        makeLfoData({ { 0.0f, 0.2f }, { 1.0f, 0.8f } }));
+
+    LfoEditorTestAccess::focusGained(*editor);
+    LfoEditorTestAccess::tickAnimation(*editor);
+    REQUIRE(LfoEditorTestAccess::focusAmount(*editor) > 0.0f);
+
+    // JUCE does not send visibilityChanged() to a child when only its parent
+    // is hidden. LfoPanel's workspace cleanup must still clear the animation
+    // synchronously because the hidden child's timer cannot finish the fade.
+    panel.setVisible(false);
+    CHECK(LfoEditorTestAccess::focusAmount(*editor) == 0.0f);
+    CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(*editor));
+
+    panel.setVisible(true);
+    CHECK(LfoEditorTestAccess::focusAmount(*editor) == 0.0f);
+    CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(*editor));
+}
+
 TEST_CASE("LFO editor point hit radius follows its visual scale",
           "[lfo][editor][ui][scale]")
 {

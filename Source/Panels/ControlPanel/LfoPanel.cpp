@@ -185,6 +185,19 @@ void LfoEditor::dismissTransientInteraction()
 {
     invalidateContextMenuSession();
     cancelAllInteraction();
+
+    // A workspace or editor ancestor can become hidden without delivering a
+    // visibilityChanged() callback to this child. focusLost() cannot animate
+    // to zero in that state because the animation timer deliberately does not
+    // run for hidden hierarchies, so discard the now-invisible focus frame
+    // synchronously. This prevents a stale ring from reappearing when the same
+    // workspace is shown again.
+    if (! isVisibleInHierarchy(*this))
+    {
+        focusAnimation.snapTo(0.0f);
+        stopTimer();
+    }
+
     repaint();
 }
 

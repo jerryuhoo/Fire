@@ -601,6 +601,58 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
         });
     }
 
+    SECTION("accessibility toggle preserves radio-group selection")
+    {
+        juce::Component parent;
+        parent.setBounds(0, 0, 180, 40);
+        parent.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        parent.setVisible(true);
+
+        PrimaryTextButton first { "Band Lab" };
+        PrimaryTextButton second { "Mod Forge" };
+        first.setBounds(0, 0, 80, 24);
+        second.setBounds(90, 0, 80, 24);
+        parent.addAndMakeVisible(first);
+        parent.addAndMakeVisible(second);
+
+        constexpr int workspaceGroup = 1907;
+        first.setClickingTogglesState(true);
+        second.setClickingTogglesState(true);
+        first.setRadioGroupId(workspaceGroup);
+        second.setRadioGroupId(workspaceGroup);
+        first.setToggleState(true, juce::dontSendNotification);
+
+        int firstClickCount = 0;
+        int secondClickCount = 0;
+        first.onClick = [&firstClickCount] { ++firstClickCount; };
+        second.onClick = [&secondClickCount] { ++secondClickCount; };
+
+        auto* firstAccessibility = first.getAccessibilityHandler();
+        auto* secondAccessibility = second.getAccessibilityHandler();
+        REQUIRE(firstAccessibility != nullptr);
+        REQUIRE(secondAccessibility != nullptr);
+        CHECK(firstAccessibility->getRole()
+              == juce::AccessibilityRole::radioButton);
+        CHECK(secondAccessibility->getRole()
+              == juce::AccessibilityRole::radioButton);
+
+        REQUIRE(firstAccessibility->getActions().invoke(
+            juce::AccessibilityActionType::toggle));
+        CHECK(first.getToggleState());
+        CHECK_FALSE(second.getToggleState());
+        CHECK(firstClickCount == 0);
+        CHECK(secondClickCount == 0);
+
+        REQUIRE(secondAccessibility->getActions().invoke(
+            juce::AccessibilityActionType::toggle));
+        CHECK_FALSE(first.getToggleState());
+        CHECK(second.getToggleState());
+        // JUCE notifies the deselected sibling as part of a normal radio
+        // click, so accessibility must preserve that existing contract too.
+        CHECK(firstClickCount == 1);
+        CHECK(secondClickCount == 1);
+    }
+
     SECTION("hidden and peer-detached commands are inert")
     {
         forEachShowingPrimaryButtonType([](auto& button)

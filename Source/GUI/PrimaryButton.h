@@ -132,11 +132,26 @@ private:
                 juce::AccessibilityActionType::toggle,
                 [&button]
                 {
-                    if (canActivateButton(button))
-                        // This matches JUCE's ButtonAccessibilityHandler:
-                        // sendNotification also invokes click listeners/onClick.
-                        button.setToggleState(! button.getToggleState(),
-                                              juce::sendNotification);
+                    if (! canActivateButton(button))
+                        return;
+
+                    if (button.getRadioGroupId() != 0)
+                    {
+                        // A radio action selects an option; it must never leave
+                        // the group with no selected item. Route a new
+                        // selection through the normal click path so listeners
+                        // and sibling deselection keep their JUCE semantics.
+                        // This must remain the final operation because a click
+                        // listener may delete the button.
+                        if (! button.getToggleState())
+                            button.triggerClick();
+                        return;
+                    }
+
+                    // This matches JUCE's ButtonAccessibilityHandler:
+                    // sendNotification also invokes click listeners/onClick.
+                    button.setToggleState(! button.getToggleState(),
+                                          juce::sendNotification);
                 });
 
         return actions;

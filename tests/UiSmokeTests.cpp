@@ -1316,6 +1316,83 @@ TEST_CASE("Hidden editor transient cleanup runs once per peer session",
           == detachedCleanupCount);
 }
 
+TEST_CASE("A provisional no-peer cleanup cannot consume a later explicit hide",
+          "[ui][editor][hidden][lifecycle][gesture][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+
+    editor->setVisible(true);
+    REQUIRE_FALSE(editor->isShowing());
+    editor->timerCallback();
+    const auto provisionalCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+
+    editor->timerCallback();
+    CHECK(EditorHiddenSessionTestAccess::cleanupCount(*editor)
+          == provisionalCleanupCount);
+
+    // This is a real lifecycle boundary even without a desktop peer.  Tests
+    // and hosts can begin parameter gestures on the visible component tree,
+    // so setVisible(false) must not inherit the provisional one-shot guard.
+    editor->setVisible(false);
+    const auto hiddenCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(hiddenCleanupCount == provisionalCleanupCount + 1);
+
+    editor->setVisible(false);
+    editor->timerCallback();
+    CHECK(EditorHiddenSessionTestAccess::cleanupCount(*editor)
+          == hiddenCleanupCount);
+}
+
+TEST_CASE("A detached editor rearms no-peer visibility sessions",
+          "[ui][editor][hidden][lifecycle][reattach][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    REQUIRE(editor->isShowing());
+    editor->timerCallback();
+    const auto visibleCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+
+    editor->removeFromDesktop();
+    REQUIRE_FALSE(editor->isShowing());
+    editor->timerCallback();
+    const auto detachedCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(detachedCleanupCount == visibleCleanupCount + 1);
+
+    editor->setVisible(false);
+    CHECK(EditorHiddenSessionTestAccess::cleanupCount(*editor)
+          == detachedCleanupCount);
+
+    // The update-check state remains hidden after peer removal.  Component
+    // visibility still starts its own provisional session and must rearm the
+    // following explicit hide independently of that unrelated cached state.
+    editor->setVisible(true);
+    REQUIRE_FALSE(editor->isShowing());
+    editor->timerCallback();
+    const auto noPeerVisibleCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(noPeerVisibleCleanupCount == detachedCleanupCount + 1);
+
+    editor->setVisible(false);
+    const auto finalHiddenCleanupCount =
+        EditorHiddenSessionTestAccess::cleanupCount(*editor);
+    CHECK(finalHiddenCleanupCount == noPeerVisibleCleanupCount + 1);
+
+    editor->timerCallback();
+    CHECK(EditorHiddenSessionTestAccess::cleanupCount(*editor)
+          == finalHiddenCleanupCount);
+}
+
 TEST_CASE("Fire settings dialog uses the shared visual language", "[ui][smoke]")
 {
     FireAudioProcessor processor;

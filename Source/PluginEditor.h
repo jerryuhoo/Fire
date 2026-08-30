@@ -179,6 +179,8 @@ private:
     bool spectrumBypassPresentationInitialised = false;
     fire::ui::DampedValue hostBypassIndicatorOpacity;
     bool hiddenUiCleanupComplete = false;
+    bool provisionalUiCleanupComplete = false;
+    bool editorOwnVisibilityWasHidden = false;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::uint64_t hiddenUiCleanupCountForTesting = 0;
 #endif

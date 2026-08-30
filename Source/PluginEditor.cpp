@@ -709,9 +709,15 @@ void FireAudioProcessorEditor::visibilityChanged()
 
     updateUpdateCheckVisibilitySession();
 
+    const bool ownVisibility = isVisible();
+    const bool resumedNoPeerOwnVisibility =
+        ownVisibility && editorOwnVisibilityWasHidden;
+    editorOwnVisibilityWasHidden = ! ownVisibility;
+
     if (isShowing())
     {
         hiddenUiCleanupComplete = false;
+        provisionalUiCleanupComplete = false;
         // A hidden peer may have crossed an entire bypass session without an
         // editor timer tick. Reattach from a clear frame and synchronise the
         // final processor state before any retained path can be painted.
@@ -720,13 +726,38 @@ void FireAudioProcessorEditor::visibilityChanged()
     }
     else
     {
-        if (hiddenUiCleanupComplete)
-            return;
+        bool isProvisionalVisibleState = false;
+        {
+            const juce::ScopedLock lock(updateResultLock);
+            isProvisionalVisibleState =
+                ownVisibility
+                && (resumedNoPeerOwnVisibility
+                    || provisionalUiCleanupComplete
+                    || updateCheckVisibilityState
+                           == UpdateCheckVisibilityState::provisional);
+        }
+
+        if (isProvisionalVisibleState)
+        {
+            // A visible Component without a desktop peer is not a completed
+            // hidden session. It still gets one provisional cleanup pass,
+            // but must leave a later explicit hide armed.
+            hiddenUiCleanupComplete = false;
+            if (provisionalUiCleanupComplete)
+                return;
+            provisionalUiCleanupComplete = true;
+        }
+        else
+        {
+            provisionalUiCleanupComplete = false;
+            if (hiddenUiCleanupComplete)
+                return;
+            hiddenUiCleanupComplete = true;
+        }
 
         // Closing or detaching the peer is a session boundary. Perform the
         // potentially broad transient-state cleanup once for that boundary,
         // rather than repeating it on every 60 Hz timer tick while hidden.
-        hiddenUiCleanupComplete = true;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         ++hiddenUiCleanupCountForTesting;
 #endif
@@ -1132,19 +1163,39 @@ void FireAudioProcessorEditor::timerCallback()
     if (! isShowing())
     {
         bool visibleEditorSessionEnded = false;
+        bool isProvisionalVisibleState = false;
         {
             const juce::ScopedLock lock(updateResultLock);
+            const bool ownVisibility = isVisible();
+            if (! ownVisibility)
+                editorOwnVisibilityWasHidden = true;
             visibleEditorSessionEnded =
                 updateCheckVisibilityState
                 == UpdateCheckVisibilityState::hidden;
+            isProvisionalVisibleState =
+                ownVisibility
+                && (provisionalUiCleanupComplete
+                    || updateCheckVisibilityState
+                           == UpdateCheckVisibilityState::provisional);
         }
 
-        if (hiddenUiCleanupComplete)
-            return;
+        if (isProvisionalVisibleState)
+        {
+            hiddenUiCleanupComplete = false;
+            if (provisionalUiCleanupComplete)
+                return;
+            provisionalUiCleanupComplete = true;
+        }
+        else
+        {
+            provisionalUiCleanupComplete = false;
+            if (hiddenUiCleanupComplete)
+                return;
+            hiddenUiCleanupComplete = true;
+        }
 
         // A host may detach the peer without delivering visibilityChanged().
         // The timer owns the same one-shot cleanup fallback for that case.
-        hiddenUiCleanupComplete = true;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         ++hiddenUiCleanupCountForTesting;
 #endif
@@ -1239,6 +1290,8 @@ void FireAudioProcessorEditor::timerCallback()
     // A reattached peer begins a new visible session. The next hide/detach
     // must therefore be allowed to run one cleanup pass again.
     hiddenUiCleanupComplete = false;
+    provisionalUiCleanupComplete = false;
+    editorOwnVisibilityWasHidden = false;
 
     if (hasLatestDistortionGraphValues)
     {

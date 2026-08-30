@@ -92,6 +92,12 @@ struct ModulationMatrixRowTestAccess
         row.amountSlider.updateAnimationTargets();
     }
 
+    static bool isAmountKeyboardFocusVisible(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.amountSlider.keyboardFocusVisible;
+    }
+
     static const ModulationMatrixRoutingComboBox& getSourceMenu(
         const ModulationMatrixRow& row) noexcept
     {
@@ -1893,6 +1899,78 @@ TEST_CASE("Modulation matrix amount uses continuous shared slider feedback",
 
     amountSlider->setEnabled(false);
     CHECK(animation->getDisabledAnimation() == Catch::Approx(1.0f));
+}
+
+TEST_CASE("Modulation matrix amount distinguishes pointer and keyboard focus",
+          "[ui][modulation-matrix][amount-slider][input][focus][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    {
+        const juce::ScopedLock lock(processor.getLfoManager().getLfoDataLock());
+        processor.getLfoManager().getModulationRoutings().add(routing);
+    }
+
+    juce::Component host;
+    host.setBounds(0, 0, 760, 80);
+    host.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    host.setVisible(true);
+    ModulationMatrixRow row(
+        processor,
+        0,
+        routing,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
+    host.addAndMakeVisible(row);
+    row.setBounds(0, 0, 760, 40);
+    row.resized();
+
+    auto* amountSlider = findAmountSlider(row);
+    REQUIRE(amountSlider != nullptr);
+    REQUIRE(amountSlider->isShowing());
+    amountSlider->grabKeyboardFocus();
+    REQUIRE(amountSlider->hasKeyboardFocus(true));
+    amountSlider->focusGained(juce::Component::focusChangedByTabKey);
+    CHECK(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+
+    amountSlider->focusGained(juce::Component::focusChangedByMouseClick);
+    CHECK_FALSE(
+        ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+
+    // The first subsequent keyboard event restores the navigation cue even
+    // when the key itself is not a Slider edit command.
+    amountSlider->keyPressed(juce::KeyPress { juce::KeyPress::escapeKey });
+    CHECK(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+
+    const auto position = amountSlider->getLocalBounds().toFloat().getCentre();
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    amountSlider->mouseDown(makeMouseEvent(*amountSlider,
+                                           position,
+                                           primary,
+                                           position,
+                                           false));
+    CHECK_FALSE(
+        ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+    amountSlider->mouseUp(makeMouseEvent(*amountSlider,
+                                         position,
+                                         {},
+                                         position,
+                                         false));
+    CHECK_FALSE(
+        ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+
+    amountSlider->focusGained(juce::Component::focusChangedDirectly);
+    CHECK(ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
+    amountSlider->focusLost(juce::Component::focusChangedDirectly);
+    CHECK_FALSE(
+        ModulationMatrixRowTestAccess::isAmountKeyboardFocusVisible(row));
 }
 
 TEST_CASE("Modulation matrix row dismissal closes amount and button gestures",

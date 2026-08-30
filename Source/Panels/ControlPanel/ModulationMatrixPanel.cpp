@@ -611,6 +611,20 @@ ModulationMatrixRow::PrimaryButtonSlider::createAccessibilityHandler()
         *this);
 }
 
+bool ModulationMatrixRow::PrimaryButtonSlider::keyPressed(
+    const juce::KeyPress& key)
+{
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        updateAnimationTargets();
+    }
+
+    // A keyboard edit may synchronously notify code that deletes this row, so
+    // dispatching to JUCE remains the final operation.
+    return juce::Slider::keyPressed(key);
+}
+
 void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
     const juce::MouseEvent& event)
 {
@@ -632,6 +646,7 @@ void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
         || event.mods.isPopupMenu())
         return;
 
+    keyboardFocusVisible = false;
     primaryGestureInProgress = true;
     pointerSourceType = event.source.getType();
     pointerSourceIndex = event.source.getIndex();
@@ -751,7 +766,10 @@ void ModulationMatrixRow::PrimaryButtonSlider::focusGained(
     const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
     juce::Slider::focusGained(cause);
     if (safeThis != nullptr)
+    {
+        keyboardFocusVisible = cause != focusChangedByMouseClick;
         updateAnimationTargets();
+    }
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::focusLost(
@@ -760,7 +778,10 @@ void ModulationMatrixRow::PrimaryButtonSlider::focusLost(
     const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
     juce::Slider::focusLost(cause);
     if (safeThis != nullptr)
+    {
+        keyboardFocusVisible = false;
         updateAnimationTargets();
+    }
 }
 
 bool ModulationMatrixRow::PrimaryButtonSlider::isPointerSource(
@@ -843,6 +864,7 @@ void ModulationMatrixRow::PrimaryButtonSlider::updateAnimationTargets() noexcept
     if (! isShowing())
     {
         stopTimer();
+        keyboardFocusVisible = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
         focusAnimation.snapTo(0.0f);
@@ -852,9 +874,15 @@ void ModulationMatrixRow::PrimaryButtonSlider::updateAnimationTargets() noexcept
     }
 
     const auto interactive = isEnabled();
+    if (! interactive)
+        keyboardFocusVisible = false;
+
     hoverAnimation.setTarget(interactive && isMouseOver(true) ? 1.0f : 0.0f);
     pressAnimation.setTarget(interactive && primaryGestureInProgress ? 1.0f : 0.0f);
-    focusAnimation.setTarget(interactive && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    focusAnimation.setTarget(interactive && keyboardFocusVisible
+                                 && hasKeyboardFocus(true)
+                             ? 1.0f
+                             : 0.0f);
     disabledAnimation.setTarget(interactive ? 0.0f : 1.0f);
     if (! animationsSettled() && ! isTimerRunning())
         startTimerHz(60);

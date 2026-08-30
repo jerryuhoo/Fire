@@ -173,6 +173,7 @@ private:
         float getPressAnimation() const noexcept override;
         float getFocusAnimation() const noexcept override;
         float getDisabledAnimation() const noexcept override;
+        bool keyPressed(const juce::KeyPress& key) override;
         void mouseDown(const juce::MouseEvent& event) override;
         void mouseDrag(const juce::MouseEvent& event) override;
         void mouseEnter(const juce::MouseEvent& event) override;
@@ -213,6 +214,7 @@ private:
         int pointerSourceIndex = -1;
         std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
         bool primaryGestureInProgress = false;
+        bool keyboardFocusVisible = false;
         bool pointerDispatchInProgress = false;
         bool rebuildAfterPointerDispatch = false;
         bool notifyHostAfterPointerDispatch = false;

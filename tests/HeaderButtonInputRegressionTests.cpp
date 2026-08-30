@@ -96,6 +96,16 @@ void forEachPrimaryButtonType(Callback&& callback)
     callback(hyperlinkButton);
 }
 
+template <typename Callback>
+void forEachShowingPrimaryButtonType(Callback&& callback)
+{
+    forEachPrimaryButtonType([&callback](auto& button)
+    {
+        button.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        callback(button);
+    });
+}
+
 std::vector<juce::ModifierKeys> rejectedPointerModifiers()
 {
     std::vector<juce::ModifierKeys> result {
@@ -544,17 +554,17 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
 
     SECTION("accessibility press")
     {
-        forEachPrimaryButtonType([](auto& button)
+        forEachShowingPrimaryButtonType([](auto& button)
         {
             int clickCount = 0;
             button.setClickingTogglesState(true);
             button.onClick = [&clickCount] { ++clickCount; };
-            button.addToDesktop(juce::ComponentPeer::windowIsTemporary);
-            const juce::ScopeGuard removeFromDesktop {
-                [&button] { button.removeFromDesktop(); }
-            };
             auto* accessibility = button.getAccessibilityHandler();
             REQUIRE(accessibility != nullptr);
+            CHECK(accessibility->getRole()
+                  == fire::ui::getButtonAccessibilityRole<
+                         std::remove_cvref_t<decltype(button)>>());
+            CHECK(accessibility->getValueInterface() != nullptr);
 
             REQUIRE(accessibility->getActions().invoke(
                 juce::AccessibilityActionType::press));
@@ -564,12 +574,64 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
             juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
             CHECK(button.getToggleState());
             CHECK(clickCount == 1);
+
+            REQUIRE(accessibility->getActions().contains(
+                juce::AccessibilityActionType::toggle));
+            REQUIRE(accessibility->getActions().invoke(
+                juce::AccessibilityActionType::toggle));
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 2);
+
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+            CHECK_FALSE(button.getToggleState());
+            CHECK(clickCount == 2);
+        });
+    }
+
+    SECTION("hidden and peer-detached commands are inert")
+    {
+        forEachShowingPrimaryButtonType([](auto& button)
+        {
+            int clickCount = 0;
+            button.setClickingTogglesState(true);
+            button.onClick = [&clickCount] { ++clickCount; };
+            auto* accessibility = button.getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+            REQUIRE(accessibility->getActions().contains(
+                juce::AccessibilityActionType::press));
+            REQUIRE(accessibility->getActions().contains(
+                juce::AccessibilityActionType::toggle));
+
+            const auto checkInert = [&]
+            {
+                CHECK_FALSE(static_cast<juce::Component&>(button).keyPressed(
+                    juce::KeyPress { juce::KeyPress::returnKey }));
+                CHECK_FALSE(static_cast<juce::Component&>(button).keyPressed(
+                    juce::KeyPress { juce::KeyPress::spaceKey }));
+                REQUIRE(accessibility->getActions().invoke(
+                    juce::AccessibilityActionType::press));
+                REQUIRE(accessibility->getActions().invoke(
+                    juce::AccessibilityActionType::toggle));
+                CHECK_FALSE(button.getToggleState());
+                CHECK(clickCount == 0);
+            };
+
+            button.setVisible(false);
+            REQUIRE_FALSE(button.isShowing());
+            checkInert();
+
+            button.setVisible(true);
+            REQUIRE(button.isShowing());
+            button.removeFromDesktop();
+            REQUIRE(button.isVisible());
+            REQUIRE_FALSE(button.isShowing());
+            checkInert();
         });
     }
 
     SECTION("Return and Space keys")
     {
-        forEachPrimaryButtonType([](auto& button)
+        forEachShowingPrimaryButtonType([](auto& button)
         {
             int clickCount = 0;
             button.setClickingTogglesState(true);
@@ -618,6 +680,9 @@ TEST_CASE("Primary button commands may synchronously delete their control",
     const auto invokeDeletingCommand = [](const auto& invoke)
     {
         auto button = std::make_unique<PrimaryTextButton>("Delete");
+        button->setBounds(0, 0, 80, 24);
+        button->setVisible(true);
+        button->addToDesktop(juce::ComponentPeer::windowIsTemporary);
         button->onClick = [&button] { button.reset(); };
         auto* rawButton = button.get();
 
@@ -755,6 +820,8 @@ TEST_CASE("A-B header actions survive synchronous editor deletion by the host",
     FireAudioProcessor processor;
     processor.hasUpdateCheckBeenPerformed = true;
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
     DeleteEditorOnStateNotification deleteOnChange(processor, editor);
 
     SECTION("toggle A-B")

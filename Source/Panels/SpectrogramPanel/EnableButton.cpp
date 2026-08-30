@@ -192,7 +192,7 @@ bool EnableButton::keyPressed(const juce::KeyPress& key)
     if (key.isKeyCode(juce::KeyPress::returnKey)
         || key.isKeyCode(juce::KeyPress::spaceKey))
     {
-        if (! isEnabled() || ! isVisibleInHierarchy(*this))
+        if (! fire::ui::canActivateButton(*this))
             return false;
 
         // Button::keyPressed queues triggerClick(). Commit while this visible
@@ -207,13 +207,20 @@ bool EnableButton::keyPressed(const juce::KeyPress& key)
 
 void EnableButton::triggerClick()
 {
-    if (! isEnabled() || ! isVisibleInHierarchy(*this))
+    if (! fire::ui::canTriggerButtonProgrammatically(*this))
         return;
 
     // Accessibility press actions also arrive through triggerClick(). Commit
     // at invocation time instead of replaying the request after a topology
     // change. The callback may delete this button, so it is final.
     internalClickCallback(juce::ModifierKeys::currentModifiers);
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+EnableButton::createAccessibilityHandler()
+{
+    return fire::ui::createGuardedButtonAccessibilityHandler(
+        *this, juce::AccessibilityRole::toggleButton);
 }
 
 void EnableButton::visibilityChanged()

@@ -384,6 +384,8 @@ TEST_CASE("Band button Return activates its current attachment synchronously",
     setParameterValue(processor, band1ID, 0.0f);
     BandPanel panel(processor, {}, {}, {}, {}, {});
     panel.setBounds(0, 0, 1000, 500);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
     auto* band0Parameter = processor.treeState.getParameter(band0ID);
     auto* band1Parameter = processor.treeState.getParameter(band1ID);
     REQUIRE(band0Parameter != nullptr);
@@ -398,6 +400,9 @@ TEST_CASE("Band button Return activates its current attachment synchronously",
         band1Parameter->removeListener(&band1Gestures);
     } };
 
+    REQUIRE(panel.driveBypassButton.isEnabled());
+    REQUIRE(panel.driveBypassButton.isVisible());
+    REQUIRE(panel.driveBypassButton.isShowing());
     REQUIRE(panel.driveBypassButton.keyPressed(
         juce::KeyPress { juce::KeyPress::returnKey }));
     CHECK(band0Parameter->getValue() == 1.0f);

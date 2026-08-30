@@ -133,6 +133,16 @@ void forEachBandToggle(Callback&& callback)
     }
 }
 
+template <typename Callback>
+void forEachShowingBandToggle(Callback&& callback)
+{
+    forEachBandToggle([&callback](auto& button)
+    {
+        button.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        callback(button);
+    });
+}
+
 template <typename ButtonType>
 void checkRejectedGesture(ButtonType& button,
                           juce::ModifierKeys downModifiers,
@@ -158,6 +168,7 @@ void checkActivationMayDeleteButton(const juce::KeyPress& key)
     auto button = std::make_unique<ButtonType>();
     button->setBounds(0, 0, 24, 24);
     button->setVisible(true);
+    button->addToDesktop(juce::ComponentPeer::windowIsTemporary);
     auto* rawButton = button.get();
     rawButton->onClick = [&button] { button.reset(); };
 
@@ -473,7 +484,7 @@ TEST_CASE("Band toggles preserve keyboard and programmatic activation",
 
     SECTION("Return key")
     {
-        forEachBandToggle([](auto& button)
+        forEachShowingBandToggle([](auto& button)
         {
             int clickCount = 0;
             button.onClick = [&clickCount] { ++clickCount; };
@@ -493,7 +504,7 @@ TEST_CASE("Band toggles preserve keyboard and programmatic activation",
 
     SECTION("Space key")
     {
-        forEachBandToggle([](auto& button)
+        forEachShowingBandToggle([](auto& button)
         {
             int clickCount = 0;
             button.onClick = [&clickCount] { ++clickCount; };
@@ -537,6 +548,43 @@ TEST_CASE("Band toggle commands cannot outlive their visible topology slot",
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
         CHECK_FALSE(button.getToggleState());
         CHECK(clickCount == 1);
+    });
+}
+
+TEST_CASE("Cached band toggle accessibility actions reject peer detachment",
+          "[band-toggle][multiband][ui][input][accessibility][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    forEachShowingBandToggle([](auto& button)
+    {
+        int clickCount = 0;
+        button.onClick = [&clickCount] { ++clickCount; };
+        auto* accessibility = button.getAccessibilityHandler();
+        REQUIRE(accessibility != nullptr);
+        CHECK(accessibility->getRole()
+              == juce::AccessibilityRole::toggleButton);
+        CHECK(accessibility->getValueInterface() != nullptr);
+        REQUIRE(accessibility->getActions().contains(
+            juce::AccessibilityActionType::press));
+        REQUIRE(accessibility->getActions().contains(
+            juce::AccessibilityActionType::toggle));
+
+        button.removeFromDesktop();
+        REQUIRE(button.isVisible());
+        REQUIRE_FALSE(button.isShowing());
+
+        CHECK_FALSE(static_cast<juce::Component&>(button).keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK_FALSE(static_cast<juce::Component&>(button).keyPressed(
+            juce::KeyPress { juce::KeyPress::spaceKey }));
+        REQUIRE(accessibility->getActions().invoke(
+            juce::AccessibilityActionType::press));
+        REQUIRE(accessibility->getActions().invoke(
+            juce::AccessibilityActionType::toggle));
+
+        CHECK_FALSE(button.getToggleState());
+        CHECK(clickCount == 0);
     });
 }
 

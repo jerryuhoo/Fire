@@ -20,16 +20,6 @@ bool isPrimaryPointerDown(const juce::MouseEvent& event) noexcept
         && ! event.mods.isMiddleButtonDown();
 }
 
-bool isVisibleInHierarchy(const juce::Component& component) noexcept
-{
-    for (auto* current = &component;
-         current != nullptr;
-         current = current->getParentComponent())
-        if (! current->isVisible())
-            return false;
-
-    return true;
-}
 } // namespace
 
 //==============================================================================
@@ -292,8 +282,7 @@ bool CloseButton::keyPressed(const juce::KeyPress& key)
         || key.isKeyCode(juce::KeyPress::spaceKey))
     {
         if (! presentationTarget
-            || ! isEnabled()
-            || ! isVisibleInHierarchy(*this))
+            || ! fire::ui::canActivateButton(*this))
             return false;
 
         // Button::keyPressed queues triggerClick(). Delete the band while this
@@ -309,14 +298,20 @@ bool CloseButton::keyPressed(const juce::KeyPress& key)
 void CloseButton::triggerClick()
 {
     if (! presentationTarget
-        || ! isEnabled()
-        || ! isVisibleInHierarchy(*this))
+        || ! fire::ui::canTriggerButtonProgrammatically(*this))
         return;
 
     // Accessibility presses are committed at invocation time rather than
     // being replayed after the hover target changes. The deletion callback
     // may destroy this button, so this is final.
     internalClickCallback(juce::ModifierKeys::currentModifiers);
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+CloseButton::createAccessibilityHandler()
+{
+    return fire::ui::createGuardedButtonAccessibilityHandler(
+        *this, juce::AccessibilityRole::button);
 }
 
 void CloseButton::visibilityChanged()

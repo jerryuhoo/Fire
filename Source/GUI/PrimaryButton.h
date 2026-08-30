@@ -25,6 +25,153 @@ public:
     virtual float getDisabledAnimation() const noexcept = 0;
 };
 
+namespace fire::ui
+{
+// Keyboard and accessibility are user-input paths, so the button must still
+// belong to a live, visible peer when the command is dispatched.
+inline bool canActivateButton(const juce::Button& button) noexcept
+{
+    return button.isEnabled() && button.isShowing();
+}
+
+// Preserve the pre-existing explicit-trigger contract of the spectrogram
+// controls: a hidden hierarchy is inert, but a test/owner may deliberately
+// trigger a visible off-desktop control.
+inline bool canTriggerButtonProgrammatically(
+    const juce::Button& button) noexcept
+{
+    if (! button.isEnabled())
+        return false;
+
+    for (auto* component = static_cast<const juce::Component*>(&button);
+         component != nullptr;
+         component = component->getParentComponent())
+        if (! component->isVisible())
+            return false;
+
+    return true;
+}
+
+class GuardedButtonValueInterface final
+    : public juce::AccessibilityTextValueInterface
+{
+public:
+    explicit GuardedButtonValueInterface(juce::Button& buttonToWrap)
+        : button(buttonToWrap)
+    {
+    }
+
+    bool isReadOnly() const override { return true; }
+
+    juce::String getCurrentValueAsString() const override
+    {
+        return button.getToggleState() ? "On" : "Off";
+    }
+
+    void setValueAsString(const juce::String&) override {}
+
+private:
+    juce::Button& button;
+};
+
+class GuardedButtonAccessibilityHandler final
+    : public juce::AccessibilityHandler
+{
+public:
+    GuardedButtonAccessibilityHandler(juce::Button& buttonToWrap,
+                                      juce::AccessibilityRole role)
+        : juce::AccessibilityHandler(
+              buttonToWrap,
+              buttonToWrap.getRadioGroupId() != 0
+                  ? juce::AccessibilityRole::radioButton
+                  : role,
+              makeActions(buttonToWrap),
+              makeInterfaces(buttonToWrap)),
+          button(buttonToWrap)
+    {
+    }
+
+    juce::AccessibleState getCurrentState() const override
+    {
+        auto state = juce::AccessibilityHandler::getCurrentState();
+
+        if (button.isToggleable())
+        {
+            state = state.withCheckable();
+            if (button.getToggleState())
+                state = state.withChecked();
+        }
+
+        return state;
+    }
+
+    juce::String getTitle() const override
+    {
+        const auto title = juce::AccessibilityHandler::getTitle();
+        return title.isEmpty() ? button.getButtonText() : title;
+    }
+
+    juce::String getHelp() const override
+    {
+        return button.getTooltip();
+    }
+
+private:
+    static juce::AccessibilityActions makeActions(juce::Button& button)
+    {
+        auto actions = juce::AccessibilityActions().addAction(
+            juce::AccessibilityActionType::press,
+            [&button]
+            {
+                if (canActivateButton(button))
+                    button.triggerClick();
+            });
+
+        if (button.isToggleable())
+            actions.addAction(
+                juce::AccessibilityActionType::toggle,
+                [&button]
+                {
+                    if (canActivateButton(button))
+                        // This matches JUCE's ButtonAccessibilityHandler:
+                        // sendNotification also invokes click listeners/onClick.
+                        button.setToggleState(! button.getToggleState(),
+                                              juce::sendNotification);
+                });
+
+        return actions;
+    }
+
+    static Interfaces makeInterfaces(juce::Button& button)
+    {
+        if (button.isToggleable())
+            return { std::make_unique<GuardedButtonValueInterface>(button) };
+
+        return {};
+    }
+
+    juce::Button& button;
+};
+
+inline std::unique_ptr<juce::AccessibilityHandler>
+createGuardedButtonAccessibilityHandler(juce::Button& button,
+                                        juce::AccessibilityRole role)
+{
+    return std::make_unique<GuardedButtonAccessibilityHandler>(button, role);
+}
+
+template <typename ButtonType>
+constexpr juce::AccessibilityRole getButtonAccessibilityRole() noexcept
+{
+    if constexpr (std::is_base_of_v<juce::ToggleButton, ButtonType>)
+        return juce::AccessibilityRole::toggleButton;
+    else if constexpr (std::is_base_of_v<juce::HyperlinkButton, ButtonType>)
+        return juce::AccessibilityRole::hyperlink;
+    else
+        return juce::AccessibilityRole::button;
+}
+} // namespace fire::ui
+
 /** A JUCE button that accepts pointer clicks only from an owned primary gesture.
 
     Keyboard and accessibility/programmatic activation are synchronous so a
@@ -54,9 +201,11 @@ public:
     {
         if (this->isEnabled())
         {
-            // Accessibility press actions route through triggerClick(). Submit
-            // now so the command cannot land on a later band/LFO binding. This
-            // must remain the final operation because it may delete the button.
+            // Keep JUCE's explicit programmatic trigger semantics: unlike user
+            // input, triggerClick() is allowed off-desktop. The guarded
+            // accessibility action has already required isShowing(). Submit now
+            // so the command cannot land on a later band/LFO binding. This must
+            // remain the final operation because it may delete the button.
             this->internalClickCallback(
                 juce::ModifierKeys::currentModifiers);
         }
@@ -185,9 +334,11 @@ public:
             key.isKeyCode(juce::KeyPress::returnKey)
             || key.isKeyCode(juce::KeyPress::spaceKey);
 
-        if (this->isEnabled()
-            && isActivationKey)
+        if (isActivationKey)
         {
+            if (! fire::ui::canActivateButton(*this))
+                return false;
+
             // Button::keyPressed queues triggerClick(). Invoke the normal
             // callback now so it cannot land on a later attachment target.
             // This must remain the final operation because it may delete this
@@ -262,6 +413,14 @@ public:
 
 private:
     friend struct PrimaryButtonTestAccess;
+
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override
+    {
+        return fire::ui::createGuardedButtonAccessibilityHandler(
+            *this,
+            fire::ui::getButtonAccessibilityRole<ButtonType>());
+    }
 
     enum class PointerGesture
     {

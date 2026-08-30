@@ -177,7 +177,7 @@ bool SoloButton::keyPressed(const juce::KeyPress& key)
     if (key.isKeyCode(juce::KeyPress::returnKey)
         || key.isKeyCode(juce::KeyPress::spaceKey))
     {
-        if (! isEnabled() || ! isVisibleInHierarchy(*this))
+        if (! fire::ui::canActivateButton(*this))
             return false;
 
         // Button::keyPressed queues triggerClick(). Commit while this visible
@@ -192,13 +192,20 @@ bool SoloButton::keyPressed(const juce::KeyPress& key)
 
 void SoloButton::triggerClick()
 {
-    if (! isEnabled() || ! isVisibleInHierarchy(*this))
+    if (! fire::ui::canTriggerButtonProgrammatically(*this))
         return;
 
     // Accessibility press actions also arrive through triggerClick(). Commit
     // at invocation time instead of replaying the request after a topology
     // change. The callback may delete this button, so it is final.
     internalClickCallback(juce::ModifierKeys::currentModifiers);
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+SoloButton::createAccessibilityHandler()
+{
+    return fire::ui::createGuardedButtonAccessibilityHandler(
+        *this, juce::AccessibilityRole::toggleButton);
 }
 
 void SoloButton::visibilityChanged()

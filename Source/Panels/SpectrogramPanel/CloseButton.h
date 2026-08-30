@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../../GUI/FireTheme.h"
+#include "../../GUI/PrimaryButton.h"
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct CloseButtonPointerTestAccess;
@@ -55,6 +56,8 @@ private:
     void mouseUp(const juce::MouseEvent&) override;
     void visibilityChanged() override;
     void enablementChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
     void updateInteractionTargets() noexcept;
     void dismissPointerGesture() noexcept;
     void recoverMissingPointerUp(const juce::MouseEvent&);

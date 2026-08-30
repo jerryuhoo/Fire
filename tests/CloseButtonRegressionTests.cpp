@@ -218,6 +218,7 @@ TEST_CASE("Band deletion requires a primary click",
                      CloseButton::minimumHitTargetSize,
                      CloseButton::minimumHitTargetSize);
     button.setPresented(true, false);
+    button.addToDesktop(juce::ComponentPeer::windowIsTemporary);
 
     int clickCount = 0;
     button.onClick = [&clickCount] { ++clickCount; };
@@ -268,6 +269,7 @@ TEST_CASE("Band deletion activation stays inside the presented session",
                      CloseButton::minimumHitTargetSize,
                      CloseButton::minimumHitTargetSize);
     button.setPresented(true, false);
+    button.addToDesktop(juce::ComponentPeer::windowIsTemporary);
 
     int clickCount = 0;
     button.onClick = [&clickCount] { ++clickCount; };
@@ -310,6 +312,25 @@ TEST_CASE("Band deletion activation stays inside the presented session",
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
         CHECK(clickCount == 0);
     }
+
+    SECTION("cached accessibility rejects peer detachment")
+    {
+        auto* accessibility = button.getAccessibilityHandler();
+        REQUIRE(accessibility != nullptr);
+        CHECK(accessibility->getRole() == juce::AccessibilityRole::button);
+        REQUIRE(accessibility->getActions().contains(
+            juce::AccessibilityActionType::press));
+
+        button.removeFromDesktop();
+        REQUIRE(button.isVisible());
+        REQUIRE_FALSE(button.isShowing());
+
+        CHECK_FALSE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        REQUIRE(accessibility->getActions().invoke(
+            juce::AccessibilityActionType::press));
+        CHECK(clickCount == 0);
+    }
 }
 
 TEST_CASE("Band deletion callbacks may synchronously delete their control",
@@ -324,6 +345,7 @@ TEST_CASE("Band deletion callbacks may synchronously delete their control",
                           CloseButton::minimumHitTargetSize,
                           CloseButton::minimumHitTargetSize);
         button->setPresented(true, false);
+        button->addToDesktop(juce::ComponentPeer::windowIsTemporary);
         return button;
     };
 

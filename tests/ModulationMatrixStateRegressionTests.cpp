@@ -1771,10 +1771,13 @@ TEST_CASE("Modulation matrix primary buttons preserve non-pointer activation",
 
     ModulationMatrixPanel panel(processor);
     panel.setBounds(0, 0, 760, 420);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
     auto* addButton = findTextButton(panel, "+ ADD ROUTE");
     auto* closeButton = findTextButton(panel, "Close");
     REQUIRE(addButton != nullptr);
     REQUIRE(closeButton != nullptr);
+    REQUIRE(closeButton->isShowing());
 
     SECTION("polarity triggerClick")
     {

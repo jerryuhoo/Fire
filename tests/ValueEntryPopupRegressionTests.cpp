@@ -14,6 +14,13 @@ struct ValueEntryPopupTestAccess
         popup.setVisible(true);
     }
 
+    static void openShowing(ValueEntryPopup& popup)
+    {
+        if (popup.getPeer() == nullptr)
+            popup.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        open(popup);
+    }
+
     static void setText(ValueEntryPopup& popup, const juce::String& text)
     {
         popup.editor.setText(text, juce::dontSendNotification);
@@ -83,6 +90,12 @@ struct ValueEntryPopupTestAccess
     static juce::Button& okButton(ValueEntryPopup& popup)
     {
         return popup.okButton;
+    }
+
+    static juce::AccessibilityHandler* okAccessibility(
+        ValueEntryPopup& popup)
+    {
+        return popup.okButton.getAccessibilityHandler();
     }
 
     static void forceOkButtonDown(ValueEntryPopup& popup)
@@ -581,20 +594,48 @@ TEST_CASE("Value entry button Return is synchronous across popup sessions",
         acceptedValue = value;
     };
 
-    ValueEntryPopupTestAccess::open(popup);
+    ValueEntryPopupTestAccess::openShowing(popup);
     ValueEntryPopupTestAccess::setText(popup, "4.5");
     REQUIRE(ValueEntryPopupTestAccess::pressOkReturn(popup));
     CHECK(acceptedCount == 1);
     CHECK(acceptedValue == Catch::Approx(4.5));
     CHECK_FALSE(popup.isVisible());
 
-    ValueEntryPopupTestAccess::open(popup);
+    ValueEntryPopupTestAccess::openShowing(popup);
     ValueEntryPopupTestAccess::setText(popup, "8.5");
     juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
 
     CHECK(acceptedCount == 1);
     CHECK(popup.isVisible());
     CHECK(ValueEntryPopupTestAccess::text(popup) == "8.5");
+}
+
+TEST_CASE("Cached value entry accessibility cannot submit after peer detachment",
+          "[ui][modulation][value-entry][input][accessibility][lifecycle][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ValueEntryPopup popup;
+    int acceptedCount = 0;
+    popup.onOk = [&](double) { ++acceptedCount; };
+
+    ValueEntryPopupTestAccess::openShowing(popup);
+    ValueEntryPopupTestAccess::setText(popup, "4.5");
+    auto* accessibility = ValueEntryPopupTestAccess::okAccessibility(popup);
+    REQUIRE(accessibility != nullptr);
+    REQUIRE(accessibility->getActions().contains(
+        juce::AccessibilityActionType::press));
+
+    popup.removeFromDesktop();
+    REQUIRE(popup.isVisible());
+    REQUIRE_FALSE(popup.isShowing());
+
+    CHECK_FALSE(ValueEntryPopupTestAccess::pressOkReturn(popup));
+    REQUIRE(accessibility->getActions().invoke(
+        juce::AccessibilityActionType::press));
+
+    CHECK(acceptedCount == 0);
+    CHECK(popup.isVisible());
+    CHECK(ValueEntryPopupTestAccess::text(popup) == "4.5");
 }
 
 TEST_CASE("Value entry lifecycle callbacks may delete the popup synchronously",

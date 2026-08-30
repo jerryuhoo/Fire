@@ -12,6 +12,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/FireTheme.h"
+#include "../../GUI/PrimaryButton.h"
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct BandToggleButtonPointerTestAccess;
@@ -50,6 +51,8 @@ private:
     void focusGained(FocusChangeType) override;
     void focusLost(FocusChangeType) override;
     void buttonStateChanged() override;
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
     void timerCallback() override;
     void updateAnimationTargets() noexcept;
     void startAnimationIfNeeded() noexcept;

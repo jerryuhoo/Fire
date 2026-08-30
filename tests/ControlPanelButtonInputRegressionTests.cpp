@@ -58,6 +58,11 @@ struct ContextAwareComboBoxTestAccess
     {
         return comboBox.popupSessionRevision;
     }
+
+    static void capturePopupRequest(ContextAwareComboBox& comboBox)
+    {
+        comboBox.capturePopupRequest();
+    }
 };
 
 struct BandPanelModeTestAccess
@@ -270,6 +275,14 @@ std::vector<juce::ComboBox*> collectDirectComboBoxes(juce::Component& panel)
 void selectGlobalSlopeType(GlobalPanel& panel, bool lowCut)
 {
     panel.setToggleButtonState(lowCut ? "lowcut" : "highcut");
+}
+
+void prepareBandShapePanel(BandPanel& panel)
+{
+    panel.setBounds(0, 0, 1000, 500);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+    panel.setSwitch(1, true);
 }
 
 void prepareGlobalSlopePanel(GlobalPanel& panel, bool lowCut)
@@ -562,9 +575,7 @@ TEST_CASE("BandPanel closes shape mode popups at transient boundaries",
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
     BandPanel panel(processor, {}, {}, {}, {}, {});
-    panel.setBounds(0, 0, 1000, 500);
-    panel.setVisible(true);
-    panel.setSwitch(1, true);
+    prepareBandShapePanel(panel);
 
     const auto modeBoxes = collectDirectComboBoxes(panel);
     REQUIRE(modeBoxes.size() == 4);
@@ -581,6 +592,7 @@ TEST_CASE("BandPanel closes shape mode popups at transient boundaries",
         for (auto* modeBox : modeBoxes)
             modeBox->hidePopup();
         juce::PopupMenu::dismissAllActiveMenus();
+        panel.removeFromDesktop();
     } };
 
     // Return marks the ComboBox popup active synchronously, before JUCE's
@@ -624,9 +636,7 @@ TEST_CASE("BandPanel rejects stale shape mode popup results",
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
     BandPanel panel(processor, {}, {}, {}, {}, {});
-    panel.setBounds(0, 0, 1000, 500);
-    panel.setVisible(true);
-    panel.setSwitch(1, true);
+    prepareBandShapePanel(panel);
 
     const auto band0ID =
         ParameterIDAndName::getIDString(MODE_ID, 0);
@@ -652,6 +662,7 @@ TEST_CASE("BandPanel rejects stale shape mode popup results",
     {
         band0Parameter->removeListener(&band0Gestures);
         band1Parameter->removeListener(&band1Gestures);
+        panel.removeFromDesktop();
     } };
 
     auto staleResult =
@@ -707,9 +718,14 @@ TEST_CASE("BandPanel late shape mode pointer release cannot reopen a popup",
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
     BandPanel panel(processor, {}, {}, {}, {}, {});
-    panel.setBounds(0, 0, 1000, 500);
-    panel.setVisible(true);
-    panel.setSwitch(1, true);
+    prepareBandShapePanel(panel);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        for (auto* modeBox : collectDirectComboBoxes(panel))
+            modeBox->hidePopup();
+        juce::PopupMenu::dismissAllActiveMenus();
+        panel.removeFromDesktop();
+    } };
 
     const auto modeBoxes = collectDirectComboBoxes(panel);
     const auto visibleModeIterator = std::find_if(
@@ -763,9 +779,7 @@ TEST_CASE("BandPanel shape mode commit survives synchronous panel destruction",
         std::function<void(ModulatableSlider*)> {},
         std::function<void(ModulatableSlider*)> {},
         std::function<void(ModulatableSlider*)> {});
-    panel->setBounds(0, 0, 1000, 500);
-    panel->setVisible(true);
-    panel->setSwitch(1, true);
+    prepareBandShapePanel(*panel);
 
     const auto parameterID =
         ParameterIDAndName::getIDString(MODE_ID, 0);
@@ -1580,6 +1594,88 @@ TEST_CASE("Context-aware ComboBox never routes mouse wheel input to an attachmen
     }
 }
 
+TEST_CASE("Context-aware ComboBox rejects cached commands outside its live peer",
+          "[control-panel][ui][combobox][accessibility][lifecycle][stale][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (int boundaryIndex = 0; boundaryIndex < 3; ++boundaryIndex)
+    {
+        const auto* boundaryName = boundaryIndex == 0 ? "hidden"
+                                 : boundaryIndex == 1 ? "disabled"
+                                                      : "peer detached";
+        DYNAMIC_SECTION(boundaryName)
+        {
+            FireAudioProcessor processor;
+            auto* parameter =
+                processor.treeState.getParameter(LOWCUT_SLOPE_ID);
+            REQUIRE(parameter != nullptr);
+            parameter->setValueNotifyingHost(0.0f);
+
+            ContextAwareComboBox comboBox;
+            comboBox.setBounds(0, 0, 120, 28);
+            for (int itemId = 1; itemId <= 4; ++itemId)
+                comboBox.addItem("Slope " + juce::String(itemId), itemId);
+            comboBox.setSelectedId(1, juce::dontSendNotification);
+            comboBox.configurePopupSession(
+                [] { return std::uint64_t { 7 }; },
+                [] { return true; },
+                parameter);
+            comboBox.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            comboBox.setVisible(true);
+            REQUIRE(comboBox.isShowing());
+
+            ParameterGestureRecorder gestures;
+            parameter->addListener(&gestures);
+            const juce::ScopeGuard cleanup { [&]
+            {
+                comboBox.hidePopup();
+                juce::PopupMenu::dismissAllActiveMenus();
+                comboBox.removeFromDesktop();
+                parameter->removeListener(&gestures);
+            } };
+
+            auto* accessibility = comboBox.getAccessibilityHandler();
+            REQUIRE(accessibility != nullptr);
+            REQUIRE(accessibility->getActions().contains(
+                juce::AccessibilityActionType::press));
+            auto cachedResult =
+                ContextAwareComboBoxTestAccess::createPopupResultHandler(
+                    comboBox);
+            ContextAwareComboBoxTestAccess::capturePopupRequest(comboBox);
+
+            if (boundaryIndex == 0)
+                comboBox.setVisible(false);
+            else if (boundaryIndex == 1)
+                comboBox.setEnabled(false);
+            else
+                comboBox.removeFromDesktop();
+
+            if (boundaryIndex == 1)
+            {
+                REQUIRE_FALSE(comboBox.isEnabled());
+                REQUIRE(comboBox.isShowing());
+            }
+            else
+            {
+                REQUIRE_FALSE(comboBox.isShowing());
+            }
+            comboBox.showPopup();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+            CHECK_FALSE(comboBox.isPopupActive());
+
+            cachedResult(2);
+            REQUIRE(accessibility->getActions().invoke(
+                juce::AccessibilityActionType::press));
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+            CHECK_FALSE(comboBox.isPopupActive());
+            CHECK(parameter->getValue() == Catch::Approx(0.0f));
+            CHECK(gestures.gestures.empty());
+        }
+    }
+}
+
 TEST_CASE("Context-aware ComboBox direction sequences remain synchronous and menu-exclusive",
           "[control-panel][global][filter][slope][keyboard][sequence][regression]")
 {
@@ -1704,9 +1800,7 @@ TEST_CASE("Context-aware ComboBox keyboard commits survive synchronous panel des
             std::function<void(ModulatableSlider*)> {},
             std::function<void(ModulatableSlider*)> {},
             std::function<void(ModulatableSlider*)> {});
-        panel->setBounds(0, 0, 1000, 500);
-        panel->setVisible(true);
-        panel->setSwitch(1, true);
+        prepareBandShapePanel(*panel);
 
         auto* parameter = processor.treeState.getParameter(
             ParameterIDAndName::getIDString(MODE_ID, 0));

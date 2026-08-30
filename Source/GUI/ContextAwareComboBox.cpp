@@ -48,7 +48,9 @@ void ContextAwareComboBox::capturePopupRequest() noexcept
 bool ContextAwareComboBox::isContextCurrent(
     std::uint64_t contextGeneration) const
 {
-    return getCurrentGeneration != nullptr
+    return isEnabled()
+           && isShowing()
+           && getCurrentGeneration != nullptr
            && isPopupContextValid != nullptr
            && getCurrentGeneration() == contextGeneration
            && isPopupContextValid();

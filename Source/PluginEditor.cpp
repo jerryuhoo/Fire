@@ -198,13 +198,22 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
                                  globalPanel.getModulatableSliders().end());
     refreshModulationSnapshot();
 
-    auto bypassCallback = [this](const juce::String& parameterID)
+    auto bypassCallback =
+        [safeThis = juce::Component::SafePointer<
+             FireAudioProcessorEditor>(this)](
+            const juce::String& parameterID)
     {
-        if (! processor.toggleModulationBypassForParameter(parameterID))
+        if (safeThis == nullptr)
             return;
 
-        modulationSnapshotFramesRemaining = 0;
-        updateModulationStates();
+        auto& processorToNotify = safeThis->processor;
+        if (! processorToNotify.toggleModulationBypassForParameter(
+                parameterID)
+            || safeThis == nullptr)
+            return;
+
+        safeThis->modulationSnapshotFramesRemaining = 0;
+        safeThis->updateModulationStates();
     };
 
     // Use the new helper function to get all sliders and assign the callback in a single loop

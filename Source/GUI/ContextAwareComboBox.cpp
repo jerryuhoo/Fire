@@ -199,7 +199,12 @@ void ContextAwareComboBox::mouseEnter(const juce::MouseEvent& event)
     juce::ComboBox::mouseEnter(event);
 
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void ContextAwareComboBox::mouseMove(const juce::MouseEvent& event)
@@ -208,7 +213,12 @@ void ContextAwareComboBox::mouseMove(const juce::MouseEvent& event)
     juce::ComboBox::mouseMove(event);
 
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void ContextAwareComboBox::mouseExit(const juce::MouseEvent& event)
@@ -217,7 +227,12 @@ void ContextAwareComboBox::mouseExit(const juce::MouseEvent& event)
     juce::ComboBox::mouseExit(event);
 
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void ContextAwareComboBox::mouseUp(const juce::MouseEvent& event)

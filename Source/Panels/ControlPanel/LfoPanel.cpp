@@ -1817,7 +1817,12 @@ void LfoBrushSelector::mouseEnter(const juce::MouseEvent& event)
     const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
     juce::ComboBox::mouseEnter(event);
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void LfoBrushSelector::mouseMove(const juce::MouseEvent& event)
@@ -1825,7 +1830,12 @@ void LfoBrushSelector::mouseMove(const juce::MouseEvent& event)
     const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
     juce::ComboBox::mouseMove(event);
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void LfoBrushSelector::mouseExit(const juce::MouseEvent& event)
@@ -1833,7 +1843,12 @@ void LfoBrushSelector::mouseExit(const juce::MouseEvent& event)
     const juce::Component::SafePointer<LfoBrushSelector> safeThis(this);
     juce::ComboBox::mouseExit(event);
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void LfoBrushSelector::mouseUp(const juce::MouseEvent& event)

@@ -201,7 +201,12 @@ void ModulationMatrixRoutingComboBox::mouseEnter(
         safeThis(this);
     juce::ComboBox::mouseEnter(event);
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void ModulationMatrixRoutingComboBox::mouseMove(
@@ -211,7 +216,12 @@ void ModulationMatrixRoutingComboBox::mouseMove(
         safeThis(this);
     juce::ComboBox::mouseMove(event);
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void ModulationMatrixRoutingComboBox::mouseExit(
@@ -221,7 +231,12 @@ void ModulationMatrixRoutingComboBox::mouseExit(
         safeThis(this);
     juce::ComboBox::mouseExit(event);
     if (safeThis != nullptr)
+    {
         recoverMissingPointerUp(event);
+
+        if (safeThis != nullptr)
+            repaint();
+    }
 }
 
 void ModulationMatrixRoutingComboBox::mouseUp(

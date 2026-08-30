@@ -55,6 +55,16 @@ struct FilterControlTestAccess
     {
         control.updateDraggableButtonStates();
     }
+
+    static bool hasResponseCurve(const FilterControl& control)
+    {
+        return ! control.responseCurve.isEmpty();
+    }
+
+    static double responseSampleRate(const FilterControl& control)
+    {
+        return control.responseSampleRate;
+    }
 };
 
 namespace
@@ -350,6 +360,34 @@ ComponentType* findDescendant(juce::Component& root)
     return nullptr;
 }
 } // namespace
+
+TEST_CASE("Filter response follows prepare and runtime sample-rate changes",
+          "[filter-control][ui][sample-rate][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    FilterControl control(processor, panel);
+    control.setBounds(0, 0, 1000, 400);
+    control.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    control.setVisible(true);
+    REQUIRE(control.isShowing());
+
+    CHECK(FilterControlTestAccess::responseSampleRate(control) == 0.0);
+    CHECK_FALSE(FilterControlTestAccess::hasResponseCurve(control));
+
+    processor.setRateAndBufferSizeDetails(44100.0, 64);
+    processor.prepareToPlay(44100.0, 64);
+    control.animationTick();
+    CHECK(FilterControlTestAccess::responseSampleRate(control) == 44100.0);
+    CHECK(FilterControlTestAccess::hasResponseCurve(control));
+
+    processor.setRateAndBufferSizeDetails(96000.0, 64);
+    processor.prepareToPlay(96000.0, 64);
+    control.animationTick();
+    CHECK(FilterControlTestAccess::responseSampleRate(control) == 96000.0);
+    CHECK(FilterControlTestAccess::hasResponseCurve(control));
+}
 
 TEST_CASE("Filter graph drags and Q wheel changes bracket host gestures",
           "[filter-control][ui][automation][gesture]")

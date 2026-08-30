@@ -148,6 +148,7 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
     setupQControl(draggablePeakButton, PEAK_Q_ID);
     setupQControl(draggableHighButton, HIGHCUT_Q_ID);
 
+    responseSampleRate = processor.getSampleRate();
     updateChain();
     updateDraggableButtonStates();
     checkAnimationStatus();
@@ -265,15 +266,25 @@ void FilterControl::animationTick()
     if (! isShowing())
         return;
 
+    const auto currentSampleRate = processor.getSampleRate();
+    const bool sampleRateChanged =
+        ! juce::approximatelyEqual(currentSampleRate, responseSampleRate);
+    if (sampleRateChanged)
+        responseSampleRate = currentSampleRate;
+
     const bool parametersChanged = parameterUpdatePending.exchange(false, std::memory_order_acq_rel);
     const bool routingChanged = routingStateDirty.exchange(false, std::memory_order_acq_rel);
-    bool visualStateChanged = parametersChanged || routingChanged;
+    bool visualStateChanged = parametersChanged || routingChanged
+                           || sampleRateChanged;
 
-    if (parametersChanged)
+    if (parametersChanged || sampleRateChanged)
     {
         updateChain();
         updateResponseCurve();
         setDraggableButtonBounds();
+
+        if (sampleRateChanged)
+            lfoResponseCurve.clear();
 
         juce::Component::SafePointer<FilterControl> safeThis(this);
         updateDraggableButtonStates();
@@ -282,7 +293,7 @@ void FilterControl::animationTick()
             return;
     }
 
-    if (routingChanged || parametersChanged)
+    if (routingChanged || parametersChanged || sampleRateChanged)
         checkAnimationStatus();
 
     if (isAnimationActive)

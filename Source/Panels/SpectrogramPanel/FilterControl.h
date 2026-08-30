@@ -82,6 +82,7 @@ private:
     std::vector<juce::AudioProcessorParameter*> observedParameters;
     std::vector<double> responseMagnitudes;
     std::vector<double> lfoMagnitudes;
+    double responseSampleRate = 0.0;
 
     bool dragTooltipVisible = false;
     double dragFrequency = 0.0;

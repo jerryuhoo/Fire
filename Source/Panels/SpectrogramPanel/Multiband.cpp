@@ -84,6 +84,12 @@ private:
 Multiband::Multiband(FireAudioProcessor& p, state::StateComponent& sc) : processor(p), stateComponent(sc)
 {
     setOpaque(false);
+    setWantsKeyboardFocus(true);
+    setMouseClickGrabsKeyboardFocus(true);
+    setTitle("Multiband spectrum editor");
+    setDescription("Select, split, and remove frequency bands");
+    setHelpText("Press Return or Plus to split the selected band. "
+                "Press Delete or Backspace to remove it.");
     retiringDividerVisuals.reserve(maxRetiringDividerVisuals);
     bandUIs.resize(4);
     for (int i = 0; i < 4; ++i)
@@ -656,6 +662,14 @@ void Multiband::applyAuthoritativeBandCount(int requestedBandCount,
     if (safeThis == nullptr)
         return;
 
+    if (topologyCountChanged)
+        if (auto* handler = getAccessibilityHandler())
+            handler->notifyAccessibilityEvent(
+                juce::AccessibilityEvent::structureChanged);
+
+    if (safeThis == nullptr)
+        return;
+
     repaint();
 }
 
@@ -781,6 +795,115 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
     repaint();
 }
 
+bool Multiband::addBandAtX(float localX)
+{
+    if (getWidth() <= 0 || lineNum >= 3 || ! std::isfinite(localX))
+        return false;
+
+    const float xPercent = localX / static_cast<float>(getWidth());
+    bool canCreate = xPercent >= limitLeft && xPercent <= limitRight;
+    for (int divider = 0; canCreate && divider < lineNum; ++divider)
+    {
+        // Keep new dividers far enough from every existing crossover for the
+        // same reliable mouse/keyboard hit targets used by pointer insertion.
+        if (freqDividerGroup[static_cast<size_t>(divider)]->getToggleState()
+            && std::abs(freqDividerGroup[static_cast<size_t>(divider)]
+                            ->getVerticalLine()
+                            .getXPercent()
+                        - xPercent)
+                   <= limitLeft)
+            canCreate = false;
+    }
+
+    if (! canCreate)
+        return false;
+
+    const int splitBandIndex = getBandIndexAtX(juce::roundToInt(localX));
+    if (! juce::isPositiveAndBelow(splitBandIndex, lineNum + 1))
+        return false;
+
+    // APVTS attachments update the fixed divider slots during the processor
+    // transaction. Capture the old visual identities first so the subsequent
+    // animation follows frequencies, not whichever slot contains them after
+    // compaction.
+    const auto visualStateBeforeTopology = captureDividerVisuals();
+    const bool newBandIsOnLeft =
+        localX < getBandBounds(splitBandIndex).getCentreX();
+    const int oldBandCount = lineNum + 1;
+    const int newBandCount = oldBandCount + 1;
+    int focusAfterInsert = focusIndex;
+    if (focusIndex > splitBandIndex
+        || (focusIndex == splitBandIndex && newBandIsOnLeft))
+        ++focusAfterInsert;
+
+    auto& processorToUse = processor;
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    const bool didAdd = processorToUse.addMultibandBand(
+        splitBandIndex,
+        oldBandCount,
+        newBandIsOnLeft,
+        transformFromLog(xPercent));
+    if (! didAdd || safeThis == nullptr)
+        return didAdd;
+
+    safeThis->focusIndex = juce::jlimit(0,
+                                        newBandCount - 1,
+                                        focusAfterInsert);
+    safeThis->applyAuthoritativeBandCount(newBandCount,
+                                          false,
+                                          false,
+                                          &visualStateBeforeTopology);
+
+    if (safeThis == nullptr)
+        return true;
+
+    // Focus propagation can invoke editor-owned callbacks, so it is the final
+    // operation on this component in the transaction.
+    safeThis->notifyFocusChanged();
+    return true;
+}
+
+bool Multiband::deleteBandAtIndex(int bandIndex)
+{
+    if (lineNum <= 0 || ! juce::isPositiveAndBelow(bandIndex, lineNum + 1))
+        return false;
+
+    const int oldFocus = focusIndex;
+    const int oldBandCount = lineNum + 1;
+    const int newBandCount = oldBandCount - 1;
+    const auto visualStateBeforeTopology = captureDividerVisuals();
+    int focusAfterDelete = oldFocus;
+    if (bandIndex < oldFocus
+        || (bandIndex == oldFocus && oldFocus >= newBandCount))
+        --focusAfterDelete;
+
+    // Any synchronous host callback below may delete this component together
+    // with the editor. Keep the transaction processor-owned, and inspect the
+    // weak pointer before touching presentation.
+    auto& processorToUse = processor;
+    juce::Component::SafePointer<Multiband> safeThis(this);
+    const bool didDelete = processorToUse.deleteMultibandBand(bandIndex,
+                                                              oldBandCount);
+    if (! didDelete || safeThis == nullptr)
+        return didDelete;
+
+    safeThis->focusIndex = juce::jlimit(0,
+                                        newBandCount - 1,
+                                        focusAfterDelete);
+    safeThis->applyAuthoritativeBandCount(newBandCount,
+                                          false,
+                                          false,
+                                          &visualStateBeforeTopology);
+
+    if (safeThis == nullptr)
+        return true;
+
+    // Focus propagation can also invoke editor-owned callbacks, so it remains
+    // the final operation in this transaction.
+    safeThis->notifyFocusChanged();
+    return true;
+}
+
 void Multiband::mouseDown(const juce::MouseEvent& e)
 {
     const int incomingDividerIndex = getDividerIndexForEvent(e);
@@ -828,67 +951,8 @@ void Multiband::mouseDown(const juce::MouseEvent& e)
 
     if (! isDragging && e.mods.isLeftButtonDown() && localEvent.y <= getHeight() / 5.0f) // create new lines
     {
-        const float xPercent = localEvent.position.x / static_cast<float>(getWidth());
-        if (lineNum < 3)
-        {
-            bool canCreate = xPercent >= limitLeft && xPercent <= limitRight;
-
-            int i = 0;
-            for (; canCreate && i < lineNum; ++i)
-            {
-                // can't create near existed lines
-                if (freqDividerGroup[i]->getToggleState()
-                    && std::abs(freqDividerGroup[i]->getVerticalLine().getXPercent() - xPercent) <= limitLeft)
-                    canCreate = false;
-            }
-            if (canCreate)
-            {
-                const int splitBandIndex = getBandIndexAtX(localEvent.x);
-                if (! juce::isPositiveAndBelow(splitBandIndex, lineNum + 1))
-                    return;
-
-                // APVTS attachments update the fixed divider slots during the
-                // processor transaction. Capture the old visual identities
-                // first so the subsequent animation follows frequencies, not
-                // whichever slot happens to contain them after compaction.
-                const auto visualStateBeforeTopology = captureDividerVisuals();
-
-                const bool newBandIsOnLeft = localEvent.position.x
-                                             < getBandBounds(splitBandIndex).getCentreX();
-                const int oldBandCount = lineNum + 1;
-                const int newBandCount = oldBandCount + 1;
-                int focusAfterInsert = focusIndex;
-                if (focusIndex > splitBandIndex
-                    || (focusIndex == splitBandIndex && newBandIsOnLeft))
-                    ++focusAfterInsert;
-
-                auto& processorToUse = processor;
-                juce::Component::SafePointer<Multiband> safeThis(this);
-                if (! processorToUse.addMultibandBand(
-                        splitBandIndex,
-                        oldBandCount,
-                        newBandIsOnLeft,
-                        transformFromLog(xPercent))
-                    || safeThis == nullptr)
-                    return;
-
-                safeThis->focusIndex = juce::jlimit(0,
-                                                    newBandCount - 1,
-                                                    focusAfterInsert);
-                safeThis->applyAuthoritativeBandCount(newBandCount,
-                                                      false,
-                                                      false,
-                                                      &visualStateBeforeTopology);
-
-                if (safeThis == nullptr)
-                    return;
-
-                // Focus propagation is the only remaining editor callback and
-                // is deliberately the final operation in this path.
-                safeThis->notifyFocusChanged();
-                return;
-            }
-        }
+        addBandAtX(localEvent.position.x);
+        return;
     }
     else if (! isDragging && e.mods.isLeftButtonDown() && localEvent.y > getHeight() / 5.0f) // focus on one band
     {
@@ -1157,40 +1221,7 @@ void Multiband::buttonClicked(juce::Button* button)
     {
         if (button == bandUIs[i].closeButton.get()) // <--- MODIFIED
         {
-            const int deletedIndex = i;
-            const int oldFocus = focusIndex;
-            const int oldBandCount = lineNum + 1;
-            const int newBandCount = oldBandCount - 1;
-            const auto visualStateBeforeTopology = captureDividerVisuals();
-            int focusAfterDelete = oldFocus;
-            if (deletedIndex < oldFocus
-                || (deletedIndex == oldFocus && oldFocus >= newBandCount))
-                --focusAfterDelete;
-
-            // Any synchronous host callback below may delete this component
-            // together with the whole editor. Keep the transaction processor-
-            // owned, and inspect the weak pointer before touching presentation.
-            auto& processorToUse = processor;
-            juce::Component::SafePointer<Multiband> safeThis(this);
-            if (! processorToUse.deleteMultibandBand(deletedIndex,
-                                                      oldBandCount)
-                || safeThis == nullptr)
-                return;
-
-            safeThis->focusIndex = juce::jlimit(0,
-                                                newBandCount - 1,
-                                                focusAfterDelete);
-            safeThis->applyAuthoritativeBandCount(newBandCount,
-                                                  false,
-                                                  false,
-                                                  &visualStateBeforeTopology);
-
-            if (safeThis == nullptr)
-                return;
-
-            // Focus propagation can also invoke editor-owned callbacks, so it
-            // is deliberately the final operation in this listener.
-            safeThis->notifyFocusChanged();
+            deleteBandAtIndex(i);
             return;
         }
     }
@@ -1364,6 +1395,61 @@ void Multiband::visibilityChanged()
 
     if (isShowing())
         processor.setHistoryArray(focusIndex);
+}
+
+bool Multiband::keyPressed(const juce::KeyPress& key)
+{
+    // Child buttons and crossover sliders own their own keyboard commands.
+    // Only treat a key as a topology command when the spectrum background
+    // itself has focus, rather than when an unhandled child key bubbles up.
+    if (! isEnabled() || ! isShowing() || ! hasKeyboardFocus(false))
+        return juce::Component::keyPressed(key);
+
+    const auto modifiers = key.getModifiers();
+    if (modifiers.isCommandDown() || modifiers.isCtrlDown()
+        || modifiers.isAltDown())
+        return juce::Component::keyPressed(key);
+
+    const bool addCommand =
+        (key.isKeyCode(juce::KeyPress::returnKey)
+         && ! modifiers.isShiftDown())
+        || key.getTextCharacter() == '+';
+    if (addCommand)
+    {
+        if (! primaryDragActive)
+        {
+            const auto selectedBand = getBandBounds(focusIndex);
+            if (! selectedBand.isEmpty())
+                addBandAtX(selectedBand.getCentreX());
+        }
+
+        // Consume a recognised command even at the four-band limit so it
+        // cannot escape to the host and trigger an unrelated transport action.
+        return true;
+    }
+
+    const bool deleteCommand =
+        ! modifiers.isShiftDown()
+        && (key.isKeyCode(juce::KeyPress::deleteKey)
+            || key.isKeyCode(juce::KeyPress::backspaceKey));
+    if (deleteCommand)
+    {
+        if (! primaryDragActive)
+            deleteBandAtIndex(focusIndex);
+
+        // Likewise consume Delete for the required one-band floor.
+        return true;
+    }
+
+    return juce::Component::keyPressed(key);
+}
+
+std::unique_ptr<juce::AccessibilityHandler>
+Multiband::createAccessibilityHandler()
+{
+    return std::make_unique<juce::AccessibilityHandler>(
+        *this,
+        juce::AccessibilityRole::group);
 }
 
 int Multiband::getBandIndexAtX(int x) const

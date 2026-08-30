@@ -46,6 +46,10 @@ public:
     void mouseMove(const juce::MouseEvent& event) override;
     void mouseExit(const juce::MouseEvent& event) override;
     void visibilityChanged() override;
+    bool keyPressed(const juce::KeyPress& key) override;
+
+    std::unique_ptr<juce::AccessibilityHandler>
+    createAccessibilityHandler() override;
 
     void dragLines(float xPercent, int index);
 
@@ -131,6 +135,8 @@ private:
                          bool enabled,
                          float frequency,
                          juce::NotificationType parameterNotification);
+    bool addBandAtX(float localX);
+    bool deleteBandAtIndex(int bandIndex);
     bool updateFocusIndex(int requestedIndex, bool forceNotification);
     void notifyFocusChanged();
 

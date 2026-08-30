@@ -3737,6 +3737,101 @@ TEST_CASE("Adding a divider preserves the focused band's identity on either side
     }
 }
 
+TEST_CASE("Multiband background keyboard commands edit the focused topology",
+          "[multiband][ui][keyboard][accessibility][topology][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 1);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    auto* bandCount = processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    REQUIRE(bandCount != nullptr);
+    REQUIRE(bandCount->load(std::memory_order_relaxed)
+            == Catch::Approx(1.0f));
+
+    multiband->grabKeyboardFocus();
+    REQUIRE(multiband->hasKeyboardFocus(false));
+    auto& component = static_cast<juce::Component&>(*multiband);
+
+    // Return splits the selected band at its visual centre.
+    CHECK(component.keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    CHECK(bandCount->load(std::memory_order_relaxed)
+          == Catch::Approx(2.0f));
+    CHECK(multiband->getFocusIndex() == 0);
+
+    // Backspace removes the selected band through the same transaction used
+    // by the close tile and preserves the mandatory one-band floor.
+    CHECK(component.keyPressed(
+        juce::KeyPress { juce::KeyPress::backspaceKey }));
+    CHECK(bandCount->load(std::memory_order_relaxed)
+          == Catch::Approx(1.0f));
+    CHECK(component.keyPressed(
+        juce::KeyPress { juce::KeyPress::deleteKey }));
+    CHECK(bandCount->load(std::memory_order_relaxed)
+          == Catch::Approx(1.0f));
+
+    const juce::KeyPress plusKey {
+        '+', juce::ModifierKeys::shiftModifier, '+'
+    };
+    CHECK(component.keyPressed(plusKey));
+    CHECK(bandCount->load(std::memory_order_relaxed)
+          == Catch::Approx(2.0f));
+
+    auto* accessibility = multiband->getAccessibilityHandler();
+    REQUIRE(accessibility != nullptr);
+    CHECK(accessibility->getRole() == juce::AccessibilityRole::group);
+    CHECK(accessibility->getTitle() == "Multiband spectrum editor");
+    CHECK(accessibility->getHelp()
+              .containsIgnoreCase("Return or Plus"));
+
+    editor->removeFromDesktop();
+}
+
+TEST_CASE("Multiband topology shortcuts do not steal unhandled child keys",
+          "[multiband][ui][keyboard][accessibility][topology][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2, { 1000.0f, 0.0f, 0.0f });
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    const auto dividerGroups = getDividerGroupsByIndex(*multiband);
+    REQUIRE(dividerGroups[0] != nullptr);
+    auto& divider = dividerGroups[0]->getVerticalLine();
+    divider.grabKeyboardFocus();
+    REQUIRE(divider.hasKeyboardFocus(false));
+
+    auto* bandCount = processor.treeState.getRawParameterValue(NUM_BANDS_ID);
+    REQUIRE(bandCount != nullptr);
+    REQUIRE(bandCount->load(std::memory_order_relaxed)
+            == Catch::Approx(2.0f));
+
+    CHECK_FALSE(static_cast<juce::Component&>(*multiband).keyPressed(
+        juce::KeyPress { juce::KeyPress::returnKey }));
+    CHECK(bandCount->load(std::memory_order_relaxed)
+          == Catch::Approx(2.0f));
+
+    editor->removeFromDesktop();
+}
+
 TEST_CASE("A newly added divider reaches the first audio block without a message-loop handoff",
           "[multiband][ui][add][processor][timing]")
 {

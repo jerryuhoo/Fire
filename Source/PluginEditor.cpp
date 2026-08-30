@@ -118,7 +118,9 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
         valueEntryTargetParameterID.clear();
     };
 
+    consumedModulationUiRevision = processor.getModulationUiRevision();
     processor.addChangeListener(this);
+    processor.addModulationUiChangeListener(this);
     // timer
     juce::Timer::startTimerHz(60.0f);
 
@@ -538,6 +540,11 @@ FireAudioProcessorEditor::FireAudioProcessorEditor(FireAudioProcessor& p)
 
 FireAudioProcessorEditor::~FireAudioProcessorEditor()
 {
+    // Stop the high-frequency modulation channel before any child control is
+    // torn down. A worker may still publish a revision, but it can no longer
+    // queue an editor callback against partially destroyed GUI state.
+    processor.removeModulationUiChangeListener(this);
+
     // Reject a worker already returning from fetchLatest(), and remove any UI
     // result before teardown can run nested message loops.
     invalidateUpdateCheckSessionForDestruction();
@@ -593,11 +600,6 @@ FireAudioProcessorEditor::~FireAudioProcessorEditor()
 
     setLookAndFeel(nullptr);
     processor.removeChangeListener(this);
-}
-
-void FireAudioProcessorEditor::markPresetAsDirty()
-{
-    stateComponent.markAsDirty();
 }
 
 void FireAudioProcessorEditor::initEditor()
@@ -1842,9 +1844,9 @@ void FireAudioProcessorEditor::handleAsyncUpdate()
             return;
     }
 
-    // Processor-side routing changes can arrive through AsyncUpdater. Refresh the
-    // view here, but don't end assignment mode: only a successful slider click is
-    // a one-shot assignment completion.
+    // Coalesce editor-owned asynchronous refresh requests here. Processor-side
+    // modulation changes arrive through its ChangeBroadcaster revision instead,
+    // so no worker thread ever needs to retain or dereference this editor.
     modulationSnapshotFramesRemaining = 0;
     updateModulationStates();
     repaint(headerArea);
@@ -2186,10 +2188,34 @@ void FireAudioProcessorEditor::exitAssignMode(bool showCancellationFeedback)
 
 void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
+    if (processor.isModulationUiChangeSource(source))
+    {
+        const auto revision = processor.getModulationUiRevision();
+        if (revision == consumedModulationUiRevision)
+            return;
+
+        consumedModulationUiRevision = revision;
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
+            this);
+        stateComponent.markAsDirty();
+        if (safeThis == nullptr)
+            return;
+
+        // Do not call refreshLfoDisplay() here. Shape edits publish at pointer
+        // rate, and rebinding LfoEditor would cancel the gesture being edited.
+        modulationSnapshotFramesRemaining = 0;
+        updateModulationStates();
+        return;
+    }
+
     if (source == &processor)
     {
         const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
             this);
+        // A host/preset state synchronisation is authoritative. Absorb every
+        // modulation revision already published before this callback so a
+        // coalesced older modulation message cannot dirty the newly loaded state.
+        consumedModulationUiRevision = processor.getModulationUiRevision();
         const bool resetFocusAfterStateLoad =
             stateComponent.consumeFocusResetAfterStateLoad();
 

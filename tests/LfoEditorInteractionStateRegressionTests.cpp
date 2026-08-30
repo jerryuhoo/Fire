@@ -1,4 +1,5 @@
 #include <Panels/ControlPanel/LfoPanel.h>
+#include <PluginEditor.h>
 #include <PluginProcessor.h>
 
 #include <catch2/catch_approx.hpp>
@@ -10,6 +11,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
+#include <thread>
 
 struct LfoEditorTestAccess
 {
@@ -343,6 +345,88 @@ struct LfoEditorTestAccess
         editor.contextMenuLaunchHook = std::move(hook);
     }
 };
+
+struct ModulationUiDispatchTestAccess
+{
+    static LfoPanel& lfoPanel(FireAudioProcessorEditor& editor) noexcept
+    {
+        return editor.lfoPanel;
+    }
+
+    static juce::ComboBox& presetBox(
+        FireAudioProcessorEditor& editor) noexcept
+    {
+        return *editor.stateComponent.getPresetBox();
+    }
+};
+
+namespace
+{
+class ModulationRevisionListener final : public juce::ChangeListener
+{
+public:
+    void changeListenerCallback(juce::ChangeBroadcaster*) override
+    {
+        ++callbackCount;
+        callbackWasOnMessageThread =
+            juce::MessageManager::getInstance()->isThisTheMessageThread();
+    }
+
+    int callbackCount = 0;
+    bool callbackWasOnMessageThread = false;
+};
+}
+
+TEST_CASE("Modulation UI revisions cross worker and editor lifetimes asynchronously",
+          "[lfo][processor][thread][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    ModulationRevisionListener listener;
+    processor.addModulationUiChangeListener(&listener);
+
+    const auto revisionBefore = processor.getModulationUiRevision();
+    std::thread worker([&processor]
+    {
+        for (int update = 0; update < 32; ++update)
+            processor.lfoDataHasChanged();
+    });
+    worker.join();
+
+    CHECK(processor.getModulationUiRevision() == revisionBefore + 32);
+    CHECK(listener.callbackCount == 0);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    CHECK(listener.callbackCount > 0);
+    CHECK(listener.callbackWasOnMessageThread);
+
+    // A queued processor notification must not retain or call a listener after
+    // the corresponding editor lifetime has ended.
+    const int callbacksBeforeRemoval = listener.callbackCount;
+    processor.removeModulationUiChangeListener(&listener);
+    std::thread lateWorker([&processor] { processor.lfoDataHasChanged(); });
+    lateWorker.join();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    CHECK(listener.callbackCount == callbacksBeforeRemoval);
+
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto* editor = processor.createEditorIfNeeded();
+    REQUIRE(editor != nullptr);
+    std::atomic<bool> startConcurrentMutation { false };
+    std::thread lifecycleWorker([&]
+    {
+        while (! startConcurrentMutation.load(std::memory_order_acquire))
+            std::this_thread::yield();
+
+        for (int update = 0; update < 64; ++update)
+            processor.lfoDataHasChanged();
+    });
+    startConcurrentMutation.store(true, std::memory_order_release);
+    processor.editorBeingDeleted(editor);
+    delete editor;
+    lifecycleWorker.join();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    CHECK(processor.getActiveEditor() == nullptr);
+}
 
 namespace
 {
@@ -3261,4 +3345,68 @@ TEST_CASE("LFO editor point hit radius follows its visual scale",
     editor.mouseMove(makeMouseEvent(editor,
                                     point + juce::Point<float>(largeRadius * 1.1f, 0.0f)));
     CHECK(LfoEditorTestAccess::hoveredPoint(editor) == -1);
+}
+
+TEST_CASE("Dedicated modulation UI delivery preserves LFO drags and state baselines",
+          "[lfo][editor][processor][thread][dispatch][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto* editor = dynamic_cast<FireAudioProcessorEditor*>(
+        processor.createEditorIfNeeded());
+    REQUIRE(editor != nullptr);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    REQUIRE(editor->isShowing());
+
+    auto* lfoEditor = findLfoEditor(
+        ModulationUiDispatchTestAccess::lfoPanel(*editor));
+    REQUIRE(lfoEditor != nullptr);
+    REQUIRE(lfoEditor->getWidth() > 0);
+    REQUIRE(lfoEditor->getHeight() > 0);
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    const auto down = LfoEditorTestAccess::pointScreenPosition(*lfoEditor, 0);
+    // The default first point sits on the lower edge, so drag upwards to
+    // exercise two distinct, unclamped values.
+    const auto firstDrag = down + juce::Point<float> { 0.0f, -12.0f };
+    const auto secondDrag = down + juce::Point<float> { 0.0f, -24.0f };
+    lfoEditor->mouseDown(makeMouseEvent(*lfoEditor, down, primary));
+    REQUIRE(LfoEditorTestAccess::isPrimaryPointerGesture(*lfoEditor));
+    lfoEditor->mouseDrag(makeMouseEvent(*lfoEditor,
+                                       firstDrag,
+                                       primary,
+                                       down,
+                                       true));
+    const auto valueAfterFirstDrag =
+        LfoEditorTestAccess::data(*lfoEditor).points.front().y;
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    CHECK(LfoEditorTestAccess::isPrimaryPointerGesture(*lfoEditor));
+    lfoEditor->mouseDrag(makeMouseEvent(*lfoEditor,
+                                       secondDrag,
+                                       primary,
+                                       down,
+                                       true));
+    CHECK(LfoEditorTestAccess::data(*lfoEditor).points.front().y
+          != Catch::Approx(valueAfterFirstDrag));
+    lfoEditor->mouseUp(makeMouseEvent(*lfoEditor, secondDrag, {}, down, true));
+
+    // Queue an older modulation notification, then let an authoritative
+    // general state callback absorb its revision before that queued delivery.
+    processor.lfoDataHasChanged();
+    editor->changeListenerCallback(&processor);
+    auto& presetBox = ModulationUiDispatchTestAccess::presetBox(*editor);
+    presetBox.clear(juce::dontSendNotification);
+    presetBox.addItem("Loaded", 1);
+    presetBox.setSelectedId(1, juce::dontSendNotification);
+    presetBox.setText("Loaded", juce::dontSendNotification);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    CHECK(presetBox.getText() == "Loaded");
+
+    processor.editorBeingDeleted(editor);
+    delete editor;
 }

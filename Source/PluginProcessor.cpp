@@ -8105,13 +8105,33 @@ const juce::StringArray& FireAudioProcessor::getLfoRateSyncDivisions() const
 
 void FireAudioProcessor::lfoDataHasChanged()
 {
+    modulationUiRevision.fetch_add(1, std::memory_order_release);
     updateHostDisplay(
         juce::AudioProcessorListener::ChangeDetails {}.withNonParameterStateChanged(true));
+    modulationUiChangeBroadcaster.sendChangeMessage();
+}
 
-    if (auto* editor = dynamic_cast<FireAudioProcessorEditor*>(getActiveEditor()))
-    {
-        editor->markPresetAsDirty();
-    }
+std::uint64_t FireAudioProcessor::getModulationUiRevision() const noexcept
+{
+    return modulationUiRevision.load(std::memory_order_acquire);
+}
+
+void FireAudioProcessor::addModulationUiChangeListener(
+    juce::ChangeListener* listener)
+{
+    modulationUiChangeBroadcaster.addChangeListener(listener);
+}
+
+void FireAudioProcessor::removeModulationUiChangeListener(
+    juce::ChangeListener* listener)
+{
+    modulationUiChangeBroadcaster.removeChangeListener(listener);
+}
+
+bool FireAudioProcessor::isModulationUiChangeSource(
+    const juce::ChangeBroadcaster* source) const noexcept
+{
+    return source == &modulationUiChangeBroadcaster;
 }
 
 bool FireAudioProcessor::getLatestMeterValues(MeterValues& values)
@@ -8344,17 +8364,6 @@ LfoManager::AssignmentResult FireAudioProcessor::assignLfoToTarget(
     if (result != LfoManager::AssignmentResult::changed)
         return result;
 
-    // When the modulation assignment changes, notify the active editor to update its UI
-    if (auto* editor = getActiveEditor())
-    {
-        // We must cast the generic editor pointer to our specific FireAudioProcessorEditor
-        // type to access the triggerAsyncUpdate() method from its AsyncUpdater base class.
-        // A dynamic_cast is used for type safety.
-        if (auto* fireEditor = dynamic_cast<FireAudioProcessorEditor*>(editor))
-        {
-            fireEditor->triggerAsyncUpdate();
-        }
-    }
     lfoDataHasChanged();
     return result;
 }
@@ -8365,13 +8374,6 @@ bool FireAudioProcessor::clearModulationForParameter(
     if (! lfoManager->clearModulationForTarget(targetParameterID))
         return false;
 
-    if (auto* editor = getActiveEditor())
-    {
-        if (auto* fireEditor = dynamic_cast<FireAudioProcessorEditor*>(editor))
-        {
-            fireEditor->triggerAsyncUpdate();
-        }
-    }
     lfoDataHasChanged();
     return true;
 }

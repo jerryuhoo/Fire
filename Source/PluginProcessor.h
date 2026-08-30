@@ -509,6 +509,11 @@ public:
 
 
     void lfoDataHasChanged();
+    std::uint64_t getModulationUiRevision() const noexcept;
+    void addModulationUiChangeListener(juce::ChangeListener* listener);
+    void removeModulationUiChangeListener(juce::ChangeListener* listener);
+    bool isModulationUiChangeSource(
+        const juce::ChangeBroadcaster* source) const noexcept;
     bool isCurrentStateEquivalentToPreset(const juce::XmlElement& presetXml);
 
     void splitBands(const juce::AudioBuffer<float>& inputBuffer, double sampleRate);
@@ -1132,6 +1137,8 @@ private:
 
     // bypass state
     std::atomic<bool> isBypassed { false };
+    std::atomic<std::uint64_t> modulationUiRevision { 0 };
+    juce::ChangeBroadcaster modulationUiChangeBroadcaster;
     std::atomic<std::uint64_t> hostBypassPresentationEpoch { 0 };
     bool hostBypassSessionActive = false;
     bool hostBypassSessionHqMode = false;

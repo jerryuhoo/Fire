@@ -120,7 +120,6 @@ public:
     void enablementChanged() override;
     void timerCallback() override;
     void handleAsyncUpdate() override;
-    void markPresetAsDirty();
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     void showValuePopupForSlider(ModulatableSlider* slider);
@@ -131,6 +130,7 @@ private:
     friend struct DistortionGraphSourceEpochTestAccess;
     friend struct MeterFreshnessTestAccess;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    friend struct ModulationUiDispatchTestAccess;
     friend struct EditorUpdateCheckLifecycleTestAccess;
     friend struct EditorHiddenSessionTestAccess;
     friend struct EditorBackgroundCacheTestAccess;
@@ -302,6 +302,7 @@ private:
     juce::Array<ModulationRouting> modulationRoutingSnapshot;
     std::vector<int> modulationRoutingIndexBySlider;
     int modulationSnapshotFramesRemaining = 0;
+    std::uint64_t consumedModulationUiRevision = 0;
     std::uint64_t captureUpdateCheckSession();
     bool publishAvailableUpdate(const juce::String& version,
                                 std::uint64_t sessionGeneration);

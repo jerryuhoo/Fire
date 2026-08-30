@@ -33,6 +33,13 @@ struct PrimaryButtonTestAccess
         button.focusAnimation = focus;
         button.disabledAnimation = disabled;
     }
+
+    template <typename ButtonType>
+    static bool isKeyboardFocusVisible(
+        const PrimaryPointerButton<ButtonType>& button) noexcept
+    {
+        return button.keyboardFocusVisible;
+    }
 };
 
 namespace
@@ -735,6 +742,40 @@ TEST_CASE("Primary buttons preserve keyboard and programmatic activation",
             CHECK(clickCount == 0);
         });
     }
+}
+
+TEST_CASE("Primary buttons distinguish pointer focus from keyboard focus",
+          "[header-button][ui][input][primary-button][focus][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    forEachShowingPrimaryButtonType([leftButton](auto& button)
+    {
+        button.grabKeyboardFocus();
+        REQUIRE(button.hasKeyboardFocus(true));
+
+        button.focusGained(juce::Component::focusChangedByMouseClick);
+        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+
+        // Keyboard use after a pointer-originated focus must reveal the focus
+        // affordance again without delaying the command.
+        REQUIRE(button.keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+
+        beginPointerGesture(button, leftButton);
+        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+        endPointerGesture(button);
+        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+
+        button.focusGained(juce::Component::focusChangedDirectly);
+        CHECK(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+        button.focusLost(juce::Component::focusChangedDirectly);
+        CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+    });
 }
 
 TEST_CASE("Primary button commands may synchronously delete their control",

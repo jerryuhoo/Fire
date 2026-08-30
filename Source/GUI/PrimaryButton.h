@@ -249,6 +249,10 @@ public:
 
         if (pointerGesture == PointerGesture::primary)
         {
+            // A pointer click may give the component keyboard focus, but that
+            // must not leave a keyboard-navigation outline behind after the
+            // pointer exits.
+            keyboardFocusVisible = false;
             pointerSourceType = event.source.getType();
             pointerSourceIndex = event.source.getIndex();
             ButtonType::mouseDown(event);
@@ -345,6 +349,12 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override
     {
+        if (this->hasKeyboardFocus(true) && ! keyboardFocusVisible)
+        {
+            keyboardFocusVisible = true;
+            updateAnimationTargets();
+        }
+
         const bool isActivationKey =
             key.isKeyCode(juce::KeyPress::returnKey)
             || key.isKeyCode(juce::KeyPress::spaceKey);
@@ -398,7 +408,10 @@ public:
         const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::focusGained(cause);
         if (safeThis != nullptr)
+        {
+            keyboardFocusVisible = cause != juce::Component::focusChangedByMouseClick;
             updateAnimationTargets();
+        }
     }
 
     void focusLost(juce::Component::FocusChangeType cause) override
@@ -406,7 +419,10 @@ public:
         const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         ButtonType::focusLost(cause);
         if (safeThis != nullptr)
+        {
+            keyboardFocusVisible = false;
             updateAnimationTargets();
+        }
     }
 
     void dismissPointerGesture() noexcept
@@ -463,11 +479,15 @@ private:
         if (! this->isShowing())
         {
             stopTimer();
+            keyboardFocusVisible = false;
             hoverAnimation = pressAnimation = focusAnimation = 0.0f;
             disabledAnimation = this->isEnabled() ? 0.0f : 1.0f;
             this->repaint();
             return;
         }
+
+        if (! this->isEnabled())
+            keyboardFocusVisible = false;
 
         if (! animationsAtRest())
             startTimerHz(60);
@@ -478,7 +498,10 @@ private:
     {
         const auto hoverTarget = this->isEnabled() && this->isMouseOver(true) ? 1.0f : 0.0f;
         const auto pressTarget = this->isEnabled() && this->getState() == juce::Button::buttonDown ? 1.0f : 0.0f;
-        const auto focusTarget = this->isEnabled() && this->hasKeyboardFocus(true) ? 1.0f : 0.0f;
+        const auto focusTarget = this->isEnabled() && keyboardFocusVisible
+                                     && this->hasKeyboardFocus(true)
+                                 ? 1.0f
+                                 : 0.0f;
         const auto disabledTarget = this->isEnabled() ? 0.0f : 1.0f;
         return std::abs(hoverAnimation - hoverTarget) < 0.0001f
             && std::abs(pressAnimation - pressTarget) < 0.0001f
@@ -506,7 +529,12 @@ private:
         const auto enabled = this->isEnabled();
         auto changed = approach(hoverAnimation, enabled && this->isMouseOver(true) ? 1.0f : 0.0f, 0.22f);
         changed = approach(pressAnimation, enabled && this->getState() == juce::Button::buttonDown ? 1.0f : 0.0f, 0.32f) || changed;
-        changed = approach(focusAnimation, enabled && this->hasKeyboardFocus(true) ? 1.0f : 0.0f, 0.20f) || changed;
+        changed = approach(focusAnimation,
+                           enabled && keyboardFocusVisible
+                               && this->hasKeyboardFocus(true)
+                           ? 1.0f
+                           : 0.0f,
+                           0.20f) || changed;
         changed = approach(disabledAnimation, enabled ? 0.0f : 1.0f, 0.18f) || changed;
 
         if (changed)
@@ -519,6 +547,7 @@ private:
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
+    bool keyboardFocusVisible = false;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;
     float focusAnimation = 0.0f;

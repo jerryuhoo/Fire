@@ -212,6 +212,35 @@ void LfoEditor::cancelAllInteraction() noexcept
     clearPrimaryDoubleClickAuthorization();
 }
 
+void LfoEditor::notePointerInteraction() noexcept
+{
+    lastInputWasKeyboard = false;
+    clearKeyboardFocusDisplay();
+}
+
+void LfoEditor::noteKeyboardInteraction() noexcept
+{
+    lastInputWasKeyboard = true;
+    keyboardFocusVisible = isEnabled() && isVisibleInHierarchy(*this);
+    updateFocusAnimationTarget();
+}
+
+void LfoEditor::clearKeyboardFocusDisplay() noexcept
+{
+    keyboardFocusVisible = false;
+    updateFocusAnimationTarget();
+}
+
+void LfoEditor::updateFocusAnimationTarget() noexcept
+{
+    focusAnimation.setTarget(isEnabled()
+                                 && isVisibleInHierarchy(*this)
+                                 && keyboardFocusVisible
+                             ? 1.0f
+                             : 0.0f);
+    startAnimationIfNeeded();
+}
+
 bool LfoEditor::isCompletePrimaryDown(
     const juce::MouseEvent& event) noexcept
 {
@@ -283,14 +312,13 @@ void LfoEditor::dismissTransientInteraction()
 {
     invalidateContextMenuSession();
     cancelAllInteraction();
+    clearKeyboardFocusDisplay();
 
-    // A workspace or editor ancestor can become hidden without delivering a
-    // visibilityChanged() callback to this child. focusLost() cannot animate
-    // to zero in that state because the animation timer deliberately does not
-    // run for hidden hierarchies, so discard the now-invisible focus frame
-    // synchronously. This prevents a stale ring from reappearing when the same
-    // workspace is shown again.
-    if (! isVisibleInHierarchy(*this))
+    // A workspace ancestor can hide, or the host can detach the top-level
+    // peer, without delivering visibilityChanged() to this child. focusLost()
+    // cannot finish an invisible fade in either state, so discard the frame
+    // synchronously and prevent it from reappearing in the next UI session.
+    if (! isShowing())
     {
         focusAnimation.snapTo(0.0f);
         stopTimer();
@@ -810,6 +838,11 @@ void LfoEditor::setSmoothness(float smoothness)
 void LfoEditor::mouseDown(const juce::MouseEvent& event)
 {
     auto safeThis = juce::Component::SafePointer<LfoEditor>(this);
+
+    // grabKeyboardFocus() below may synchronously report a direct focus gain.
+    // Establish pointer modality first so that restoration cannot revive the
+    // keyboard-navigation frame after a canvas click.
+    notePointerInteraction();
 
     if (activePointerGesture != PointerGesture::none)
     {
@@ -1397,16 +1430,32 @@ void LfoEditor::enablementChanged()
 
 void LfoEditor::focusGained(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<LfoEditor> safeThis(this);
     juce::Component::focusGained(cause);
-    focusAnimation.setTarget(isEnabled() && isVisibleInHierarchy(*this) ? 1.0f : 0.0f);
-    startAnimationIfNeeded();
+    if (safeThis == nullptr)
+        return;
+
+    if (cause == focusChangedByMouseClick)
+    {
+        notePointerInteraction();
+        return;
+    }
+
+    if (cause == focusChangedByTabKey)
+        lastInputWasKeyboard = true;
+
+    keyboardFocusVisible = lastInputWasKeyboard
+                        && isEnabled()
+                        && isVisibleInHierarchy(*this);
+    updateFocusAnimationTarget();
 }
 
 void LfoEditor::focusLost(FocusChangeType cause)
 {
+    const juce::Component::SafePointer<LfoEditor> safeThis(this);
     juce::Component::focusLost(cause);
-    focusAnimation.setTarget(0.0f);
-    startAnimationIfNeeded();
+    if (safeThis != nullptr)
+        clearKeyboardFocusDisplay();
 }
 
 void LfoEditor::timerCallback()
@@ -1414,6 +1463,7 @@ void LfoEditor::timerCallback()
     if (! isVisibleInHierarchy(*this))
     {
         cancelPointAndCurveInteraction();
+        keyboardFocusVisible = false;
         focusAnimation.snapTo(0.0f);
         stopTimer();
         repaint();
@@ -1438,7 +1488,8 @@ void LfoEditor::updateAnimationTargets() noexcept
     const bool interactive = isEnabled() && isVisibleInHierarchy(*this);
     pointHoverAnimation.setTarget(interactive && hoveredPointIndex != -1 ? 1.0f : 0.0f);
     if (! interactive)
-        focusAnimation.setTarget(0.0f);
+        keyboardFocusVisible = false;
+    focusAnimation.setTarget(interactive && keyboardFocusVisible ? 1.0f : 0.0f);
     startAnimationIfNeeded();
 }
 
@@ -1958,12 +2009,14 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
 
         if (keyCode == 'c')
         {
+            noteKeyboardInteraction();
             copyShape();
             return true;
         }
 
         if (keyCode == 'v')
         {
+            noteKeyboardInteraction();
             if (pasteShape())
                 publishActiveData();
             return true;
@@ -1971,6 +2024,7 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
 
         if (keyCode == 'a')
         {
+            noteKeyboardInteraction();
             selectAllPoints();
             return true;
         }
@@ -1993,6 +2047,12 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
     {
         if (! canAcceptPointKeyboardInput())
             return false;
+
+        // A canvas initially focused by a pointer deliberately has no focus
+        // frame. Its first genuine keyboard navigation/edit command promotes
+        // the same focus session to keyboard-visible without changing any LFO
+        // data by itself.
+        noteKeyboardInteraction();
 
         const auto contextBeforeValidation = activeDataContext;
         auto validator = dataContextValidator;
@@ -2050,6 +2110,7 @@ bool LfoEditor::keyPressed(const juce::KeyPress& key)
         && (key.isKeyCode(juce::KeyPress::deleteKey)
             || key.isKeyCode(juce::KeyPress::backspaceKey)))
     {
+        noteKeyboardInteraction();
         if (deleteSelectedPoints())
             publishActiveData();
         return true;

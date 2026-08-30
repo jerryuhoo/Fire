@@ -139,6 +139,10 @@ private:
     bool validatePointDragInteractionOrCancel() noexcept;
     void cancelPointAndCurveInteraction() noexcept;
     void cancelAllInteraction() noexcept;
+    void notePointerInteraction() noexcept;
+    void noteKeyboardInteraction() noexcept;
+    void clearKeyboardFocusDisplay() noexcept;
+    void updateFocusAnimationTarget() noexcept;
     void timerCallback() override;
     void updateAnimationTargets() noexcept;
     void startAnimationIfNeeded() noexcept;
@@ -211,6 +215,12 @@ private:
     int animatedPointIndex = -1;
     fire::ui::DampedValue pointHoverAnimation;
     fire::ui::DampedValue focusAnimation;
+    // Direct focus may be JUCE restoring focus after grabKeyboardFocus() or a
+    // popup. Preserve the last explicit modality so pointer focus cannot grow
+    // a keyboard-navigation frame, while first programmatic focus remains
+    // discoverable.
+    bool lastInputWasKeyboard = true;
+    bool keyboardFocusVisible = false;
     float initialCurvature = 0.0f;
     int initialDragY = 0;
 

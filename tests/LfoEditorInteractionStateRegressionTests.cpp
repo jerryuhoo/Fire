@@ -28,6 +28,21 @@ struct LfoEditorTestAccess
         return editor.focusAnimation.current;
     }
 
+    static float focusTarget(const LfoEditor& editor) noexcept
+    {
+        return editor.focusAnimation.target;
+    }
+
+    static bool keyboardFocusIsVisible(const LfoEditor& editor) noexcept
+    {
+        return editor.keyboardFocusVisible;
+    }
+
+    static bool lastInputWasKeyboard(const LfoEditor& editor) noexcept
+    {
+        return editor.lastInputWasKeyboard;
+    }
+
     static float pointHitRadius(const LfoEditor& editor) noexcept
     {
         return editor.getPointVisualRadius();
@@ -55,9 +70,20 @@ struct LfoEditorTestAccess
         editor.timerCallback();
     }
 
-    static void focusGained(LfoEditor& editor)
+    static void focusGained(
+        LfoEditor& editor,
+        juce::Component::FocusChangeType cause =
+            juce::Component::focusChangedDirectly)
     {
-        editor.focusGained(juce::Component::focusChangedDirectly);
+        editor.focusGained(cause);
+    }
+
+    static void focusLost(
+        LfoEditor& editor,
+        juce::Component::FocusChangeType cause =
+            juce::Component::focusChangedDirectly)
+    {
+        editor.focusLost(cause);
     }
 
     static void setTrackedPointerSource(
@@ -2959,6 +2985,158 @@ TEST_CASE("LFO clear mode switch and data replacement fully cancel transient sta
     REQUIRE(LfoEditorTestAccess::pointCount(editor) == 4);
     REQUIRE(LfoEditorTestAccess::interactionStateIsValid(editor));
     CHECK(hasValidLfoTopology(LfoEditorTestAccess::data(editor)));
+}
+
+TEST_CASE("LFO editor focus frame follows pointer and keyboard modality",
+          "[lfo][editor][input][focus][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto original = makeLfoData({
+        { 0.0f, 0.20f }, { 0.45f, 0.75f }, { 1.0f, 0.35f }
+    });
+
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+    editor.setDataToDisplay(original);
+
+    // A first direct/programmatic focus remains discoverable to keyboard and
+    // assistive-technology users.
+    LfoEditorTestAccess::focusGained(
+        editor, juce::Component::focusChangedDirectly);
+    REQUIRE(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+    REQUIRE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+    REQUIRE(LfoEditorTestAccess::focusTarget(editor) == 1.0f);
+    LfoEditorTestAccess::tickAnimation(editor);
+    const auto keyboardFocusAmount =
+        LfoEditorTestAccess::focusAmount(editor);
+    REQUIRE(keyboardFocusAmount > 0.0f);
+
+    // mouseDown establishes pointer modality before grabKeyboardFocus(). A
+    // direct focus callback caused by that grab must therefore remain hidden.
+    const auto firstPoint =
+        LfoEditorTestAccess::pointScreenPosition(editor, 0);
+    editor.mouseDown(makeMouseEvent(editor, firstPoint, leftButton));
+    CHECK_FALSE(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+    CHECK_FALSE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+    CHECK(LfoEditorTestAccess::focusTarget(editor) == 0.0f);
+    CHECK(LfoEditorTestAccess::focusAmount(editor) > 0.0f);
+    checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+
+    editor.mouseUp(makeMouseEvent(editor, firstPoint));
+    checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+    for (int frame = 0; frame < 24; ++frame)
+        LfoEditorTestAccess::tickAnimation(editor);
+    CHECK(LfoEditorTestAccess::focusAmount(editor)
+          < keyboardFocusAmount);
+
+    LfoEditorTestAccess::focusGained(
+        editor, juce::Component::focusChangedByMouseClick);
+    LfoEditorTestAccess::focusLost(editor);
+    LfoEditorTestAccess::focusGained(
+        editor, juce::Component::focusChangedDirectly);
+    CHECK_FALSE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+    CHECK(LfoEditorTestAccess::focusTarget(editor) == 0.0f);
+
+    // Tab is navigation rather than a data mutation, but it is a genuine
+    // keyboard editor command and must promote a pointer-focused canvas to a
+    // keyboard-visible focus session.
+    REQUIRE(editor.keyPressed(
+        juce::KeyPress { juce::KeyPress::tabKey }));
+    CHECK(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+    CHECK(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+    CHECK(LfoEditorTestAccess::focusTarget(editor) == 1.0f);
+    checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+
+    LfoEditorTestAccess::focusLost(editor);
+    CHECK_FALSE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+    CHECK(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+    CHECK(LfoEditorTestAccess::focusTarget(editor) == 0.0f);
+
+    // A direct restoration now follows the most recent explicit keyboard
+    // modality rather than being confused with the earlier pointer focus.
+    LfoEditorTestAccess::focusGained(
+        editor, juce::Component::focusChangedDirectly);
+    CHECK(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+    CHECK(LfoEditorTestAccess::focusTarget(editor) == 1.0f);
+
+    editor.removeFromDesktop();
+}
+
+TEST_CASE("LFO editor clears current focus presentation at lifecycle boundaries",
+          "[lfo][editor][input][focus][animation][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto original = makeLfoData({
+        { 0.0f, 0.20f }, { 0.45f, 0.75f }, { 1.0f, 0.35f }
+    });
+
+    LfoEditor editor;
+    prepareEditor(editor);
+    editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor.setVisible(true);
+    editor.setDataToDisplay(original);
+    LfoEditorTestAccess::focusGained(
+        editor, juce::Component::focusChangedByTabKey);
+    LfoEditorTestAccess::tickAnimation(editor);
+    REQUIRE(LfoEditorTestAccess::focusAmount(editor) > 0.0f);
+
+    SECTION("hidden hierarchy discards the invisible animation")
+    {
+        editor.setVisible(false);
+        CHECK_FALSE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+        CHECK(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+        CHECK(LfoEditorTestAccess::focusAmount(editor) == 0.0f);
+        CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(editor));
+
+        editor.setVisible(true);
+        LfoEditorTestAccess::focusGained(
+            editor, juce::Component::focusChangedDirectly);
+        CHECK(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+        CHECK(LfoEditorTestAccess::focusTarget(editor) == 1.0f);
+    }
+
+    SECTION("disable fades the frame without forgetting keyboard modality")
+    {
+        editor.setEnabled(false);
+        CHECK_FALSE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+        CHECK(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+        CHECK(LfoEditorTestAccess::focusTarget(editor) == 0.0f);
+        CHECK(LfoEditorTestAccess::animationIsRunning(editor));
+        for (int frame = 0; frame < 30; ++frame)
+            LfoEditorTestAccess::tickAnimation(editor);
+        CHECK(LfoEditorTestAccess::focusAmount(editor) < 0.01f);
+
+        editor.setEnabled(true);
+        LfoEditorTestAccess::focusGained(
+            editor, juce::Component::focusChangedDirectly);
+        CHECK(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+        CHECK(LfoEditorTestAccess::focusTarget(editor) == 1.0f);
+    }
+
+    SECTION("host peer detach cleanup cannot revive a stale frame")
+    {
+        editor.removeFromDesktop();
+        // PluginEditor routes its observed peer-detach boundary through this
+        // same cleanup entry point for the descendant LFO canvas.
+        editor.dismissTransientInteraction();
+        CHECK_FALSE(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+        CHECK(LfoEditorTestAccess::lastInputWasKeyboard(editor));
+        CHECK(LfoEditorTestAccess::focusAmount(editor) == 0.0f);
+        CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(editor));
+        checkSameLfoData(LfoEditorTestAccess::data(editor), original);
+
+        editor.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        editor.setVisible(true);
+        CHECK(LfoEditorTestAccess::focusAmount(editor) == 0.0f);
+        LfoEditorTestAccess::focusGained(
+            editor, juce::Component::focusChangedDirectly);
+        CHECK(LfoEditorTestAccess::keyboardFocusIsVisible(editor));
+        CHECK(LfoEditorTestAccess::focusTarget(editor) == 1.0f);
+    }
+
+    editor.removeFromDesktop();
 }
 
 TEST_CASE("LFO editor point hover and focus feedback animate only while visible",

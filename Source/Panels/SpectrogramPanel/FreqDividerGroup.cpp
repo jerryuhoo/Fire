@@ -60,7 +60,8 @@ void FreqDividerGroup::resized()
     const float uiScale = juce::jlimit(0.75f, 2.0f, getWidth() / 100.0f);
     margin = 7.5f * uiScale;
     size = 15.0f * uiScale;
-    const int lineHitWidth = juce::jmax(4, juce::roundToInt(getWidth() / 10.0f));
+    const int lineHitWidth = juce::jmax(
+        16, juce::roundToInt(getWidth() / 10.0f));
     verticalLine.setBounds(0, 0, lineHitWidth, getHeight());
     width = verticalLine.getWidth() * 0.5f;
     freqTextLabel.setScale(uiScale);

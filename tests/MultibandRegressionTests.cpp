@@ -3964,7 +3964,7 @@ TEST_CASE("Close controls remain hit-testable while crossing a divider child",
     const auto closeButtons = getPositionedCloseButtons(*multiband);
     REQUIRE(closeButtons.size() == 2);
     auto& divider = dividerGroup->getVerticalLine();
-    REQUIRE(divider.getWidth() >= 2);
+    REQUIRE(divider.getWidth() >= 16);
 
     const auto checkMoveThroughDivider = [&](float localDividerX)
     {

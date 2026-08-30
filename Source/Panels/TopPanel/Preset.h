@@ -19,6 +19,7 @@
 #include "../../Utility/VersionInfo.h"
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -144,10 +145,14 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         juce::String currentPresetKey;
         juce::HashMap<int, juce::String> comboBoxIdToPresetKeyMap;
         mutable juce::CriticalSection identityLock;
+        void recursiveFileSearchImpl(juce::XmlElement& parentXML,
+                                     const juce::File& dir,
+                                     int depth,
+                                     int& discoveredPresetCount);
         void recursiveSort(juce::XmlElement* parent);
         static juce::String normalisePresetKey(juce::String key);
         std::atomic<int> mCurrentPresetId { 0 };
-        int numPresets = 0;
+        std::atomic<int> numPresets { 0 };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StatePresets)
     };

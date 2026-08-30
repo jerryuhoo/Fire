@@ -701,7 +701,7 @@ namespace state
 
     juce::String StatePresets::getNextAvailablePresetId()
     {
-        int newPresetIdNumber = getNumPresets();
+        const int newPresetIdNumber = getNumPresets();
         return "preset" + static_cast<juce::String>(newPresetIdNumber); // format: preset##
     }
 
@@ -731,7 +731,22 @@ namespace state
                                            const juce::File& dir,
                                            int depth)
     {
-        if (depth > maximumPresetFolderDepth || numPresets >= maximumPresetCount)
+        int discoveredPresetCount = 0;
+        recursiveFileSearchImpl(parentXML,
+                                dir,
+                                depth,
+                                discoveredPresetCount);
+        numPresets.store(discoveredPresetCount, std::memory_order_release);
+    }
+
+    void StatePresets::recursiveFileSearchImpl(
+        juce::XmlElement& parentXML,
+        const juce::File& dir,
+        int depth,
+        int& discoveredPresetCount)
+    {
+        if (depth > maximumPresetFolderDepth
+            || discoveredPresetCount >= maximumPresetCount)
             return;
 
         juce::RangedDirectoryIterator iterator(dir,
@@ -741,14 +756,17 @@ namespace state
                                                 juce::File::FollowSymlinks::no);
         for (auto file : iterator)
         {
-            if (numPresets >= maximumPresetCount)
+            if (discoveredPresetCount >= maximumPresetCount)
                 break;
 
             if (file.isDirectory())
             {
                 auto currentState = std::make_unique<juce::XmlElement>("FOLDER");
                 currentState->setAttribute("folderName", file.getFile().getFileName());
-                recursiveFileSearch(*currentState, file.getFile(), depth + 1);
+                recursiveFileSearchImpl(*currentState,
+                                        file.getFile(),
+                                        depth + 1,
+                                        discoveredPresetCount);
                 if (currentState->getNumChildElements() > 0)
                     parentXML.addChildElement(currentState.release());
             }
@@ -780,8 +798,9 @@ namespace state
                 if (presetKey.isEmpty())
                     continue;
 
-                ++numPresets;
-                const juce::String newPresetId = getNextAvailablePresetId();
+                ++discoveredPresetCount;
+                const juce::String newPresetId =
+                    "preset" + juce::String(discoveredPresetCount);
                 currentState->setTagName(newPresetId);
 
                 const juce::String newName = file.getFile().getFileNameWithoutExtension();
@@ -811,13 +830,21 @@ namespace state
 
     void StatePresets::scanAllPresets()
     {
-        numPresets = 0;
+        int discoveredPresetCount = 0;
         mPresetXml.deleteAllChildElements();
         //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
 
-        recursiveFileSearch(mPresetXml, presetFile, 0);
+        recursiveFileSearchImpl(mPresetXml,
+                                presetFile,
+                                0,
+                                discoveredPresetCount);
 
         recursiveSort(&mPresetXml);
+
+        // Host state restoration may query the count from a non-message
+        // thread. Publish only the complete scan so it never clamps a legacy
+        // preset ID against a transient zero or partial result.
+        numPresets.store(discoveredPresetCount, std::memory_order_release);
 
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
     }
@@ -961,7 +988,15 @@ namespace state
 
         if (removeByTag(mPresetXml))
         {
-            numPresets = juce::jmax(0, numPresets - 1);
+            auto previousCount = numPresets.load(std::memory_order_relaxed);
+            while (previousCount > 0
+                   && ! numPresets.compare_exchange_weak(
+                       previousCount,
+                       previousCount - 1,
+                       std::memory_order_release,
+                       std::memory_order_relaxed))
+            {
+            }
             const juce::ScopedLock lock(identityLock);
             mCurrentPresetId.store(0, std::memory_order_relaxed);
             statePresetName.clear();
@@ -1054,7 +1089,7 @@ namespace state
     int StatePresets::getNumPresets() const
     {
         //return mPresetXml.getNumChildElements();
-        return numPresets;
+        return numPresets.load(std::memory_order_acquire);
     }
 
     int StatePresets::getCurrentPresetId() const

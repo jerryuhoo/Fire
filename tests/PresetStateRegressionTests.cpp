@@ -803,6 +803,52 @@ TEST_CASE("Preset save failure is atomic and dotted filenames retain their ident
     CHECK(presets.getNumPresets() == countBeforeFailure);
 }
 
+TEST_CASE("Preset rescans publish only complete counts to concurrent readers",
+          "[preset][filesystem][concurrency][state]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    FireAudioProcessor presetSource;
+    constexpr int expectedPresetCount = 32;
+    for (int index = 0; index < expectedPresetCount; ++index)
+        writePresetFile(
+            presetSource,
+            temporaryDirectory.directory.getChildFile(
+                "Concurrent-" + juce::String(index) + ".fire"),
+            "Concurrent-" + juce::String(index));
+
+    state::StatePresets presets {
+        presetSource, temporaryDirectory.directory.getFullPathName()
+    };
+    REQUIRE(presets.getNumPresets() == expectedPresetCount);
+
+    std::atomic<bool> readerReady { false };
+    std::atomic<bool> keepReading { true };
+    std::atomic<bool> observedPartialCount { false };
+    std::thread reader([&]
+    {
+        readerReady.store(true, std::memory_order_release);
+        while (keepReading.load(std::memory_order_acquire))
+            if (presets.getNumPresets() != expectedPresetCount)
+                observedPartialCount.store(true, std::memory_order_relaxed);
+    });
+
+    while (! readerReady.load(std::memory_order_acquire))
+        std::this_thread::yield();
+
+    for (int scan = 0; scan < 3; ++scan)
+        presets.scanAllPresets();
+
+    keepReading.store(false, std::memory_order_release);
+    reader.join();
+
+    CHECK_FALSE(observedPartialCount.load(std::memory_order_relaxed));
+    CHECK(presets.getNumPresets() == expectedPresetCount);
+}
+
 TEST_CASE("Duplicate preset display names keep their relative-path identity",
           "[preset][filesystem][identity][duplicates]")
 {

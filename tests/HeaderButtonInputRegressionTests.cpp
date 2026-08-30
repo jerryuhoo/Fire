@@ -707,6 +707,47 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
     }
 }
 
+TEST_CASE("Editor peer detachment discards every header pointer gesture",
+          "[header-button][ui][input][editor][peer][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    REQUIRE(editor->isShowing());
+
+    std::vector<PrimaryTextButton*> buttons;
+    collectHeaderButtons(*editor, buttons);
+    REQUIRE(buttons.size() == 11);
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    int clickCount = 0;
+    for (auto* button : buttons)
+    {
+        REQUIRE(button != nullptr);
+        button->onClick = [&clickCount] { ++clickCount; };
+        beginPointerGesture(*button, leftButton);
+        REQUIRE(button->isDown());
+    }
+
+    editor->removeFromDesktop();
+    REQUIRE(editor->isVisible());
+    REQUIRE_FALSE(editor->isShowing());
+    editor->timerCallback();
+
+    for (auto* button : buttons)
+    {
+        CHECK_FALSE(button->isDown());
+        endPointerGesture(*button);
+        CHECK_FALSE(button->isDown());
+        button->onClick = nullptr;
+    }
+    CHECK(clickCount == 0);
+}
+
 TEST_CASE("A-B header actions survive synchronous editor deletion by the host",
           "[header-button][ui][preset][host][lifetime][self-delete][regression]")
 {

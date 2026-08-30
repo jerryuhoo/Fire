@@ -696,11 +696,29 @@ void FireAudioProcessorEditor::visibilityChanged()
             return;
 
         hqButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
         windowLeftButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
         windowRightButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
         windowLfoButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
         zoomButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
         stateComponent.dismissPointerGestures();
+        if (safeThis == nullptr)
+            return;
+
         valueEntryPopup.dismissSession();
 
         if (safeThis == nullptr)
@@ -1032,6 +1050,30 @@ void FireAudioProcessorEditor::timerCallback()
             return;
 
         hideValuePopup();
+        if (safeThis == nullptr)
+            return;
+
+        hqButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        windowLeftButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        windowRightButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        windowLfoButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        zoomButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        stateComponent.dismissPointerGestures();
         if (safeThis == nullptr)
             return;
 

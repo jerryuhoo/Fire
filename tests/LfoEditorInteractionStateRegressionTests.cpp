@@ -5,7 +5,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
 #include <initializer_list>
 #include <memory>
 
@@ -321,6 +323,26 @@ namespace
 void prepareEditor(LfoEditor& editor)
 {
     editor.setBounds(0, 0, 400, 200);
+}
+
+std::uint64_t renderFingerprint(LfoEditor& editor)
+{
+    juce::Image image(juce::Image::ARGB,
+                      juce::jmax(1, editor.getWidth()),
+                      juce::jmax(1, editor.getHeight()),
+                      true);
+    juce::Graphics graphics(image);
+    editor.paintEntireComponent(graphics, true);
+
+    std::uint64_t fingerprint = 1469598103934665603ull;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            fingerprint ^= image.getPixelAt(x, y).getARGB();
+            fingerprint *= 1099511628211ull;
+        }
+
+    return fingerprint;
 }
 
 LfoEditor* findLfoEditor(juce::Component& root)
@@ -2963,6 +2985,51 @@ TEST_CASE("LFO editor point hover and focus feedback animate only while visible"
     CHECK_FALSE(LfoEditorTestAccess::animationIsRunning(editor));
     CHECK(LfoEditorTestAccess::hoveredPoint(editor) == -1);
     CHECK(LfoEditorTestAccess::hoverAmount(editor) == 0.0f);
+}
+
+TEST_CASE("LFO editor rendering follows bank colour without stale grid cache",
+          "[lfo][editor][ui][colour][bank][cache]")
+{
+    const auto shape = makeLfoData({ { 0.0f, 0.18f },
+                                     { 0.36f, 0.72f },
+                                     { 1.0f, 0.82f } });
+    LfoEditor reusedEditor;
+    prepareEditor(reusedEditor);
+
+    std::array<std::uint64_t, fire::ui::lfoBankCount> fingerprints {};
+    for (int bank = 0; bank < fire::ui::lfoBankCount; ++bank)
+    {
+        reusedEditor.setDataToDisplay(
+            shape, LfoEditor::DataContext { bank, 1 });
+        fingerprints[static_cast<size_t>(bank)] =
+            renderFingerprint(reusedEditor);
+
+        // A freshly built cache for this bank must match an editor which
+        // reused the cache created while another bank was active.
+        LfoEditor freshEditor;
+        prepareEditor(freshEditor);
+        freshEditor.setDataToDisplay(
+            shape, LfoEditor::DataContext { bank, 1 });
+        CHECK(renderFingerprint(freshEditor)
+              == fingerprints[static_cast<size_t>(bank)]);
+    }
+
+    for (size_t first = 0; first < fingerprints.size(); ++first)
+        for (size_t second = first + 1;
+             second < fingerprints.size(); ++second)
+            CHECK(fingerprints[first] != fingerprints[second]);
+
+    reusedEditor.setDataToDisplay(
+        shape, LfoEditor::DataContext { 0, 2 });
+    CHECK(renderFingerprint(reusedEditor) == fingerprints.front());
+
+    LfoEditor standaloneEditor;
+    prepareEditor(standaloneEditor);
+    standaloneEditor.setDataToDisplay(shape);
+    const auto genericFingerprint = renderFingerprint(standaloneEditor);
+    standaloneEditor.setDataToDisplay(
+        shape, LfoEditor::DataContext { fire::ui::lfoBankCount, 9 });
+    CHECK(renderFingerprint(standaloneEditor) == genericFingerprint);
 }
 
 TEST_CASE("LFO editor discards focus animation when its workspace ancestor hides",

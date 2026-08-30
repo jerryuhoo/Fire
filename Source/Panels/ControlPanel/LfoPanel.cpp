@@ -519,6 +519,7 @@ void LfoEditor::setDataContextValidator(
 
 void LfoEditor::paint(juce::Graphics& g)
 {
+    const auto accent = getCurrentLfoAccent();
     const auto physicalScale = g.getInternalContext().getPhysicalPixelScaleFactor();
     if (gridCache.isNull()
         || cachedGridWidth != getWidth()
@@ -530,6 +531,14 @@ void LfoEditor::paint(juce::Graphics& g)
 
     if (! gridCache.isNull())
         g.drawImage(gridCache, getLocalBounds().toFloat());
+
+    // The centre line belongs to the selected source palette, so keep it out
+    // of the geometry-only grid cache. Switching banks must never leave the
+    // previous source colour baked into the background image.
+    g.setColour(accent.withAlpha(0.34f));
+    g.drawHorizontalLine(getHeight() / 2,
+                         0.0f,
+                         static_cast<float>(getWidth()));
 
     const auto drawFocusRing = [&]
     {
@@ -559,23 +568,19 @@ void LfoEditor::paint(juce::Graphics& g)
     fillPath.lineTo(static_cast<float>(getWidth()), static_cast<float>(getHeight()));
     fillPath.lineTo(0.0f, static_cast<float>(getHeight()));
     fillPath.closeSubPath();
-    juce::ColourGradient fill(fire::ui::colours::modulation.withAlpha(0.16f),
+    juce::ColourGradient fill(accent.withAlpha(0.16f),
                               0.0f, 0.0f,
-                              fire::ui::colours::ember.withAlpha(0.015f),
+                              accent.withAlpha(0.015f),
                               0.0f, static_cast<float>(getHeight()), false);
     g.setGradientFill(fill);
     g.fillPath(fillPath);
 
-    g.setColour(fire::ui::colours::modulation.withAlpha(0.13f));
+    g.setColour(accent.withAlpha(0.13f));
     g.strokePath(cachedWavePath,
                  juce::PathStrokeType(5.5f,
                                       juce::PathStrokeType::curved,
                                       juce::PathStrokeType::rounded));
-    juce::ColourGradient wave(fire::ui::colours::modulation, 0.0f, 0.0f,
-                              fire::ui::colours::flame,
-                              static_cast<float>(getWidth()), static_cast<float>(getHeight()), false);
-    wave.addColour(0.68, fire::ui::colours::whiteHot);
-    g.setGradientFill(wave);
+    g.setColour(accent);
     g.strokePath(cachedWavePath,
                  juce::PathStrokeType(2.0f,
                                       juce::PathStrokeType::curved,
@@ -593,8 +598,9 @@ void LfoEditor::paint(juce::Graphics& g)
         auto localPoint = fromNormalized(activeLfoData.points[i]);
 
         float currentPointRadius = getPointVisualRadius();
-        juce::Colour currentPointColour = isSelected ? fire::ui::colours::whiteHot
-                                                     : fire::ui::colours::modulation;
+        juce::Colour currentPointColour = isSelected
+                                              ? fire::ui::colours::whiteHot
+                                              : accent;
 
         // Apply hover effect (enlarge and make transparent) to both selected and unselected points.
         if (hover > 0.0f)
@@ -616,7 +622,10 @@ void LfoEditor::paint(juce::Graphics& g)
         g.setColour(currentPointColour.withAlpha(0.88f + hover * 0.12f));
         g.drawEllipse(pointBounds.reduced(0.5f), isSelected ? 2.0f : 1.3f);
         if (isSelected)
+        {
+            g.setColour(accent.brighter(hover * 0.12f));
             g.fillEllipse(pointBounds.reduced(currentPointRadius * 0.50f));
+        }
     }
 
     // Draw the marquee selection rectangle if the user is currently dragging it.
@@ -625,7 +634,7 @@ void LfoEditor::paint(juce::Graphics& g)
         auto rectToDraw = makeNormalised(selectionRectangle.getPosition(),
                                          selectionRectangle.getBottomRight());
 
-        g.setColour(fire::ui::colours::modulation.withAlpha(0.14f));
+        g.setColour(accent.withAlpha(0.14f));
         g.fillRoundedRectangle(rectToDraw.toFloat(), 2.0f);
         g.setColour(fire::ui::colours::whiteHot.withAlpha(0.85f));
         g.drawRoundedRectangle(rectToDraw.toFloat(), 2.0f, 1.0f);
@@ -647,7 +656,7 @@ void LfoEditor::paint(juce::Graphics& g)
     // Draw phase offset line when dragging
     if (phaseOffsetPosition >= 0.0f)
     {
-        g.setColour(fire::ui::colours::modulation.withAlpha(0.62f));
+        g.setColour(accent.withAlpha(0.62f));
         g.drawVerticalLine(juce::roundToInt(getWidth() * phaseOffsetPosition), 0.0f, (float) getHeight());
     }
 
@@ -692,8 +701,6 @@ void LfoEditor::rebuildGridCache(float physicalScale)
         cacheGraphics.drawHorizontalLine(juce::roundToInt(getHeight() * i / static_cast<float>(vGridDivs)),
                                          0.0f, static_cast<float>(getWidth()));
 
-    cacheGraphics.setColour(fire::ui::colours::modulation.withAlpha(0.34f));
-    cacheGraphics.drawHorizontalLine(getHeight() / 2, 0.0f, static_cast<float>(getWidth()));
     cacheGraphics.setColour(fire::ui::colours::hairline.withAlpha(0.92f));
     cacheGraphics.drawRect(getLocalBounds(), 1);
 }
@@ -718,6 +725,14 @@ uint64_t LfoEditor::getWavePathSignature() const noexcept
     for (const auto curvature : activeLfoData.curvatures)
         append(juce::roundToInt(curvature * 100000.0f));
     return hash;
+}
+
+juce::Colour LfoEditor::getCurrentLfoAccent() const noexcept
+{
+    if (! fire::ui::isValidLfoBankIndex(activeDataContext.lfoIndex))
+        return fire::ui::colours::modulation;
+
+    return fire::ui::lfoBankColour(activeDataContext.lfoIndex);
 }
 
 void LfoEditor::rebuildWavePath()
@@ -3200,6 +3215,12 @@ void LfoPanel::setLfo(int newIndex)
     // Update the current LFO index and tell the editor to display the new data.
     currentLfoIndex = newIndex;
     lfoSelectionPosition.setTarget(static_cast<float>(currentLfoIndex));
+    const auto accent = fire::ui::lfoBankColour(currentLfoIndex);
+    for (auto* motionSlider : { &rateSlider,
+                                &lfoSmoothSlider,
+                                &lfoPhaseSlider })
+        motionSlider->setColour(juce::Slider::rotarySliderFillColourId,
+                                accent);
     repaint(leftColumnArea);
     displayLfoData(currentLfoIndex);
 

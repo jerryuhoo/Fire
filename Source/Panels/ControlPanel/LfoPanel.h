@@ -189,6 +189,7 @@ private:
     void rebuildGridCache(float physicalScale);
     void rebuildWavePath();
     uint64_t getWavePathSignature() const noexcept;
+    juce::Colour getCurrentLfoAccent() const noexcept;
     juce::Image gridCache;
     juce::Path cachedWavePath;
     uint64_t cachedWavePathSignature = 0;

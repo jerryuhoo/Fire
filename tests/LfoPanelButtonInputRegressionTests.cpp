@@ -690,6 +690,51 @@ TEST_CASE("LFO panel preserves interactive layout at narrow and scaled sizes",
     checkLayout(1.0f, { 0, 0, 640, 224 });
 }
 
+TEST_CASE("LFO bank selection colours its editor controls consistently",
+          "[lfo][ui][colour][bank]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    LfoPanel panel(processor);
+
+    for (int selectedBank = 0;
+         selectedBank < fire::ui::lfoBankCount;
+         ++selectedBank)
+    {
+        LfoPanelBrushTestAccess::setLfo(panel, selectedBank);
+        const auto expected = fire::ui::lfoBankColour(selectedBank);
+
+        for (int buttonIndex = 0;
+             buttonIndex < fire::ui::lfoBankCount;
+             ++buttonIndex)
+        {
+            const auto& button =
+                LfoPanelBrushTestAccess::getLfoSelectButton(panel,
+                                                            buttonIndex);
+            CHECK(button.findColour(juce::TextButton::textColourOnId)
+                  == fire::ui::lfoBankColour(buttonIndex));
+            CHECK(button.getToggleState()
+                  == (buttonIndex == selectedBank));
+        }
+
+        for (const auto* slider :
+             LfoPanelBrushTestAccess::getMotionSliders(panel))
+            CHECK(slider->findColour(
+                      juce::Slider::rotarySliderFillColourId)
+                  == expected);
+
+        // Re-selecting the same bank follows a different lifecycle path but
+        // must retain the same palette and attachments.
+        LfoPanelBrushTestAccess::setLfo(panel, selectedBank);
+        for (const auto* slider :
+             LfoPanelBrushTestAccess::getMotionSliders(panel))
+            CHECK(slider->findColour(
+                      juce::Slider::rotarySliderFillColourId)
+                  == expected);
+    }
+}
+
 TEST_CASE("LFO resize preserves an active numeric value edit",
           "[lfo][ui][layout][resize][slider][lifecycle]")
 {

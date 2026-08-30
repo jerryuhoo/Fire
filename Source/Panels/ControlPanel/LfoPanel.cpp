@@ -2495,9 +2495,11 @@ void LfoPanel::animationTick(float deltaSeconds)
 
     if (! isShowing())
     {
-        if (assignFeedback == AssignFeedback::completed
-            || assignFeedback == AssignFeedback::cancelled)
-            clearAssignFeedback();
+        // Hiding MOD FORGE is only a workspace change, not the end of the
+        // editor session. Preserve completed/cancelled feedback and its
+        // remaining visible time so it can be seen when the user returns.
+        // FireAudioProcessorEditor explicitly clears this state when the
+        // actual editor session is hidden or disabled.
         lfoSelectionPosition.snapTo(lfoSelectionPosition.target);
         return;
     }

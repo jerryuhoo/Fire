@@ -973,6 +973,31 @@ void FireAudioProcessorEditor::timerCallback()
     // when the peer becomes visible again.
     if (! isShowing())
     {
+        bool visibleEditorSessionEnded = false;
+        {
+            const juce::ScopedLock lock(updateResultLock);
+            visibleEditorSessionEnded =
+                updateCheckVisibilityState
+                == UpdateCheckVisibilityState::hidden;
+        }
+
+        // Unlike a workspace change, a detached/minimised editor peer ends
+        // the visible UI session even when the host leaves this Component's
+        // own visible flag set. visibilityChanged() is therefore not
+        // guaranteed to perform the Assign cleanup for this boundary. Keep
+        // the normal pre-peer construction state provisional, though: it is
+        // not a session that has become hidden.
+        if (visibleEditorSessionEnded)
+        {
+            if (isLfoAssignMode)
+                exitAssignMode(false);
+            else
+                lfoPanel.clearAssignFeedback();
+        }
+
+        if (safeThis == nullptr)
+            return;
+
         for (auto* slider : allModulatableSliders)
         {
             if (slider != nullptr)

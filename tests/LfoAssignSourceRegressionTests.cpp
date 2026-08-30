@@ -162,3 +162,69 @@ TEST_CASE("Assign mode reports cancellation and cannot survive editor hiding",
     CHECK_FALSE(assignButton->getToggleState());
     CHECK(assignButton->getButtonText() == "Assign");
 }
+
+TEST_CASE("Assign result feedback pauses while the LFO workspace is hidden",
+          "[ui][lfo][assign][feedback][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    juce::Component host;
+    host.setBounds(0, 0, 1000, 500);
+    host.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    host.setVisible(true);
+
+    LfoPanel lfoPanel(processor);
+    lfoPanel.setBounds(host.getLocalBounds());
+    host.addAndMakeVisible(lfoPanel);
+    REQUIRE(lfoPanel.isShowing());
+
+    lfoPanel.showAssignCompleted(2);
+    CHECK(lfoPanel.assignButton.getButtonText() == "LFO 3 Assigned");
+
+    // Switching to another workspace must pause the amount of visible time
+    // remaining instead of consuming or clearing it off-screen.
+    lfoPanel.setVisible(false);
+    for (int frame = 0; frame < 20; ++frame)
+        lfoPanel.animationTick(0.1f);
+    CHECK(lfoPanel.assignButton.getButtonText() == "LFO 3 Assigned");
+
+    lfoPanel.setVisible(true);
+    REQUIRE(lfoPanel.isShowing());
+    for (int frame = 0; frame < 5; ++frame)
+        lfoPanel.animationTick(0.1f);
+    CHECK(lfoPanel.assignButton.getButtonText() == "LFO 3 Assigned");
+
+    for (int frame = 0; frame < 7; ++frame)
+        lfoPanel.animationTick(0.1f);
+    CHECK(lfoPanel.assignButton.getButtonText() == "Assign");
+}
+
+TEST_CASE("Assign feedback cannot survive a detached editor peer",
+          "[ui][lfo][assign][feedback][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    REQUIRE(editor->isShowing());
+    editor->timerCallback();
+
+    auto* lfoPanel = findDescendant<LfoPanel>(*editor);
+    REQUIRE(lfoPanel != nullptr);
+    lfoPanel->showAssignCompleted(1);
+    CHECK(lfoPanel->assignButton.getButtonText() == "LFO 2 Assigned");
+
+    // Some hosts detach the peer while retaining a visible Editor component,
+    // so there is no Component::visibilityChanged() notification to perform
+    // session cleanup. The shared UI timer observes this boundary instead.
+    editor->removeFromDesktop();
+    REQUIRE_FALSE(editor->isShowing());
+    editor->timerCallback();
+    CHECK(lfoPanel->assignButton.getButtonText() == "Assign");
+}

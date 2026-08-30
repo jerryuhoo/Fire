@@ -21,7 +21,8 @@ struct DraggableButtonPointerTestAccess;
 /*
 */
 class DraggableButton : public juce::Component,
-                        public juce::SettableTooltipClient
+                        public juce::SettableTooltipClient,
+                        private juce::Timer
 {
 public:
     DraggableButton();
@@ -60,13 +61,23 @@ private:
     bool setAccessibleFrequency(double frequency);
     double getAccessibleFrequency() const noexcept;
     bool canAcceptKeyboardOrAccessibilityInput() const noexcept;
+    void timerCallback() override;
+    void updateAnimationTargets() noexcept;
+    void startAnimationIfNeeded() noexcept;
+    bool advanceAnimation(float deltaSeconds) noexcept;
+    bool animationsSettled() const noexcept;
+    bool hasPresentedInteraction() const noexcept;
+    void clearInteractionPresentation() noexcept;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
     void enablementChanged() override;
     void visibilityChanged() override;
     std::unique_ptr<juce::AccessibilityHandler>
     createAccessibilityHandler() override;
-    juce::Colour getColour();
+    juce::Colour getColour() const;
     bool mState = true;
+    fire::ui::DampedValue hoverAnimation;
+    fire::ui::DampedValue pressAnimation;
+    fire::ui::DampedValue focusAnimation;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DraggableButton)
 };

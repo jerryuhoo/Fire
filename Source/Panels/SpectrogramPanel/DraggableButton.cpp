@@ -84,6 +84,9 @@ private:
 //==============================================================================
 DraggableButton::DraggableButton()
 {
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
     setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     setWantsKeyboardFocus(true);
     setMouseClickGrabsKeyboardFocus(true);
@@ -94,39 +97,45 @@ DraggableButton::DraggableButton()
 
 DraggableButton::~DraggableButton()
 {
+    stopTimer();
 }
 
 void DraggableButton::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+    const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
+    const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
+    const auto focus = juce::jlimit(0.0f, 1.0f, focusAnimation.current);
     const auto accent = getColour();
-    const bool hasVisibleFocus = mState && isEnabled()
-                              && hasKeyboardFocus(true);
+
+    bounds = bounds.reduced(press * 0.45f);
 
     if (mState)
     {
-        g.setColour(accent.withAlpha(hasVisibleFocus ? 0.25f
-                                                    : isEntered ? 0.20f : 0.11f));
-        g.fillEllipse(bounds.expanded((isEntered || hasVisibleFocus) ? 0.0f
-                                                                     : -0.5f));
+        const auto emphasis = juce::jmax(hover, focus * 0.92f);
+        g.setColour(accent.withAlpha(0.11f + hover * 0.09f
+                                           + focus * 0.14f));
+        g.fillEllipse(bounds.expanded(-0.5f + emphasis * 0.5f));
     }
 
-    juce::ColourGradient metal(fire::ui::colours::raised.brighter(isEntered ? 0.10f : 0.04f),
+    juce::ColourGradient metal(fire::ui::colours::raised.brighter(0.04f + hover * 0.06f),
                                bounds.getCentreX(), bounds.getY(),
                                fire::ui::colours::surface0, bounds.getCentreX(), bounds.getBottom(), false);
     g.setGradientFill(metal);
     g.fillEllipse(bounds.reduced(bounds.getWidth() * 0.16f));
 
-    g.setColour(accent.withAlpha(mState ? (isEntered ? 0.95f : 0.76f) : 0.38f));
+    g.setColour(accent.withAlpha(mState ? 0.76f + hover * 0.19f
+                                      : 0.38f));
     g.drawEllipse(bounds.reduced(bounds.getWidth() * 0.16f), 1.0f);
 
-    const auto core = bounds.reduced(bounds.getWidth() * (isEntered ? 0.34f : 0.38f));
+    const auto coreInset = 0.38f - hover * 0.04f + press * 0.015f;
+    const auto core = bounds.reduced(bounds.getWidth() * coreInset);
     g.setColour(mState ? fire::ui::colours::whiteHot : fire::ui::colours::disabled);
     g.fillEllipse(core);
 
-    if (hasVisibleFocus)
+    if (focus > 0.001f)
     {
-        g.setColour(fire::ui::colours::ember.withAlpha(0.92f));
+        g.setColour(fire::ui::colours::ember.withAlpha(0.92f * focus));
         g.drawEllipse(bounds.reduced(1.0f), 1.5f);
     }
 }
@@ -139,7 +148,7 @@ void DraggableButton::mouseEnter(const juce::MouseEvent& e)
 {
     juce::Component::mouseEnter(e);
     isEntered = true;
-    repaint();
+    updateAnimationTargets();
 
     // If the owner re-enters without its primary button, the preceding up was
     // lost while the host or window manager changed pointer capture.
@@ -156,17 +165,16 @@ void DraggableButton::mouseExit(const juce::MouseEvent& e)
 {
     juce::Component::mouseExit(e);
     isEntered = false;
-    repaint();
+    updateAnimationTargets();
 
     recoverMissingPointerUp(e);
 }
 
-juce::Colour DraggableButton::getColour()
+juce::Colour DraggableButton::getColour() const
 {
-    if (mState && isEntered)
-        return fire::ui::colours::filter.brighter(0.12f);
-    else if (mState && ! isEntered)
-        return fire::ui::colours::filter;
+    if (mState)
+        return fire::ui::colours::filter.brighter(
+            juce::jlimit(0.0f, 1.0f, hoverAnimation.current) * 0.12f);
 
     return fire::ui::colours::disabled;
 }
@@ -177,6 +185,10 @@ void DraggableButton::setState(const bool state)
         return;
 
     mState = state;
+    if (! state)
+        clearInteractionPresentation();
+    else
+        updateAnimationTargets();
     repaint();
 
     // Ending an active drag can synchronously remove this component through a
@@ -211,6 +223,7 @@ void DraggableButton::mouseDown(const juce::MouseEvent& event)
     primaryDragActive = true;
     pointerSourceType = event.source.getType();
     pointerSourceIndex = event.source.getIndex();
+    updateAnimationTargets();
     auto dragCallback = onDrag;
 
     // Keep the callable alive if it removes its owning component. No member is
@@ -287,6 +300,7 @@ void DraggableButton::dismissTransientInteraction()
 
     primaryDragActive = false;
     pointerSourceIndex = -1;
+    updateAnimationTargets();
     if (onDragFinished)
     {
         auto finishedCallback = onDragFinished;
@@ -376,22 +390,118 @@ bool DraggableButton::canAcceptKeyboardOrAccessibilityInput() const noexcept
     return mState && isEnabled() && isShowing() && ! primaryDragActive;
 }
 
+void DraggableButton::timerCallback()
+{
+    if (! mState || ! isEnabled() || ! isShowing())
+    {
+        isEntered = false;
+        clearInteractionPresentation();
+        repaint();
+
+        // A detached peer cannot deliver its matching pointer release. The
+        // finish callback can synchronously delete the owning editor, so this
+        // remains the final operation in the lifecycle path.
+        dismissTransientInteraction();
+        return;
+    }
+
+    updateAnimationTargets();
+    if (advanceAnimation(1.0f / 60.0f))
+        repaint();
+
+    if (animationsSettled())
+    {
+        if (hasPresentedInteraction())
+            startTimer(100);
+        else
+            stopTimer();
+    }
+}
+
+void DraggableButton::updateAnimationTargets() noexcept
+{
+    if (! mState || ! isEnabled() || ! isShowing())
+    {
+        clearInteractionPresentation();
+        return;
+    }
+
+    hoverAnimation.setTarget(isEntered || primaryDragActive ? 1.0f : 0.0f);
+    pressAnimation.setTarget(primaryDragActive ? 1.0f : 0.0f);
+    focusAnimation.setTarget(hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    startAnimationIfNeeded();
+}
+
+void DraggableButton::startAnimationIfNeeded() noexcept
+{
+    if (! animationsSettled())
+    {
+        startTimerHz(60);
+        return;
+    }
+
+    // Keep a low-rate lifecycle watch while an interaction is visibly held.
+    // Component::removeFromDesktop() does not emit visibilityChanged(), so a
+    // fully settled hover/focus would otherwise remain painted after a host
+    // detaches the editor peer.
+    if (hasPresentedInteraction() && ! isTimerRunning())
+        startTimer(100);
+}
+
+bool DraggableButton::advanceAnimation(float deltaSeconds) noexcept
+{
+    auto changed = hoverAnimation.advance(deltaSeconds, 0.10f);
+    changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
+    changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
+    return changed;
+}
+
+bool DraggableButton::animationsSettled() const noexcept
+{
+    return hoverAnimation.isSettled() && pressAnimation.isSettled()
+        && focusAnimation.isSettled();
+}
+
+bool DraggableButton::hasPresentedInteraction() const noexcept
+{
+    return hoverAnimation.current > 0.001f
+        || pressAnimation.current > 0.001f
+        || focusAnimation.current > 0.001f
+        || hoverAnimation.target > 0.001f
+        || pressAnimation.target > 0.001f
+        || focusAnimation.target > 0.001f;
+}
+
+void DraggableButton::clearInteractionPresentation() noexcept
+{
+    stopTimer();
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
+}
+
 void DraggableButton::focusGained(FocusChangeType cause)
 {
     juce::Component::focusGained(cause);
-    repaint();
+    updateAnimationTargets();
 }
 
 void DraggableButton::focusLost(FocusChangeType cause)
 {
     juce::Component::focusLost(cause);
-    repaint();
+    updateAnimationTargets();
 }
 
 void DraggableButton::enablementChanged()
 {
     juce::Component::enablementChanged();
     isEntered = isEntered && isEnabled();
+
+    if (isEnabled())
+        updateAnimationTargets();
+    else
+        clearInteractionPresentation();
+
     repaint();
 
     if (! isEnabled())
@@ -401,13 +511,15 @@ void DraggableButton::enablementChanged()
 void DraggableButton::visibilityChanged()
 {
     juce::Component::visibilityChanged();
-    if (isVisible())
+    if (isShowing())
     {
+        updateAnimationTargets();
         repaint();
         return;
     }
 
     isEntered = false;
+    clearInteractionPresentation();
     repaint();
 
     // The drag-finished callback may synchronously destroy the owner.

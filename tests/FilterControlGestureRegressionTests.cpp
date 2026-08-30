@@ -28,6 +28,32 @@ struct DraggableButtonPointerTestAccess
         button.pointerSourceType = sourceType;
         button.pointerSourceIndex = sourceIndex;
     }
+
+    static bool advanceAnimation(DraggableButton& button,
+                                 float deltaSeconds) noexcept
+    {
+        return button.advanceAnimation(deltaSeconds);
+    }
+
+    static void pollAnimationLifecycle(DraggableButton& button)
+    {
+        button.timerCallback();
+    }
+
+    static float hoverAnimation(const DraggableButton& button) noexcept
+    {
+        return button.hoverAnimation.current;
+    }
+
+    static float pressAnimation(const DraggableButton& button) noexcept
+    {
+        return button.pressAnimation.current;
+    }
+
+    static float focusAnimation(const DraggableButton& button) noexcept
+    {
+        return button.focusAnimation.current;
+    }
 };
 
 struct FilterControlTestAccess
@@ -800,6 +826,114 @@ TEST_CASE("Filter graph nodes expose distinct names and usable hit targets",
         CHECK(node->getWidth() >= 20);
         CHECK(node->getHeight() >= 20);
     }
+}
+
+TEST_CASE("Filter graph node interaction feedback fades continuously and clears off-peer",
+          "[filter-control][ui][animation][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    DraggableButton node;
+    node.setBounds(0, 0, 24, 24);
+    int dragFinishes = 0;
+    node.onDrag = [](DraggableButton&, const juce::MouseEvent&) {};
+    node.onDragFinished = [&dragFinishes] { ++dragFinishes; };
+    node.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    node.setVisible(true);
+    REQUIRE(node.isShowing());
+
+    const auto centre = node.getLocalBounds().toFloat().getCentre();
+    const auto frame = [&node]
+    {
+        return DraggableButtonPointerTestAccess::advanceAnimation(
+            node, 1.0f / 60.0f);
+    };
+    const auto hover = [&node]
+    {
+        return DraggableButtonPointerTestAccess::hoverAnimation(node);
+    };
+    const auto press = [&node]
+    {
+        return DraggableButtonPointerTestAccess::pressAnimation(node);
+    };
+    const auto focus = [&node]
+    {
+        return DraggableButtonPointerTestAccess::focusAnimation(node);
+    };
+
+    CHECK(hover() == 0.0f);
+    CHECK(press() == 0.0f);
+    CHECK(focus() == 0.0f);
+
+    node.mouseEnter(makeMouseEvent(node, centre, {}, centre));
+    REQUIRE(frame());
+    CHECK(hover() > 0.0f);
+    CHECK(hover() < 1.0f);
+    CHECK(press() == 0.0f);
+
+    node.mouseDown(makeMouseEvent(
+        node,
+        centre,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier },
+        centre));
+    REQUIRE(frame());
+    CHECK(press() > 0.0f);
+    CHECK(press() < 1.0f);
+
+    node.mouseUp(makeMouseEvent(node, centre, {}, centre));
+    CHECK(dragFinishes == 1);
+    const auto pressBeforeRelease = press();
+    for (int frameIndex = 0; frameIndex < 12; ++frameIndex)
+        frame();
+    CHECK(press() < pressBeforeRelease);
+    CHECK(hover() > 0.0f);
+
+    node.mouseExit(makeMouseEvent(node, { -1.0f, -1.0f }, {}, centre));
+    const auto hoverBeforeExit = hover();
+    for (int frameIndex = 0; frameIndex < 12; ++frameIndex)
+        frame();
+    CHECK(hover() < hoverBeforeExit);
+
+    node.grabKeyboardFocus();
+    REQUIRE(node.hasKeyboardFocus(true));
+    REQUIRE(frame());
+    CHECK(focus() > 0.0f);
+    CHECK(focus() < 1.0f);
+
+    node.giveAwayKeyboardFocus();
+    const auto focusBeforeLoss = focus();
+    for (int frameIndex = 0; frameIndex < 12; ++frameIndex)
+        frame();
+    CHECK(focus() < focusBeforeLoss);
+
+    node.mouseEnter(makeMouseEvent(node, centre, {}, centre));
+    frame();
+    REQUIRE(hover() > 0.0f);
+    node.setVisible(false);
+    CHECK(hover() == 0.0f);
+    CHECK(press() == 0.0f);
+    CHECK(focus() == 0.0f);
+
+    node.setVisible(true);
+    REQUIRE(node.isShowing());
+    node.mouseEnter(makeMouseEvent(node, centre, {}, centre));
+    frame();
+    REQUIRE(hover() > 0.0f);
+    node.setEnabled(false);
+    CHECK(hover() == 0.0f);
+    CHECK(press() == 0.0f);
+    CHECK(focus() == 0.0f);
+
+    node.setEnabled(true);
+    node.mouseEnter(makeMouseEvent(node, centre, {}, centre));
+    frame();
+    REQUIRE(hover() > 0.0f);
+    node.removeFromDesktop();
+    REQUIRE_FALSE(node.isShowing());
+    DraggableButtonPointerTestAccess::pollAnimationLifecycle(node);
+    CHECK(hover() == 0.0f);
+    CHECK(press() == 0.0f);
+    CHECK(focus() == 0.0f);
+    CHECK(dragFinishes == 1);
 }
 
 TEST_CASE("Filter graph nodes keep a primary drag owned by one pointer source",

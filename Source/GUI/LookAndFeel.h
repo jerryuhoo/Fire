@@ -510,10 +510,15 @@ public:
         const auto animation = getSliderAnimation(slider);
         const auto centreY = area.getCentreY();
         const auto track = area.reduced(6.0f * scale, area.getHeight() * 0.42f);
+        const auto configuredTrackColour =
+            slider.findColour(juce::Slider::trackColourId);
+        const auto trackAccent = configuredTrackColour.isTransparent()
+                                   ? colours::ember
+                                   : configuredTrackColour;
         g.setColour(colours::surface2.interpolatedWith(colours::raised,
                                                        animation.focus * 0.52f));
         g.fillRoundedRectangle(track, track.getHeight() * 0.5f);
-        g.setColour(colours::hairline.interpolatedWith(colours::ember,
+        g.setColour(colours::hairline.interpolatedWith(trackAccent,
                                                        juce::jmax(animation.focus,
                                                                   animation.hover * 0.36f))
                         .withMultipliedAlpha(1.0f - 0.66f * animation.disabled));
@@ -527,8 +532,7 @@ public:
                                                                       track.getY(),
                                                                       juce::jmax(startX, sliderPos),
                                                                       track.getBottom());
-        const auto valueColour = sliderPos < startX ? colours::signalCool : colours::ember;
-        g.setColour(valueColour.withAlpha(0.9f - 0.6f * animation.disabled));
+        g.setColour(trackAccent.withMultipliedAlpha(0.9f - 0.6f * animation.disabled));
         g.fillRoundedRectangle(valueBounds, track.getHeight() * 0.5f);
 
         const auto thumbScale = 1.0f + animation.hover * 0.10f - animation.press * 0.08f;

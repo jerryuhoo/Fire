@@ -104,6 +104,11 @@ struct ModulationMatrixRowTestAccess
         return row.amountSlider;
     }
 
+    static juce::Slider& getAmountSlider(ModulationMatrixRow& row) noexcept
+    {
+        return row.amountSlider;
+    }
+
     static const juce::TextButton& getBipolarButton(
         const ModulationMatrixRow& row) noexcept
     {
@@ -191,6 +196,55 @@ juce::Slider* findAmountSlider(juce::Component& component)
                 return slider;
 
     return nullptr;
+}
+
+juce::Image renderSlider(juce::Slider& slider)
+{
+    juce::Image image(juce::Image::ARGB,
+                      juce::jmax(1, slider.getWidth()),
+                      juce::jmax(1, slider.getHeight()),
+                      true);
+    juce::Graphics graphics(image);
+    slider.paintEntireComponent(graphics, true);
+    return image;
+}
+
+std::uint64_t imageFingerprint(const juce::Image& image)
+{
+    std::uint64_t fingerprint = 1469598103934665603ull;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            fingerprint ^= image.getPixelAt(x, y).getARGB();
+            fingerprint *= 1099511628211ull;
+        }
+
+    return fingerprint;
+}
+
+int countPixelsNearColour(const juce::Image& image,
+                          juce::Colour expected)
+{
+    const auto channelDistance = [](juce::uint8 first,
+                                    juce::uint8 second)
+    {
+        return first >= second ? first - second : second - first;
+    };
+
+    int matchingPixels = 0;
+    for (int y = 0; y < image.getHeight(); ++y)
+        for (int x = 0; x < image.getWidth(); ++x)
+        {
+            const auto pixel = image.getPixelAt(x, y);
+            const auto distance =
+                channelDistance(pixel.getRed(), expected.getRed())
+                + channelDistance(pixel.getGreen(), expected.getGreen())
+                + channelDistance(pixel.getBlue(), expected.getBlue());
+            if (pixel.getAlpha() >= 96 && distance <= 36)
+                ++matchingPixels;
+        }
+
+    return matchingPixels;
 }
 
 juce::MouseEvent makeMouseEvent(juce::Component& component,
@@ -2703,6 +2757,7 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
 {
     juce::ScopedJuceInitialiser_GUI gui;
     FireAudioProcessor processor;
+    std::array<std::uint64_t, fire::ui::lfoBankCount> fingerprints {};
 
     for (int sourceIndex = 0;
          sourceIndex < fire::ui::lfoBankCount;
@@ -2710,15 +2765,19 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
     {
         CAPTURE(sourceIndex);
         const ModulationRouting routing {
-            sourceIndex, {}, 0.25f, true, false
+            sourceIndex, {}, 0.72f, true, false
         };
-        const ModulationMatrixRow row(
+        ModulationMatrixRow row(
             processor,
             0,
             routing,
             makeRoutingEditSession(processor),
             [](std::uint64_t, ModulationRouting) {});
+        row.setBounds(0, 0, 760, 44);
         const auto sourceColour = fire::ui::lfoBankColour(sourceIndex);
+        const auto renderedSourceColour =
+            fire::ui::colours::surface2.overlaidWith(
+                sourceColour.withMultipliedAlpha(0.9f));
 
         const auto& sourceMenu =
             ModulationMatrixRowTestAccess::getSourceMenu(row);
@@ -2747,10 +2806,27 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
         }
         CHECK(sourceItemIndex == fire::ui::lfoBankCount);
 
-        const auto& amountSlider =
+        auto& amountSlider =
             ModulationMatrixRowTestAccess::getAmountSlider(row);
         CHECK(amountSlider.findColour(juce::Slider::trackColourId)
               == sourceColour);
+
+        const auto positiveImage = renderSlider(amountSlider);
+        const auto positiveMatchingPixels =
+            countPixelsNearColour(positiveImage, renderedSourceColour);
+        CAPTURE(positiveMatchingPixels);
+        CHECK(positiveMatchingPixels > 24);
+        fingerprints[static_cast<size_t>(sourceIndex)] =
+            imageFingerprint(positiveImage);
+
+        amountSlider.setValue(-0.72, juce::dontSendNotification);
+        const auto negativeImage = renderSlider(amountSlider);
+        const auto negativeMatchingPixels =
+            countPixelsNearColour(negativeImage, renderedSourceColour);
+        CAPTURE(negativeMatchingPixels);
+        CHECK(negativeMatchingPixels > 24);
+        CHECK(imageFingerprint(negativeImage)
+              != fingerprints[static_cast<size_t>(sourceIndex)]);
 
         const auto& bipolarButton =
             ModulationMatrixRowTestAccess::getBipolarButton(row);
@@ -2779,6 +2855,29 @@ TEST_CASE("Modulation matrix source affordances follow the LFO bank palette",
         CHECK(removeButton.findColour(juce::TextButton::textColourOffId)
               == fire::ui::colours::danger);
     }
+
+    for (size_t first = 0; first < fingerprints.size(); ++first)
+        for (size_t second = first + 1; second < fingerprints.size(); ++second)
+            CHECK(fingerprints[first] != fingerprints[second]);
+
+    const ModulationRouting fallbackRouting { 0, {}, 0.72f, true, false };
+    ModulationMatrixRow fallbackRow(
+        processor,
+        0,
+        fallbackRouting,
+        makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
+    fallbackRow.setBounds(0, 0, 760, 44);
+    auto& fallbackSlider =
+        ModulationMatrixRowTestAccess::getAmountSlider(fallbackRow);
+    fallbackSlider.setColour(juce::Slider::trackColourId,
+                             juce::Colours::transparentBlack);
+    const auto renderedFallbackColour =
+        fire::ui::colours::surface2.overlaidWith(
+            fire::ui::colours::ember.withMultipliedAlpha(0.9f));
+    CHECK(countPixelsNearColour(renderSlider(fallbackSlider),
+                                renderedFallbackColour)
+          > 24);
 
     ModulationMatrixPanel panel { processor };
     auto* addButton = findTextButton(panel, "+ ADD ROUTE");

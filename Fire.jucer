@@ -99,6 +99,8 @@
         <FILE id="A4Ogfw" name="AudioHelpers.h" compile="0" resource="0" file="Source/Utility/AudioHelpers.h"/>
         <FILE id="SBsuX3" name="FiltersUtil.h" compile="0" resource="0" file="Source/Utility/FiltersUtil.h"/>
         <FILE id="I9GGUn" name="Parameters.h" compile="0" resource="0" file="Source/Utility/Parameters.h"/>
+        <FILE id="sNPr01" name="StrictNumberParser.h" compile="0" resource="0"
+              file="Source/Utility/StrictNumberParser.h"/>
         <FILE id="iNAOxz" name="VersionInfo.cpp" compile="1" resource="0" file="Source/Utility/VersionInfo.cpp"/>
         <FILE id="hyj9JI" name="VersionInfo.h" compile="0" resource="0" file="Source/Utility/VersionInfo.h"/>
       </GROUP>
@@ -107,6 +109,13 @@
               file="Source/GUI/ContextAwareComboBox.cpp"/>
         <FILE id="cACb02" name="ContextAwareComboBox.h" compile="0" resource="0"
               file="Source/GUI/ContextAwareComboBox.h"/>
+        <FILE id="fThm01" name="FireTheme.h" compile="0" resource="0" file="Source/GUI/FireTheme.h"/>
+        <FILE id="fTip01" name="FireTooltipWindow.h" compile="0" resource="0"
+              file="Source/GUI/FireTooltipWindow.h"/>
+        <FILE id="fCmb01" name="FocusAwareComboBox.h" compile="0" resource="0"
+              file="Source/GUI/FocusAwareComboBox.h"/>
+        <FILE id="gSld01" name="GuardedSliderAccessibility.h" compile="0" resource="0"
+              file="Source/GUI/GuardedSliderAccessibility.h"/>
         <FILE id="rznrv4" name="InterfaceDefines.h" compile="0" resource="0"
               file="Source/GUI/InterfaceDefines.h"/>
         <FILE id="NKA4fO" name="LookAndFeel.h" compile="0" resource="0" file="Source/GUI/LookAndFeel.h"/>
@@ -114,6 +123,12 @@
               file="Source/GUI/ModulatableSlider.cpp"/>
         <FILE id="p1LFw2" name="ModulatableSlider.h" compile="0" resource="0"
               file="Source/GUI/ModulatableSlider.h"/>
+        <FILE id="pBtn01" name="PrimaryButton.h" compile="0" resource="0"
+              file="Source/GUI/PrimaryButton.h"/>
+        <FILE id="pLbl01" name="PrimaryEditableLabel.h" compile="0" resource="0"
+              file="Source/GUI/PrimaryEditableLabel.h"/>
+        <FILE id="pSld01" name="PrimarySlider.h" compile="0" resource="0"
+              file="Source/GUI/PrimarySlider.h"/>
         <FILE id="i163aG" name="SettingsComponent.h" compile="0" resource="0"
               file="Source/GUI/SettingsComponent.h"/>
         <FILE id="C3EVC1" name="ValueEntryPopup.cpp" compile="1" resource="0"
@@ -150,6 +165,8 @@
               file="Source/DSP/WidthProcessor.cpp"/>
         <FILE id="e7b4uu" name="WidthProcessor.h" compile="0" resource="0"
               file="Source/DSP/WidthProcessor.h"/>
+        <FILE id="zMix01" name="ZeroLatencyModulatedDryWetMixer.h" compile="0" resource="0"
+              file="Source/DSP/ZeroLatencyModulatedDryWetMixer.h"/>
       </GROUP>
       <FILE id="txl2qK" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>

@@ -388,6 +388,8 @@ private:
     void styleLfoSelectButton(juce::TextButton& button, juce::Colour colour);
     void configureModulationMatrixDialog(
         juce::DialogWindow::LaunchOptions& launchOptions);
+    static void configureModulationMatrixDialogResizeLimits(
+        juce::DialogWindow& dialog);
     void showModulationMatrixDialog();
     void setLfo(int newIndex);
     void displayLfoData(int index);

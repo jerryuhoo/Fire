@@ -265,6 +265,11 @@ class ModulationMatrixPanel : public juce::Component,
                               private juce::AsyncUpdater
 {
 public:
+    static constexpr int preferredContentWidth = 800;
+    static constexpr int preferredContentHeight = 400;
+    static constexpr int minimumContentWidth = 620;
+    static constexpr int minimumContentHeight = 300;
+
     ModulationMatrixPanel(FireAudioProcessor& p);
     ~ModulationMatrixPanel() override;
 

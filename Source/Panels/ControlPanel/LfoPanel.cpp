@@ -34,6 +34,54 @@ static void deleteDialogSynchronously(
     dialog.deleteAndZero();
 }
 
+static juce::Point<int> getModulationMatrixInitialContentSize(
+    const juce::Component& anchor) noexcept
+{
+    auto maximumWidth = ModulationMatrixPanel::preferredContentWidth;
+    auto maximumHeight = ModulationMatrixPanel::preferredContentHeight;
+
+    const auto applyAvailableArea = [&maximumWidth, &maximumHeight](
+                                        juce::Rectangle<int> area,
+                                        int horizontalMargin,
+                                        int verticalMargin)
+    {
+        if (area.isEmpty())
+            return;
+
+        maximumWidth = juce::jmin(
+            maximumWidth,
+            juce::jmax(ModulationMatrixPanel::minimumContentWidth,
+                       area.getWidth() - horizontalMargin));
+        maximumHeight = juce::jmin(
+            maximumHeight,
+            juce::jmax(ModulationMatrixPanel::minimumContentHeight,
+                       area.getHeight() - verticalMargin));
+    };
+
+    // Display lookup assumes a live desktop peer. LaunchOptions is also
+    // configured by tests and other offscreen owners, where querying the
+    // Desktop display list can be invalid; their local owner bounds below are
+    // sufficient until the component is attached.
+    if (anchor.getPeer() != nullptr)
+        applyAvailableArea(anchor.getParentMonitorArea(), 64, 96);
+
+    // A matrix that almost completely covers a compact plug-in editor is hard
+    // to orient and close. Keep a smaller inset inside the owning editor too;
+    // the usable-layout floor still wins when the owner is unusually small.
+    if (auto* owner = anchor.getTopLevelComponent();
+        owner != nullptr && ! owner->getLocalBounds().isEmpty())
+        applyAvailableArea(owner->getLocalBounds(), 48, 64);
+
+    return {
+        juce::jlimit(ModulationMatrixPanel::minimumContentWidth,
+                     ModulationMatrixPanel::preferredContentWidth,
+                     maximumWidth),
+        juce::jlimit(ModulationMatrixPanel::minimumContentHeight,
+                     ModulationMatrixPanel::preferredContentHeight,
+                     maximumHeight)
+    };
+}
+
 class LfoEditorAccessibilityHandler final
     : public juce::AccessibilityHandler
 {
@@ -3239,9 +3287,47 @@ void LfoPanel::configureModulationMatrixDialog(
     juce::DialogWindow::LaunchOptions& launchOptions)
 {
     launchOptions.content.setOwned(new ModulationMatrixPanel(processor));
-    launchOptions.content->setSize(800, 400);
+    const auto initialSize =
+        getModulationMatrixInitialContentSize(*this);
+    launchOptions.content->setSize(initialSize.x, initialSize.y);
     launchOptions.dialogTitle = "Modulation Matrix";
+    launchOptions.resizable = true;
     launchOptions.componentToCentreAround = this;
+}
+
+void LfoPanel::configureModulationMatrixDialogResizeLimits(
+    juce::DialogWindow& dialog)
+{
+    juce::Component::SafePointer<juce::DialogWindow> safeDialog(&dialog);
+
+    // Test factories and unusual hosts may provide a plain DialogWindow rather
+    // than LaunchOptions' resizable default. Apply the same window contract to
+    // both paths without recreating an already-correct native peer.
+    if (! dialog.isResizable())
+        dialog.setResizable(true, false);
+
+    if (safeDialog == nullptr)
+        return;
+
+    // This border is JUCE's authoritative conversion between the complete
+    // DialogWindow bounds and its content component. Window/content sizes may
+    // not yet have completed their first layout when launchAsync() returns, so
+    // deriving the frame from those transient bounds can miss the title bar.
+    const auto contentBorder = safeDialog->getContentComponentBorder();
+    const auto frameWidth = contentBorder.getLeftAndRight();
+    const auto frameHeight = contentBorder.getTopAndBottom();
+
+    // Resize limits apply to the complete native window, while the layout
+    // floor describes the content. Include the actual title-bar/border size so
+    // the last columns and footer controls cannot be clipped on any platform.
+    const auto minimumDialogWidth =
+        ModulationMatrixPanel::minimumContentWidth + frameWidth;
+    const auto minimumDialogHeight =
+        ModulationMatrixPanel::minimumContentHeight + frameHeight;
+    safeDialog->setResizeLimits(minimumDialogWidth,
+                                minimumDialogHeight,
+                                juce::jmax(4096, minimumDialogWidth),
+                                juce::jmax(4096, minimumDialogHeight));
 }
 
 void LfoPanel::showModulationMatrixDialog()
@@ -3296,6 +3382,21 @@ void LfoPanel::showModulationMatrixDialog()
     // may destroy or hide the editor before returning. Keep the returned
     // processor-referencing content local until its owner is known to remain
     // in the same visible interaction session.
+    if (safeThis == nullptr
+        || safeThis->modulationMatrixDialogSessionGeneration
+               != launchSessionGeneration
+        || ! safeThis->isShowing()
+        || ! safeThis->isEnabled())
+    {
+        deleteDialogSynchronously(launchedDialog);
+        return;
+    }
+
+    if (launchedDialog == nullptr)
+        return;
+
+    LfoPanel::configureModulationMatrixDialogResizeLimits(
+        *launchedDialog.getComponent());
     if (safeThis == nullptr
         || safeThis->modulationMatrixDialogSessionGeneration
                != launchSessionGeneration

@@ -34,11 +34,16 @@ struct LfoPanelDialogTestAccess final
         panel.modulationMatrixDialogFactoryForTesting = std::move(factory);
     }
 
-    static juce::String getConfiguredDialogTitle(LfoPanel& panel)
+    static void configureDialog(
+        LfoPanel& panel,
+        juce::DialogWindow::LaunchOptions& launchOptions)
     {
-        juce::DialogWindow::LaunchOptions launchOptions;
         panel.configureModulationMatrixDialog(launchOptions);
-        return launchOptions.dialogTitle;
+    }
+
+    static void configureDialogResizeLimits(juce::DialogWindow& dialog)
+    {
+        LfoPanel::configureModulationMatrixDialogResizeLimits(dialog);
     }
 };
 
@@ -930,14 +935,120 @@ TEST_CASE("LFO Slider gestures close at panel and editor lifecycle boundaries",
 TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
           "[ui][lfo][matrix][dialog][lifecycle]")
 {
-    SECTION("production dialog has a descriptive title")
+    SECTION("production launch options adapt without crossing the layout floor")
     {
         FireAudioProcessor processor;
         processor.hasUpdateCheckBeenPerformed = true;
         LfoPanel panel(processor);
+        panel.setBounds(0, 0, 700, 360);
 
-        CHECK(LfoPanelDialogTestAccess::getConfiguredDialogTitle(panel)
-              == "Modulation Matrix");
+        juce::DialogWindow::LaunchOptions launchOptions;
+        LfoPanelDialogTestAccess::configureDialog(panel, launchOptions);
+        auto* content = dynamic_cast<ModulationMatrixPanel*>(
+            launchOptions.content.get());
+        REQUIRE(content != nullptr);
+
+        CHECK(launchOptions.dialogTitle == "Modulation Matrix");
+        CHECK(launchOptions.componentToCentreAround == &panel);
+        CHECK(launchOptions.resizable);
+        CHECK(content->getWidth()
+              >= ModulationMatrixPanel::minimumContentWidth);
+        CHECK(content->getHeight()
+              >= ModulationMatrixPanel::minimumContentHeight);
+        CHECK(content->getWidth()
+              <= ModulationMatrixPanel::preferredContentWidth);
+        CHECK(content->getHeight()
+              <= ModulationMatrixPanel::preferredContentHeight);
+        CHECK(content->getWidth()
+              < ModulationMatrixPanel::preferredContentWidth);
+        CHECK(content->getWidth() <= panel.getWidth());
+    }
+
+    SECTION("shared dialog resize floor preserves the complete matrix layout")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        while (processor.getLfoManager()
+                   .getModulationRoutingStateSnapshot()
+                   .routings.size() < 5)
+        {
+            const auto routingState = processor.getLfoManager()
+                                          .getModulationRoutingStateSnapshot();
+            const auto result = processor.getLfoManager()
+                                    .addEmptyModulationRoutingIfRevisionMatches(
+                                        routingState.revision);
+            REQUIRE(result.accepted);
+            REQUIRE(result.changed);
+        }
+
+        juce::Component host;
+        host.setBounds(0, 0, 1000, 500);
+        host.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        REQUIRE(host.getPeer() != nullptr);
+        host.setVisible(true);
+        REQUIRE(host.isShowing());
+
+        LfoPanel panel(processor);
+        REQUIRE(panel.getNumChildComponents() > 0);
+        host.addAndMakeVisible(panel);
+        panel.setBounds(host.getLocalBounds());
+        REQUIRE(panel.getPeer() != nullptr);
+        REQUIRE(panel.isShowing());
+
+        auto* dialog = createModulationMatrixDialog(processor, &host);
+        REQUIRE(dialog != nullptr);
+        LfoPanelDialogTestAccess::configureDialogResizeLimits(*dialog);
+        LfoPanelDialogTestAccess::setDialog(panel, dialog);
+        REQUIRE(dialog->isResizable());
+        REQUIRE(dialog->getConstrainer() != nullptr);
+        auto* content = dynamic_cast<ModulationMatrixPanel*>(
+            dialog->getContentComponent());
+        REQUIRE(content != nullptr);
+
+        dialog->setBoundsConstrained({ dialog->getX(),
+                                       dialog->getY(),
+                                       40,
+                                       40 });
+        CHECK(content->getWidth()
+              >= ModulationMatrixPanel::minimumContentWidth);
+        CHECK(content->getHeight()
+              >= ModulationMatrixPanel::minimumContentHeight);
+
+        auto* header = findComponentOfType<ModulationMatrixHeader>(*content);
+        auto* viewport = findComponentOfType<juce::Viewport>(*content);
+        auto* row = findComponentOfType<ModulationMatrixRow>(*content);
+        auto* addButton = findButtonWithText(*content, "+ ADD ROUTE");
+        auto* closeButton = findButtonWithText(*content, "Close");
+        REQUIRE(header != nullptr);
+        REQUIRE(viewport != nullptr);
+        REQUIRE(row != nullptr);
+        REQUIRE(addButton != nullptr);
+        REQUIRE(closeButton != nullptr);
+        CHECK_FALSE(header->getBounds().isEmpty());
+        CHECK(viewport->getHeight() > 0);
+        CHECK(viewport->getVerticalScrollBar().isVisible());
+        CHECK_FALSE(viewport->getHorizontalScrollBar().isVisible());
+        CHECK_FALSE(row->getBounds().isEmpty());
+        CHECK_FALSE(addButton->getBounds().isEmpty());
+        CHECK_FALSE(closeButton->getBounds().isEmpty());
+        CHECK_FALSE(addButton->getBounds().intersects(
+            closeButton->getBounds()));
+
+        int previousRight = 0;
+        for (auto* child : row->getChildren())
+        {
+            REQUIRE(child != nullptr);
+            CHECK_FALSE(child->getBounds().isEmpty());
+            CHECK(row->getLocalBounds().contains(child->getBounds()));
+            CHECK(child->getX() >= previousRight);
+            previousRight = child->getRight();
+        }
+
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        panel.dismissModulationMatrixDialog();
+        CHECK(safeDialog == nullptr);
+        host.removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 
     SECTION("direct panel hide")
@@ -1106,6 +1217,19 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         CHECK(factoryCalls == 1);
         REQUIRE(newDialog->isShowing());
         REQUIRE(newDialog->isCurrentlyModal(false));
+        REQUIRE(newDialog->isResizable());
+        REQUIRE(newDialog->getConstrainer() != nullptr);
+        auto* newContent = dynamic_cast<ModulationMatrixPanel*>(
+            newDialog->getContentComponent());
+        REQUIRE(newContent != nullptr);
+        newDialog->setBoundsConstrained({ newDialog->getX(),
+                                          newDialog->getY(),
+                                          40,
+                                          40 });
+        CHECK(newContent->getWidth()
+              >= ModulationMatrixPanel::minimumContentWidth);
+        CHECK(newContent->getHeight()
+              >= ModulationMatrixPanel::minimumContentHeight);
         juce::Component::SafePointer<juce::DialogWindow> safeNewDialog(
             newDialog);
         juce::Component::SafePointer<juce::Component> safeNewContent(

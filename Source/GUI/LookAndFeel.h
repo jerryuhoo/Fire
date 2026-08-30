@@ -294,15 +294,21 @@ public:
             g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
         }
 
-        auto textArea = label.getBorderSize().subtractedFrom(label.getLocalBounds());
         const auto enabledAlpha = label.isEnabled() ? 1.0f : 0.38f;
-        g.setColour(label.findColour(label.isBeingEdited() ? juce::Label::textWhenEditingColourId
-                                                          : juce::Label::textColourId)
-                        .withMultipliedAlpha(enabledAlpha));
-        g.setFont(getLabelFont(label));
-        g.drawFittedText(label.getText(), textArea, label.getJustificationType(),
-                         juce::jmax(1, juce::roundToInt(textArea.getHeight() / juce::jmax(1.0f, getLabelFont(label).getHeight()))),
-                         label.getMinimumHorizontalScale());
+        // The TextEditor created by Label owns the text while editing. Drawing
+        // the backing Label text as well leaves both glyph runs visible when
+        // the editor has a transparent background (as the crossover frequency
+        // editor does), which looks like a persistent text shadow/ghost.
+        if (! label.isBeingEdited())
+        {
+            auto textArea = label.getBorderSize().subtractedFrom(label.getLocalBounds());
+            g.setColour(label.findColour(juce::Label::textColourId)
+                            .withMultipliedAlpha(enabledAlpha));
+            g.setFont(getLabelFont(label));
+            g.drawFittedText(label.getText(), textArea, label.getJustificationType(),
+                             juce::jmax(1, juce::roundToInt(textArea.getHeight() / juce::jmax(1.0f, getLabelFont(label).getHeight()))),
+                             label.getMinimumHorizontalScale());
+        }
 
         const auto outline = label.findColour(label.isBeingEdited() ? juce::Label::outlineWhenEditingColourId
                                                                     : juce::Label::outlineColourId);

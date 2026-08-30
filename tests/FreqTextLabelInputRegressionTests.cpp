@@ -1,4 +1,5 @@
 #include <Panels/SpectrogramPanel/FreqTextLabel.h>
+#include <GUI/LookAndFeel.h>
 #include "helpers/ScopedNumericLocale.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -477,6 +478,66 @@ TEST_CASE("Frequency label editing preserves keyboard and accessibility entry",
         CHECK(label->isBeingEdited());
         CHECK_FALSE(handler->getCurrentState().isFocusable());
     }
+}
+
+TEST_CASE("Fire label painting leaves editable text to the active editor",
+          "[frequency-label][ui][paint][editing]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    juce::Component desktopHost;
+    PrimaryEditableLabel label({}, "1 kHz");
+    desktopHost.setBounds(0, 0, 120, 40);
+    desktopHost.setVisible(false);
+    desktopHost.addAndMakeVisible(label);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    label.setBounds(0, 0, 90, 24);
+    label.setEditable(true);
+    label.setLookAndFeel(&lookAndFeel);
+    label.setColour(juce::Label::backgroundColourId,
+                    juce::Colours::transparentBlack);
+    label.setColour(juce::Label::outlineColourId,
+                    juce::Colours::transparentBlack);
+    label.setColour(juce::Label::textColourId,
+                    juce::Colours::white);
+    label.setColour(juce::Label::outlineWhenEditingColourId,
+                    juce::Colours::transparentBlack);
+    label.setColour(juce::Label::textWhenEditingColourId,
+                    juce::Colours::white);
+
+    const auto countPaintedPixels = [](const juce::Image& image)
+    {
+        int count = 0;
+        for (int y = 0; y < image.getHeight(); ++y)
+            for (int x = 0; x < image.getWidth(); ++x)
+                if (image.getPixelAt(x, y).getAlpha() != 0)
+                    ++count;
+        return count;
+    };
+
+    juce::Image normalLayer(juce::Image::ARGB, 90, 24, true);
+    juce::Graphics normalGraphics(normalLayer);
+    lookAndFeel.drawLabel(normalGraphics, label);
+    CHECK(countPaintedPixels(normalLayer) > 0);
+
+    label.showEditor();
+    REQUIRE(label.isBeingEdited());
+
+    juce::Image transparentEditingLayer(juce::Image::ARGB, 90, 24, true);
+    juce::Graphics transparentEditingGraphics(transparentEditingLayer);
+    lookAndFeel.drawLabel(transparentEditingGraphics, label);
+    CHECK(countPaintedPixels(transparentEditingLayer) == 0);
+
+    label.setColour(juce::Label::outlineWhenEditingColourId,
+                    juce::Colours::red);
+    juce::Image outlinedEditingLayer(juce::Image::ARGB, 90, 24, true);
+    juce::Graphics outlinedEditingGraphics(outlinedEditingLayer);
+    lookAndFeel.drawLabel(outlinedEditingGraphics, label);
+    CHECK(countPaintedPixels(outlinedEditingLayer) > 0);
+
+    label.hideEditor(true);
+    label.setLookAndFeel(nullptr);
 }
 
 TEST_CASE("Cached frequency-label accessibility rejects stale lifecycle actions",

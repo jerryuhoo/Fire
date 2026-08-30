@@ -104,6 +104,7 @@ private:
     bool isCanonicalisingLines = false;
     bool isPublishingCrossoverCascade = false;
     int hoveredBandIndex = -1;
+    std::array<fire::ui::DampedValue, 4> bandHoverAnimations;
     FocusChangedCallback focusChangedCallback;
 
     struct DividerVisualState
@@ -147,8 +148,7 @@ private:
     int countLines();
     void paintBandOverlay(juce::Graphics& g,
                           int index,
-                          juce::Rectangle<float> area,
-                          juce::Point<float> mousePosition);
+                          juce::Rectangle<float> area);
     float getDividerX(int index) const;
     juce::Rectangle<float> getBandBounds(int index) const;
     int getBandIndexAtX(int x) const;

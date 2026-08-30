@@ -51,6 +51,25 @@ struct MultibandPointerTestAccess
         multiband.pointerSourceType = sourceType;
         multiband.pointerSourceIndex = sourceIndex;
     }
+
+    static void setHoveredBand(Multiband& multiband, int bandIndex)
+    {
+        if (juce::isPositiveAndBelow(bandIndex, multiband.lineNum + 1))
+        {
+            const auto bounds = multiband.getBandBounds(bandIndex);
+            multiband.updateHoveredBand(bounds.getCentre().roundToInt(), true);
+        }
+        else
+        {
+            multiband.updateHoveredBand({}, false);
+        }
+    }
+
+    static float getBandHover(const Multiband& multiband, int bandIndex)
+    {
+        return multiband.bandHoverAnimations[static_cast<size_t>(bandIndex)]
+            .current;
+    }
 };
 
 struct VerticalLinePointerTestAccess
@@ -4038,6 +4057,69 @@ TEST_CASE("A rapid add-delete cycle resets reused DSP slots even when the band c
     CHECK(postWarmResidual < 1.0e-6f);
     CHECK(settledError < 1.0e-12);
     CHECK(settledResidual < 1.0e-6f);
+}
+
+TEST_CASE("Band hover overlay fades between neighbouring bands",
+          "[multiband][ui][hover][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    initialiseBandLayout(processor, 2);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->setBounds(0, 0, 1000, 500);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    auto* multiband = findDescendant<Multiband>(*editor);
+    REQUIRE(multiband != nullptr);
+    REQUIRE(multiband->isShowing());
+
+    MultibandPointerTestAccess::setHoveredBand(*multiband, 1);
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 1)
+          == Catch::Approx(0.0f));
+
+    multiband->animationTick(1.0f / 60.0f);
+    const auto enteringAmount =
+        MultibandPointerTestAccess::getBandHover(*multiband, 1);
+    CHECK(enteringAmount > 0.0f);
+    CHECK(enteringAmount < 1.0f);
+
+    for (int frame = 0; frame < 10; ++frame)
+        multiband->animationTick(1.0f / 60.0f);
+    const auto establishedAmount =
+        MultibandPointerTestAccess::getBandHover(*multiband, 1);
+    CHECK(establishedAmount > enteringAmount);
+
+    MultibandPointerTestAccess::setHoveredBand(*multiband, 0);
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 0)
+          == Catch::Approx(0.0f));
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 1)
+          == Catch::Approx(establishedAmount));
+
+    multiband->animationTick(1.0f / 60.0f);
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 0) > 0.0f);
+    for (int frame = 0; frame < 8; ++frame)
+        multiband->animationTick(1.0f / 60.0f);
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 1)
+          < establishedAmount);
+
+    const auto leavingAmount =
+        MultibandPointerTestAccess::getBandHover(*multiband, 0);
+    MultibandPointerTestAccess::setHoveredBand(*multiband, -1);
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 0)
+          == Catch::Approx(leavingAmount));
+    for (int frame = 0; frame < 12; ++frame)
+        multiband->animationTick(1.0f / 60.0f);
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 0)
+          < leavingAmount);
+
+    multiband->dismissTransientUi();
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 0)
+          == Catch::Approx(0.0f));
+    CHECK(MultibandPointerTestAccess::getBandHover(*multiband, 1)
+          == Catch::Approx(0.0f));
 }
 
 TEST_CASE("Close controls remain hit-testable while crossing a divider child",

@@ -257,7 +257,7 @@ void Multiband::paint(juce::Graphics& g)
     // Hit testing, focus changes and painting share the exact centre of each
     // divider, so the selected rail cannot stop short or spill into a neighbour.
     for (int band = 0; band <= lineNum; ++band)
-        paintBandOverlay(g, band, getBandBounds(band), mousePos);
+        paintBandOverlay(g, band, getBandBounds(band));
 
     // Disabled divider components are hidden as soon as the processor commits
     // the new topology. Paint their short-lived visual copies independently so
@@ -309,6 +309,14 @@ void Multiband::animationTick(float deltaSeconds)
             safeCloseButton->repaint();
     }
 
+    bool bandHoverChanged = false;
+    for (auto& hover : bandHoverAnimations)
+        bandHoverChanged = hover.advance(deltaSeconds, 0.12f)
+                        || bandHoverChanged;
+
+    if (bandHoverChanged)
+        repaint();
+
     bool topologyVisualChanged = false;
     for (auto& visual : retiringDividerVisuals)
     {
@@ -343,6 +351,8 @@ void Multiband::dismissTransientUi()
 {
     clearPrimaryPointerState();
     hoveredBandIndex = -1;
+    for (auto& hover : bandHoverAnimations)
+        hover.snapTo(0.0f);
     clearRetiringDividerVisuals();
     juce::Component::SafePointer<Multiband> safeThis(this);
 
@@ -775,6 +785,8 @@ void Multiband::mouseDrag(const juce::MouseEvent& e)
 
     isDragging = true;
     hoveredBandIndex = -1;
+    for (auto& hover : bandHoverAnimations)
+        hover.setTarget(0.0f);
     updateCloseButtonVisibility();
 
     const auto localEvent = e.getEventRelativeTo(this);
@@ -1250,14 +1262,16 @@ state::StateComponent& Multiband::getStateComponent()
 
 void Multiband::paintBandOverlay(juce::Graphics& g,
                                  int index,
-                                 juce::Rectangle<float> area,
-                                 juce::Point<float> mousePosition)
+                                 juce::Rectangle<float> area)
 {
     if (area.isEmpty() || ! juce::isPositiveAndBelow(index, lineNum + 1))
         return;
 
     const bool selected = focusIndex == index;
-    const bool hovered = ! isDragging && area.contains(mousePosition);
+    const auto hover = juce::jlimit(
+        0.0f,
+        1.0f,
+        bandHoverAnimations[static_cast<size_t>(index)].current);
 
     if (selected)
     {
@@ -1270,9 +1284,9 @@ void Multiband::paintBandOverlay(juce::Graphics& g,
         g.fillRect(area);
     }
 
-    if (hovered && ! selected)
+    if (hover > 0.001f && ! selected)
     {
-        g.setColour(fire::ui::colours::textPrimary.withAlpha(0.032f));
+        g.setColour(fire::ui::colours::textPrimary.withAlpha(0.032f * hover));
         g.fillRect(area);
     }
 
@@ -1587,6 +1601,12 @@ void Multiband::updateHoveredBand(juce::Point<int> localPosition, bool pointerIs
         return;
 
     hoveredBandIndex = newHoveredBand;
+    for (int index = 0; index < static_cast<int>(bandHoverAnimations.size());
+         ++index)
+    {
+        bandHoverAnimations[static_cast<size_t>(index)].setTarget(
+            index == hoveredBandIndex ? 1.0f : 0.0f);
+    }
     updateCloseButtonVisibility();
     repaint();
 }

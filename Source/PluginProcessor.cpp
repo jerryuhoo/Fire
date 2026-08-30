@@ -4686,6 +4686,8 @@ void FireAudioProcessor::processWetBlock(
         auto chainSettings = getCachedChainSettings(&lfoOutputBuffer);
 
         ModulatedFilterValues filterVals;
+        filterVals.captureEpoch = filterTelemetryCaptureEpoch.load(
+            std::memory_order_acquire);
         filterVals.lowCutFreq = chainSettings.lowCutFreq;
         filterVals.lowCutGain = chainSettings.lowCutGainInDecibels;
         filterVals.lowCutQ = chainSettings.lowCutQuality;
@@ -8191,27 +8193,74 @@ void FireAudioProcessor::publishMeterValues(bool refreshBandMeters)
     pushToFifo(meterFifo, meterFifoBuffer, values);
 }
 
-bool FireAudioProcessor::getLatestModulatedFilterValues(ModulatedFilterValues& values)
+bool FireAudioProcessor::getLatestModulatedFilterValues(
+    ModulatedFilterValues& values,
+    std::uint64_t requiredCaptureEpoch)
 {
-    int numAvailable = filterFifo.getNumReady();
+    const int numAvailable = filterFifo.getNumReady();
+    if (numAvailable <= 0)
+        return false;
 
-    if (numAvailable > 0)
+    int start1 = 0;
+    int size1 = 0;
+    int start2 = 0;
+    int size2 = 0;
+    filterFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+
+    ModulatedFilterValues latestMatchingValues;
+    bool foundMatchingPacket = false;
+    const auto inspectRange = [&] (int start, int size)
     {
-        int start1, size1, start2, size2;
-        filterFifo.prepareToRead(numAvailable, start1, size1, start2, size2);
+        for (int offset = 0; offset < size; ++offset)
+        {
+            const auto& candidate =
+                filterFifoBuffer[static_cast<size_t>(start + offset)];
+            if (requiredCaptureEpoch == 0
+                || candidate.captureEpoch == requiredCaptureEpoch)
+            {
+                latestMatchingValues = candidate;
+                foundMatchingPacket = true;
+            }
+        }
+    };
 
-        if (size2 > 0)
-        {
-            values = filterFifoBuffer[start2 + size2 - 1];
-        }
-        else
-        {
-            values = filterFifoBuffer[start1 + size1 - 1];
-        }
-        filterFifo.finishedRead(numAvailable);
-        return true;
+    inspectRange(start1, size1);
+    inspectRange(start2, size2);
+    // Consume rejected packets too. This keeps the SPSC queue available while
+    // the filter page or its owning editor is hidden.
+    filterFifo.finishedRead(numAvailable);
+
+    if (! foundMatchingPacket)
+        return false;
+
+    // A second editor/session may have advanced the epoch while this drain was
+    // in progress. Never publish a packet to the superseded presentation.
+    if (requiredCaptureEpoch != 0
+        && filterTelemetryCaptureEpoch.load(std::memory_order_acquire)
+               != requiredCaptureEpoch)
+        return false;
+
+    values = latestMatchingValues;
+    return true;
+}
+
+std::uint64_t FireAudioProcessor::requestFreshModulatedFilterValuesEpoch() noexcept
+{
+    auto currentEpoch = filterTelemetryCaptureEpoch.load(
+        std::memory_order_relaxed);
+    for (;;)
+    {
+        auto nextEpoch = currentEpoch + 1u;
+        if (nextEpoch == 0)
+            nextEpoch = 1;
+
+        if (filterTelemetryCaptureEpoch.compare_exchange_weak(
+                currentEpoch,
+                nextEpoch,
+                std::memory_order_release,
+                std::memory_order_relaxed))
+            return nextEpoch;
     }
-    return false;
 }
 
 float FireAudioProcessor::getGlobalInputRMSLevel(int channel) const

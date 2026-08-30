@@ -99,6 +99,11 @@ struct DistortionGraphValues
 
 struct ModulatedFilterValues
 {
+    // Identifies the editor presentation session which requested this packet.
+    // A newly shown FilterControl accepts only packets published after it
+    // advanced the processor-owned epoch, so FIFO backlog from a hidden or
+    // destroyed editor can never become the first displayed frame.
+    std::uint64_t captureEpoch { 0 };
     float lowCutFreq { 20.0f };
     float lowCutGain { 0.0f };
     float lowCutQ { 1.0f };

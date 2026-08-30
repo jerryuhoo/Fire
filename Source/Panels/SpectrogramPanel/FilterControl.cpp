@@ -196,6 +196,9 @@ FilterControl::FilterControl(FireAudioProcessor& p, GlobalPanel& panel)
     updateChain();
     updateDraggableButtonStates();
     checkAnimationStatus();
+    // A processor can outlive several editor instances. Drain packets owned
+    // by the previous instance before this control begins a visible session.
+    suspendTelemetryPresentation();
     juce::ignoreUnused(panel);
 }
 
@@ -308,7 +311,24 @@ void FilterControl::paint(juce::Graphics& g)
 void FilterControl::animationTick()
 {
     if (! isShowing())
+    {
+        suspendTelemetryPresentation();
         return;
+    }
+
+    if (! telemetryPresentationActive)
+    {
+        requiredTelemetryCaptureEpoch =
+            processor.requestFreshModulatedFilterValuesEpoch();
+        telemetryPresentationActive = true;
+        hasFreshTelemetryForPresentation = false;
+    }
+
+    ModulatedFilterValues modulatedValues;
+    const bool hasFreshModulatedValues =
+        processor.getLatestModulatedFilterValues(
+            modulatedValues,
+            requiredTelemetryCaptureEpoch);
 
     const auto currentSampleRate = processor.getSampleRate();
     const bool sampleRateChanged =
@@ -328,7 +348,10 @@ void FilterControl::animationTick()
         setDraggableButtonBounds();
 
         if (sampleRateChanged)
+        {
             lfoResponseCurve.clear();
+            hasFreshTelemetryForPresentation = false;
+        }
 
         juce::Component::SafePointer<FilterControl> safeThis(this);
         updateDraggableButtonStates();
@@ -342,10 +365,10 @@ void FilterControl::animationTick()
 
     if (isAnimationActive)
     {
-        ModulatedFilterValues modulatedValues;
-        if (processor.getLatestModulatedFilterValues(modulatedValues))
+        if (hasFreshModulatedValues)
         {
             updateLfoChain(modulatedValues);
+            hasFreshTelemetryForPresentation = true;
             updateLfoResponseCurve();
             visualStateChanged = true;
         }
@@ -353,6 +376,25 @@ void FilterControl::animationTick()
 
     if (visualStateChanged)
         repaint();
+}
+
+void FilterControl::suspendTelemetryPresentation()
+{
+    // getLatest... is latest-wins and consumes the whole ready range. Calling
+    // it on every hidden editor tick prevents short-block hosts from filling
+    // the FIFO, while resetting the epoch below rejects the final packet that
+    // can race a hide/show boundary.
+    ModulatedFilterValues ignoredValues;
+    processor.getLatestModulatedFilterValues(ignoredValues);
+
+    telemetryPresentationActive = false;
+    hasFreshTelemetryForPresentation = false;
+    requiredTelemetryCaptureEpoch = 0;
+    if (! lfoResponseCurve.isEmpty())
+    {
+        lfoResponseCurve.clear();
+        repaint();
+    }
 }
 
 void FilterControl::parameterValueChanged(int parameterIndex, float newValue)
@@ -394,8 +436,8 @@ void FilterControl::checkAnimationStatus()
     if (needsAnimation != isAnimationActive)
     {
         isAnimationActive = needsAnimation;
-        if (! isAnimationActive)
-            lfoResponseCurve.clear();
+        hasFreshTelemetryForPresentation = false;
+        lfoResponseCurve.clear();
     }
 
 }
@@ -409,7 +451,10 @@ void FilterControl::visibilityChanged()
         routingStateDirty.store(true, std::memory_order_release);
     }
     else
+    {
+        suspendTelemetryPresentation();
         dismissTransientInteraction();
+    }
 }
 
 void FilterControl::dismissTransientInteraction()
@@ -437,7 +482,7 @@ void FilterControl::dismissTransientInteraction()
 void FilterControl::resized()
 {
     updateResponseCurve();
-    if (isAnimationActive)
+    if (isAnimationActive && hasFreshTelemetryForPresentation)
         updateLfoResponseCurve();
     setDraggableButtonBounds();
 }
@@ -823,7 +868,8 @@ void FilterControl::updateLfoResponseCurve()
     const auto pointCount = getCurvePointCount();
     const auto sampleRate = processor.getSampleRate();
     const auto maximumFrequency = maximumUsableDisplayFrequency(sampleRate);
-    if (! isAnimationActive || pointCount == 0 || sampleRate <= 0.0
+    if (! isAnimationActive || ! hasFreshTelemetryForPresentation
+        || pointCount == 0 || sampleRate <= 0.0
         || maximumFrequency <= minimumDisplayFrequency)
     {
         lfoResponseCurve.clear();

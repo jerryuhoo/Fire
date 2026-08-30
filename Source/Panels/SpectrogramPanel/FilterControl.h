@@ -35,6 +35,7 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void animationTick();
+    void suspendTelemetryPresentation();
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int, bool) override {}
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -77,6 +78,9 @@ private:
     int getCurvePointCount() const;
 
     bool isAnimationActive = false;
+    bool telemetryPresentationActive = false;
+    bool hasFreshTelemetryForPresentation = false;
+    std::uint64_t requiredTelemetryCaptureEpoch = 0;
     std::atomic<bool> parameterUpdatePending { false };
     std::atomic<bool> routingStateDirty { true };
     std::vector<juce::AudioProcessorParameter*> observedParameters;

@@ -488,7 +488,10 @@ public:
     float getSampleMaxValue(int bandIndex);
     float getTotalLatency() const;
 
-    bool getLatestModulatedFilterValues(ModulatedFilterValues& values);
+    bool getLatestModulatedFilterValues(
+        ModulatedFilterValues& values,
+        std::uint64_t requiredCaptureEpoch = 0);
+    std::uint64_t requestFreshModulatedFilterValuesEpoch() noexcept;
     bool getLatestMeterValues(MeterValues& values);
 
     // Getters for meter levels
@@ -1145,6 +1148,9 @@ private:
     std::atomic<float> realtimeModulatedThresholds[4];
 
     // 1. For FilterControl
+    static_assert(std::atomic<std::uint64_t>::is_always_lock_free,
+                  "Filter telemetry epochs must remain RT-safe");
+    std::atomic<std::uint64_t> filterTelemetryCaptureEpoch { 1 };
     juce::AbstractFifo filterFifo { 1024 };
     std::vector<ModulatedFilterValues> filterFifoBuffer;
 

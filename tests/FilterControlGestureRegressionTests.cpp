@@ -63,6 +63,16 @@ struct FilterControlTestAccess
         return ! control.responseCurve.isEmpty();
     }
 
+    static bool hasLfoResponseCurve(const FilterControl& control)
+    {
+        return ! control.lfoResponseCurve.isEmpty();
+    }
+
+    static bool telemetryPresentationIsActive(const FilterControl& control)
+    {
+        return control.telemetryPresentationActive;
+    }
+
     static double responseSampleRate(const FilterControl& control)
     {
         return control.responseSampleRate;
@@ -332,6 +342,28 @@ void setPlainParameter(FireAudioProcessor& processor,
     parameter->setValueNotifyingHost(parameter->convertTo0to1(plainValue));
 }
 
+constexpr double filterTelemetrySampleRate = 48000.0;
+constexpr int filterTelemetryBlockSize = 64;
+
+void prepareFilterTelemetry(FireAudioProcessor& processor)
+{
+    processor.setRateAndBufferSizeDetails(filterTelemetrySampleRate,
+                                          filterTelemetryBlockSize);
+    processor.prepareToPlay(filterTelemetrySampleRate,
+                            filterTelemetryBlockSize);
+    setPlainParameter(processor, FILTER_BYPASS_ID, 1.0f);
+    processor.assignLfoToTarget(0, PEAK_GAIN_ID);
+    processor.setModulationDepth(PEAK_GAIN_ID, 0.75f);
+}
+
+void publishFilterTelemetry(FireAudioProcessor& processor)
+{
+    juce::AudioBuffer<float> buffer(2, filterTelemetryBlockSize);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    processor.processBlock(buffer, midi);
+}
+
 juce::MouseEvent makeMouseEvent(juce::Component& component,
                                 juce::Point<float> position,
                                 juce::ModifierKeys modifiers,
@@ -394,6 +426,129 @@ TEST_CASE("Filter response follows prepare and runtime sample-rate changes",
     control.animationTick();
     CHECK(FilterControlTestAccess::responseSampleRate(control) == 96000.0);
     CHECK(FilterControlTestAccess::hasResponseCurve(control));
+}
+
+TEST_CASE("Filter telemetry epochs reject packets from older presentation sessions",
+          "[filter-control][ui][telemetry][freshness][source-epoch][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    prepareFilterTelemetry(processor);
+
+    publishFilterTelemetry(processor);
+    const auto freshEpoch =
+        processor.requestFreshModulatedFilterValuesEpoch();
+
+    ModulatedFilterValues values;
+    CHECK_FALSE(processor.getLatestModulatedFilterValues(values, freshEpoch));
+    // Rejected packets are consumed, otherwise a full stale FIFO would also
+    // prevent the audio thread from publishing into the new session.
+    CHECK_FALSE(processor.getLatestModulatedFilterValues(values));
+
+    publishFilterTelemetry(processor);
+    REQUIRE(processor.getLatestModulatedFilterValues(values, freshEpoch));
+    CHECK(values.captureEpoch == freshEpoch);
+}
+
+TEST_CASE("Hidden filter pages drain telemetry and wait for a fresh visible packet",
+          "[filter-control][ui][telemetry][workspace][freshness][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    prepareFilterTelemetry(processor);
+    GlobalPanel panel(processor, {}, {}, {}, {}, {});
+    FilterControl control(processor, panel);
+    control.setBounds(0, 0, 1000, 400);
+    control.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    control.setVisible(true);
+    REQUIRE(control.isShowing());
+
+    control.animationTick();
+    REQUIRE(FilterControlTestAccess::telemetryPresentationIsActive(control));
+    publishFilterTelemetry(processor);
+    control.animationTick();
+    REQUIRE(FilterControlTestAccess::hasLfoResponseCurve(control));
+
+    // This is the same effective visibility transition as MASTER LAB to BAND
+    // LAB or MOD FORGE. The old curve must disappear immediately.
+    control.setVisible(false);
+    CHECK_FALSE(FilterControlTestAccess::telemetryPresentationIsActive(control));
+    CHECK_FALSE(FilterControlTestAccess::hasLfoResponseCurve(control));
+
+    publishFilterTelemetry(processor);
+    publishFilterTelemetry(processor);
+    control.animationTick();
+    ModulatedFilterValues drainedValues;
+    CHECK_FALSE(processor.getLatestModulatedFilterValues(drainedValues));
+
+    // Playback can stop while the page is hidden. Showing the page must not
+    // resurrect its last hidden packet; only a callback from the new epoch is
+    // eligible for presentation.
+    control.setVisible(true);
+    control.animationTick();
+    CHECK_FALSE(FilterControlTestAccess::hasLfoResponseCurve(control));
+    publishFilterTelemetry(processor);
+    control.animationTick();
+    CHECK(FilterControlTestAccess::hasLfoResponseCurve(control));
+}
+
+TEST_CASE("Detached editors drain filter telemetry before returning from their timer",
+          "[filter-control][ui][editor][hidden][telemetry][freshness][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    prepareFilterTelemetry(processor);
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    REQUIRE(editor->isShowing());
+
+    auto* control = findDescendant<FilterControl>(*editor);
+    REQUIRE(control != nullptr);
+    control->setBounds(0, 0, 1000, 400);
+    control->setVisible(true);
+    control->animationTick();
+    publishFilterTelemetry(processor);
+    control->animationTick();
+    REQUIRE(FilterControlTestAccess::hasLfoResponseCurve(*control));
+
+    editor->removeFromDesktop();
+    REQUIRE_FALSE(editor->isShowing());
+    publishFilterTelemetry(processor);
+    editor->timerCallback();
+
+    CHECK_FALSE(FilterControlTestAccess::telemetryPresentationIsActive(*control));
+    CHECK_FALSE(FilterControlTestAccess::hasLfoResponseCurve(*control));
+    ModulatedFilterValues drainedValues;
+    CHECK_FALSE(processor.getLatestModulatedFilterValues(drainedValues));
+}
+
+TEST_CASE("New filter controls do not inherit telemetry from destroyed editors",
+          "[filter-control][ui][editor][lifecycle][telemetry][freshness][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    prepareFilterTelemetry(processor);
+    publishFilterTelemetry(processor);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+    auto* control = findDescendant<FilterControl>(*editor);
+    REQUIRE(control != nullptr);
+    control->setBounds(0, 0, 1000, 400);
+    control->setVisible(true);
+    control->animationTick();
+
+    CHECK_FALSE(FilterControlTestAccess::hasLfoResponseCurve(*control));
+    ModulatedFilterValues drainedValues;
+    CHECK_FALSE(processor.getLatestModulatedFilterValues(drainedValues));
+
+    publishFilterTelemetry(processor);
+    control->animationTick();
+    CHECK(FilterControlTestAccess::hasLfoResponseCurve(*control));
 }
 
 TEST_CASE("Low sample-rate filter response stays on the fixed spectrum axis",

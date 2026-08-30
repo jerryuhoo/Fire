@@ -1320,6 +1320,13 @@ void FireAudioProcessorEditor::timerCallback()
     const bool hasLatestDistortionGraphValues =
         processor.getLatestDistortionGraphValues(latestDistortionGraphValues);
 
+    // FilterControl normally drains its own latest-wins telemetry from the
+    // shared animation clock. A detached/minimised peer returns before that
+    // clock, so explicitly keep the queue drained and end its presentation
+    // epoch while this editor is not drawable.
+    if (! isShowing())
+        filterControl.suspendTelemetryPresentation();
+
     // Hosts commonly keep an editor instance alive after hiding its window.
     // Keep the timer itself cheap in that state and resume from a fresh clock
     // when the peer becomes visible again.

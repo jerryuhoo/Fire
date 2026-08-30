@@ -171,6 +171,30 @@ TEST_CASE("Fire ComboBoxes honour their configured idle background colour",
     CHECK(imageFingerprint(firstHeader) == imageFingerprint(secondHeader));
 }
 
+TEST_CASE("Fire ComboBox animation cache discards expired idle controls",
+          "[ui][combo-box][theme][animation][lifecycle][cache][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+
+    for (int session = 0; session < 128; ++session)
+    {
+        auto image = renderIdleComboBox(
+            lookAndFeel,
+            session % 2 == 0 ? fire::ui::colours::surface0
+                             : fire::ui::colours::surface1);
+        CHECK(image.isValid());
+        CHECK(lookAndFeel.getTrackedComboBoxAnimationCountForTesting() == 1);
+    }
+
+    // One final lookup prunes the expired entry from the preceding session
+    // before inserting its own state.
+    auto finalImage = renderIdleComboBox(lookAndFeel,
+                                         fire::ui::colours::surface0);
+    CHECK(finalImage.isValid());
+    CHECK(lookAndFeel.getTrackedComboBoxAnimationCountForTesting() == 1);
+}
+
 TEST_CASE("Fire context menus inherit their target theme and cursor anchor",
           "[ui][popup-menu][theme][anchor]")
 {

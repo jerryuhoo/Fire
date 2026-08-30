@@ -110,6 +110,13 @@ public:
         setColour(juce::ToggleButton::tickDisabledColourId, colours::disabled);
     }
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    size_t getTrackedComboBoxAnimationCountForTesting() const noexcept
+    {
+        return comboBoxAnimations.size();
+    }
+#endif
+
     juce::Font getBaseFont(float height = KNOB_FONT_SIZE) const
     {
         return fire::ui::bodyFont(height * scale);
@@ -851,6 +858,20 @@ private:
     ComboBoxAnimation& getComboBoxAnimation(juce::ComboBox& box,
                                              bool isButtonDown)
     {
+        // A ComboBox may be painted once in an idle state and then destroyed
+        // without ever starting the animation timer. Prune those expired (or
+        // hidden) entries whenever the cache is next used so its size follows
+        // the number of live controls, rather than the number of UI sessions.
+        comboBoxAnimations.erase(
+            std::remove_if(comboBoxAnimations.begin(),
+                           comboBoxAnimations.end(),
+                           [](const auto& state)
+                           {
+                               return state.box == nullptr
+                                   || ! state.box->isShowing();
+                           }),
+            comboBoxAnimations.end());
+
         auto found = std::find_if(comboBoxAnimations.begin(), comboBoxAnimations.end(),
                                   [&box](const auto& state)
                                   {

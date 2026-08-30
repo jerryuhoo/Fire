@@ -387,6 +387,24 @@ public:
             updateAnimationTargets();
     }
 
+    void parentHierarchyChanged() override
+    {
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
+        ButtonType::parentHierarchyChanged();
+
+        if (safeThis == nullptr)
+            return;
+
+        if (! this->isShowing())
+        {
+            dismissPointerGesture();
+            if (safeThis == nullptr)
+                return;
+        }
+
+        updateAnimationTargets();
+    }
+
     void enablementChanged() override
     {
         const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
@@ -489,9 +507,17 @@ private:
         if (! this->isEnabled())
             keyboardFocusVisible = false;
 
-        if (! animationsAtRest())
+        if (! animationsAtRest() || hasPresentedInteraction())
             startTimerHz(60);
         this->repaint();
+    }
+
+    bool hasPresentedInteraction() const noexcept
+    {
+        return pointerGesture == PointerGesture::primary
+            || this->getState() != juce::Button::buttonNormal
+            || (this->isEnabled()
+                && (keyboardFocusVisible || this->isMouseOver(true)));
     }
 
     bool animationsAtRest() const noexcept
@@ -522,6 +548,11 @@ private:
     {
         if (! this->isShowing())
         {
+            const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
+            dismissPointerGesture();
+            if (safeThis == nullptr)
+                return;
+
             updateAnimationTargets();
             return;
         }
@@ -539,7 +570,7 @@ private:
 
         if (changed)
             this->repaint();
-        if (animationsAtRest())
+        if (animationsAtRest() && ! hasPresentedInteraction())
             stopTimer();
     }
 

@@ -464,6 +464,52 @@ TEST_CASE("Primary button state callbacks may synchronously delete their control
         rawButton->setEnabled(false);
         CHECK(button == nullptr);
     }
+
+    SECTION("parent hierarchy transition")
+    {
+        juce::Component desktopHost;
+        desktopHost.setBounds(0, 0, 120, 60);
+        desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        desktopHost.setVisible(true);
+        auto button = std::make_unique<PrimaryTextButton>("Delete");
+        button->setBounds(0, 0, 80, 24);
+        desktopHost.addAndMakeVisible(*button);
+        beginPointerGesture(*button, leftButton);
+        REQUIRE(button->isDown());
+
+        auto* rawButton = button.get();
+        rawButton->onStateChange = [&button] { button.reset(); };
+        desktopHost.removeChildComponent(rawButton);
+
+        CHECK(button == nullptr);
+        desktopHost.removeFromDesktop();
+    }
+
+    SECTION("ancestor peer transition")
+    {
+        juce::Component desktopHost;
+        desktopHost.setBounds(0, 0, 120, 60);
+        desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        desktopHost.setVisible(true);
+        auto button = std::make_unique<PrimaryTextButton>("Delete");
+        button->setBounds(0, 0, 80, 24);
+        desktopHost.addAndMakeVisible(*button);
+        beginPointerGesture(*button, leftButton);
+        REQUIRE(button->isDown());
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+
+        bool callbackStarted = false;
+        button->onStateChange = [&]
+        {
+            callbackStarted = true;
+            button.reset();
+        };
+        desktopHost.removeFromDesktop();
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+
+        CHECK(callbackStarted);
+        CHECK(button == nullptr);
+    }
 }
 
 TEST_CASE("Primary buttons discard gestures at visibility and enablement boundaries",
@@ -521,6 +567,117 @@ TEST_CASE("Primary buttons discard gestures at visibility and enablement boundar
             CHECK(clickCount == 1);
         });
     }
+}
+
+TEST_CASE("Primary buttons discard gestures at hierarchy and peer boundaries",
+          "[header-button][ui][input][primary-button][lifecycle][peer][stale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    SECTION("removing the button from its parent is synchronous")
+    {
+        forEachPrimaryButtonType([leftButton](auto& button)
+        {
+            juce::Component desktopHost;
+            desktopHost.setBounds(0, 0, 120, 60);
+            desktopHost.addAndMakeVisible(button);
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            beginPointerGesture(button, leftButton);
+            REQUIRE(button.isDown());
+
+            desktopHost.removeChildComponent(&button);
+
+            CHECK_FALSE(button.isShowing());
+            CHECK_FALSE(button.isDown());
+            desktopHost.addAndMakeVisible(button);
+            REQUIRE(button.isShowing());
+            endPointerGesture(button);
+            CHECK_FALSE(button.isDown());
+            CHECK(clickCount == 0);
+
+            performPointerGesture(button, leftButton);
+            CHECK(clickCount == 1);
+            desktopHost.removeFromDesktop();
+        });
+    }
+
+    SECTION("a detached ancestor peer is recovered after the press settles")
+    {
+        forEachPrimaryButtonType([leftButton](auto& button)
+        {
+            juce::Component desktopHost;
+            desktopHost.setBounds(0, 0, 120, 60);
+            desktopHost.addAndMakeVisible(button);
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+
+            int clickCount = 0;
+            button.onClick = [&clickCount] { ++clickCount; };
+            beginPointerGesture(button, leftButton);
+            REQUIRE(button.isDown());
+
+            // The lifecycle watch must outlive the short press animation.
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+            REQUIRE(button.isDown());
+            desktopHost.removeFromDesktop();
+            REQUIRE_FALSE(button.isShowing());
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+
+            CHECK_FALSE(button.isDown());
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(button.isShowing());
+            endPointerGesture(button);
+            CHECK_FALSE(button.isDown());
+            CHECK(clickCount == 0);
+
+            performPointerGesture(button, leftButton);
+            CHECK(clickCount == 1);
+            desktopHost.removeFromDesktop();
+        });
+    }
+}
+
+TEST_CASE("Primary buttons clear settled hover and focus after peer detachment",
+          "[header-button][ui][animation][focus][lifecycle][peer][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component desktopHost;
+    PrimaryTextButton button { "Lifecycle" };
+    desktopHost.setBounds(0, 0, 120, 60);
+    button.setBounds(0, 0, 100, 28);
+    desktopHost.addAndMakeVisible(button);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    REQUIRE(button.isShowing());
+
+    button.grabKeyboardFocus();
+    REQUIRE(button.hasKeyboardFocus(true));
+    button.focusGained(juce::Component::focusChangedDirectly);
+    REQUIRE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+    static_cast<juce::Component&>(button).mouseEnter(
+        makeMouseEvent(button, {}));
+    REQUIRE(button.getState() == juce::Button::buttonOver);
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(600);
+    desktopHost.removeFromDesktop();
+    REQUIRE_FALSE(button.isShowing());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(35);
+
+    CHECK(button.getState() == juce::Button::buttonNormal);
+    CHECK_FALSE(PrimaryButtonTestAccess::isKeyboardFocusVisible(button));
+    CHECK(button.getHoverAnimation() == 0.0f);
+    CHECK(button.getPressAnimation() == 0.0f);
+    CHECK(button.getFocusAnimation() == 0.0f);
 }
 
 TEST_CASE("Primary buttons recover when a pointer release is lost",

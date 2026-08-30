@@ -16,6 +16,12 @@
 #include <limits>
 #include <utility>
 
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+using HostBypassDenormalStateHook = void (*) (bool) noexcept;
+void setHostBypassDenormalStateHookForTesting(
+    HostBypassDenormalStateHook hook) noexcept;
+#endif
+
 namespace
 {
 bool parseStrictFiniteDouble(const juce::String& textToParse, double& result) noexcept
@@ -123,6 +129,10 @@ constexpr double safePeakReleaseSeconds = 0.05;
 constexpr int hostStateFormatVersion = 1;
 constexpr int oldestWrappedHostParameterCount = 19;
 constexpr int maximumStateModulationRoutings = 128;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+std::atomic<HostBypassDenormalStateHook>
+    hostBypassDenormalStateHookForTesting { nullptr };
+#endif
 constexpr std::array<const char*, 8> legacyHostStateParameterAnchors {
     HQ_ID,
     DOWNSAMPLE_ID,
@@ -545,6 +555,15 @@ void processGlobalFilterStage(StageProcessor& leftProcessor,
     }
 }
 } // namespace
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+void setHostBypassDenormalStateHookForTesting(
+    HostBypassDenormalStateHook hook) noexcept
+{
+    hostBypassDenormalStateHookForTesting.store(hook,
+                                                std::memory_order_release);
+}
+#endif
 
 void OutputGainTransitionState::prepare(double sampleRate) noexcept
 {
@@ -4321,6 +4340,17 @@ bool FireAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
 void FireAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
+    // The audible bypass path runs meters and the latency-matching Thiran delay
+    // before processWetBlock() establishes its own denormal guard for the hidden
+    // wet render. Protect the complete callback so subnormal tails cannot cause
+    // floating-point assists while the plug-in is host-bypassed.
+    juce::ScopedNoDenormals noDenormals;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+    if (const auto hook = hostBypassDenormalStateHookForTesting.load(
+            std::memory_order_acquire))
+        hook(juce::FloatVectorOperations::areDenormalsDisabled());
+#endif
+
     isBypassed.store(true, std::memory_order_relaxed);
 
     if (needsReset.exchange(false, std::memory_order_acq_rel))

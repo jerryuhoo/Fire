@@ -49,6 +49,27 @@ juce::Colour moduleColourForIndex(int index)
         default: return fire::ui::colours::drive;
     }
 }
+
+template <typename PanelType>
+bool dismissInteractionBeforeComponentStateChange(
+    juce::Component* component,
+    bool stateWillChange,
+    const juce::Component::SafePointer<PanelType>& safePanel)
+{
+    if (component == nullptr || ! stateWillChange)
+        return safePanel != nullptr;
+
+    if (auto* slider = dynamic_cast<ModulatableSlider*>(component))
+        slider->dismissTransientInteraction();
+    else if (auto* comboBox = dynamic_cast<ContextAwareComboBox*>(component))
+        comboBox->dismissTransientInteraction();
+    else if (auto* textButton = dynamic_cast<PrimaryTextButton*>(component))
+        textButton->dismissPointerGesture();
+    else if (auto* toggleButton = dynamic_cast<PrimaryToggleButton*>(component))
+        toggleButton->dismissPointerGesture();
+
+    return safePanel != nullptr;
+}
 } // namespace
 
 //==============================================================================
@@ -797,18 +818,36 @@ void BandPanel::setScale(float newScale)
 
 void BandPanel::dismissButtonInteractions() noexcept
 {
-    linkedButton.dismissPointerGesture();
-    safeButton.dismissPointerGesture();
-    extremeButton.dismissPointerGesture();
-    oscSwitch.dismissPointerGesture();
-    shapeSwitch.dismissPointerGesture();
-    compressorSwitch.dismissPointerGesture();
-    widthSwitch.dismissPointerGesture();
-    driveBypassButton.dismissPointerGesture();
-    shapeBypassButton.dismissPointerGesture();
-    compressorBypassButton.dismissPointerGesture();
-    widthBypassButton.dismissPointerGesture();
-    dcFilterButton.dismissPointerGesture();
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    auto dismiss = [&safeThis](auto& button)
+    {
+        button.dismissPointerGesture();
+        return safeThis != nullptr;
+    };
+
+    if (! dismiss(linkedButton))
+        return;
+    if (! dismiss(safeButton))
+        return;
+    if (! dismiss(extremeButton))
+        return;
+    if (! dismiss(oscSwitch))
+        return;
+    if (! dismiss(shapeSwitch))
+        return;
+    if (! dismiss(compressorSwitch))
+        return;
+    if (! dismiss(widthSwitch))
+        return;
+    if (! dismiss(driveBypassButton))
+        return;
+    if (! dismiss(shapeBypassButton))
+        return;
+    if (! dismiss(compressorBypassButton))
+        return;
+    if (! dismiss(widthBypassButton))
+        return;
+    dismiss(dcFilterButton);
 }
 
 void BandPanel::dismissTransientInteraction() noexcept
@@ -824,6 +863,9 @@ void BandPanel::dismissTransientInteraction() noexcept
     }
 
     dismissButtonInteractions();
+    if (safeThis == nullptr)
+        return;
+
     invalidateDistortionModeInteractions();
 }
 
@@ -840,6 +882,9 @@ void BandPanel::dismissTransientInteractionForParameterRebind() noexcept
     }
 
     dismissButtonInteractions();
+    if (safeThis == nullptr)
+        return;
+
     invalidateDistortionModeInteractions();
 }
 
@@ -847,8 +892,13 @@ void BandPanel::invalidateDistortionModeInteractions() noexcept
 {
     ++distortionModeInteractionGeneration;
 
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     for (auto& modeBox : distortionModes)
+    {
         modeBox.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+    }
 }
 
 bool BandPanel::canOpenDistortionModePopup(size_t modeIndex) const noexcept
@@ -948,6 +998,20 @@ void BandPanel::initBypassButton(juce::ToggleButton& bypassButton, juce::Colour 
 void BandPanel::buttonClicked(juce::Button* clickedButton)
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    auto setGroupVisibility = [this, &safeThis](
+                                  juce::Array<juce::Component*>& components,
+                                  bool shouldBeVisible)
+    {
+        setVisibility(components, shouldBeVisible);
+        return safeThis != nullptr;
+    };
+    auto setComponentVisibility = [&safeThis](juce::Component& component,
+                                               bool shouldBeVisible)
+    {
+        component.setVisible(shouldBeVisible);
+        return safeThis != nullptr;
+    };
+
     if ((clickedButton == &oscSwitch && oscSwitch.getToggleState())
         || (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
         || (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
@@ -962,61 +1026,95 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     if (clickedButton == &oscSwitch && oscSwitch.getToggleState())
     {
         setAnimatedModuleTarget(0);
-        setVisibility(driveComponents, true);
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, false);
+        if (! setGroupVisibility(driveComponents, true))
+            return;
+        if (! setGroupVisibility(shapeComponents, false))
+            return;
+        if (! setGroupVisibility(compressorComponents, false))
+            return;
+        if (! setGroupVisibility(widthComponents, false))
+            return;
 
-        oscilloscope.setVisible(true);
-        distortionGraph.setVisible(false);
-        vuPanel.setVisible(false);
-        widthGraph.setVisible(false);
+        if (! setComponentVisibility(oscilloscope, true))
+            return;
+        if (! setComponentVisibility(distortionGraph, false))
+            return;
+        if (! setComponentVisibility(vuPanel, false))
+            return;
+        if (! setComponentVisibility(widthGraph, false))
+            return;
         isSwitch = true;
     }
     else if (clickedButton == &shapeSwitch && shapeSwitch.getToggleState())
     {
         setAnimatedModuleTarget(1);
-        setVisibility(driveComponents, false);
-        setVisibility(shapeComponents, true);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, false);
+        if (! setGroupVisibility(driveComponents, false))
+            return;
+        if (! setGroupVisibility(shapeComponents, true))
+            return;
+        if (! setGroupVisibility(compressorComponents, false))
+            return;
+        if (! setGroupVisibility(widthComponents, false))
+            return;
 
-        oscilloscope.setVisible(false);
-        distortionGraph.setVisible(true);
-        vuPanel.setVisible(false);
-        widthGraph.setVisible(false);
+        if (! setComponentVisibility(oscilloscope, false))
+            return;
+        if (! setComponentVisibility(distortionGraph, true))
+            return;
+        if (! setComponentVisibility(vuPanel, false))
+            return;
+        if (! setComponentVisibility(widthGraph, false))
+            return;
         isSwitch = true;
     }
     else if (clickedButton == &compressorSwitch && compressorSwitch.getToggleState())
     {
         setAnimatedModuleTarget(2);
-        setVisibility(driveComponents, false);
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, true);
-        setVisibility(widthComponents, false);
+        if (! setGroupVisibility(driveComponents, false))
+            return;
+        if (! setGroupVisibility(shapeComponents, false))
+            return;
+        if (! setGroupVisibility(compressorComponents, true))
+            return;
+        if (! setGroupVisibility(widthComponents, false))
+            return;
 
-        oscilloscope.setVisible(false);
-        distortionGraph.setVisible(false);
-        vuPanel.setVisible(true);
-        widthGraph.setVisible(false);
+        if (! setComponentVisibility(oscilloscope, false))
+            return;
+        if (! setComponentVisibility(distortionGraph, false))
+            return;
+        if (! setComponentVisibility(vuPanel, true))
+            return;
+        if (! setComponentVisibility(widthGraph, false))
+            return;
         isSwitch = true;
     }
     else if (clickedButton == &widthSwitch && widthSwitch.getToggleState())
     {
         setAnimatedModuleTarget(3);
-        setVisibility(driveComponents, false);
-        setVisibility(shapeComponents, false);
-        setVisibility(compressorComponents, false);
-        setVisibility(widthComponents, true);
+        if (! setGroupVisibility(driveComponents, false))
+            return;
+        if (! setGroupVisibility(shapeComponents, false))
+            return;
+        if (! setGroupVisibility(compressorComponents, false))
+            return;
+        if (! setGroupVisibility(widthComponents, true))
+            return;
 
-        oscilloscope.setVisible(false);
-        distortionGraph.setVisible(false);
-        vuPanel.setVisible(false);
-        widthGraph.setVisible(true);
+        if (! setComponentVisibility(oscilloscope, false))
+            return;
+        if (! setComponentVisibility(distortionGraph, false))
+            return;
+        if (! setComponentVisibility(vuPanel, false))
+            return;
+        if (! setComponentVisibility(widthGraph, true))
+            return;
         isSwitch = true;
     }
 
     updateDistortionModeVisibility();
+    if (safeThis == nullptr)
+        return;
 
     // Handle clicks from any of the bypass buttons.
     if (clickedButton == &driveBypassButton || clickedButton == &shapeBypassButton || clickedButton == &compressorBypassButton || clickedButton == &widthBypassButton)
@@ -1032,6 +1130,9 @@ void BandPanel::buttonClicked(juce::Button* clickedButton)
     if (isSwitch)
     {
         resized();
+        if (safeThis == nullptr)
+            return;
+
         invalidateChromeCache();
     }
 }
@@ -1070,6 +1171,9 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
     pendingFocusForceUpdate = false;
 
     vuPanel.setFocusBandNum(num);
+    if (safeThis == nullptr)
+        return;
+
     if (focusBandNum == num && ! forceUpdate)
         return;
 
@@ -1084,19 +1188,34 @@ void BandPanel::setFocusBandNum(int num, bool forceUpdate)
         return;
 
     processor.setUiFocusBand(num);
+    if (safeThis == nullptr)
+        return;
 
     focusBandNum = num;
     updateAttachments();
+    if (safeThis == nullptr)
+        return;
+
     updateWhenChangingFocus();
+    if (safeThis == nullptr)
+        return;
 
     const auto* bandEnabledParameter = processor.treeState.getRawParameterValue(
         ParameterIDAndName::getIDString(BAND_ENABLE_ID, focusBandNum));
     const bool isBandEnabled = bandEnabledParameter != nullptr
                                && bandEnabledParameter->load() > 0.5f;
     setBandKnobsStates(isBandEnabled, false);
+    if (safeThis == nullptr)
+        return;
 
     updateDistortionModeVisibility();
+    if (safeThis == nullptr)
+        return;
+
     updateDistortionGraphFromParameters();
+    if (safeThis == nullptr)
+        return;
+
     invalidateChromeCache();
 }
 
@@ -1197,9 +1316,20 @@ void BandPanel::updateDriveMeter()
 
 void BandPanel::setVisibility(juce::Array<juce::Component*>& components, bool isVisible)
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     for (auto* component : components)
     {
+        if (component == nullptr)
+            continue;
+
+        if (! dismissInteractionBeforeComponentStateChange(
+                component, component->isVisible() != isVisible, safeThis))
+            return;
+
         component->setVisible(isVisible);
+
+        if (safeThis == nullptr)
+            return;
     }
 }
 
@@ -1219,31 +1349,65 @@ bool BandPanel::canEnableSubKnob(juce::Component& component)
 
 void BandPanel::setBandKnobsStates(bool isBandEnabled, bool /*callFromSubBypass*/)
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    auto setComponentEnabled = [&safeThis](juce::Component* component,
+                                            bool shouldBeEnabled)
+    {
+        if (component == nullptr)
+            return safeThis != nullptr;
+
+        if (! dismissInteractionBeforeComponentStateChange(
+                component,
+                component->isEnabled() != shouldBeEnabled,
+                safeThis))
+            return false;
+
+        component->setEnabled(shouldBeEnabled);
+        return safeThis != nullptr;
+    };
+
     if (! isBandEnabled)
+    {
         invalidateDistortionModeInteractions();
+        if (safeThis == nullptr)
+            return;
+    }
 
     for (auto* component : allControls)
     {
-        component->setEnabled(isBandEnabled);
+        if (! setComponentEnabled(component, isBandEnabled))
+            return;
     }
 
     if (isBandEnabled)
     {
         bool driveIsEnabled = driveBypassButton.getToggleState();
         for (auto* component : driveComponents)
-            component->setEnabled(driveIsEnabled);
+        {
+            if (! setComponentEnabled(component, driveIsEnabled))
+                return;
+        }
 
         bool shapeIsEnabled = shapeBypassButton.getToggleState();
         for (auto* component : shapeComponents)
-            component->setEnabled(shapeIsEnabled);
+        {
+            if (! setComponentEnabled(component, shapeIsEnabled))
+                return;
+        }
 
         bool compIsEnabled = compressorBypassButton.getToggleState();
         for (auto* component : compressorComponents)
-            component->setEnabled(compIsEnabled);
+        {
+            if (! setComponentEnabled(component, compIsEnabled))
+                return;
+        }
 
         bool widthIsEnabled = widthBypassButton.getToggleState();
         for (auto* component : widthComponents)
-            component->setEnabled(widthIsEnabled);
+        {
+            if (! setComponentEnabled(component, widthIsEnabled))
+                return;
+        }
     }
 }
 
@@ -1261,12 +1425,31 @@ void BandPanel::setSwitch(const int index, bool state)
 
 void BandPanel::updateWhenChangingFocus()
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     updateDriveMeter();
+    if (safeThis == nullptr)
+        return;
+
     buttonClicked(&oscSwitch);
+    if (safeThis == nullptr)
+        return;
+
     buttonClicked(&shapeSwitch);
+    if (safeThis == nullptr)
+        return;
+
     buttonClicked(&compressorSwitch);
+    if (safeThis == nullptr)
+        return;
+
     buttonClicked(&widthSwitch);
+    if (safeThis == nullptr)
+        return;
+
     updateDistortionModeVisibility();
+    if (safeThis == nullptr)
+        return;
+
     invalidateChromeCache();
 }
 
@@ -1337,7 +1520,10 @@ void BandPanel::setMenu(juce::ComboBox* combobox)
 
 void BandPanel::updateDistortionModeVisibility()
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     invalidateDistortionModeInteractions();
+    if (safeThis == nullptr)
+        return;
 
     const bool shouldShowAny = shapeSwitch.getToggleState();
 
@@ -1345,6 +1531,8 @@ void BandPanel::updateDistortionModeVisibility()
     {
         distortionModes[i].setVisible(shouldShowAny
                                       && focusBandNum == static_cast<int>(i));
+        if (safeThis == nullptr)
+            return;
     }
 }
 
@@ -1361,6 +1549,7 @@ void BandPanel::presentMeterValues(const MeterValues& values,
 
 void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
 {
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
     if (isDragging)
     {
         if (oscilloscope.isVisible())
@@ -1377,8 +1566,15 @@ void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
         if (preDragVisibleGraph != &distortionGraph)
         {
             if (preDragVisibleGraph != nullptr)
+            {
                 preDragVisibleGraph->setVisible(false);
+                if (safeThis == nullptr)
+                    return;
+            }
+
             distortionGraph.setVisible(true);
+            if (safeThis == nullptr)
+                return;
         }
     }
     else
@@ -1386,7 +1582,12 @@ void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
         if (preDragVisibleGraph != nullptr && preDragVisibleGraph != &distortionGraph)
         {
             distortionGraph.setVisible(false);
+            if (safeThis == nullptr)
+                return;
+
             preDragVisibleGraph->setVisible(true);
+            if (safeThis == nullptr)
+                return;
         }
         preDragVisibleGraph = nullptr;
     }

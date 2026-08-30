@@ -147,6 +147,44 @@ private:
     std::function<void()> callback;
 };
 
+template <typename PanelType>
+class DeletePanelOnSliderDragEnd final : public juce::Slider::Listener
+{
+public:
+    DeletePanelOnSliderDragEnd(juce::Slider& sliderToObserve,
+                               std::unique_ptr<PanelType>& panelToDelete)
+        : slider(&sliderToObserve), panel(panelToDelete)
+    {
+        sliderToObserve.addListener(this);
+    }
+
+    ~DeletePanelOnSliderDragEnd() override
+    {
+        if (slider != nullptr)
+            slider->removeListener(this);
+    }
+
+    void sliderValueChanged(juce::Slider*) override {}
+    void sliderDragStarted(juce::Slider*) override {}
+
+    void sliderDragEnded(juce::Slider*) override
+    {
+        ++dragEndCount;
+        if (deletionStarted)
+            return;
+
+        deletionStarted = true;
+        panel.reset();
+        callbackCompleted = true;
+    }
+
+    juce::Component::SafePointer<juce::Slider> slider;
+    std::unique_ptr<PanelType>& panel;
+    int dragEndCount = 0;
+    bool deletionStarted = false;
+    bool callbackCompleted = false;
+};
+
 void setParameterValue(FireAudioProcessor& processor,
                        const juce::String& parameterID,
                        float normalizedValue)
@@ -1698,5 +1736,112 @@ TEST_CASE("Context-aware ComboBox keyboard commits survive synchronous panel des
         CHECK(panel == nullptr);
         CHECK(parameter->getValue() == Catch::Approx(expectedValue));
         CHECK(gestures.gestures == std::vector<bool> { true, false });
+    }
+}
+
+TEST_CASE("Control-panel bulk lifecycle changes survive synchronous panel destruction",
+          "[control-panel][ui][slider][lifecycle][reentrancy][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    SECTION("BandPanel module switch")
+    {
+        FireAudioProcessor processor;
+        setParameterValue(
+            processor,
+            ParameterIDAndName::getIDString(BAND_ENABLE_ID, 0),
+            1.0f);
+        auto panel = std::make_unique<BandPanel>(
+            processor,
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {});
+        panel->setBounds(0, 0, 1000, 500);
+        panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel->setVisible(true);
+        auto* drive = panel->getDriveKnob();
+        REQUIRE(drive != nullptr);
+        REQUIRE(drive->isShowing());
+        drive->mouseDown(makeMouseEvent(
+            *drive,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+        REQUIRE(drive->hasActiveInteraction());
+        DeletePanelOnSliderDragEnd<BandPanel> destroyOnDragEnd(
+            *drive, panel);
+
+        panel->setSwitch(1, true);
+
+        CHECK(destroyOnDragEnd.dragEndCount == 1);
+        CHECK(destroyOnDragEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+
+    SECTION("BandPanel disable")
+    {
+        FireAudioProcessor processor;
+        setParameterValue(
+            processor,
+            ParameterIDAndName::getIDString(BAND_ENABLE_ID, 0),
+            1.0f);
+        auto panel = std::make_unique<BandPanel>(
+            processor,
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {});
+        panel->setBounds(0, 0, 1000, 500);
+        panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel->setVisible(true);
+        auto* drive = panel->getDriveKnob();
+        REQUIRE(drive != nullptr);
+        REQUIRE(drive->isShowing());
+        REQUIRE(drive->isEnabled());
+        drive->mouseDown(makeMouseEvent(
+            *drive,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+        REQUIRE(drive->hasActiveInteraction());
+        DeletePanelOnSliderDragEnd<BandPanel> destroyOnDragEnd(
+            *drive, panel);
+
+        panel->setBandKnobsStates(false, false);
+
+        CHECK(destroyOnDragEnd.dragEndCount == 1);
+        CHECK(destroyOnDragEnd.callbackCompleted);
+        CHECK(panel == nullptr);
+    }
+
+    SECTION("GlobalPanel filter bypass")
+    {
+        FireAudioProcessor processor;
+        setParameterValue(processor, FILTER_BYPASS_ID, 1.0f);
+        auto panel = std::make_unique<GlobalPanel>(
+            processor,
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {},
+            std::function<void(ModulatableSlider*)> {});
+        panel->setBounds(0, 0, 1000, 500);
+        panel->setToggleButtonState("lowcut");
+        panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel->setVisible(true);
+        auto& lowcutFrequency = panel->getLowcutFreqKnob();
+        REQUIRE(lowcutFrequency.isShowing());
+        REQUIRE(lowcutFrequency.isEnabled());
+        lowcutFrequency.mouseDown(makeMouseEvent(
+            lowcutFrequency,
+            juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+        REQUIRE(lowcutFrequency.hasActiveInteraction());
+        DeletePanelOnSliderDragEnd<GlobalPanel> destroyOnDragEnd(
+            lowcutFrequency, panel);
+
+        GlobalPanelSlopeTestAccess::setFilterEnabled(*panel, false);
+
+        CHECK(destroyOnDragEnd.dragEndCount == 1);
+        CHECK(destroyOnDragEnd.callbackCompleted);
+        CHECK(panel == nullptr);
     }
 }

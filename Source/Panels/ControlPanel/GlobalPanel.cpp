@@ -38,6 +38,27 @@ void drawMinimalTitle(juce::Graphics& g,
     g.setColour(fire::ui::colours::textSecondary.withAlpha(0.82f));
     g.drawText(text.toUpperCase(), bounds, juce::Justification::centredLeft);
 }
+
+template <typename PanelType>
+bool dismissInteractionBeforeComponentStateChange(
+    juce::Component* component,
+    bool stateWillChange,
+    const juce::Component::SafePointer<PanelType>& safePanel)
+{
+    if (component == nullptr || ! stateWillChange)
+        return safePanel != nullptr;
+
+    if (auto* slider = dynamic_cast<ModulatableSlider*>(component))
+        slider->dismissTransientInteraction();
+    else if (auto* comboBox = dynamic_cast<ContextAwareComboBox*>(component))
+        comboBox->dismissTransientInteraction();
+    else if (auto* textButton = dynamic_cast<PrimaryTextButton*>(component))
+        textButton->dismissPointerGesture();
+    else if (auto* toggleButton = dynamic_cast<PrimaryToggleButton*>(component))
+        toggleButton->dismissPointerGesture();
+
+    return safePanel != nullptr;
+}
 } // namespace
 
 //==============================================================================
@@ -113,16 +134,36 @@ void GlobalPanel::dismissTransientInteraction() noexcept
             return;
     }
 
-    filterLowCutButton.dismissPointerGesture();
-    filterPeakButton.dismissPointerGesture();
-    filterHighCutButton.dismissPointerGesture();
-    filterSwitch.dismissPointerGesture();
-    downsampleSwitch.dismissPointerGesture();
-    graphSwitch.dismissPointerGesture();
+    auto dismiss = [&safeThis](auto& button)
+    {
+        button.dismissPointerGesture();
+        return safeThis != nullptr;
+    };
+
+    if (! dismiss(filterLowCutButton))
+        return;
+    if (! dismiss(filterPeakButton))
+        return;
+    if (! dismiss(filterHighCutButton))
+        return;
+    if (! dismiss(filterSwitch))
+        return;
+    if (! dismiss(downsampleSwitch))
+        return;
+    if (! dismiss(graphSwitch))
+        return;
     if (filterBypassButton != nullptr)
+    {
         filterBypassButton->dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+    }
     if (downsampleBypassButton != nullptr)
+    {
         downsampleBypassButton->dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+    }
 
     invalidateSlopeInteractions();
 }
@@ -130,7 +171,11 @@ void GlobalPanel::dismissTransientInteraction() noexcept
 void GlobalPanel::invalidateSlopeInteractions() noexcept
 {
     ++slopeInteractionGeneration;
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     lowcutSlopeMode.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+
     highcutSlopeMode.dismissTransientInteraction();
 }
 
@@ -174,7 +219,10 @@ void GlobalPanel::visibilityChanged()
 
 void GlobalPanel::enablementChanged()
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     juce::Component::enablementChanged();
+    if (safeThis == nullptr)
+        return;
 
     if (! isEnabled())
         invalidateSlopeInteractions();
@@ -921,6 +969,13 @@ void GlobalPanel::restoreComponentsObscuredByZoom() noexcept
 void GlobalPanel::buttonClicked(juce::Button* clickedButton)
 {
     const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    auto setGroupVisibility = [this, &safeThis](
+                                  juce::Array<juce::Component*>& components,
+                                  bool shouldBeVisible)
+    {
+        setVisibility(components, shouldBeVisible);
+        return safeThis != nullptr;
+    };
     const bool changesSlopeContext = clickedButton == &filterSwitch
                                      || clickedButton == &downsampleSwitch
                                      || clickedButton == &graphSwitch
@@ -929,7 +984,11 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
                                      || clickedButton == &filterHighCutButton;
 
     if (changesSlopeContext)
+    {
         invalidateSlopeInteractions();
+        if (safeThis == nullptr)
+            return;
+    }
 
     if ((clickedButton == &filterSwitch && filterSwitch.getToggleState())
         || (clickedButton == &downsampleSwitch && downsampleSwitch.getToggleState())
@@ -943,40 +1002,57 @@ void GlobalPanel::buttonClicked(juce::Button* clickedButton)
     bool isSwitch = false;
     if (clickedButton == &filterSwitch && filterSwitch.getToggleState())
     {
-        setVisibility(filterComponents, true);
-        setVisibility(downsampleComponents, false);
-        setVisibility(graphComponents, false);
+        if (! setGroupVisibility(filterComponents, true))
+            return;
+        if (! setGroupVisibility(downsampleComponents, false))
+            return;
+        if (! setGroupVisibility(graphComponents, false))
+            return;
         updateFilterKnobVisibility();
+        if (safeThis == nullptr)
+            return;
         isSwitch = true;
     }
     else if (clickedButton == &downsampleSwitch && downsampleSwitch.getToggleState())
     {
-        setVisibility(downsampleComponents, true);
-        setVisibility(filterComponents, false);
-        setVisibility(graphComponents, false);
+        if (! setGroupVisibility(downsampleComponents, true))
+            return;
+        if (! setGroupVisibility(filterComponents, false))
+            return;
+        if (! setGroupVisibility(graphComponents, false))
+            return;
         isSwitch = true;
     }
     else if (clickedButton == &graphSwitch && graphSwitch.getToggleState())
     {
-        setVisibility(graphComponents, true);
-        setVisibility(filterComponents, false);
-        setVisibility(downsampleComponents, false);
+        if (! setGroupVisibility(graphComponents, true))
+            return;
+        if (! setGroupVisibility(filterComponents, false))
+            return;
+        if (! setGroupVisibility(downsampleComponents, false))
+            return;
         isSwitch = true;
     }
     else if (clickedButton == &filterLowCutButton || clickedButton == &filterPeakButton || clickedButton == &filterHighCutButton)
     {
         updateFilterKnobVisibility();
+        if (safeThis == nullptr)
+            return;
     }
 
     if (isSwitch)
     {
         resized();
+        if (safeThis == nullptr)
+            return;
+
         invalidateChromeCache();
     }
 }
 
 void GlobalPanel::updateFilterKnobVisibility()
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     // Filter type attachments may update from automation or state restore
     // while another global module is selected. Child visibility is independent
     // of its siblings, so never let such an update reveal a filter group over
@@ -992,15 +1068,32 @@ void GlobalPanel::updateFilterKnobVisibility()
                                 && filterHighCutButton.getToggleState();
 
     setVisibility(peakKnobs, peakVisible);
+    if (safeThis == nullptr)
+        return;
+
     setVisibility(lowcutKnobs, lowcutVisible);
+    if (safeThis == nullptr)
+        return;
+
     setVisibility(highcutKnobs, highcutVisible);
 }
 
 void GlobalPanel::setVisibility(juce::Array<juce::Component*>& array, bool isVisible)
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
     for (auto* component : array)
     {
+        if (component == nullptr)
+            continue;
+
+        if (! dismissInteractionBeforeComponentStateChange(
+                component, component->isVisible() != isVisible, safeThis))
+            return;
+
         component->setVisible(isVisible);
+
+        if (safeThis == nullptr)
+            return;
     }
 }
 
@@ -1023,17 +1116,42 @@ void GlobalPanel::setToggleButtonState(juce::String toggleButton)
 
 void GlobalPanel::setBypassState(int index, bool state)
 {
+    const juce::Component::SafePointer<GlobalPanel> safeThis(this);
+    auto setComponentEnabled = [&safeThis](juce::Component* component,
+                                            bool shouldBeEnabled)
+    {
+        if (component == nullptr)
+            return safeThis != nullptr;
+
+        if (! dismissInteractionBeforeComponentStateChange(
+                component,
+                component->isEnabled() != shouldBeEnabled,
+                safeThis))
+            return false;
+
+        component->setEnabled(shouldBeEnabled);
+        return safeThis != nullptr;
+    };
+
     // Simplified logic as the bypass buttons are now separate from the main component groups
     if (index == 0) // Filter
     {
         invalidateSlopeInteractions();
+        if (safeThis == nullptr)
+            return;
 
         for (auto* component : filterComponents)
-            component->setEnabled(state);
+        {
+            if (! setComponentEnabled(component, state))
+                return;
+        }
     }
     else if (index == 1) // Lo-Fi (Downsample)
     {
         for (auto* component : downsampleComponents)
-            component->setEnabled(state);
+        {
+            if (! setComponentEnabled(component, state))
+                return;
+        }
     }
 }

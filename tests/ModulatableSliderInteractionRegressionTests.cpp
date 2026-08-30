@@ -82,6 +82,11 @@ struct ModulatableSliderInteractionTestAccess
         return slider.forwardedValueLabel.getComponent();
     }
 
+    static juce::Label& getTitleLabel(ModulatableSlider& slider) noexcept
+    {
+        return slider.label;
+    }
+
     static const juce::MouseEvent* getLastAcceptedPointerEvent(
         const ModulatableSlider& slider) noexcept
     {
@@ -1209,6 +1214,115 @@ TEST_CASE("Slider lifecycle boundaries finish gestures and tolerate synchronous 
                 juce::ModifierKeys {
                     juce::ModifierKeys::rightButtonModifier }));
         CHECK(slider == nullptr);
+    }
+
+    SECTION("title visibility callback may delete during mouse enter")
+    {
+        class DeleteOwnerOnVisibility final : public juce::ComponentListener
+        {
+        public:
+            explicit DeleteOwnerOnVisibility(
+                std::unique_ptr<ModulatableSlider>& ownerToDelete)
+                : owner(ownerToDelete)
+            {
+            }
+
+            void componentVisibilityChanged(
+                juce::Component& component) override
+            {
+                if (! component.isVisible())
+                    owner.reset();
+            }
+
+        private:
+            std::unique_ptr<ModulatableSlider>& owner;
+        };
+
+        auto slider = std::make_unique<ModulatableSlider>();
+        slider->setBounds(0, 0, 120, 120);
+        auto& title =
+            ModulatableSliderInteractionTestAccess::getTitleLabel(*slider);
+        DeleteOwnerOnVisibility deleteOnHide(slider);
+        title.addComponentListener(&deleteOnHide);
+
+        auto* const rawSlider = slider.get();
+        rawSlider->mouseEnter(makeMouseEvent(
+            *rawSlider, rawSlider->getLocalBounds().toFloat().getCentre()));
+        CHECK(slider == nullptr);
+    }
+
+    SECTION("presentation reset may delete while restoring its title")
+    {
+        class DeleteOwnerOnVisibility final : public juce::ComponentListener
+        {
+        public:
+            explicit DeleteOwnerOnVisibility(
+                std::unique_ptr<ModulatableSlider>& ownerToDelete)
+                : owner(ownerToDelete)
+            {
+            }
+
+            void componentVisibilityChanged(
+                juce::Component& component) override
+            {
+                if (component.isVisible())
+                    owner.reset();
+            }
+
+        private:
+            std::unique_ptr<ModulatableSlider>& owner;
+        };
+
+        auto slider = std::make_unique<ModulatableSlider>();
+        slider->setBounds(0, 0, 120, 120);
+        slider->mouseEnter(makeMouseEvent(
+            *slider, slider->getLocalBounds().toFloat().getCentre()));
+        auto& title =
+            ModulatableSliderInteractionTestAccess::getTitleLabel(*slider);
+        REQUIRE_FALSE(title.isVisible());
+        int mainEnds = 0;
+        slider->onMainDragEnd =
+            [&](ModulatableSlider*) { ++mainEnds; };
+        const auto position = slider->getLocalBounds().toFloat().getCentre();
+        slider->mouseDown(makeMouseEvent(*slider, position, primaryButton));
+        REQUIRE(slider->hasActiveInteraction());
+
+        DeleteOwnerOnVisibility deleteOnShow(slider);
+        title.addComponentListener(&deleteOnShow);
+        auto* const rawSlider = slider.get();
+        rawSlider->dismissTransientInteraction();
+
+        CHECK(slider == nullptr);
+        CHECK(mainEnds == 1);
+    }
+
+    SECTION("value editor hide callback may delete during presentation reset")
+    {
+        auto slider = std::make_unique<ModulatableSlider>();
+        slider->setBounds(0, 0, 120, 120);
+        slider->addToDesktop(0);
+        slider->setVisible(true);
+        slider->mouseEnter(makeMouseEvent(
+            *slider, slider->getLocalBounds().toFloat().getCentre()));
+        auto* valueLabel =
+            ModulatableSliderInteractionTestAccess::getForwardedValueLabel(
+                *slider);
+        REQUIRE(valueLabel != nullptr);
+        int mainEnds = 0;
+        slider->onMainDragEnd =
+            [&](ModulatableSlider*) { ++mainEnds; };
+        const auto position = slider->getLocalBounds().toFloat().getCentre();
+        slider->mouseDown(makeMouseEvent(*slider, position, primaryButton));
+        REQUIRE(slider->hasActiveInteraction());
+        valueLabel->showEditor();
+        REQUIRE(valueLabel->isBeingEdited());
+        valueLabel->onEditorHide = [&] { slider.reset(); };
+
+        auto* const rawSlider = slider.get();
+        rawSlider->dismissTransientInteraction();
+
+        CHECK(slider == nullptr);
+        CHECK(mainEnds == 1);
     }
 }
 

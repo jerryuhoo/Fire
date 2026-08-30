@@ -164,7 +164,7 @@ private:
     void dismissTransientInteractionImpl(bool invalidateContextMenu);
     void beginPointerGesture(PointerGesture gesture,
                              const juce::MouseEvent& event);
-    void resetTransientPresentation();
+    bool resetTransientPresentation();
     void lookAndFeelChanged() override;
     void attachValueLabelPopupForwarder();
     void detachValueLabelPopupForwarder();

@@ -92,8 +92,13 @@ void ModulatableSlider::ValueLabelPopupForwarder::cancelGesture()
 
 void ModulatableSlider::lookAndFeelChanged()
 {
+    const auto safeThis =
+        juce::Component::SafePointer<ModulatableSlider>(this);
     detachValueLabelPopupForwarder();
     juce::Slider::lookAndFeelChanged();
+    if (! safeThis)
+        return;
+
     attachValueLabelPopupForwarder();
 }
 
@@ -248,6 +253,9 @@ void ModulatableSlider::mouseEnter(const juce::MouseEvent& event)
         return;
 
     label.setVisible(false);
+    if (! safeThis)
+        return;
+
     const auto uiScale = getUiScale();
     setTextBoxStyle(juce::Slider::TextBoxAbove, false,
                     juce::roundToInt(TEXTBOX_WIDTH * uiScale),
@@ -685,8 +693,10 @@ bool ModulatableSlider::finishActivePointerGesture(
     return true;
 }
 
-void ModulatableSlider::resetTransientPresentation()
+bool ModulatableSlider::resetTransientPresentation()
 {
+    const auto safeThis =
+        juce::Component::SafePointer<ModulatableSlider>(this);
     const bool timerWasRunning = isTimerRunning();
     const bool presentationChanged = timerWasRunning
                                      || isModHandleMouseOver
@@ -700,14 +710,37 @@ void ModulatableSlider::resetTransientPresentation()
     hoverAnimation = 0.0f;
     pressAnimation = 0.0f;
     if (! label.isVisible())
+    {
         label.setVisible(true);
+        if (! safeThis)
+            return false;
+    }
+
     if (getTextBoxPosition() != juce::Slider::NoTextBox)
     {
+        // Slider::hideTextBox updates its private value label after asking the
+        // label to hide its editor. Hide the editor explicitly first so an
+        // onEditorHide callback may delete this Slider before Pimpl continues.
+        if (auto* valueLabel = forwardedValueLabel.getComponent();
+            valueLabel != nullptr && valueLabel->isBeingEdited())
+        {
+            valueLabel->hideEditor(true);
+            if (! safeThis)
+                return false;
+        }
+
         hideTextBox(true);
+        if (! safeThis)
+            return false;
+
         setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        if (! safeThis)
+            return false;
     }
     if (presentationChanged)
         repaint();
+
+    return safeThis != nullptr;
 }
 
 void ModulatableSlider::dismissTransientInteraction()
@@ -723,6 +756,9 @@ void ModulatableSlider::dismissTransientInteractionPreservingContextMenu()
 void ModulatableSlider::dismissTransientInteractionImpl(
     bool invalidateContextMenu)
 {
+    const auto safeThis =
+        juce::Component::SafePointer<ModulatableSlider>(this);
+
     // Invalidate before any drag-end or hover callback. Those callbacks may
     // re-enter UI code, and an abandoned menu must already be inert there.
     if (invalidateContextMenu)
@@ -733,10 +769,11 @@ void ModulatableSlider::dismissTransientInteractionImpl(
     if (lastAcceptedPointerEvent.has_value())
         releaseEvent.emplace(*lastAcceptedPointerEvent);
 
-    resetTransientPresentation();
+    if (! resetTransientPresentation() || ! safeThis)
+        return;
+
     clearAssignmentDoubleClickSuppression();
 
-    auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
     if (activePointerGesture != PointerGesture::none)
     {
         // Every accepted gesture stores its most recent event. Keeping a copy
@@ -887,6 +924,8 @@ void ModulatableSlider::resized()
 
 void ModulatableSlider::timerCallback()
 {
+    const auto safeThis =
+        juce::Component::SafePointer<ModulatableSlider>(this);
     // This function is called when the timer finishes.
     stopTimer();
 
@@ -894,13 +933,20 @@ void ModulatableSlider::timerCallback()
     if (! isMouseOver(true))
     {
         label.setVisible(true);
+        if (! safeThis)
+            return;
+
         setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     }
 }
 
 void ModulatableSlider::visibilityChanged()
 {
+    const auto safeThis =
+        juce::Component::SafePointer<ModulatableSlider>(this);
     juce::Slider::visibilityChanged();
+    if (! safeThis)
+        return;
 
     if (! isShowing())
         dismissTransientInteraction();
@@ -908,7 +954,11 @@ void ModulatableSlider::visibilityChanged()
 
 void ModulatableSlider::enablementChanged()
 {
+    const auto safeThis =
+        juce::Component::SafePointer<ModulatableSlider>(this);
     juce::Slider::enablementChanged();
+    if (! safeThis)
+        return;
 
     // Enabling is also a lifecycle boundary. A physical button may still be
     // held after the control was disabled, and must not revive that gesture.

@@ -2499,21 +2499,35 @@ namespace state
 
         procStatePresets.scanAllPresets();
         procStatePresets.setCurrentPresetKey(previouslySelectedKey);
-        refreshPresetBox();
+        // Reconcile the rebuilt entry with the current processor state. A
+        // rescan is display-only: an externally replaced preset must make the
+        // live sound dirty rather than silently loading the new file.
+        synchronisePresetSelectionFromManager();
 
         const int newPresetIdToSelect = procStatePresets.getCurrentPresetId();
         if (newPresetIdToSelect > 0)
         {
-            presetBox.setSelectedId(newPresetIdToSelect, juce::dontSendNotification);
+            // synchronisePresetSelectionFromManager() already selected a
+            // semantically matching file or marked a mismatch dirty. Preserve
+            // a pre-existing edit even if the replacement happens to match it.
             if (wasDirty)
                 markAsDirty();
         }
-        else if (wasDirty)
+        else if (previouslySelectedKey.isNotEmpty() || wasDirty)
         {
-            // Keep an honest dirty display even if the backing file was
-            // removed externally during the rescan.
+            // The selected backing file was removed or became invalid. Keep
+            // its stable identity and an honest dirty label so a rescan never
+            // makes the still-live sound appear to be Init.
+            auto dirtyText = previousText;
+            if (dirtyText.isEmpty())
+                dirtyText = juce::File(previouslySelectedKey)
+                                .getFileNameWithoutExtension();
+            if (! dirtyText.endsWith("*"))
+                dirtyText += "*";
+
+            isChanged = true;
             presetBox.setSelectedId(0, juce::dontSendNotification);
-            presetBox.setText(previousText, juce::dontSendNotification);
+            presetBox.setText(dirtyText, juce::dontSendNotification);
         }
     }
 

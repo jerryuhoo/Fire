@@ -24,6 +24,11 @@ struct StateComponentMenuTestAccess
     {
         component.handlePresetMenuResult(result);
     }
+
+    static void rescan(state::StateComponent& component)
+    {
+        component.rescanPresetFolder();
+    }
 };
 
 struct StateComponentManualUpdateTestAccess
@@ -792,6 +797,86 @@ TEST_CASE("Preset UI synchronisation reflects restored identity without reloadin
     CHECK(presetBox->getSelectedId() == 0);
     CHECK(presetBox->getText() == "Sync*");
     CHECK(getPlainParameter(processor, driveID) == Catch::Approx(61.0f));
+}
+
+TEST_CASE("Preset rescan compares external files without replacing the live sound",
+          "[preset][filesystem][ui][rescan][dirty][identity][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    const auto presetPath =
+        temporaryDirectory.directory.getChildFile("Sync.fire");
+    const auto driveID = ParameterIDAndName::getIDString(DRIVE_ID, 0);
+
+    FireAudioProcessor originalPreset;
+    setPlainParameter(originalPreset, driveID, 34.0f);
+    writePresetFile(originalPreset, presetPath, "Sync");
+
+    FireAudioProcessor processor;
+    setPlainParameter(processor, driveID, 34.0f);
+    processor.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+    processor.statePresets.setCurrentPresetKey("Sync.fire");
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.synchronisePresetSelectionFromManager();
+
+    auto* presetBox = component.getPresetBox();
+    REQUIRE(presetBox != nullptr);
+    REQUIRE(presetBox->getSelectedId() == 1);
+    REQUIRE(presetBox->getText() == "Sync");
+
+    SECTION("a semantic no-op rewrite remains clean")
+    {
+        FireAudioProcessor equivalentPreset;
+        setPlainParameter(equivalentPreset, driveID, 34.0f);
+        writePresetFile(equivalentPreset, presetPath, "Different metadata");
+
+        StateComponentMenuTestAccess::rescan(component);
+
+        CHECK(presetBox->getSelectedId() == 1);
+        CHECK(presetBox->getText() == "Sync");
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(34.0f));
+    }
+
+    SECTION("an external overwrite marks the unchanged live sound dirty")
+    {
+        FireAudioProcessor replacementPreset;
+        setPlainParameter(replacementPreset, driveID, 73.0f);
+        writePresetFile(replacementPreset, presetPath, "Sync");
+
+        StateComponentMenuTestAccess::rescan(component);
+
+        CHECK(presetBox->getSelectedId() == 0);
+        CHECK(presetBox->getText() == "Sync*");
+        CHECK(processor.statePresets.getCurrentPresetKey() == "Sync.fire");
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(34.0f));
+    }
+
+    SECTION("delete and recreate cannot erase an existing dirty indication")
+    {
+        REQUIRE(presetPath.deleteFile());
+        StateComponentMenuTestAccess::rescan(component);
+
+        REQUIRE(presetBox->getSelectedId() == 0);
+        REQUIRE(presetBox->getText() == "Sync*");
+        REQUIRE(processor.statePresets.getCurrentPresetKey() == "Sync.fire");
+        REQUIRE(getPlainParameter(processor, driveID)
+                == Catch::Approx(34.0f));
+
+        FireAudioProcessor recreatedPreset;
+        setPlainParameter(recreatedPreset, driveID, 34.0f);
+        writePresetFile(recreatedPreset, presetPath, "Sync");
+        StateComponentMenuTestAccess::rescan(component);
+
+        CHECK(presetBox->getSelectedId() == 0);
+        CHECK(presetBox->getText() == "Sync*");
+        CHECK(processor.statePresets.getCurrentPresetKey() == "Sync.fire");
+        CHECK(getPlainParameter(processor, driveID) == Catch::Approx(34.0f));
+    }
 }
 
 TEST_CASE("Preset selection publishes identity and sound as one host generation",

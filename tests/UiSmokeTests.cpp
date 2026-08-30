@@ -1068,6 +1068,43 @@ TEST_CASE("Modulation Matrix dialog closes synchronously with its owning UI",
         editor->removeFromDesktop();
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
+
+    SECTION("dialog factory may synchronously destroy its owner")
+    {
+        FireAudioProcessor processor;
+        processor.hasUpdateCheckBeenPerformed = true;
+        auto panel = std::make_unique<LfoPanel>(processor);
+        panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel->setVisible(true);
+
+        int factoryCalls = 0;
+        juce::Component::SafePointer<juce::DialogWindow> safeReturnedDialog;
+        juce::Component::SafePointer<juce::Component> safeReturnedContent;
+        LfoPanelDialogTestAccess::setDialogFactory(
+            *panel,
+            [&]
+            {
+                ++factoryCalls;
+                auto* dialog = createModulationMatrixDialog(processor);
+                safeReturnedDialog = dialog;
+                safeReturnedContent = dialog->getContentComponent();
+                panel.reset();
+                return dialog;
+            });
+
+        auto* panelAtLaunch = panel.get();
+        REQUIRE(panelAtLaunch != nullptr);
+        LfoPanelDialogTestAccess::showDialog(*panelAtLaunch);
+
+        CHECK(factoryCalls == 1);
+        CHECK(panel == nullptr);
+        CHECK(safeReturnedDialog == nullptr);
+        CHECK(safeReturnedContent == nullptr);
+        CHECK(juce::ModalComponentManager::getInstance()
+                  ->getNumModalComponents()
+              == 0);
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
 }
 
 TEST_CASE("Settings dialog closes synchronously with its owning UI",

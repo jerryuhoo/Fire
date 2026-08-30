@@ -427,6 +427,7 @@ private:
     std::array<juce::String, 4> smoothParameterIDs;
 
     juce::Component::SafePointer<juce::DialogWindow> modulationMatrixDialog;
+    std::uint64_t modulationMatrixDialogSessionGeneration = 0;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::function<juce::DialogWindow*()>
         modulationMatrixDialogFactoryForTesting;

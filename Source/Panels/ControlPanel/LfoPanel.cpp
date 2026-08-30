@@ -24,6 +24,16 @@ static bool isVisibleInHierarchy(const juce::Component& component) noexcept
     return true;
 }
 
+static void deleteDialogSynchronously(
+    juce::Component::SafePointer<juce::DialogWindow> dialog) noexcept
+{
+    if (dialog == nullptr)
+        return;
+
+    dialog->exitModalState(0);
+    dialog.deleteAndZero();
+}
+
 //==============================================================================
 // LfoEditor Implementation
 //==============================================================================
@@ -2920,10 +2930,13 @@ void LfoPanel::configureModulationMatrixDialog(
 
 void LfoPanel::showModulationMatrixDialog()
 {
-    if (! isShowing())
+    const juce::Component::SafePointer<LfoPanel> safeThis(this);
+
+    if (! safeThis->isShowing() || ! safeThis->isEnabled())
         return;
 
-    if (auto* existingDialog = modulationMatrixDialog.getComponent())
+    if (auto* existingDialog =
+            safeThis->modulationMatrixDialog.getComponent())
     {
         if (existingDialog->isShowing()
             && existingDialog->isCurrentlyModal(false))
@@ -2935,38 +2948,62 @@ void LfoPanel::showModulationMatrixDialog()
         // DefaultDialogWindow::closeButtonPressed() hides the window and leaves
         // auto-deletion queued for ModalComponentManager's next async update.
         // Remove that stale window synchronously before reopening.
-        dismissModulationMatrixDialog();
+        safeThis->dismissModulationMatrixDialog();
+        if (safeThis == nullptr)
+            return;
     }
+
+    const auto launchSessionGeneration =
+        safeThis->modulationMatrixDialogSessionGeneration;
+    juce::Component::SafePointer<juce::DialogWindow> launchedDialog;
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
-    if (modulationMatrixDialogFactoryForTesting)
+    // Copy the callable before invoking it: a host callback reached during
+    // launch may synchronously destroy this panel and its owning editor.
+    auto dialogFactory =
+        safeThis->modulationMatrixDialogFactoryForTesting;
+    if (dialogFactory)
     {
-        modulationMatrixDialog =
-            modulationMatrixDialogFactoryForTesting();
+        launchedDialog = dialogFactory();
+    }
+    else
+#endif
+    {
+        // LaunchOptions owns and automatically deletes the modal dialog and
+        // its content when the modal state ends.
+        juce::DialogWindow::LaunchOptions launchOptions;
+        safeThis->configureModulationMatrixDialog(launchOptions);
+        launchedDialog = launchOptions.launchAsync();
+    }
+
+    // launchAsync(), or a synchronous host callback reached while it runs,
+    // may destroy or hide the editor before returning. Keep the returned
+    // processor-referencing content local until its owner is known to remain
+    // in the same visible interaction session.
+    if (safeThis == nullptr
+        || safeThis->modulationMatrixDialogSessionGeneration
+               != launchSessionGeneration
+        || ! safeThis->isShowing()
+        || ! safeThis->isEnabled())
+    {
+        deleteDialogSynchronously(launchedDialog);
         return;
     }
-#endif
 
-    // LaunchOptions owns and automatically deletes the modal dialog and its
-    // content when the modal state ends.
-    juce::DialogWindow::LaunchOptions launchOptions;
-    configureModulationMatrixDialog(launchOptions);
-    modulationMatrixDialog = launchOptions.launchAsync();
+    safeThis->modulationMatrixDialog = launchedDialog;
 }
 
 void LfoPanel::dismissModulationMatrixDialog()
 {
+    ++modulationMatrixDialogSessionGeneration;
+
     // launchAsync() normally defers deletion until the modal manager's next
     // async update. The dialog content holds a reference to the processor, so
     // an editor/processor teardown must not leave that deletion queued.
     auto dialog = modulationMatrixDialog;
     modulationMatrixDialog = nullptr;
 
-    if (dialog != nullptr)
-    {
-        dialog->exitModalState(0);
-        dialog.deleteAndZero();
-    }
+    deleteDialogSynchronously(dialog);
 }
 
 void LfoPanel::visibilityChanged()

@@ -412,6 +412,93 @@ TEST_CASE("Production control panels wire graph zoom into their live layouts",
         }
     }
 
+    SECTION("Drive preview defers its graph restoration until transfer zoom closes")
+    {
+        BandPanel panel(processor, {}, {}, {}, {}, {});
+        panel.setBounds(0, 0, 1180, 430);
+        panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+        panel.setVisible(true);
+        panel.resized();
+
+        auto* drive = panel.getDriveKnob();
+        auto* transferGraph = panel.getDistortionGraph();
+        REQUIRE(drive != nullptr);
+        REQUIRE(transferGraph != nullptr);
+        REQUIRE(drive->isShowing());
+
+        const auto graphs = directGraphs(panel);
+        auto waveform = std::find_if(
+            graphs.begin(), graphs.end(), [](const auto* graph)
+            {
+                return graph->getTitle().startsWithIgnoreCase("WAVEFORM");
+            });
+        REQUIRE(waveform != graphs.end());
+        auto* waveformGraph = *waveform;
+        REQUIRE(waveformGraph->isShowing());
+        REQUIRE_FALSE(transferGraph->isShowing());
+
+        drive->onMainDragStart = [&panel](ModulatableSlider*)
+        {
+            panel.setGraphVisibilityForDriveDrag(true);
+        };
+        drive->onMainDragEnd = [&panel](ModulatableSlider*)
+        {
+            panel.setGraphVisibilityForDriveDrag(false);
+        };
+
+        drive->mouseDown(makeMouseEvent(*drive, primary));
+        REQUIRE(drive->hasActiveInteraction());
+        CHECK_FALSE(waveformGraph->isShowing());
+        REQUIRE(transferGraph->isShowing());
+
+        auto* transferAccessibility =
+            transferGraph->getAccessibilityHandler();
+        REQUIRE(transferAccessibility != nullptr);
+        REQUIRE(transferAccessibility->getActions().invoke(
+            juce::AccessibilityActionType::press));
+
+        // Zoom hides Drive and therefore completes its real Slider gesture.
+        // The drag-end callback must not hide the graph that now owns zoom.
+        CHECK_FALSE(drive->hasActiveInteraction());
+        CHECK_FALSE(drive->isShowing());
+        CHECK(transferGraph->getZoomState());
+        CHECK(transferGraph->isShowing());
+        CHECK(std::count_if(graphs.begin(), graphs.end(),
+                            [](const auto* graph)
+                            {
+                                return graph->isShowing();
+                            })
+              == 1);
+
+        REQUIRE(transferAccessibility->getActions().invoke(
+            juce::AccessibilityActionType::press));
+        CHECK_FALSE(transferGraph->getZoomState());
+        CHECK_FALSE(transferGraph->isShowing());
+        CHECK(waveformGraph->isShowing());
+        CHECK(drive->isShowing());
+        CHECK_FALSE(drive->hasActiveInteraction());
+
+        // A normal keyboard module switch still ends a fresh Drive preview
+        // immediately, after which the selected module owns graph visibility.
+        drive->mouseDown(makeMouseEvent(*drive, primary));
+        REQUIRE(drive->hasActiveInteraction());
+        REQUIRE(transferGraph->isShowing());
+        auto* shapeButton = findDirectButton(panel, "Shape");
+        REQUIRE(shapeButton != nullptr);
+        REQUIRE(static_cast<juce::Component&>(*shapeButton).keyPressed(
+            juce::KeyPress { juce::KeyPress::returnKey }));
+        CHECK_FALSE(drive->hasActiveInteraction());
+        CHECK_FALSE(drive->isShowing());
+        CHECK(transferGraph->isShowing());
+        CHECK_FALSE(transferGraph->getZoomState());
+        CHECK(std::count_if(graphs.begin(), graphs.end(),
+                            [](const auto* graph)
+                            {
+                                return graph->isShowing();
+                            })
+              == 1);
+    }
+
     SECTION("global graph zoom hides and restores its siblings")
     {
         GlobalPanel panel(processor, {}, {}, {}, {}, {});

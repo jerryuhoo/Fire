@@ -675,6 +675,8 @@ void BandPanel::toggleGraphZoom(GraphTemplate* graph)
 void BandPanel::clearGraphZoom() noexcept
 {
     const juce::Component::SafePointer<BandPanel> safeThis(this);
+    const bool shouldRestoreDrivePreview =
+        driveGraphPreviewPhase == DriveGraphPreviewPhase::restoreAfterZoom;
     auto* graph = zoomedGraph;
     zoomedGraph = nullptr;
     if (graph != nullptr)
@@ -682,6 +684,11 @@ void BandPanel::clearGraphZoom() noexcept
 
     if (safeThis != nullptr)
         safeThis->restoreComponentsObscuredByZoom();
+
+    if (safeThis != nullptr && shouldRestoreDrivePreview
+        && safeThis->driveGraphPreviewPhase
+               == DriveGraphPreviewPhase::restoreAfterZoom)
+        safeThis->restoreDriveGraphPreviewNow();
 }
 
 void BandPanel::hideComponentsObscuredByZoom(const GraphTemplate& graph)
@@ -737,6 +744,38 @@ void BandPanel::restoreComponentsObscuredByZoom() noexcept
     if (auto* handler = getAccessibilityHandler())
         handler->notifyAccessibilityEvent(
             juce::AccessibilityEvent::structureChanged);
+}
+
+GraphTemplate* BandPanel::getSelectedModuleGraph() noexcept
+{
+    if (shapeSwitch.getToggleState())
+        return &distortionGraph;
+    if (compressorSwitch.getToggleState())
+        return &vuPanel;
+    if (widthSwitch.getToggleState())
+        return &widthGraph;
+    return &oscilloscope;
+}
+
+void BandPanel::restoreDriveGraphPreviewNow() noexcept
+{
+    if (driveGraphPreviewPhase == DriveGraphPreviewPhase::idle)
+        return;
+
+    // Clear the session before changing visibility. Component listeners may
+    // synchronously re-enter panel code, and a completed preview must be
+    // observed as idle from that point onward.
+    auto* const graphToRestore = graphBeforeDrivePreview;
+    graphBeforeDrivePreview = nullptr;
+    driveGraphPreviewPhase = DriveGraphPreviewPhase::idle;
+
+    if (graphToRestore == nullptr || graphToRestore == &distortionGraph)
+        return;
+
+    const juce::Component::SafePointer<BandPanel> safeThis(this);
+    distortionGraph.setVisible(false);
+    if (safeThis != nullptr)
+        graphToRestore->setVisible(true);
 }
 
 void BandPanel::setAnimatedModuleTarget(int moduleIndex)
@@ -1563,22 +1602,20 @@ void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
     const juce::Component::SafePointer<BandPanel> safeThis(this);
     if (isDragging)
     {
-        if (oscilloscope.isVisible())
-            preDragVisibleGraph = &oscilloscope;
-        else if (distortionGraph.isVisible())
-            preDragVisibleGraph = &distortionGraph;
-        else if (vuPanel.isVisible())
-            preDragVisibleGraph = &vuPanel;
-        else if (widthGraph.isVisible())
-            preDragVisibleGraph = &widthGraph;
-        else
-            preDragVisibleGraph = nullptr;
+        // A Slider emits one main-drag start per accepted gesture. Ignore a
+        // duplicate notification rather than replacing the graph owned by the
+        // current preview session with its temporary transfer graph.
+        if (driveGraphPreviewPhase != DriveGraphPreviewPhase::idle)
+            return;
 
-        if (preDragVisibleGraph != &distortionGraph)
+        graphBeforeDrivePreview = getSelectedModuleGraph();
+        driveGraphPreviewPhase = DriveGraphPreviewPhase::previewing;
+
+        if (graphBeforeDrivePreview != &distortionGraph)
         {
-            if (preDragVisibleGraph != nullptr)
+            if (graphBeforeDrivePreview != nullptr)
             {
-                preDragVisibleGraph->setVisible(false);
+                graphBeforeDrivePreview->setVisible(false);
                 if (safeThis == nullptr)
                     return;
             }
@@ -1590,16 +1627,23 @@ void BandPanel::setGraphVisibilityForDriveDrag(bool isDragging)
     }
     else
     {
-        if (preDragVisibleGraph != nullptr && preDragVisibleGraph != &distortionGraph)
-        {
-            distortionGraph.setVisible(false);
-            if (safeThis == nullptr)
-                return;
+        if (driveGraphPreviewPhase == DriveGraphPreviewPhase::idle
+            || driveGraphPreviewPhase
+                   == DriveGraphPreviewPhase::restoreAfterZoom)
+            return;
 
-            preDragVisibleGraph->setVisible(true);
-            if (safeThis == nullptr)
-                return;
+        // Expanding the temporary transfer graph hides the Drive control. Its
+        // visibility lifecycle synchronously ends the Slider gesture while the
+        // graph is becoming zoomed. Keep the zoom owner visible and defer the
+        // preview restoration until clearGraphZoom() has first restored the
+        // controls hidden by that zoom session.
+        if (zoomedGraph == &distortionGraph
+            && distortionGraph.getZoomState())
+        {
+            driveGraphPreviewPhase = DriveGraphPreviewPhase::restoreAfterZoom;
+            return;
         }
-        preDragVisibleGraph = nullptr;
+
+        restoreDriveGraphPreviewNow();
     }
 }

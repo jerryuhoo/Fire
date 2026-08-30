@@ -98,6 +98,8 @@ private:
     void clearGraphZoom() noexcept;
     void hideComponentsObscuredByZoom(const GraphTemplate& graph);
     void restoreComponentsObscuredByZoom() noexcept;
+    GraphTemplate* getSelectedModuleGraph() noexcept;
+    void restoreDriveGraphPreviewNow() noexcept;
     void setAnimatedModuleTarget(int moduleIndex);
     juce::Rectangle<float> getModuleSelectionBounds(float modulePosition) const;
     juce::Colour getModuleSelectionColour() const;
@@ -179,7 +181,16 @@ private:
     std::array<std::unique_ptr<ComboBoxAttachment>, 4> modeAttachments;
     std::uint64_t distortionModeInteractionGeneration = 0;
 
-    juce::Component* preDragVisibleGraph = nullptr;
+    enum class DriveGraphPreviewPhase
+    {
+        idle,
+        previewing,
+        restoreAfterZoom
+    };
+
+    DriveGraphPreviewPhase driveGraphPreviewPhase =
+        DriveGraphPreviewPhase::idle;
+    GraphTemplate* graphBeforeDrivePreview = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BandPanel)
 };

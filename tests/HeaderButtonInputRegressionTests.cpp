@@ -371,6 +371,39 @@ TEST_CASE("Primary button state callbacks may synchronously delete their control
         CHECK(button == nullptr);
     }
 
+    SECTION("direct gesture dismissal")
+    {
+        auto button = makePressedButton();
+        auto* rawButton = button.get();
+        bool callbackStarted = false;
+        rawButton->onStateChange = [&]
+        {
+            callbackStarted = true;
+            button.reset();
+        };
+
+        rawButton->dismissPointerGesture();
+        CHECK(callbackStarted);
+        CHECK(button == nullptr);
+    }
+
+    SECTION("missing release recovery")
+    {
+        auto button = makePressedButton();
+        auto* rawButton = button.get();
+        const auto move = makeMouseEvent(*rawButton, {});
+        bool callbackStarted = false;
+        rawButton->onStateChange = [&]
+        {
+            callbackStarted = true;
+            button.reset();
+        };
+
+        static_cast<juce::Component&>(*rawButton).mouseMove(move);
+        CHECK(callbackStarted);
+        CHECK(button == nullptr);
+    }
+
     SECTION("hover state transition")
     {
         auto button = makePressedButton();

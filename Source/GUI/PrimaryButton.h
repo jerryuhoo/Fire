@@ -117,7 +117,9 @@ public:
         if (safeThis != nullptr)
         {
             recoverMissingPointerUp(event);
-            updateAnimationTargets();
+
+            if (safeThis != nullptr)
+                updateAnimationTargets();
         }
     }
 
@@ -133,7 +135,9 @@ public:
         if (safeThis != nullptr)
         {
             recoverMissingPointerUp(event);
-            updateAnimationTargets();
+
+            if (safeThis != nullptr)
+                updateAnimationTargets();
         }
     }
 
@@ -149,7 +153,9 @@ public:
         if (safeThis != nullptr)
         {
             recoverMissingPointerUp(event);
-            updateAnimationTargets();
+
+            if (safeThis != nullptr)
+                updateAnimationTargets();
         }
     }
 
@@ -216,7 +222,9 @@ public:
         // Re-enabling while a physical button remains held must not revive an
         // abandoned gesture through Button::updateState().
         dismissPointerGesture();
-        updateAnimationTargets();
+
+        if (safeThis != nullptr)
+            updateAnimationTargets();
     }
 
     void focusGained(juce::Component::FocusChangeType cause) override
@@ -245,8 +253,11 @@ public:
                                       && this->isMouseOver(true)
                                   ? juce::Button::buttonOver
                                   : juce::Button::buttonNormal;
+        const juce::Component::SafePointer<PrimaryPointerButton> safeThis(this);
         this->setState(restingState);
-        updateAnimationTargets();
+
+        if (safeThis != nullptr)
+            updateAnimationTargets();
     }
 
 private:

@@ -528,6 +528,50 @@ TEST_CASE("Editor publishes the selected history source before its graphs appear
     CHECK((processor.getHistorySourceToken() & sourceMask) == 0u);
 }
 
+TEST_CASE("Preset focus reset is consumed by state synchronisation, not a later header click",
+          "[ui][preset][focus][workspace][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+
+    setParameterValue(processor, NUM_BANDS_ID, 3.0f);
+    for (int divider = 0; divider < 2; ++divider)
+        setParameterValue(processor,
+                          ParameterIDAndName::getIDString(LINE_STATE_ID,
+                                                          divider),
+                          1.0f);
+
+    auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
+    editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    editor->setVisible(true);
+
+    auto* multiband = findComponentOfType<Multiband>(*editor);
+    auto* presetState =
+        findComponentOfType<state::StateComponent>(*editor);
+    REQUIRE(multiband != nullptr);
+    REQUIRE(presetState != nullptr);
+
+    multiband->setFocusIndex(2);
+    REQUIRE(multiband->getFocusIndex() == 2);
+    presetState->requestFocusResetAfterStateLoad();
+
+    // A workspace click can arrive before the asynchronous processor change
+    // notification. It must not consume the preset-load coordination state.
+    selectWorkspace(*editor, "MOD FORGE");
+    CHECK(multiband->getFocusIndex() == 2);
+
+    editor->changeListenerCallback(&processor);
+    CHECK(multiband->getFocusIndex() == 0);
+
+    // Once the matching state synchronisation has consumed the request,
+    // unrelated header commands preserve the user's current band.
+    multiband->setFocusIndex(2);
+    REQUIRE(multiband->getFocusIndex() == 2);
+    selectWorkspace(*editor, "MASTER LAB");
+    CHECK(multiband->getFocusIndex() == 2);
+}
+
 TEST_CASE("Editor scale reaches every embedded control-panel graph",
           "[ui][graph][scale][layout][regression]")
 {

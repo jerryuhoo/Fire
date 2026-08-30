@@ -1581,15 +1581,6 @@ void FireAudioProcessorEditor::buttonClicked(juce::Button* clickedButton)
         if (safeThis == nullptr)
             return;
     }
-    if (multiband.getStateComponent().getChangedState())
-    {
-        multiband.setFocusIndex(0);
-
-        if (safeThis == nullptr)
-            return;
-
-        multiband.getStateComponent().setChangedState(false);
-    }
     if (clickedButton == &zoomButton)
     {
         // Since setClickingTogglesState is false, we manually toggle the state.
@@ -2107,10 +2098,33 @@ void FireAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* s
 {
     if (source == &processor)
     {
+        const juce::Component::SafePointer<FireAudioProcessorEditor> safeThis(
+            this);
+        const bool resetFocusAfterStateLoad =
+            stateComponent.consumeFocusResetAfterStateLoad();
+
         modulationSnapshotFramesRemaining = 0;
         stateComponent.synchronisePresetSelectionFromManager();
+        if (safeThis == nullptr)
+            return;
+
         stateComponent.synchroniseABButtonFromManager();
+        if (safeThis == nullptr)
+            return;
+
         lfoPanel.refreshLfoDisplay();
+        if (safeThis == nullptr)
+            return;
+
+        if (resetFocusAfterStateLoad)
+        {
+            multiband.setFocusIndex(0);
+            if (safeThis == nullptr)
+                return;
+        }
+
+        // Crossover repair can synchronously notify a host which destroys the
+        // editor, so keep this as the final operation in the callback.
         multiband.resortAndRedrawLines();
     }
 }

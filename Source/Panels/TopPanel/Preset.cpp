@@ -2128,7 +2128,6 @@ namespace state
     void StateComponent::updatePresetBox(int selectedId) // when preset is changed
     {
         const juce::Component::SafePointer<StateComponent> safeThis(this);
-        isChanged = true; // do it first
 
         if (selectedId > 0)
         {
@@ -2175,6 +2174,9 @@ namespace state
 
                 if (! presetWasLoaded)
                     return;
+
+                if (safeThis != nullptr)
+                    safeThis->requestFocusResetAfterStateLoad();
 
                 // The UI owns an outer transaction which also includes the
                 // selected preset ID. Notify only after that transaction has
@@ -2267,7 +2269,6 @@ namespace state
         auto& fireProc = static_cast<FireAudioProcessor&>(procStatePresets.getProcessor());
         if (! fireProc.isCurrentStateEquivalentToPreset(*presetXml))
         {
-            isChanged = true;
             markAsDirty();
         }
 
@@ -2624,7 +2625,6 @@ namespace state
             if (! dirtyText.endsWith("*"))
                 dirtyText += "*";
 
-            isChanged = true;
             presetBox.setSelectedId(0, juce::dontSendNotification);
             presetBox.setText(dirtyText, juce::dontSendNotification);
         }
@@ -2756,7 +2756,7 @@ namespace state
             const juce::Component::SafePointer<StateComponent> safeThis(this);
             auto* presetManager = &procStatePresets;
             auto* abState = &procStateAB;
-            isChanged = true;
+            requestFocusResetAfterStateLoad();
             beginProgrammaticChange();
             const juce::ScopeGuard finishInit { [safeThis]
             {
@@ -2913,14 +2913,16 @@ namespace state
                                4096);
     }
 
-    void StateComponent::setChangedState(bool state)
+    void StateComponent::requestFocusResetAfterStateLoad() noexcept
     {
-        isChanged = state;
+        focusResetAfterStateLoadPending = true;
     }
 
-    bool StateComponent::getChangedState()
+    bool StateComponent::consumeFocusResetAfterStateLoad() noexcept
     {
-        return isChanged;
+        const bool wasPending = focusResetAfterStateLoadPending;
+        focusResetAfterStateLoadPending = false;
+        return wasPending;
     }
 
     juce::ComboBox* StateComponent::getPresetBox()

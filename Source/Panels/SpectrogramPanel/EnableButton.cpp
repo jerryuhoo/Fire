@@ -35,6 +35,10 @@ bool isVisibleInHierarchy(const juce::Component& component) noexcept
 //==============================================================================
 EnableButton::EnableButton()
 {
+    hoverAnimation.snapTo(0.0f);
+    pressAnimation.snapTo(0.0f);
+    focusAnimation.snapTo(0.0f);
+    enabledAnimation.snapTo(isEnabled() ? 1.0f : 0.0f);
 }
 
 EnableButton::~EnableButton()
@@ -46,16 +50,29 @@ void EnableButton::paint(juce::Graphics& g)
     auto bounds = getLocalBounds().toFloat().reduced(0.75f);
     const bool active = getToggleState();
     const auto accent = getColour();
+    const auto hover = juce::jlimit(0.0f, 1.0f, hoverAnimation.current);
+    const auto press = juce::jlimit(0.0f, 1.0f, pressAnimation.current);
+    const auto focus = juce::jlimit(0.0f, 1.0f, focusAnimation.current);
+    const auto enabled = juce::jlimit(0.0f, 1.0f, enabledAnimation.current);
 
-    juce::ColourGradient metal(fire::ui::colours::raised.brighter(isEntered ? 0.10f : 0.03f),
+    bounds = bounds.reduced(press * 0.55f);
+
+    juce::ColourGradient metal(fire::ui::colours::raised.brighter(0.03f + hover * 0.07f),
                                bounds.getCentreX(), bounds.getY(),
                                fire::ui::colours::surface0, bounds.getCentreX(), bounds.getBottom(), false);
     g.setGradientFill(metal);
     g.fillEllipse(bounds);
 
     g.setColour((active ? accent : fire::ui::colours::hairline)
-                    .withAlpha(active ? 0.84f : (isEntered ? 0.78f : 0.58f)));
+                    .withAlpha((active ? 0.84f : 0.58f + hover * 0.20f)
+                               * (0.48f + enabled * 0.52f)));
     g.drawEllipse(bounds, 1.0f);
+
+    if (focus > 0.001f)
+    {
+        g.setColour(fire::ui::colours::gold.withAlpha(0.52f * focus * enabled));
+        g.drawEllipse(bounds.expanded(1.25f), 1.0f);
+    }
 
     auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
     const auto lineW = juce::jmax(1.0f, radius * 0.13f);
@@ -68,7 +85,8 @@ void EnableButton::paint(juce::Graphics& g)
                                 juce::MathConstants<float>::twoPi * 0.88f,
                                 true);
 
-    g.setColour(accent.withAlpha(active ? 0.95f : 0.40f));
+    g.setColour(accent.withAlpha((active ? 0.95f : 0.40f + hover * 0.10f)
+                                 * (0.48f + enabled * 0.52f)));
     g.strokePath(backgroundArc,
                  juce::PathStrokeType(lineW, juce::PathStrokeType::curved,
                                       juce::PathStrokeType::rounded));
@@ -92,7 +110,7 @@ void EnableButton::mouseEnter(const juce::MouseEvent& e)
         return;
 
     isEntered = true;
-    repaint();
+    updateAnimationTargets();
     recoverMissingPointerUp(e);
 }
 
@@ -120,7 +138,7 @@ void EnableButton::mouseExit(const juce::MouseEvent& e)
         return;
 
     isEntered = false;
-    repaint();
+    updateAnimationTargets();
     recoverMissingPointerUp(e);
 }
 
@@ -203,8 +221,22 @@ void EnableButton::visibilityChanged()
     const juce::Component::SafePointer<EnableButton> safeThis(this);
     juce::ToggleButton::visibilityChanged();
 
-    if (safeThis != nullptr && ! isVisible())
+    if (safeThis == nullptr)
+        return;
+
+    if (! isVisible())
+    {
         dismissPointerGesture();
+        isEntered = false;
+        hoverAnimation.snapTo(0.0f);
+        pressAnimation.snapTo(0.0f);
+        focusAnimation.snapTo(0.0f);
+        stopTimer();
+    }
+    else
+    {
+        updateAnimationTargets();
+    }
 }
 
 void EnableButton::enablementChanged()
@@ -212,8 +244,76 @@ void EnableButton::enablementChanged()
     const juce::Component::SafePointer<EnableButton> safeThis(this);
     juce::ToggleButton::enablementChanged();
 
-    if (safeThis != nullptr && ! isEnabled())
+    if (safeThis != nullptr)
+    {
+        if (! isEnabled())
+            dismissPointerGesture();
+        updateAnimationTargets();
+    }
+}
+
+void EnableButton::focusGained(FocusChangeType cause)
+{
+    juce::ToggleButton::focusGained(cause);
+    updateAnimationTargets();
+}
+
+void EnableButton::focusLost(FocusChangeType cause)
+{
+    juce::ToggleButton::focusLost(cause);
+    updateAnimationTargets();
+}
+
+void EnableButton::buttonStateChanged()
+{
+    updateAnimationTargets();
+}
+
+void EnableButton::timerCallback()
+{
+    if (! isVisibleInHierarchy(*this))
+    {
         dismissPointerGesture();
+        isEntered = false;
+        hoverAnimation.snapTo(0.0f);
+        pressAnimation.snapTo(0.0f);
+        focusAnimation.snapTo(0.0f);
+        stopTimer();
+        repaint();
+        return;
+    }
+
+    if (advanceAnimation(1.0f / 60.0f))
+        repaint();
+    else
+        stopTimer();
+}
+
+void EnableButton::updateAnimationTargets() noexcept
+{
+    const bool interactive = isEnabled() && isVisibleInHierarchy(*this);
+    hoverAnimation.setTarget(interactive && (isEntered || isDown()) ? 1.0f : 0.0f);
+    pressAnimation.setTarget(interactive && isDown() ? 1.0f : 0.0f);
+    focusAnimation.setTarget(interactive && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    enabledAnimation.setTarget(isEnabled() ? 1.0f : 0.0f);
+    startAnimationIfNeeded();
+}
+
+void EnableButton::startAnimationIfNeeded() noexcept
+{
+    if (isVisibleInHierarchy(*this)
+        && (! hoverAnimation.isSettled() || ! pressAnimation.isSettled()
+            || ! focusAnimation.isSettled() || ! enabledAnimation.isSettled()))
+        startTimerHz(60);
+}
+
+bool EnableButton::advanceAnimation(float deltaSeconds) noexcept
+{
+    bool changed = hoverAnimation.advance(deltaSeconds, 0.10f);
+    changed = pressAnimation.advance(deltaSeconds, 0.065f) || changed;
+    changed = focusAnimation.advance(deltaSeconds, 0.11f) || changed;
+    changed = enabledAnimation.advance(deltaSeconds, 0.13f) || changed;
+    return changed;
 }
 
 void EnableButton::dismissPointerGesture() noexcept
@@ -239,28 +339,10 @@ bool EnableButton::isPointerSource(const juce::MouseEvent& event) const noexcept
         && event.source.getIndex() == pointerSourceIndex;
 }
 
-juce::Colour EnableButton::getColour()
+juce::Colour EnableButton::getColour() const
 {
-    if (isEntered)
-    {
-        if (! getToggleState())
-        {
-            return fire::ui::colours::disabled.brighter(0.10f);
-        }
-        else
-        {
-            return fire::ui::colours::gold.brighter(0.08f);
-        }
-    }
-    else
-    {
-        if (! getToggleState())
-        {
-            return fire::ui::colours::disabled;
-        }
-        else
-        {
-            return fire::ui::colours::gold;
-        }
-    }
+    const auto base = getToggleState() ? fire::ui::colours::gold
+                                       : fire::ui::colours::disabled;
+    return base.brighter(hoverAnimation.current
+                         * (getToggleState() ? 0.08f : 0.10f));
 }

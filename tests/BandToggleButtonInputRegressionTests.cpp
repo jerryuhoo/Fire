@@ -23,6 +23,30 @@ struct BandToggleButtonPointerTestAccess
         button.pointerSourceType = sourceType;
         button.pointerSourceIndex = sourceIndex;
     }
+
+    template <typename ButtonType>
+    static float hover(const ButtonType& button)
+    {
+        return button.hoverAnimation.current;
+    }
+
+    template <typename ButtonType>
+    static float press(const ButtonType& button)
+    {
+        return button.pressAnimation.current;
+    }
+
+    template <typename ButtonType>
+    static float enabled(const ButtonType& button)
+    {
+        return button.enabledAnimation.current;
+    }
+
+    template <typename ButtonType>
+    static void advance(ButtonType& button, float seconds)
+    {
+        button.advanceAnimation(seconds);
+    }
 };
 
 namespace
@@ -176,6 +200,38 @@ TEST_CASE("Band toggles reject popup and auxiliary mouse gestures",
         });
     }
 #endif
+}
+
+TEST_CASE("Band toggle interaction visuals transition and reset when hidden",
+          "[band-toggle][multiband][ui][animation][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    const auto leftButton = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+
+    forEachBandToggle([leftButton](auto& button)
+    {
+        auto& component = static_cast<juce::Component&>(button);
+        component.mouseEnter(makeMouseEvent(button, {}));
+        BandToggleButtonPointerTestAccess::advance(button, 1.0f / 60.0f);
+        CHECK(BandToggleButtonPointerTestAccess::hover(button) > 0.0f);
+        CHECK(BandToggleButtonPointerTestAccess::hover(button) < 1.0f);
+
+        component.mouseDown(makeMouseEvent(button, leftButton));
+        BandToggleButtonPointerTestAccess::advance(button, 1.0f / 60.0f);
+        CHECK(BandToggleButtonPointerTestAccess::press(button) > 0.0f);
+
+        button.setEnabled(false);
+        REQUIRE_FALSE(button.isDown());
+        BandToggleButtonPointerTestAccess::advance(button, 1.0f / 60.0f);
+        CHECK(BandToggleButtonPointerTestAccess::enabled(button) > 0.0f);
+        CHECK(BandToggleButtonPointerTestAccess::enabled(button) < 1.0f);
+
+        button.setVisible(false);
+        CHECK(BandToggleButtonPointerTestAccess::hover(button) == 0.0f);
+        CHECK(BandToggleButtonPointerTestAccess::press(button) == 0.0f);
+    });
 }
 
 TEST_CASE("Band toggles pair only accepted primary mouse gestures",

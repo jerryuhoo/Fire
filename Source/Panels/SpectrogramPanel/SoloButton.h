@@ -20,7 +20,8 @@ struct BandToggleButtonPointerTestAccess;
 //==============================================================================
 /*
 */
-class SoloButton : public juce::ToggleButton
+class SoloButton : public juce::ToggleButton,
+                   private juce::Timer
 {
 public:
     SoloButton();
@@ -46,6 +47,13 @@ private:
 
     void visibilityChanged() override;
     void enablementChanged() override;
+    void focusGained(FocusChangeType) override;
+    void focusLost(FocusChangeType) override;
+    void buttonStateChanged() override;
+    void timerCallback() override;
+    void updateAnimationTargets() noexcept;
+    void startAnimationIfNeeded() noexcept;
+    bool advanceAnimation(float deltaSeconds) noexcept;
     void recoverMissingPointerUp(const juce::MouseEvent& event);
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
 
@@ -54,6 +62,10 @@ private:
     juce::MouseInputSource::InputSourceType pointerSourceType =
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
-    juce::Colour getColour();
+    fire::ui::DampedValue hoverAnimation;
+    fire::ui::DampedValue pressAnimation;
+    fire::ui::DampedValue focusAnimation;
+    fire::ui::DampedValue enabledAnimation;
+    juce::Colour getColour() const;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SoloButton)
 };

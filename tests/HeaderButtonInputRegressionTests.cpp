@@ -96,6 +96,19 @@ void performPointerGesture(juce::Button& button,
     endPointerGesture(button, upModifiers);
 }
 
+void detachTestPeerAndDrain(juce::Component& desktopHost,
+                            juce::Component& child)
+{
+    desktopHost.removeFromDesktop();
+
+    // On macOS the native peer can finish portions of its teardown on the
+    // message queue.  Do not let callbacks belonging to this short-lived test
+    // window escape into the next button instance (or the next test case),
+    // after both stack components have already been destroyed.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    desktopHost.removeChildComponent(&child);
+}
+
 template <typename Callback>
 void forEachPrimaryButtonType(Callback&& callback)
 {
@@ -605,7 +618,7 @@ TEST_CASE("Primary buttons discard gestures at hierarchy and peer boundaries",
 
             performPointerGesture(button, leftButton);
             CHECK(clickCount == 1);
-            desktopHost.removeFromDesktop();
+            detachTestPeerAndDrain(desktopHost, button);
         });
     }
 
@@ -642,7 +655,7 @@ TEST_CASE("Primary buttons discard gestures at hierarchy and peer boundaries",
 
             performPointerGesture(button, leftButton);
             CHECK(clickCount == 1);
-            desktopHost.removeFromDesktop();
+            detachTestPeerAndDrain(desktopHost, button);
         });
     }
 }

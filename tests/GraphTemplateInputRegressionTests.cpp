@@ -53,6 +53,17 @@ struct GraphTemplateInputTestAccess
         return graph.focusAnimation.current;
     }
 
+    static float focusTarget(const GraphTemplate& graph) noexcept
+    {
+        return graph.focusAnimation.target;
+    }
+
+    static bool isKeyboardFocusVisible(
+        const GraphTemplate& graph) noexcept
+    {
+        return graph.keyboardFocusVisible;
+    }
+
     static float disabled(const GraphTemplate& graph) noexcept
     {
         return graph.disabledAnimation.current;
@@ -227,6 +238,66 @@ TEST_CASE("Graph zoom release cannot cross hidden or disabled lifecycle",
     CHECK(GraphTemplateInputTestAccess::disabled(graph) < 1.0f);
     graph.mouseUp(makeMouseEvent(graph, {}));
     CHECK_FALSE(graph.getZoomState());
+}
+
+TEST_CASE("Graph focus presentation follows keyboard input modality",
+          "[graph][ui][input][focus][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    GraphTemplate graph;
+    graph.setBounds(0, 0, 240, 120);
+    graph.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    graph.setVisible(true);
+
+    int zoomRequests = 0;
+    graph.setZoomRequestCallback([&zoomRequests] { ++zoomRequests; });
+    graph.grabKeyboardFocus();
+    REQUIRE(graph.hasKeyboardFocus(true));
+
+    graph.focusGained(juce::Component::focusChangedByTabKey);
+    REQUIRE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 1.0f);
+
+    // A real accepted pointer gesture retains actual focus for keyboard use,
+    // while immediately removing the focus-visible animation target.
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier
+    };
+    graph.mouseDown(makeMouseEvent(graph, primary));
+    REQUIRE(graph.hasKeyboardFocus(true));
+    CHECK_FALSE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 0.0f);
+    graph.mouseUp(makeMouseEvent(graph, {}));
+    CHECK(zoomRequests == 1);
+    CHECK_FALSE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 0.0f);
+
+    // The next keyboard command restores the cue before invoking a callback
+    // that is allowed to synchronously destroy the graph.
+    REQUIRE(graph.keyPressed(juce::KeyPress { juce::KeyPress::returnKey }));
+    CHECK(zoomRequests == 2);
+    CHECK(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 1.0f);
+
+    graph.focusGained(juce::Component::focusChangedByMouseClick);
+    CHECK_FALSE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 0.0f);
+
+    graph.focusGained(juce::Component::focusChangedDirectly);
+    REQUIRE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    graph.setEnabled(false);
+    CHECK_FALSE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 0.0f);
+
+    graph.setEnabled(true);
+    graph.focusGained(juce::Component::focusChangedDirectly);
+    REQUIRE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    graph.setVisible(false);
+    CHECK_FALSE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
+    CHECK(GraphTemplateInputTestAccess::focusTarget(graph) == 0.0f);
+
+    graph.focusLost(juce::Component::focusChangedDirectly);
+    CHECK_FALSE(GraphTemplateInputTestAccess::isKeyboardFocusVisible(graph));
 }
 
 TEST_CASE("Graph zoom callback tolerates synchronous graph deletion",

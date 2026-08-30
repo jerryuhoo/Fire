@@ -62,6 +62,7 @@ private:
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
     bool primaryPointerDown = false;
+    bool keyboardFocusVisible = false;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;
     fire::ui::DampedValue focusAnimation;

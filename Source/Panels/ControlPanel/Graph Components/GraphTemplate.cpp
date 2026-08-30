@@ -169,6 +169,10 @@ void GraphTemplate::mouseDown(const juce::MouseEvent& e)
         dismissPointerGesture();
     }
 
+    // JUCE may give the graph keyboard focus before dispatching mouseDown.
+    // Preserve that focus for a subsequent Return/Space press, but do not
+    // leave a keyboard-navigation outline behind after pointer interaction.
+    keyboardFocusVisible = false;
     primaryPointerDown = true;
     pointerSourceType = e.source.getType();
     pointerSourceIndex = e.source.getIndex();
@@ -221,6 +225,12 @@ void GraphTemplate::mouseExit(const juce::MouseEvent& e)
 
 bool GraphTemplate::keyPressed(const juce::KeyPress& key)
 {
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        updateAnimationTargets();
+    }
+
     const bool isActivationKey = key.isKeyCode(juce::KeyPress::returnKey)
                                  || key.isKeyCode(juce::KeyPress::spaceKey);
     if (isActivationKey && canRequestZoom())
@@ -251,12 +261,14 @@ void GraphTemplate::enablementChanged()
 void GraphTemplate::focusGained(FocusChangeType cause)
 {
     juce::Component::focusGained(cause);
+    keyboardFocusVisible = cause != focusChangedByMouseClick;
     updateAnimationTargets();
 }
 
 void GraphTemplate::focusLost(FocusChangeType cause)
 {
     juce::Component::focusLost(cause);
+    keyboardFocusVisible = false;
     updateAnimationTargets();
 }
 
@@ -434,6 +446,7 @@ void GraphTemplate::updateAnimationTargets() noexcept
     if (! interactive)
     {
         animationTimer.stopTimer();
+        keyboardFocusVisible = false;
         hoverAnimation.snapTo(0.0f);
         pressAnimation.snapTo(0.0f);
         focusAnimation.snapTo(0.0f);
@@ -443,9 +456,15 @@ void GraphTemplate::updateAnimationTargets() noexcept
     }
 
     const bool enabled = isEnabled();
+    if (! enabled)
+        keyboardFocusVisible = false;
+
     hoverAnimation.setTarget(enabled && isMouseOn ? 1.0f : 0.0f);
     pressAnimation.setTarget(enabled && primaryPointerDown ? 1.0f : 0.0f);
-    focusAnimation.setTarget(enabled && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+    focusAnimation.setTarget(enabled && keyboardFocusVisible
+                                 && hasKeyboardFocus(true)
+                             ? 1.0f
+                             : 0.0f);
     disabledAnimation.setTarget(enabled ? 0.0f : 1.0f);
     if (! animationsSettled() && ! animationTimer.isTimerRunning())
         animationTimer.startTimerHz(60);

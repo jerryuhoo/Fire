@@ -31,6 +31,24 @@ struct ModulationMatrixRoutingComboBoxTestAccess
     }
 };
 
+struct ModulationMatrixRowTestAccess
+{
+    static void setAmountPointerSource(
+        ModulationMatrixRow& row,
+        juce::MouseInputSource::InputSourceType type,
+        int index) noexcept
+    {
+        row.amountSlider.pointerSourceType = type;
+        row.amountSlider.pointerSourceIndex = index;
+    }
+
+    static bool hasActiveAmountGesture(
+        const ModulationMatrixRow& row) noexcept
+    {
+        return row.amountSlider.primaryGestureInProgress;
+    }
+};
+
 namespace
 {
 void replacePresetRoutings(juce::XmlElement& preset,
@@ -936,6 +954,123 @@ TEST_CASE("Modulation matrix amount accepts only primary-button drags",
         CHECK(routings[0].depth
               == Catch::Approx(static_cast<float>(amountSlider->getValue())));
     }
+
+    SECTION("a foreign MouseInputSource cannot drag or release the owner gesture")
+    {
+        const auto primary = juce::ModifierKeys {
+            juce::ModifierKeys::leftButtonModifier };
+        const auto ownerDown = makeMouseEvent(*amountSlider,
+                                              downPosition,
+                                              primary,
+                                              downPosition,
+                                              false);
+        amountSlider->mouseDown(ownerDown);
+        REQUIRE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(row));
+        CHECK(sliderCapture.dragStartCount == 1);
+        const auto valueAfterOwnerDown = amountSlider->getValue();
+
+        const auto ownerType = ownerDown.source.getType();
+        const auto ownerIndex = ownerDown.source.getIndex();
+        const auto foreignType = ownerType == juce::MouseInputSource::mouse
+                                     ? juce::MouseInputSource::touch
+                                     : juce::MouseInputSource::mouse;
+        ModulationMatrixRowTestAccess::setAmountPointerSource(
+            row, foreignType, ownerIndex + 17);
+
+        amountSlider->mouseDrag(makeMouseEvent(*amountSlider,
+                                               dragPosition,
+                                               primary,
+                                               downPosition,
+                                               true));
+        amountSlider->mouseUp(makeMouseEvent(*amountSlider,
+                                             dragPosition,
+                                             {},
+                                             downPosition,
+                                             true));
+        CHECK(ModulationMatrixRowTestAccess::hasActiveAmountGesture(row));
+        CHECK(sliderCapture.dragEndCount == 0);
+        CHECK(amountSlider->getValue() == Catch::Approx(valueAfterOwnerDown));
+
+        ModulationMatrixRowTestAccess::setAmountPointerSource(
+            row, ownerType, ownerIndex);
+        amountSlider->mouseDrag(makeMouseEvent(*amountSlider,
+                                               dragPosition,
+                                               primary,
+                                               downPosition,
+                                               true));
+        amountSlider->mouseUp(makeMouseEvent(*amountSlider,
+                                             dragPosition,
+                                             {},
+                                             downPosition,
+                                             true));
+        CHECK_FALSE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(row));
+        CHECK(sliderCapture.dragEndCount == 1);
+        CHECK(amountSlider->getValue() != Catch::Approx(initialDepth));
+    }
+
+    amountSlider->removeListener(&sliderCapture);
+}
+
+TEST_CASE("Modulation matrix row dismissal closes amount and button gestures",
+          "[ui][modulation-matrix][input][dismissal]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    const auto targets = ParameterIDAndName::getAllModulatableTargets();
+    REQUIRE_FALSE(targets.empty());
+    const ModulationRouting routing {
+        0, targets.front().parameterID, 0.25f, true, false
+    };
+    auto& manager = processor.getLfoManager();
+    {
+        const juce::ScopedLock lock(manager.getLfoDataLock());
+        manager.getModulationRoutings().set(0, routing);
+    }
+
+    ModulationMatrixRow row(
+        processor, 0, routing, makeRoutingEditSession(processor),
+        [](std::uint64_t, ModulationRouting) {});
+    juce::Component visibleParent;
+    visibleParent.setBounds(0, 0, 760, 40);
+    visibleParent.addAndMakeVisible(row);
+    row.setBounds(0, 0, 760, 40);
+    auto* amountSlider = findAmountSlider(row);
+    auto* polarityButton = findTextButton(row, "Bi");
+    REQUIRE(amountSlider != nullptr);
+    REQUIRE(polarityButton != nullptr);
+    SliderInteractionCapture sliderCapture;
+    amountSlider->addListener(&sliderCapture);
+
+    const auto primary = juce::ModifierKeys {
+        juce::ModifierKeys::leftButtonModifier };
+    const auto sliderPosition = amountSlider->getLocalBounds().toFloat().getCentre();
+    amountSlider->mouseDown(makeMouseEvent(*amountSlider,
+                                          sliderPosition,
+                                          primary,
+                                          sliderPosition,
+                                          false));
+    static_cast<juce::Component&>(*polarityButton).mouseDown(
+        makeMouseEvent(*polarityButton,
+                       polarityButton->getLocalBounds().toFloat().getCentre(),
+                       primary,
+                       polarityButton->getLocalBounds().toFloat().getCentre(),
+                       false));
+    REQUIRE(sliderCapture.dragStartCount == 1);
+
+    row.setVisible(false);
+    CHECK_FALSE(ModulationMatrixRowTestAccess::hasActiveAmountGesture(row));
+    CHECK(sliderCapture.dragEndCount == 1);
+
+    const auto polarityBeforeRelease = routing.isBipolar;
+    static_cast<juce::Component&>(*polarityButton).mouseUp(
+        makeMouseEvent(*polarityButton,
+                       polarityButton->getLocalBounds().toFloat().getCentre(),
+                       {},
+                       polarityButton->getLocalBounds().toFloat().getCentre(),
+                       false));
+    const auto liveRoutings = manager.getModulationRoutingsCopy();
+    REQUIRE_FALSE(liveRoutings.isEmpty());
+    CHECK(liveRoutings[0].isBipolar == polarityBeforeRelease);
 
     amountSlider->removeListener(&sliderCapture);
 }

@@ -18,8 +18,10 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 
 struct ModulationMatrixRoutingComboBoxTestAccess;
+struct ModulationMatrixRowTestAccess;
 
 struct ModulationRoutingEditSession
 {
@@ -151,16 +153,34 @@ public:
     void resized() override;
     void visibilityChanged() override;
     void enablementChanged() override;
+    void parentHierarchyChanged() override;
+    void dismissTransientInteractions() noexcept;
 
 private:
+    friend struct ModulationMatrixRowTestAccess;
+
     class PrimaryButtonSlider final : public juce::Slider
     {
     public:
+        ~PrimaryButtonSlider() override;
         void mouseDown(const juce::MouseEvent& event) override;
         void mouseDrag(const juce::MouseEvent& event) override;
         void mouseUp(const juce::MouseEvent& event) override;
+        void visibilityChanged() override;
+        void enablementChanged() override;
+        void parentHierarchyChanged() override;
+        void dismissTransientInteraction();
 
     private:
+        friend struct ModulationMatrixRowTestAccess;
+
+        bool isPointerSource(const juce::MouseEvent& event) const noexcept;
+        void finishActivePointerGesture();
+
+        juce::MouseInputSource::InputSourceType pointerSourceType =
+            juce::MouseInputSource::mouse;
+        int pointerSourceIndex = -1;
+        std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
         bool primaryGestureInProgress = false;
     };
 

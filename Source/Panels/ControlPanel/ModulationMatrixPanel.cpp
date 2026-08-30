@@ -527,34 +527,109 @@ void ModulationMatrixHeader::resized()
 //==============================================================================
 // ModulationMatrixRow Implementation
 //==============================================================================
+ModulationMatrixRow::PrimaryButtonSlider::~PrimaryButtonSlider()
+{
+    dismissTransientInteraction();
+}
+
 void ModulationMatrixRow::PrimaryButtonSlider::mouseDown(
     const juce::MouseEvent& event)
 {
-    if (primaryGestureInProgress
+    if (primaryGestureInProgress)
+    {
+        if (! isPointerSource(event))
+            return;
+
+        const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+        finishActivePointerGesture();
+        if (safeThis == nullptr)
+            return;
+    }
+
+    if (! isEnabled()
         || ! event.mods.isLeftButtonDown()
+        || event.mods.isRightButtonDown()
         || event.mods.isMiddleButtonDown()
         || event.mods.isPopupMenu())
         return;
 
     primaryGestureInProgress = true;
+    pointerSourceType = event.source.getType();
+    pointerSourceIndex = event.source.getIndex();
+    lastAcceptedPointerEvent.emplace(event);
     juce::Slider::mouseDown(event);
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::mouseDrag(
     const juce::MouseEvent& event)
 {
-    if (primaryGestureInProgress)
-        juce::Slider::mouseDrag(event);
+    if (! primaryGestureInProgress || ! isPointerSource(event))
+        return;
+
+    lastAcceptedPointerEvent.emplace(event);
+    juce::Slider::mouseDrag(event);
 }
 
 void ModulationMatrixRow::PrimaryButtonSlider::mouseUp(
     const juce::MouseEvent& event)
 {
-    if (! primaryGestureInProgress)
+    if (! primaryGestureInProgress || ! isPointerSource(event))
         return;
 
     primaryGestureInProgress = false;
+    pointerSourceIndex = -1;
+    lastAcceptedPointerEvent.reset();
     juce::Slider::mouseUp(event);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::visibilityChanged()
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::visibilityChanged();
+    if (safeThis != nullptr && ! isShowing())
+        dismissTransientInteraction();
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::enablementChanged()
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::enablementChanged();
+    if (safeThis != nullptr)
+        dismissTransientInteraction();
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::parentHierarchyChanged()
+{
+    const juce::Component::SafePointer<PrimaryButtonSlider> safeThis(this);
+    juce::Slider::parentHierarchyChanged();
+    if (safeThis != nullptr && ! isShowing())
+        dismissTransientInteraction();
+}
+
+bool ModulationMatrixRow::PrimaryButtonSlider::isPointerSource(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::finishActivePointerGesture()
+{
+    auto releaseEvent = std::move(lastAcceptedPointerEvent);
+    const auto wasActive = primaryGestureInProgress;
+    primaryGestureInProgress = false;
+    pointerSourceIndex = -1;
+    lastAcceptedPointerEvent.reset();
+
+    // Slider::mouseUp may synchronously delete this row through a listener, so
+    // gesture completion must remain the final operation.
+    if (wasActive && releaseEvent.has_value())
+        juce::Slider::mouseUp(*releaseEvent);
+}
+
+void ModulationMatrixRow::PrimaryButtonSlider::dismissTransientInteraction()
+{
+    finishActivePointerGesture();
 }
 
 ModulationMatrixRow::ModulationMatrixRow(FireAudioProcessor& p,
@@ -692,8 +767,7 @@ void ModulationMatrixRow::paint(juce::Graphics& g)
 
 ModulationMatrixRow::~ModulationMatrixRow()
 {
-    sourceMenu.dismissTransientInteraction();
-    destinationMenu.dismissTransientInteraction();
+    dismissTransientInteractions();
     sourceMenu.removeListener(this);
     amountSlider.removeListener(this);
     bipolarButton.removeListener(this);
@@ -720,20 +794,42 @@ void ModulationMatrixRow::visibilityChanged()
 {
     juce::Component::visibilityChanged();
     if (! isShowing())
-    {
-        sourceMenu.dismissTransientInteraction();
-        destinationMenu.dismissTransientInteraction();
-    }
+        dismissTransientInteractions();
 }
 
 void ModulationMatrixRow::enablementChanged()
 {
     juce::Component::enablementChanged();
     if (! isEnabled())
-    {
-        sourceMenu.dismissTransientInteraction();
-        destinationMenu.dismissTransientInteraction();
-    }
+        dismissTransientInteractions();
+}
+
+void ModulationMatrixRow::parentHierarchyChanged()
+{
+    juce::Component::parentHierarchyChanged();
+    if (! isShowing())
+        dismissTransientInteractions();
+}
+
+void ModulationMatrixRow::dismissTransientInteractions() noexcept
+{
+    const juce::Component::SafePointer<ModulationMatrixRow> safeThis(this);
+    sourceMenu.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+    amountSlider.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+    bipolarButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+    bypassButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+    destinationMenu.dismissTransientInteraction();
+    if (safeThis == nullptr)
+        return;
+    removeButton.dismissPointerGesture();
 }
 
 void ModulationMatrixRow::buttonClicked(juce::Button* button)
@@ -1048,20 +1144,19 @@ void ModulationMatrixPanel::enablementChanged()
 
 void ModulationMatrixPanel::dismissTransientInteractions() noexcept
 {
+    const juce::Component::SafePointer<ModulationMatrixPanel> safeThis(this);
     for (auto& row : rows)
     {
-        if (row == nullptr)
-            continue;
-
-        for (int childIndex = 0;
-             childIndex < row->getNumChildComponents();
-             ++childIndex)
-        {
-            if (auto* comboBox = dynamic_cast<ModulationMatrixRoutingComboBox*>(
-                    row->getChildComponent(childIndex)))
-                comboBox->dismissTransientInteraction();
-        }
+        if (row != nullptr)
+            row->dismissTransientInteractions();
+        if (safeThis == nullptr)
+            return;
     }
+
+    addButton.dismissPointerGesture();
+    if (safeThis == nullptr)
+        return;
+    closeButton.dismissPointerGesture();
 }
 
 void ModulationMatrixPanel::buttonClicked(juce::Button* button)
@@ -1164,6 +1259,7 @@ void ModulationMatrixPanel::buildUiFromProcessorState()
 
 void ModulationMatrixPanel::requestUiRebuild()
 {
+    dismissTransientInteractions();
     triggerAsyncUpdate();
 }
 

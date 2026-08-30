@@ -4,6 +4,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <memory>
 #include <vector>
 
 struct PrimarySliderTestAccess
@@ -104,6 +105,52 @@ public:
     int valueChanges = 0;
     int dragStarts = 0;
     int dragEnds = 0;
+};
+
+class DeletingSliderListener final : public juce::Slider::Listener
+{
+public:
+    enum class DeleteOn
+    {
+        dragStarted,
+        valueChanged,
+        dragEnded
+    };
+
+    DeletingSliderListener(std::unique_ptr<PrimarySlider>& ownerToDeleteIn,
+                           DeleteOn deletionPointToUse,
+                           SliderInteractionCapture& captureToUse)
+        : ownerToDelete(ownerToDeleteIn),
+          deletionPoint(deletionPointToUse),
+          capture(captureToUse)
+    {
+    }
+
+    void sliderValueChanged(juce::Slider*) override
+    {
+        ++capture.valueChanges;
+        if (deletionPoint == DeleteOn::valueChanged)
+            ownerToDelete.reset();
+    }
+
+    void sliderDragStarted(juce::Slider*) override
+    {
+        ++capture.dragStarts;
+        if (deletionPoint == DeleteOn::dragStarted)
+            ownerToDelete.reset();
+    }
+
+    void sliderDragEnded(juce::Slider*) override
+    {
+        ++capture.dragEnds;
+        if (deletionPoint == DeleteOn::dragEnded)
+            ownerToDelete.reset();
+    }
+
+private:
+    std::unique_ptr<PrimarySlider>& ownerToDelete;
+    DeleteOn deletionPoint;
+    SliderInteractionCapture& capture;
 };
 
 juce::Button* findSliderButton(juce::Slider& slider,
@@ -221,6 +268,99 @@ TEST_CASE("PrimarySlider preserves accessible value semantics while showing",
     CHECK(capture.dragEnds == 2);
 
     slider.removeFromDesktop();
+}
+
+TEST_CASE("PrimarySlider accessible writes survive synchronous Slider deletion",
+          "[primary-slider][ui][input][accessibility][lifecycle][deletion]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    for (const auto deletionPoint : {
+             DeletingSliderListener::DeleteOn::dragStarted,
+             DeletingSliderListener::DeleteOn::valueChanged,
+             DeletingSliderListener::DeleteOn::dragEnded })
+    {
+        const auto* const sectionName =
+            deletionPoint == DeletingSliderListener::DeleteOn::dragStarted
+                ? "deleted by drag-start listener"
+            : deletionPoint == DeletingSliderListener::DeleteOn::valueChanged
+                ? "deleted by value listener"
+                : "deleted by drag-end listener";
+        DYNAMIC_SECTION(sectionName)
+        {
+            juce::Component desktopHost;
+            desktopHost.setBounds(0, 0, 160, 60);
+            auto slider = std::make_unique<PrimarySlider>();
+            slider->setBounds(0, 0, 120, 30);
+            slider->setRange(0.0, 1.0, 0.1);
+            slider->setValue(0.2, juce::dontSendNotification);
+            desktopHost.addAndMakeVisible(*slider);
+            desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+            desktopHost.setVisible(true);
+            REQUIRE(slider->isShowing());
+
+            SliderInteractionCapture capture;
+            DeletingSliderListener deletingListener(slider,
+                                                     deletionPoint,
+                                                     capture);
+            slider->addListener(&deletingListener);
+            auto* const handler = slider->getAccessibilityHandler();
+            REQUIRE(handler != nullptr);
+            auto* const value = handler->getValueInterface();
+            REQUIRE(value != nullptr);
+
+            // The interface and handler are destroyed during this call. The
+            // call must return without touching either one again.
+            value->setValue(0.8);
+
+            CHECK(slider == nullptr);
+            CHECK(capture.dragStarts == 1);
+            CHECK(capture.valueChanges
+                  == (deletionPoint
+                              == DeletingSliderListener::DeleteOn::dragStarted
+                          ? 0
+                          : 1));
+            CHECK(capture.dragEnds
+                  == (deletionPoint
+                              == DeletingSliderListener::DeleteOn::dragEnded
+                          ? 1
+                          : 0));
+
+            desktopHost.removeFromDesktop();
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+        }
+    }
+}
+
+TEST_CASE("PrimarySlider accessible text conversion survives Slider deletion",
+          "[primary-slider][ui][input][accessibility][lifecycle][deletion]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    juce::Component desktopHost;
+    desktopHost.setBounds(0, 0, 160, 60);
+    auto slider = std::make_unique<PrimarySlider>();
+    slider->setBounds(0, 0, 120, 30);
+    slider->setRange(0.0, 1.0, 0.1);
+    desktopHost.addAndMakeVisible(*slider);
+    desktopHost.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    desktopHost.setVisible(true);
+    REQUIRE(slider->isShowing());
+
+    slider->valueFromTextFunction = [&slider](const juce::String&)
+    {
+        slider.reset();
+        return 0.8;
+    };
+    auto* const handler = slider->getAccessibilityHandler();
+    REQUIRE(handler != nullptr);
+    auto* const value = handler->getValueInterface();
+    REQUIRE(value != nullptr);
+
+    value->setValueAsString("0.8");
+
+    CHECK(slider == nullptr);
+    desktopHost.removeFromDesktop();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 }
 
 TEST_CASE("Cached PrimarySlider accessibility rejects stale value writes",

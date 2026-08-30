@@ -11,6 +11,7 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include <memory>
+#include <new>
 
 namespace fire::ui
 {
@@ -37,11 +38,13 @@ public:
         if (! canInteract())
             return;
 
-        juce::Slider::ScopedDragNotification drag(slider);
-        if (useMaxValue)
-            slider.setMaxValue(newValue, juce::sendNotificationSync);
-        else
-            slider.setValue(newValue, juce::sendNotificationSync);
+        // Drag-start, value, and drag-end notifications are synchronous. Any
+        // one of them may close the editor and delete both the Slider and this
+        // value interface. Keep every input needed below in locals before the
+        // first callback, and never access this again after it.
+        auto* const target = &slider;
+        const auto writesMaximum = useMaxValue;
+        setValueGuarded(*target, writesMaximum, newValue);
     }
 
     juce::String getCurrentValueAsString() const override
@@ -51,8 +54,30 @@ public:
 
     void setValueAsString(const juce::String& newValue) override
     {
-        if (canInteract())
-            setValue(slider.getValueFromText(newValue));
+        if (! canInteract())
+            return;
+
+        auto* const target = &slider;
+        const auto writesMaximum = useMaxValue;
+        const juce::Component::SafePointer<juce::Slider> safeTarget(target);
+        const auto suffix = target->getTextValueSuffix();
+        auto valueFromText = target->valueFromTextFunction;
+        auto text = newValue.trimStart();
+        if (text.endsWith(suffix))
+            text = text.substring(0, text.length() - suffix.length());
+
+        // Copy the user conversion before invoking it. It is stored inside the
+        // Slider, so deleting the Slider from the conversion must not destroy
+        // the std::function target while that target is still executing.
+        const auto parsedValue = valueFromText != nullptr
+                                     ? valueFromText(text)
+                                     : parseDefaultSliderText(text);
+        if (safeTarget == nullptr)
+            return;
+
+        // Do not call back through this interface: a custom text conversion
+        // may have synchronously removed it along with the Slider.
+        setValueGuarded(*target, writesMaximum, parsedValue);
     }
 
     juce::AccessibilityValueInterface::AccessibleValueRange
@@ -67,6 +92,43 @@ public:
     }
 
 private:
+    static double parseDefaultSliderText(juce::String text)
+    {
+        while (text.startsWithChar('+'))
+            text = text.substring(1).trimStart();
+
+        return text.initialSectionContainingOnly("0123456789.,-")
+            .getDoubleValue();
+    }
+
+    static void setValueGuarded(juce::Slider& target,
+                                bool writesMaximum,
+                                double newValue)
+    {
+        const juce::Component::SafePointer<juce::Slider> safeTarget(&target);
+        using Drag = juce::Slider::ScopedDragNotification;
+        alignas(Drag) unsigned char dragStorage[sizeof(Drag)];
+
+        // Placement storage lets us omit the destructor when sendDragStart()
+        // synchronously deletes the Slider. ScopedDragNotification's normal
+        // automatic destructor would otherwise dereference the dead Slider.
+        auto* const drag = new (&dragStorage) Drag(target);
+        if (safeTarget == nullptr)
+            return;
+
+        if (writesMaximum)
+            target.setMaxValue(newValue, juce::sendNotificationSync);
+        else
+            target.setValue(newValue, juce::sendNotificationSync);
+
+        if (safeTarget == nullptr)
+            return;
+
+        // This remains the final operation: sendDragEnd() may also delete the
+        // Slider and its accessibility handler.
+        drag->~Drag();
+    }
+
     bool canInteract() const noexcept
     {
         return slider.isEnabled() && slider.isShowing();

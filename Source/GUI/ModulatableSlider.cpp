@@ -206,6 +206,7 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
     deltaSeconds = juce::jlimit(0.0f, 0.05f, deltaSeconds);
     const auto oldHover = hoverAnimation;
     const auto oldPress = pressAnimation;
+    const auto oldFocus = focusAnimation;
     const auto oldHandleHover = modulationHandleHoverAnimation;
     const auto oldHandlePress = modulationHandlePressAnimation;
     const auto hoverTarget = isMouseOverMainSlider() && isEnabled() ? 1.0f : 0.0f;
@@ -213,6 +214,7 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
                                  && isEnabled()
                              ? 1.0f
                              : 0.0f;
+    const auto focusTarget = shouldShowKeyboardFocus() ? 1.0f : 0.0f;
     const auto handleHoverTarget = isModulated && isModHandleMouseOver
                                        && isEnabled()
                                    ? 1.0f
@@ -223,10 +225,12 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
                                    : 0.0f;
     const auto hoverStep = juce::jmin(1.0f, deltaSeconds * 10.0f);
     const auto pressStep = juce::jmin(1.0f, deltaSeconds * 16.0f);
+    const auto focusStep = juce::jmin(1.0f, deltaSeconds * 10.0f);
     const auto handleHoverStep = juce::jmin(1.0f, deltaSeconds * 12.0f);
     const auto handlePressStep = juce::jmin(1.0f, deltaSeconds * 18.0f);
     hoverAnimation += (hoverTarget - hoverAnimation) * hoverStep;
     pressAnimation += (pressTarget - pressAnimation) * pressStep;
+    focusAnimation += (focusTarget - focusAnimation) * focusStep;
     modulationHandleHoverAnimation +=
         (handleHoverTarget - modulationHandleHoverAnimation)
         * handleHoverStep;
@@ -238,6 +242,8 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
         hoverAnimation = hoverTarget;
     if (std::abs(pressAnimation - pressTarget) < 0.002f)
         pressAnimation = pressTarget;
+    if (std::abs(focusAnimation - focusTarget) < 0.002f)
+        focusAnimation = focusTarget;
     if (std::abs(modulationHandleHoverAnimation - handleHoverTarget) < 0.002f)
         modulationHandleHoverAnimation = handleHoverTarget;
     if (std::abs(modulationHandlePressAnimation - handlePressTarget) < 0.002f)
@@ -245,6 +251,7 @@ bool ModulatableSlider::advanceAnimation(float deltaSeconds) noexcept
 
     return std::abs(oldHover - hoverAnimation) > 0.001f
            || std::abs(oldPress - pressAnimation) > 0.001f
+           || std::abs(oldFocus - focusAnimation) > 0.001f
            || std::abs(oldHandleHover - modulationHandleHoverAnimation) > 0.001f
            || std::abs(oldHandlePress - modulationHandlePressAnimation) > 0.001f;
 }
@@ -423,6 +430,10 @@ void ModulatableSlider::mouseDown(const juce::MouseEvent& event)
         return;
     }
 
+    // A pointer gesture keeps real focus so arrow keys remain immediately
+    // available, but only subsequent keyboard input makes that focus visible.
+    keyboardFocusVisible = false;
+
     if (onClickInAssignMode)
     {
         // Assigning a target exits assign mode, which clears the callback on
@@ -588,6 +599,41 @@ void ModulatableSlider::mouseUp(const juce::MouseEvent& event)
     }
 }
 
+bool ModulatableSlider::keyPressed(const juce::KeyPress& key)
+{
+    if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+    {
+        keyboardFocusVisible = true;
+        repaint();
+    }
+
+    // Slider keyboard input may synchronously notify code that deletes this
+    // control, so this remains the final operation.
+    return juce::Slider::keyPressed(key);
+}
+
+void ModulatableSlider::focusGained(FocusChangeType cause)
+{
+    const auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+    juce::Slider::focusGained(cause);
+    if (! safeThis)
+        return;
+
+    keyboardFocusVisible = cause != focusChangedByMouseClick;
+    repaint();
+}
+
+void ModulatableSlider::focusLost(FocusChangeType cause)
+{
+    const auto safeThis = juce::Component::SafePointer<ModulatableSlider>(this);
+    juce::Slider::focusLost(cause);
+    if (! safeThis)
+        return;
+
+    keyboardFocusVisible = false;
+    repaint();
+}
+
 bool ModulatableSlider::isCompletePrimaryDown(
     const juce::MouseEvent& event) const noexcept
 {
@@ -635,6 +681,11 @@ bool ModulatableSlider::recoverMissingPointerUp(
     // button as a cancelled release. An unrelated button must not leave a
     // primary SliderAttachment gesture open, and this path never opens a menu.
     return finishActivePointerGesture(event);
+}
+
+bool ModulatableSlider::shouldShowKeyboardFocus() const noexcept
+{
+    return isEnabled() && keyboardFocusVisible && hasKeyboardFocus(true);
 }
 
 bool ModulatableSlider::shouldSuppressAssignmentDoubleClick(
@@ -736,6 +787,7 @@ bool ModulatableSlider::resetTransientPresentation()
                                      || isModHandleMouseOver
                                      || hoverAnimation != 0.0f
                                      || pressAnimation != 0.0f
+                                     || focusAnimation != 0.0f
                                      || modulationHandleHoverAnimation != 0.0f
                                      || modulationHandlePressAnimation != 0.0f
                                      || ! label.isVisible()
@@ -745,8 +797,10 @@ bool ModulatableSlider::resetTransientPresentation()
     isModHandleMouseOver = false;
     hoverAnimation = 0.0f;
     pressAnimation = 0.0f;
+    focusAnimation = 0.0f;
     modulationHandleHoverAnimation = 0.0f;
     modulationHandlePressAnimation = 0.0f;
+    keyboardFocusVisible = false;
     if (! label.isVisible())
     {
         label.setVisible(true);

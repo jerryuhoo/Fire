@@ -39,6 +39,12 @@ struct PrimarySliderTestAccess
     {
         slider.updateAnimationTargets();
     }
+
+    static bool isKeyboardFocusVisible(
+        const PrimarySlider& slider) noexcept
+    {
+        return slider.keyboardFocusVisible;
+    }
 };
 
 namespace
@@ -136,6 +142,43 @@ TEST_CASE("PrimarySlider interaction presentation is continuous and hidden-idle"
 
     slider.setEnabled(false);
     CHECK(slider.getDisabledAnimation() == Catch::Approx(1.0f));
+}
+
+TEST_CASE("PrimarySlider focus presentation follows keyboard modality",
+          "[primary-slider][ui][input][focus][animation][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    PrimarySlider slider;
+    slider.setBounds(0, 0, 180, 32);
+    slider.setRange(0.0, 1.0, 0.01);
+    slider.setValue(0.5, juce::dontSendNotification);
+    slider.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    slider.setVisible(true);
+    REQUIRE(slider.isShowing());
+
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    REQUIRE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedByMouseClick);
+    CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedByTabKey);
+    REQUIRE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+
+    const auto centre = slider.getLocalBounds().toFloat().getCentre();
+    slider.mouseDown(makeMouseEvent(
+        slider,
+        centre,
+        juce::ModifierKeys { juce::ModifierKeys::leftButtonModifier }));
+    CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
+    slider.mouseUp(makeMouseEvent(slider, centre));
+
+    slider.focusLost(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    CHECK_FALSE(PrimarySliderTestAccess::isKeyboardFocusVisible(slider));
 }
 
 TEST_CASE("PrimarySlider preserves accessible value semantics while showing",

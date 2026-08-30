@@ -68,6 +68,7 @@ public:
     bool advanceAnimation(float deltaSeconds) noexcept;
     float getHoverAnimation() const noexcept { return hoverAnimation; }
     float getPressAnimation() const noexcept { return pressAnimation; }
+    float getFocusAnimation() const noexcept { return focusAnimation; }
     float getModulationHandleHoverAnimation() const noexcept
     {
         return modulationHandleHoverAnimation;
@@ -103,6 +104,9 @@ public:
     void mouseDown(const juce::MouseEvent& event) override;
     void mouseDrag(const juce::MouseEvent& event) override;
     void mouseUp(const juce::MouseEvent& event) override;
+    bool keyPressed(const juce::KeyPress& key) override;
+    void focusGained(FocusChangeType cause) override;
+    void focusLost(FocusChangeType cause) override;
 
     std::function<void(ModulatableSlider*)> onModDragStart;
     std::function<void(ModulatableSlider*)> onModDragMove;
@@ -166,6 +170,7 @@ private:
         const juce::MouseEvent& event) noexcept;
     bool isPointerSource(const juce::MouseEvent& event) const noexcept;
     bool recoverMissingPointerUp(const juce::MouseEvent& event);
+    bool shouldShowKeyboardFocus() const noexcept;
     bool shouldSuppressAssignmentDoubleClick(
         const juce::MouseEvent& event) const noexcept;
     void clearAssignmentDoubleClickSuppression() noexcept;
@@ -216,8 +221,10 @@ private:
     std::uint64_t contextMenuRevision = 0;
     float hoverAnimation = 0.0f;
     float pressAnimation = 0.0f;
+    float focusAnimation = 0.0f;
     float modulationHandleHoverAnimation = 0.0f;
     float modulationHandlePressAnimation = 0.0f;
+    bool keyboardFocusVisible = false;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     std::uint64_t accessibilityHandlerCreationCountForTesting = 0;
 #endif

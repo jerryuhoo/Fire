@@ -79,7 +79,13 @@ public:
         lastAcceptedPointerEvent.emplace(event);
 
         if (pointerGesture == PointerGesture::primary)
+        {
+            // JUCE gives a Slider keyboard focus before dispatching the
+            // matching mouseDown. Keep that focus for immediate arrow-key
+            // input, but do not present it as keyboard-origin focus.
+            keyboardFocusVisible = false;
             juce::Slider::mouseDown(event);
+        }
 
         if (safeThis)
             updateAnimationTargets();
@@ -160,6 +166,19 @@ public:
         juce::Slider::mouseDoubleClick(event);
     }
 
+    bool keyPressed(const juce::KeyPress& key) override
+    {
+        if (hasKeyboardFocus(true) && ! keyboardFocusVisible)
+        {
+            keyboardFocusVisible = true;
+            updateAnimationTargets();
+        }
+
+        // Slider keyboard input may synchronously notify code that deletes
+        // this control, so this remains the final operation.
+        return juce::Slider::keyPressed(key);
+    }
+
     void visibilityChanged() override
     {
         auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
@@ -190,7 +209,10 @@ public:
         const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::focusGained(cause);
         if (safeThis)
+        {
+            keyboardFocusVisible = cause != focusChangedByMouseClick;
             updateAnimationTargets();
+        }
     }
 
     void focusLost(juce::Component::FocusChangeType cause) override
@@ -198,7 +220,10 @@ public:
         const auto safeThis = juce::Component::SafePointer<PrimarySlider>(this);
         juce::Slider::focusLost(cause);
         if (safeThis)
+        {
+            keyboardFocusVisible = false;
             updateAnimationTargets();
+        }
     }
 
     bool hasActivePointerGesture() const noexcept
@@ -313,6 +338,7 @@ private:
         if (! isShowing())
         {
             stopTimer();
+            keyboardFocusVisible = false;
             hoverAnimation.snapTo(0.0f);
             pressAnimation.snapTo(0.0f);
             focusAnimation.snapTo(0.0f);
@@ -322,9 +348,14 @@ private:
         }
 
         const auto interactive = isEnabled();
+        if (! interactive)
+            keyboardFocusVisible = false;
         hoverAnimation.setTarget(interactive && isMouseOver(true) ? 1.0f : 0.0f);
         pressAnimation.setTarget(interactive && hasActivePointerGesture() ? 1.0f : 0.0f);
-        focusAnimation.setTarget(interactive && hasKeyboardFocus(true) ? 1.0f : 0.0f);
+        focusAnimation.setTarget(interactive && keyboardFocusVisible
+                                     && hasKeyboardFocus(true)
+                                 ? 1.0f
+                                 : 0.0f);
         disabledAnimation.setTarget(interactive ? 0.0f : 1.0f);
         if (! animationsSettled() && ! isTimerRunning())
             startTimerHz(60);
@@ -367,6 +398,7 @@ private:
         juce::MouseInputSource::mouse;
     int pointerSourceIndex = -1;
     std::optional<juce::MouseEvent> lastAcceptedPointerEvent;
+    bool keyboardFocusVisible = false;
     fire::ui::DampedValue hoverAnimation;
     fire::ui::DampedValue pressAnimation;
     fire::ui::DampedValue focusAnimation;

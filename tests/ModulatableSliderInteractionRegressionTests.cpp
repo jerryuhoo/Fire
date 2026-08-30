@@ -75,6 +75,7 @@ struct ModulatableSliderInteractionTestAccess
     {
         slider.hoverAnimation = 0.75f;
         slider.pressAnimation = 0.65f;
+        slider.focusAnimation = 0.60f;
         slider.modulationHandleHoverAnimation = 0.55f;
         slider.modulationHandlePressAnimation = 0.45f;
     }
@@ -102,6 +103,18 @@ struct ModulatableSliderInteractionTestAccess
         const ModulatableSlider& slider) noexcept
     {
         return slider.accessibilityHandlerCreationCountForTesting;
+    }
+
+    static bool isKeyboardFocusVisible(
+        const ModulatableSlider& slider) noexcept
+    {
+        return slider.keyboardFocusVisible;
+    }
+
+    static void setFocusAnimation(ModulatableSlider& slider,
+                                  float amount) noexcept
+    {
+        slider.focusAnimation = amount;
     }
 
     static void forwardValueLabelMouseDown(
@@ -1268,13 +1281,14 @@ TEST_CASE("Dismiss resets slider hover, editor and animation presentation exactl
     const auto relaidOutHandlePosition = slider.getModulationHandleBounds().getCentre();
     slider.mouseEnter(makeMouseEvent(slider, relaidOutHandlePosition));
     REQUIRE(hoverStarts == 2);
-    ModulatableSliderInteractionTestAccess::primeAnimations(slider);
+    ModulatableSliderInteractionTestAccess::setFocusAnimation(slider, 1.0f);
 
     slider.dismissTransientInteraction();
     CHECK_FALSE(slider.isTimerRunning());
     CHECK_FALSE(slider.isModHandleMouseOver);
     CHECK(slider.getHoverAnimation() == 0.0f);
     CHECK(slider.getPressAnimation() == 0.0f);
+    CHECK(slider.getFocusAnimation() == 0.0f);
     CHECK(slider.getModulationHandleHoverAnimation() == 0.0f);
     CHECK(slider.getModulationHandlePressAnimation() == 0.0f);
     CHECK(slider.getTextBoxPosition() == juce::Slider::NoTextBox);
@@ -1288,6 +1302,51 @@ TEST_CASE("Dismiss resets slider hover, editor and animation presentation exactl
 
     slider.dismissTransientInteraction();
     CHECK(hoverEnds == 2);
+}
+
+TEST_CASE("Modulatable knob focus presentation follows keyboard modality",
+          "[modulatable-slider][ui][input][focus][animation][render][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    ModulatableSlider slider;
+    slider.setLookAndFeel(&lookAndFeel);
+    slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    slider.setRange(0.0, 1.0, 0.01);
+    slider.setValue(0.5, juce::dontSendNotification);
+    slider.setBounds(0, 0, 120, 120);
+
+    const auto idleFingerprint = renderFingerprint(slider);
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    REQUIRE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedByMouseClick);
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+
+    slider.focusGained(
+        juce::Component::FocusChangeType::focusChangedByTabKey);
+    REQUIRE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+
+    ModulatableSliderInteractionTestAccess::primeAnimations(slider);
+    const auto keyboardFocusFingerprint = renderFingerprint(slider);
+    REQUIRE(keyboardFocusFingerprint != idleFingerprint);
+
+    const auto centre = slider.getLocalBounds().toFloat().getCentre();
+    slider.mouseDown(makeMouseEvent(slider, centre, primaryButton));
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+    slider.mouseUp(makeMouseEvent(slider, centre));
+
+    slider.focusLost(
+        juce::Component::FocusChangeType::focusChangedDirectly);
+    CHECK_FALSE(ModulatableSliderInteractionTestAccess::isKeyboardFocusVisible(
+        slider));
+    slider.setLookAndFeel(nullptr);
 }
 
 TEST_CASE("Modulation handle hover and press feedback animate without changing its hit target",

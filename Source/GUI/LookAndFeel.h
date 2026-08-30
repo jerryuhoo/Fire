@@ -958,7 +958,7 @@ private:
         // top of its specialised interaction model.
         if (const auto* modSlider = dynamic_cast<const ModulatableSlider*>(&slider))
             return { modSlider->getHoverAnimation(), modSlider->getPressAnimation(),
-                     slider.hasKeyboardFocus(true) ? 1.0f : 0.0f,
+                     modSlider->getFocusAnimation(),
                      slider.isEnabled() ? 0.0f : 1.0f };
 
         if (const auto* primary = dynamic_cast<const PrimarySliderAnimationState*>(&slider))

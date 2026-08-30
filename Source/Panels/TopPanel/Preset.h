@@ -30,6 +30,8 @@ struct StateComponentMenuTestAccess;
 struct StateComponentManualUpdateTestAccess;
 struct StateComponentPresetBoxTestAccess;
 struct StateComponentSaveChooserTestAccess;
+struct StateComponentSaveErrorAlertTestAccess;
+struct StateComponentSessionBoundaryTestAccess;
 #endif
 
 namespace state
@@ -204,6 +206,8 @@ PluginProcessor).
         friend struct ::StateComponentManualUpdateTestAccess;
         friend struct ::StateComponentPresetBoxTestAccess;
         friend struct ::StateComponentSaveChooserTestAccess;
+        friend struct ::StateComponentSaveErrorAlertTestAccess;
+        friend struct ::StateComponentSessionBoundaryTestAccess;
 #endif
 
         class PresetComboBox final : public juce::ComboBox
@@ -295,8 +299,12 @@ PluginProcessor).
         juce::ScopedMessageBox manualUpdateAlert;
         std::uint64_t manualUpdateAlertGeneration = 0;
         bool manualUpdateAlertActive = false;
+        juce::ScopedMessageBox saveErrorAlert;
+        std::uint64_t saveErrorAlertGeneration = 0;
+        bool saveErrorAlertActive = false;
         std::atomic<bool> dirtyUpdatePending { false };
         std::atomic<bool> versionCheckReady { false };
+        std::uint64_t interactionSessionGeneration = 0;
         juce::Component::SafePointer<juce::DialogWindow> settingsDialog;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         std::function<juce::DialogWindow*()> settingsDialogFactoryForTesting;
@@ -307,6 +315,11 @@ PluginProcessor).
         std::function<void(const juce::URL&)>
             manualUpdateUrlLauncherForTesting;
         std::function<void()> manualUpdateDialogCloserForTesting;
+        std::function<std::function<void()>(
+            const juce::MessageBoxOptions&,
+            std::function<void(int)>)>
+            saveErrorDialogPresenterForTesting;
+        std::function<void()> saveErrorDialogCloserForTesting;
 #endif
 
         PrimaryTextButton toggleABButton;
@@ -343,6 +356,10 @@ PluginProcessor).
             std::uint64_t expectedGeneration,
             const juce::FileChooser* expectedChooser);
         void invalidateSaveChooserSession() noexcept;
+        void showSaveErrorAlert(juce::String message);
+        void handleSaveErrorAlertResult(int result,
+                                        std::uint64_t alertGeneration);
+        void invalidateSaveErrorAlert() noexcept;
         void openPresetFolder();
         void rescanPresetFolder();
         void creatFolderIfNotExist(juce::File userFile);

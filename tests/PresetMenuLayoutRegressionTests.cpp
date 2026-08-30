@@ -161,4 +161,23 @@ TEST_CASE("Preset browser exposes a descriptive accessible identity",
     auto* accessibility = presetBox->getAccessibilityHandler();
     REQUIRE(accessibility != nullptr);
     CHECK(accessibility->getTitle() == "Preset browser");
+
+    auto* toggleAB = stateComponent.getToggleABButton();
+    REQUIRE(toggleAB != nullptr);
+    CHECK(toggleAB->getTitle() == "A/B state");
+    CHECK(toggleAB->getTooltip() == "Switch between the A and B states");
+    auto* toggleAccessibility = toggleAB->getAccessibilityHandler();
+    REQUIRE(toggleAccessibility != nullptr);
+    CHECK(toggleAccessibility->getTitle() == "A/B state");
+    CHECK(toggleAccessibility->getHelp() == toggleAB->getTooltip());
+
+    auto* copyAB = stateComponent.getCopyABButton();
+    REQUIRE(copyAB != nullptr);
+    CHECK(copyAB->getTitle() == "Copy A/B state");
+    CHECK(copyAB->getTooltip()
+          == "Copy the current state to the other A/B slot");
+    auto* copyAccessibility = copyAB->getAccessibilityHandler();
+    REQUIRE(copyAccessibility != nullptr);
+    CHECK(copyAccessibility->getTitle() == "Copy A/B state");
+    CHECK(copyAccessibility->getHelp() == copyAB->getTooltip());
 }

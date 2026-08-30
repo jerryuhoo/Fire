@@ -196,6 +196,95 @@ struct StateComponentSaveChooserTestAccess
     }
 };
 
+struct StateComponentSaveErrorAlertTestAccess
+{
+    struct PresentedAlert
+    {
+        juce::String title;
+        juce::String message;
+        juce::Component* associatedComponent = nullptr;
+        juce::Component* parentComponent = nullptr;
+        std::function<void(int)> complete;
+        int closeCount = 0;
+    };
+
+    using AlertPtr = std::shared_ptr<PresentedAlert>;
+    using Presenter = std::function<std::function<void()>(
+        const juce::MessageBoxOptions&,
+        std::function<void(int)>)>;
+
+    static void installDialogSeam(
+        state::StateComponent& component,
+        std::vector<AlertPtr>& presentedAlerts)
+    {
+        component.saveErrorDialogPresenterForTesting =
+            [&presentedAlerts](const juce::MessageBoxOptions& options,
+                               std::function<void(int)> complete)
+        {
+            auto alert = std::make_shared<PresentedAlert>();
+            alert->title = options.getTitle();
+            alert->message = options.getMessage();
+            alert->associatedComponent = options.getAssociatedComponent();
+            alert->parentComponent = options.getParentComponent();
+            alert->complete = std::move(complete);
+            presentedAlerts.push_back(alert);
+            return std::function<void()> { [alert]
+            {
+                ++alert->closeCount;
+            } };
+        };
+    }
+
+    static void setDialogPresenter(state::StateComponent& component,
+                                   Presenter presenter)
+    {
+        component.saveErrorDialogPresenterForTesting =
+            std::move(presenter);
+    }
+
+    static void show(state::StateComponent& component,
+                     juce::String message)
+    {
+        component.showSaveErrorAlert(std::move(message));
+    }
+
+    static void launchSave(state::StateComponent& component)
+    {
+        component.savePresetAlertWindow();
+    }
+
+    static bool hasActiveAlert(const state::StateComponent& component)
+    {
+        return component.saveErrorAlertActive;
+    }
+};
+
+struct StateComponentSessionBoundaryTestAccess
+{
+    static void setSettingsDialog(state::StateComponent& component,
+                                  juce::DialogWindow* dialog)
+    {
+        component.settingsDialog = dialog;
+    }
+
+    static bool hasSettingsDialog(const state::StateComponent& component)
+    {
+        return component.settingsDialog != nullptr;
+    }
+
+    static void setSettingsDialogFactory(
+        state::StateComponent& component,
+        std::function<juce::DialogWindow*()> factory)
+    {
+        component.settingsDialogFactoryForTesting = std::move(factory);
+    }
+
+    static void showSettingsDialog(state::StateComponent& component)
+    {
+        component.showSettingsDialog();
+    }
+};
+
 namespace
 {
 class ScopedTemporaryDirectory
@@ -1165,11 +1254,16 @@ TEST_CASE("Preset menu rejects hidden and superseded asynchronous results",
             StateComponentMenuTestAccess::createResultHandler(component);
 
         component.setEnabled(false);
-        staleResult(1);
         component.setEnabled(true);
         staleResult(1);
 
         CHECK(getPlainParameter(processor, driveID) == Catch::Approx(73.0f));
+
+        auto replacementResult =
+            StateComponentMenuTestAccess::createResultHandler(component);
+        replacementResult(1);
+        CHECK(getPlainParameter(processor, driveID)
+              == Catch::Approx(defaultDrive));
     }
 }
 
@@ -1541,6 +1635,32 @@ TEST_CASE("Preset save chooser results stay inside one visible owner session",
         checkSavedDrive(currentPath, 68.0f);
     }
 
+    SECTION("disable and restore cannot revive the old chooser")
+    {
+        setPlainParameter(processor, driveID, 31.0f);
+        auto staleSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+
+        component.setEnabled(false);
+        CHECK_FALSE(StateComponentSaveChooserTestAccess::hasOwnedChooser(
+            component));
+        component.setEnabled(true);
+
+        const auto stalePath =
+            temporaryDirectory.directory.getChildFile("Disabled.fire");
+        staleSession.deliverResult(stalePath);
+        CHECK_FALSE(stalePath.existsAsFile());
+
+        setPlainParameter(processor, driveID, 68.0f);
+        auto replacementSession =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+        const auto currentPath =
+            temporaryDirectory.directory.getChildFile("Reenabled.fire");
+        replacementSession.deliverResult(currentPath);
+        REQUIRE(currentPath.existsAsFile());
+        checkSavedDrive(currentPath, 68.0f);
+    }
+
     SECTION("cancelling consumes only the matching chooser")
     {
         auto cancelledSession =
@@ -1557,6 +1677,249 @@ TEST_CASE("Preset save chooser results stay inside one visible owner session",
         cancelledSession.deliverResult({});
         CHECK(StateComponentSaveChooserTestAccess::isCurrent(
             component, replacementSession));
+    }
+}
+
+TEST_CASE("Preset save failure alerts stay inside one visible owner session",
+          "[preset][ui][save-alert][session][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    FireAudioProcessor processor;
+    processor.statePresets.setPresetDirectoryForTesting(
+        temporaryDirectory.directory);
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+    REQUIRE(component.isShowing());
+
+    std::vector<StateComponentSaveErrorAlertTestAccess::AlertPtr> alerts;
+    StateComponentSaveErrorAlertTestAccess::installDialogSeam(
+        component, alerts);
+
+    SECTION("an unusable preset root owns its folder-creation failure")
+    {
+        const auto blockedRoot =
+            temporaryDirectory.directory.getChildFile("BlockedRoot");
+        REQUIRE(blockedRoot.replaceWithText("not a directory"));
+        processor.statePresets.setPresetDirectoryForTesting(blockedRoot);
+
+        StateComponentSaveErrorAlertTestAccess::launchSave(component);
+
+        REQUIRE(alerts.size() == 1);
+        CHECK(alerts.front()->title == "Preset save failed");
+        CHECK(alerts.front()->message.contains("folder"));
+        CHECK(alerts.front()->associatedComponent == &component);
+        CHECK(alerts.front()->parentComponent == &component);
+        CHECK(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+        alerts.front()->complete(0);
+        CHECK(alerts.front()->closeCount == 1);
+        CHECK_FALSE(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+    }
+
+    SECTION("a failed chooser destination owns its write failure")
+    {
+        const auto blockedParent =
+            temporaryDirectory.directory.getChildFile("BlockedParent");
+        REQUIRE(blockedParent.replaceWithText("not a directory"));
+        auto session =
+            StateComponentSaveChooserTestAccess::beginSession(component);
+
+        session.deliverResult(
+            blockedParent.getChildFile("CannotWrite.fire"));
+
+        REQUIRE(alerts.size() == 1);
+        CHECK(alerts.front()->title == "Preset save failed");
+        CHECK(alerts.front()->message.contains("selected location"));
+        CHECK(alerts.front()->associatedComponent == &component);
+        CHECK(alerts.front()->parentComponent == &component);
+        CHECK(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+        alerts.front()->complete(0);
+        CHECK(alerts.front()->closeCount == 1);
+    }
+
+    SECTION("hide closes the old alert and rejects its late completion")
+    {
+        StateComponentSaveErrorAlertTestAccess::show(
+            component, "First failure");
+        REQUIRE(alerts.size() == 1);
+        auto staleAlert = alerts.front();
+
+        component.setVisible(false);
+        CHECK(staleAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+        component.setVisible(true);
+
+        StateComponentSaveErrorAlertTestAccess::show(
+            component, "Replacement failure");
+        REQUIRE(alerts.size() == 2);
+        auto replacementAlert = alerts.back();
+
+        staleAlert->complete(0);
+        CHECK(replacementAlert->closeCount == 0);
+        CHECK(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+
+        replacementAlert->complete(0);
+        CHECK(replacementAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+    }
+
+    SECTION("disable-enable cannot revive the old alert")
+    {
+        StateComponentSaveErrorAlertTestAccess::show(
+            component, "Disabled failure");
+        REQUIRE(alerts.size() == 1);
+        auto staleAlert = alerts.front();
+
+        component.setEnabled(false);
+        CHECK(staleAlert->closeCount == 1);
+        CHECK_FALSE(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+        component.setEnabled(true);
+
+        StateComponentSaveErrorAlertTestAccess::show(
+            component, "Replacement failure");
+        REQUIRE(alerts.size() == 2);
+        auto replacementAlert = alerts.back();
+        staleAlert->complete(0);
+        CHECK(replacementAlert->closeCount == 0);
+        CHECK(StateComponentSaveErrorAlertTestAccess::hasActiveAlert(
+            component));
+        replacementAlert->complete(0);
+    }
+}
+
+TEST_CASE("Preset session dismissal tolerates synchronous owner deletion",
+          "[preset][ui][session][dialog][lifetime][self-delete][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    auto component = std::make_unique<state::StateComponent>(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component->setBounds(0, 0, 800, 48);
+    component->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component->setVisible(true);
+
+    int closeCount = 0;
+    StateComponentSaveErrorAlertTestAccess::setDialogPresenter(
+        *component,
+        [&component, &closeCount](const juce::MessageBoxOptions&,
+                                  std::function<void(int)>)
+        {
+            return std::function<void()> { [&component, &closeCount]
+            {
+                ++closeCount;
+                component.reset();
+            } };
+        });
+    StateComponentSaveErrorAlertTestAccess::show(
+        *component, "Failure before deletion");
+    REQUIRE(component != nullptr);
+
+    component->dismissPointerGestures();
+
+    CHECK(component == nullptr);
+    CHECK(closeCount == 1);
+}
+
+TEST_CASE("Destroying StateComponent closes its preset save failure alert",
+          "[preset][ui][save-alert][lifetime][destruction][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    std::vector<StateComponentSaveErrorAlertTestAccess::AlertPtr> alerts;
+    auto component = std::make_unique<state::StateComponent>(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component->setBounds(0, 0, 800, 48);
+    component->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component->setVisible(true);
+    StateComponentSaveErrorAlertTestAccess::installDialogSeam(
+        *component, alerts);
+    StateComponentSaveErrorAlertTestAccess::show(
+        *component, "Failure before destruction");
+    REQUIRE(alerts.size() == 1);
+    auto staleAlert = alerts.front();
+
+    component.reset();
+
+    CHECK(staleAlert->closeCount == 1);
+    staleAlert->complete(0);
+    CHECK(staleAlert->closeCount == 1);
+}
+
+TEST_CASE("Disabling preset controls synchronously closes settings",
+          "[preset][ui][settings][dialog][session][lifecycle][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    state::StateComponent component(
+        processor.stateAB, processor.statePresets, processor.treeState);
+    component.setBounds(0, 0, 800, 48);
+    component.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    component.setVisible(true);
+    const juce::ScopeGuard cleanup { [&]
+    {
+        component.dismissPointerGestures();
+        component.removeFromDesktop();
+    } };
+
+    SECTION("an already-owned dialog closes at the disable boundary")
+    {
+        auto* dialog = new juce::DialogWindow(
+            "Settings", fire::ui::colours::canvas, true, false);
+        juce::Component::SafePointer<juce::DialogWindow> safeDialog(dialog);
+        StateComponentSessionBoundaryTestAccess::setSettingsDialog(
+            component, dialog);
+        REQUIRE(StateComponentSessionBoundaryTestAccess::hasSettingsDialog(
+            component));
+
+        component.setEnabled(false);
+
+        CHECK(safeDialog == nullptr);
+        CHECK_FALSE(
+            StateComponentSessionBoundaryTestAccess::hasSettingsDialog(
+                component));
+        component.setEnabled(true);
+    }
+
+    SECTION("disable-enable during launch rejects the old dialog")
+    {
+        juce::Component::SafePointer<juce::DialogWindow> launchedDialog;
+        StateComponentSessionBoundaryTestAccess::setSettingsDialogFactory(
+            component,
+            [&component, &launchedDialog]
+            {
+                auto* dialog = new juce::DialogWindow(
+                    "Settings", fire::ui::colours::canvas, true, false);
+                launchedDialog = dialog;
+                component.setEnabled(false);
+                component.setEnabled(true);
+                return dialog;
+            });
+
+        StateComponentSessionBoundaryTestAccess::showSettingsDialog(
+            component);
+
+        CHECK(launchedDialog == nullptr);
+        CHECK_FALSE(
+            StateComponentSessionBoundaryTestAccess::hasSettingsDialog(
+                component));
     }
 }
 

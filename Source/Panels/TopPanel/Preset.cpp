@@ -1636,10 +1636,15 @@ namespace state
 
         styleHeaderButton(toggleABButton, fire::ui::colours::gold);
         toggleABButton.setComponentID("header_ab");
+        toggleABButton.setTitle("A/B state");
+        toggleABButton.setTooltip("Switch between the A and B states");
         toggleABButton.setColour(juce::TextButton::textColourOffId,
                                  fire::ui::colours::gold.withAlpha(0.84f));
         styleHeaderButton(copyABButton, fire::ui::colours::flame);
         copyABButton.setComponentID("header_action");
+        copyABButton.setTitle("Copy A/B state");
+        copyABButton.setTooltip(
+            "Copy the current state to the other A/B slot");
         styleHeaderButton(previousButton, fire::ui::colours::flame);
         previousButton.setComponentID("header_previous");
         previousButton.setTooltip("Previous preset");
@@ -1669,6 +1674,7 @@ namespace state
         invalidateManualUpdateRequest();
         manualUpdateCheckThread.stop();
         invalidateManualUpdateAlert();
+        invalidateSaveErrorAlert();
         presetBox.dismissTransientInteraction();
         invalidatePresetMenuSession();
         dismissSettingsDialog();
@@ -1927,6 +1933,7 @@ namespace state
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         auto launcher = manualUpdateUrlLauncherForTesting;
         auto closer = std::move(manualUpdateDialogCloserForTesting);
+        manualUpdateDialogCloserForTesting = nullptr;
 #endif
 
         manualUpdateAlertActive = false;
@@ -1957,6 +1964,7 @@ namespace state
         ++manualUpdateAlertGeneration;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
         auto closer = std::move(manualUpdateDialogCloserForTesting);
+        manualUpdateDialogCloserForTesting = nullptr;
 #endif
         manualUpdateAlert.close();
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -2002,17 +2010,11 @@ namespace state
 
     void StateComponent::visibilityChanged()
     {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
         juce::Component::visibilityChanged();
 
-        if (! isShowing())
-        {
-            invalidateManualUpdateRequest();
-            invalidateManualUpdateAlert();
-            presetBox.dismissTransientInteraction();
-            invalidatePresetMenuSession();
-            invalidateSaveChooserSession();
-            dismissSettingsDialog();
-        }
+        if (safeThis != nullptr && ! safeThis->isShowing())
+            safeThis->dismissPointerGestures();
     }
 
     void StateComponent::enablementChanged()
@@ -2022,11 +2024,7 @@ namespace state
         if (safeThis == nullptr || safeThis->isEnabled())
             return;
 
-        safeThis->invalidateManualUpdateRequest();
-        if (safeThis == nullptr)
-            return;
-
-        safeThis->invalidateManualUpdateAlert();
+        safeThis->dismissPointerGestures();
     }
 
     void StateComponent::buttonClicked(juce::Button* clickedButton)
@@ -2317,10 +2315,7 @@ namespace state
         creatFolderIfNotExist(userFile);
         if (! userFile.isDirectory())
         {
-            juce::NativeMessageBox::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-                                                        "Preset save failed",
-                                                        "The preset folder could not be created.",
-                                                        this);
+            showSaveErrorAlert("The preset folder could not be created.");
             return;
         }
 
@@ -2467,11 +2462,8 @@ namespace state
         }
         else
         {
-            juce::NativeMessageBox::showMessageBoxAsync(
-                juce::AlertWindow::WarningIcon,
-                "Preset save failed",
-                "The preset could not be written to the selected location.",
-                safeThis.getComponent());
+            safeThis->showSaveErrorAlert(
+                "The preset could not be written to the selected location.");
         }
     }
 
@@ -2480,6 +2472,111 @@ namespace state
         fileChooserSessionActive = false;
         ++fileChooserSessionGeneration;
         fileChooser.reset();
+    }
+
+    void StateComponent::showSaveErrorAlert(juce::String message)
+    {
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+        invalidateSaveErrorAlert();
+        if (safeThis == nullptr
+            || ! safeThis->isShowing()
+            || ! safeThis->isEnabled())
+            return;
+
+        safeThis->saveErrorAlertActive = true;
+        const auto alertGeneration = safeThis->saveErrorAlertGeneration;
+        const auto options = juce::MessageBoxOptions()
+                                 .withIconType(
+                                     juce::MessageBoxIconType::WarningIcon)
+                                 .withTitle("Preset save failed")
+                                 .withMessage(std::move(message))
+                                 .withButton("OK")
+                                 .withAssociatedComponent(
+                                     safeThis.getComponent())
+                                 .withParentComponent(
+                                     safeThis.getComponent());
+        const auto callback = [safeThis, alertGeneration](int result)
+        {
+            if (safeThis != nullptr)
+                safeThis->handleSaveErrorAlertResult(
+                    result, alertGeneration);
+        };
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (safeThis->saveErrorDialogPresenterForTesting)
+        {
+            auto presenter = safeThis->saveErrorDialogPresenterForTesting;
+            auto closer = presenter(options, callback);
+            if (safeThis == nullptr)
+            {
+                if (closer)
+                    closer();
+                return;
+            }
+
+            if (safeThis->saveErrorAlertActive
+                && safeThis->saveErrorAlertGeneration == alertGeneration)
+            {
+                safeThis->saveErrorDialogCloserForTesting =
+                    std::move(closer);
+            }
+            else if (closer)
+            {
+                closer();
+            }
+            return;
+        }
+#endif
+
+        auto alert = juce::NativeMessageBox::showScopedAsync(options,
+                                                              callback);
+        if (safeThis != nullptr
+            && safeThis->saveErrorAlertActive
+            && safeThis->saveErrorAlertGeneration == alertGeneration)
+        {
+            safeThis->saveErrorAlert = std::move(alert);
+        }
+        else
+        {
+            alert.close();
+        }
+    }
+
+    void StateComponent::handleSaveErrorAlertResult(
+        int result,
+        std::uint64_t alertGeneration)
+    {
+        juce::ignoreUnused(result);
+        if (! saveErrorAlertActive
+            || saveErrorAlertGeneration != alertGeneration)
+            return;
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        auto closer = std::move(saveErrorDialogCloserForTesting);
+        saveErrorDialogCloserForTesting = nullptr;
+#endif
+        saveErrorAlertActive = false;
+        ++saveErrorAlertGeneration;
+        saveErrorAlert.close();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (closer)
+            closer();
+#endif
+    }
+
+    void StateComponent::invalidateSaveErrorAlert() noexcept
+    {
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        auto closer = std::move(saveErrorDialogCloserForTesting);
+        saveErrorDialogCloserForTesting = nullptr;
+#endif
+        saveErrorAlertActive = false;
+        ++saveErrorAlertGeneration;
+        saveErrorAlert.close();
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        if (closer)
+            closer();
+#endif
     }
 
     void StateComponent::openPresetFolder()
@@ -2722,7 +2819,7 @@ namespace state
 
         // PopupMenu results are delivered asynchronously. A host may hide the
         // editor after the click but before this callback reaches us.
-        if (! safeThis->isShowing())
+        if (! safeThis->isShowing() || ! safeThis->isEnabled())
             return;
 
         if (auto* existingDialog = safeThis->settingsDialog.getComponent())
@@ -2741,6 +2838,8 @@ namespace state
                 return;
         }
 
+        const auto launchSessionGeneration =
+            safeThis->interactionSessionGeneration;
         juce::Component::SafePointer<juce::DialogWindow> launchedDialog;
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
@@ -2775,7 +2874,11 @@ namespace state
         // this StateComponent before returning. Keep the returned auto-delete
         // window local until it is fully configured so no member of a deleted
         // owner is written and an orphaned dialog cannot outlive the processor.
-        if (safeThis == nullptr)
+        if (safeThis == nullptr
+            || safeThis->interactionSessionGeneration
+                   != launchSessionGeneration
+            || ! safeThis->isShowing()
+            || ! safeThis->isEnabled())
         {
             deleteDialogSynchronously(launchedDialog);
             return;
@@ -2785,7 +2888,11 @@ namespace state
             return;
 
         StateComponent::configureSettingsDialogResizeLimits(*launchedDialog);
-        if (safeThis == nullptr)
+        if (safeThis == nullptr
+            || safeThis->interactionSessionGeneration
+                   != launchSessionGeneration
+            || ! safeThis->isShowing()
+            || ! safeThis->isEnabled())
         {
             deleteDialogSynchronously(launchedDialog);
             return;
@@ -2854,19 +2961,60 @@ namespace state
     void StateComponent::dismissPointerGestures() noexcept
     {
         // The editor calls this when an ancestor is hidden. JUCE does not send
-        // visibilityChanged() to every descendant, so invalidate the menu here
-        // as well as in StateComponent::visibilityChanged().
-        invalidateManualUpdateRequest();
-        invalidateManualUpdateAlert();
-        presetBox.dismissTransientInteraction();
-        invalidatePresetMenuSession();
-        invalidateSaveChooserSession();
-        toggleABButton.dismissPointerGesture();
-        copyABButton.dismissPointerGesture();
-        previousButton.dismissPointerGesture();
-        nextButton.dismissPointerGesture();
-        savePresetButton.dismissPointerGesture();
-        menuButton.dismissPointerGesture();
+        // visibilityChanged() to every descendant. Treat it as the same full
+        // interaction-session boundary as hiding or disabling this component.
+        const juce::Component::SafePointer<StateComponent> safeThis(this);
+        ++safeThis->interactionSessionGeneration;
+
+        safeThis->invalidatePresetMenuSession();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->invalidateSaveChooserSession();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->presetBox.dismissTransientInteraction();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->invalidateManualUpdateRequest();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->invalidateManualUpdateAlert();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->invalidateSaveErrorAlert();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->toggleABButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->copyABButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->previousButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->nextButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->savePresetButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->menuButton.dismissPointerGesture();
+        if (safeThis == nullptr)
+            return;
+
+        safeThis->dismissSettingsDialog();
     }
 
     void StateComponent::dismissSettingsDialog() noexcept

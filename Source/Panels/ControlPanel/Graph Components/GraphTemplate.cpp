@@ -100,25 +100,76 @@ void GraphTemplate::setZoomState(bool zoomState)
     repaint();
 }
 
+void GraphTemplate::setZoomRequestCallback(std::function<void()> callback)
+{
+    dismissPointerGesture();
+    onZoomRequested = std::move(callback);
+    updateHoverState();
+}
+
 void GraphTemplate::mouseDown(const juce::MouseEvent& e)
 {
-    juce::ignoreUnused(e);
-    mZoomState = ! mZoomState;
+    if (onZoomRequested == nullptr || ! isEnabled() || ! isShowing()
+        || ! isCompletePrimaryDown(e))
+        return;
+
+    if (primaryPointerDown)
+    {
+        if (! isPointerSource(e))
+            return;
+        dismissPointerGesture();
+    }
+
+    primaryPointerDown = true;
+    pointerSourceType = e.source.getType();
+    pointerSourceIndex = e.source.getIndex();
     repaint();
+}
+
+void GraphTemplate::mouseDrag(const juce::MouseEvent& e)
+{
+    if (! primaryPointerDown || ! isPointerSource(e))
+        return;
+
+    if (! isCompletePrimaryDown(e))
+        dismissPointerGesture();
+}
+
+void GraphTemplate::mouseUp(const juce::MouseEvent& e)
+{
+    if (! primaryPointerDown || ! isPointerSource(e))
+        return;
+
+    const auto localPosition = e.getEventRelativeTo(this).position.roundToInt();
+    const bool shouldActivate = isEnabled() && isShowing()
+                                && getLocalBounds().contains(localPosition);
+    dismissPointerGesture();
+    if (! shouldActivate)
+        return;
+
+    // The owner may synchronously delete this graph. Invoke a retained copy as
+    // the final operation and do not touch component state afterwards.
+    auto callback = onZoomRequested;
+    if (callback)
+        callback();
 }
 
 void GraphTemplate::mouseEnter(const juce::MouseEvent& e)
 {
-    juce::ignoreUnused(e);
-    isMouseOn = true;
-    repaint();
+    recoverMissingPointerUp(e);
+    updateHoverState();
+}
+
+void GraphTemplate::mouseMove(const juce::MouseEvent& e)
+{
+    recoverMissingPointerUp(e);
+    updateHoverState();
 }
 
 void GraphTemplate::mouseExit(const juce::MouseEvent& e)
 {
-    juce::ignoreUnused(e);
-    isMouseOn = false;
-    repaint();
+    recoverMissingPointerUp(e);
+    updateHoverState();
 }
 
 void GraphTemplate::visibilityChanged()
@@ -126,6 +177,12 @@ void GraphTemplate::visibilityChanged()
     updateShowingState();
     if (isVisible())
         repaint();
+}
+
+void GraphTemplate::enablementChanged()
+{
+    dismissPointerGesture();
+    updateHoverState();
 }
 
 void GraphTemplate::parentHierarchyChanged()
@@ -191,6 +248,15 @@ void GraphTemplate::updateShowingState()
         return;
 
     lastKnownShowingState = nowShowing;
+    if (! nowShowing)
+    {
+        dismissPointerGesture();
+        if (isMouseOn)
+        {
+            isMouseOn = false;
+            repaint();
+        }
+    }
     graphShowingStateChanged(nowShowing);
 }
 
@@ -210,6 +276,51 @@ void GraphTemplate::componentParentHierarchyChanged(juce::Component& component)
 void GraphTemplate::componentBeingDeleted(juce::Component& component)
 {
     visibilityAncestors.removeFirstMatchingValue(&component);
+}
+
+bool GraphTemplate::isCompletePrimaryDown(
+    const juce::MouseEvent& event) const noexcept
+{
+    return event.mods.isLeftButtonDown()
+        && ! event.mods.isRightButtonDown()
+        && ! event.mods.isMiddleButtonDown()
+        && ! event.mods.isPopupMenu();
+}
+
+bool GraphTemplate::isPointerSource(const juce::MouseEvent& event) const noexcept
+{
+    return event.source.getType() == pointerSourceType
+        && event.source.getIndex() == pointerSourceIndex;
+}
+
+void GraphTemplate::recoverMissingPointerUp(
+    const juce::MouseEvent& event) noexcept
+{
+    if (primaryPointerDown && isPointerSource(event)
+        && ! event.mods.isLeftButtonDown())
+        dismissPointerGesture();
+}
+
+void GraphTemplate::dismissPointerGesture() noexcept
+{
+    if (! primaryPointerDown && pointerSourceIndex == -1)
+        return;
+
+    primaryPointerDown = false;
+    pointerSourceIndex = -1;
+    repaint();
+}
+
+void GraphTemplate::updateHoverState() noexcept
+{
+    const bool shouldShowHover = onZoomRequested != nullptr
+                                 && isEnabled() && isShowing()
+                                 && isMouseOver(true);
+    if (isMouseOn != shouldShowHover)
+    {
+        isMouseOn = shouldShowHover;
+        repaint();
+    }
 }
 
 void GraphTemplate::rebuildStaticLayer(float displayScale)

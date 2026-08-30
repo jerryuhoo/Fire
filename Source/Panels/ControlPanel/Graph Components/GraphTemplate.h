@@ -12,10 +12,13 @@
 
 #include "../../../GUI/InterfaceDefines.h"
 #include "juce_gui_basics/juce_gui_basics.h"
+#include <functional>
 
 //==============================================================================
 /*
 */
+struct GraphTemplateInputTestAccess;
+
 class GraphTemplate : public juce::Component,
                       private juce::ComponentListener
 {
@@ -29,13 +32,19 @@ public:
     float getScale() const noexcept;
     bool getZoomState() const noexcept;
     void setZoomState(bool zoomState);
+    void setZoomRequestCallback(std::function<void()> callback);
     void mouseDown(const juce::MouseEvent& e) override;
+    void mouseDrag(const juce::MouseEvent& e) override;
+    void mouseUp(const juce::MouseEvent& e) override;
     void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
     void visibilityChanged() override;
+    void enablementChanged() override;
     void parentHierarchyChanged() override;
 
 private:
+    friend struct GraphTemplateInputTestAccess;
     float scale = 1.0f;
     juce::String graphTitle { "SIGNAL" };
     fire::ui::ModuleRole graphRole = fire::ui::ModuleRole::neutral;
@@ -44,6 +53,11 @@ private:
     float staticLayerScale = 0.0f;
     juce::Array<juce::Component*> visibilityAncestors;
     bool lastKnownShowingState = false;
+    std::function<void()> onZoomRequested;
+    juce::MouseInputSource::InputSourceType pointerSourceType =
+        juce::MouseInputSource::mouse;
+    int pointerSourceIndex = -1;
+    bool primaryPointerDown = false;
 
     void rebuildStaticLayer(float displayScale);
     void rebuildVisibilityObservers();
@@ -51,6 +65,11 @@ private:
     void componentVisibilityChanged(juce::Component&) override;
     void componentParentHierarchyChanged(juce::Component&) override;
     void componentBeingDeleted(juce::Component&) override;
+    bool isCompletePrimaryDown(const juce::MouseEvent&) const noexcept;
+    bool isPointerSource(const juce::MouseEvent&) const noexcept;
+    void recoverMissingPointerUp(const juce::MouseEvent&) noexcept;
+    void dismissPointerGesture() noexcept;
+    void updateHoverState() noexcept;
 
 protected:
     void setGraphIdentity(juce::String title, fire::ui::ModuleRole role);

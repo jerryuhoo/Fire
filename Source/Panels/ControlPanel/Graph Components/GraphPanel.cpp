@@ -24,6 +24,28 @@ GraphPanel::GraphPanel(FireAudioProcessor& p) : processor(p)
 
     // Width Graph
     addAndMakeVisible(widthGraph);
+
+    const juce::Component::SafePointer<GraphPanel> safeThis(this);
+    oscilloscope.setZoomRequestCallback([safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->toggleZoom(safeThis->getOscilloscope());
+    });
+    vuPanel.setZoomRequestCallback([safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->toggleZoom(safeThis->getVuPanel());
+    });
+    distortionGraph.setZoomRequestCallback([safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->toggleZoom(safeThis->getDistortionGraph());
+    });
+    widthGraph.setZoomRequestCallback([safeThis]
+    {
+        if (safeThis != nullptr)
+            safeThis->toggleZoom(safeThis->getWidthGraph());
+    });
     setInterceptsMouseClicks(false, true);
     setOpaque(false);
 }

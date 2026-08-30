@@ -106,6 +106,31 @@ TEST_CASE("Filter graph nodes support guarded keyboard and accessible frequency 
           == Catch::Approx(2000.0).epsilon(0.015));
     CHECK(value->getCurrentValueAsString().contains("Hz"));
 
+    value->setValueAsString("3.5 kHz");
+    const auto expectedKilohertzX =
+        1000.0 * juce::mapFromLog10(3500.0, 20.0, 20000.0);
+    CHECK(lastTargetInHost.x
+          == Catch::Approx(expectedKilohertzX).margin(0.001));
+    CHECK(dragCount == 4);
+    CHECK(finishCount == 4);
+
+    value->setValueAsString("2k");
+    CHECK(value->getCurrentValue()
+          == Catch::Approx(2000.0).epsilon(0.015));
+    CHECK(dragCount == 5);
+    CHECK(finishCount == 5);
+
+    const auto boundsBeforeInvalidText = button.getBounds();
+    for (const auto& invalidText : {
+             juce::String { "garbage" },
+             juce::String { "2 kHz trailing" },
+             juce::String { "NaN Hz" } })
+        value->setValueAsString(invalidText);
+
+    CHECK(button.getBounds() == boundsBeforeInvalidText);
+    CHECK(dragCount == 5);
+    CHECK(finishCount == 5);
+
     host.removeFromDesktop();
     REQUIRE_FALSE(button.isShowing());
     const auto detachedBounds = button.getBounds();
@@ -123,8 +148,8 @@ TEST_CASE("Filter graph nodes support guarded keyboard and accessible frequency 
         eventPosition, {}, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
         &button, &button, eventTime, eventPosition, eventTime, 1, false);
     button.mouseWheelMove(wheelEvent, wheel);
-    CHECK(dragCount == 3);
-    CHECK(finishCount == 3);
+    CHECK(dragCount == 5);
+    CHECK(finishCount == 5);
     CHECK(qCount == 1);
 }
 

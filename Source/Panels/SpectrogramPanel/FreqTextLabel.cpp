@@ -11,45 +11,6 @@
 #include "FreqTextLabel.h"
 #include "../../Utility/AudioHelpers.h"
 #include "../../Utility/StrictNumberParser.h"
-#include <cmath>
-#include <optional>
-
-namespace
-{
-std::optional<double> parseFrequencyText(juce::String text)
-{
-    text = text.trim().toLowerCase();
-    double multiplier = 1.0;
-
-    if (text.endsWithIgnoreCase("khz"))
-    {
-        multiplier = 1000.0;
-        text = text.dropLastCharacters(3).trim();
-    }
-    else if (text.endsWithChar('k'))
-    {
-        multiplier = 1000.0;
-        text = text.dropLastCharacters(1).trim();
-    }
-    else if (text.endsWithIgnoreCase("hz"))
-    {
-        text = text.dropLastCharacters(2).trim();
-    }
-
-    if (text.isEmpty())
-        return std::nullopt;
-
-    double parsedValue = 0.0;
-    if (! fire::utility::parseStrictFiniteDouble(text, parsedValue))
-        return std::nullopt;
-
-    const double frequency = parsedValue * multiplier;
-    if (! std::isfinite(frequency))
-        return std::nullopt;
-
-    return frequency;
-}
-} // namespace
 
 //==============================================================================
 FreqTextLabel::FreqTextLabel(VerticalLine& v) : verticalLine(v)
@@ -290,15 +251,17 @@ void FreqTextLabel::setFreq(int freq)
 
 void FreqTextLabel::applyEditedText()
 {
-    const auto requestedFrequency = parseFrequencyText(freqLabel.getText());
-    if (! requestedFrequency.has_value() || ! frequencyEditCallback)
+    double requestedFrequency = 0.0;
+    if (! fire::utility::parseStrictFrequency(freqLabel.getText(),
+                                               requestedFrequency)
+        || ! frequencyEditCallback)
         return;
 
     const auto range = verticalLine.getNormalisableRange();
-    if (*requestedFrequency < range.start || *requestedFrequency > range.end)
+    if (requestedFrequency < range.start || requestedFrequency > range.end)
         return;
 
-    const double constrainedFrequency = range.snapToLegalValue(*requestedFrequency);
+    const double constrainedFrequency = range.snapToLegalValue(requestedFrequency);
     if (juce::approximatelyEqual(constrainedFrequency, verticalLine.getValue()))
         return;
 

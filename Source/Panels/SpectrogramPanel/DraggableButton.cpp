@@ -9,6 +9,7 @@
 */
 
 #include "DraggableButton.h"
+#include "../../Utility/StrictNumberParser.h"
 
 namespace
 {
@@ -63,10 +64,9 @@ public:
 
     void setValueAsString(const juce::String& newValue) override
     {
-        auto frequency = newValue.getDoubleValue();
-        if (newValue.containsIgnoreCase("khz"))
-            frequency *= 1000.0;
-        setValue(frequency);
+        double frequency = 0.0;
+        if (fire::utility::parseStrictFrequency(newValue, frequency))
+            setValue(frequency);
     }
 
     AccessibleValueRange getRange() const override

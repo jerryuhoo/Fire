@@ -46,6 +46,33 @@ struct LfoPanelBrushTestAccess final
         return panel.brushSelector.pointerInteractionActive;
     }
 
+    static PrimaryTextButton& getLfoSelectButton(LfoPanel& panel,
+                                                  int index)
+    {
+        return *panel.lfoSelectButtons[static_cast<size_t>(index)];
+    }
+
+    static LfoEditor& getEditor(LfoPanel& panel)
+    {
+        return panel.lfoEditor;
+    }
+
+    static std::array<PrimarySlider*, 3> getMotionSliders(LfoPanel& panel)
+    {
+        return { &panel.rateSlider,
+                 &panel.lfoSmoothSlider,
+                 &panel.lfoPhaseSlider };
+    }
+
+    static std::array<PrimarySlider*, 5> getAllSliders(LfoPanel& panel)
+    {
+        return { &panel.rateSlider,
+                 &panel.gridXSlider,
+                 &panel.gridYSlider,
+                 &panel.lfoSmoothSlider,
+                 &panel.lfoPhaseSlider };
+    }
+
     static void restoreDefaultSelectionCallback(LfoPanel& panel)
     {
         panel.brushSelector.setSelectionCallback(
@@ -68,6 +95,44 @@ struct ParameterGestureRecorder final : juce::AudioProcessorParameter::Listener
     }
 
     std::vector<bool> gestures;
+};
+
+struct DeletePanelOnButtonStateChange final : juce::Button::Listener
+{
+    explicit DeletePanelOnButtonStateChange(
+        std::unique_ptr<LfoPanel>& panelToDelete)
+        : panel(panelToDelete)
+    {
+    }
+
+    void buttonClicked(juce::Button*) override {}
+
+    void buttonStateChanged(juce::Button*) override
+    {
+        if (armed)
+            panel.reset();
+    }
+
+    std::unique_ptr<LfoPanel>& panel;
+    bool armed = false;
+};
+
+struct DeletePanelOnVisibilityChange final : juce::ComponentListener
+{
+    explicit DeletePanelOnVisibilityChange(
+        std::unique_ptr<LfoPanel>& panelToDelete)
+        : panel(panelToDelete)
+    {
+    }
+
+    void componentVisibilityChanged(juce::Component&) override
+    {
+        if (armed)
+            panel.reset();
+    }
+
+    std::unique_ptr<LfoPanel>& panel;
+    bool armed = false;
 };
 
 juce::MouseEvent makeMouseEvent(juce::Component& component,
@@ -148,6 +213,32 @@ void prepareBrushPanel(LfoPanel& panel)
     panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
     panel.setVisible(true);
     LfoPanelBrushTestAccess::setEditMode(panel, LfoEditMode::BrushPaint);
+}
+
+std::vector<juce::Component*> collectVisibleInteractiveChildren(
+    LfoPanel& panel)
+{
+    std::vector<juce::Component*> controls;
+    auto* editor = &LfoPanelBrushTestAccess::getEditor(panel);
+
+    for (auto* child : panel.getChildren())
+        if (child->isVisible()
+            && (child == editor
+                || dynamic_cast<juce::Button*>(child) != nullptr
+                || dynamic_cast<juce::Slider*>(child) != nullptr
+                || dynamic_cast<juce::ComboBox*>(child) != nullptr))
+            controls.push_back(child);
+
+    return controls;
+}
+
+juce::Label* findSliderTextLabel(juce::Slider& slider)
+{
+    for (auto* child : slider.getChildren())
+        if (auto* label = dynamic_cast<juce::Label*>(child))
+            return label;
+
+    return nullptr;
 }
 } // namespace
 
@@ -482,4 +573,205 @@ TEST_CASE("LFO brush completion survives synchronous owner deletion",
     result(static_cast<int>(LfoPresetShape::SquareHigh));
     CHECK(panel == nullptr);
     CHECK(deliveredBrush == LfoPresetShape::SquareHigh);
+}
+
+TEST_CASE("LFO interaction cleanup stops after synchronous owner deletion",
+          "[lfo-button][lfo][ui][lifecycle][reentrancy][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto panel = std::make_unique<LfoPanel>(processor);
+    panel->setBounds(0, 0, 1000, 500);
+    panel->addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel->setVisible(true);
+
+    auto& firstButton =
+        LfoPanelBrushTestAccess::getLfoSelectButton(*panel, 0);
+    beginPrimaryClick(firstButton);
+    REQUIRE(firstButton.isDown());
+
+    DeletePanelOnButtonStateChange deleteListener(panel);
+    firstButton.addListener(&deleteListener);
+    deleteListener.armed = true;
+
+    panel->dismissTransientInteraction();
+    CHECK(panel == nullptr);
+}
+
+TEST_CASE("LFO mode switch stops after synchronous owner deletion",
+          "[lfo][brush-selector][ui][lifecycle][reentrancy][self-delete]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    auto panel = std::make_unique<LfoPanel>(processor);
+    prepareBrushPanel(*panel);
+
+    auto& selector = LfoPanelBrushTestAccess::getSelector(*panel);
+    REQUIRE(selector.isVisible());
+
+    DeletePanelOnVisibilityChange deleteListener(panel);
+    selector.addComponentListener(&deleteListener);
+    deleteListener.armed = true;
+
+    LfoPanelBrushTestAccess::setEditMode(*panel,
+                                         LfoEditMode::PointEdit);
+    CHECK(panel == nullptr);
+}
+
+TEST_CASE("LFO panel preserves interactive layout at narrow and scaled sizes",
+          "[lfo][ui][layout][resize][scale]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    LfoPanel panel(processor);
+
+    const auto checkLayout = [&](float panelScale,
+                                 juce::Rectangle<int> bounds)
+    {
+        CAPTURE(panelScale, bounds.toString());
+        panel.setScale(panelScale);
+        panel.setBounds(bounds);
+        LfoPanelBrushTestAccess::setEditMode(panel,
+                                             LfoEditMode::BrushPaint);
+
+        auto controls = collectVisibleInteractiveChildren(panel);
+        REQUIRE(controls.size() == 16);
+        for (size_t first = 0; first < controls.size(); ++first)
+        {
+            CAPTURE(first, controls[first]->getBounds().toString());
+            REQUIRE_FALSE(controls[first]->getBounds().isEmpty());
+            CHECK(panel.getLocalBounds().contains(controls[first]->getBounds()));
+
+            for (size_t second = first + 1;
+                 second < controls.size(); ++second)
+            {
+                CAPTURE(second, controls[second]->getBounds().toString());
+                CHECK_FALSE(controls[first]->getBounds().intersects(
+                    controls[second]->getBounds()));
+            }
+        }
+    };
+
+    checkLayout(1.0f, { 0, 0, 984, 224 });
+    const auto normalEditorBounds =
+        LfoPanelBrushTestAccess::getEditor(panel).getBounds();
+    const auto normalTextBoxWidth =
+        LfoPanelBrushTestAccess::getMotionSliders(panel)[0]->getTextBoxWidth();
+    const auto normalTextBoxHeight =
+        LfoPanelBrushTestAccess::getMotionSliders(panel)[0]->getTextBoxHeight();
+
+    // This is the same logical workspace at a 50% host scale. Fixed pixel
+    // minima used to consume most of the editor, while unscaled Slider text
+    // boxes left almost no rotary hit area.
+    checkLayout(0.5f, { 0, 0, 492, 112 });
+    const auto scaledEditorBounds =
+        LfoPanelBrushTestAccess::getEditor(panel).getBounds();
+    const auto scaledSliders =
+        LfoPanelBrushTestAccess::getMotionSliders(panel);
+    CHECK(scaledEditorBounds.getWidth()
+          >= juce::roundToInt(normalEditorBounds.getWidth() * 0.45f));
+    CHECK(scaledEditorBounds.getHeight()
+          >= juce::roundToInt(normalEditorBounds.getHeight() * 0.45f));
+    for (auto* slider : scaledSliders)
+    {
+        CHECK(slider->getTextBoxWidth()
+              <= juce::roundToInt(normalTextBoxWidth * 0.55f));
+        CHECK(slider->getTextBoxHeight()
+              <= juce::roundToInt(normalTextBoxHeight * 0.55f));
+    }
+
+    checkLayout(1.5f, { 0, 0, 1476, 336 });
+
+    // Hosts can also transiently report a narrow logical width before their
+    // scale callback. The centre controls wrap rather than collapsing.
+    checkLayout(1.0f, { 0, 0, 640, 224 });
+}
+
+TEST_CASE("LFO resize preserves an active numeric value edit",
+          "[lfo][ui][layout][resize][slider][lifecycle]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    setParameterValue(
+        processor,
+        ParameterIDAndName::getIDString(LFO_SYNC_MODE_ID, 0),
+        0.0f);
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 984, 224);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+
+    auto* rateSlider =
+        LfoPanelBrushTestAccess::getMotionSliders(panel)[0];
+    REQUIRE(rateSlider != nullptr);
+    REQUIRE(rateSlider->isTextBoxEditable());
+    auto* valueLabel = findSliderTextLabel(*rateSlider);
+    REQUIRE(valueLabel != nullptr);
+    const auto originalTextBoxWidth = rateSlider->getTextBoxWidth();
+
+    rateSlider->showTextBox();
+    REQUIRE(valueLabel->isBeingEdited());
+
+    panel.setScale(1.25f);
+    CHECK(valueLabel->isBeingEdited());
+    CHECK(findSliderTextLabel(*rateSlider) == valueLabel);
+    CHECK(rateSlider->getTextBoxWidth() == originalTextBoxWidth);
+
+    rateSlider->hideTextBox(true);
+    REQUIRE_FALSE(valueLabel->isBeingEdited());
+    panel.setScale(1.25f);
+    CHECK(rateSlider->getTextBoxWidth() > originalTextBoxWidth);
+
+    panel.removeFromDesktop();
+}
+
+TEST_CASE("LFO controls expose meaningful accessibility titles and help",
+          "[lfo][ui][accessibility][slider][brush-selector]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireAudioProcessor processor;
+    processor.hasUpdateCheckBeenPerformed = true;
+    LfoPanel panel(processor);
+    panel.setBounds(0, 0, 984, 224);
+    panel.addToDesktop(juce::ComponentPeer::windowIsTemporary);
+    panel.setVisible(true);
+
+    const std::array<juce::String, 5> sliderTitles {
+        "LFO rate",
+        "Horizontal grid divisions",
+        "Vertical grid divisions",
+        "LFO smoothness",
+        "LFO phase"
+    };
+    const auto sliders = LfoPanelBrushTestAccess::getAllSliders(panel);
+    for (size_t index = 0; index < sliders.size(); ++index)
+    {
+        CAPTURE(index);
+        auto* slider = sliders[index];
+        REQUIRE(slider != nullptr);
+        CHECK(slider->getTitle() == sliderTitles[index]);
+        REQUIRE_FALSE(slider->getTooltip().isEmpty());
+
+        auto* accessibility = slider->getAccessibilityHandler();
+        REQUIRE(accessibility != nullptr);
+        CHECK(accessibility->getTitle() == sliderTitles[index]);
+        CHECK(accessibility->getHelp() == slider->getTooltip());
+        CHECK(accessibility->getRole() == juce::AccessibilityRole::slider);
+    }
+
+    auto& selector = LfoPanelBrushTestAccess::getSelector(panel);
+    CHECK(selector.getTitle() == "LFO brush shape");
+    REQUIRE_FALSE(selector.getTooltip().isEmpty());
+    auto* selectorAccessibility = selector.getAccessibilityHandler();
+    REQUIRE(selectorAccessibility != nullptr);
+    CHECK(selectorAccessibility->getTitle() == "LFO brush shape");
+    CHECK(selectorAccessibility->getHelp() == selector.getTooltip());
+    CHECK(selectorAccessibility->getRole()
+          == juce::AccessibilityRole::comboBox);
+
+    panel.removeFromDesktop();
 }

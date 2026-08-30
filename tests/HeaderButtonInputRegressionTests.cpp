@@ -20,6 +20,19 @@ struct PrimaryButtonTestAccess
         button.pointerSourceType = type;
         button.pointerSourceIndex = index;
     }
+
+    template <typename ButtonType>
+    static void setAnimationState(PrimaryPointerButton<ButtonType>& button,
+                                  float hover,
+                                  float press,
+                                  float focus,
+                                  float disabled) noexcept
+    {
+        button.hoverAnimation = hover;
+        button.pressAnimation = press;
+        button.focusAnimation = focus;
+        button.disabledAnimation = disabled;
+    }
 };
 
 namespace
@@ -770,6 +783,38 @@ TEST_CASE("Editor header and preset actions use primary-only buttons",
         CHECK(clickCount == 0);
         button->onClick = nullptr;
     }
+}
+
+TEST_CASE("Overlapping workspace hover press and focus keep a valid opacity",
+          "[header-button][ui][animation][colour][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    FireLookAndFeel lookAndFeel;
+    PrimaryTextButton button { "MOD FORGE" };
+    button.setBounds(0, 0, 120, 28);
+    button.setComponentID("workspace_tab");
+    button.getProperties().set("fireAnimatedSelection", true);
+    button.setColour(juce::TextButton::buttonColourId,
+                     juce::Colours::transparentBlack);
+    button.setColour(juce::TextButton::textColourOnId,
+                     fire::ui::colours::modulation);
+    button.setColour(juce::TextButton::textColourOffId,
+                     fire::ui::colours::textMuted);
+
+    // A real click can temporarily have all three animations at full weight.
+    // The visual blend must saturate before it reaches Colour::withAlpha.
+    PrimaryButtonTestAccess::setAnimationState(button, 1.0f, 1.0f, 1.0f, 0.0f);
+    CHECK(fire::ui::headerInteractionWashAlpha(1.0f, 1.0f, 1.0f, 0.0f)
+          == 1.0f);
+    juce::Image image(juce::Image::ARGB, 120, 28, true);
+    juce::Graphics graphics(image);
+    lookAndFeel.drawButtonBackground(graphics,
+                                     button,
+                                     juce::Colours::transparentBlack,
+                                     true,
+                                     true);
+
+    CHECK(image.getPixelAt(60, 14).getAlpha() > 0);
 }
 
 TEST_CASE("Editor peer detachment discards every header pointer gesture",

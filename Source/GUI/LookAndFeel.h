@@ -19,6 +19,24 @@
 #include <cmath>
 #include <vector>
 
+namespace fire::ui
+{
+inline float headerInteractionWashAlpha(float hover,
+                                        float press,
+                                        float focus,
+                                        float disabled) noexcept
+{
+    hover = juce::jlimit(0.0f, 1.0f, hover);
+    press = juce::jlimit(0.0f, 1.0f, press);
+    focus = juce::jlimit(0.0f, 1.0f, focus);
+    disabled = juce::jlimit(0.0f, 1.0f, disabled);
+    return juce::jlimit(0.0f,
+                        1.0f,
+                        (0.56f * hover + 0.72f * press + 0.34f * focus)
+                            * (1.0f - disabled));
+}
+} // namespace fire::ui
+
 class FireLookAndFeel final : public juce::LookAndFeel_V4,
                               private juce::Timer
 {
@@ -445,10 +463,14 @@ public:
                 else if (hoverAmount > 0.001f || pressAmount > 0.001f || focusAmount > 0.001f)
                 {
                     auto wash = colours::surface2.interpolatedWith(colours::raised, pressAmount);
-                    g.setColour(wash.withAlpha((0.56f * hoverAmount
-                                                + 0.72f * pressAmount
-                                                + 0.34f * focusAmount)
-                                               * (1.0f - disabledAmount)));
+                    // Hover, press, and keyboard focus overlap during a normal
+                    // mouse click. Their visual weights are additive, so the
+                    // transient total can exceed Colour::withAlpha's [0, 1]
+                    // contract even though every animation is individually
+                    // bounded. Saturate only the composed wash opacity.
+                    const auto washAlpha = headerInteractionWashAlpha(
+                        hoverAmount, pressAmount, focusAmount, disabledAmount);
+                    g.setColour(wash.withAlpha(washAlpha));
                     g.fillRoundedRectangle(bounds, Metrics::radiusSmall * scale);
                 }
             }

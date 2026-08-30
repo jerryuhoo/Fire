@@ -2427,7 +2427,7 @@ void LfoPanel::paint(juce::Graphics& g)
     fire::ui::drawPanel(g, centerColumnArea.toFloat(), fire::ui::colours::modulation, false);
     fire::ui::drawPanel(g, rightColumnArea.toFloat(), fire::ui::colours::flame, false);
 
-    const auto titleHeight = juce::jmax(16.0f, 21.0f * scale);
+    const auto titleHeight = juce::jmax(9.0f, 21.0f * scale);
     const auto drawPlainTitle = [&g, titleHeight, this](juce::Rectangle<int> area,
                                                         const juce::String& title)
     {
@@ -2482,23 +2482,51 @@ void LfoPanel::paintOverChildren(juce::Graphics& g)
 void LfoPanel::resized()
 {
     const auto uiScale = scale;
-    const auto outer = juce::jmax(4, juce::roundToInt(7.0f * uiScale));
-    const auto gap = juce::jmax(4, juce::roundToInt(7.0f * uiScale));
-    const auto titleHeight = juce::jmax(16, juce::roundToInt(21.0f * uiScale));
-    const auto scaledKnobSize = juce::jmax(1, juce::roundToInt(KNOB_SIZE * 0.82f * uiScale));
+    const auto outer = juce::jmax(2, juce::roundToInt(7.0f * uiScale));
+    const auto gap = juce::jmax(2, juce::roundToInt(7.0f * uiScale));
+    const auto titleHeight = juce::jmax(9, juce::roundToInt(21.0f * uiScale));
+    const auto contentInset = uiScale >= 1.0f
+                                  ? juce::jmax(4, outer / 2)
+                                  : juce::jmax(
+                                        2, juce::roundToInt(4.0f * uiScale));
 
     auto mainArea = getLocalBounds().reduced(outer);
-    const auto leftWidth = juce::jlimit(104, juce::roundToInt(150.0f * uiScale),
-                                        juce::roundToInt(mainArea.getWidth() * 0.14f));
-    const auto rightWidth = juce::jlimit(248, juce::roundToInt(340.0f * uiScale),
-                                         juce::roundToInt(mainArea.getWidth() * 0.33f));
+    const auto availableColumnWidth = juce::jmax(0, mainArea.getWidth() - 2 * gap);
+    const auto leftMinimum = juce::jmax(1, juce::roundToInt(104.0f * uiScale));
+    const auto leftMaximum = juce::jmax(leftMinimum,
+                                         juce::roundToInt(150.0f * uiScale));
+    const auto rightMinimum = juce::jmax(1, juce::roundToInt(248.0f * uiScale));
+    const auto rightMaximum = juce::jmax(rightMinimum,
+                                          juce::roundToInt(340.0f * uiScale));
+    auto leftWidth = juce::jlimit(leftMinimum, leftMaximum,
+                                  juce::roundToInt(mainArea.getWidth() * 0.14f));
+    auto rightWidth = juce::jlimit(rightMinimum, rightMaximum,
+                                   juce::roundToInt(mainArea.getWidth() * 0.33f));
+
+    // A host may briefly report dimensions below the editor's resize limits
+    // while restoring or changing display scale. Preserve a useful shape
+    // editor instead of allowing the fixed side-column minima to consume it.
+    const auto minimumCentreWidth = juce::jmin(
+        juce::jmax(1, juce::roundToInt(360.0f * uiScale)),
+        juce::roundToInt(availableColumnWidth * 0.5f));
+    const auto maximumSideWidth =
+        juce::jmax(0, availableColumnWidth - minimumCentreWidth);
+    const auto requestedSideWidth = leftWidth + rightWidth;
+    if (requestedSideWidth > maximumSideWidth && requestedSideWidth > 0)
+    {
+        leftWidth = juce::roundToInt(
+            maximumSideWidth * (static_cast<float>(leftWidth)
+                                / static_cast<float>(requestedSideWidth)));
+        rightWidth = maximumSideWidth - leftWidth;
+    }
+
     leftColumnArea = mainArea.removeFromLeft(leftWidth);
     mainArea.removeFromLeft(gap);
     rightColumnArea = mainArea.removeFromRight(rightWidth);
     mainArea.removeFromRight(gap);
     centerColumnArea = mainArea;
 
-    auto leftContent = leftColumnArea.reduced(juce::jmax(4, outer / 2));
+    auto leftContent = leftColumnArea.reduced(contentInset);
     leftContent.removeFromTop(titleHeight);
     juce::FlexBox lfoSelectBox;
     lfoSelectBox.flexDirection = juce::FlexBox::Direction::column;
@@ -2508,30 +2536,62 @@ void LfoPanel::resized()
                                    .withMargin(juce::FlexItem::Margin(2.0f * uiScale)));
     lfoSelectBox.performLayout(leftContent);
 
-    auto centreContent = centerColumnArea.reduced(juce::jmax(4, outer / 2));
+    auto centreContent = centerColumnArea.reduced(contentInset);
     centreContent.removeFromTop(titleHeight);
-    topRowArea = centreContent.removeFromTop(juce::jmax(27, juce::roundToInt(34.0f * uiScale)));
-    centreContent.removeFromTop(juce::jmax(3, gap / 2));
+    const auto topControlHeight =
+        juce::jmax(16, juce::roundToInt(34.0f * uiScale));
+    const auto topRowGap = juce::jmax(1, gap / 2);
+    const bool useTwoTopRows =
+        centreContent.getWidth() < juce::roundToInt(460.0f * uiScale);
+    const auto topRowsHeight = useTwoTopRows
+                                   ? topControlHeight * 2 + topRowGap
+                                   : topControlHeight;
+    topRowArea = centreContent.removeFromTop(
+        juce::jmin(centreContent.getHeight(), topRowsHeight));
+    centreContent.removeFromTop(juce::jmin(centreContent.getHeight(),
+                                           topRowGap));
     lfoEditor.setBounds(centreContent);
 
-    juce::FlexBox topRowFlexBox;
-    topRowFlexBox.flexDirection = juce::FlexBox::Direction::row;
-    topRowFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-    topRowFlexBox.alignItems = juce::FlexBox::AlignItems::stretch;
-    std::vector<juce::Component*> topRowControls = {
-        &matrixButton, &syncButton, &assignButton, &editModeButton, &brushModeButton, &brushSelector
+    const auto layoutTopRow = [uiScale](
+                                  juce::Rectangle<int> row,
+                                  std::initializer_list<juce::Component*> controls)
+    {
+        juce::FlexBox box;
+        box.flexDirection = juce::FlexBox::Direction::row;
+        box.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
+        box.alignItems = juce::FlexBox::AlignItems::stretch;
+        for (auto* control : controls)
+            box.items.add(juce::FlexItem(*control).withFlex(1.0f)
+                              .withMargin(juce::FlexItem::Margin(
+                                  0.0f, 1.5f * uiScale,
+                                  0.0f, 1.5f * uiScale)));
+        box.performLayout(row);
     };
-    for (auto* control : topRowControls)
-        topRowFlexBox.items.add(juce::FlexItem(*control).withFlex(1.0f)
-                                    .withMargin(juce::FlexItem::Margin(0.0f, 1.5f * uiScale,
-                                                                       0.0f, 1.5f * uiScale)));
-    topRowFlexBox.performLayout(topRowArea);
 
-    auto rightColumnWorkArea = rightColumnArea.reduced(juce::jmax(4, outer / 2));
+    if (useTwoTopRows)
+    {
+        auto rows = topRowArea;
+        auto firstRow = rows.removeFromTop(
+            juce::jmin(topControlHeight, rows.getHeight()));
+        rows.removeFromTop(juce::jmin(topRowGap, rows.getHeight()));
+        layoutTopRow(firstRow, { &matrixButton, &syncButton, &assignButton });
+        layoutTopRow(rows, { &editModeButton, &brushModeButton, &brushSelector });
+    }
+    else
+    {
+        layoutTopRow(topRowArea,
+                     { &matrixButton, &syncButton, &assignButton,
+                       &editModeButton, &brushModeButton, &brushSelector });
+    }
+
+    auto rightColumnWorkArea = rightColumnArea.reduced(contentInset);
     rightColumnWorkArea.removeFromTop(titleHeight);
-    auto gridArea = rightColumnWorkArea.removeFromBottom(juce::jmax(28, juce::roundToInt(36.0f * uiScale)));
+    auto gridArea = rightColumnWorkArea.removeFromBottom(
+        juce::jmin(rightColumnWorkArea.getHeight(),
+                   juce::jmax(17, juce::roundToInt(36.0f * uiScale))));
     separatorLine = rightColumnWorkArea.removeFromBottom(1);
-    rightColumnWorkArea.removeFromBottom(juce::jmax(3, gap / 2));
+    rightColumnWorkArea.removeFromBottom(
+        juce::jmin(rightColumnWorkArea.getHeight(), topRowGap));
     auto knobsArea = rightColumnWorkArea;
 
     juce::FlexBox gridBox;
@@ -2547,11 +2607,49 @@ void LfoPanel::resized()
     juce::Grid knobGrid;
     using Track = juce::Grid::TrackInfo;
 
+    const auto knobGap = juce::jmax(1, juce::roundToInt(3.0f * uiScale));
+    const auto desiredKnobSize =
+        juce::jmax(1, juce::roundToInt(KNOB_SIZE * 0.82f * uiScale));
+    const auto widthLimitedKnobSize =
+        juce::jmax(1, (knobsArea.getWidth() - knobGap * 2) / 3);
+    const auto scaledKnobSize = juce::jmax(
+        1, juce::jmin(desiredKnobSize,
+                      widthLimitedKnobSize,
+                      juce::jmax(1, knobsArea.getHeight())));
+    const auto textBoxWidth = juce::jmin(
+        scaledKnobSize,
+        juce::jmax(12, juce::roundToInt(TEXTBOX_WIDTH * uiScale)));
+    const auto textBoxHeight = juce::jmin(
+        juce::jmax(1, scaledKnobSize / 2),
+        juce::jmax(8, juce::roundToInt(TEXTBOX_HEIGHT * uiScale)));
+    const auto updateTextBoxLayout = [textBoxWidth, textBoxHeight](
+                                         PrimarySlider& slider)
+    {
+        // Rebuilding JUCE's Slider text Label while it is being edited ends
+        // that edit. A host resize must not discard an in-progress value.
+        for (auto* child : slider.getChildren())
+            if (auto* label = dynamic_cast<juce::Label*>(child);
+                label != nullptr && label->isBeingEdited())
+                return;
+
+        if (slider.getTextBoxPosition() == juce::Slider::TextBoxBelow
+            && slider.getTextBoxWidth() == textBoxWidth
+            && slider.getTextBoxHeight() == textBoxHeight)
+            return;
+
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow,
+                               ! slider.isTextBoxEditable(),
+                               textBoxWidth, textBoxHeight);
+    };
+    updateTextBoxLayout(rateSlider);
+    updateTextBoxLayout(lfoSmoothSlider);
+    updateTextBoxLayout(lfoPhaseSlider);
+
     knobGrid.templateColumns = {
         Track(juce::Grid::Px(scaledKnobSize)),
-        Track(juce::Grid::Px(juce::jmax(1.0f, 3.0f * uiScale))),
+        Track(juce::Grid::Px(knobGap)),
         Track(juce::Grid::Px(scaledKnobSize)),
-        Track(juce::Grid::Px(juce::jmax(1.0f, 3.0f * uiScale))),
+        Track(juce::Grid::Px(knobGap)),
         Track(juce::Grid::Px(scaledKnobSize))
     };
 
@@ -3073,7 +3171,9 @@ void LfoPanel::sliderDragEnded(juce::Slider* slider)
 
 void LfoPanel::setScale(float newScale)
 {
-    scale = newScale;
+    scale = std::isfinite(newScale) && newScale > 0.0f
+                ? juce::jlimit(0.25f, 4.0f, newScale)
+                : 1.0f;
     resized(); // Call resized to apply the new scale
 }
 

@@ -205,6 +205,20 @@ std::uint64_t renderFingerprint(juce::Component& component)
 
     return fingerprint;
 }
+
+bool dispatchUntil(const std::function<bool()>& condition)
+{
+    constexpr int maximumMessageTurns = 100;
+    for (int turn = 0; turn < maximumMessageTurns; ++turn)
+    {
+        if (condition())
+            return true;
+
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    }
+
+    return condition();
+}
 } // namespace
 
 TEST_CASE("Settings controls retain native roles behind primary-only input",
@@ -247,7 +261,10 @@ TEST_CASE("Settings company link renders animated Fire keyboard feedback",
 
     company.grabKeyboardFocus();
     REQUIRE(company.hasKeyboardFocus(true));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+    REQUIRE(dispatchUntil([&company]
+    {
+        return company.getFocusAnimation() > 0.95f;
+    }));
     CHECK(company.getFocusAnimation() > 0.95f);
     CHECK(renderFingerprint(company) != restingFingerprint);
 
@@ -255,15 +272,21 @@ TEST_CASE("Settings company link renders animated Fire keyboard feedback",
     // retaining the same native hyperlink control and URL behaviour.
     static_cast<juce::Component&>(company).focusGained(
         juce::Component::focusChangedByMouseClick);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(600);
-    CHECK(company.getFocusAnimation() < 0.01f);
+    REQUIRE(dispatchUntil([&company]
+    {
+        return company.getFocusAnimation() == 0.0f;
+    }));
+    CHECK(company.getFocusAnimation() == 0.0f);
     CHECK(renderFingerprint(company) == restingFingerprint);
 
     // The first keyboard activation after pointer focus must restore the
     // keyboard-only outline through PrimaryPointerButton's synchronous path.
     REQUIRE(static_cast<juce::Component&>(company).keyPressed(
         juce::KeyPress { juce::KeyPress::returnKey }));
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(350);
+    REQUIRE(dispatchUntil([&company]
+    {
+        return company.getFocusAnimation() > 0.95f;
+    }));
     CHECK(company.getFocusAnimation() > 0.95f);
     CHECK(renderFingerprint(company) != restingFingerprint);
 }

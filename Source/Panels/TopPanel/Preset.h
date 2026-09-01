@@ -27,6 +27,7 @@
 
 class FireAudioProcessor;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+struct StatePresetsScanTestAccess;
 struct StateComponentDialogTestAccess;
 struct StateComponentMenuTestAccess;
 struct StateComponentManualUpdateTestAccess;
@@ -138,6 +139,42 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
 #endif
 
     private:
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        friend struct ::StatePresetsScanTestAccess;
+#endif
+        struct PresetScanLimits
+        {
+            int maximumAcceptedPresetCount = 0;
+            int maximumCandidateFileCount = 0;
+            int maximumDirectoryEntryCount = 0;
+            int maximumRawDirectoryEntryCount = 0;
+            juce::int64 maximumParsedFileBytes = 0;
+        };
+
+        struct PresetScanStatistics
+        {
+            int acceptedPresetCount = 0;
+            int candidateFileCount = 0;
+            int visitedDirectoryEntryCount = 0;
+            int rawDirectoryEntryCount = 0;
+            int parsedFileCount = 0;
+            int rejectedCandidateCount = 0;
+            int skippedForByteBudgetCount = 0;
+            juce::int64 parsedFileBytes = 0;
+            bool acceptedPresetLimitReached = false;
+            bool candidateFileLimitReached = false;
+            bool directoryEntryLimitReached = false;
+            bool rawDirectoryEntryLimitReached = false;
+            bool parsedFileByteLimitReached = false;
+        };
+
+        struct PresetScanState
+        {
+            PresetScanLimits limits;
+            PresetScanStatistics statistics;
+            bool stopScanning = false;
+        };
+
         juce::AudioProcessor& pluginProcessor;
         juce::XmlElement mPresetXml { "WINGSFIRE" }; // in-plugin representation mutiple presets in one xml
         juce::XmlElement presetXmlSingle { "WINGSFIRE" }; // single preset for save file
@@ -149,9 +186,18 @@ Full path Mac  = ~/Library/JohnFlynnPlugins/ThisPlugin/presets.xml
         void recursiveFileSearchImpl(juce::XmlElement& parentXML,
                                      const juce::File& dir,
                                      int depth,
-                                     int& discoveredPresetCount);
+                                     PresetScanState& scanState);
         void recursiveSort(juce::XmlElement* parent);
         static juce::String normalisePresetKey(juce::String key);
+        static PresetScanLimits getDefaultPresetScanLimits() noexcept;
+        PresetScanLimits presetScanLimits;
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        PresetScanStatistics lastPresetScanStatistics;
+        std::function<void(const juce::File&)>
+            presetStreamOpenedHookForTesting;
+        std::function<void(const juce::File&, juce::int64)>
+            presetSnapshotOpenedHookForTesting;
+#endif
         std::atomic<int> mCurrentPresetId { 0 };
         std::atomic<int> numPresets { 0 };
 

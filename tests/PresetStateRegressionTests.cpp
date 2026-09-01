@@ -13,6 +13,89 @@
 #include <thread>
 #include <vector>
 
+struct StatePresetsScanTestAccess
+{
+    struct Limits
+    {
+        int maximumAcceptedPresetCount = 0;
+        int maximumCandidateFileCount = 0;
+        int maximumDirectoryEntryCount = 0;
+        int maximumRawDirectoryEntryCount = 0;
+        juce::int64 maximumParsedFileBytes = 0;
+    };
+
+    struct Statistics
+    {
+        int acceptedPresetCount = 0;
+        int candidateFileCount = 0;
+        int visitedDirectoryEntryCount = 0;
+        int rawDirectoryEntryCount = 0;
+        int parsedFileCount = 0;
+        int rejectedCandidateCount = 0;
+        int skippedForByteBudgetCount = 0;
+        juce::int64 parsedFileBytes = 0;
+        bool acceptedPresetLimitReached = false;
+        bool candidateFileLimitReached = false;
+        bool directoryEntryLimitReached = false;
+        bool rawDirectoryEntryLimitReached = false;
+        bool parsedFileByteLimitReached = false;
+    };
+
+    static Limits defaultLimits()
+    {
+        const auto limits =
+            state::StatePresets::getDefaultPresetScanLimits();
+        return { limits.maximumAcceptedPresetCount,
+                 limits.maximumCandidateFileCount,
+                 limits.maximumDirectoryEntryCount,
+                 limits.maximumRawDirectoryEntryCount,
+                 limits.maximumParsedFileBytes };
+    }
+
+    static void setLimits(state::StatePresets& presets, Limits limits)
+    {
+        presets.presetScanLimits = {
+            juce::jmax(0, limits.maximumAcceptedPresetCount),
+            juce::jmax(0, limits.maximumCandidateFileCount),
+            juce::jmax(0, limits.maximumDirectoryEntryCount),
+            juce::jmax(0, limits.maximumRawDirectoryEntryCount),
+            juce::jmax<juce::int64>(0, limits.maximumParsedFileBytes)
+        };
+    }
+
+    static void setSnapshotOpenedHook(
+        state::StatePresets& presets,
+        std::function<void(const juce::File&, juce::int64)> hook)
+    {
+        presets.presetSnapshotOpenedHookForTesting = std::move(hook);
+    }
+
+    static void setStreamOpenedHook(
+        state::StatePresets& presets,
+        std::function<void(const juce::File&)> hook)
+    {
+        presets.presetStreamOpenedHookForTesting = std::move(hook);
+    }
+
+    static Statistics statistics(const state::StatePresets& presets)
+    {
+        const auto& statistics = presets.lastPresetScanStatistics;
+        return { statistics.acceptedPresetCount,
+                 statistics.candidateFileCount,
+                 statistics.visitedDirectoryEntryCount,
+                 statistics.rawDirectoryEntryCount,
+                 statistics.parsedFileCount,
+                 statistics.rejectedCandidateCount,
+                 statistics.skippedForByteBudgetCount,
+                 statistics.parsedFileBytes,
+                 statistics.acceptedPresetLimitReached,
+                 statistics.candidateFileLimitReached,
+                 statistics.directoryEntryLimitReached,
+                 statistics.rawDirectoryEntryLimitReached,
+                 statistics.parsedFileByteLimitReached };
+    }
+};
+
 struct StateComponentMenuTestAccess
 {
     static std::function<void(int)> createResultHandler(
@@ -657,6 +740,42 @@ void writePresetFile(FireAudioProcessor& processor,
     REQUIRE(xml.writeTo(file));
 }
 
+void writePaddedPresetFile(FireAudioProcessor& processor,
+                           const juce::File& file,
+                           const juce::String& name,
+                           int paddingBytes)
+{
+    juce::XmlElement xml { "WINGSFIRE" };
+    xml.setAttribute("presetName", name);
+    state::saveStateToXml(processor, xml);
+    xml.setAttribute(
+        "scanBudgetPadding",
+        juce::String::repeatedString("x", juce::jmax(0, paddingBytes)));
+    REQUIRE(xml.writeTo(file));
+}
+
+bool createSparseFileWithSize(const juce::File& file,
+                              juce::int64 size)
+{
+    if (size <= 0)
+    {
+        juce::FileOutputStream emptyStream(file);
+        if (! emptyStream.openedOk())
+            return false;
+        emptyStream.flush();
+        return file.existsAsFile() && file.getSize() == 0;
+    }
+
+    juce::FileOutputStream stream(file);
+    if (! stream.openedOk()
+        || ! stream.setPosition(size - 1)
+        || ! stream.writeByte(0))
+        return false;
+
+    stream.flush();
+    return file.getSize() == size;
+}
+
 juce::XmlElement* findHostParameter(juce::XmlElement& stateXml,
                                     FireAudioProcessor& processor,
                                     const juce::String& parameterID)
@@ -859,6 +978,439 @@ TEST_CASE("Preset rescans publish only complete counts to concurrent readers",
 
     CHECK_FALSE(observedPartialCount.load(std::memory_order_relaxed));
     CHECK(presets.getNumPresets() == expectedPresetCount);
+}
+
+TEST_CASE("Preset scan defaults define deterministic bounded work",
+          "[preset][scan][budget][defaults]")
+{
+    const auto limits = StatePresetsScanTestAccess::defaultLimits();
+    REQUIRE(limits.maximumAcceptedPresetCount == 4096);
+    CHECK(limits.maximumCandidateFileCount == 8192);
+    CHECK(limits.maximumDirectoryEntryCount == 32768);
+    CHECK(limits.maximumRawDirectoryEntryCount == 65536);
+    CHECK(limits.maximumParsedFileBytes == 64 * 1024 * 1024);
+}
+
+TEST_CASE("Preset scan hard count budgets stop the complete depth-first scan",
+          "[preset][scan][budget][filesystem][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+    FireAudioProcessor processor;
+    state::StatePresets presets {
+        processor, temporaryDirectory.directory.getFullPathName()
+    };
+
+    SECTION("accepted preset limit")
+    {
+        for (int index = 0; index < 5; ++index)
+            writePresetFile(
+                processor,
+                temporaryDirectory.directory.getChildFile(
+                    "Valid-" + juce::String(index) + ".fire"),
+                "Valid-" + juce::String(index));
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 3, 8, 16, 32, 4 * 1024 * 1024 });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 3);
+        CHECK(statistics.acceptedPresetCount == 3);
+        CHECK(statistics.candidateFileCount == 3);
+        CHECK(statistics.acceptedPresetLimitReached);
+        CHECK_FALSE(statistics.candidateFileLimitReached);
+        CHECK_FALSE(statistics.directoryEntryLimitReached);
+    }
+
+    SECTION("candidate file limit counts empty fire files")
+    {
+        for (int index = 0; index < 5; ++index)
+            REQUIRE(createSparseFileWithSize(
+                temporaryDirectory.directory.getChildFile(
+                    "Empty-" + juce::String(index) + ".fire"),
+                0));
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 3, 16, 32, 4 * 1024 * 1024 });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 0);
+        CHECK(statistics.candidateFileCount == 3);
+        CHECK(statistics.rejectedCandidateCount == 3);
+        CHECK(statistics.candidateFileLimitReached);
+        CHECK_FALSE(statistics.acceptedPresetLimitReached);
+        CHECK_FALSE(statistics.directoryEntryLimitReached);
+    }
+
+    SECTION("directory entry limit includes files and folders")
+    {
+        REQUIRE(temporaryDirectory.directory.getChildFile("Folder-A")
+                    .createDirectory().wasOk());
+        REQUIRE(temporaryDirectory.directory.getChildFile("Folder-B")
+                    .createDirectory().wasOk());
+        REQUIRE(temporaryDirectory.directory.getChildFile("Other-A.txt")
+                    .replaceWithText("not a preset"));
+        REQUIRE(temporaryDirectory.directory.getChildFile("Other-B.txt")
+                    .replaceWithText("not a preset"));
+        REQUIRE(temporaryDirectory.directory.getChildFile("Other-C.txt")
+                    .replaceWithText("not a preset"));
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 4, 8, 4 * 1024 * 1024 });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 0);
+        CHECK(statistics.visitedDirectoryEntryCount == 4);
+        CHECK(statistics.directoryEntryLimitReached);
+        CHECK_FALSE(statistics.acceptedPresetLimitReached);
+        CHECK_FALSE(statistics.candidateFileLimitReached);
+    }
+
+    SECTION("hidden files and folders preserve visible scan capacity")
+    {
+        writePresetFile(
+            processor,
+            temporaryDirectory.directory.getChildFile(".Hidden.fire"),
+            "Hidden");
+        const auto hiddenFolder =
+            temporaryDirectory.directory.getChildFile(".Hidden-Folder");
+        REQUIRE(hiddenFolder.createDirectory().wasOk());
+        writePresetFile(processor,
+                        hiddenFolder.getChildFile("Nested.fire"),
+                        "Nested");
+        if (! temporaryDirectory.directory
+                  .getChildFile(".Hidden.fire")
+                  .isHidden()
+            || ! hiddenFolder.isHidden())
+            SKIP("Dot-prefixed entries are not hidden on this filesystem");
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 8, 16, 4 * 1024 * 1024 });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 0);
+        CHECK(statistics.visitedDirectoryEntryCount == 0);
+        CHECK(statistics.rawDirectoryEntryCount == 2);
+        CHECK(statistics.candidateFileCount == 0);
+        CHECK_FALSE(statistics.acceptedPresetLimitReached);
+        CHECK_FALSE(statistics.candidateFileLimitReached);
+        CHECK_FALSE(statistics.directoryEntryLimitReached);
+        CHECK_FALSE(statistics.rawDirectoryEntryLimitReached);
+    }
+
+    SECTION("hidden entries are bounded by the raw traversal limit")
+    {
+        for (int index = 0; index < 5; ++index)
+            REQUIRE(temporaryDirectory.directory
+                        .getChildFile(".Hidden-" + juce::String(index))
+                        .replaceWithText("ignored"));
+        if (! temporaryDirectory.directory
+                  .getChildFile(".Hidden-0")
+                  .isHidden())
+            SKIP("Dot-prefixed entries are not hidden on this filesystem");
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 8, 3, 4 * 1024 * 1024 });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 0);
+        CHECK(statistics.rawDirectoryEntryCount == 3);
+        CHECK(statistics.visitedDirectoryEntryCount == 0);
+        CHECK(statistics.candidateFileCount == 0);
+        CHECK(statistics.rawDirectoryEntryLimitReached);
+        CHECK_FALSE(statistics.directoryEntryLimitReached);
+    }
+}
+
+TEST_CASE("Preset scan counts every fire candidate before validation",
+          "[preset][scan][budget][corrupt][filesystem][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    REQUIRE(createSparseFileWithSize(
+        temporaryDirectory.directory.getChildFile("Empty.fire"), 0));
+    REQUIRE(createSparseFileWithSize(
+        temporaryDirectory.directory.getChildFile("Oversized.fire"),
+        4 * 1024 * 1024 + 1));
+    REQUIRE(temporaryDirectory.directory.getChildFile("Malformed.fire")
+                .replaceWithText("<WINGSFIRE><broken></WINGSFIRE>"));
+    juce::XmlElement foreignXml { "SETTINGS" };
+    REQUIRE(foreignXml.writeTo(
+        temporaryDirectory.directory.getChildFile("Foreign.fire")));
+    REQUIRE(temporaryDirectory.directory.getChildFile("Ignored.txt")
+                .replaceWithText("not a preset"));
+
+    FireAudioProcessor processor;
+    state::StatePresets presets {
+        processor, temporaryDirectory.directory.getFullPathName()
+    };
+    StatePresetsScanTestAccess::setLimits(
+        presets, { 8, 4, 16, 32, 8 * 1024 * 1024 });
+    presets.scanAllPresets();
+    const auto statistics =
+        StatePresetsScanTestAccess::statistics(presets);
+
+    CHECK(presets.getNumPresets() == 0);
+    CHECK(statistics.candidateFileCount == 4);
+    CHECK(statistics.parsedFileCount == 2);
+    CHECK(statistics.rejectedCandidateCount == 4);
+    CHECK(statistics.candidateFileLimitReached);
+    CHECK(statistics.parsedFileBytes > 0);
+    CHECK(statistics.parsedFileBytes < 8 * 1024 * 1024);
+}
+
+TEST_CASE("Preset scan rejects file and directory symbolic links",
+          "[preset][scan][budget][symlink][filesystem][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    const auto scanRoot =
+        temporaryDirectory.directory.getChildFile("Scan");
+    const auto targetRoot =
+        temporaryDirectory.directory.getChildFile("Targets");
+    REQUIRE(scanRoot.createDirectory().wasOk());
+    REQUIRE(targetRoot.createDirectory().wasOk());
+
+    FireAudioProcessor processor;
+    const auto targetPreset = targetRoot.getChildFile("Target.fire");
+    writePresetFile(processor, targetPreset, "Target");
+    if (! targetPreset.createSymbolicLink(
+            scanRoot.getChildFile("File-Link.fire"), false)
+        || ! targetRoot.createSymbolicLink(
+            scanRoot.getChildFile("Folder-Link"), false))
+        SKIP("Symbolic links are unavailable on this test filesystem");
+
+    state::StatePresets presets { processor, scanRoot.getFullPathName() };
+    const auto statistics =
+        StatePresetsScanTestAccess::statistics(presets);
+
+    CHECK(presets.getNumPresets() == 0);
+    CHECK(statistics.rawDirectoryEntryCount == 2);
+    CHECK(statistics.visitedDirectoryEntryCount == 2);
+    CHECK(statistics.candidateFileCount == 0);
+    CHECK(statistics.acceptedPresetCount == 0);
+}
+
+TEST_CASE("Preset scan depth limit includes level sixteen only",
+          "[preset][scan][budget][depth][filesystem][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+
+    const auto scanRoot =
+        temporaryDirectory.directory.getChildFile("Scan");
+    REQUIRE(scanRoot.createDirectory().wasOk());
+    FireAudioProcessor processor;
+    writePresetFile(processor,
+                    scanRoot.getChildFile("Root.fire"),
+                    "Root");
+
+    auto level = scanRoot;
+    for (int depth = 1; depth <= 17; ++depth)
+    {
+        level = level.getChildFile("Level-" + juce::String(depth));
+        REQUIRE(level.createDirectory().wasOk());
+        if (depth == 16)
+            writePresetFile(processor,
+                            level.getChildFile("At-Limit.fire"),
+                            "At-Limit");
+        else if (depth == 17)
+            writePresetFile(processor,
+                            level.getChildFile("Beyond-Limit.fire"),
+                            "Beyond-Limit");
+    }
+
+    state::StatePresets presets { processor, scanRoot.getFullPathName() };
+    const auto statistics =
+        StatePresetsScanTestAccess::statistics(presets);
+
+    CHECK(presets.getNumPresets() == 2);
+    CHECK(statistics.acceptedPresetCount == 2);
+    CHECK(statistics.candidateFileCount == 2);
+}
+
+TEST_CASE("Preset scan parser byte budget is deterministic",
+          "[preset][scan][budget][bytes][filesystem][regression]")
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+    ScopedTemporaryDirectory temporaryDirectory;
+    CAPTURE(temporaryDirectory.directory.getFullPathName());
+    REQUIRE(temporaryDirectory.wasCreated());
+    FireAudioProcessor processor;
+    state::StatePresets presets {
+        processor, temporaryDirectory.directory.getFullPathName()
+    };
+
+    SECTION("path replacement after open cannot change the parsed handle")
+    {
+        const auto presetFile = temporaryDirectory.directory.getChildFile(
+            "Replaced.fire");
+        writePresetFile(processor, presetFile, "Replaced");
+        const auto openedLength = presetFile.getSize();
+        REQUIRE(openedLength > 0);
+
+        int hookCalls = 0;
+        bool replacementSucceeded = false;
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 16, 32, openedLength });
+        StatePresetsScanTestAccess::setStreamOpenedHook(
+            presets,
+            [&](const juce::File& openedFile)
+            {
+                ++hookCalls;
+                CHECK(openedFile == presetFile);
+                const auto openedHandleBackup =
+                    openedFile.getSiblingFile("Replaced.snapshot");
+                replacementSucceeded =
+                    openedFile.moveFileTo(openedHandleBackup)
+                    && openedFile.replaceWithText("<WINGSFIRE><BROKEN>");
+            });
+
+        presets.scanAllPresets();
+        if (! replacementSucceeded)
+            SKIP("Atomic replacement of an open file is unavailable");
+
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+        CHECK(hookCalls == 1);
+        CHECK(presetFile.getSize() != openedLength);
+        CHECK(presets.getNumPresets() == 1);
+        CHECK(statistics.acceptedPresetCount == 1);
+        CHECK(statistics.parsedFileCount == 1);
+        CHECK(statistics.parsedFileBytes == openedLength);
+    }
+
+    SECTION("accounting and parsing share one bounded handle prefix")
+    {
+        const auto presetFile = temporaryDirectory.directory.getChildFile(
+            "Snapshot.fire");
+        writePresetFile(processor, presetFile, "Snapshot");
+        const auto chargedLength = presetFile.getSize();
+        REQUIRE(chargedLength > 0);
+
+        int hookCalls = 0;
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 16, 32, chargedLength });
+        StatePresetsScanTestAccess::setSnapshotOpenedHook(
+            presets,
+            [&](const juce::File& openedFile, juce::int64 snapshotLength)
+            {
+                ++hookCalls;
+                CHECK(openedFile == presetFile);
+                CHECK(snapshotLength == chargedLength);
+
+                // Grow the same file after its open-handle length has been
+                // charged. The parser must see only the original complete XML
+                // prefix, not this unbudgeted trailing document fragment.
+                juce::FileOutputStream append(openedFile);
+                REQUIRE(append.openedOk());
+                REQUIRE(append.writeText(
+                    "\n<UNBUDGETED>"
+                        + juce::String::repeatedString("x", 32 * 1024),
+                    false,
+                    false,
+                    nullptr));
+                append.flush();
+            });
+
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(hookCalls == 1);
+        CHECK(presetFile.getSize() > chargedLength);
+        CHECK(presets.getNumPresets() == 1);
+        CHECK(statistics.acceptedPresetCount == 1);
+        CHECK(statistics.parsedFileCount == 1);
+        CHECK(statistics.parsedFileBytes == chargedLength);
+        CHECK(statistics.skippedForByteBudgetCount == 0);
+    }
+
+    SECTION("invalid candidates cannot consume unbounded parser input")
+    {
+        const juce::String malformed =
+            "<WINGSFIRE><BROKEN>"
+            + juce::String::repeatedString("x", 2048);
+        std::array<juce::File, 3> files;
+        for (int index = 0; index < static_cast<int>(files.size()); ++index)
+        {
+            files[static_cast<size_t>(index)] =
+                temporaryDirectory.directory.getChildFile(
+                    "Malformed-" + juce::String(index) + ".fire");
+            REQUIRE(files[static_cast<size_t>(index)]
+                        .replaceWithText(malformed));
+        }
+        const auto candidateBytes = files.front().getSize();
+        REQUIRE(candidateBytes > 0);
+        for (const auto& file : files)
+            REQUIRE(file.getSize() == candidateBytes);
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 16, 32, candidateBytes * 2 });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 0);
+        CHECK(statistics.candidateFileCount == 3);
+        CHECK(statistics.parsedFileCount == 2);
+        CHECK(statistics.rejectedCandidateCount == 2);
+        CHECK(statistics.skippedForByteBudgetCount == 1);
+        CHECK(statistics.parsedFileBytes == candidateBytes * 2);
+        CHECK(statistics.parsedFileByteLimitReached);
+        CHECK_FALSE(statistics.candidateFileLimitReached);
+    }
+
+    SECTION("a non-fitting file does not block a fitting preset")
+    {
+        const auto largeFile = temporaryDirectory.directory.getChildFile(
+            "00-Large.fire");
+        const auto smallFile = temporaryDirectory.directory.getChildFile(
+            "99-Small.fire");
+        writePaddedPresetFile(processor, largeFile, "Large", 64 * 1024);
+        writePresetFile(processor, smallFile, "Small");
+        REQUIRE(largeFile.getSize() > smallFile.getSize());
+
+        StatePresetsScanTestAccess::setLimits(
+            presets, { 8, 8, 16, 32, smallFile.getSize() });
+        presets.scanAllPresets();
+        const auto statistics =
+            StatePresetsScanTestAccess::statistics(presets);
+
+        CHECK(presets.getNumPresets() == 1);
+        CHECK(statistics.candidateFileCount == 2);
+        CHECK(statistics.parsedFileCount == 1);
+        CHECK(statistics.acceptedPresetCount == 1);
+        CHECK(statistics.rejectedCandidateCount == 0);
+        CHECK(statistics.skippedForByteBudgetCount == 1);
+        CHECK(statistics.parsedFileBytes == smallFile.getSize());
+        CHECK(statistics.parsedFileByteLimitReached);
+
+        juce::ComboBox menu;
+        presets.setPresetAndFolderNames(menu);
+        REQUIRE(menu.getNumItems() == 1);
+        CHECK(menu.getItemText(0) == "99-Small");
+    }
 }
 
 TEST_CASE("Duplicate preset display names keep their relative-path identity",

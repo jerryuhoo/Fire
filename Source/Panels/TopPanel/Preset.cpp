@@ -20,6 +20,10 @@ namespace
 constexpr juce::int64 maximumPresetFileBytes = 4 * 1024 * 1024;
 constexpr int maximumPresetFolderDepth = 16;
 constexpr int maximumPresetCount = 4096;
+constexpr int maximumPresetCandidateCount = maximumPresetCount * 2;
+constexpr int maximumPresetDirectoryEntryCount = maximumPresetCount * 8;
+constexpr int maximumPresetRawDirectoryEntryCount = maximumPresetCount * 16;
+constexpr juce::int64 maximumPresetScanParsedBytes = 64 * 1024 * 1024;
 
 void deleteDialogSynchronously(
     juce::Component::SafePointer<juce::DialogWindow> dialog) noexcept
@@ -615,19 +619,142 @@ namespace state
 
     //==============================================================================
 
-    bool parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml)
+    static juce::int64 measurePresetSnapshotLength(
+        juce::FileInputStream& stream)
     {
-        if (! file.existsAsFile()
-            || file.getSize() <= 0
-            || file.getSize() > maximumPresetFileBytes)
+        if (! stream.openedOk())
+            return -1;
+
+        const auto byteExistsAt = [&](juce::int64 offset,
+                                      bool& exists) -> bool
+        {
+            if (offset < 0 || ! stream.setPosition(offset))
+                return false;
+
+            char byte = 0;
+            const auto bytesRead = stream.read(&byte, 1);
+            if (bytesRead != 0 && bytesRead != 1)
+                return false;
+
+            exists = bytesRead == 1;
+            return true;
+        };
+
+        // JUCE's getTotalLength() asks the path for its current size, not the
+        // already-open native handle. Use it only as a fast hint, and verify
+        // both sides of the claimed EOF against this stream. A normal file
+        // therefore costs two one-byte probes; a concurrently replaced path
+        // falls back to a bounded binary search on the open handle.
+        const auto hintedLength = stream.getTotalLength();
+        juce::int64 measuredLength = -1;
+        bool lastHintedByteExists = false;
+        bool byteAfterHintExists = false;
+        if (hintedLength > 0
+            && hintedLength <= maximumPresetFileBytes
+            && byteExistsAt(hintedLength - 1, lastHintedByteExists)
+            && byteExistsAt(hintedLength, byteAfterHintExists)
+            && lastHintedByteExists
+            && ! byteAfterHintExists)
+        {
+            measuredLength = hintedLength;
+        }
+        else
+        {
+            bool firstByteExists = false;
+            bool byteBeyondLimitExists = false;
+            if (! byteExistsAt(0, firstByteExists))
+                measuredLength = -1;
+            else if (! firstByteExists)
+                measuredLength = 0;
+            else if (! byteExistsAt(maximumPresetFileBytes,
+                                    byteBeyondLimitExists))
+                measuredLength = -1;
+            else if (byteBeyondLimitExists)
+                measuredLength = maximumPresetFileBytes + 1;
+            else
+            {
+                juce::int64 firstPossibleEof = 1;
+                juce::int64 lastPossibleEof = maximumPresetFileBytes;
+                bool searchFailed = false;
+                while (firstPossibleEof < lastPossibleEof)
+                {
+                    const auto midpoint = firstPossibleEof
+                                        + (lastPossibleEof
+                                           - firstPossibleEof)
+                                              / 2;
+                    bool midpointExists = false;
+                    if (! byteExistsAt(midpoint, midpointExists))
+                    {
+                        searchFailed = true;
+                        break;
+                    }
+
+                    if (midpointExists)
+                        firstPossibleEof = midpoint + 1;
+                    else
+                        lastPossibleEof = midpoint;
+                }
+
+                measuredLength = searchFailed ? -1 : firstPossibleEof;
+            }
+        }
+
+        if (! stream.setPosition(0))
+            return -1;
+
+        return measuredLength;
+    }
+
+    static bool parsePresetSnapshot(juce::FileInputStream& stream,
+                                    juce::int64 snapshotLength,
+                                    juce::XmlElement& xml)
+    {
+        if (! stream.openedOk()
+            || snapshotLength <= 0
+            || snapshotLength > maximumPresetFileBytes)
             return false;
 
-        auto parsed = juce::XmlDocument::parse(file);
+        // snapshotLength belongs to this already-open handle. Never reopen the
+        // path: it may be replaced or extended between directory enumeration
+        // and parsing. The explicit direct-read limit prevents an append from
+        // expanding the charged parser input; JUCE's MemoryOutputStream helper
+        // is deliberately avoided because it re-queries the path length.
+        juce::MemoryBlock snapshot(static_cast<size_t>(snapshotLength),
+                                   false);
+        juce::int64 bytesRead = 0;
+        while (bytesRead < snapshotLength)
+        {
+            const auto chunk = stream.read(
+                static_cast<char*>(snapshot.getData())
+                    + static_cast<size_t>(bytesRead),
+                static_cast<int>(snapshotLength - bytesRead));
+            if (chunk <= 0)
+                break;
+
+            bytesRead += chunk;
+        }
+
+        if (bytesRead != snapshotLength)
+            return false;
+
+        auto parsed = juce::XmlDocument::parse(
+            juce::String::createStringFromData(
+                snapshot.getData(), static_cast<int>(snapshot.getSize())));
         if (parsed == nullptr || ! isSupportedPresetDocument(*parsed))
             return false;
 
         xml = *parsed;
         return true;
+    }
+
+    bool parseFileToXmlElement(const juce::File& file, juce::XmlElement& xml)
+    {
+        juce::FileInputStream stream(file);
+        if (! stream.openedOk())
+            return false;
+
+        const auto snapshotLength = measurePresetSnapshotLength(stream);
+        return parsePresetSnapshot(stream, snapshotLength, xml);
     }
 
     bool writeXmlElementToFile(const juce::XmlElement& xml,
@@ -687,10 +814,23 @@ namespace state
     };
 
     //==============================================================================
+    StatePresets::PresetScanLimits
+    StatePresets::getDefaultPresetScanLimits() noexcept
+    {
+        return {
+            maximumPresetCount,
+            maximumPresetCandidateCount,
+            maximumPresetDirectoryEntryCount,
+            maximumPresetRawDirectoryEntryCount,
+            maximumPresetScanParsedBytes
+        };
+    }
+
     StatePresets::StatePresets(juce::AudioProcessor& proc, const juce::String& presetFileLocation)
         : pluginProcessor { proc },
           presetFile { juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                           .getChildFile(presetFileLocation) }
+                           .getChildFile(presetFileLocation) },
+          presetScanLimits { getDefaultPresetScanLimits() }
     {
         scanAllPresets();
         //parseFileToXmlElement(presetFile, mPresetXml);
@@ -735,53 +875,224 @@ namespace state
                                            const juce::File& dir,
                                            int depth)
     {
-        int discoveredPresetCount = 0;
+        PresetScanState scanState { presetScanLimits, {}, false };
         recursiveFileSearchImpl(parentXML,
                                 dir,
                                 depth,
-                                discoveredPresetCount);
-        numPresets.store(discoveredPresetCount, std::memory_order_release);
+                                scanState);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        lastPresetScanStatistics = scanState.statistics;
+#endif
+        numPresets.store(scanState.statistics.acceptedPresetCount,
+                         std::memory_order_release);
     }
 
     void StatePresets::recursiveFileSearchImpl(
         juce::XmlElement& parentXML,
         const juce::File& dir,
         int depth,
-        int& discoveredPresetCount)
+        PresetScanState& scanState)
     {
-        if (depth > maximumPresetFolderDepth
-            || discoveredPresetCount >= maximumPresetCount)
+        auto& limits = scanState.limits;
+        auto& statistics = scanState.statistics;
+
+        if (scanState.stopScanning
+            || depth > maximumPresetFolderDepth
+            || dir.isSymbolicLink())
             return;
+
+        // Hard count limits stop the complete depth-first traversal. Checking
+        // at every recursive entry makes an exhausted child unwind all of its
+        // ancestors instead of merely advancing to the next sibling folder.
+        if (statistics.acceptedPresetCount
+                >= limits.maximumAcceptedPresetCount)
+        {
+            statistics.acceptedPresetLimitReached = true;
+            scanState.stopScanning = true;
+            return;
+        }
+
+        if (statistics.candidateFileCount
+                >= limits.maximumCandidateFileCount)
+        {
+            statistics.candidateFileLimitReached = true;
+            scanState.stopScanning = true;
+            return;
+        }
+
+        if (statistics.visitedDirectoryEntryCount
+                >= limits.maximumDirectoryEntryCount)
+        {
+            statistics.directoryEntryLimitReached = true;
+            scanState.stopScanning = true;
+            return;
+        }
+
+        if (statistics.rawDirectoryEntryCount
+                >= limits.maximumRawDirectoryEntryCount)
+        {
+            statistics.rawDirectoryEntryLimitReached = true;
+            scanState.stopScanning = true;
+            return;
+        }
 
         juce::RangedDirectoryIterator iterator(dir,
                                                 false,
                                                 "*",
-                                                juce::File::findFilesAndDirectories | juce::File::ignoreHiddenFiles,
+                                                juce::File::findFilesAndDirectories,
                                                 juce::File::FollowSymlinks::no);
         for (auto file : iterator)
         {
-            if (discoveredPresetCount >= maximumPresetCount)
+            if (scanState.stopScanning)
                 break;
+
+            if (statistics.rawDirectoryEntryCount
+                    >= limits.maximumRawDirectoryEntryCount)
+            {
+                statistics.rawDirectoryEntryLimitReached = true;
+                scanState.stopScanning = true;
+                break;
+            }
+
+            ++statistics.rawDirectoryEntryCount;
+            const juce::ScopeGuard finishRawDirectoryEntry { [&]
+            {
+                if (statistics.rawDirectoryEntryCount
+                        >= limits.maximumRawDirectoryEntryCount)
+                {
+                    statistics.rawDirectoryEntryLimitReached = true;
+                    scanState.stopScanning = true;
+                }
+            } };
+
+            const auto candidate = file.getFile();
+            if (file.isHidden())
+                continue;
+
+            if (statistics.visitedDirectoryEntryCount
+                    >= limits.maximumDirectoryEntryCount)
+            {
+                statistics.directoryEntryLimitReached = true;
+                scanState.stopScanning = true;
+                continue;
+            }
+
+            ++statistics.visitedDirectoryEntryCount;
+            const juce::ScopeGuard finishDirectoryEntry { [&]
+            {
+                if (statistics.visitedDirectoryEntryCount
+                        >= limits.maximumDirectoryEntryCount)
+                {
+                    statistics.directoryEntryLimitReached = true;
+                    scanState.stopScanning = true;
+                }
+            } };
+
+            // RangedDirectoryIterator is configured not to follow links, but
+            // reject them explicitly before either file parsing or recursive
+            // descent. A non-hidden link consumes raw and visible traversal
+            // slots, never a .fire candidate slot.
+            if (candidate.isSymbolicLink())
+                continue;
 
             if (file.isDirectory())
             {
                 auto currentState = std::make_unique<juce::XmlElement>("FOLDER");
-                currentState->setAttribute("folderName", file.getFile().getFileName());
+                currentState->setAttribute("folderName",
+                                           candidate.getFileName());
                 recursiveFileSearchImpl(*currentState,
-                                        file.getFile(),
+                                        candidate,
                                         depth + 1,
-                                        discoveredPresetCount);
+                                        scanState);
                 if (currentState->getNumChildElements() > 0)
                     parentXML.addChildElement(currentState.release());
             }
-            else if (file.getFile().hasFileExtension(PRESET_EXETENSION))
+            else if (candidate.hasFileExtension(PRESET_EXETENSION))
             {
-                auto currentState = std::make_unique<juce::XmlElement>("PRESET");
-                if (! parseFileToXmlElement(file.getFile(), *currentState))
+                if (statistics.candidateFileCount
+                        >= limits.maximumCandidateFileCount)
+                {
+                    statistics.candidateFileLimitReached = true;
+                    scanState.stopScanning = true;
                     continue;
+                }
+
+                // Every .fire path consumes a candidate slot, including an
+                // empty, oversized, malformed, foreign, or otherwise rejected
+                // document. Invalid files therefore cannot make the scan
+                // unbounded while leaving the accepted count at zero.
+                ++statistics.candidateFileCount;
+                const juce::ScopeGuard finishCandidate { [&]
+                {
+                    if (statistics.candidateFileCount
+                            >= limits.maximumCandidateFileCount)
+                    {
+                        statistics.candidateFileLimitReached = true;
+                        scanState.stopScanning = true;
+                    }
+                } };
+
+                // Open once, then charge and parse the length belonging to
+                // that same handle. Reopening by path would allow an external
+                // preset manager to replace a small file with a large one
+                // between accounting and XML parsing.
+                juce::FileInputStream candidateStream(candidate);
+                if (! candidateStream.openedOk())
+                {
+                    ++statistics.rejectedCandidateCount;
+                    continue;
+                }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+                if (presetStreamOpenedHookForTesting)
+                    presetStreamOpenedHookForTesting(candidate);
+#endif
+
+                const auto candidateBytes =
+                    measurePresetSnapshotLength(candidateStream);
+                if (candidateBytes <= 0
+                    || candidateBytes > maximumPresetFileBytes)
+                {
+                    ++statistics.rejectedCandidateCount;
+                    continue;
+                }
+
+                const auto parsedByteBudgetRemaining =
+                    juce::jmax<juce::int64>(
+                        0,
+                        limits.maximumParsedFileBytes
+                            - statistics.parsedFileBytes);
+                if (candidateBytes > parsedByteBudgetRemaining)
+                {
+                    // Do not end traversal here: a later small preset can
+                    // still fit in the deterministic byte budget.
+                    ++statistics.skippedForByteBudgetCount;
+                    statistics.parsedFileByteLimitReached = true;
+                    continue;
+                }
+
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+                if (presetSnapshotOpenedHookForTesting)
+                    presetSnapshotOpenedHookForTesting(candidate,
+                                                       candidateBytes);
+#endif
+
+                statistics.parsedFileBytes += candidateBytes;
+                ++statistics.parsedFileCount;
+                auto currentState = std::make_unique<juce::XmlElement>("PRESET");
+                if (! parsePresetSnapshot(candidateStream,
+                                           candidateBytes,
+                                           *currentState))
+                {
+                    ++statistics.rejectedCandidateCount;
+                    continue;
+                }
 
                 if (! isLoadablePresetState(*currentState, pluginProcessor))
+                {
+                    ++statistics.rejectedCandidateCount;
                     continue;
+                }
 
                 bool hasKnownParameter = false;
                 for (const auto* parameter : pluginProcessor.getParameters())
@@ -796,23 +1107,39 @@ namespace state
                 // not a preset. Exposing it would create a menu action that
                 // silently resets every parameter to its default.
                 if (! hasKnownParameter)
+                {
+                    ++statistics.rejectedCandidateCount;
                     continue;
+                }
 
-                const auto presetKey = normalisePresetKey(file.getFile().getRelativePathFrom(presetFile));
+                const auto presetKey = normalisePresetKey(
+                    candidate.getRelativePathFrom(presetFile));
                 if (presetKey.isEmpty())
+                {
+                    ++statistics.rejectedCandidateCount;
                     continue;
+                }
 
-                ++discoveredPresetCount;
+                ++statistics.acceptedPresetCount;
                 const juce::String newPresetId =
-                    "preset" + juce::String(discoveredPresetCount);
+                    "preset"
+                    + juce::String(statistics.acceptedPresetCount);
                 currentState->setTagName(newPresetId);
 
-                const juce::String newName = file.getFile().getFileNameWithoutExtension();
+                const juce::String newName =
+                    candidate.getFileNameWithoutExtension();
                 if (newName != currentState->getStringAttribute("presetName"))
                     currentState->setAttribute("presetName", newName);
                 currentState->setAttribute("presetKey", presetKey);
 
                 parentXML.addChildElement(currentState.release());
+
+                if (statistics.acceptedPresetCount
+                        >= limits.maximumAcceptedPresetCount)
+                {
+                    statistics.acceptedPresetLimitReached = true;
+                    scanState.stopScanning = true;
+                }
             }
         }
     }
@@ -834,21 +1161,25 @@ namespace state
 
     void StatePresets::scanAllPresets()
     {
-        int discoveredPresetCount = 0;
+        PresetScanState scanState { presetScanLimits, {}, false };
         mPresetXml.deleteAllChildElements();
         //RangedDirectoryIterator iterator(presetFile, true, "*.fire", 2);
 
         recursiveFileSearchImpl(mPresetXml,
                                 presetFile,
                                 0,
-                                discoveredPresetCount);
+                                scanState);
 
         recursiveSort(&mPresetXml);
+#if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
+        lastPresetScanStatistics = scanState.statistics;
+#endif
 
         // Host state restoration may query the count from a non-message
         // thread. Publish only the complete scan so it never clamps a legacy
         // preset ID against a transient zero or partial result.
-        numPresets.store(discoveredPresetCount, std::memory_order_release);
+        numPresets.store(scanState.statistics.acceptedPresetCount,
+                         std::memory_order_release);
 
         //mPresetXml.writeTo(File::getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Audio/Presets/Wings/Fire/test.xml"));
     }

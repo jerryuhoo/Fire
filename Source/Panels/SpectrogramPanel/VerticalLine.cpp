@@ -555,6 +555,9 @@ void VerticalLine::setUserPositionChangeCallback(
 void VerticalLine::beginParameterGesture()
 {
     const bool shouldNotify = parameterGestureDepth++ == 0;
+    if (shouldNotify && ++parameterGestureGeneration == 0)
+        ++parameterGestureGeneration;
+
     updateAnimationTargets();
     auto beginCallback = shouldNotify ? parameterGestureBegin
                                       : ParameterGestureCallback {};
@@ -575,6 +578,18 @@ void VerticalLine::endParameterGesture()
 
     if (endCallback)
         endCallback();
+}
+
+std::uint64_t VerticalLine::getParameterGestureGeneration() const noexcept
+{
+    return parameterGestureGeneration;
+}
+
+bool VerticalLine::isParameterGestureActiveForGeneration(
+    std::uint64_t expectedGeneration) const noexcept
+{
+    return parameterGestureDepth > 0
+        && parameterGestureGeneration == expectedGeneration;
 }
 
 void VerticalLine::setValueAsPartOfGesture(double newValue,

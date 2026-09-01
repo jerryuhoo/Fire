@@ -176,11 +176,33 @@ std::uint64_t FreqDividerGroup::getVisibilityGeneration() const noexcept
     return visibilityGeneration;
 }
 
-void FreqDividerGroup::dismissIfHidden(std::uint64_t expectedGeneration)
+std::uint64_t FreqDividerGroup::getParameterGestureGeneration() const noexcept
 {
-    if (visibilityGeneration != expectedGeneration || isVisible())
+    return verticalLine.getParameterGestureGeneration();
+}
+
+void FreqDividerGroup::dismissDeferredInteraction(
+    std::uint64_t expectedVisibilityGeneration,
+    std::uint64_t expectedGestureGeneration)
+{
+    if (visibilityGeneration == expectedVisibilityGeneration && ! isVisible())
+    {
+        dismissImmediately();
+        return;
+    }
+
+    if (! isVisible())
         return;
 
+    if (! verticalLine.isParameterGestureActiveForGeneration(
+            expectedGestureGeneration))
+        return;
+
+    // NUM_BANDS may restore this compatibility slot before the deferred
+    // LINE_STATE callback runs. The pointer ownership was already revoked at
+    // the hide boundary, so end the abandoned gesture if and only if no newer
+    // gesture has replaced it. This also closes an old frequency TextEditor;
+    // the callback may delete this entire group, so it must remain last.
     dismissImmediately();
 }
 

@@ -1594,11 +1594,15 @@ void Multiband::handleDividerHidden(int dividerIndex)
         return;
 
     const auto visibilityGeneration = safeGroup->getVisibilityGeneration();
-    juce::MessageManager::callAsync([safeGroup, visibilityGeneration]
-    {
-        if (safeGroup != nullptr)
-            safeGroup->dismissIfHidden(visibilityGeneration);
-    });
+    const auto gestureGeneration =
+        safeGroup->getParameterGestureGeneration();
+    juce::MessageManager::callAsync(
+        [safeGroup, visibilityGeneration, gestureGeneration]
+        {
+            if (safeGroup != nullptr)
+                safeGroup->dismissDeferredInteraction(visibilityGeneration,
+                                                      gestureGeneration);
+        });
 }
 
 void Multiband::updateHoveredBand(juce::Point<int> localPosition, bool pointerIsInside)

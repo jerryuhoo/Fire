@@ -2106,6 +2106,7 @@ TEST_CASE("Topology-driven crossover teardown survives synchronous editor closur
 
     auto editor = std::make_unique<FireAudioProcessorEditor>(processor);
     editor->setBounds(0, 0, 1000, 500);
+    editor->stopTimer();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
 
     auto* multiband = findDescendant<Multiband>(*editor);
@@ -2190,8 +2191,14 @@ TEST_CASE("Topology-driven crossover teardown survives synchronous editor closur
             0.0f);
 
         // The attachment callback must return before gesture end is allowed
-        // to delete the attachment and its owning editor.
+        // to delete the attachment and its owning editor. Deterministically
+        // reproduce the competing 60 Hz reconciliation before delivering the
+        // queued cleanup: NUM_BANDS re-shows the compatibility-hidden slot,
+        // but the old frequency gesture must still be ended by its token.
         CHECK(editor != nullptr);
+        multiband->synchroniseBandCountFromParameter();
+        REQUIRE(editor != nullptr);
+        CHECK(dividerGroups[static_cast<size_t>(activeDividerIndex)]->isVisible());
         juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
     }
 

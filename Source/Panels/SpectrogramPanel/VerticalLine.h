@@ -12,12 +12,14 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 #include "../../GUI/FireTheme.h"
+#include <cstdint>
 #include <functional>
 #include <memory>
 
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
 struct VerticalLinePointerTestAccess;
 #endif
+class FreqDividerGroup;
 
 //==============================================================================
 /*
@@ -70,6 +72,7 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
 
 private:
+    friend class FreqDividerGroup;
 #if defined(RUN_PAMPLEJUCE_TESTS) && RUN_PAMPLEJUCE_TESTS
     friend struct VerticalLinePointerTestAccess;
 #endif
@@ -79,6 +82,9 @@ private:
     bool canAcceptKeyboardOrAccessibilityInput() const noexcept;
     bool shouldShowKeyboardFocus() const noexcept;
     bool setValueFromUserInput(double newValue);
+    std::uint64_t getParameterGestureGeneration() const noexcept;
+    bool isParameterGestureActiveForGeneration(
+        std::uint64_t expectedGeneration) const noexcept;
     void updateAnimationTargets() noexcept;
     void focusGained(FocusChangeType cause) override;
     void focusLost(FocusChangeType cause) override;
@@ -106,6 +112,7 @@ private:
     PointerGestureAdmissionCallback pointerGestureAdmission;
     UserPositionChangeCallback userPositionChange;
     int parameterGestureDepth = 0;
+    std::uint64_t parameterGestureGeneration = 0;
     bool primaryDragActive = false;
     bool keyboardFocusVisible = false;
     juce::MouseInputSource::InputSourceType pointerSourceType =

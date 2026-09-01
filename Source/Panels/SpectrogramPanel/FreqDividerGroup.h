@@ -55,7 +55,10 @@ private:
     float getTopologyReveal() const noexcept;
     void visibilityChanged() override;
     std::uint64_t getVisibilityGeneration() const noexcept;
-    void dismissIfHidden(std::uint64_t expectedGeneration);
+    std::uint64_t getParameterGestureGeneration() const noexcept;
+    void dismissDeferredInteraction(
+        std::uint64_t expectedVisibilityGeneration,
+        std::uint64_t expectedGestureGeneration);
 
     FireAudioProcessor& processor;
     VerticalLine verticalLine;

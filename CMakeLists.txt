@@ -89,9 +89,50 @@ juce_add_plugin("${PROJECT_NAME}"
 # Without running into ODR violations
 add_library(SharedCode INTERFACE)
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # The upstream CLAP helper copies the bundle before a complete macOS
+    # resource signature is applied. Suppress only that CLAP copy; JUCE's
+    # already-configured AU/VST3 copy steps retain their original setting.
+    get_target_property(FIRE_COPY_PLUGIN_AFTER_BUILD
+        "${PROJECT_NAME}" JUCE_COPY_PLUGIN_AFTER_BUILD)
+    set_property(TARGET "${PROJECT_NAME}"
+        PROPERTY JUCE_COPY_PLUGIN_AFTER_BUILD FALSE)
+endif ()
+
 clap_juce_extensions_plugin(TARGET "${PROJECT_NAME}"
     CLAP_ID "${BUNDLE_ID}"
     CLAP_FEATURES audio-effect)
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set_property(TARGET "${PROJECT_NAME}"
+        PROPERTY JUCE_COPY_PLUGIN_AFTER_BUILD
+        "${FIRE_COPY_PLUGIN_AFTER_BUILD}")
+
+    if ("$ENV{HOME}" STREQUAL "")
+        message(FATAL_ERROR "HOME must be set before installing the CLAP bundle")
+    endif ()
+
+    set(FIRE_CLAP_INSTALL_DIRECTORY
+        "$ENV{HOME}/Library/Audio/Plug-Ins/CLAP")
+    set(FIRE_CLAP_INSTALL_BUNDLE
+        "${FIRE_CLAP_INSTALL_DIRECTORY}/${PRODUCT_NAME}.clap")
+    add_custom_command(TARGET "${PROJECT_NAME}_CLAP" POST_BUILD
+        COMMAND /usr/bin/codesign --force --deep --sign -
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
+        COMMAND /usr/bin/codesign --verify --deep --strict
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${FIRE_CLAP_INSTALL_DIRECTORY}"
+        COMMAND "${CMAKE_COMMAND}" -E remove_directory
+            "${FIRE_CLAP_INSTALL_BUNDLE}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_directory
+            "$<TARGET_BUNDLE_DIR:${PROJECT_NAME}_CLAP>"
+            "${FIRE_CLAP_INSTALL_BUNDLE}"
+        COMMAND /usr/bin/codesign --verify --deep --strict
+            "${FIRE_CLAP_INSTALL_BUNDLE}"
+        COMMENT "Signing and installing ${PRODUCT_NAME}.clap"
+        VERBATIM)
+endif ()
 
 # Configure shared compiler and language defaults.
 include(SharedCodeDefaults)
